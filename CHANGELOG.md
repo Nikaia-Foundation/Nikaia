@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1478] — 2026-11-19
+
+**The decisions on how a grammar is lowered live in one record, ADR-grammar-lowering-v1 (#2268)**
+- The decisions on how a grammar is lowered (a grammar! macro invocation, name for name, guessing no meaning, @frame's check left to the backend, a fold step's callees inline(always), a map std's own type over hashbrown's table) live in one record, ADR-grammar-lowering-v1; five decisions of ADR-296 moved.
+
 ## [0.0.1477] — 2026-11-19
 
 **Builders' changes (#2305, #2321)**

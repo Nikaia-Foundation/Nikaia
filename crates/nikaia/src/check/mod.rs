@@ -607,7 +607,7 @@ impl<'a> Checker<'a> {
     //
     // **A method call is not asked**, and the limit is worth naming: a foreign
     // Rust function is reached by a qualified path (`hyper_shim::serve`), which
-    // is what a name-for-name lowering makes callable at all (ADR-296 D17), so
+    // is what a name-for-name lowering makes callable at all (ADR-grammar-lowering-v1 D2), so
     // the call form below is the one ADR-303 D7 is about. A method on a receiver
     // whose type no ledger describes would need the same question asked of its
     // arguments, and nothing in the corpus reaches it - ADR-288 D11's rule, that

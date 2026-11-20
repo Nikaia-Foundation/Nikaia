@@ -13,7 +13,7 @@
 //! no such thing: `"ab".repeat(-1)` is not an access at all, so it needs a
 //! message of its own and gets one.
 //!
-//! **Why a trait.** The emitter does not know types (ADR-296 D17): it sees a
+//! **Why a trait.** The emitter does not know types (ADR-grammar-lowering-v1 D2): it sees a
 //! method name and an argument. So this is chosen by the type of what is passed,
 //! and is the **identity** for anything that is not a signed integer - which is
 //! what makes it safe to write around every call of that name, including a

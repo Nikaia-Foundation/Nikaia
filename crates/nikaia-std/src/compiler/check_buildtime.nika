@@ -121,7 +121,7 @@ impl CheckState {
     ///
     /// The ledger's key stays `Type::new`, because that is what the **lowering**
     /// writes and the lowering is name for name
-    /// ([ADR-296](../../docs/specification/adr/adr-296.md) D17). What this
+    /// ([ADR-grammar-lowering-v1](../../../../docs/specification/adr/adr-grammar-lowering-v1.md) D2). What this
     /// refuses is the *source* spelling.
     fn a_constructor_written_as_new(ref mut self, world: ref CheckWorld, name: ref String, span: ref Span) sync {
         let ty = name.strip_suffix("::new") ?? return

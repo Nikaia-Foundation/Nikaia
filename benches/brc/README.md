@@ -61,7 +61,7 @@ benches/brc/brc.sh 200000     # quicker
   entry at 1 unit and not at 16, 42 instructions a row apart. `1brc.nika`
   inlines the entry at both since #695 (what a fold's step calls is
   `#[inline(always)]`), and with `hashbrown`'s probe in it since `std`'s map
-  is its own type (ADR-296 D42: `entry` always inlined, a text key compared
+  is its own type (ADR-grammar-lowering-v1 D5: `entry` always inlined, a text key compared
   and hashed by words, a search per length class), and the
   runtime's `advance` at both since it is `#[inline(always)]` too (9.0 a row
   at 1 unit). One setting alone would pick the winner,

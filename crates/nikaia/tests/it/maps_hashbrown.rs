@@ -1,5 +1,5 @@
 //! **A map is `std`'s own type over `hashbrown`'s table, keyed or trusted**
-//! (#420, #434, ADR-296 D42): both kinds of `HashMap` lower to it with the
+//! (#420, #434, ADR-grammar-lowering-v1 D5): both kinds of `HashMap` lower to it with the
 //! hasher each had before,
 //! and a program using the whole of what the language offers on a map compiles
 //! and prints the same under either.
@@ -116,7 +116,7 @@ fn a_keyed_map_is_hashbrowns_table_with_the_keyed_hash() {
 }
 
 /// The types are the ones the program wrote: `nikaia_std`'s `HashMap` is
-/// `std`'s own type over `hashbrown`'s table (ADR-296 D42), with the keyed
+/// `std`'s own type over `hashbrown`'s table (ADR-grammar-lowering-v1 D5), with the keyed
 /// hasher by default and the fast one in `TrustedMap`.
 #[test]
 fn the_maps_are_stds_own() {

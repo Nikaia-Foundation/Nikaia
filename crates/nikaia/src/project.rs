@@ -2729,7 +2729,7 @@ impl Project {
     ///
     /// **The position is translated and the text is not**, which is ADR-300's
     /// own choice and is honest for most of what arrives: the lowering is name
-    /// for name (ADR-296 D17), so "`xs` does not live long enough" is already a
+    /// for name (ADR-grammar-lowering-v1 D2), so "`xs` does not live long enough" is already a
     /// sentence about the Nikaia source and only its place was wrong. It is
     /// *not* honest for a trait-bound error, whose every noun is a Rust type the
     /// author did not write - and rewriting one into Nikaia vocabulary is a

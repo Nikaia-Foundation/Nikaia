@@ -11,7 +11,7 @@ assert!(text_key::same::<&'static str, &str>());
 ```
 
 The caller is `nikaia-std`'s map (`src/map.rs`,
-[ADR-296](../../../docs/specification/adr/adr-296.md) D42): one type for every
+[ADR-grammar-lowering-v1](../../../docs/specification/adr/adr-grammar-lowering-v1.md) D5): one type for every
 key, which hashes and compares a text key (`str`, `&str`, `String`,
 `&String`, `Box<str>`, `Rc<str>`, `Arc<str>`, `Cow<str>`) a word at a time
 instead of through `str`'s `==`, a call of `memcmp`. Rust has no
