@@ -30,6 +30,10 @@ pub struct ProverScope {
     /// `path::is_component(key)`. Still from outside, but the binding carries
     /// the guard's proof to a path or program sink, as the joined text does.
     pub joined: collections::BTreeSet[String],
+    /// **Names bound to a root of a file operation** (ADR-raw-sinks-1 D2,
+    /// D11, #2440): `let at = fs::Root::Dir(dir)`, with the root's value, so
+    /// that a call opening a path under `at` judges `dir` as at the root.
+    pub roots: collections::BTreeMap[String, Expr],
     /// Names bound anywhere in this body, so a callee's name that a local
     /// shadows is not the callee.
     pub locals: collections::BTreeSet[String],
@@ -126,6 +130,7 @@ impl ProverScope {
             carried: collections::BTreeSet(),
             carried_from: collections::BTreeMap(),
             joined: collections::BTreeSet(),
+            roots: collections::BTreeMap(),
             locals: collections::BTreeSet(),
             facts: [],
             entry: collections::BTreeMap(),
@@ -192,6 +197,7 @@ impl ProverScope {
         self.carried.remove(name)
         self.carried_from.remove(name)
         self.joined.remove(name)
+        self.roots.remove(name)
         self.entry.remove(name)
         self.entry.remove(length)
         self.locals.insert(name.clone())
@@ -548,6 +554,7 @@ impl ProverScope {
         scope.carried = self.carried.clone()
         scope.carried_from = self.carried_from.clone()
         scope.joined = self.joined.clone()
+        scope.roots = self.roots.clone()
         scope.locals = self.locals.clone()
         scope.maps = self.maps.clone()
         return scope

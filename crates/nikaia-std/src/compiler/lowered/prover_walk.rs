@@ -583,6 +583,8 @@ pub(crate) fn prover_let(walk: &mut ProverWalk, names: &[winnow_grammar::Symbol]
     if tainted { source = nikaia_std::index::or(outside_source(value, &scope.tainted, &scope.sources, words, library, &walk.state, &mut &mut *holes_of), || "".into()); }
     let carried = carried_param(value, &scope, words, library, &walk.state, &mut &mut *holes_of);
     let proved = tainted && !mutable && names.len() == 1 && raw_sink_proved_join(walk, value, &scope, words, library, &mut &mut *holes_of, &mut &mut *ask);
+    let root = raw_sink_root(value, &scope, words);
+    let rooted = !mutable && names.len() == 1 && (raw_sink_anywhere(&root, words, &mut &mut *written_of) || raw_sink_dir(&root, words).is_some());
     for name in names.iter() {
         let name = *name;
         let n = nikaia_std::block::Text::from(words.resolve(name).to_string());
@@ -595,6 +597,7 @@ pub(crate) fn prover_let(walk: &mut ProverWalk, names: &[winnow_grammar::Symbol]
             if source != "" { scope.sources.insert(nikaia_std::block::Text::from(n.to_string()), nikaia_std::block::Text::from(source.to_string())); }
         }
         if proved { scope.joined.insert(nikaia_std::block::Text::from(n.to_string())); }
+        if rooted { scope.roots.insert(nikaia_std::block::Text::from(n.to_string()), root.clone()); }
     }
     if names.len() == 1 && prover_let_typed(&walk, ty, &span, words, 3) { scope.maps.insert(nikaia_std::block::Text::from(words.resolve(*unsafe { nikaia_std::proven::read(&names, (0) as usize) }).to_string())); }
     if names.len() == 1 && value_lin.is_none() && !tainted {
@@ -1480,7 +1483,7 @@ pub(crate) fn prover_join(walk: &mut ProverWalk, scope: &mut ProverScope, then_s
     prover_join_arms(walk, scope, &sides, &span);
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq)]
 pub(crate) struct ProverArm {
     pub(crate) scope: ProverScope,
     pub(crate) leaves: bool,
@@ -2042,18 +2045,19 @@ pub(crate) fn prover_raw_sink(walk: &mut ProverWalk, callee: &str, args: &[Expr]
         let sink = ParamSink { index: -1, kind: String::from("program"), sink: String::from("the program `process::run` runs"), operation: String::from(""), root_part: false, guard };
         for part in parts.iter() { raw_sink_part(walk, &sink, &sink.sink, part, span, scope, at, program, words, library, &mut *holes_of, &mut *ask, &mut *written_of); }
     } else if callee.starts_with("fs::") && library.functions.contains_key(callee) {
-        for (i, arg) in args.iter().enumerate().map(|(at, item)| (at as i64, item)) {
-            let anywhere = raw_sink_anywhere(arg, words, &mut *written_of);
+        for (i, written) in args.iter().enumerate().map(|(at, item)| (at as i64, item)) {
+            let arg = raw_sink_root(written, scope, words);
+            let anywhere = raw_sink_anywhere(&arg, words, &mut *written_of);
             let mut root_parts: Vec<Expr> = vec![];
             if !anywhere {
-                match raw_sink_dir(arg, words) {
+                match raw_sink_dir(&arg, words) {
                     Some(ref dir) => { raw_sink_parts(dir, &mut *holes_of, &mut root_parts); },
                     None => { continue; },
                 }
             }
             let mut root_outside = false;
             for part in root_parts.iter() { if raw_sink_outside(part, scope, words, library, &walk.state, &mut *holes_of) { root_outside = true; } }
-            let root = written_of(arg);
+            let root = written_of(&arg);
             let mut whole = raw_sink_operation(callee, 0, config, words, &mut *written_of);
             if i > 1 && raw_sink_operation(callee, 1, config, words, &mut *written_of) != whole { whole = String::from("anywhere"); }
             let root_sink = ParamSink { index: -1, kind: String::from("path"), sink: format!("the root `{}` of `{}`, a directory a stranger may have chosen", root, callee), operation: whole, root_part: true, guard: String::from("") };
@@ -2223,6 +2227,14 @@ pub(crate) fn raw_sink_operation(callee: &str, j: i64, config: &[ConfigArg], wor
         }
     }
     String::from("read")
+}
+
+pub(crate) fn raw_sink_root(arg: &Expr, scope: &ProverScope, words: &winnow_grammar::InternerContext) -> Expr {
+    let name = match raw_sink_name(arg, words) { Some(__nikaia_value) => __nikaia_value, None => return arg.clone() };
+    nikaia_std::index::or(match *nikaia_std::index::get(&scope.roots, &name) {
+        Some(__nikaia_it) => Some(__nikaia_it.clone()),
+        None => None,
+    }, || arg.clone().into())
 }
 
 pub(crate) fn raw_sink_dir(arg: &Expr, words: &winnow_grammar::InternerContext) -> Option<Expr> {

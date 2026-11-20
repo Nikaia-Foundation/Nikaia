@@ -1,0 +1,18 @@
+// A root bound to a name is judged where a call opens a path under the name
+// (ADR-raw-sinks-1 D2, D11, #2440): `let at = fs::Root::Dir(dir)` with `dir`
+// from the command line is `NK1308` at the call that uses `at`, as the root
+// written in the call is, and so is a path from outside under a name bound to
+// `fs::Root::Anywhere`. A name bound to a `Dir` of a literal is no sink.
+use std::cli
+use std::fs
+
+fn main() throws {
+    let dir = cli::args().nth(1) ?? "."
+    let at = fs::Root::Dir(dir)
+    println(fs::exists("notes.txt", at))
+    let p = cli::args().nth(1) ?? "."
+    let anywhere = fs::Root::Anywhere
+    println(fs::exists(p, anywhere))
+    let here = fs::Root::Dir(".")
+    println(fs::exists("notes.txt", here))
+}

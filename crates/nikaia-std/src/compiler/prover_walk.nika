@@ -793,6 +793,10 @@ fn prover_let(mut walk: ProverWalk, names: ref Vec[winnow_grammar::Symbol], muta
     // D14: a guarded name joined after a clean part carries its proof to
     // the binding, asked before the binding drops what the name knew.
     let proved = tainted && !mutable && names.len() == 1 && raw_sink_proved_join(walk, value, scope, words, library, holes_of, ask)
+    // D11: a root bound to a name is judged where a call opens a path under
+    // the name, as written there (#2440).
+    let root = raw_sink_root(value, scope, words)
+    let rooted = !mutable && names.len() == 1 && (raw_sink_anywhere(root, words, written_of) || raw_sink_dir(root, words) != null)
     for name in names {
         let n = words.resolve(name).clone()
         scope.rebind(walk.arena, n)
@@ -807,6 +811,9 @@ fn prover_let(mut walk: ProverWalk, names: ref Vec[winnow_grammar::Symbol], muta
         }
         if proved {
             scope.joined.insert(n.clone())
+        }
+        if rooted {
+            scope.roots.insert(n.clone(), root.clone())
         }
     }
     // **A map's index reads a key** (ADR-396 D4), a `let mut`'s too.
@@ -2774,7 +2781,8 @@ fn prover_raw_sink(mut walk: ProverWalk, callee: ref String, args: ref Vec[Expr]
             raw_sink_part(walk, sink, sink.sink, part, span, scope, at, program, words, library, holes_of, ask, written_of)
         }
     } else if callee.starts_with("fs::") && library.functions.contains_key(callee) {
-        for (i, arg) in args.iter().enumerate() {
+        for (i, written) in args.iter().enumerate() {
+            let arg = raw_sink_root(written, scope, words)
             let anywhere = raw_sink_anywhere(arg, words, written_of)
             let mut root_parts: Vec[Expr] = []
             if !anywhere {
@@ -3059,6 +3067,13 @@ fn raw_sink_operation(callee: ref String, j: i64, config: ref Vec[ConfigArg], wo
         }
     }
     return "read"
+}
+
+/// **The root an argument names** (ADR-raw-sinks-1 D11, #2440): the value
+/// of a name bound to a root (`ProverScope::roots`), else the argument.
+fn raw_sink_root(arg: ref Expr, scope: ref ProverScope, words: ref winnow_grammar::InternerContext) -> Expr {
+    let name = raw_sink_name(arg, words) ?? return arg.clone()
+    return scope.roots[name]?.clone() ?? arg.clone()
 }
 
 /// The directory of `fs::Root::Dir(dir)`, or nothing for any other root
