@@ -112,7 +112,15 @@ pub fn proven_traced(
     let all = nikaia_std::compiler::bounds_proven::bounds_proven(
         &parsed.program,
         &parsed.interner,
-        &beside.iter().map(|p| p.bounds_beside()).collect::<Vec<_>>(),
+        // **Only the other files** (ADR-391 D1): a caller that hands the
+        // whole package (`modules.rs`, the emitter's `ContractsHost`) names
+        // this file among them, and read beside itself each field it declares
+        // is "declared in a file beside", no rule's candidate (#2447).
+        &beside
+            .iter()
+            .filter(|p| !std::ptr::eq(**p, parsed))
+            .map(|p| p.bounds_beside())
+            .collect::<Vec<_>>(),
         facts,
         ledgers,
         nonnegative,
