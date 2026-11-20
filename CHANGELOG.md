@@ -8,6 +8,14 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1503] — 2026-11-20
+
+**Builders' changes (#2409, #2411, #2418)**
+- yaml checks an implicit key's single line on its bytes, without the UTF-8 check: events on the deep input 7.6 % fewer instructions.
+- A grammar's `bytes(p)` now binds the names inside `p` for the action and a guard, as `text(p)` does; the bound bytes are read unchecked (Part II 10, the `x:p` row).
+- yaml counts the indentation below a line once instead of twice: events on the deep input 6.7 % fewer instructions
+- yaml reads a quoted scalar's runs as one vectorised search for its quote, backslash or line break: scalars 210.8 -> 125.0 M instructions (0.80 of saphyr-parser), large events 1.48 -> 1.43
+
 ## [0.0.1502] — 2026-11-20
 
 **Builders' changes (#2303, #2336, #2354, #2369, #2370, #2371, #2375)**
