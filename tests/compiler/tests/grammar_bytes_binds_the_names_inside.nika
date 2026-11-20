@@ -1,0 +1,27 @@
+// `bytes(p)` binds the names inside `p` as `text(p)` does (Part II 10, the
+// row of `x:p`, #2409): bound or not, over text or over `Bytes`, and the
+// covered bytes are read unchecked, in the action and in a guard.
+grammar G {
+    rule WS = "" -> { }
+    entry rule top -> i64 = b:bytes(v:Num) -> { v * 10 + b.len() as i64 }
+    entry rule pair -> i64 = b:bytes(k:Num ":" v:Num) -> { k * 100 + v * 10 + b.len() as i64 }
+    entry rule hidden -> i64 = bytes(v:Num any) -> { v }
+    entry rule raw -> i64 = b:bytes(v:Num any) -> { v * 10 + b[1] as i64 - 250 }
+    entry rule guarded -> i64 = b:bytes(v:Num any) if(b.find(10) == null, "one line") -> { v }
+    rule Num -> i64 =
+        "3" -> { 3 }
+        | "4" -> { 4 }
+        | "5" -> { 5 }
+        | "6" -> { 6 }
+        | "7" -> { 7 }
+}
+fn main() throws {
+    println(f"{G::top("7") catch { -1 }}")
+    println(f"{G::top(Bytes([55])) catch { -1 }}")
+    println(f"{G::pair("3:4") catch { -1 }}")
+    println(f"{G::pair(Bytes([51, 58, 52])) catch { -1 }}")
+    println(f"{G::hidden("5x") catch { -1 }}")
+    println(f"{G::raw(Bytes([54, 255])) catch { -1 }}")
+    println(f"{G::guarded("4x") catch { -1 }} {G::guarded("4\n") catch { -1 }}")
+    println(f"{G::guarded(Bytes([52, 255])) catch { -1 }} {G::guarded(Bytes([52, 10])) catch { -1 }}")
+}

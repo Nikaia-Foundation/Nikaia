@@ -9,7 +9,10 @@ impl EmitState {
         if emit_is_a_binding_text(world, &walk, &pattern.node) {
             match &pattern.node {
                 Pattern::Ref { args, .. } => {
+                    let raw = walk.grammar_raw;
+                    walk.grammar_raw = raw || walk.grammar_bytes && emit_is_a_bytes_call(world, &walk, &pattern.node);
                     self.emit_text_parts(world, walk, out, host, &emit_hidden_text(pattern), args)?;
+                    walk.grammar_raw = raw;
                     out.record(&pattern.span, st);
                     return Ok(());
                 },
@@ -65,7 +68,10 @@ impl EmitState {
                 match &pat.node {
                     Pattern::Ref { args, .. } => {
                         if emit_is_a_binding_text(world, &walk, &pat.node) {
+                            let raw = walk.grammar_raw;
+                            walk.grammar_raw = raw || walk.grammar_bytes && emit_is_a_bytes_call(world, &walk, &pat.node);
                             self.emit_text_parts(world, walk, out, host, &emit_text(world, name), args)?;
+                            walk.grammar_raw = raw;
                             return Ok(());
                         }
                     },
@@ -344,16 +350,30 @@ pub(crate) fn emit_ungrouped(pattern: &Spanned<Pattern>) -> &Spanned<Pattern> {
 
 pub(crate) fn emit_is_a_binding_text(world: &EmitWorld<'_, '_, '_, '_>, walk: &EmitWalk, pattern: &Pattern) -> bool {
     match pattern {
-        Pattern::Ref { name, generics, args } => { let name = *name; emit_text(world, name) == "text" && generics.is_empty() && !args.is_empty() && !walk.grammar_nested && !walk.grammar_rules.contains("text") && args.iter().any(|arg| { emit_binds_a_name(&arg.node) }) },
+        Pattern::Ref { name, generics, args } => { let name = *name; (emit_text(world, name) == "text" || emit_text(world, name) == "bytes") && generics.is_empty() && !args.is_empty() && !walk.grammar_nested && !walk.grammar_rules.contains(&emit_text(world, name)) && args.iter().any(|arg| { emit_binds_a_name(&arg.node) }) },
+        _ => false,
+    }
+}
+
+pub(crate) fn emit_is_a_bytes_call(world: &EmitWorld<'_, '_, '_, '_>, walk: &EmitWalk, pattern: &Pattern) -> bool {
+    match pattern {
+        Pattern::Ref { name, .. } => { let name = *name; emit_text(world, name) == "bytes" && !walk.grammar_rules.contains("bytes") },
         _ => false,
     }
 }
 
 pub(crate) fn emit_texts_a_guard_reads(world: &EmitWorld<'_, '_, '_, '_>, walk: &EmitWalk, out: &mut EmitOut, patterns: &[Spanned<Pattern>], at: i64) {
     #[allow(unused_mut)] let mut names: Vec<String> = vec![];
-    let mut ranges: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut names = names;
+    #[allow(unused_mut)] let mut ranges: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut names = names;
     emit_text_bindings(world, walk, unsafe { nikaia_std::proven::read(&patterns, (at) as usize) }, &mut names, &mut ranges);
-    for (name, range) in names.iter().zip(ranges.iter()) { if patterns.iter().skip(nikaia_std::count::of(unsafe { nikaia_std::proven::add::<i64>(at, 1) })).any(|later| { emit_guard_reads(world, &later.node, name) }) { out.push(&format!(" {}:{}(at = {})", name, emit_covered_rule(), range)); } }
+    let mut as_bytes: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut names = names; #[allow(unused_mut, clippy::redundant_locals)] let mut ranges = ranges;
+    emit_bytes_bindings(world, &unsafe { nikaia_std::proven::read(&patterns, (at) as usize) }.node, &mut as_bytes);
+    for (name, range) in names.iter().zip(ranges.iter()) {
+        if patterns.iter().skip(nikaia_std::count::of(unsafe { nikaia_std::proven::add::<i64>(at, 1) })).any(|later| { emit_guard_reads(world, &later.node, name) }) {
+            let rule = if nikaia_std::list::contains(&as_bytes, &name) { emit_covered_bytes_rule() } else { emit_covered_rule() };
+            out.push(&format!(" {}:{}(at = {})", name, rule, range));
+        }
+    }
 }
 
 pub(crate) fn emit_guard_reads(world: &EmitWorld<'_, '_, '_, '_>, pattern: &Pattern, name: &str) -> bool {
@@ -376,8 +396,21 @@ pub(crate) fn emit_reads_a_text_in_a_guard(world: &EmitWorld<'_, '_, '_, '_>, wa
     #[allow(unused_mut)] let mut names: Vec<String> = vec![];
     let mut ranges: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut names = names;
     emit_text_bindings(world, walk, pattern, &mut names, &mut ranges);
-    names.iter().any(|name| { emit_guard_reads(world, &pattern.node, name) })
+    let mut as_bytes: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut names = names;
+    emit_bytes_bindings(world, &pattern.node, &mut as_bytes);
+    names.iter().any(|name| { !nikaia_std::list::contains(&as_bytes, &name) && emit_guard_reads(world, &pattern.node, name) })
 }
+
+pub(crate) fn emit_reads_bytes_in_a_guard(world: &EmitWorld<'_, '_, '_, '_>, walk: &EmitWalk, pattern: &Spanned<Pattern>) -> bool {
+    #[allow(unused_mut)] let mut names: Vec<String> = vec![];
+    let mut ranges: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut names = names;
+    emit_text_bindings(world, walk, pattern, &mut names, &mut ranges);
+    let mut as_bytes: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut names = names;
+    emit_bytes_bindings(world, &pattern.node, &mut as_bytes);
+    names.iter().any(|name| { nikaia_std::list::contains(&as_bytes, &name) && emit_guard_reads(world, &pattern.node, name) })
+}
+
+pub(crate) fn emit_covered_bytes_rule() -> String { String::from("__nikaia_covered_bytes") }
 
 pub(crate) fn emit_covered_rule() -> String { String::from("__nikaia_covered") }
 

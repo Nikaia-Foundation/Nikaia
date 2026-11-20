@@ -15,7 +15,10 @@ impl EmitState {
         if emit_is_a_binding_text(world, walk, pattern.node) {
             match pattern.node {
                 Pattern::Ref { args, .. } => {
+                    let raw = walk.grammar_raw
+                    walk.grammar_raw = raw || walk.grammar_bytes && emit_is_a_bytes_call(world, walk, pattern.node)
                     self.emit_text_parts(world, walk, out, host, emit_hidden_text(pattern), args)
+                    walk.grammar_raw = raw
                     out.record(pattern.span, st)
                     return
                 },
@@ -86,7 +89,11 @@ impl EmitState {
                 match pat.node {
                     Pattern::Ref { args, .. } => {
                         if emit_is_a_binding_text(world, walk, pat.node) {
+                            // under `bytes(..)` over a `Bytes`, `any` is the raw `byte`
+                            let raw = walk.grammar_raw
+                            walk.grammar_raw = raw || walk.grammar_bytes && emit_is_a_bytes_call(world, walk, pat.node)
                             self.emit_text_parts(world, walk, out, host, emit_text(world, name), args)
+                            walk.grammar_raw = raw
                             return
                         }
                     },
@@ -450,11 +457,20 @@ fn emit_ungrouped(pattern: ref Spanned[Pattern]) -> ref Spanned[Pattern] {
     }
 }
 
-/// Whether a pattern is the built-in `text(p)` and `p` binds a name
-/// (#1013): the grammar declares no rule of that name.
+/// Whether a pattern is the built-in `text(p)` or `bytes(p)` and `p` binds a
+/// name (#1013, #2409): the grammar declares no rule of that name.
 fn emit_is_a_binding_text(world: ref EmitWorld, walk: ref EmitWalk, pattern: ref Pattern) -> bool {
     return match pattern {
-        Pattern::Ref { name, generics, args } => emit_text(world, name) == "text" && generics.len() == 0 && args.len() >= 1 && !walk.grammar_nested && !walk.grammar_rules.contains("text") && args.iter().any(fn(arg) { emit_binds_a_name(arg.node) }),
+        Pattern::Ref { name, generics, args } => (emit_text(world, name) == "text" || emit_text(world, name) == "bytes") && generics.len() == 0 && args.len() >= 1 && !walk.grammar_nested && !walk.grammar_rules.contains(emit_text(world, name)) && args.iter().any(fn(arg) { emit_binds_a_name(arg.node) }),
+        else => false,
+    }
+}
+
+/// Whether a pattern is the built-in `bytes(..)`, not a rule of that name:
+/// over a `Bytes` what it covers is read raw (`any` is a `byte`).
+fn emit_is_a_bytes_call(world: ref EmitWorld, walk: ref EmitWalk, pattern: ref Pattern) -> bool {
+    return match pattern {
+        Pattern::Ref { name, .. } => emit_text(world, name) == "bytes" && !walk.grammar_rules.contains("bytes"),
         else => false,
     }
 }
@@ -469,9 +485,12 @@ fn emit_texts_a_guard_reads(world: ref EmitWorld, walk: ref EmitWalk, mut out: E
     let mut names: Vec[String] = []
     let mut ranges: Vec[String] = []
     emit_text_bindings(world, walk, patterns[at], names, ranges)
+    let mut as_bytes: Vec[String] = []
+    emit_bytes_bindings(world, patterns[at].node, as_bytes)
     for (name, range) in names.iter().zip(ranges.iter()) {
         if patterns.iter().skip(at + 1).any(fn(later) { emit_guard_reads(world, later.node, name) }) {
-            out.push(f" {name}:{emit_covered_rule()}(at = {range})")
+            let rule = if as_bytes.contains(name) { emit_covered_bytes_rule() } else { emit_covered_rule() }
+            out.push(f" {name}:{rule}(at = {range})")
         }
     }
 }
@@ -499,7 +518,26 @@ fn emit_reads_a_text_in_a_guard(world: ref EmitWorld, walk: ref EmitWalk, patter
     let mut names: Vec[String] = []
     let mut ranges: Vec[String] = []
     emit_text_bindings(world, walk, pattern, names, ranges)
-    return names.iter().any(fn(name) { emit_guard_reads(world, pattern.node, name) })
+    let mut as_bytes: Vec[String] = []
+    emit_bytes_bindings(world, pattern.node, as_bytes)
+    return names.iter().any(fn(name) { !as_bytes.contains(name) && emit_guard_reads(world, pattern.node, name) })
+}
+
+/// Whether a guard of an alternative reads a bound `bytes(..)` whose
+/// pattern binds names, so that the grammar needs the
+/// `__nikaia_covered_bytes` rule (#2409).
+fn emit_reads_bytes_in_a_guard(world: ref EmitWorld, walk: ref EmitWalk, pattern: ref Spanned[Pattern]) -> bool {
+    let mut names: Vec[String] = []
+    let mut ranges: Vec[String] = []
+    emit_text_bindings(world, walk, pattern, names, ranges)
+    let mut as_bytes: Vec[String] = []
+    emit_bytes_bindings(world, pattern.node, as_bytes)
+    return names.iter().any(fn(name) { as_bytes.contains(name) && emit_guard_reads(world, pattern.node, name) })
+}
+
+/// The rule a guard's bound `bytes(..)` is read by, unchecked (#2409).
+fn emit_covered_bytes_rule() -> String {
+    return "__nikaia_covered_bytes"
 }
 
 /// The rule a guard's bound `text(..)` is read by (#1033).

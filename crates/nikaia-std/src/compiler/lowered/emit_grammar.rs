@@ -335,18 +335,25 @@ impl EmitState {
         let mut heres = false;
         let mut counts = false;
         let mut covers = false;
+        let mut covers_bytes = false;
         for rule in def.rules.iter() {
             for alt in rule.alts.iter() {
                 spans = spans || emit_writes_a_built_in(world, &walk, &alt.pattern.node, "span", 1);
                 heres = heres || emit_writes_a_built_in(world, &walk, &alt.pattern.node, "here", 0);
                 counts = counts || emit_writes_a_built_in(world, &walk, &alt.pattern.node, "count", 1);
                 covers = covers || emit_reads_a_text_in_a_guard(world, &walk, &alt.pattern);
+                covers_bytes = covers_bytes || emit_reads_bytes_in_a_guard(world, &walk, &alt.pattern);
             }
         }
         if covers {
             out.push(&format!("\n        rule {}(at: ::core::ops::Range<usize>) -> &'a str =\n", emit_covered_rule()));
             out.push("          empty\n");
             if bytes { out.push("            -> { ::nikaia_std::grammar::covered_bytes::<_, __WgEr>(input, at.clone())? }\n"); } else { out.push("            -> { ::nikaia_std::grammar::covered(input, at.clone()) }\n"); }
+        }
+        if covers_bytes {
+            out.push(&format!("\n        rule {}(at: ::core::ops::Range<usize>) -> &'a [u8] =\n", emit_covered_bytes_rule()));
+            out.push("          empty\n");
+            if bytes { out.push("            -> { ::nikaia_std::grammar::covered_raw(input, at.clone()) }\n"); } else { out.push("            -> { ::nikaia_std::grammar::covered(input, at.clone()).as_bytes() }\n"); }
         }
         if counts {
             out.push(&format!("\n        rule {}<T>(p: Rule<T>) -> i64 =\n", emit_count_rule()));
@@ -439,12 +446,14 @@ impl EmitState {
                     #[allow(unused_mut)] let mut spanned: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut as_spans = as_spans;
                     emit_span_bindings(world, &walk, &alt.pattern.node, &mut as_spans, &mut spanned, false);
                     let mut prelude = String::from(""); #[allow(unused_mut, clippy::redundant_locals)] let mut as_bytes = as_bytes; #[allow(unused_mut, clippy::redundant_locals)] let mut as_spans = as_spans; #[allow(unused_mut, clippy::redundant_locals)] let mut spanned = spanned;
-                    for name in as_bytes.iter() { prelude = format!("{}let {} = {}.as_bytes(); ", prelude, name, name); }
-                    for (name, range) in as_spans.iter().zip(spanned.iter()) { prelude = format!("{}let {} = ::nikaia_std::text::Span::of({}); ", prelude, name, range); }
-                    #[allow(unused_mut)] let mut as_texts: Vec<String> = vec![];
-                    let mut covered: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut as_texts = as_texts;
+                    #[allow(unused_mut)] let mut as_texts: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut as_bytes = as_bytes;
+                    #[allow(unused_mut)] let mut covered: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut as_texts = as_texts;
                     emit_text_bindings(world, &walk, &alt.pattern, &mut as_texts, &mut covered);
-                    for (name, range) in as_texts.iter().zip(covered.iter()) { if bytes { prelude = format!("{}let {} = ::nikaia_std::grammar::covered_bytes::<_, __WgEr>(input, {})?; ", prelude, name, range); } else { prelude = format!("{}let {} = ::nikaia_std::grammar::covered(input, {}); ", prelude, name, range); } }
+                    for name in as_bytes.iter() { if !nikaia_std::list::contains(&as_texts, &name) { prelude = format!("{}let {} = {}.as_bytes(); ", prelude, name, name); } }
+                    for (name, range) in as_spans.iter().zip(spanned.iter()) { prelude = format!("{}let {} = ::nikaia_std::text::Span::of({}); ", prelude, name, range); }
+                    let mut bound_bytes: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut as_texts = as_texts; #[allow(unused_mut, clippy::redundant_locals)] let mut covered = covered;
+                    emit_bytes_bindings(world, &alt.pattern.node, &mut bound_bytes);
+                    for (name, range) in as_texts.iter().zip(covered.iter()) { if nikaia_std::list::contains(&bound_bytes, &name) { if bytes { prelude = format!("{}let {} = ::nikaia_std::grammar::covered_raw(input, {}); ", prelude, name, range); } else { prelude = format!("{}let {} = ::nikaia_std::grammar::covered(input, {}).as_bytes(); ", prelude, name, range); } } else if bytes { prelude = format!("{}let {} = ::nikaia_std::grammar::covered_bytes::<_, __WgEr>(input, {})?; ", prelude, name, range); } else { prelude = format!("{}let {} = ::nikaia_std::grammar::covered(input, {}); ", prelude, name, range); } }
                     if self.emit_action_can_fail(world, action) {
                         if prelude != "" { out.push(&format!("{{ {}", prelude)); }
                         self.emit_failing_action(world, walk, out, host, action, emit_passes_a_cut(&alt.pattern.node))?;

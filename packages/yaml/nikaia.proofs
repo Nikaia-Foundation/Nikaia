@@ -1467,7 +1467,6 @@
 8bac304e2d9ca6817bae709374602013e5be0fd33caa07de85b55cbd0f1971ad proved R(h9,h12,c1:1:0:1)
 8bad830f8bf6dc117bba567fe8f0136f46cbbfaaea1c55e8e9cf57793ebda109 refuted v0=0,v1=1,v2=0,v3=0,v4=0,v5=0,v6=0,v7=0
 8bb937cc7d8363d6ff7b59a4bd99e781a9065d2a8b4680bc5782d1977b8e7e5b refuted v0=0,v1=1,v10=1,v2=1,v3=0,v4=2,v5=1,v6=0,v7=1,v8=0,v9=1
-8bbe36c010ea83c79ea6408be92ca9beb2b1ed00dd872b8259909d39af5733b9 invariant src/main.nika:2861:3/bounds closed-forms=eq(e@87444,j);closed-forms=le(e,e@87444);guess-and-check=le(e,j);guess-and-check=ge(e,j#81);guess-and-check=le(e,n);guess-and-check=lt(e,n);guess-and-check=ge(e,0);guess-and-check=lt(e,bs.len%28%29)
 8bf99f91c1902a19db8b331b0491bd11cde0767b802c2f1e0f3508f048c8bd6a refuted v0=0,v1=0,v2=1,v3=1,v4=0,v5=1,v6=1
 8c05b39c0f20a0b014e7a3b98bba58c14836d1981ccbda8a3ad7dd92f1c1f303 refuted v0=1
 8c1a2fc4749a15d809e31b0f4cdfe10d0added3884a202464a15e170b2e8f765 proved R(h1)
@@ -1575,7 +1574,6 @@
 96bd867a7fd7bab6dc926cbd64eb5ec9e9d46fca7b66f8ce24d3bcb89fbd5483 refuted v0=1,v1=0,v2=0,v3=0,v4=-1,v5=1,v6=1,v7=0
 96c0b94aefd40ca3349a1b1975ed541aeb1553d782b481cafd52a90936619c66 refuted v0=0,v1=1,v2=0,v3=0,v4=0,v5=1,v6=1,v7=0
 96dcb3e2dbf7a4cd88ab623ddfc564efb7f0c56a9d3e4b08f1919deb68e0daa1 refuted v0=0,v1=2,v10=0,v11=0,v12=0,v13=1,v14=0,v2=0,v3=2,v4=1,v5=0,v6=0,v7=0,v8=1,v9=0
-9704b8f6373137c8c48a3508561852f2c03715f41c47495a60d1412a2bd33fbf invariant src/main.nika:2837:2/bounds closed-forms=eq(i@86857,0);guess-and-check=ge(i,0)
 9711bd41feb8d1dededbd8a4122f64ab90609ce0189ee1a6335cc617f8805767 refuted v0=0,v1=0,v2=1,v3=0,v4=1,v5=0,v6=1,v7=0
 971a162d264a31b6fbb8395d7ee712addb710841c5807eb610d8fe6141e876fa proved R(h2,h13,h14,c2:1:0:1,c3:1:1:1)
 9723b24ab0a571045cded54f964ae3852f45b7f714b0d65b7ec3939820665961 refuted v0=0,v1=0,v10=0,v11=0,v12=0,v2=1,v3=0,v4=0,v5=0,v6=0,v7=0,v8=0,v9=0
@@ -2021,6 +2019,7 @@ c0e05ddc1ba7c11e08002ab32bd60fa135a4b72c15e6db266d0e7cd5ae621e0f refuted v0=-1,v
 c0fbe0bfaf6cf13b9343cbc9d55d4360496cc05d57b542db70f8023d6d8504ec proved R(h9,h24,h26,c1:1:2:1,c3:1:0:1)
 c0fcf3783ea6b9641c3a4e75c535183c029085c1cd0915d398e70830d88fd193 proved R(h0,h5,h9,c0:1:1:1,c3:1:2:1)
 c0fe7945659b524bafa6d57bdf8c2c002926c5b103ee838530f092275e051c22 refuted v0=0,v1=45,v2=0,v3=-4
+c116e1752bcd4160e5a929b28faac58d91c2be782e78d2bc775333140a2b5af0 invariant src/main.nika:2855:2/bounds closed-forms=eq(i@87945,0);guess-and-check=ge(i,0)
 c11a53097e9561659f08ba2baf48f6dd706622130c6de08f2efe5d4fbc134b54 refuted v0=0,v1=16,v2=16,v3=16,v4=0,v5=16
 c15f5de68ad43002171fb82fe61adba6243aac80e10b7e7856f86bf5db69cac1 refuted v0=-1,v1=0,v2=-1,v3=0,v4=1,v5=-1,v6=-1
 c15f7cb2f10ef85bc2bf9af783e69135a99f6ecabd6941ad4840812910e1741a refuted v0=0,v1=0,v2=1,v3=0,v4=1,v5=1,v6=0,v7=1,v8=0
@@ -2630,6 +2629,7 @@ fd896fe75c7ac31b846dab7d9f5814bdea03748d4c950e6d47800ac79bb973ba refuted v0=1,v1
 fd999eb75f8c931d1e0053dfb33343628a585c09abd3af5623b29c4fa855019d proved R(h6,h7,h13,c0:1:2:1,c1:1:3:1)
 fd9d08b52193fcbc95eed8dbaaf77fc567f82494f2b1d0d1029ff06358750a98 refuted v0=0,v1=0
 fdb4c372c6b596bde150c90344a38bae57bd7cdd3dcd591430ecead42f47dfb7 refuted v0=1,v1=1,v2=1,v3=1,v4=1,v5=0,v6=0,v7=0
+fde5ea9906f5be8cfc0d29ee18e6af42e218e7f15a810350c609ef486088dfa0 invariant src/main.nika:2879:3/bounds closed-forms=eq(e@88532,j);closed-forms=le(e,e@88532);guess-and-check=le(e,j);guess-and-check=ge(e,j#81);guess-and-check=le(e,n);guess-and-check=lt(e,n);guess-and-check=ge(e,0);guess-and-check=lt(e,bs.len%28%29)
 fde86592d9c285f0b3d4b4764cc5264bc674145ed0a0823988f559dd1af07915 proved S5[R(h5,h26,c1:1:0:1)|R(h4,h27,c0:1:1:1)]
 fdf41096ba042cc3697f0a42bb92c189a437a55fb500e9fe56cd0488a6543b2a refuted v0=0,v1=0,v2=0,v3=0,v4=0,v5=0,v6=0,v7=0,v8=1
 fdf69d6e360158f5108858ab1627dcc9771c224b5364f283ee01cfea776126c9 refuted v0=0,v1=-1
