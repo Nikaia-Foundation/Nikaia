@@ -88,6 +88,7 @@
 use std::cli
 use std::env
 use std::fs
+use std::path
 use std::process
 use std::text
 
@@ -108,34 +109,37 @@ fn solver_rod_cases() -> i64 {
 	return 1099511627776
 }
 
+// The `nikaia` this program runs under (`env::current_exe`, set by `nikaia
+// run`, ADR-program-path-1 D3), which the compiler trusts as no outside value
+// does (ADR-397): a path out of `/proc` or a shell would come from outside
+// and reach `process::run` (ADR-raw-sinks-1, #2364).
 fn solver_toolchain(repo: String) -> String throws {
-	let exe = process::run(
-		"sh",
-		[
-			"-c",
-			"p=$PPID; while [ \"$p\" -gt 1 ]; do e=$(readlink /proc/$p/exe); if [ \"$(basename \"$e\")\" = nikaia ]; then echo \"$e\"; exit 0; fi; p=$(cut -d' ' -f4 /proc/$p/stat); done",
-		],
-	).stdout.trim().clone()
+	let exe = env::current_exe()?.display() ?? ""
 	if exe.len() == 0 {
 		// `$NIKAIA` first: a copy of the repository (a `git archive` tree for
 		// an instrumented solver) has no build of its own (#2006).
 		let named = env::var("NIKAIA") ?? ""
 		if named != "" { return named }
-		// Run by hand from a shell (`nikaia run` replaced itself with this
-		// program): the repository's own build, only where it exists (#1305).
+		// Run as a built program, not by `nikaia run`: the repository's own
+		// build, only where it exists (#1305).
 		for built in [f"{repo}/target/fast/nikaia", f"{repo}/target/release/nikaia"] {
 			if fs::exists(built.clone(), fs::Root::Anywhere) { return built }
 		}
-		eprintln(f"no nikaia found: none among this program's ancestors, no `$NIKAIA`, none in {repo}/target/fast or target/release (#1305)")
+		eprintln(f"no nikaia found: not run by `nikaia run`, no `$NIKAIA`, none in {repo}/target/fast or target/release (#1305)")
 		process::exit(2)
 	}
-	return exe
+	return exe.clone()
 }
 
+// The repository this program stands in: the directory above the
+// `scripts/solver.nika` that `nikaia run` names in `env::current_main`
+// (ADR-program-path-1 D3), an absolute path the compiler trusts; a path out
+// of `git` or `pwd` would come from outside (ADR-raw-sinks-1, #2364). Run
+// otherwise, the working directory.
 fn solver_root() -> String throws {
-	let here = process::run("git", ["rev-parse", "--show-toplevel"]).stdout.trim().clone()
-	if fs::exists(f"{here}/scripts/gate.nika", fs::Root::Anywhere) { return here }
-	return process::run("pwd", []).stdout.trim().clone()
+	let main = env::current_main()?.display() ?? ""
+	let repo = main.strip_suffix("/scripts/solver.nika") ?? "."
+	return repo.clone()
 }
 
 // --- Assembling and building the program ---
@@ -145,7 +149,10 @@ fn solver_root() -> String throws {
 // the rod's driver `packages/logic/rod/src/main.nika`. Empty where the
 // package cannot be listed.
 fn solver_program_files(repo: String) -> Vec[String] throws {
-	let listed = process::run("sh", ["-c", "ls \"$1\"/packages/logic/src/*.nika | LC_ALL=C sort", "sh", repo.clone()])
+	let listed = process::run(
+		"sh",
+		["-c", "ls \"$1\"/packages/logic/src/*.nika | LC_ALL=C sort", "sh", repo.clone()],
+	)
 	let mut paths: Vec[String] = []
 	if !listed.ok { return paths }
 	paths.push(f"{repo}/packages/logic/nikaia.toml")
@@ -245,12 +252,17 @@ fn solver_cache_dir() -> String {
 // `--build-in <slot> REPO NIKAIA KEPT`, writes and builds it there.
 fn solver_build(repo: String, nikaia: String) -> String throws {
 	let key = solver_key(repo.clone(), nikaia.clone())
-	if key == "" {
+	// The key is a hash `sha256sum` printed, one component by this guard
+	// (ADR-raw-sinks-1 D14), so the paths built from it are not outside.
+	if key == "" || !path::is_component(key) {
 		println("the solver program did not build: its files could not be read")
 		return ""
 	}
 	let kept = f"{repo}/target/solver-rod/{key}/solver_rod"
-	if fs::exists(kept.clone(), fs::Root::Anywhere) { return kept }
+	// Looked up under the store's own root, where the guarded key is one
+	// component (ADR-raw-sinks-1 D11, D14).
+	let store = fs::Root::Dir(f"{repo}/target/solver-rod")
+	if fs::exists(f"{key}/solver_rod", store) { return kept }
 	process::run("mkdir", ["-p", f"{repo}/target/solver-rod/{key}"])
 	let main = env::current_main()?.display() ?? f"{repo}/scripts/solver.nika"
 	// Under the lock: built only where no run before this one kept it.
@@ -279,7 +291,7 @@ fn solver_build(repo: String, nikaia: String) -> String throws {
 			kept.clone(),
 		]; stdout: process::Stream::Inherited,
 	)
-	if !built.ok || !fs::exists(kept.clone(), fs::Root::Anywhere) {
+	if !built.ok || !fs::exists(f"{key}/solver_rod", store) {
 		if built.ok { println("the solver program did not build") }
 		return ""
 	}
@@ -608,7 +620,7 @@ fn solver_rlimit() -> i64 {
 // The z3 to ask: `$Z3` where it is set, else `z3` on the path; `""` where
 // neither runs.
 fn solver_z3_exe() -> String throws {
-	return solver_exe("Z3", "z3")
+	return solver_exe(env::var("Z3") ?? "z3")
 }
 
 // z3's answer to a file under `rlimit`: `sat`, `unsat`, `unknown`, or `error`
@@ -1132,11 +1144,14 @@ fn solver_fuzz(repo: String, nikaia: String, args: Vec[String]) throws {
 	let seed = if self_test { 7 } else { text::parse_i64(plain[1].clone()) ?? 0 }
 	let max = solver_flag(args.clone(), "--size", 8)
 	let rlimit = solver_flag(args.clone(), "--rlimit", solver_rlimit())
-	let bugs: String = if self_test { process::run("mktemp", ["-d"]).stdout.trim().clone() } else {
-		f"{repo}/tests/solver/bugs"
+	// The queries and, under `--self-test`, the disagreements are written
+	// into directories `std` made (ADR-raw-sinks-1 D12).
+	let bugs: fs::Root = if self_test { fs::scratch() } else {
+		let kept = f"{repo}/tests/solver/bugs"
+		fs::create_dir(kept.clone(), fs::Root::Anywhere; recursive: true)
+		fs::Root::Dir(kept)
 	}
-	let work: String = process::run("mktemp", ["-d"]).stdout.trim().clone()
-	process::run("mkdir", ["-p", bugs.clone()])
+	let work = fs::scratch()
 	let bin = solver_build(repo, nikaia)
 	if bin == "" { process::exit(1) }
 	println(f"fuzz: {n} queries, seed {seed}, size 1 to {max}, z3 rlimit {rlimit}")
@@ -1162,8 +1177,8 @@ fn solver_fuzz(repo: String, nikaia: String, args: Vec[String]) throws {
 			let source = solver_query_text(query)
 			let name = if kind
 				== "" { f"fuzz-{seed}-{i}.smt2" } else { f"fuzz-{seed}-{i}-{kind}.smt2" }
-			let path = f"{work}/{name}"
-			fs::write(path.clone(), fs::Root::Anywhere, source.clone())
+			let path = f"{work.path().display()}/{name}"
+			fs::write(name.clone(), work, source.clone())
 			let (answer, _, _) = solver_answer(bin.clone(), "new", path.clone(), 60)
 			if answer == "proved" { proved += 1 }
 			if answer == "refuted" { refuted += 1 }
@@ -1187,11 +1202,7 @@ fn solver_fuzz(repo: String, nikaia: String, args: Vec[String]) throws {
 			let against = got != "" && (expected == "sat" || expected == "unsat") && got != expected
 			if against || answer.starts_with("wrong") {
 				found += 1
-				fs::write(
-					f"{bugs}/{name}",
-					fs::Root::Anywhere,
-					solver_with_status(source.clone(), expected.clone()),
-				)
+				fs::write(name.clone(), bugs, solver_with_status(source.clone(), expected.clone()))
 				println(f"{name}: engine {answer}, {by} {expected}")
 			}
 			if self_test && i == 0 {
@@ -1206,8 +1217,8 @@ fn solver_fuzz(repo: String, nikaia: String, args: Vec[String]) throws {
 			println(f"size {s}: z3 decided {decided[s]}, undecided {undecided[s]}")
 		}
 	}
-	if self_test { process::run("rm", ["-rf", bugs]) }
-	process::run("rm", ["-rf", work])
+	if self_test { process::run("rm", ["-rf", bugs.path().display()]) }
+	process::run("rm", ["-rf", work.path().display()])
 	if found > 0 {
 		println(f"reproduce: nikaia run scripts/solver.nika -- fuzz {n} {seed} --size {max} --rlimit {rlimit}")
 		process::exit(1)
@@ -1695,10 +1706,11 @@ fn solver_one(
 	return SolverRun { answer: answer, millis: millis, kib: kib, instructions: counted }
 }
 
-// Where a solver's CLI is: `$VAR` where it is set, else `name` on the path;
-// `""` where neither runs.
-fn solver_exe(var: String, name: String) -> String throws {
-	let exe = env::var(var) ?? name
+// `exe` where it runs (the operator's `$VAR`, else the solver's name on the
+// path), `""` where it does not. The caller reads the variable by its literal
+// name: a name the compiler does not know while building is untrusted
+// (ADR-397 D2), and the program run is a raw sink (ADR-raw-sinks-1 D10).
+fn solver_exe(exe: String) -> String throws {
 	return if process::run("sh", ["-c", f"command -v '{exe}'"]).ok { exe } else { "" }
 }
 
@@ -1787,12 +1799,12 @@ fn solver_compare(repo: String, nikaia: String, args: Vec[String]) throws {
 	if bin == "" { process::exit(1) }
 	let mut solvers: Vec[String] = ["ours"]
 	let mut exes: Vec[String] = [""]
-	for (name, var) in [("z3", "Z3"), ("cvc5", "CVC5")] {
-		let exe = solver_exe(var, name)
+	for (name, var, chosen) in [("z3", "Z3", env::var("Z3") ?? "z3"), ("cvc5", "CVC5", env::var("CVC5") ?? "cvc5")] {
+		let exe = solver_exe(chosen)
 		if exe == "" {
 			println(f"{name} is not on the path (nor ${var}): left out")
 		} else {
-			solvers.push(name)
+			solvers.push(name.clone())
 			exes.push(exe)
 		}
 	}
