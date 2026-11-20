@@ -6899,19 +6899,6 @@ provenance = "untrusted"
 keeps = ["args", "env", "env_remove", "stdin"]
 signature = "(program: ref String, args: Vec[String]; dir: ref String = \".\", env: Vec[(String, String)] = [], env_remove: Vec[String] = [], env_clear: bool = false, within: time::Duration? = null, stdin: process::Input = process::Input::Closed, stdout: process::Stream = process::Stream::Captured, stderr: process::Stream = process::Stream::Captured, trusted: bool = false) -> process::Output"
 
-# Whether two environment names are the same variable (ADR-243 D5): byte
-# for byte, or without regard to ASCII case where `windows`. `std`'s own, for
-# its test blocks (ADR-rust-boundary-1 D24, D26). Rust takes both names as
-# `&OsStr`, which a `String` crosses to as `OsStr::new` (Part III 15.2,
-# `os_text`, #2351).
-[fn."process::same_name"]
-pub = false
-panics = false
-sync = true
-touches = []
-os_text = ["a", "b"]
-signature = "(a: ref String, b: ref String, windows: bool) -> bool"
-
 # A program started and not yet waited for (#1177): what `process::spawn`
 # hands back. Its two output streams are read to their end from the start, so
 # it never blocks on a full pipe while nobody waits.
