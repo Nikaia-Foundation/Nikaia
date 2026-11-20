@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1492] — 2026-11-20
+
+**solver: build the program as a package of files, rustc's lints capped**
+- The solver's program builds in about half the time when cold: it is built as a package of its files, and rustc's lints on it are capped.
+
 ## [0.0.1491] — 2026-11-20
 
 **The decisions on views live in one record, ADR-views-v4 (#2273)**

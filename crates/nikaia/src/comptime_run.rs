@@ -799,6 +799,45 @@ fn defaults_known_from<R>(outer: Option<&crate::contracts::Ledger>, read: impl F
     out
 }
 
+/// **What a build set on this thread around the program it reads**, taken
+/// to a worker thread (#1949): the build-time directory defaults are
+/// compiled in, the defaults a ledger recorded and the constants being
+/// worked out ahead. A pass that proves the units of a package on every core
+/// ([`crate::proofs::in_parallel`]) answers on each worker as on the thread
+/// that started it.
+pub(crate) struct Carried {
+    defaults: Option<std::sync::Arc<crate::grammar_run::BuildTimeDir>>,
+    known: Option<crate::contracts::Ledger>,
+    ahead: BTreeSet<String>,
+}
+
+/// This thread's [`Carried`].
+pub(crate) fn carried() -> Carried {
+    Carried {
+        defaults: DEFAULTS.with(|held| held.borrow().clone()),
+        known: KNOWN.with(|held| held.borrow().clone()),
+        ahead: AHEAD.with(|held| held.borrow().clone()),
+    }
+}
+
+impl Carried {
+    /// `run` with what `self` holds set on this thread, and what was set
+    /// before put back after.
+    pub(crate) fn within<R>(&self, run: impl FnOnce() -> R) -> R {
+        let defaults =
+            DEFAULTS.with(|held| std::mem::replace(&mut *held.borrow_mut(), self.defaults.clone()));
+        let known =
+            KNOWN.with(|held| std::mem::replace(&mut *held.borrow_mut(), self.known.clone()));
+        let ahead =
+            AHEAD.with(|held| std::mem::replace(&mut *held.borrow_mut(), self.ahead.clone()));
+        let out = run();
+        DEFAULTS.with(|held| *held.borrow_mut() = defaults);
+        KNOWN.with(|held| *held.borrow_mut() = known);
+        AHEAD.with(|held| *held.borrow_mut() = ahead);
+        out
+    }
+}
+
 /// What the program's ledger recorded for option `at` of `key` - qualified
 /// by the package for one that is not the program's - where a run's
 /// sub-program is being read and the ledger holds a value.
