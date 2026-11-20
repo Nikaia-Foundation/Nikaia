@@ -260,6 +260,16 @@ impl SvAssumes {
 }
 
 impl SvLog {
+	/// Back to the log it was at `mark`: the steps, entries and columns made
+	/// since are dropped, as if never written.
+	fn rewind(ref mut self, mark: ref SvMark) {
+		self.steps.truncate(mark.steps)
+		self.walk.made_by.truncate(mark.entries as i64)
+		self.walk.seen.truncate(mark.entries as i64)
+		self.entries = mark.entries
+		self.columns = mark.columns
+	}
+
 	/// Whether the log holds more steps than its `limit` allows.
 	fn over(ref self) -> bool {
 		return self.limit > 0 && self.steps.len() > self.limit
@@ -348,6 +358,13 @@ pub struct SvBook {
 	pub reals: Vec[u32],
 }
 
+/// Where a book's log stood, which `SvBook.rewind` returns it to.
+struct SvMark {
+	steps: i64,
+	entries: u32,
+	columns: u32,
+}
+
 /// A book over `query`, its clauses not yet put in.
 fn sv_book(query: ref SvQuery) -> SvBook? {
 	let log = sv_log(query) ?? return null
@@ -421,6 +438,26 @@ fn sv_lits_ascending(ls: ref Vec[u32]) -> bool {
 }
 
 impl SvBook {
+	/// Where the log stands now, for `rewind`.
+	fn mark(ref self) -> SvMark {
+		return SvMark { steps: self.log.steps.len(), entries: self.log.entries, columns: self.log.columns }
+	}
+
+	/// Back to the book it was at `mark`: the steps since and the bound
+	/// entries they made are dropped. Only for what no clause the search
+	/// holds came from: a check that refuted nothing kept every bound its
+	/// elimination derived, about 600 MiB a check on SMPT
+	/// Referendum-PT-0500-RF-00, held until the process ran out of memory
+	/// (#2377).
+	fn rewind(ref mut self, mark: ref SvMark) {
+		let mut id = mark.entries
+		while id < self.log.entries {
+			self.bounds.remove(id)
+			id += 1
+		}
+		self.log.rewind(mark)
+	}
+
 	/// The bound literal `l` assumes, as the checker reads it; `null` past
 	/// the atoms, on a negated equality, or where the negation overflows.
 	fn lit_bound(ref self, l: u32) -> SvBound? {

@@ -941,6 +941,7 @@ pub fn diagnose(
             |host, _| {
                 use project_lower::ProjectLowerHost;
                 host.read_program()
+                    .and_then(|()| host.infer_program())
                     .and_then(|()| project_lower::project_lower_check(host).map(|_| ()))
                     .map_err(|error| host.failed.take().unwrap_or_else(|| anyhow!("{error}")))
             },
@@ -987,6 +988,7 @@ pub fn definition(
                 |host, _| {
                     use project_lower::ProjectLowerHost;
                     host.read_program().ok()?;
+                    host.infer_program().ok()?;
                     // A refusal still leaves the facts of what was checked.
                     let _ = project_lower::project_lower_check(host);
                     let program = host.program.borrow();
@@ -1105,6 +1107,7 @@ fn with_lower_host<R>(
         open,
         reads: &reads,
         choices: RefCell::new(Some(choices)),
+        gathered: RefCell::new(None),
         program: RefCell::new(None),
         key_source: RefCell::new(String::new()),
         cache: RefCell::new(None),
@@ -1140,6 +1143,8 @@ struct LowerHost<'a> {
     reads: &'a assets::Reads,
     /// The key's choices; named with the program's paths once it is read.
     choices: RefCell<Option<Choices>>,
+    /// The program's files as read, until its ledger is inferred (#2395).
+    gathered: RefCell<Option<modules::Gathered>>,
     program: RefCell<Option<modules::Program>>,
     key_source: RefCell<String>,
     cache: RefCell<Option<Cache>>,
@@ -1192,6 +1197,10 @@ impl LowerHost<'_> {
         if features.is_empty() || self.exported.borrow().is_none() {
             return Ok(());
         }
+        // A cache hit read no program (#2395): narrowing reads it.
+        if self.program.borrow().is_none() {
+            self.inferred()?;
+        }
         let package = manifest
             .package_name()
             .map(str::to_text)
@@ -1232,6 +1241,68 @@ impl LowerHost<'_> {
         })
     }
 
+    /// **The program's ledger inferred** over the files `read_program` read
+    /// (#2395), once: with an option's computed default compiled where this
+    /// build compiles its `comptime`s (ADR-321 D1, ADR-318 D1), since the
+    /// ledger records the value, and with the prover's recorded answers open
+    /// ([ADR-270](../../docs/specification/adr/adr-270.md) D4): the
+    /// inference asks the prover too, and those questions are the build's as
+    /// much as the check's. Outside a project there is no file.
+    fn inferred(&self) -> Result<()> {
+        if self.program.borrow().is_some() {
+            return Ok(());
+        }
+        let gathered = self
+            .gathered
+            .borrow_mut()
+            .take()
+            .expect("the program is read first");
+        let book = match self.layout.in_project {
+            true => crate::proofs::Book::read(&self.layout.root),
+            false => crate::proofs::Book::default(),
+        };
+        let (program, book) = crate::proofs::with_book(book, || {
+            crate::comptime_run::defaults_compiled_in(self.reads.build_time_dir().place(), || {
+                gathered.infer(self.packages)
+            })
+        });
+        *self.book.borrow_mut() = Some(book);
+        let mut program = program?;
+        program.entry_shown_as = SHOWN_AS.with(|cell| cell.borrow().clone());
+        // **Said in the build's trace** (`NIKAIA_WRAPPER_TRACE`): which
+        // lowering inferred a ledger, and so which one a cache hit spared.
+        block_on(project_settings::project_settings_trace(
+            TRACE_VAR,
+            Some(&self.package_exported()),
+            false,
+            "ledger inferred",
+            &SettingsHost,
+        ));
+        *self.program.borrow_mut() = Some(program);
+        Ok(())
+    }
+
+    /// The package name a library's entry points are read under.
+    fn package_exported(&self) -> String {
+        Manifest::read(&self.layout.root.join("nikaia.toml"))
+            .ok()
+            .and_then(|m| m.package_name().map(str::to_text))
+            .unwrap_or_else(|| self.settings.words.symbol_prefix.clone())
+    }
+
+    /// What a library's entry points are read under, stored with them in
+    /// the cache (#2395): a hit under other words is a miss.
+    fn export_said(&self) -> String {
+        let words = &self.settings.words;
+        format!(
+            "{}\n{}\n{}\n{}",
+            words.symbol_prefix,
+            self.package_exported(),
+            words.user_parallelism,
+            words.target
+        )
+    }
+
     fn program(&self) -> std::cell::Ref<'_, modules::Program> {
         std::cell::Ref::map(self.program.borrow(), |program| {
             program.as_ref().expect("the program is read first")
@@ -1255,50 +1326,43 @@ impl project_lower::ProjectLowerHost for LowerHost<'_> {
         // project*, which is what a `nikaia.toml` declares; a directory of loose
         // examples is a directory of programs, and compiling one of them must not
         // pull in the other ten (ADR-286 D1, `modules::collect_one`).
-        // **An option's computed default is compiled where this build compiles
-        // its `comptime`s** (ADR-321 D1, ADR-318 D1): the ledger inferred while
-        // the program is read records the value.
+        //
+        // **Only the files** (#2395): they are all the key is made of, and a
+        // hit needs no more; `infer_program` infers the ledger on a miss.
         let (input, packages) = (self.input, self.packages);
-        // **The prover's recorded answers are open from here** ([ADR-270](../../docs/specification/adr/adr-270.md)
-        // D4): the ledger inferred while the program is read asks the
-        // prover too, and those questions are the build's as much as the
-        // check's. Outside a project there is no file.
-        let book = match self.layout.in_project {
-            true => crate::proofs::Book::read(&self.layout.root),
-            false => crate::proofs::Book::default(),
+        let gathered = match (self.settings.words.tests, self.layout.in_project) {
+            _ if self.program_test => {
+                modules::Gathered::program_test_open(input, packages, self.open)
+            }
+            (true, in_project) => {
+                modules::Gathered::for_tests_open(input, packages, in_project, self.open)
+            }
+            (false, true) => modules::Gathered::with_open(input, packages, self.open),
+            (false, false) => modules::Gathered::one_open(input, self.open),
         };
-        let (program, book) = crate::proofs::with_book(book, || {
-            crate::comptime_run::defaults_compiled_in(
-                self.reads.build_time_dir().place(),
-                || match (self.settings.words.tests, self.layout.in_project) {
-                    _ if self.program_test => {
-                        modules::Program::read_program_test_open(input, packages, self.open)
-                    }
-                    (true, in_project) => modules::Program::read_for_tests_open(
-                        input, packages, in_project, self.open,
-                    ),
-                    (false, true) => modules::Program::read_with_open(input, packages, self.open),
-                    (false, false) => modules::Program::read_one_open(input, self.open),
-                },
-            )
-        });
-        *self.book.borrow_mut() = Some(book);
-        let mut program = self.held(program)?;
-        program.entry_shown_as = SHOWN_AS.with(|cell| cell.borrow().clone());
-        *self.key_source.borrow_mut() = String::from(program.sources().join("\n// --- unit ---\n"));
+        let gathered = self.held(gathered)?;
+        *self.key_source.borrow_mut() =
+            String::from(gathered.sources().join("\n// --- unit ---\n"));
         // **What the output names is part of the key** (0.0.239): the abort table
         // names each file as it was handed to the compiler (ADR-300 D9), so a
         // lowering cached for `/abs/one.nika` and reused for `one.nika` named the
         // first path in the second program's aborts. A choice, and not part of
         // the source, because the source's hash is the lockfile's.
+        let shown_as = SHOWN_AS.with(|cell| cell.borrow().clone());
         let choices = self
             .choices
             .borrow_mut()
             .take()
             .expect("the choices are set");
-        *self.choices.borrow_mut() = Some(choices.naming(program.shown_paths().join("\n")));
-        *self.program.borrow_mut() = Some(program);
+        *self.choices.borrow_mut() =
+            Some(choices.naming(gathered.shown_paths(shown_as.as_deref()).join("\n")));
+        *self.gathered.borrow_mut() = Some(gathered);
         Ok(())
+    }
+
+    fn infer_program(&self) -> HostResult<()> {
+        let inferred = self.inferred();
+        self.held(inferred)
     }
 
     fn open_cache(&self) {
@@ -1317,11 +1381,15 @@ impl project_lower::ProjectLowerHost for LowerHost<'_> {
     }
 
     fn source_paths(&self) -> Vec<PathBuf> {
-        self.program()
-            .units
-            .iter()
-            .map(|unit| unit.path.clone())
-            .collect()
+        match self.program.borrow().as_ref() {
+            Some(program) => program.units.iter().map(|unit| unit.path.clone()).collect(),
+            None => self
+                .gathered
+                .borrow()
+                .as_ref()
+                .expect("the program is read first")
+                .paths(),
+        }
     }
 
     fn could_promise(&self) -> String {
@@ -1334,8 +1402,16 @@ impl project_lower::ProjectLowerHost for LowerHost<'_> {
             .and_then(|text| Ledger::parse(&text).ok())
     }
 
-    fn lost_sync(&self, committed: &Ledger) -> String {
-        self.program().lost_sync(committed)
+    fn sync_lost(&self) -> Vec<nikaia_std::compiler::modules::SyncLost> {
+        self.program().lost_sync_all()
+    }
+
+    fn keepers(&self) -> BTreeMap<String, BTreeMap<String, Vec<String>>> {
+        self.program().keepers.clone()
+    }
+
+    fn theirs(&self) -> Vec<String> {
+        self.program().as_its_own.keys().cloned().collect()
     }
 
     fn export(&self) -> HostResult<()> {
@@ -1343,14 +1419,10 @@ impl project_lower::ProjectLowerHost for LowerHost<'_> {
         if !settings.library() {
             return Ok(());
         }
-        let package = Manifest::read(&self.layout.root.join("nikaia.toml"))
-            .ok()
-            .and_then(|m| m.package_name().map(str::to_text))
-            .unwrap_or_else(|| settings.words.symbol_prefix.clone());
         let exported = crate::cexport::export(
             &self.program(),
             &settings.words.symbol_prefix,
-            &package,
+            &self.package_exported(),
             settings.words.user_parallelism == "yes",
             &settings.words.target,
             None,
@@ -1369,13 +1441,56 @@ impl project_lower::ProjectLowerHost for LowerHost<'_> {
                 &self.choices(),
                 &self.layout.root,
             )
-            .filter(|artifacts| artifacts.has_all(&[RUST, CONTRACTS, DERIVED, WARNINGS]))?;
-        let get = |name| artifacts.get(name).expect("checked above").to_text();
+            .filter(|artifacts| {
+                artifacts.has_all(&[
+                    RUST, CONTRACTS, DERIVED, WARNINGS, PROMISE, LOST, KEEPERS, THEIRS,
+                ])
+            })?;
+        let get = |name| artifacts.get(name).expect("checked above");
+        // **A library's entry points come from the entry too** (#2395),
+        // stored with what they were read under: another package name is a
+        // miss.
+        if self.settings.library() {
+            let exported = entry_list(artifacts.get(EXPORTED)?)?;
+            let (said, fields) = exported.split_first()?;
+            if *said != self.export_said() {
+                return None;
+            }
+            *self.exported.borrow_mut() = match fields {
+                [] => None,
+                [rust, header, python, node, java] => Some(crate::cexport::Exported {
+                    rust: rust.to_text(),
+                    header: header.to_text(),
+                    python: python.to_text(),
+                    node: node.to_text(),
+                    java: java.to_text(),
+                }),
+                _ => return None,
+            };
+        }
+        let lost = entry_list(get(LOST))?;
+        let lost = lost
+            .chunks(2)
+            .map(|pair| match pair {
+                [key, said] => Some(nikaia_std::compiler::modules::SyncLost {
+                    key: key.to_text(),
+                    said: said.to_text(),
+                }),
+                _ => None,
+            })
+            .collect::<Option<Vec<_>>>()?;
         Some(project_lower::ProjectLowerArtifacts {
-            rust: get(RUST),
-            ledger: get(CONTRACTS),
-            derived: get(DERIVED),
-            warnings: get(WARNINGS),
+            rust: get(RUST).to_text(),
+            ledger: get(CONTRACTS).to_text(),
+            derived: get(DERIVED).to_text(),
+            warnings: get(WARNINGS).to_text(),
+            promise: get(PROMISE).to_text(),
+            lost,
+            keepers: keepers_of_entry(get(KEEPERS))?,
+            theirs: entry_list(get(THEIRS))?
+                .into_iter()
+                .map(str::to_text)
+                .collect(),
         })
     }
 
@@ -1384,13 +1499,32 @@ impl project_lower::ProjectLowerHost for LowerHost<'_> {
         let Some(cache) = cache.as_mut() else {
             return;
         };
+        let lost: Vec<&str> = made
+            .lost
+            .iter()
+            .flat_map(|lost| [lost.key.as_str(), lost.said.as_str()])
+            .collect();
+        let theirs: Vec<&str> = made.theirs.iter().map(String::as_str).collect();
         // An empty map is correct and usual: with no list in effect nothing
         // can be read at all.
-        let artifacts = Artifacts::new()
+        let mut artifacts = Artifacts::new()
             .with(RUST, &made.rust)
             .with(CONTRACTS, &made.ledger)
             .with(DERIVED, &made.derived)
-            .with(WARNINGS, &made.warnings);
+            .with(WARNINGS, &made.warnings)
+            .with(PROMISE, &made.promise)
+            .with(LOST, entry_text(&lost))
+            .with(KEEPERS, keepers_entry(&made.keepers))
+            .with(THEIRS, entry_text(&theirs));
+        if self.settings.library() {
+            let said = self.export_said();
+            let exported = self.exported.borrow();
+            let fields: Vec<&str> = match exported.as_ref() {
+                None => vec![&said],
+                Some(e) => vec![&said, &e.rust, &e.header, &e.python, &e.node, &e.java],
+            };
+            artifacts = artifacts.with(EXPORTED, entry_text(&fields));
+        }
         let stored = cache
             .record(
                 &self.unit,
@@ -1701,13 +1835,18 @@ impl project_lower::ProjectLowerHost for LowerHost<'_> {
         self.reads.unused()
     }
 
-    fn changed_contracts(&self, now: &Ledger, committed: &Ledger) -> String {
+    fn changed_contracts(
+        &self,
+        now: &Ledger,
+        committed: &Ledger,
+        keepers: &BTreeMap<String, BTreeMap<String, Vec<String>>>,
+        theirs: &[String],
+    ) -> String {
         // The packages this program depends on: their entries in the ledger are
         // theirs, and a contract they changed is said in their own build.
-        let program = self.program();
-        crate::prove::changed_contracts(now, committed, &program.keepers, |key| {
+        crate::prove::changed_contracts(now, committed, keepers, |key| {
             !key.split_once("::")
-                .is_some_and(|(package, _)| program.as_its_own.contains_key(package))
+                .is_some_and(|(package, _)| theirs.iter().any(|their| their == package))
         })
     }
 
@@ -1725,6 +1864,83 @@ pub const DERIVED: &str = "derived";
 /// The warnings the check said while it made the lowering, said again when it
 /// is reused.
 pub const WARNINGS: &str = "warnings";
+/// **What a hit says its notes with** (#2395), stored so a hit infers no
+/// ledger: the note on what the program could promise (ADR-288 D29), each
+/// `pub` function's warning that it can pause now (D32), the impls that keep
+/// each trait method's parameters (ADR-277 D17), the packages the program
+/// depends on, and a library's entry points (ADR-284 D4).
+const PROMISE: &str = "promise";
+const LOST: &str = "lost-sync";
+const KEEPERS: &str = "keepers";
+const THEIRS: &str = "theirs";
+const EXPORTED: &str = "exported";
+
+/// Texts as one artifact: each as its length in bytes, `:`, and itself.
+fn entry_text(items: &[&str]) -> String {
+    let mut out = String::new();
+    for item in items {
+        out.push_str(&item.len().to_string());
+        out.push(':');
+        out.push_str(item);
+    }
+    out
+}
+
+/// [`entry_text`] read back; `None` where it is not one.
+fn entry_list(mut text: &str) -> Option<Vec<&str>> {
+    let mut out = Vec::new();
+    while !text.is_empty() {
+        let (len, rest) = text.split_once(':')?;
+        let len: usize = len.parse().ok()?;
+        out.push(rest.get(..len)?);
+        text = rest.get(len..)?;
+    }
+    Some(out)
+}
+
+/// The keepers as one artifact: each method, the number of its parameters,
+/// and each parameter, the number of its impls and each impl.
+fn keepers_entry(keepers: &BTreeMap<String, BTreeMap<String, Vec<String>>>) -> String {
+    let counts: Vec<String> = keepers
+        .values()
+        .flat_map(|by| {
+            std::iter::once(format!("{}", by.len()))
+                .chain(by.values().map(|i| format!("{}", i.len())))
+        })
+        .collect();
+    let mut counted = counts.iter();
+    let mut items: Vec<&str> = Vec::new();
+    for (method, by_parameter) in keepers {
+        items.push(method);
+        items.push(counted.next().expect("one count each"));
+        for (parameter, impls) in by_parameter {
+            items.push(parameter);
+            items.push(counted.next().expect("one count each"));
+            items.extend(impls.iter().map(String::as_str));
+        }
+    }
+    entry_text(&items)
+}
+
+/// [`keepers_entry`] read back.
+fn keepers_of_entry(text: &str) -> Option<BTreeMap<String, BTreeMap<String, Vec<String>>>> {
+    let mut items = entry_list(text)?.into_iter();
+    let mut out = BTreeMap::new();
+    while let Some(method) = items.next() {
+        let parameters: usize = items.next()?.parse().ok()?;
+        let mut by_parameter = BTreeMap::new();
+        for _ in 0..parameters {
+            let parameter = items.next()?;
+            let count: usize = items.next()?.parse().ok()?;
+            let impls = (0..count)
+                .map(|_| items.next().map(str::to_text))
+                .collect::<Option<Vec<_>>>()?;
+            by_parameter.insert(parameter.to_text(), impls);
+        }
+        out.insert(method.to_text(), by_parameter);
+    }
+    Some(out)
+}
 
 /// **What this build links against, and what has been described**
 /// ([ADR-rust-boundary-1](../../docs/specification/adr/adr-rust-boundary-1.md) D1): the struct, how a

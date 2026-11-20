@@ -171,6 +171,13 @@ impl SvAssumes {
 }
 
 impl SvLog {
+    pub(crate) fn rewind(&mut self, mark: &SvMark) {
+        self.steps.truncate(nikaia_std::count::of(mark.steps));
+        self.walk.made_by.truncate(nikaia_std::count::of(mark.entries as i64));
+        self.walk.seen.truncate(nikaia_std::count::of(mark.entries as i64));
+        self.entries = mark.entries;
+        self.columns = mark.columns;
+    }
     pub(crate) fn over(&self) -> bool { self.limit > 0 && (self.steps.len() as i64) > self.limit }
     pub(crate) fn add(&mut self, step: SvStep, made: u32) -> u32 {
         let id = self.entries;
@@ -219,6 +226,13 @@ pub struct SvBook {
     pub bounds: collections::BTreeMap<u32, SvBound>,
     pub pre: collections::BTreeMap<u32, u32>,
     pub reals: Vec<u32>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub(crate) struct SvMark {
+    pub(crate) steps: i64,
+    pub(crate) entries: u32,
+    pub(crate) columns: u32,
 }
 
 pub(crate) fn sv_book(query: &SvQuery) -> Option<SvBook> {
@@ -279,6 +293,15 @@ pub(crate) fn sv_lits_ascending(ls: &[u32]) -> bool {
 }
 
 impl SvBook {
+    pub(crate) fn mark(&self) -> SvMark { SvMark { steps: self.log.steps.len() as i64, entries: self.log.entries, columns: self.log.columns } }
+    pub(crate) fn rewind(&mut self, mark: &SvMark) {
+        let mut id = mark.entries;
+        while id < self.log.entries {
+            self.bounds.remove(&id);
+            id = unsafe { nikaia_std::proven::add::<u32>(id, 1) };
+        }
+        self.log.rewind(mark);
+    }
     pub(crate) fn lit_bound(&self, l: u32) -> Option<SvBound> {
         let at = (l / 2u32) as i64;
         if at >= self.atoms.len() as i64 { return None; }

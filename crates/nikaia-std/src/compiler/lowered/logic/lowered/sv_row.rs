@@ -87,6 +87,53 @@ pub(crate) fn sv_row_combine(a: i64, r: &SvRow, b: i64, s: &SvRow) -> Option<SvR
     Some(sv_row_reduced(sum))
 }
 
+pub(crate) fn sv_row_combine_exact(a: i64, r: &SvRow, b: i64, s: &SvRow) -> Option<SvRow> {
+    let sum = sv_row_sum(a, r, b, s);
+    if sum.is_some() { return Some(sv_row_reduced(nikaia_std::index::or(sum, || sv_row_constant(0).into()))); }
+    sv_row_combine_wide(a, r, b, s)
+}
+
+pub(crate) fn sv_row_combine_wide(a: i64, r: &SvRow, b: i64, s: &SvRow) -> Option<SvRow> {
+    let room = unsafe { nikaia_std::proven::add::<i64>(nikaia_std::proven::add::<i64>(r.cols.len() as i64, s.cols.len() as i64), 1) };
+    let mut cols: Vec<u32> = Vec::with_capacity(nikaia_std::count::of(room));
+    let mut lows: Vec<u64> = Vec::with_capacity(nikaia_std::count::of(room));
+    let mut highs: Vec<i64> = Vec::with_capacity(nikaia_std::count::of(room));
+    let mut i: i64 = 0;
+    let mut j: i64 = 0;
+    while ((i) as usize) < r.cols.len() || ((j) as usize) < s.cols.len() {
+        let mut col: u32 = 0u32;
+        let mut x: i64 = 0;
+        let mut y: i64 = 0;
+        if ((j) as usize) >= s.cols.len() || ((i) as usize) < r.cols.len() && *unsafe { nikaia_std::proven::read(&r.cols, (i) as usize) } < *unsafe { nikaia_std::proven::read(&s.cols, (j) as usize) } {
+            col = *unsafe { nikaia_std::proven::read(&r.cols, (i) as usize) };
+            x = *nikaia_std::index::get(&r.ks, (i) as usize);
+            i = unsafe { nikaia_std::proven::add::<i64>(i, 1) };
+        } else if ((i) as usize) >= r.cols.len() || *unsafe { nikaia_std::proven::read(&s.cols, (j) as usize) } < *unsafe { nikaia_std::proven::read(&r.cols, (i) as usize) } {
+            col = *unsafe { nikaia_std::proven::read(&s.cols, (j) as usize) };
+            y = *nikaia_std::index::get(&s.ks, (j) as usize);
+            j = unsafe { nikaia_std::proven::add::<i64>(j, 1) };
+        } else {
+            col = *unsafe { nikaia_std::proven::read(&r.cols, (i) as usize) };
+            x = *nikaia_std::index::get(&r.ks, (i) as usize);
+            y = *nikaia_std::index::get(&s.ks, (j) as usize);
+            i = unsafe { nikaia_std::proven::add::<i64>(i, 1) };
+            j = unsafe { nikaia_std::proven::add::<i64>(j, 1) };
+        }
+        let (low, high) = match sv_wide_mul_add(a, x, b, y) { Some(__nikaia_value) => __nikaia_value, None => return None };
+        if low != 0u64 || high != 0 {
+            cols.push(col);
+            lows.push(low);
+            highs.push(high);
+        }
+    }
+    let (low, high) = match sv_wide_mul_add(a, r.constant, b, s.constant) { Some(__nikaia_value) => __nikaia_value, None => return None };
+    lows.push(low);
+    highs.push(high);
+    let mut ks = match sv_wide_reduced(&lows, &highs) { Some(__nikaia_value) => __nikaia_value, None => return None };
+    let constant = match ks.pop() { Some(__nikaia_value) => __nikaia_value, None => return None };
+    Some(SvRow { cols, ks, constant })
+}
+
 pub(crate) fn sv_row_scale(r: &SvRow, k: i64) -> Option<SvRow> { sv_row_sum(k, r, 0, &sv_row_constant(0)) }
 
 pub(crate) fn sv_row_content(r: &SvRow) -> Option<i64> { sv_content(&r.ks) }
@@ -117,6 +164,11 @@ pub(crate) fn sv_row_tightened(r: &SvRow) -> SvRow {
 pub(crate) fn sv_row_eliminate(r: &SvRow, s: &SvRow, col: u32) -> Option<SvRow> {
     let ab = match sv_cancelling(sv_row_coef(r, col), sv_row_coef(s, col)) { Some(__nikaia_value) => __nikaia_value, None => return None };
     sv_row_combine(*nikaia_std::index::get(&ab, 0), r, *nikaia_std::index::get(&ab, 1), s)
+}
+
+pub(crate) fn sv_row_eliminate_exact(r: &SvRow, s: &SvRow, col: u32) -> Option<SvRow> {
+    let ab = match sv_cancelling(sv_row_coef(r, col), sv_row_coef(s, col)) { Some(__nikaia_value) => __nikaia_value, None => return None };
+    sv_row_combine_exact(*nikaia_std::index::get(&ab, 0), r, *nikaia_std::index::get(&ab, 1), s)
 }
 
 pub(crate) fn sv_row_pick(r: &SvRow, s: &SvRow, opposite: bool) -> Option<u32> {
@@ -261,10 +313,32 @@ pub(crate) fn __nikaia_test_0() -> Result<(), std::boxed::Box<dyn std::error::Er
     Ok(())
 }
 
+pub(crate) fn __nikaia_test_1() -> Result<(), std::boxed::Box<dyn std::error::Error>> {
+    let p31: i64 = 2147483648i64;
+    let p33: i64 = 8589934592i64;
+    let p40: i64 = 1099511627776i64;
+    let mut out: String = String::from("");
+    let r = nikaia_std::index::or(sv_row_of(vec![sv_row_test_term(0u32, p31), sv_row_test_term(1u32, unsafe { nikaia_std::proven::mul::<i64>(3, p31) })], p31), || sv_row_constant(0).into());
+    let s = nikaia_std::index::or(sv_row_of(vec![sv_row_test_term(0u32, p31), sv_row_test_term(1u32, p31), sv_row_test_term(2u32, 2)], 0), || sv_row_constant(0).into());
+    let minus = nikaia_std::index::or(sv_row_scale(&s, -1), || sv_row_constant(0).into());
+    out = nikaia_std::block::Text::from(nikaia_std::concat::plus(out, format!("r = {}, s = {}\n", sv_row_text(&r), sv_row_text(&s))));
+    out = nikaia_std::block::Text::from(nikaia_std::concat::plus(out, format!("2^33·r + 2^33·s in i64: {}\n", sv_row_test_show((sv_row_combine(p33, &r, p33, &s)).as_ref()))));
+    out = nikaia_std::block::Text::from(nikaia_std::concat::plus(out, format!("2^33·r + 2^33·s exact: {}\n", sv_row_test_show((sv_row_combine_exact(p33, &r, p33, &s)).as_ref()))));
+    out = nikaia_std::block::Text::from(nikaia_std::concat::plus(out, format!("2^33·r - 2^33·(-s) exact: {}\n", sv_row_test_show((sv_row_combine_exact(p33, &r, unsafe { nikaia_std::proven::sub::<i64>(0, p33) }, &minus)).as_ref()))));
+    out = nikaia_std::block::Text::from(nikaia_std::concat::plus(out, format!("small rows take the i64 path: {}\n", sv_row_test_show((sv_row_combine_exact(1, &r, -1, &r)).as_ref()))));
+    let t = nikaia_std::index::or(sv_row_of(vec![sv_row_test_term(0u32, p40)], 0), || sv_row_constant(0).into());
+    let u = nikaia_std::index::or(sv_row_of(vec![sv_row_test_term(0u32, 1), sv_row_test_term(1u32, 1)], 0), || sv_row_constant(0).into());
+    out = nikaia_std::block::Text::from(nikaia_std::concat::plus(out, format!("2^40·{} + (2^40 + 1)·({}), gcd 1: {}\n", sv_row_text(&t), sv_row_text(&u), sv_row_test_show((sv_row_combine_exact(p40, &t, unsafe { nikaia_std::proven::add::<i64>(p40, 1) }, &u)).as_ref()))));
+    let expected = vec!["r = 2147483648·x0 + 6442450944·x1 + 2147483648, s = 2147483648·x0 + 2147483648·x1 + 2·x2", "2^33·r + 2^33·s in i64: refused", "2^33·r + 2^33·s exact: 2147483648·x0 + 4294967296·x1 + x2 + 1073741824", "2^33·r - 2^33·(-s) exact: 2147483648·x0 + 4294967296·x1 + x2 + 1073741824", "small rows take the i64 path: 0", "2^40·1099511627776·x0 + (2^40 + 1)·(x0 + x1), gcd 1: refused"];
+    if !(out == nikaia_std::block::Text::from(nikaia_std::concat::plus(nikaia_std::block::Text::from(expected.join("\n")), "\n"))) { nikaia_std::abort::assertion_failed("assert(out == expected.join(\"\\n\") + \"\\n\")", None, &[("out", (&&nikaia_std::abort::Operand(&(out))).shown()), ("expected.join(\"\\n\") + \"\\n\"", (&&nikaia_std::abort::Operand(&(nikaia_std::block::Text::from(nikaia_std::concat::plus(nikaia_std::block::Text::from(expected.join("\n")), "\n"))))).shown()), ]) };
+    Ok(())
+}
+
 
 /// The `test` blocks of this file (#2082), as `nikaia test --std` runs them.
 pub(crate) fn sv_row_nikaia_tests() -> Vec<(&'static str, fn() -> Result<(), std::boxed::Box<dyn std::error::Error>>)> {
     vec![
         ("sv_row::rows_are_built_combined_reduced_evaluated_and_read_from_lglin", __nikaia_test_0),
+        ("sv_row::a_combination_whose_products_leave_i64_is_reduced_in_double_width_2307", __nikaia_test_1),
     ]
 }

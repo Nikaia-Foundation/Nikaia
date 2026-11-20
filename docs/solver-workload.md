@@ -447,6 +447,10 @@ file, `examples/n-body`, is +1.2 %.
 
 ## 9. Against z3 and cvc5 on SMT-LIB (#1338)
 
+The prover research page shows these figures as bars, reached and behind
+per family (`website/research/prover/index.md`, *Against z3 and cvc5*):
+when this section is measured again, that section is updated with it.
+
 **Ran on 2026-11-20** (0.0.1481, at 0e4862662), on the set `scripts/solver.nika
 fetch` builds from GitHub at fixed commits (`tests/solver/SOURCES.md`): 578
 QF_LIA and 519 QF_LRA files, each one query with a status and at most 1 MiB.
@@ -462,8 +466,9 @@ builds running beside it part of the time: a file near the limit can fall on
 either side of it, which is why time is ranked here and not quoted.
 
 `compare` counts ours' unsolved files by reason itself (#2259): **overflow**,
-a file that leaves `i64` (ADR-270 D11: answered `unknown` on purpose until
-the 128÷64 division lands), also where the walk after the overflowed search
+a file that leaves `i64` (ADR-270 D11: answered `unknown` on purpose where a
+simplex row does not fit `i64` even combined in double width and reduced by
+its gcd, #2307), also where the walk after the overflowed search
 ran on to the limit (the rod at the build-time case budget then answers
 `unknown (overflow)`); **timeout**, past the limit otherwise; **unknown**,
 any other reason. Ours ran under a case budget no limit reaches (#2090), so
@@ -486,7 +491,7 @@ unsolved files, each a timeout):
 | QF_LIA nec-smt | 3 | 1 (16.1 s) | 0 | 1 (14.6 s) | 0 | level with z3, ahead of cvc5 | 2 timeouts nobody solves |
 | QF_LIA rings | 1 | 1 | 0 | 1 | 1 | level | |
 | QF_LIA rings_preprocessed | 2 | 2 (1.2 s) | 0 | 2 (0.0 s) | 2 (3.5 s) | level | |
-| QF_LIA seeds | 164 | 115 (5.9 s) | 48 | 162 (0.3 s) | 157 (1.2 s) | behind | 1 timeout z3 solves |
+| QF_LIA seeds | 164 | 124 (4.9 s) | 36 | 162 (0.3 s) | 157 (1.2 s) | behind | 4 unknown z3 solves (#2307: 12 overflows fewer, 9 solved) |
 | QF_LIA tightrhombus | 1 | 0 | 1 | 1 | 1 | behind | |
 | QF_LRA 2017-Heizmann | 4 | 0 | 4 | 0 | 0 | level | |
 | QF_LRA LassoRanker | 1 | 0 | 1 | 1 | 1 | behind | |
@@ -497,11 +502,15 @@ unsolved files, each a timeout):
 | QF_LRA spider_benchmarks | 2 | 2 | 0 | 2 | 2 | level | |
 | QF_LRA tta_startup | 2 | 2 (1.0 s) | 0 | 2 (0.0 s) | 2 (0.1 s) | level | |
 | QF_LRA uart | 2 | 1 (14.2 s) | 0 | 1 (11.0 s) | 1 (13.7 s) | level | 1 timeout nobody solves |
-| **QF_LIA** | 578 | 512 (2.6 s) | 50 | 569 (0.4 s) | 545 (1.4 s) | behind | 16 timeouts |
+| **QF_LIA** | 578 | 521 (2.3 s) | 38 | 569 (0.4 s) | 545 (1.4 s) | behind | 15 timeouts, 4 unknown |
 | **QF_LRA** | 519 | 510 (0.3 s) | 8 | 513 (0.2 s) | 513 (0.2 s) | behind | 1 timeout |
 
-Of the 66 QF_LIA files ours does not solve, 50 leave `i64`; of the 9 QF_LRA
-files, 8. Without them ours is behind by the 16 QF_LIA timeouts and the one
+Of the 57 QF_LIA files ours does not solve, 38 leave `i64`; of the 9 QF_LRA
+files, 8. Since #2307 a simplex pivot whose row leaves `i64` is combined in
+double width and reduced by its gcd: the seeds overflows fell from 48 to 36
+(9 files solved, 4 now `unknown`); of the 36, 22 rows do not fit `i64`
+reduced, and in 14 no entry fits, so no gcd is taken. Without them ours is
+behind by the 15 QF_LIA timeouts, the 4 seeds `unknown` and the one
 QF_LRA timeout, of which 7 neither z3 nor cvc5 solves within the limit
 either: what is left to catch up on is 10 files, 6 of them SMPT. Level on
 twelve of the twenty families, ahead of cvc5 on c_inference (27 against 12)
