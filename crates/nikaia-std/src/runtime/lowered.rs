@@ -27,8 +27,6 @@ use nikaia_std::seq::Join as _;
 #[allow(unused_imports)]
 use nikaia_std::text::TextQuoted as _;
 #[allow(unused_imports)]
-use nikaia_std::abort;
-#[allow(unused_imports)]
 use nikaia_std::collections;
 #[allow(unused_imports)]
 use nikaia_std::env;
@@ -247,7 +245,10 @@ mod time_spans_lowered {
 #[allow(unused_imports)]
 pub use time_spans_lowered::*;
 
-pub mod abort_lines {}
+pub mod abort_lines {
+    #[allow(unused_imports)]
+    pub use super::{lookup};
+}
 pub mod cli {
     #[allow(unused_imports)]
     pub use super::{an};
@@ -361,4 +362,4 @@ pub fn nikaia_run_tests(filters: &[std::string::String], list: bool, more: std::
 /// **The digest of this lowered set** (#1610): every file `lower-std` wrote
 /// beside this index, and the index above this line. Compiled into the same
 /// crate as the code it names, it is the compiler's identity for its caches.
-pub const LOWERED_DIGEST: &str = "9918cd1d33319e0ca82384f9869a0d13f0396d8746422f234c0bf225e14e285b";
+pub const LOWERED_DIGEST: &str = "be259c2ad138f3c695575c03892aac3a67c10c979b9a1791a2d2000f335cc255";
