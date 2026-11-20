@@ -702,7 +702,7 @@ impl EmitState {
                     let written_as_a_view = lent_option || self.emit_fn_written_as_view(key, at)
                     let mut ty = each.ty.clone()
                     // **A plain `Bytes` the ledger lends as a kept `ref Bytes`
-                    // is written as one** (ADR-views-3 D15, #2367): `&Bytes`.
+                    // is written as one** (ADR-views-v4 D15, #2367): `&Bytes`.
                     if written_as_a_view && !lent_option && !ty.is_view {
                         ty.is_view = true
                     }

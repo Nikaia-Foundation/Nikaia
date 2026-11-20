@@ -1818,7 +1818,7 @@ pub struct KeepsFound {
     pub key: String,
     pub uses: Uses,
     /// **The plain `Bytes` parameters kept only through a cut or a clone**
-    /// (ADR-views-3 D15, ADR-373 D4, #2367), left out of `uses.kept`: the
+    /// (ADR-views-v4 D15, ADR-373 D4, #2367), left out of `uses.kept`: the
     /// function takes each with its owner as a `ref Bytes`, not by value.
     pub counted: Vec[String],
 }
@@ -2134,7 +2134,7 @@ pub fn keeps_infer[H: KeepsHost](mut ledger: Ledger, units: ref Vec[ParsedView],
         }
     }
     // **A plain `Bytes` kept only through a cut or a clone is a `ref Bytes`
-    // kept** (ADR-views-3 D15, ADR-373 D4, #2367): unless a callee keeps it
+    // kept** (ADR-views-v4 D15, ADR-373 D4, #2367): unless a callee keeps it
     // whole, the signature lends it and `keeps` names it, so it is lowered to
     // `&Bytes`, the cut or clone is a count on the caller's owner, and the
     // caller still has it after the call.
@@ -2611,7 +2611,7 @@ pub fn keeps_uses_of(view: ref ParsedView, item: ref Item, target: String?, ledg
                 types.insert("self", target_name.clone())
             }
             // **A `ref Bytes` a `.clone()` keeps** (ADR-373 D1, D4), and a
-            // plain `b: Bytes` (`keep` or not), which ADR-views-3 D15 spells
+            // plain `b: Bytes` (`keep` or not), which ADR-views-v4 D15 spells
             // the same where it is lent (#2367): kept only through a cut or a
             // clone, it is counted below and taken as a `ref Bytes` is.
             let mut cloned_keeps: collections::BTreeSet[String] = collections::BTreeSet()
@@ -2652,7 +2652,7 @@ pub fn keeps_uses_of(view: ref ParsedView, item: ref Item, target: String?, ledg
             let mut context = KeepsBody { parameters: parameters.clone(), lent: lent, fields: fields, returns_a_view: returns_a_view, hands_back_its_last: ret_type != null && !returns_a_view, unresolved: unresolved, types: types, own_methods: indexes.own, library_methods: indexes.library, cloned_keeps: cloned_keeps, code_lends: code_lends, options: options, bounds: bounds }
             let uses = uses_in(body, view.words, holes_of, context, ledger, library)
             // **A plain `Bytes` kept only through a cut or a clone is
-            // counted** (ADR-views-3 D15, ADR-373 D4, #2367): the walk again
+            // counted** (ADR-views-v4 D15, ADR-373 D4, #2367): the walk again
             // without counting its cuts and clones tells it from one kept
             // whole (`out.push(b)`), which is still taken by value.
             let mut counted: Vec[String] = []

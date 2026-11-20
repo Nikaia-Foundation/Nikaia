@@ -1,5 +1,5 @@
 // #2367: a plain lent `b: Bytes` is the spelling of `ref Bytes`
-// (ADR-views-3 D15), so keeping a cut or a clone of it keeps it as #2214's
+// (ADR-views-v4 D15), so keeping a cut or a clone of it keeps it as #2214's
 // `ref Bytes` does (ADR-373 D4): the function takes the `Bytes` with its
 // owner, and the cut or clone is the mapping at a count, not a copy. The
 // file stays mapped while what was kept lives, and the caller still has `b`.
