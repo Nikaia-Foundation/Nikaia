@@ -19,9 +19,15 @@ pub trait TextNeedle {
     /// The first `count` matches in `text` replaced by `to`, in `text`'s
     /// own buffer (ADR-text-reuse-1 D4).
     fn replaced_in_place(&self, text: &mut crate::block::Text, to: &str, count: usize);
+    /// How many bytes a match of the needle covers.
+    fn byte_len(&self) -> usize;
 }
 
 impl TextNeedle for str {
+    #[inline]
+    fn byte_len(&self) -> usize {
+        self.len()
+    }
     #[inline]
     fn first_in(&self, text: &str) -> Option<usize> {
         match one_byte(self) {
@@ -54,6 +60,10 @@ impl TextNeedle for str {
 
 impl TextNeedle for String {
     #[inline]
+    fn byte_len(&self) -> usize {
+        self.len()
+    }
+    #[inline]
     fn first_in(&self, text: &str) -> Option<usize> {
         self.as_str().first_in(text)
     }
@@ -74,6 +84,10 @@ impl TextNeedle for String {
 /// A block's text is searched for as a `String` is (#490).
 impl TextNeedle for crate::block::Text {
     #[inline]
+    fn byte_len(&self) -> usize {
+        self.as_str().len()
+    }
+    #[inline]
     fn first_in(&self, text: &str) -> Option<usize> {
         self.as_str().first_in(text)
     }
@@ -93,6 +107,10 @@ impl TextNeedle for crate::block::Text {
 
 impl TextNeedle for char {
     #[inline]
+    fn byte_len(&self) -> usize {
+        self.len_utf8()
+    }
+    #[inline]
     fn first_in(&self, text: &str) -> Option<usize> {
         text.find(*self)
     }
@@ -111,6 +129,10 @@ impl TextNeedle for char {
 }
 
 impl<T: TextNeedle + ?Sized> TextNeedle for &T {
+    #[inline]
+    fn byte_len(&self) -> usize {
+        (**self).byte_len()
+    }
     #[inline]
     fn first_in(&self, text: &str) -> Option<usize> {
         (**self).first_in(text)
