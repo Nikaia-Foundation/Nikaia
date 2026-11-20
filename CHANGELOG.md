@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1501] — 2026-11-20
+
+**A returned tree every caller keeps in the task is built in its block (ADR-327 D17) (#2348)**
+- Faster recursive builders: a tree a private function returns is built in the task's block when every call keeps it in the task (ADR-327 D17); binary-trees runs half the instructions with no malloc or free in bottom_up, and `--sharing` names each function placed this way.
+
 ## [0.0.1500] — 2026-11-20
 
 **Builders' changes (#2260, #2307, #2377, #2395)**
