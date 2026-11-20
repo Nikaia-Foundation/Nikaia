@@ -38,7 +38,9 @@ fn a_list_literal_is_a_vec() {
                   }\n";
     assert!(findings(source).is_empty(), "{:#?}", findings(source));
     assert!(
-        lowered(source).contains("let xs = vec![1, 2, 3];"),
+        lowered(source).contains(
+            "let xs = nikaia_std::block::List::from_array_in([1, 2, 3], nikaia_std::block::Place::Block);"
+        ),
         "{}",
         lowered(source)
     );
@@ -90,7 +92,8 @@ fn an_empty_list_a_push_answers_is_not_refused() {
                   }\n";
     assert!(findings(source).is_empty(), "{:#?}", findings(source));
     assert!(
-        lowered(source).contains("let mut xs = vec![];"),
+        lowered(source)
+            .contains("let mut xs = nikaia_std::block::list(nikaia_std::block::Place::Block);"),
         "{}",
         lowered(source)
     );
