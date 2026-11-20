@@ -3,26 +3,26 @@
 // (`push`, `len`, a `for` over it) is built with `Place::Block`, as a list
 // of `f64` literals already was. Its elements are open numbers, `Unknown`
 // to the checker until their uses type them, and still no views.
+use std::env
 use std::fs
 use std::process
 
 fn toolchain() -> String throws {
-    let exe = process::run("sh", ["-c", "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\""]).stdout.trim().clone()
+    let exe = env::current_exe()?.display() ?? ""
     if exe.len() > 0 { return exe }
     return "target/fast/nikaia"
 }
 
 fn main() throws {
-    let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+    let tmp = fs::scratch()
     let source = "fn sum() -> i64 sync {\n    let mut w = [4, 5]\n    w.push(6)\n    let mut s = 0\n    for x in w { s += x }\n    return s\n}\n\nfn main() throws {\n    println(f\"{sum()}\")\n    let mut v = [4, 5]\n    v.push(6)\n    let n = v.len()\n    println(f\"{n}\")\n    let kept = [1, 2]\n    println(f\"{total(kept)}\")\n}\n\nfn total(xs: Vec[i64]) -> i64 sync {\n    let mut t = 0\n    for x in xs { t += x }\n    return t\n}\n"
-    fs::write(f"{tmp}/p.nika", fs::Root::Anywhere, source)
-    let lowered = process::run(toolchain(), ["lower", "p.nika", "-o", "p.rs"]; dir: tmp.clone())
+    fs::write("p.nika", tmp, source)
+    let lowered = process::run(toolchain(), ["lower", "p.nika", "-o", "p.rs"]; dir: tmp.path().to_text())
     if lowered.stdout.contains("Lowered p.nika") == false { println(lowered.stderr) }
-    let rust = fs::read_to_string(f"{tmp}/p.rs", fs::Root::Anywhere)
+    let rust = fs::read_to_string("p.rs", tmp)
     println(f"placed in the block: {rust.split("List::from_array_in([4, 5], nikaia_std::block::Place::Block)").count() - 1}")
     println(f"handed to a call, outside: {rust.split("vec![1, 2]").count() - 1}")
-    let ran = process::run(toolchain(), ["run", "p.nika"]; dir: tmp.clone())
+    let ran = process::run(toolchain(), ["run", "p.nika"]; dir: tmp.path().to_text())
     println(ran.stdout.trim())
     println(ran.stderr.trim())
-    process::run("rm", ["-rf", tmp])
 }

@@ -12,3 +12,10 @@ the tools move staged:
   badges red
   version red
   exit 1
+the tools move staged, a builder's run:
+  index green
+  fmt green
+  adr-refs green
+  badges stale (the driver's)
+  version green
+  exit 0

@@ -4,25 +4,26 @@
 // `lib::Point`, on an `enum` that holds one, a `HashSet` of them and a copy
 // are not refused with NK1188, NK1260 or NK2105. A type with a float part
 // compares, and one with its own `impl Eq` compares by it (ADR-341 D5).
+use std::env
 use std::fs
 use std::process
 
 fn toolchain() -> String throws {
-    let exe = process::run("sh", ["-c", "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\""]).stdout.trim().clone()
+    let exe = env::current_exe()?.display() ?? ""
     if exe.len() > 0 { return exe }
     return "target/fast/nikaia"
 }
 
 fn main() throws {
-    let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
-    process::run("mkdir", ["-p", f"{tmp}/lib/src", f"{tmp}/app/src"])
-    fs::write(f"{tmp}/lib/nikaia.toml", fs::Root::Anywhere, "[package]\nname = \"lib\"\nversion = \"0.1.0\"\n\n[build]\nartifact = \"rust-library\"\n")
-    fs::write(f"{tmp}/lib/src/main.nika", fs::Root::Anywhere, "pub struct Point {\n\tpub x: i64,\n}\n\npub enum Kind {\n\tPlain,\n\tQuoted,\n}\n\npub struct Rough {\n\tpub w: f64,\n}\n\npub struct Named {\n\tpub n: i64,\n\tpub tag: String,\n}\n\nimpl Eq for Named {\n\tfn eq(ref self, other: ref Named) -> bool {\n\t\treturn self.n == other.n\n\t}\n}\n\npub fn named(n: i64, tag: String) -> Named {\n\treturn Named { n: n, tag: tag }\n}\n\npub fn origin() -> Point sync {\n\treturn Point { x: 0 }\n}\n\npub fn rough() -> Rough sync {\n\treturn Rough { w: 1.5 }\n}\n")
-    fs::write(f"{tmp}/app/nikaia.toml", fs::Root::Anywhere, "[package]\nname = \"app\"\nversion = \"0.1.0\"\n\n[dependencies]\nlib = { path = \"../lib\" }\n")
-    fs::write(f"{tmp}/app/src/main.nika", fs::Root::Anywhere, "use lib\nuse std::collections\n\nenum Held {\n\tSome(lib::Point),\n\tNone,\n}\n\nfn main() throws {\n\tlet a = lib::origin()\n\tprintln(a == lib::origin())\n\tprintln(Held::Some(a) == Held::Some(lib::origin()))\n\tprintln(Held::None == Held::Some(a))\n\tlet b = a\n\tprintln(a == b)\n\tlet mut seen: collections::HashSet[lib::Point] = collections::HashSet()\n\tseen.insert(lib::origin())\n\tprintln(seen.contains(a))\n\tprintln(lib::Kind::Plain == lib::Kind::Quoted)\n\tprintln(lib::rough() == lib::rough())\n\tprintln(lib::named(1, \"a\") == lib::named(1, \"b\"))\n\tprintln(lib::named(1, \"a\") == lib::named(2, \"a\"))\n}\n")
-    let out = process::run(toolchain(), ["run"]; dir: f"{tmp}/app")
+    let tmp = fs::scratch()
+    process::run("mkdir", ["-p", f"{tmp.path().to_text()}/lib/src", f"{tmp.path().to_text()}/app/src"])
+    fs::write("lib/nikaia.toml", tmp, "[package]\nname = \"lib\"\nversion = \"0.1.0\"\n\n[build]\nartifact = \"rust-library\"\n")
+    fs::write("lib/src/main.nika", tmp, "pub struct Point {\n\tpub x: i64,\n}\n\npub enum Kind {\n\tPlain,\n\tQuoted,\n}\n\npub struct Rough {\n\tpub w: f64,\n}\n\npub struct Named {\n\tpub n: i64,\n\tpub tag: String,\n}\n\nimpl Eq for Named {\n\tfn eq(ref self, other: ref Named) -> bool {\n\t\treturn self.n == other.n\n\t}\n}\n\npub fn named(n: i64, tag: String) -> Named {\n\treturn Named { n: n, tag: tag }\n}\n\npub fn origin() -> Point sync {\n\treturn Point { x: 0 }\n}\n\npub fn rough() -> Rough sync {\n\treturn Rough { w: 1.5 }\n}\n")
+    fs::write("app/nikaia.toml", tmp, "[package]\nname = \"app\"\nversion = \"0.1.0\"\n\n[dependencies]\nlib = { path = \"../lib\" }\n")
+    fs::write("app/src/main.nika", tmp, "use lib\nuse std::collections\n\nenum Held {\n\tSome(lib::Point),\n\tNone,\n}\n\nfn main() throws {\n\tlet a = lib::origin()\n\tprintln(a == lib::origin())\n\tprintln(Held::Some(a) == Held::Some(lib::origin()))\n\tprintln(Held::None == Held::Some(a))\n\tlet b = a\n\tprintln(a == b)\n\tlet mut seen: collections::HashSet[lib::Point] = collections::HashSet()\n\tseen.insert(lib::origin())\n\tprintln(seen.contains(a))\n\tprintln(lib::Kind::Plain == lib::Kind::Quoted)\n\tprintln(lib::rough() == lib::rough())\n\tprintln(lib::named(1, \"a\") == lib::named(1, \"b\"))\n\tprintln(lib::named(1, \"a\") == lib::named(2, \"a\"))\n}\n")
+    let out = process::run(toolchain(), ["run"]; dir: f"{tmp.path().to_text()}/app")
     let mut shown: Vec[String] = []
-    for line in f"{out.stdout}{out.stderr}".replace(tmp, "TMP").lines() {
+    for line in f"{out.stdout}{out.stderr}".replace(tmp.path().to_text(), "TMP").lines() {
         let said = line.trim()
         if !said.starts_with("Compiling") && !said.starts_with("note: `lib`'s own `[build]`") {
             shown.push(line.clone())
@@ -30,5 +31,4 @@ fn main() throws {
     }
     println(shown.join("\n"))
     println(f"exit {out.code}")
-    process::run("rm", ["-rf", tmp])
 }

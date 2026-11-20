@@ -2,17 +2,12 @@
 // function is kept on disk under its program's sources, and the
 // dependency's files are among them: after the dependency's body changes,
 // the next run computes the value again and prints the new one.
+use std::env
 use std::fs
 use std::process
 
 fn toolchain() -> String throws {
-	let exe = process::run(
-		"sh",
-		[
-			"-c",
-			"p=$PPID; while [ \"$p\" -gt 1 ]; do e=$(readlink /proc/$p/exe); if [ \"$(basename \"$e\")\" = nikaia ]; then echo \"$e\"; exit 0; fi; p=$(cut -d' ' -f4 /proc/$p/stat); done",
-		],
-	).stdout.trim().clone()
+	let exe = env::current_exe()?.display() ?? ""
 	if exe.len() == 0 {
 		eprintln("no running nikaia among this program's ancestors: run it with `nikaia test` (#1305)")
 		process::exit(2)
@@ -20,22 +15,21 @@ fn toolchain() -> String throws {
 	return exe
 }
 
-fn ran(nikaia: String, app: String) -> String throws {
-	let out = process::run(nikaia, ["run"]; dir: app.clone(), env: [("RUST_BACKTRACE", "0")])
+fn ran(nikaia: String, app: ref fs::Root) -> String throws {
+	let out = process::run(nikaia, ["run"]; dir: app.path().to_text(), env: [("RUST_BACKTRACE", "0")])
 	return f"{out.stdout.trim()} (exit {out.code})"
 }
 
 fn main() throws {
-	let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+	let tmp = fs::scratch()
 	let nikaia = toolchain()
-	process::run("mkdir", ["-p", f"{tmp}/lib/src", f"{tmp}/app/src"])
-	fs::write(f"{tmp}/lib/nikaia.toml", fs::Root::Anywhere, "[package]\nname = \"lib\"\nversion = \"0.1.0\"\n")
-	fs::write(f"{tmp}/lib/src/main.nika", fs::Root::Anywhere, "pub fn base(n: i64) -> i64 sync {\n\treturn n * 2\n}\n")
-	fs::write(f"{tmp}/app/nikaia.toml", fs::Root::Anywhere, "[package]\nname = \"app\"\nversion = \"0.1.0\"\n\n[dependencies]\nlib = { path = \"../lib\" }\n")
-	fs::write(f"{tmp}/app/src/main.nika", fs::Root::Anywhere, "use lib\n\ncomptime V: i64 = lib::base(21)\n\nfn main() throws {\n\tprintln(V)\n}\n")
-	let app = f"{tmp}/app"
+	process::run("mkdir", ["-p", f"{tmp.path().to_text()}/lib/src", f"{tmp.path().to_text()}/app/src"])
+	fs::write("lib/nikaia.toml", tmp, "[package]\nname = \"lib\"\nversion = \"0.1.0\"\n")
+	fs::write("lib/src/main.nika", tmp, "pub fn base(n: i64) -> i64 sync {\n\treturn n * 2\n}\n")
+	fs::write("app/nikaia.toml", tmp, "[package]\nname = \"app\"\nversion = \"0.1.0\"\n\n[dependencies]\nlib = { path = \"../lib\" }\n")
+	fs::write("app/src/main.nika", tmp, "use lib\n\ncomptime V: i64 = lib::base(21)\n\nfn main() throws {\n\tprintln(V)\n}\n")
+	let app = tmp.join("app")
 	println(f"first: {ran(nikaia, app)}")
-	process::run("sed", ["-i", "s/n \\* 2/n * 3/", "src/main.nika"]; dir: f"{tmp}/lib")
+	process::run("sed", ["-i", "s/n \\* 2/n * 3/", "src/main.nika"]; dir: f"{tmp.path().to_text()}/lib")
 	println(f"dependency changed: {ran(nikaia, app)}")
-	process::run("rm", ["-rf", tmp])
 }

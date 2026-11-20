@@ -4,32 +4,26 @@
 // `main` ends at once. Moved from the `nikaia-std` unit tests
 // `a_task_nobody_joins_still_runs` and `a_task_that_finishes_is_still_waited_for`
 // (#2209).
+use std::env
 use std::fs
 use std::process
 
 fn toolchain() -> String throws {
-	let exe = process::run(
-		"sh",
-		[
-			"-c",
-			"e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\"",
-		],
-	).stdout.trim().clone()
+	let exe = env::current_exe()?.display() ?? ""
 	if exe.len() > 0 { return exe }
 	return "target/fast/nikaia"
 }
 
 fn main() throws {
-	let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+	let tmp = fs::scratch()
 	fs::write(
-		f"{tmp}/child.nika",
-		fs::Root::Anywhere,
+		"child.nika",
+		tmp,
 		"use std::fs\nuse std::time\n\nfn main() throws {\n\tasync(detached) fn {\n\t\ttime::sleep(20.millis())\n\t\tfs::write(\"done.txt\", fs::Root::Anywhere, \"written\") catch { return }\n\t}\n\tprintln(\"main ends\")\n}\n",
 	)
-	let out = process::run(toolchain(), ["run", "child.nika"]; dir: tmp)
+	let out = process::run(toolchain(), ["run", "child.nika"]; dir: tmp.path().to_text())
 	println(out.stdout.trim())
 	println(f"exit {out.code}")
-	let done = process::run("cat", [f"{tmp}/done.txt"]).stdout
+	let done = process::run("cat", [f"{tmp.path().to_text()}/done.txt"]).stdout
 	println(f"done.txt: {done}")
-	process::run("rm", ["-rf", tmp])
 }

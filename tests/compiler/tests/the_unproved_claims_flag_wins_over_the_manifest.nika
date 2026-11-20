@@ -2,24 +2,19 @@
 // line wins over the manifest's `unproved-claims = "error"`: the claim it
 // cannot prove is a warning, checked when the program runs, and the program
 // runs.
+use std::env
 use std::fs
 use std::process
 
 fn toolchain() -> String throws {
-	let exe = process::run(
-		"sh",
-		[
-			"-c",
-			"e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\"",
-		],
-	).stdout.trim().clone()
+	let exe = env::current_exe()?.display() ?? ""
 	if exe.len() > 0 { return exe }
 	return "target/fast/nikaia"
 }
 
-fn shown(tmp: String, text: String) -> String {
+fn shown(tmp: ref fs::Root, text: String) -> String throws {
 	let mut lines: Vec[String] = []
-	for line in text.replace(tmp, "TMP").lines() {
+	for line in text.replace(tmp.path().to_text(), "TMP").lines() {
 		let t = line.trim()
 		if t.starts_with("Compiling") || t.starts_with("Finished") || t.starts_with("Running") {
 			continue
@@ -29,30 +24,29 @@ fn shown(tmp: String, text: String) -> String {
 	return lines.join("\n")
 }
 
-fn project(tmp: String, name: String, build: String, main: String) throws {
-	process::run("mkdir", ["-p", f"{tmp}/{name}/src"])
-	fs::write(f"{tmp}/{name}/nikaia.toml", fs::Root::Anywhere, f"[package]\nname = \"p\"\nversion = \"0.1.0\"\n{build}")
-	fs::write(f"{tmp}/{name}/src/main.nika", fs::Root::Anywhere, main)
+fn project(tmp: ref fs::Root, name: String, build: String, main: String) throws {
+	process::run("mkdir", ["-p", f"{tmp.path().to_text()}/{name}/src"])
+	fs::write(f"{name}/nikaia.toml", tmp, f"[package]\nname = \"p\"\nversion = \"0.1.0\"\n{build}")
+	fs::write(f"{name}/src/main.nika", tmp, main)
 }
 
-fn checked(tmp: String, name: String, flags: Vec[String]) throws {
+fn checked(tmp: ref fs::Root, name: String, flags: Vec[String]) throws {
 	let mut args: Vec[String] = ["check", "src/main.nika"]
 	args.extend(flags)
-	let out = process::run(toolchain(), args; dir: f"{tmp}/{name}")
+	let out = process::run(toolchain(), args; dir: f"{tmp.path().to_text()}/{name}")
 	println(f"== {name}")
 	println(shown(tmp, f"{out.stdout}{out.stderr}"))
 	println(f"exit {out.code}")
 }
 
 fn main() throws {
-	let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+	let tmp = fs::scratch()
 	let error = "\n[build]\nunproved-claims = \"error\"\n"
 	let claim = "fn main() throws {\n\tlet x = 0.5\n\tassert(x * 2.0 == 1.0)\n\tprintln(\"ok\")\n}\n"
 	project(tmp, "manifest", error, claim)
 	checked(tmp, "manifest", [])
-	let out = process::run(toolchain(), ["run", "--unproved-claims=warn", "src/main.nika"]; dir: f"{tmp}/manifest")
+	let out = process::run(toolchain(), ["run", "--unproved-claims=warn", "src/main.nika"]; dir: f"{tmp.path().to_text()}/manifest")
 	println("== run --unproved-claims=warn")
 	println(shown(tmp, f"{out.stdout}{out.stderr}"))
 	println(f"exit {out.code}")
-	process::run("rm", ["-rf", tmp])
 }

@@ -5,47 +5,41 @@
 // (read alone, every call into the package failed closed to `keep`). The
 // package is written here, small, so what `packages/json` later does with its
 // own fields (a `ref` field, which the migration drops) does not move the test.
+use std::env
 use std::fs
 use std::process
 
 fn toolchain() -> String throws {
-	let exe = process::run(
-		"sh",
-		[
-			"-c",
-			"e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\"",
-		],
-	).stdout.trim().clone()
+	let exe = env::current_exe()?.display() ?? ""
 	if exe.len() > 0 { return exe }
 	return "target/fast/nikaia"
 }
 
 fn main() throws {
-	let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+	let tmp = fs::scratch()
 	let nikaia = toolchain()
-	process::run("mkdir", ["-p", f"{tmp}/words/src", f"{tmp}/words/tests"])
+	process::run("mkdir", ["-p", f"{tmp.path().to_text()}/words/src", f"{tmp.path().to_text()}/words/tests"])
 	fs::write(
-		f"{tmp}/words/nikaia.toml",
-		fs::Root::Anywhere,
+		"words/nikaia.toml",
+		tmp,
 		"[package]\nname = \"words\"\nversion = \"0.1.0\"\n\n[build]\nartifact = \"rust-library\"\n",
 	)
 	fs::write(
-		f"{tmp}/words/src/main.nika",
-		fs::Root::Anywhere,
+		"words/src/main.nika",
+		tmp,
 		"pub fn count(text: String) -> i64 {\n    let mut n = 0\n    for _w in text.split(\" \") {\n        n = n + 1\n    }\n    return n\n}\n",
 	)
 	fs::write(
-		f"{tmp}/words/tests/count.nika",
-		fs::Root::Anywhere,
+		"words/tests/count.nika",
+		tmp,
 		"use words\n\nfn line(text: String) throws {\n    println(words::count(text))\n}\n\nfn main() throws {\n    line(\"a b\")\n}\n",
 	)
-	let out = process::run(nikaia, ["migrate", "views-3", f"{tmp}/words/tests"])
+	let out = process::run(nikaia, ["migrate", "views-3", f"{tmp.path().to_text()}/words/tests"])
 	println(f"exit: {out.code}")
-	print(out.stderr.replace(tmp, "TMP"))
+	print(out.stderr.replace(tmp.path().to_text(), "TMP"))
 	let kept = process::run(
 		"sh",
-		["-c", f"cd {tmp}/words/tests && grep -n '\\bkeep\\b' *.nika"],
+		["-c", f"cd {tmp.path().to_text()}/words/tests && grep -n '\\bkeep\\b' *.nika"],
 	).stdout
 	print(kept)
-	process::run("rm", ["-rf", tmp])
 }

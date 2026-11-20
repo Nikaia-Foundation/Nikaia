@@ -2,18 +2,19 @@
 // is refused with NK1351 like `run`, where rustc used to refuse the program
 // crate as the internal NK1343 (E0601). A package built as a rust-library
 // (ADR-393 D1) is checked as its lib crate, and plain `check` is unchanged.
+use std::env
 use std::fs
 use std::process
 
 fn toolchain() -> String throws {
-	let exe = process::run("sh", ["-c", "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\""]).stdout.trim().clone()
+	let exe = env::current_exe()?.display() ?? ""
 	if exe.len() > 0 { return exe }
 	return "target/fast/nikaia"
 }
 
-fn shown(tmp: String, dir: String, args: Vec[String]) throws {
-	let out = process::run(toolchain(), args; dir: f"{tmp}/{dir}", env: [("NIKAIA_CACHE_DIR", f"{tmp}/cache")])
-	for line in f"{out.stdout}{out.stderr}".replace(tmp, "TMP").lines() {
+fn shown(tmp: ref fs::Root, dir: String, args: Vec[String]) throws {
+	let out = process::run(toolchain(), args; dir: f"{tmp.path().to_text()}/{dir}", env: [("NIKAIA_CACHE_DIR", f"{tmp.path().to_text()}/cache")])
+	for line in f"{out.stdout}{out.stderr}".replace(tmp.path().to_text(), "TMP").lines() {
 		if !line.trim().starts_with("Compiling") && !line.starts_with("note:") && !line.trim().starts_with("help: write `sync`") {
 			println(line)
 		}
@@ -22,17 +23,16 @@ fn shown(tmp: String, dir: String, args: Vec[String]) throws {
 }
 
 fn main() throws {
-	let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+	let tmp = fs::scratch()
 	let source = "pub fn f() -> i64 { return 1 }\n"
-	process::run("mkdir", ["-p", f"{tmp}/loose", f"{tmp}/program/src", f"{tmp}/library/src"])
-	fs::write(f"{tmp}/loose/one.nika", fs::Root::Anywhere, source)
-	fs::write(f"{tmp}/program/nikaia.toml", fs::Root::Anywhere, "[package]\nname = \"program\"\nversion = \"0.1.0\"\n")
-	fs::write(f"{tmp}/program/src/main.nika", fs::Root::Anywhere, source)
-	fs::write(f"{tmp}/library/nikaia.toml", fs::Root::Anywhere, "[package]\nname = \"library\"\nversion = \"0.1.0\"\n\n[build]\nartifact = \"rust-library\"\n")
-	fs::write(f"{tmp}/library/src/main.nika", fs::Root::Anywhere, source)
+	process::run("mkdir", ["-p", f"{tmp.path().to_text()}/loose", f"{tmp.path().to_text()}/program/src", f"{tmp.path().to_text()}/library/src"])
+	fs::write("loose/one.nika", tmp, source)
+	fs::write("program/nikaia.toml", tmp, "[package]\nname = \"program\"\nversion = \"0.1.0\"\n")
+	fs::write("program/src/main.nika", tmp, source)
+	fs::write("library/nikaia.toml", tmp, "[package]\nname = \"library\"\nversion = \"0.1.0\"\n\n[build]\nartifact = \"rust-library\"\n")
+	fs::write("library/src/main.nika", tmp, source)
 	shown(tmp, "loose", ["check", "--rustc", "one.nika"])
 	shown(tmp, "loose", ["check", "one.nika"])
 	shown(tmp, "program", ["check", "--rustc", "src/main.nika"])
 	shown(tmp, "library", ["check", "--rustc", "src/main.nika"])
-	process::run("rm", ["-rf", tmp])
 }

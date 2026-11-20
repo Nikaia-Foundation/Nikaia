@@ -3,24 +3,19 @@
 // known from the first; `w.push(0)` may change `w`, so after it the claim
 // is open again; `assert(is_sorted(v) && v.len() > 0)` at the top of a
 // function is its precondition and proves `v[0]`.
+use std::env
 use std::fs
 use std::process
 
 fn toolchain() -> String throws {
-	let exe = process::run(
-		"sh",
-		[
-			"-c",
-			"e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\"",
-		],
-	).stdout.trim().clone()
+	let exe = env::current_exe()?.display() ?? ""
 	if exe.len() > 0 { return exe }
 	return "target/fast/nikaia"
 }
 
-fn shown(tmp: String, text: String) -> String {
+fn shown(tmp: ref fs::Root, text: String) -> String throws {
 	let mut lines: Vec[String] = []
-	for line in text.replace(tmp, "TMP").lines() {
+	for line in text.replace(tmp.path().to_text(), "TMP").lines() {
 		let t = line.trim()
 		if t.starts_with("Compiling") || t.starts_with("Finished") || t.starts_with("Running") {
 			continue
@@ -30,17 +25,16 @@ fn shown(tmp: String, text: String) -> String {
 	return lines.join("\n")
 }
 
-fn ran(tmp: String, file: String, text: String, args: Vec[String]) throws {
-	fs::write(f"{tmp}/{file}", fs::Root::Anywhere, text)
+fn ran(tmp: ref fs::Root, file: String, text: String, args: Vec[String]) throws {
+	fs::write(f"{file}", tmp, text)
 	println(f"== {args.join(" ")}")
-	let out = process::run(toolchain(), args; dir: tmp)
+	let out = process::run(toolchain(), args; dir: tmp.path().to_text())
 	println(shown(tmp, f"{out.stdout}{out.stderr}"))
 	println(f"exit {out.code}")
 }
 
 fn main() throws {
-	let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+	let tmp = fs::scratch()
 	ran(tmp, "repeat.nika", "fn is_sorted(v: Vec[i64]) -> bool sync {\n\tlet mut i = 1\n\twhile i < v.len() {\n\t\tif v[i - 1] > v[i] { return false }\n\t\ti = i + 1\n\t}\n\ttrue\n}\n\nfn main() throws {\n\tlet v = [1, 2, 3]\n\tassert(is_sorted(v))\n\tassert(is_sorted(v))\n\tlet mut w = [1, 2, 3]\n\tassert(is_sorted(w))\n\tw.push(0)\n\tassert(is_sorted(w))\n\tprintln(\"ok\")\n}\n", ["check", "--asserts", "--unproved-claims=warn", "repeat.nika"])
 	ran(tmp, "first.nika", "fn is_sorted(v: Vec[i64]) -> bool sync {\n\tlet mut i = 1\n\twhile i < v.len() {\n\t\tif v[i - 1] > v[i] { return false }\n\t\ti = i + 1\n\t}\n\ttrue\n}\n\nfn first(v: Vec[i64]) -> i64 {\n\tassert(is_sorted(v) && v.len() > 0)\n\treturn v[0]\n}\n\nfn main() throws {\n\tprintln(first([1, 2, 3]))\n}\n", ["check", "--asserts", "--bounds", "--unproved-claims=warn", "first.nika"])
-	process::run("rm", ["-rf", tmp])
 }

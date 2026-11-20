@@ -14,17 +14,12 @@
 // `zero_io_workers_is_refused_by_name`,
 // `a_method_that_names_no_mechanism_is_refused` and
 // `a_line_that_is_not_a_setting_is_refused_by_line_number` (#2211).
+use std::env
 use std::fs
 use std::process
 
 fn toolchain() -> String throws {
-	let exe = process::run(
-		"sh",
-		[
-			"-c",
-			"e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\"",
-		],
-	).stdout.trim().clone()
+	let exe = env::current_exe()?.display() ?? ""
 	if exe.len() > 0 { return exe }
 	return "target/fast/nikaia"
 }
@@ -40,10 +35,10 @@ fn shown(err: String) -> String {
 }
 
 fn main() throws {
-	let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+	let tmp = fs::scratch()
 	fs::write(
-		f"{tmp}/cores.nika",
-		fs::Root::Anywhere,
+		"cores.nika",
+		tmp,
 		"use std::task\n\nfn main() throws {\n\tprintln(f\"cores {task::cores()}\")\n}\n",
 	)
 	let bad = [
@@ -56,36 +51,35 @@ fn main() throws {
 		"cleanup-deadline = \"soon\"\n",
 	]
 	for text in bad {
-		fs::write(f"{tmp}/runtime.toml", fs::Root::Anywhere, text)
+		fs::write("runtime.toml", tmp, text)
 		let out = process::run(
 			toolchain(),
-			["run", "cores.nika"]; dir: tmp,
-			env: [("NIKAIA_RUNTIME_CONFIG", f"{tmp}/runtime.toml")],
+			["run", "cores.nika"]; dir: tmp.path().to_text(),
+			env: [("NIKAIA_RUNTIME_CONFIG", f"{tmp.path().to_text()}/runtime.toml")],
 		)
 		println(f"{shown(out.stderr)}; exit {out.code}")
 	}
 	fs::write(
-		f"{tmp}/runtime.toml",
-		fs::Root::Anywhere,
+		"runtime.toml",
+		tmp,
 		"# the runtime, on this machine\nio-workers = 2\nuser-pool = 8\nio-method = \"blocking\"  # a comment\ncleanup-deadline = \"500ms\"\n",
 	)
 	let out = process::run(
 		toolchain(),
-		["run", "--user-parallelism", "yes", "cores.nika"]; dir: tmp,
-		env: [("NIKAIA_RUNTIME_CONFIG", f"{tmp}/runtime.toml")],
+		["run", "--user-parallelism", "yes", "cores.nika"]; dir: tmp.path().to_text(),
+		env: [("NIKAIA_RUNTIME_CONFIG", f"{tmp.path().to_text()}/runtime.toml")],
 	)
 	println(f"valid: {shown(out.stderr)}; {out.stdout.trim()}; exit {out.code}")
-	process::run("mkfifo", ["-m", "600", f"{tmp}/fifo"])
+	process::run("mkfifo", ["-m", "600", f"{tmp.path().to_text()}/fifo"])
 	fs::write(
-		f"{tmp}/drain.nika",
-		fs::Root::Anywhere,
+		"drain.nika",
+		tmp,
 		"use std::fs\n\nfn main() throws {\n\tasync(detached) fn {\n\t\tlet bytes = fs::read(\"fifo\", fs::Root::Anywhere) catch { return }\n\t\tprintln(f\"read {bytes.len()}\")\n\t}\n\tprintln(\"main ends\")\n}\n",
 	)
 	let drained = process::run(
 		toolchain(),
-		["run", "drain.nika"]; dir: tmp, env: [("NIKAIA_RUNTIME_CONFIG", f"{tmp}/runtime.toml")],
+		["run", "drain.nika"]; dir: tmp.path().to_text(), env: [("NIKAIA_RUNTIME_CONFIG", f"{tmp.path().to_text()}/runtime.toml")],
 	)
 	let said = drained.stderr.contains("did not finish within the 0.5s cleanup deadline")
 	println(f"drain: {drained.stdout.trim()}; the 0.5s deadline is named: {said}; exit {drained.code}")
-	process::run("rm", ["-rf", tmp])
 }

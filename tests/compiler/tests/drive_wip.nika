@@ -17,21 +17,18 @@
 // the whole report, which may be gone from docs/briefs/ (#1791). A `broke I<n>`
 // answer goes to the run's issue (#1818, drive_improve_plan). A Found that
 // names a scratchpad path is filed with a note that its probe is gone (#1824).
+use std::env
 use std::fs
 use std::process
 
 fn toolchain() -> String throws {
-    let exe = process::run("sh", ["-c", "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\""]).stdout.trim().clone()
+    let exe = env::current_exe()?.display() ?? ""
     if exe.len() > 0 { return exe }
     return "target/fast/nikaia"
 }
 
 fn root() -> String throws {
-    let here = process::run("pwd", []).stdout.trim().clone()
-    if fs::exists(f"{here}/scripts/drive.nika", fs::Root::Anywhere) { return here }
-    let parent = process::run("sh", ["-c", "readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/cwd"]).stdout.trim().clone()
-    if fs::exists(f"{parent}/scripts/drive.nika", fs::Root::Anywhere) { return parent }
-    return process::run("realpath", [f"{parent}/../.."]).stdout.trim().clone()
+    return env::current_main()?.parent()?.parent()?.parent()?.parent()?.display() ?? "../.."
 }
 
 fn drive(repo: String, nikaia: String, args: Vec[String]) throws {
@@ -58,37 +55,36 @@ fn main() throws {
     // A Found that names its probe by a scratchpad path says it is gone (#1824).
     drive(repo.clone(), nikaia.clone(), ["--found-issue", "issue-1751", "1751", "a churn of SharedMut runs over the budget: /tmp/claude-0/x/scratchpad/issue-1751/p.nika", "none"])
     // A report with two Founds gives neither its one `Needs:` (#1769).
-    let two = process::run("mktemp", []).stdout.trim().clone()
-    fs::write(two.clone(), fs::Root::Anywhere, "Result: done\nFound: guide/views.md example uses the old ref syntax\nFound: NK1131 refuses a lent field\nNeeds: group D of #1531\n")
+    let reports = fs::scratch()
+    let two = f"{reports.path().to_text()}/two.md"
+    fs::write("two.md", reports, "Result: done\nFound: guide/views.md example uses the old ref syntax\nFound: NK1131 refuses a lent field\nNeeds: group D of #1531\n")
     drive(repo.clone(), nikaia.clone(), ["--found-issues", "issue-1675", "1675", two.clone()])
-    process::run("rm", ["-f", two])
-    let bad = process::run("mktemp", []).stdout.trim().clone()
-    fs::write(bad.clone(), fs::Root::Anywhere, "Result: done\nCommit: drive: a partial run stays in batch.txt\nPushed: local 1a827e65\nIssue: wrong I8: item 3 was built already\nDeviation: none\nNeeds: none\nFriction: pre-push red on a badge that was not mine\n")
+    let bad = f"{reports.path().to_text()}/bad.md"
+    fs::write("bad.md", reports, "Result: done\nCommit: drive: a partial run stays in batch.txt\nPushed: local 1a827e65\nIssue: wrong I8: item 3 was built already\nDeviation: none\nNeeds: none\nFriction: pre-push red on a badge that was not mine\n")
     drive(repo.clone(), nikaia.clone(), ["--improve-issue", "issue-1624", "1624", bad.clone()])
-    let good = process::run("mktemp", []).stdout.trim().clone()
-    fs::write(good.clone(), fs::Root::Anywhere, "Result: done\nIssue: complete\nDeviation: none\nNeeds: none\nFriction: none\n")
+    let good = f"{reports.path().to_text()}/good.md"
+    fs::write("good.md", reports, "Result: done\nIssue: complete\nDeviation: none\nNeeds: none\nFriction: none\n")
     drive(repo.clone(), nikaia.clone(), ["--improve-issue", "issue-1625", "1625", good.clone()])
     drive(repo.clone(), nikaia.clone(), ["--comment-issue", "issue-1625", "1625", good.clone()])
-    let said = process::run("mktemp", []).stdout.trim().clone()
-    fs::write(said.clone(), fs::Root::Anywhere, "Result: done\nNeeds: none\nComment: #1531 group D waits on group C, from #1634\nComment: none\nComment: on the plan, no number\n")
+    let said = f"{reports.path().to_text()}/said.md"
+    fs::write("said.md", reports, "Result: done\nNeeds: none\nComment: #1531 group D waits on group C, from #1634\nComment: none\nComment: on the plan, no number\n")
     drive(repo.clone(), nikaia.clone(), ["--comment-issue", "issue-1676", "1676", said.clone()])
     drive(repo.clone(), nikaia.clone(), ["--improve-issue", "issue-1676", "", said.clone()])
-    let built = process::run("mktemp", []).stdout.trim().clone()
-    fs::write(built.clone(), fs::Root::Anywhere, "Result: done\nIssue: rules-gap (built): no rule said an item needs no GitHub; wrong I5: the probe passed\nFriction: none\n")
+    let built = f"{reports.path().to_text()}/built.md"
+    fs::write("built.md", reports, "Result: done\nIssue: rules-gap (built): no rule said an item needs no GitHub; wrong I5: the probe passed\nFriction: none\n")
     drive(repo.clone(), nikaia.clone(), ["--improve-issue", "issue-1707", "1707", built.clone()])
-    fs::write(built.clone(), fs::Root::Anywhere, "Result: done\nIssue: rules-gap (built): no rule said an item needs no GitHub\nFriction: none\n")
+    fs::write("built.md", reports, "Result: done\nIssue: rules-gap (built): no rule said an item needs no GitHub\nFriction: none\n")
     drive(repo.clone(), nikaia.clone(), ["--improve-issue", "issue-1708", "1708", built.clone()])
-    fs::write(built.clone(), fs::Root::Anywhere, "Result: done\nIssue: meets I1-I13; complete\nFriction: none\n")
+    fs::write("built.md", reports, "Result: done\nIssue: meets I1-I13; complete\nFriction: none\n")
     drive(repo.clone(), nikaia.clone(), ["--improve-issue", "issue-1740", "1740", built.clone()])
-    fs::write(built.clone(), fs::Root::Anywhere, "Result: done\nIssue: Fits docs/issues.md; item 3's cause turned out to be a compiler defect\nFriction: none\n")
+    fs::write("built.md", reports, "Result: done\nIssue: Fits docs/issues.md; item 3's cause turned out to be a compiler defect\nFriction: none\n")
     drive(repo.clone(), nikaia.clone(), ["--improve-issue", "issue-1820", "1820", built.clone()])
-    fs::write(built.clone(), fs::Root::Anywhere, "Result: blocked\nFound: none\nNeeds: supervisor decision: ADR-306 has no rule for a struct result's fields\nFriction: none\n")
+    fs::write("built.md", reports, "Result: blocked\nFound: none\nNeeds: supervisor decision: ADR-306 has no rule for a struct result's fields\nFriction: none\n")
     drive(repo.clone(), nikaia.clone(), ["--improve-issue", "issue-1557", "1557", built.clone()])
-    let batch = process::run("mktemp", ["-d"]).stdout.trim().clone()
-    fs::write(f"{batch}/found.txt", fs::Root::Anywhere, "issue-1700: filed #9\nissue-1749: filed #1801\nissue-1749: filed #1802\n")
-    fs::write(built.clone(), fs::Root::Anywhere, "Result: done\nFound: `xs.sort_by(f)` on an untyped list is NK1171\nFound: none\nFound: a stale guide example\nIssue: rules-gap: the second defect, see Found\nFriction: none\n")
-    drive(repo.clone(), nikaia.clone(), ["--improve-issue", "issue-1749", "1749", built.clone(), batch.clone()])
-    fs::write(f"{batch}/found.txt", fs::Root::Anywhere, "issue-1749: filed #1801\n")
-    drive(repo, nikaia, ["--improve-issue", "issue-1749", "1749", built.clone(), batch.clone()])
-    process::run("rm", ["-rf", bad, good, said, built, batch])
+    let batch = fs::scratch()
+    fs::write("found.txt", batch, "issue-1700: filed #9\nissue-1749: filed #1801\nissue-1749: filed #1802\n")
+    fs::write("built.md", reports, "Result: done\nFound: `xs.sort_by(f)` on an untyped list is NK1171\nFound: none\nFound: a stale guide example\nIssue: rules-gap: the second defect, see Found\nFriction: none\n")
+    drive(repo.clone(), nikaia.clone(), ["--improve-issue", "issue-1749", "1749", built.clone(), batch.path().to_text()])
+    fs::write("found.txt", batch, "issue-1749: filed #1801\n")
+    drive(repo, nikaia, ["--improve-issue", "issue-1749", "1749", built.clone(), batch.path().to_text()])
 }

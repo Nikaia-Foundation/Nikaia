@@ -6,17 +6,12 @@
 // D10). Moved from the `nikaia-std` unit tests
 // `abort::tests::{a_failed_claim_names_what_it_claimed, a_known_line_is_translated}`
 // and the shown operands of `an_operand_prints_where_it_can` (#2082).
+use std::env
 use std::fs
 use std::process
 
 fn toolchain() -> String throws {
-    let exe = process::run(
-        "sh",
-        [
-            "-c",
-            "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\"",
-        ],
-    ).stdout.trim().clone()
+    let exe = env::current_exe()?.display() ?? ""
     if exe.len() > 0 { return exe }
     return "target/fast/nikaia"
 }
@@ -36,16 +31,16 @@ fn stops(text: String) -> String {
 }
 
 fn main() throws {
-    let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+    let tmp = fs::scratch()
     fs::write(
-        f"{tmp}/claims.nika",
-        fs::Root::Anywhere,
+        "claims.nika",
+        tmp,
         "use std::cli\n\nfn plain(blank: i64) throws {\n    println(\"plain\")\n    assert(blank == 1)\n}\n\nfn told(blank: i64) throws {\n    println(\"told\")\n    assert(blank == 1; message: \"an empty line is blank\")\n}\n\nfn quoted(name: String) throws {\n    println(\"quoted\")\n    assert(name == \"a\")\n}\n\nfn main() throws {\n    let mut args: Vec[String] = []\n    for a in cli::args() { args.push(a) }\n    let which = args[args.len() - 1].clone()\n    let blank = which.bytes.len()\n    if which == \"ab\" { plain(blank) }\n    if which == \"told\" { told(blank) }\n    if which == \"quoted\" { quoted(which) }\n    println(\"held\")\n}\n",
     )
     for case in ["ab", "told", "quoted", "a"] {
         let out = process::run(
             "sh",
-            ["-c", f"\"$0\" run --unproved-claims=warn claims.nika -- {case}", toolchain()]; dir: tmp.clone(),
+            ["-c", f"\"$0\" run --unproved-claims=warn claims.nika -- {case}", toolchain()]; dir: tmp.path().to_text(),
         )
         println(f"== {case}, exit {out.code}")
         print(out.stdout)
@@ -53,5 +48,4 @@ fn main() throws {
             println(stops(out.stderr))
         }
     }
-    process::run("rm", ["-rf", tmp])
 }

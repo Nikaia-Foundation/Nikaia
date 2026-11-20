@@ -3,21 +3,18 @@
 // `rust_library/user` depends on that by path, calls its functions and
 // matches its enum. Both are copied to a scratch directory and built there;
 // cargo's target directory is kept in the tests' cache.
+use std::env
 use std::fs
 use std::process
 
 fn toolchain(repo: String) -> String throws {
-    let exe = process::run("sh", ["-c", "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\""]).stdout.trim().clone()
+    let exe = env::current_exe()?.display() ?? ""
     if exe.len() > 0 { return exe }
     return f"{repo}/target/fast/nikaia"
 }
 
 fn root() -> String throws {
-    let here = process::run("pwd", []).stdout.trim().clone()
-    if fs::exists(f"{here}/scripts/gate.nika", fs::Root::Anywhere) { return here }
-    let parent = process::run("sh", ["-c", "readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/cwd"]).stdout.trim().clone()
-    if fs::exists(f"{parent}/scripts/gate.nika", fs::Root::Anywhere) { return parent }
-    return process::run("realpath", [f"{parent}/../.."]).stdout.trim().clone()
+    return env::current_main()?.parent()?.parent()?.parent()?.parent()?.display() ?? "../.."
 }
 
 // The tests' cache entry cargo builds in, `<kind>/<toolchain key>` under
@@ -29,24 +26,23 @@ fn cache_entry(repo: String, nikaia: String, kind: String) -> String throws {
     let key = process::run("sha256sum", [nikaia]).stdout.split(" ").collect()[0].clone()
     let entry = f"{repo}/target/nikaia-project-tests/{kind}/{key}"
     process::run("mkdir", ["-p", entry.clone()])
-    fs::write(f"{entry}/.nikaia-used", fs::Root::Anywhere, "")
+    fs::write(f"target/nikaia-project-tests/{kind}/{key}/.nikaia-used", fs::Root::Dir(repo.clone()), "")
     return entry
 }
 
 fn main() throws {
     let repo = root()
     let nikaia = toolchain(repo.clone())
-    let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
-    process::run("cp", ["-r", f"{repo}/tests/compiler/rust_library/demo", f"{repo}/tests/compiler/rust_library/user", tmp.clone()])
-    let built = process::run(nikaia, ["build"]; dir: f"{tmp}/demo")
-    println(built.stdout.trim().replace(tmp, "TMP"))
+    let tmp = fs::scratch()
+    process::run("cp", ["-r", f"{repo}/tests/compiler/rust_library/demo", f"{repo}/tests/compiler/rust_library/user", tmp.path().to_text()])
+    let built = process::run(nikaia, ["build"]; dir: f"{tmp.path().to_text()}/demo")
+    println(built.stdout.trim().replace(tmp.path().to_text(), "TMP"))
     for file in ["Cargo.toml", "src/lib.rs"] {
-        let there = fs::exists(f"{tmp}/demo/target/rust-library/nikaia_demo/{file}", fs::Root::Anywhere)
+        let there = fs::exists(f"demo/target/rust-library/nikaia_demo/{file}", tmp)
         println(f"{file}: {there}")
     }
     let cache = cache_entry(repo.clone(), nikaia.clone(), "rust-library-user")
-    let ran = process::run("cargo", ["run", "-q"]; dir: f"{tmp}/user", env: [("CARGO_TARGET_DIR", cache), ("CARGO_NET_OFFLINE", "true")])
+    let ran = process::run("cargo", ["run", "-q"]; dir: f"{tmp.path().to_text()}/user", env: [("CARGO_TARGET_DIR", cache), ("CARGO_NET_OFFLINE", "true")])
     println(ran.stdout.trim())
     if ran.code != 0 { println(ran.stderr.trim()) }
-    process::run("rm", ["-rf", tmp])
 }

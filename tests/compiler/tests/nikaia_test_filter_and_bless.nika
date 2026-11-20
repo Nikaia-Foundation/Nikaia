@@ -2,17 +2,18 @@
 // TEXT (several add up, none matching is an error), and `--bless` gives a
 // test program with no `.stdout` the one it printed, never a new `.stderr`;
 // `--bless-stderr` makes the missing `.stderr` too.
+use std::env
 use std::fs
 use std::process
 
 fn toolchain() -> String throws {
-    let exe = process::run("sh", ["-c", "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\""]).stdout.trim().clone()
+    let exe = env::current_exe()?.display() ?? ""
     if exe.len() > 0 { return exe }
     return "target/fast/nikaia"
 }
 
-fn run_test(nikaia: String, tmp: String, label: String, args: Vec[String]) throws {
-    let out = process::run(nikaia, args; dir: tmp.clone())
+fn run_test(nikaia: String, tmp: ref fs::Root, label: String, args: Vec[String]) throws {
+    let out = process::run(nikaia, args; dir: tmp.path().to_text())
     println(f"-- {label}: exit {out.code}")
     for line in f"{out.stdout}{out.stderr}".lines() {
         if line.starts_with("program ") || line.starts_with("no tests") || line.starts_with("`--filter`") || line.starts_with("test result") {
@@ -22,24 +23,23 @@ fn run_test(nikaia: String, tmp: String, label: String, args: Vec[String]) throw
 }
 
 fn main() throws {
-    let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+    let tmp = fs::scratch()
     let nikaia = toolchain()
-    process::run("mkdir", ["-p", f"{tmp}/src", f"{tmp}/tests"])
-    fs::write(f"{tmp}/nikaia.toml", fs::Root::Anywhere, "[package]\nname = \"filtered\"\nversion = \"0.1.0\"\n")
-    fs::write(f"{tmp}/src/main.nika", fs::Root::Anywhere, "fn main() {}\n")
-    fs::write(f"{tmp}/tests/alpha.nika", fs::Root::Anywhere, "fn main() throws {\n    println(\"alpha\")\n}\n")
-    fs::write(f"{tmp}/tests/beta.nika", fs::Root::Anywhere, "fn main() throws {\n    println(\"beta\")\n}\n")
+    process::run("mkdir", ["-p", f"{tmp.path().to_text()}/src", f"{tmp.path().to_text()}/tests"])
+    fs::write("nikaia.toml", tmp, "[package]\nname = \"filtered\"\nversion = \"0.1.0\"\n")
+    fs::write("src/main.nika", tmp, "fn main() {}\n")
+    fs::write("tests/alpha.nika", tmp, "fn main() throws {\n    println(\"alpha\")\n}\n")
+    fs::write("tests/beta.nika", tmp, "fn main() throws {\n    println(\"beta\")\n}\n")
     run_test(nikaia, tmp, "alpha blessed alone", ["test", "--filter", "alp", "--bless"])
-    println(f"alpha.stdout: {fs::read_to_string(f"{tmp}/tests/alpha.stdout", fs::Root::Anywhere).trim()}")
-    println(f"beta.stdout made: {fs::exists(f"{tmp}/tests/beta.stdout", fs::Root::Anywhere)}")
-    println(f"alpha.stderr made: {fs::exists(f"{tmp}/tests/alpha.stderr", fs::Root::Anywhere)}")
+    println(f"alpha.stdout: {fs::read_to_string("tests/alpha.stdout", tmp).trim()}")
+    println(f"beta.stdout made: {fs::exists("tests/beta.stdout", tmp)}")
+    println(f"alpha.stderr made: {fs::exists("tests/alpha.stderr", tmp)}")
     run_test(nikaia, tmp, "two filters", ["test", "--filter", "alp", "--filter", "bet"])
     run_test(nikaia, tmp, "no test matches", ["test", "--filter", "gamma"])
     run_test(nikaia, tmp, "a pattern matches no name", ["test", "--filter", "alpha|beta"])
-    fs::write(f"{tmp}/tests/loud.nika", fs::Root::Anywhere, "fn main() throws {\n    eprintln(\"loud\")\n}\n")
+    fs::write("tests/loud.nika", tmp, "fn main() throws {\n    eprintln(\"loud\")\n}\n")
     run_test(nikaia, tmp, "loud blessed", ["test", "--filter", "loud", "--bless"])
-    println(f"loud.stderr made: {fs::exists(f"{tmp}/tests/loud.stderr", fs::Root::Anywhere)}")
+    println(f"loud.stderr made: {fs::exists("tests/loud.stderr", tmp)}")
     run_test(nikaia, tmp, "loud blessed with stderr", ["test", "--filter", "loud", "--bless-stderr"])
-    println(f"loud.stderr: {fs::read_to_string(f"{tmp}/tests/loud.stderr", fs::Root::Anywhere).trim()}")
-    process::run("rm", ["-rf", tmp])
+    println(f"loud.stderr: {fs::read_to_string("tests/loud.stderr", tmp).trim()}")
 }

@@ -4,18 +4,13 @@
 // as the engine's log (`proved sv:...`). A build under `--locked` reads the
 // entry and checks it with `sv_check`; an entry changed by one step no
 // longer checks, so the question is searched again and `--locked` refuses.
+use std::env
 use std::fs
 use std::process
 use std::text
 
 fn toolchain() -> String throws {
-	let exe = process::run(
-		"sh",
-		[
-			"-c",
-			"p=$PPID; while [ \"$p\" -gt 1 ]; do e=$(readlink /proc/$p/exe); if [ \"$(basename \"$e\")\" = nikaia ]; then echo \"$e\"; exit 0; fi; p=$(cut -d' ' -f4 /proc/$p/stat); done",
-		],
-	).stdout.trim().clone()
+	let exe = env::current_exe()?.display() ?? ""
 	if exe.len() == 0 {
 		eprintln("no running nikaia among this program's ancestors: run it with `nikaia test` (#1305)")
 		process::exit(2)
@@ -36,8 +31,8 @@ fn program() -> String {
 }
 
 // The book's entries that hold a log, inline or in `nikaia.proofs.d`.
-fn logs(tmp: String) -> i64 throws {
-	let out = process::run("sh", ["-c", "grep -c ' proved sv:' nikaia.proofs; grep -l '^sv:' nikaia.proofs.d/* 2>/dev/null | wc -l"]; dir: tmp.clone())
+fn logs(tmp: ref fs::Root) -> i64 throws {
+	let out = process::run("sh", ["-c", "grep -c ' proved sv:' nikaia.proofs; grep -l '^sv:' nikaia.proofs.d/* 2>/dev/null | wc -l"]; dir: tmp.path().to_text())
 	let mut n = 0
 	for line in out.stdout.lines() {
 		n += text::parse_i64(line.trim()) ?? 0
@@ -46,19 +41,18 @@ fn logs(tmp: String) -> i64 throws {
 }
 
 fn main() throws {
-	let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+	let tmp = fs::scratch()
 	let nikaia = toolchain()
-	process::run("mkdir", ["-p", f"{tmp}/src"])
-	fs::write(f"{tmp}/nikaia.toml", fs::Root::Anywhere, "[package]\nname = \"parity\"\nversion = \"0.1.0\"\n")
-	fs::write(f"{tmp}/src/main.nika", fs::Root::Anywhere, program())
-	let first = process::run(nikaia, ["build", "--no-cache"]; dir: tmp.clone())
+	process::run("mkdir", ["-p", f"{tmp.path().to_text()}/src"])
+	fs::write("nikaia.toml", tmp, "[package]\nname = \"parity\"\nversion = \"0.1.0\"\n")
+	fs::write("src/main.nika", tmp, program())
+	let first = process::run(nikaia, ["build", "--no-cache"]; dir: tmp.path().to_text())
 	println(f"built: {first.stderr.contains("error") == false}")
 	println(f"entries holding a log: {logs(tmp) > 0}")
-	let locked = process::run(nikaia, ["build", "--no-cache", "--locked"]; dir: tmp.clone())
+	let locked = process::run(nikaia, ["build", "--no-cache", "--locked"]; dir: tmp.path().to_text())
 	println(f"--locked with the log as written: {locked.stderr.contains("--locked") == false}")
 	// One step of the inline log changed: `i3` (an input) becomes `i99999`.
-	process::run("sed", ["-i", "-E", "/ proved sv:/ s/,i3,/,i99999,/", "nikaia.proofs"]; dir: tmp.clone())
-	let tampered = process::run(nikaia, ["build", "--no-cache", "--locked"]; dir: tmp.clone())
+	process::run("sed", ["-i", "-E", "/ proved sv:/ s/,i3,/,i99999,/", "nikaia.proofs"]; dir: tmp.path().to_text())
+	let tampered = process::run(nikaia, ["build", "--no-cache", "--locked"]; dir: tmp.path().to_text())
 	println(f"--locked with one step changed: {tampered.stderr.contains("commit `nikaia.proofs`")}")
-	process::run("rm", ["-rf", tmp])
 }

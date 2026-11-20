@@ -3,36 +3,24 @@
 // decision on #2310): the Rust's `&'static str` takes only text the build
 // holds, so the call is `NK1102`, naming `comptime`. Before #2310 it reached
 // rustc (`NK1343`, borrowed data escapes outside of function).
+use std::env
 use std::fs
 use std::process
 
 fn toolchain(repo: String) -> String throws {
-	let exe = process::run(
-		"sh",
-		[
-			"-c",
-			"e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\"",
-		],
-	).stdout.trim().clone()
+	let exe = env::current_exe()?.display() ?? ""
 	if exe.len() > 0 { return exe }
 	return f"{repo}/target/fast/nikaia"
 }
 
 fn root() -> String throws {
-	let here = process::run("pwd", []).stdout.trim().clone()
-	if fs::exists(f"{here}/scripts/gate.nika", fs::Root::Anywhere) { return here }
-	let parent = process::run(
-		"sh",
-		["-c", "readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/cwd"],
-	).stdout.trim().clone()
-	if fs::exists(f"{parent}/scripts/gate.nika", fs::Root::Anywhere) { return parent }
-	return process::run("realpath", [f"{parent}/../.."]).stdout.trim().clone()
+	return env::current_main()?.parent()?.parent()?.parent()?.parent()?.display() ?? "../.."
 }
 
-fn ran(nikaia: String, tmp: String, case: String, args: Vec[String]) throws {
-	let done = process::run(nikaia, args; dir: f"{tmp}/lines", env: [("CARGO_TERM_COLOR", "never")])
+fn ran(nikaia: String, tmp: ref fs::Root, case: String, args: Vec[String]) throws {
+	let done = process::run(nikaia, args; dir: f"{tmp.path().to_text()}/lines", env: [("CARGO_TERM_COLOR", "never")])
 	println(f"--- {case}: exit {done.code}")
-	let text = f"{done.stdout}{done.stderr}".replace(tmp, "TMP")
+	let text = f"{done.stdout}{done.stderr}".replace(tmp.path().to_text(), "TMP")
 	for line in text.lines() {
 		// Cargo's progress varies by run and by machine; CI colours it, so it is asked not to.
 		let word = line.trim_start().split(" ").next() ?? ""
@@ -46,14 +34,13 @@ fn ran(nikaia: String, tmp: String, case: String, args: Vec[String]) throws {
 fn main() throws {
 	let repo = root()
 	let nikaia = toolchain(repo.clone())
-	let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
-	process::run("cp", ["-r", f"{repo}/tests/compiler/own_rust/lines", tmp.clone()])
-	let lines = f"{tmp}/lines"
-	let source = fs::read_to_string(f"{lines}/src/lines.nika", fs::Root::Anywhere)
+	let tmp = fs::scratch()
+	process::run("cp", ["-r", f"{repo}/tests/compiler/own_rust/lines", tmp.path().to_text()])
+	let lines = tmp.join("lines")
+	let source = fs::read_to_string("src/lines.nika", lines)
 	// A package's entry is `src/main.nika` (Part III 13.3), a library's too.
-	fs::write(f"{lines}/src/main.nika", fs::Root::Anywhere, "// The entry of the package.\n")
+	fs::write("src/main.nika", lines, "// The entry of the package.\n")
 	let asked: String = "\nfn ask(name: ref String) -> bool {\n    let table: Array[(u32, ref String, u32), 1] = [(10, name, 3)]\n    return words::lookup(table, 11) == null\n}\n\ntest \"a made name\" {\n    assert(ask(\"src/main.nika\".to_uppercase()))\n}\n"
-	fs::write(f"{lines}/src/lines.nika", fs::Root::Anywhere, f"{source}{asked}")
-	ran(nikaia, tmp.clone(), "run-time table", ["test"])
-	process::run("rm", ["-rf", tmp])
+	fs::write("src/lines.nika", lines, f"{source}{asked}")
+	ran(nikaia, tmp, "run-time table", ["test"])
 }

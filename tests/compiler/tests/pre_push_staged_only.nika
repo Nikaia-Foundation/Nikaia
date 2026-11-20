@@ -5,23 +5,22 @@
 // temp repository made of HEAD with this checkout's scripts, a tools file
 // grows by five thousand code lines, unstaged, and an unrelated file is staged:
 // every step stays green. Staged, the same growth turns `badges` and
-// `version` red. It runs `pre-push -- push`, where the badges are strict (a
-// builder's run only shows them; the driver redraws them).
+// `version` red under `pre-push -- push`, where the badges are strict. A
+// builder's run (no argument) only shows the stale badge, and its `version`
+// stays green: it checks the version lines without the badges (#2414: Rust
+// staged turned `version` red on the driver's stale badge alone).
+use std::env
 use std::fs
 use std::process
 
 fn toolchain() -> String throws {
-    let exe = process::run("sh", ["-c", "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\""]).stdout.trim().clone()
+    let exe = env::current_exe()?.display() ?? ""
     if exe.len() > 0 { return exe }
     return "target/fast/nikaia"
 }
 
 fn root() -> String throws {
-    let here = process::run("pwd", []).stdout.trim().clone()
-    if fs::exists(f"{here}/scripts/pre-push.nika", fs::Root::Anywhere) { return here }
-    let parent = process::run("sh", ["-c", "readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/cwd"]).stdout.trim().clone()
-    if fs::exists(f"{parent}/scripts/pre-push.nika", fs::Root::Anywhere) { return parent }
-    return process::run("realpath", [f"{parent}/../.."]).stdout.trim().clone()
+    return env::current_main()?.parent()?.parent()?.parent()?.parent()?.display() ?? "../.."
 }
 
 fn sh(dir: String, script: String) -> String throws {
@@ -30,13 +29,18 @@ fn sh(dir: String, script: String) -> String throws {
     return out.stdout.trim().clone()
 }
 
-// The step lines of a strict pre-push run (`-- push`), without the output of
-// a red one.
-fn steps(nikaia: String, work: String) -> String throws {
-    let out = process::run(nikaia, ["run", "scripts/pre-push.nika", "--", "push"]; dir: work)
+// The step lines of a pre-push run, strict (`-- push`) or a builder's,
+// without the output of a red one.
+fn steps(nikaia: String, work: ref fs::Root, strict: bool) -> String throws {
+    let mut args: Vec[String] = ["run", "scripts/pre-push.nika"]
+    if strict {
+        args.push("--")
+        args.push("push")
+    }
+    let out = process::run(nikaia, args; dir: work.path().to_text())
     let mut lines = String()
     for line in out.stdout.lines() {
-        if line.ends_with(" green") || line.ends_with(" red") {
+        if line.ends_with(" green") || line.ends_with(" red") || line.starts_with("badges stale") {
             lines.push_str(f"  {line}\n")
         }
     }
@@ -44,10 +48,10 @@ fn steps(nikaia: String, work: String) -> String throws {
 }
 
 fn main() throws {
-    let tmp = process::run("sh", ["-c", "realpath $(mktemp -d)"]).stdout.trim().clone()
+    let tmp = fs::scratch()
     let repo = root()
     let nikaia = toolchain()
-    let work = f"{tmp}/work"
+    let work = tmp.join("work")
     let id = "git config user.email t@t; git config user.name t; git config commit.gpgsign false"
     let tool = "crates/nikaia-std/src/compiler/fmt.nika"
     // The temp repository borrows this checkout's objects and reads HEAD's
@@ -55,13 +59,14 @@ fn main() throws {
     // pre-push copies the index itself, so a checked-out tree would only be
     // written and deleted again (13 000 files, the most of this test's time).
     let objects = sh(repo.clone(), "realpath $(git rev-parse --git-path objects)")
-    sh(tmp.clone(), f"git init -q -b develop work; echo {objects} > work/.git/objects/info/alternates")
-    sh(work.clone(), f"git read-tree $(git -C {repo} rev-parse HEAD^{{tree}}); git checkout-index README.md {tool}; mkdir -p scripts; s=\"scripts/pre-push.nika scripts/slot.nika scripts/check-adr-refs.nika scripts/bump.py scripts/badges.py scripts/self_hosting.py\"; for f in $s; do cp {repo}/$f $f; done; {id}; git add $s; git commit -q -m base")
-    sh(work.clone(), f"for i in $(seq 5000); do echo \"fn grown_$i() -> i64 {{ $i }}\"; done >> {tool}; echo note >> README.md; git add README.md")
+    sh(tmp.path().to_text(), f"git init -q -b develop work; echo {objects} > work/.git/objects/info/alternates")
+    sh(work.path().to_text(), f"git read-tree $(git -C {repo} rev-parse HEAD^{{tree}}); git checkout-index README.md {tool}; mkdir -p scripts; s=\"scripts/pre-push.nika scripts/slot.nika scripts/check-adr-refs.nika scripts/bump.py scripts/badges.py scripts/self_hosting.py\"; for f in $s; do cp {repo}/$f $f; done; {id}; git add $s; git commit -q -m base")
+    sh(work.path().to_text(), f"for i in $(seq 5000); do echo \"fn grown_$i() -> i64 {{ $i }}\"; done >> {tool}; echo note >> README.md; git add README.md")
     println("unstaged tools move, a docs file staged:")
-    println(steps(nikaia.clone(), work.clone()))
-    sh(work.clone(), f"git add {tool}")
+    println(steps(nikaia.clone(), work, true))
+    sh(work.path().to_text(), f"git add {tool}")
     println("the tools move staged:")
-    println(steps(nikaia, work))
-    process::run("rm", ["-rf", tmp])
+    println(steps(nikaia.clone(), work, true))
+    println("the tools move staged, a builder's run:")
+    println(steps(nikaia, work, false))
 }

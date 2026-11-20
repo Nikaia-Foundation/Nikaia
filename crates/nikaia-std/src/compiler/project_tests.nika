@@ -99,15 +99,18 @@ fn shown_path(path: ref fs::Path, root: ref fs::Path) -> String {
     return (path.strip_prefix(root) ?? path).display()
 }
 
-fn files_under(dir: ref fs::Path) -> Vec[(String, fs::Path)] throws {
-    let mut found: Vec[(String, fs::Path)] = fs::walk(dir, fs::Root::Anywhere).iter().map(fn(name) { (name.text_of(), dir.join(name)) }).collect()
+// Each name below is opened under the directory it was read from, never
+// anywhere (ADR-raw-sinks-1 D13): a test's files under its `tests/`.
+fn files_under(dir: ref fs::Path, at: ref fs::Root) -> Vec[(String, fs::Path)] throws {
+    let mut found: Vec[(String, fs::Path)] = fs::walk(dir, at).iter().map(fn(name) { (name.text_of(), dir.join(name)) }).collect()
     found.sort()
     return found
 }
 
-/// Whether `path` names a directory; a name that is not there names none.
-fn project_tests_is_dir(path: ref fs::Path) -> bool {
-    let found = fs::metadata(path, fs::Root::Anywhere) catch { return false }
+/// Whether `path` names a directory under `at`; a name that is not there
+/// names none.
+fn project_tests_is_dir(path: ref fs::Path, at: ref fs::Root) -> bool {
+    let found = fs::metadata(path, at) catch { return false }
     return found.is_dir()
 }
 
@@ -117,30 +120,36 @@ fn project_tests_is_file(path: ref fs::Path) -> bool {
     return found.is_file()
 }
 
-/// A file's bytes, nothing where it is not there; a file that is there and
-/// cannot be read is the failure.
-fn project_tests_optional(path: ref fs::Path) -> Bytes? throws {
-    if !fs::exists(path, fs::Root::Anywhere) {
-        return null
-    }
-    return fs::read(path, fs::Root::Anywhere)
+/// Whether `path` names a file under `at`; a name that is not there names
+/// none.
+fn project_tests_is_file_under(path: ref fs::Path, at: ref fs::Root) -> bool {
+    let found = fs::metadata(path, at) catch { return false }
+    return found.is_file()
 }
 
-/// The names in `dir` that end in `.ending`, without it, sorted: a test's
-/// name is the file's stem.
-fn project_tests_stems(dir: ref fs::Path, ending: String, want_dir: bool) -> collections::BTreeSet[String] {
+/// A file's bytes, nothing where it is not there; a file that is there and
+/// cannot be read is the failure.
+fn project_tests_optional(path: ref fs::Path, at: ref fs::Root) -> Bytes? throws {
+    if !fs::exists(path, at) {
+        return null
+    }
+    return fs::read(path, at)
+}
+
+/// The names in the directory of `at` that end in `.ending`, without it,
+/// sorted: a test's name is the file's stem.
+fn project_tests_stems(at: ref fs::Root, ending: String, want_dir: bool) -> collections::BTreeSet[String] {
     let mut names: collections::BTreeSet[String] = collections::BTreeSet()
-    let entries = fs::read_dir(dir, fs::Root::Anywhere) catch { return names }
+    let entries = fs::read_dir(".", at) catch { return names }
     for name in entries.iter() {
         let text = name.text_of()
         let stem: String = (text.strip_suffix(ending) ?? "").clone()
         if stem.is_empty() {
             continue
         }
-        let path = dir.join(name)
         let right = match want_dir {
-            true => project_tests_is_dir(path),
-            false => project_tests_is_file(path),
+            true => project_tests_is_dir(name, at),
+            false => project_tests_is_file_under(name, at),
         }
         if right {
             names.insert(stem)
@@ -154,37 +163,39 @@ fn project_tests_stems(dir: ref fs::Path, ending: String, want_dir: bool) -> col
 /// quietly has no input.
 pub fn output_tests(root: ref fs::Path) -> Vec[OutputTest] throws {
     let dir = root.join("tests")
-    let mut names = project_tests_stems(dir, ".stdout", false)
-    names.extend(project_tests_stems(dir, ".out", true))
-    names.extend(project_tests_stems(dir, ".stops", false))
+    let at = fs::Root::Dir(dir.clone())
+    let mut names = project_tests_stems(at, ".stdout", false)
+    names.extend(project_tests_stems(at, ".out", true))
+    names.extend(project_tests_stems(at, ".stops", false))
     let mut tests: Vec[OutputTest] = []
     for name in names {
         // A `NAME.nika` beside them makes the files that program's (D22).
-        if project_tests_is_file(dir.join(f"{name}.nika")) {
+        let program: fs::Path = f"{name}.nika"
+        if project_tests_is_file_under(program, at) {
             continue
         }
-        let stdout = project_tests_optional(dir.join(f"{name}.stdout"))
-        let out = dir.join(f"{name}.out")
+        let stdout = project_tests_optional(f"{name}.stdout", at)
+        let out: fs::Path = f"{name}.out"
         let mut files: Vec[(String, Bytes)] = []
-        if project_tests_is_dir(out) {
-            for (relative, path) in files_under(out) {
-                files.push((relative, fs::read(path, fs::Root::Anywhere)))
+        if project_tests_is_dir(out, at) {
+            for (relative, path) in files_under(out, at) {
+                files.push((relative, fs::read(path, at)))
             }
         }
-        let given = dir.join(f"{name}.in")
-        let inputs: fs::Path? = match project_tests_is_dir(given) {
-            true => given,
+        let given: fs::Path = f"{name}.in"
+        let inputs: fs::Path? = match project_tests_is_dir(given, at) {
+            true => dir.join(given),
             false => null,
         }
-        let stdin = project_tests_optional(dir.join(f"{name}.stdin")) ?? Bytes([])
+        let stdin = project_tests_optional(f"{name}.stdin", at) ?? Bytes([])
         let mut args: Vec[String] = []
-        let listed = project_tests_optional(dir.join(f"{name}.args"))
+        let listed = project_tests_optional(f"{name}.args", at)
         if listed != null {
             let bytes = listed ?? Bytes([])
             args = bytes.text().lines().map(fn(line) { line.clone() }).collect()
         }
-        let stderr = project_tests_optional(dir.join(f"{name}.stderr"))
-        let stops = project_tests_optional(dir.join(f"{name}.stops"))
+        let stderr = project_tests_optional(f"{name}.stderr", at)
+        let stops = project_tests_optional(f"{name}.stops", at)
         tests.push(OutputTest { name: name.clone(), dir: root.join("tests"), stdout: stdout, stderr: stderr, stops: stops, files: files, inputs: inputs, stdin: stdin, args: args })
     }
     return tests
@@ -193,13 +204,15 @@ pub fn output_tests(root: ref fs::Path) -> Vec[OutputTest] throws {
 /// Copy every file under `from` to the same name under `to`, making the
 /// directories on the way.
 pub fn copy_into(from: ref fs::Path, to: ref fs::Path) throws {
-    for (relative, path) in files_under(from) {
-        let target = to.join(relative)
+    let from_at = fs::Root::Dir(from.clone())
+    let to_at = fs::Root::Dir(to.clone())
+    for (relative, path) in files_under(".", from_at) {
+        let target: fs::Path = relative
         match target.parent() {
             null => {}
-            parent => fs::create_dir(parent, fs::Root::Anywhere; recursive: true),
+            parent => fs::create_dir(parent, to_at; recursive: true),
         }
-        fs::copy(path, target, fs::Root::Anywhere)
+        fs::write(target, to_at, fs::read(path, from_at))
     }
 }
 
@@ -264,22 +277,22 @@ pub fn project_tests_program_manifest(root: ref fs::Path, package: String?) -> P
 
 /// The package's test programs, by name.
 pub fn program_tests(root: ref fs::Path) -> Vec[ProgramTest] throws {
-    let dir = root.join("tests")
+    let at = fs::Root::Dir(root.join("tests"))
     let mut tests: Vec[ProgramTest] = []
     // **One `--bounds` expectation per test** (ADR-361 D14): a
     // `NAME.loops.bounds` left from the switch is an error, not a file
     // nothing reads.
-    for stem in project_tests_stems(dir, ".loops.bounds", false) {
+    for stem in project_tests_stems(at, ".loops.bounds", false) {
         throw ProjectTestsRefusal::Refused(f"tests/{stem}.loops.bounds: a test program has one `--bounds` expectation, `{stem}.bounds`, since every build asks a check through its loop (ADR-361 D14): move what it holds into `{stem}.bounds` and delete it")
     }
-    for name in project_tests_stems(dir, ".nika", false) {
-        let stdout = project_tests_optional(dir.join(f"{name}.stdout"))
-        let stderr = project_tests_optional(dir.join(f"{name}.stderr"))
-        let bounds = project_tests_optional(dir.join(f"{name}.bounds"))
-        let asserts = project_tests_optional(dir.join(f"{name}.asserts"))
-        let sharing = project_tests_optional(dir.join(f"{name}.sharing"))
-        let stops = project_tests_optional(dir.join(f"{name}.stops"))
-        let stdin = project_tests_optional(dir.join(f"{name}.stdin")) ?? Bytes([])
+    for name in project_tests_stems(at, ".nika", false) {
+        let stdout = project_tests_optional(f"{name}.stdout", at)
+        let stderr = project_tests_optional(f"{name}.stderr", at)
+        let bounds = project_tests_optional(f"{name}.bounds", at)
+        let asserts = project_tests_optional(f"{name}.asserts", at)
+        let sharing = project_tests_optional(f"{name}.sharing", at)
+        let stops = project_tests_optional(f"{name}.stops", at)
+        let stdin = project_tests_optional(f"{name}.stdin", at) ?? Bytes([])
         tests.push(ProgramTest { name: name.clone(), dir: root.join("tests"), stdout: stdout, stderr: stderr, stops: stops, bounds: bounds, asserts: asserts, sharing: sharing, stdin: stdin })
     }
     return tests
@@ -290,20 +303,20 @@ pub fn program_tests(root: ref fs::Path) -> Vec[ProgramTest] throws {
 /// expectation nothing checks. A `.loops.bounds` is left to
 /// [`program_tests`], which refuses every one (ADR-361 D14).
 pub fn project_tests_stray_bounds(root: ref fs::Path) -> Vec[String] {
-    let dir = root.join("tests")
+    let at = fs::Root::Dir(root.join("tests"))
     let mut stray: Vec[String] = []
-    for stem in project_tests_stems(dir, ".bounds", false) {
-        if !stem.ends_with(".loops") && !project_tests_is_file(dir.join(f"{stem}.nika")) {
+    for stem in project_tests_stems(at, ".bounds", false) {
+        if !stem.ends_with(".loops") && !project_tests_is_file_under(f"{stem}.nika", at) {
             stray.push(f"{stem}.bounds")
         }
     }
-    for stem in project_tests_stems(dir, ".asserts", false) {
-        if !project_tests_is_file(dir.join(f"{stem}.nika")) {
+    for stem in project_tests_stems(at, ".asserts", false) {
+        if !project_tests_is_file_under(f"{stem}.nika", at) {
             stray.push(f"{stem}.asserts")
         }
     }
-    for stem in project_tests_stems(dir, ".sharing", false) {
-        if !project_tests_is_file(dir.join(f"{stem}.nika")) {
+    for stem in project_tests_stems(at, ".sharing", false) {
+        if !project_tests_is_file_under(f"{stem}.nika", at) {
             stray.push(f"{stem}.sharing")
         }
     }
@@ -893,13 +906,18 @@ pub fn project_tests_batches[H: ProjectTestsProgramHost](host: ref H, programs: 
         fs::write(dir.join("project").join("nikaia.toml"), fs::Root::Anywhere, manifest.clone())
         fs::write(dir.join("project").join("src").join("main.nika"), fs::Root::Anywhere, project_tests_batch_carrier())
         let mut lines: Vec[String] = []
+        // A program's package is named by its stem, under the batch's
+        // `programs/` (ADR-raw-sinks-1 D13).
+        fs::create_dir(dir.join("programs"), fs::Root::Anywhere; recursive: true)
+        let programs = fs::Root::Dir(dir.join("programs"))
         for program in chunk {
-            let at = dir.join("programs").join(program.name)
-            fs::create_dir(at.join("src"), fs::Root::Anywhere; recursive: true)
-            fs::write(at.join("nikaia.toml"), fs::Root::Anywhere, manifest.clone())
-            let entry = at.join("src").join("main.nika")
+            let at: fs::Path = program.name.clone()
+            fs::create_dir(at.join("src"), programs; recursive: true)
+            fs::write(at.join("nikaia.toml"), programs, manifest.clone())
+            let entry = dir.join("programs").join(at).join("src").join("main.nika")
             let source = program.dir.join(f"{program.name}.nika")
-            fs::copy(source, entry, fs::Root::Anywhere) catch { throw ProjectTestsRefusal::Refused(f"copying {source.display()}: {error}") }
+            let text = fs::read(f"{program.name}.nika", fs::Root::Dir(program.dir.clone())) catch { throw ProjectTestsRefusal::Refused(f"copying {source.display()}: {error}") }
+            fs::write(at.join("src").join("main.nika"), programs, text) catch { throw ProjectTestsRefusal::Refused(f"copying {source.display()}: {error}") }
             lines.push(f"{program.name}\t{entry.display()}\n")
         }
         let list = dir.join("batch.list")
@@ -950,8 +968,7 @@ pub fn project_tests_batches[H: ProjectTestsProgramHost](host: ref H, programs: 
 /// **Whether a test program can start a compiler of its own** (#1955): it
 /// names `process::`, the only way a program starts one.
 fn project_tests_starts_processes(program: ref ProgramTest) -> bool {
-    let source = program.dir.join(f"{program.name}.nika")
-    let text = fs::read_to_string(source, fs::Root::Anywhere) catch { return false }
+    let text = fs::read_to_string(f"{program.name}.nika", fs::Root::Dir(program.dir.clone())) catch { return false }
     return text.contains("process::")
 }
 
@@ -995,13 +1012,13 @@ pub fn project_tests_warm_up[H: ProjectTestsProgramHost](host: ref H, programs: 
 /// Remove everything in `dir` but the entry named `keep`; a `dir` that cannot
 /// be read holds nothing to remove.
 fn project_tests_empty_but(dir: ref fs::Path, keep: String) throws {
-    let names = fs::read_dir(dir, fs::Root::Anywhere) catch { return }
+    let at = fs::Root::Dir(dir.clone())
+    let names = fs::read_dir(".", at) catch { return }
     for name in names {
         if name.text_of() == keep {
             continue
         }
-        let path = dir.join(name)
-        fs::remove(path, fs::Root::Anywhere; recursive: true) catch { throw ProjectTestsRefusal::Refused(f"emptying {path.display()}: {error}") }
+        fs::remove(name, at; recursive: true) catch { throw ProjectTestsRefusal::Refused(f"emptying {dir.join(name).display()}: {error}") }
     }
 }
 
@@ -1031,7 +1048,8 @@ fn project_tests_prepared[H: ProjectTestsProgramHost](host: ref H, program: ref 
     fs::create_dir(project.join("src"), fs::Root::Anywhere; recursive: true)
     let source = program.dir.join(f"{program.name}.nika")
     let entry = project.join("src").join("main.nika")
-    fs::copy(source, entry, fs::Root::Anywhere) catch { throw ProjectTestsRefusal::Refused(f"copying {source.display()}: {error}") }
+    let text = fs::read(f"{program.name}.nika", fs::Root::Dir(program.dir.clone())) catch { throw ProjectTestsRefusal::Refused(f"copying {source.display()}: {error}") }
+    fs::write(entry, fs::Root::Anywhere, text) catch { throw ProjectTestsRefusal::Refused(f"copying {source.display()}: {error}") }
     let dependency: String = match host.package_name(root) {
         null => "",
         name => {
@@ -1237,15 +1255,15 @@ fn project_tests_bless_program(program: ref ProgramTest, outcomes: ref Vec[(Stri
         return ProjectTestsBlessed::Unchanged
     }
     if !refused && (program.stdout != null || new_stdout) {
-        fs::write(program.dir.join(f"{program.name}.stdout"), fs::Root::Anywhere, first.stdout.clone())
+        fs::write(f"{program.name}.stdout", fs::Root::Dir(program.dir.clone()), first.stdout.clone())
     }
     if stops {
-        fs::write(program.dir.join(f"{program.name}.stops"), fs::Root::Anywhere, first.stderr.bytes)
+        fs::write(f"{program.name}.stops", fs::Root::Dir(program.dir.clone()), first.stderr.bytes)
     } else if refused || program.stderr != null || new_stderr {
-        fs::write(program.dir.join(f"{program.name}.stderr"), fs::Root::Anywhere, first.stderr.bytes)
+        fs::write(f"{program.name}.stderr", fs::Root::Dir(program.dir.clone()), first.stderr.bytes)
     }
     for (name, _, got) in first.bounds {
-        fs::write(program.dir.join(name), fs::Root::Anywhere, got.clone())
+        fs::write(name, fs::Root::Dir(program.dir.clone()), got.clone())
     }
     return ProjectTestsBlessed::Written
 }
@@ -1337,15 +1355,16 @@ fn project_tests_bless(output: ref OutputTest, outcomes: ref Vec[(String, Projec
         return ProjectTestsBlessed::Unchanged
     }
     if output.stdout != null {
-        fs::write(output.dir.join(f"{output.name}.stdout"), fs::Root::Anywhere, first.stdout.clone())
+        fs::write(f"{output.name}.stdout", fs::Root::Dir(output.dir.clone()), first.stdout.clone())
     }
     if stops {
-        fs::write(output.dir.join(f"{output.name}.stops"), fs::Root::Anywhere, first.stderr.bytes)
+        fs::write(f"{output.name}.stops", fs::Root::Dir(output.dir.clone()), first.stderr.bytes)
     } else if output.stderr != null {
-        fs::write(output.dir.join(f"{output.name}.stderr"), fs::Root::Anywhere, first.stderr.bytes)
+        fs::write(f"{output.name}.stderr", fs::Root::Dir(output.dir.clone()), first.stderr.bytes)
     }
+    let out: fs::Path = f"{output.name}.out"
     for (relative, got) in first.files {
-        fs::write(output.dir.join(f"{output.name}.out").join(relative), fs::Root::Anywhere, match got {
+        fs::write(out.join(relative), fs::Root::Dir(output.dir.clone()), match got {
             null => Bytes([]),
             written => written.clone(),
         })

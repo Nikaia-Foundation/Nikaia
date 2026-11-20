@@ -13,6 +13,6 @@ _@0 | name _x@2 | name _0@5 | digits 1000@8 | name __@14 | _@17 | name x@19
 == B1.nika
 3 words, 3 names, 0 docs, 1 literals, 6 other, 3 after a line break
 == gate_full_dry_run.nika
-40 words, 195 names, 0 docs, 74 literals, 407 other, 51 after a line break
+37 words, 153 names, 0 docs, 61 literals, 319 other, 47 after a line break
 == grammar_failing_action_in_alternative.nika
 36 words, 79 names, 0 docs, 25 literals, 154 other, 39 after a line break

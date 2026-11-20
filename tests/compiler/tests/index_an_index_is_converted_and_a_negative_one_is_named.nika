@@ -4,17 +4,12 @@
 // have made of it (ADR-298 D1). Moved from the `nikaia-std` unit tests
 // `index::tests::*` (#2082).
 use std::collections
+use std::env
 use std::fs
 use std::process
 
 fn toolchain() -> String throws {
-    let exe = process::run(
-        "sh",
-        [
-            "-c",
-            "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\"",
-        ],
-    ).stdout.trim().clone()
+    let exe = env::current_exe()?.display() ?? ""
     if exe.len() > 0 { return exe }
     return "target/fast/nikaia"
 }
@@ -31,15 +26,15 @@ fn main() throws {
     let b = text.find("b") ?? return
     let d = text.find("d") ?? return
     println(f"{text.between(b.start, d.start)} {text.between(b.start, d.end)}")
-    let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+    let tmp = fs::scratch()
     fs::write(
-        f"{tmp}/neg.nika",
-        fs::Root::Anywhere,
+        "neg.nika",
+        tmp,
         "use std::cli\n\nfn main() throws {\n    let xs = [10, 20, 30]\n    let mut i = -2\n    for _ in cli::args() { i += 1 }\n    println(xs[i])\n}\n",
     )
     let out = process::run(
         "sh",
-        ["-c", "\"$0\" run --unproved-claims=warn neg.nika", toolchain()]; dir: tmp.clone(),
+        ["-c", "\"$0\" run --unproved-claims=warn neg.nika", toolchain()]; dir: tmp.path().to_text(),
     )
     println(f"exit {out.code}")
     for line in out.stderr.lines() {
@@ -48,5 +43,4 @@ fn main() throws {
             println(f"wrapped: {line.contains("18446744073709551615")}")
         }
     }
-    process::run("rm", ["-rf", tmp])
 }

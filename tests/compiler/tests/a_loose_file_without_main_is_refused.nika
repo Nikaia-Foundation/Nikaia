@@ -2,18 +2,19 @@
 // refused with NK1351 before anything is lowered, where rustc used to refuse
 // it as the internal NK1343 (E0601). `nikaia check` of the same file is
 // unchanged, and a file with `fn main` still runs.
+use std::env
 use std::fs
 use std::process
 
 fn toolchain() -> String throws {
-	let exe = process::run("sh", ["-c", "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\""]).stdout.trim().clone()
+	let exe = env::current_exe()?.display() ?? ""
 	if exe.len() > 0 { return exe }
 	return "target/fast/nikaia"
 }
 
-fn shown(tmp: String, verb: String, file: String) throws {
-	let out = process::run(toolchain(), [verb, file]; dir: tmp, env: [("NIKAIA_CACHE_DIR", f"{tmp}/cache")])
-	for line in f"{out.stdout}{out.stderr}".replace(tmp, "TMP").lines() {
+fn shown(tmp: ref fs::Root, verb: String, file: String) throws {
+	let out = process::run(toolchain(), [verb, file]; dir: tmp.path().to_text(), env: [("NIKAIA_CACHE_DIR", f"{tmp.path().to_text()}/cache")])
+	for line in f"{out.stdout}{out.stderr}".replace(tmp.path().to_text(), "TMP").lines() {
 		if !line.trim().starts_with("Compiling") && !line.starts_with("note:") && !line.trim().starts_with("help: write `sync`") {
 			println(line)
 		}
@@ -22,11 +23,10 @@ fn shown(tmp: String, verb: String, file: String) throws {
 }
 
 fn main() throws {
-	let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
-	fs::write(f"{tmp}/one.nika", fs::Root::Anywhere, "pub fn f() -> i64 { return 1 }\n")
-	fs::write(f"{tmp}/two.nika", fs::Root::Anywhere, "fn main() throws {\n\tprintln(\"two runs\")\n}\n")
+	let tmp = fs::scratch()
+	fs::write("one.nika", tmp, "pub fn f() -> i64 { return 1 }\n")
+	fs::write("two.nika", tmp, "fn main() throws {\n\tprintln(\"two runs\")\n}\n")
 	shown(tmp, "run", "one.nika")
 	shown(tmp, "check", "one.nika")
 	shown(tmp, "run", "two.nika")
-	process::run("rm", ["-rf", tmp])
 }

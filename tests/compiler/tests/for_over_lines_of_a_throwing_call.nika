@@ -4,41 +4,38 @@
 // view there is refused with NK1102 (for_over_lines_of_a_throwing_call_refused),
 // never left to rustc.
 use std::fs
-use std::process
 
-fn names(path: String) -> Vec[String] throws {
+fn names(tmp: ref fs::Root, name: String) -> Vec[String] throws {
     let mut out: Vec[String] = []
-    for line in fs::read_to_string(path, fs::Root::Anywhere).lines() {
+    for line in fs::read_to_string(name, tmp).lines() {
         out.push(line.clone())
     }
     return out
 }
 
 fn main() throws {
-    let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
-    let path = f"{tmp}/uses.txt"
-    fs::write(path, fs::Root::Anywhere, "use a\nb\nuse a\n")
+    let tmp = fs::scratch()
+    fs::write("uses.txt", tmp, "use a\nb\nuse a\n")
     let mut uses: Vec[String] = []
-    for line in fs::read_to_string(path, fs::Root::Anywhere).lines() {
+    for line in fs::read_to_string("uses.txt", tmp).lines() {
         if line.starts_with("use ") {
             if !uses.contains(line) { uses.push(line.clone()) }
         }
     }
     println(uses.len())
     let mut parts: Vec[String] = []
-    for part in fs::read_to_string(path, fs::Root::Anywhere).trim().split("\n") {
+    for part in fs::read_to_string("uses.txt", tmp).trim().split("\n") {
         parts.push(part.clone())
     }
     println(parts.len())
     let mut counted = 0
-    for line in fs::read_to_string(path, fs::Root::Anywhere).lines() {
+    for line in fs::read_to_string("uses.txt", tmp).lines() {
         if line.starts_with("use ") { counted += 1 }
     }
     println(counted)
     let mut named: Vec[String] = []
-    for name in names(path).iter() {
+    for name in names(tmp, "uses.txt").iter() {
         named.push(name.trim().clone())
     }
     println(named.len())
-    process::run("rm", ["-r", tmp])
 }

@@ -5,21 +5,18 @@
 // time. This test computes the digest of the committed set again, as
 // `sysroot_package_digest` does: SHA-256 over the index above the line, then
 // each file under `lowered/` by path with its own SHA-256, sorted by path.
+use std::env
 use std::fs
 use std::hash
 use std::process
 
 fn root() -> String throws {
-    let here = process::run("pwd", []).stdout.trim().clone()
-    if fs::exists(f"{here}/scripts/gate.nika", fs::Root::Anywhere) { return here }
-    let parent = process::run("sh", ["-c", "readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/cwd"]).stdout.trim().clone()
-    if fs::exists(f"{parent}/scripts/gate.nika", fs::Root::Anywhere) { return parent }
-    return process::run("realpath", [f"{parent}/../.."]).stdout.trim().clone()
+    return env::current_main()?.parent()?.parent()?.parent()?.parent()?.display() ?? "../.."
 }
 
 fn main() throws {
     let dir = f"{root()}/crates/nikaia-std/src/compiler"
-    let index = fs::read_to_string(f"{dir}/lowered.rs", fs::Root::Anywhere) catch { "" }
+    let index = fs::read_to_string("lowered.rs", fs::Root::Dir(dir.clone())) catch { "" }
     let marker = "\n/// **The digest of this lowered set**"
     let at = index.find(marker)?.start ?? index.end()
     let line = "pub const LOWERED_DIGEST: &str = \""
@@ -34,7 +31,7 @@ fn main() throws {
     all.push_str("\n")
     let listed = process::run("sh", ["-c", f"cd '{dir}' && find lowered -name '*.rs' | LC_ALL=C sort"]).stdout.clone()
     for path in listed.lines() {
-        let text = fs::read_to_string(f"{dir}/{path}", fs::Root::Anywhere) catch { "" }
+        let text = fs::read_to_string(path, fs::Root::Dir(dir.clone())) catch { "" }
         all.push_str(path)
         all.push_str("\n")
         all.push_str(hash::sha256_hex(text.bytes().collect()))

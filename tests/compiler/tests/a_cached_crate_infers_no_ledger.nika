@@ -6,17 +6,12 @@
 // trace (`NIKAIA_WRAPPER_TRACE`) says `ledger inferred` once per crate on a
 // cold build, never for the wrapper's hits, and the build says the same
 // either way.
+use std::env
 use std::fs
 use std::process
 
 fn toolchain() -> String throws {
-	let exe = process::run(
-		"sh",
-		[
-			"-c",
-			"p=$PPID; while [ \"$p\" -gt 1 ]; do e=$(readlink /proc/$p/exe); if [ \"$(basename \"$e\")\" = nikaia ]; then echo \"$e\"; exit 0; fi; p=$(cut -d' ' -f4 /proc/$p/stat); done",
-		],
-	).stdout.trim().clone()
+	let exe = env::current_exe()?.display() ?? ""
 	if exe.len() == 0 {
 		eprintln("no running nikaia among this program's ancestors: run it with `nikaia test` (#1305)")
 		process::exit(2)
@@ -25,10 +20,10 @@ fn toolchain() -> String throws {
 }
 
 // The ledgers inferred since the last call, and the trace emptied.
-fn inferred(trace: String) -> String throws {
+fn inferred(trace: ref fs::Root) -> String throws {
 	let said = process::run(
 		"sh",
-		["-c", f"grep ' ledger inferred' {trace} | sort; rm -f {trace}"],
+		["-c", f"grep ' ledger inferred' {trace.path().to_text()} | sort; rm -f {trace.path().to_text()}"],
 	).stdout.trim().clone()
 	if said.len() == 0 { return "none inferred" }
 	return said.replace("\n", ", ")
@@ -36,15 +31,15 @@ fn inferred(trace: String) -> String throws {
 
 // What a build said of the program: its warnings and notes, without Cargo's
 // lines.
-fn build(nikaia: String, p: String, cache: String, trace: String) -> String throws {
+fn build(nikaia: String, p: String, cache: ref fs::Root, trace: ref fs::Root) -> String throws {
 	let built = process::run(
 		nikaia,
 		["build"]; dir: p.clone(),
 		env: [
 			("RUST_BACKTRACE", "0"),
 			("CARGO_TERM_COLOR", "never"),
-			("NIKAIA_CACHE_DIR", cache.clone()),
-			("NIKAIA_WRAPPER_TRACE", trace.clone()),
+			("NIKAIA_CACHE_DIR", cache.path().to_text()),
+			("NIKAIA_WRAPPER_TRACE", trace.path().to_text()),
 		],
 	)
 	if built.code != 0 {
@@ -58,48 +53,47 @@ fn build(nikaia: String, p: String, cache: String, trace: String) -> String thro
 }
 
 fn main() throws {
-	let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+	let tmp = fs::scratch()
 	let nikaia = toolchain()
-	let cache = f"{tmp}/cache"
-	let trace = f"{tmp}/trace"
-	process::run("mkdir", ["-p", f"{tmp}/lib/src", f"{tmp}/app/src"])
+	let cache = tmp.join("cache")
+	let trace = tmp.join("trace")
+	process::run("mkdir", ["-p", f"{tmp.path().to_text()}/lib/src", f"{tmp.path().to_text()}/app/src"])
 	fs::write(
-		f"{tmp}/lib/nikaia.toml",
-		fs::Root::Anywhere,
+		"lib/nikaia.toml",
+		tmp,
 		"[package]\nname = \"lib\"\nversion = \"0.1.0\"\n",
 	)
 	fs::write(
-		f"{tmp}/lib/src/main.nika",
-		fs::Root::Anywhere,
+		"lib/src/main.nika",
+		tmp,
 		"pub fn word() -> i64 {\n\treturn 1\n}\n",
 	)
 	fs::write(
-		f"{tmp}/app/nikaia.toml",
-		fs::Root::Anywhere,
+		"app/nikaia.toml",
+		tmp,
 		"[package]\nname = \"app\"\nversion = \"0.1.0\"\n\n[dependencies]\nlib = { path = \"../lib\" }\n",
 	)
 	fs::write(
-		f"{tmp}/app/src/main.nika",
-		fs::Root::Anywhere,
+		"app/src/main.nika",
+		tmp,
 		"use lib\n\npub fn twice(n: i64) -> i64 {\n\treturn n * 2\n}\n\nfn main() throws {\n\tprintln(twice(lib::word()))\n}\n",
 	)
-	let app = f"{tmp}/app"
+	let app = tmp.join("app")
 	// A first build writes each package's `nikaia.proofs`; only a lowering
 	// whose proofs are settled is recorded (ADR-270 D4), as with the
 	// committed `nikaia.proofs` of the solver's `logic`. Then a cold one:
 	// another cache, no `target`.
-	build(nikaia, app, f"{tmp}/first", trace)
+	build(nikaia, app.path().to_text(), tmp.join("first"), trace)
 	inferred(trace)
-	process::run("rm", ["-rf", f"{tmp}/app/target", f"{tmp}/lib/target"])
-	let cold = build(nikaia, app, cache, trace)
+	process::run("rm", ["-rf", f"{tmp.path().to_text()}/app/target", f"{tmp.path().to_text()}/lib/target"])
+	let cold = build(nikaia, app.path().to_text(), cache, trace)
 	println(f"cold: {inferred(trace)}")
 	print(cold)
 	// Cargo's record of a fresh crate dropped: the wrapper lowers each
 	// crate again, and the cache answers.
-	process::run("sh", ["-c", "find target -name cargo-fresh -delete"]; dir: app.clone())
-	let again = build(nikaia, app, cache, trace)
+	process::run("sh", ["-c", "find target -name cargo-fresh -delete"]; dir: app.path().to_text())
+	let again = build(nikaia, app.path().to_text(), cache, trace)
 	println(f"wrapper again: {inferred(trace)}; says the same {again == cold}")
-	let warm = build(nikaia, app, cache, trace)
+	let warm = build(nikaia, app.path().to_text(), cache, trace)
 	println(f"warm: {inferred(trace)}; says the same {warm == cold}")
-	process::run("rm", ["-rf", tmp])
 }

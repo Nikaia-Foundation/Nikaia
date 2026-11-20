@@ -7,48 +7,43 @@
 // throws. Shown are its public declarations; that `javac --release 22`
 // compiles it and that it runs is `scripts/java_binding.nika`'s, which needs
 // a JDK 22.
+use std::env
 use std::fs
 use std::process
 
 fn toolchain() -> String throws {
-	let exe = process::run(
-		"sh",
-		[
-			"-c",
-			"e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\"",
-		],
-	).stdout.trim().clone()
+	let exe = env::current_exe()?.display() ?? ""
 	if exe.len() > 0 { return exe }
 	return "target/fast/nikaia"
 }
 
 fn main() throws {
 	let nikaia = toolchain()
-	let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
-	process::run("mkdir", ["-p", f"{tmp}/src"])
+	let tmp = fs::scratch()
+	process::run("mkdir", ["-p", f"{tmp.path().to_text()}/src"])
 	fs::write(
-		f"{tmp}/nikaia.toml",
-		fs::Root::Anywhere,
+		"nikaia.toml",
+		tmp,
 		"[package]\nname = \"geo-kit\"\nversion = \"0.1.0\"\n\n[build]\nartifact = \"c-library\"\n",
 	)
 	fs::write(
-		f"{tmp}/src/main.nika",
-		fs::Root::Anywhere,
+		"src/main.nika",
+		tmp,
 		"pub enum Light {\n    Red,\n    Green,\n}\n\npub struct Board {\n    pub name: String,\n    pub cells: i64,\n}\n\nimpl Board {\n    pub extern fn(name: ref String) -> Board sync {\n        return Board { name: name.clone(), cells: 0 }\n    }\n\n    pub extern fn grow(ref mut self, by: i64) -> i64 sync {\n        self.cells = self.cells + by\n        return self.cells\n    }\n}\n\npub extern struct Point {\n    x: f64,\n    y: i32,\n}\n\nimpl Point {\n    pub extern fn sum(ref self) -> f64 sync {\n        return self.x + 1.0\n    }\n\n    pub extern fn shift(ref mut self, by: f64) sync {\n        self.x = self.x + by\n    }\n}\n\npub extern enum Figure {\n    Dot(f64),\n    Frame { w: f64, h: f64 },\n    Nothing,\n}\n\npub enum Refusal {\n    Negative,\n}\n\nimpl Error for Refusal {\n    fn message(ref self) -> String {\n        return \"a negative count\"\n    }\n}\n\npub extern fn checked(n: i64) -> i64 sync throws {\n    if n < 0 {\n        throw Refusal::Negative\n    }\n    return n\n}\n\npub extern fn greet(name: ref String) -> String sync {\n    return f\"Hello, {name}\"\n}\n\npub extern fn find(n: i64) -> i64? sync {\n    if n > 0 {\n        return n\n    }\n    return null\n}\n\npub extern fn nearest(n: i64) -> Point? sync {\n    if n > 0 {\n        return Point { x: 1.0, y: 2 }\n    }\n    return null\n}\n\npub extern fn turned(f: Figure) -> Figure sync {\n    return f\n}\n\npub extern fn diagonal(points: ref Array[Point]) -> Vec[Point] sync {\n    let mut out: Vec[Point] = []\n    for p in points {\n        out.push(p)\n    }\n    return out\n}\n\npub extern fn each_light(n: i64, each: fn(ref String, Light) -> bool sync) -> i64 sync {\n    if each(\"red\", Light::Red) {\n        return n\n    }\n    return 0\n}\n",
 	)
 	let out = process::run(
 		nikaia,
-		["bind", "java"]; dir: tmp.clone(),
+		["bind", "java"]; dir: tmp.path().to_text(),
 		env: [("RUST_BACKTRACE", "0")],
 	)
 	println(f"bind java: exit {out.code}")
-	if out.code != 0 { println(out.stderr.trim().replace(tmp, "TMP")) }
+	if out.code != 0 { println(out.stderr.trim().replace(tmp.path().to_text(), "TMP")) }
 	for line in out.stdout.lines() {
-		if line.starts_with("binding: ") { println(line.replace(tmp, "TMP")) }
+		if line.starts_with("binding: ") { println(line.replace(tmp.path().to_text(), "TMP")) }
 	}
 	let java = fs::read_to_string(
-		f"{tmp}/target/nikaia/c-library/java/geo_kit/GeoKit.java",
-		fs::Root::Anywhere,
+		"target/nikaia/c-library/java/geo_kit/GeoKit.java",
+		tmp,
 	)
 	for line in java.lines() {
 		let declared = line.starts_with("package ")
@@ -62,5 +57,4 @@ fn main() throws {
 				println(line.trim_end_matches(" {").trim_end_matches(" {}"))
 			}
 	}
-	process::run("rm", ["-rf", tmp])
 }

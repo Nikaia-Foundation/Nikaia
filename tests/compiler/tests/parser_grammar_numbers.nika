@@ -5,21 +5,18 @@
 // small driver and run. A refused number's words and caret are the Rust
 // grammar's: each refusal is printed beside what `nikaia check` says of the
 // same literal after `let x = ` (12 columns further right).
+use std::env
 use std::fs
 use std::process
 
 fn toolchain(repo: String) -> String throws {
-    let exe = process::run("sh", ["-c", "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\""]).stdout.trim().clone()
+    let exe = env::current_exe()?.display() ?? ""
     if exe.len() > 0 { return exe }
     return f"{repo}/target/fast/nikaia"
 }
 
 fn root() -> String throws {
-    let here = process::run("pwd", []).stdout.trim().clone()
-    if fs::exists(f"{here}/scripts/gate.nika", fs::Root::Anywhere) { return here }
-    let parent = process::run("sh", ["-c", "readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/cwd"]).stdout.trim().clone()
-    if fs::exists(f"{parent}/scripts/gate.nika", fs::Root::Anywhere) { return parent }
-    return process::run("realpath", [f"{parent}/../.."]).stdout.trim().clone()
+    return env::current_main()?.parent()?.parent()?.parent()?.parent()?.display() ?? "../.."
 }
 
 // Each argument a file: `RULE<TAB>input` through that rule's entry; a
@@ -63,12 +60,12 @@ fn slice_fn(ledger: String) -> String {
 fn main() throws {
     let repo = root()
     let nikaia = toolchain(repo.clone())
-    let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
-    let tools = f"{repo}/crates/nikaia-std/src/compiler"
-    let rules = fs::read_to_string(f"{tools}/parser_grammar.nika", fs::Root::Anywhere)
-    let numbers = fs::read_to_string(f"{tools}/parse_numbers.nika", fs::Root::Anywhere)
-    let slice = slice_fn(fs::read_to_string(f"{tools}/ledger.nika", fs::Root::Anywhere))
-    fs::write(f"{tmp}/main.nika", fs::Root::Anywhere, f"use std::cli\nuse std::fs\n{rules}\n{numbers}\n{slice}\n{driver()}\n")
+    let tmp = fs::scratch()
+    let tools = fs::Root::Dir(f"{repo}/crates/nikaia-std/src/compiler")
+    let rules = fs::read_to_string("parser_grammar.nika", tools)
+    let numbers = fs::read_to_string("parse_numbers.nika", tools)
+    let slice = slice_fn(fs::read_to_string("ledger.nika", tools))
+    fs::write("main.nika", tmp, f"use std::cli\nuse std::fs\n{rules}\n{numbers}\n{slice}\n{driver()}\n")
     let cases: Vec[String] = [
         // ADR-285 D16: the four spellings, the separator out of the value
         // (D3), hexadecimal digits either case, up to a `u64` (D19).
@@ -114,19 +111,18 @@ fn main() throws {
     let mut i = 0
     for c in cases {
         i += 1
-        fs::write(f"{tmp}/case{i}.txt", fs::Root::Anywhere, c)
+        fs::write(f"case{i}.txt", tmp, c)
         args.push(f"case{i}.txt")
     }
-    let out = process::run(nikaia.clone(), args; dir: tmp)
+    let out = process::run(nikaia.clone(), args; dir: tmp.path().to_text())
     println(out.stdout.trim())
     if out.stdout.trim().len() == 0 { println(out.stderr) }
     // What the Rust grammar says of the same refused literals.
     for lit in ["0b1210", "99999999999999999999", "1_", "1__0", "0x", "1E5", "1.5E-4", "1.5G"] {
-        fs::write(f"{tmp}/p.nika", fs::Root::Anywhere, f"fn main() {{\n    let x = {lit}\n    println(f\"{{x}}\")\n}}\n")
-        let said = process::run(nikaia.clone(), ["check", "p.nika"]; dir: tmp)
+        fs::write("p.nika", tmp, f"fn main() {{\n    let x = {lit}\n    println(f\"{{x}}\")\n}}\n")
+        let said = process::run(nikaia.clone(), ["check", "p.nika"]; dir: tmp.path().to_text())
         let lines: Vec[String] = said.stderr.split("\n").map(fn(p) { p.clone() }).collect()
         let message = if lines.len() > 1 { f"{lines[0]} {lines[1].trim()}" } else { said.stderr.trim().clone() }
         println(f"rust {lit}: {message}")
     }
-    process::run("rm", ["-rf", tmp])
 }

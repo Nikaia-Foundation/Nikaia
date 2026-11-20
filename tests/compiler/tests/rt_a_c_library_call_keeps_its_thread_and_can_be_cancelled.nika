@@ -7,32 +7,27 @@
 // callback. Moved from the `nikaia-std` unit tests
 // `a_wake_from_another_thread_ends_a_park_on_the_timer` and
 // `a_thread_is_kept_for_the_next_call` (#2209).
+use std::env
 use std::fs
 use std::process
 
 fn toolchain() -> String throws {
-	let exe = process::run(
-		"sh",
-		[
-			"-c",
-			"e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\"",
-		],
-	).stdout.trim().clone()
+	let exe = env::current_exe()?.display() ?? ""
 	if exe.len() > 0 { return exe }
 	return "target/fast/nikaia"
 }
 
 fn main() throws {
-	let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
-	process::run("mkdir", ["-p", f"{tmp}/src"])
+	let tmp = fs::scratch()
+	process::run("mkdir", ["-p", f"{tmp.path().to_text()}/src"])
 	fs::write(
-		f"{tmp}/nikaia.toml",
-		fs::Root::Anywhere,
+		"nikaia.toml",
+		tmp,
 		"[package]\nname = \"nap\"\nversion = \"0.1.0\"\n\n[build]\nartifact = \"c-library\"\n",
 	)
 	fs::write(
-		f"{tmp}/src/main.nika",
-		fs::Root::Anywhere,
+		"src/main.nika",
+		tmp,
 		"use std::time\n\npub extern fn napped(ms: i64) -> i64 {\n\ttime::sleep(ms.millis())\n\treturn ms\n}\n",
 	)
 	let caller = [
@@ -92,18 +87,17 @@ fn main() throws {
 		"    return 0;",
 		"}",
 	]
-	fs::write(f"{tmp}/use.c", fs::Root::Anywhere, caller.join("\n") + "\n")
-	let built = process::run(toolchain(), ["build"]; dir: tmp.clone(), env: [("RUST_BACKTRACE", "0")])
+	fs::write("use.c", tmp, caller.join("\n") + "\n")
+	let built = process::run(toolchain(), ["build"]; dir: tmp.path().to_text(), env: [("RUST_BACKTRACE", "0")])
 	println(f"build: exit {built.code}")
-	if built.code != 0 { println(built.stderr.trim().replace(tmp, "TMP")) }
-	let lib = f"{tmp}/target/nikaia/c-library"
+	if built.code != 0 { println(built.stderr.trim().replace(tmp.path().to_text(), "TMP")) }
+	let lib = tmp.join("target/nikaia/c-library")
 	let cc = process::run(
 		"cc",
-		["-I", lib.clone(), "use.c", "-L", lib.clone(), "-lnap", "-lpthread", "-o", "use"]; dir: tmp.clone(),
+		["-I", lib.path().to_text(), "use.c", "-L", lib.path().to_text(), "-lnap", "-lpthread", "-o", "use"]; dir: tmp.path().to_text(),
 	)
 	println(f"cc: exit {cc.code}")
-	if cc.code != 0 { println(cc.stderr.trim().replace(tmp, "TMP")) }
-	let ran = process::run(f"{tmp}/use", []; dir: tmp.clone(), env: [("LD_LIBRARY_PATH", lib)])
+	if cc.code != 0 { println(cc.stderr.trim().replace(tmp.path().to_text(), "TMP")) }
+	let ran = process::run(f"{tmp.path().to_text()}/use", []; dir: tmp.path().to_text(), env: [("LD_LIBRARY_PATH", lib.path().to_text())])
 	print(ran.stdout)
-	process::run("rm", ["-rf", tmp])
 }

@@ -8,17 +8,12 @@
 // new source and eight more programs, so `nikaia test` builds them as one
 // batch, as it does in `tests/compiler`, against the library the first run
 // left; then a run with nothing changed, which still starts no Cargo (#1750).
+use std::env
 use std::fs
 use std::process
 
 fn toolchain() -> String throws {
-	let exe = process::run(
-		"sh",
-		[
-			"-c",
-			"p=$PPID; while [ \"$p\" -gt 1 ]; do e=$(readlink /proc/$p/exe); if [ \"$(basename \"$e\")\" = nikaia ]; then echo \"$e\"; exit 0; fi; p=$(cut -d' ' -f4 /proc/$p/stat); done",
-		],
-	).stdout.trim().clone()
+	let exe = env::current_exe()?.display() ?? ""
 	if exe.len() == 0 {
 		eprintln("no running nikaia among this program's ancestors: run it with `nikaia test` (#1305)")
 		process::exit(2)
@@ -46,61 +41,61 @@ fn summary(said: String) -> String {
 }
 
 fn main() throws {
-	let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+	let tmp = fs::scratch()
 	let nikaia = toolchain()
 	let real = process::run(
 		"sh",
 		["-c", "echo ${CARGO:-$(command -v cargo)}"],
 	).stdout.trim().clone()
 	let path = process::run("sh", ["-c", "echo $PATH"]).stdout.trim().clone()
-	process::run("mkdir", ["-p", f"{tmp}/lib/src", f"{tmp}/lib/tests", f"{tmp}/bin"])
-	let shim = f"{tmp}/bin/cargo"
-	fs::write(shim, fs::Root::Anywhere, SHIM)
-	process::run("chmod", ["+x", shim.clone()])
-	let log = f"{tmp}/cargo.log"
+	process::run("mkdir", ["-p", f"{tmp.path().to_text()}/lib/src", f"{tmp.path().to_text()}/lib/tests", f"{tmp.path().to_text()}/bin"])
+	let shim = tmp.join("bin/cargo")
+	fs::write("bin/cargo", tmp, SHIM)
+	process::run("chmod", ["+x", shim.path().to_text()])
+	let log = f"{tmp.path().to_text()}/cargo.log"
 	let env = [
 		("RUST_BACKTRACE", "0"),
 		("CARGO_TERM_COLOR", "never"),
-		("NIKAIA_CACHE_DIR", f"{tmp}/cache"),
-		("CARGO", shim.clone()),
+		("NIKAIA_CACHE_DIR", f"{tmp.path().to_text()}/cache"),
+		("CARGO", shim.path().to_text()),
 		("REAL_CARGO", real),
 		("SHIM_LOG", log.clone()),
-		("PATH", f"{tmp}/bin:{path}"),
+		("PATH", f"{tmp.path().to_text()}/bin:{path}"),
 	]
 
-	let lib = f"{tmp}/lib"
+	let lib = tmp.join("lib")
 	fs::write(
-		f"{lib}/nikaia.toml",
-		fs::Root::Anywhere,
+		"nikaia.toml",
+		lib,
 		"[package]\nname = \"grown\"\nversion = \"0.1.0\"\n",
 	)
-	fs::write(f"{lib}/src/main.nika", fs::Root::Anywhere, "pub fn one() -> i64 {\n\treturn 1\n}\n")
+	fs::write("src/main.nika", lib, "pub fn one() -> i64 {\n\treturn 1\n}\n")
 	fs::write(
-		f"{lib}/tests/b1.nika",
-		fs::Root::Anywhere,
+		"tests/b1.nika",
+		lib,
 		"fn main() throws {\n\tprintln(f\"{grown::one() + 1}\")\n}\n",
 	)
-	fs::write(f"{lib}/tests/b1.stdout", fs::Root::Anywhere, "2\n")
-	let first = process::run(nikaia, ["test"]; dir: lib.clone(), env: env.clone())
+	fs::write("tests/b1.stdout", lib, "2\n")
+	let first = process::run(nikaia, ["test"]; dir: lib.path().to_text(), env: env.clone())
 	println(f"test: {first.code}, {summary(first.stdout)}")
 	calls(log)
 
-	fs::write(f"{lib}/src/more.nika", fs::Root::Anywhere, "pub fn five() -> i64 {\n\treturn 5\n}\n")
+	fs::write("src/more.nika", lib, "pub fn five() -> i64 {\n\treturn 5\n}\n")
 	for k in 2..<9 {
 		fs::write(
-			f"{lib}/tests/b{k}.nika",
-			fs::Root::Anywhere,
+			f"tests/b{k}.nika",
+			lib,
 			f"fn main() throws {{\n\tprintln(f\"{{grown::one() + {k}}}\")\n}}\n",
 		)
-		fs::write(f"{lib}/tests/b{k}.stdout", fs::Root::Anywhere, f"{k + 1}\n")
+		fs::write(f"tests/b{k}.stdout", lib, f"{k + 1}\n")
 	}
 	fs::write(
-		f"{lib}/tests/five.nika",
-		fs::Root::Anywhere,
+		"tests/five.nika",
+		lib,
 		"fn main() throws {\n\tprintln(f\"{grown::five()}\")\n}\n",
 	)
-	fs::write(f"{lib}/tests/five.stdout", fs::Root::Anywhere, "5\n")
-	let grown = process::run(nikaia, ["test"]; dir: lib.clone(), env: env.clone())
+	fs::write("tests/five.stdout", lib, "5\n")
+	let grown = process::run(nikaia, ["test"]; dir: lib.path().to_text(), env: env.clone())
 	println(f"test with a new source: {grown.code}, {summary(grown.stdout)}")
 	if grown.code != 0 {
 		eprintln(grown.stdout)
@@ -108,9 +103,8 @@ fn main() throws {
 	}
 	calls(log)
 
-	let again = process::run(nikaia, ["test"]; dir: lib, env: env)
+	let again = process::run(nikaia, ["test"]; dir: lib.path().to_text(), env: env)
 	println(f"test again: {again.code}, {summary(again.stdout)}, Cargo started: {calls(log)}")
-	process::run("rm", ["-rf", tmp])
 }
 
 comptime SHIM: ref String = "#!/bin/bash\n# Cargo, with each start counted.\necho \"$1\" >> \"$SHIM_LOG\"\nexec \"$REAL_CARGO\" \"$@\"\n"
