@@ -1058,7 +1058,7 @@ pub(crate) fn check_core_call_on_described<H: CheckHost>(state: &mut CheckState,
     }, || collections::BTreeMap::new().into());
     let found = check_core_arguments_bound(state, world, host, args, &patterns, &mut bound, &mut expected, world.own.functions.contains_key(key), (callee).as_ref(), span);
     state.call_keepers.clear();
-    if world.own.functions.contains_key(key) { check_core_call_code_args(state, world, (callee).as_ref(), key, args, span); } else { check_core_call_std_code_args(state, world, (callee).as_ref(), key, args, span); }
+    if world.own.functions.contains_key(key) { check_core_call_code_args(state, world, (callee).as_ref(), key, args, span); } else { check_core_call_std_code_args(state, world, (callee).as_ref(), key, args, parallel, span); }
     if keyed && args.len() == 1 && found.len() == 1 { check_core_call_on_a_viewed_key(state, world, unsafe { nikaia_std::proven::read(&args, (0) as usize) }, unsafe { nikaia_std::proven::read(&found, (0) as usize) }, span); }
     if key == "Par::fold" && args.len() >= 3 && found.len() >= 3 {
         let acc: Ty = nikaia_std::index::or(match *nikaia_std::index::get(&bound, "A") {

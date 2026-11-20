@@ -345,10 +345,14 @@ fn check_core_call_code_args(mut state: CheckState, world: ref CheckWorld, calle
 // runs it as `FnMut`, so the parameter is lent on `&mut *` as to a function
 // of this package, and a second call that hands it on finds it still there.
 // Only a parameter handed on is recorded; a lambda or a named function is
-// handed to a `std` method as it stands.
-fn check_core_call_std_code_args(mut state: CheckState, world: ref CheckWorld, callee: ref FnContract?, key: ref String, args: ref Vec[Expr], span: ref Span) sync {
+// handed to a `std` method as it stands, and so is code a walk of a `Par` runs at
+// once (`par_iter().for_each(f)` needs `Fn`, which `&mut *f` is not).
+fn check_core_call_std_code_args(mut state: CheckState, world: ref CheckWorld, callee: ref FnContract?, key: ref String, args: ref Vec[Expr], parallel: bool, span: ref Span) sync {
     let caller: String = state.current?.clone() ?? return
     let contract: ref FnContract = callee ?? return
+    if parallel {
+        return
+    }
     let signature: ref Signature = contract.signature ?? return
     let mut i = -1
     if signature.takes_a_receiver() {
@@ -375,8 +379,7 @@ fn check_core_call_std_code_args(mut state: CheckState, world: ref CheckWorld, c
         if !check_core_call_a_parameter(state, named) {
             continue
         }
-        let at_once = contract.at_once.contains(param)
-        state.code_args.push(CheckCodeArg { caller: caller.clone(), callee: key.clone(), param: param.clone(), node: id_of(arg) as i64, lambda: false, changes: "", runs: [], handed: named, bound: false, item: false, at_once: at_once, span: check_span_at(world, arg, span) })
+        state.code_args.push(CheckCodeArg { caller: caller.clone(), callee: key.clone(), param: param.clone(), node: id_of(arg) as i64, lambda: false, changes: "", runs: [], handed: named, bound: false, item: false, at_once: false, span: check_span_at(world, arg, span) })
     }
 }
 
