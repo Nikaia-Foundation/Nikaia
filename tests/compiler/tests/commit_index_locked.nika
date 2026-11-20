@@ -4,21 +4,18 @@
 // that does it by hand (#1833: a call per file lost two new files to the
 // lock, and `git status` showed them as staged deletions beside untracked
 // copies).
+use std::env
 use std::fs
 use std::process
 
 fn toolchain(repo: String) -> String throws {
-    let exe = process::run("sh", ["-c", "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\""]).stdout.trim().clone()
+    let exe = env::current_exe()?.display() ?? ""
     if exe.len() > 0 { return exe }
     return f"{repo}/target/fast/nikaia"
 }
 
 fn root() -> String throws {
-    let here = process::run("pwd", []).stdout.trim().clone()
-    if fs::exists(f"{here}/scripts/commit.nika", fs::Root::Anywhere) { return here }
-    let parent = process::run("sh", ["-c", "readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/cwd"]).stdout.trim().clone()
-    if fs::exists(f"{parent}/scripts/commit.nika", fs::Root::Anywhere) { return parent }
-    return process::run("realpath", [f"{parent}/../.."]).stdout.trim().clone()
+    return env::current_main()?.parent()?.parent()?.parent()?.parent()?.display() ?? "../.."
 }
 
 fn git(dir: String, args: Vec[String]) -> String throws {
@@ -27,8 +24,8 @@ fn git(dir: String, args: Vec[String]) -> String throws {
     return process::run("git", all; dir: dir).stdout.trim().clone()
 }
 
-fn run_commit(nikaia: String, repo: String, tmp: String) -> String throws {
-    let out = process::run(nikaia, ["run", f"{repo}/scripts/commit.nika", "--", f"{tmp}/X.md.report.md"]; dir: tmp.clone(), env: [("GIT_AUTHOR_NAME", "T"), ("GIT_AUTHOR_EMAIL", "t@example.com"), ("GIT_COMMITTER_NAME", "T"), ("GIT_COMMITTER_EMAIL", "t@example.com")])
+fn run_commit(nikaia: String, repo: String, tmp: ref fs::Root) -> String throws {
+    let out = process::run(nikaia, ["run", f"{repo}/scripts/commit.nika", "--", f"{tmp.path().to_text()}/X.md.report.md"]; dir: tmp.path().to_text(), env: [("GIT_AUTHOR_NAME", "T"), ("GIT_AUTHOR_EMAIL", "t@example.com"), ("GIT_COMMITTER_NAME", "T"), ("GIT_COMMITTER_EMAIL", "t@example.com")])
     return out.stdout.trim().clone()
 }
 
@@ -36,32 +33,31 @@ fn main() throws {
     let repo = root()
     let nikaia = toolchain(repo.clone())
     for mode in ["brief", "held"] {
-        let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
-        git(tmp.clone(), ["init", "-q", "-b", "develop"])
-        fs::write(f"{tmp}/a.txt", fs::Root::Anywhere, "a\n")
-        git(tmp.clone(), ["add", "a.txt"])
-        git(tmp.clone(), ["commit", "-q", "-m", "base"])
+        let tmp = fs::scratch()
+        git(tmp.path().to_text(), ["init", "-q", "-b", "develop"])
+        fs::write("a.txt", tmp, "a\n")
+        git(tmp.path().to_text(), ["add", "a.txt"])
+        git(tmp.path().to_text(), ["commit", "-q", "-m", "base"])
         // Two new, untracked test files and a changed one, as #1798 committed.
-        process::run("mkdir", ["-p", f"{tmp}/tests"])
-        fs::write(f"{tmp}/tests/new.nika", fs::Root::Anywhere, "new\n")
-        fs::write(f"{tmp}/tests/new.stdout", fs::Root::Anywhere, "out\n")
-        fs::write(f"{tmp}/a.txt", fs::Root::Anywhere, "mine\n")
-        fs::write(f"{tmp}/X.md.report.md", fs::Root::Anywhere, "Result: done\nFiles: a.txt tests/new.nika tests/new.stdout\nCommit: new files\nChangelog: none\nPushed: none\n")
+        process::run("mkdir", ["-p", f"{tmp.path().to_text()}/tests"])
+        fs::write("tests/new.nika", tmp, "new\n")
+        fs::write("tests/new.stdout", tmp, "out\n")
+        fs::write("a.txt", tmp, "mine\n")
+        fs::write("X.md.report.md", tmp, "Result: done\nFiles: a.txt tests/new.nika tests/new.stdout\nCommit: new files\nChangelog: none\nPushed: none\n")
         // Another agent's git holds the shared index's lock: for a second,
         // or for the whole run.
-        fs::write(f"{tmp}/.git/index.lock", fs::Root::Anywhere, "")
-        if mode == "brief" { process::run("sh", ["-c", f"(sleep 1; rm -f {tmp}/.git/index.lock) >/dev/null 2>&1 &"]) }
+        fs::write(".git/index.lock", tmp, "")
+        if mode == "brief" { process::run("sh", ["-c", f"(sleep 1; rm -f {tmp.path().to_text()}/.git/index.lock) >/dev/null 2>&1 &"]) }
         println(f"== lock {mode}")
-        println(run_commit(nikaia.clone(), repo.clone(), tmp.clone()).replace(git(tmp.clone(), ["rev-parse", "--short=8", "HEAD"]), "SHA8"))
+        println(run_commit(nikaia.clone(), repo.clone(), tmp).replace(git(tmp.path().to_text(), ["rev-parse", "--short=8", "HEAD"]), "SHA8"))
         process::run("sleep", ["1.2"])
-        process::run("rm", ["-f", f"{tmp}/.git/index.lock"])
+        process::run("rm", ["-f", f"{tmp.path().to_text()}/.git/index.lock"])
         println("status:")
-        println(git(tmp.clone(), ["status", "--short"]))
+        println(git(tmp.path().to_text(), ["status", "--short"]))
         if mode == "held" {
-            git(tmp.clone(), ["restore", "--staged", "--", "a.txt", "tests/new.nika", "tests/new.stdout"])
+            git(tmp.path().to_text(), ["restore", "--staged", "--", "a.txt", "tests/new.nika", "tests/new.stdout"])
             println("status after the NOTE's command:")
-            println(git(tmp.clone(), ["status", "--short"]))
+            println(git(tmp.path().to_text(), ["status", "--short"]))
         }
-        process::run("rm", ["-rf", tmp])
     }
 }

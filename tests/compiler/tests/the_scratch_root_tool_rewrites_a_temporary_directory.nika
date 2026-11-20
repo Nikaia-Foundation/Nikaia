@@ -3,7 +3,8 @@
 // Shown on a program of the old shape: the `mktemp -d` becomes
 // `fs::scratch()`, a path under it opened under `Anywhere` is opened under
 // the root, a path joined to it is `join`, the directory as text is
-// `path().to_text()` (#2328), its `rm -rf` goes, and a site it does not know
+// `path().to_text()` (#2328), a helper that takes it as text takes the root,
+// its `rm -rf` goes, and a site it does not know
 // (a `mktemp` of a file) is printed as `FILE:LINE: left`.
 use std::env
 use std::fs
@@ -27,12 +28,17 @@ fn main() throws {
 		"use std::fs",
 		"use std::process",
 		"",
+		"fn put(tmp: String, text: String) throws {",
+		"    fs::write(f\"{tmp}/b.txt\", fs::Root::Anywhere, text)",
+		"}",
+		"",
 		"fn main() throws {",
 		"    let tmp = process::run(\"mktemp\", [\"-d\"]).stdout.trim().clone()",
 		"    let sub = f\"{tmp}/sub\"",
 		"    fs::write(f\"{tmp}/a.txt\", fs::Root::Anywhere, \"hi\")",
 		"    let out = process::run(\"cat\", [\"a.txt\"]; dir: tmp)",
 		"    println(fs::read_to_string(f\"{tmp}/a.txt\", fs::Root::Anywhere))",
+		"    put(tmp, \"b\")",
 		"    let one = process::run(\"mktemp\", []).stdout.trim().clone()",
 		"    process::run(\"rm\", [\"-rf\", tmp])",
 		"}",

@@ -4,17 +4,12 @@
 // proofs of that ledger are what the lowering reads. A fresh number in an
 // unrelated function makes the value a miss in the user cache (#2149), so the
 // program is written each run.
+use std::env
 use std::fs
 use std::process
 
 fn toolchain() -> String throws {
-	let exe = process::run(
-		"sh",
-		[
-			"-c",
-			"p=$PPID; while [ \"$p\" -gt 1 ]; do e=$(readlink /proc/$p/exe); if [ \"$(basename \"$e\")\" = nikaia ]; then echo \"$e\"; exit 0; fi; p=$(cut -d' ' -f4 /proc/$p/stat); done",
-		],
-	).stdout.trim().clone()
+	let exe = env::current_exe()?.display() ?? ""
 	if exe.len() == 0 {
 		eprintln("no running nikaia among this program's ancestors: run it with `nikaia test` (#1305)")
 		process::exit(2)
@@ -23,14 +18,13 @@ fn toolchain() -> String throws {
 }
 
 fn main() throws {
-	let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+	let tmp = fs::scratch()
 	let nikaia = toolchain()
 	let fresh = process::run("date", ["+%s%N"]).stdout.trim().clone()
-	let file = f"{tmp}/pick.nika"
+	let file = f"{tmp.path().to_text()}/pick.nika"
 	let head = "fn pick(xs: Vec[i64], i: i64) -> i64 sync {\n\tif i >= 0 && i < xs.len() {\n\t\treturn xs[i]\n\t}\n\treturn 0\n}\n\nfn fresh() -> i64 {\n\treturn "
 	let tail = "\n}\n\ncomptime PICKED: i64 = pick([3, 5, 7, 11], 2)\n\nfn main() throws {\n\tprintln(PICKED)\n}\n"
-	fs::write(file, fs::Root::Anywhere, f"{head}{fresh}{tail}")
-	let out = process::run(nikaia, ["run", file]; dir: tmp.clone(), env: [("RUST_BACKTRACE", "0")])
+	fs::write("pick.nika", tmp, f"{head}{fresh}{tail}")
+	let out = process::run(nikaia, ["run", file]; dir: tmp.path().to_text(), env: [("RUST_BACKTRACE", "0")])
 	println(f"{out.stdout.trim()} (exit {out.code})")
-	process::run("rm", ["-rf", tmp])
 }

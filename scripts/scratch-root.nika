@@ -127,9 +127,28 @@ fn as_text(line: String, r: String) -> String {
             return out
         }
         if c == '"' {
+            let interpolated = at(cs, i - 1) == 'f'
             out.push(c)
             i += 1
             while i < n && cs[i] != '"' {
+                // A hole of an `f"…"` is code (#2328): `{tmp}` is the
+                // directory as text, `{shown(tmp)}` a call.
+                if interpolated && cs[i] == '{' && at(cs, i + 1) == '{' {
+                    out.push('{')
+                    out.push('{')
+                    i += 2
+                    continue
+                }
+                if interpolated && cs[i] == '{' {
+                    let close = closing(cs, i)
+                    if close > i {
+                        out.push('{')
+                        out.push_str(as_text(text_of(cs, i + 1, close), r))
+                        out.push('}')
+                        i = close + 1
+                        continue
+                    }
+                }
                 if cs[i] == '\\' {
                     out.push(cs[i])
                     i += 1
@@ -257,6 +276,227 @@ fn is_anywhere_alone(line: String) -> bool {
     return t == "fs::Root::Anywhere," || t == "fs::Root::Anywhere"
 }
 
+// Whether a path under a root names a file: its last part has a `.`
+// (`main.nika`, `Cargo.toml`); a directory's has none.
+fn a_file(sub: String) -> bool {
+    let (_, last) = sub.rsplit_once("/") ?? ("", "")
+    return last.contains(".") || (!sub.contains("/") && sub.contains("."))
+}
+
+// A file under a root opened under `fs::Root::Anywhere` by its text, `file`
+// or `file.clone()` first in a call, is opened by its name under the root.
+fn file_under_root(line: String, f: String, r: String, sub: String) -> String {
+    let name = if sub.contains("{") { f"f\"{sub}\"" } else { f"\"{sub}\"" }
+    let mut now = line.clone()
+    for (open, head) in [("(", f"{f}"), ("(", f"{f}.clone()")] {
+        now = now.replace(f"{open}{head}, fs::Root::Anywhere", f"{open}{name}, {r}")
+    }
+    return now
+}
+
+// Whether the scalar at `k` opens or closes a bracket: 1, -1, else 0.
+fn bracket(c: scalar) -> i64 {
+    if c == '(' || c == '[' || c == '{' {
+        return 1
+    }
+    if c == ')' || c == ']' || c == '}' {
+        return -1
+    }
+    return 0
+}
+
+// The parts of `s` between its commas outside brackets and strings.
+fn split_top(s: String) -> Vec[String] {
+    let cs = chars(s)
+    let n = cs.len() as i64
+    let mut parts: Vec[String] = []
+    let mut depth = 0
+    let mut from = 0
+    let mut k = 0
+    while k < n {
+        if cs[k] == '"' {
+            let end = string_end(cs, k)
+            if end < 0 {
+                break
+            }
+            k = end + 1
+            continue
+        }
+        depth += bracket(cs[k])
+        if cs[k] == ',' && depth == 0 {
+            parts.push(text_of(cs, from, k))
+            from = k + 1
+        }
+        k += 1
+    }
+    parts.push(text_of(cs, from, n))
+    return parts
+}
+
+// The index of the bracket that closes the one at `open`, or -1.
+fn closing(cs: ref Vec[scalar], open: i64) -> i64 {
+    let mut depth = 0
+    let mut k = open
+    while k < cs.len() as i64 {
+        if cs[k] == '"' {
+            let end = string_end(cs, k)
+            if end < 0 {
+                return -1
+            }
+            k = end + 1
+            continue
+        }
+        depth += bracket(cs[k])
+        if depth == 0 {
+            return k
+        }
+        k += 1
+    }
+    return -1
+}
+
+// A top-level function's head: its name, its parameters, the index of the
+// `(` and of the `)` around them; a name "" where the line is none.
+fn signature(line: String) -> (String, Vec[String], i64, i64) {
+    let none: Vec[String] = []
+    if !line.starts_with("fn ") {
+        return ("", none, 0, 0)
+    }
+    let cs = chars(line)
+    let mut open = 3
+    while open < cs.len() as i64 && cs[open] != '(' {
+        open += 1
+    }
+    let close = closing(cs, open)
+    if close < 0 {
+        return ("", none, 0, 0)
+    }
+    return (text_of(cs, 3, open), split_top(text_of(cs, open + 1, close)), open, close)
+}
+
+// The helpers that take a scratch directory as text: each one's name and the
+// places of those parameters, a name the file binds to a scratch directory
+// declared `String` or `ref String`. They become `ref fs::Root`.
+fn helpers(lines: ref Vec[String]) -> Vec[(String, Vec[i64])] {
+    let mut names: Vec[String] = []
+    for line in lines {
+        let m = mktemp_root(line.clone())
+        if m.len() > 0 {
+            names.push(m)
+        }
+        let t = line.trim()
+        if t.starts_with("let ") && t.ends_with(" = fs::scratch()") {
+            names.push(t.replace("let ", "").replace(" = fs::scratch()", ""))
+        }
+        for r in names.clone() {
+            let (joined, sub) = joined_root(line.clone(), r)
+            if joined.len() > 0 && !a_file(sub) {
+                names.push(joined)
+            }
+        }
+    }
+    let mut out: Vec[(String, Vec[i64])] = []
+    for line in lines {
+        let (name, params, _, _) = signature(line.clone())
+        let mut places: Vec[i64] = []
+        let mut k = 0
+        for p in params {
+            for r in names {
+                if p.trim() == f"{r}: String" || p.trim() == f"{r}: ref String" {
+                    places.push(k)
+                }
+            }
+            k += 1
+        }
+        if name.len() > 0 && places.len() > 0 {
+            out.push((name, places))
+        }
+    }
+    return out
+}
+
+// A helper's head with its scratch parameters `ref fs::Root`, and their names.
+fn helper_head(line: String, places: ref Vec[i64]) -> (String, Vec[String]) {
+    let (_, params, open, close) = signature(line.clone())
+    let cs = chars(line)
+    let mut names: Vec[String] = []
+    let mut parts: Vec[String] = []
+    let mut k = 0
+    for p in params {
+        let t = p.trim()
+        if places.contains(k) {
+            let (r, _) = t.split_once(":") ?? (t, "")
+            names.push(r.clone())
+            parts.push(f"{r}: ref fs::Root")
+        } else {
+            parts.push(t.clone())
+        }
+        k += 1
+    }
+    // `path().to_text()` can fail, so the helper says it can.
+    let mut rest = text_of(cs, close, cs.len() as i64)
+    if !rest.contains("throws") && rest.ends_with(" {") {
+        rest = (rest.strip_suffix(" {") ?? "") + " throws {"
+    }
+    return (text_of(cs, 0, open + 1) + parts.join(", ") + rest, names)
+}
+
+// A call of a helper hands it the root, not its text: `h(tmp.path().to_text())`
+// becomes `h(tmp)` where that parameter is a root.
+fn pass_roots(line: String, hs: ref Vec[(String, Vec[i64])], roots: ref Vec[String]) -> String {
+    let mut now = line.clone()
+    for (h, places) in hs {
+        let mut from = 0
+        while true {
+            let cs = chars(now.clone())
+            let mut k = from
+            let mut found = -1
+            while k < cs.len() as i64 {
+                if written_at(cs, k, f"{h}(") && (k == 0 || !is_word(cs[k - 1])) {
+                    found = k
+                    break
+                }
+                k += 1
+            }
+            if found < 0 {
+                break
+            }
+            let open = found + h.len() as i64
+            let close = closing(cs, open)
+            if close < 0 {
+                break
+            }
+            let args = split_top(text_of(cs, open + 1, close))
+            let mut parts: Vec[String] = []
+            let mut j = 0
+            for a in args {
+                let mut part = a.clone()
+                if places.contains(j) {
+                    for r in roots {
+                        if a.trim() == f"{r}.path().to_text()" {
+                            part = a.replace(f"{r}.path().to_text()", r)
+                        }
+                        let under = f"f\"{{{r}.path().to_text()}}/"
+                        let t = a.trim()
+                        if t.starts_with(under) && t.ends_with("\"") && !t.contains(", ") {
+                            let sub = (t.strip_prefix(under) ?? "").strip_suffix("\"") ?? ""
+                            if !sub.contains("{") {
+                                part = a.replace(t, f"{r}.join(\"{sub}\")")
+                            }
+                        }
+                    }
+                }
+                parts.push(part)
+                j += 1
+            }
+            let joined = parts.join(",")
+            now = text_of(cs, 0, open + 1) + joined + text_of(cs, close, cs.len() as i64)
+            from = open + 1
+        }
+    }
+    return now
+}
+
 // The root a directory's text is opened under: a scratch root is itself, the
 // repository's text a `Dir` of it.
 fn root_of(r: String, scratch: bool) -> String {
@@ -367,16 +607,36 @@ fn rewrite(file: String, text: String) -> (String, i64) throws {
     let read: Vec[String] = text.split("\n").map(fn(l) { l.clone() }).collect()
     let (lines, looked) = lookups(file, read)
     let n = lines.len() as i64
+    let hs = helpers(lines)
     let mut out: Vec[String] = []
     let mut roots: Vec[String] = []
     let mut dirs: Vec[String] = []
+    let mut files: Vec[(String, String, String)] = []
     let mut changed = if looked { 1 } else { 0 }
     let mut i = 0
     while i < n {
         let line = lines[i]
         if line.starts_with("fn ") || line.starts_with("pub fn ") {
             roots = []
+            files = []
             dirs = ["root()"]
+            let (name, _, _, _) = signature(line)
+            let mut head = line.clone()
+            for (h, places) in hs {
+                if h == name {
+                    let (written, names) = helper_head(line, places)
+                    head = written
+                    for r in names {
+                        roots.push(r.clone())
+                    }
+                }
+            }
+            if head != line {
+                out.push(head)
+                changed += 1
+                i += 1
+                continue
+            }
         }
         let name = mktemp_root(line)
         if name.len() > 0 {
@@ -402,8 +662,13 @@ fn rewrite(file: String, text: String) -> (String, i64) throws {
                 break
             }
             let (joined, sub) = joined_root(line, r)
+            if joined.len() > 0 && a_file(sub) {
+                files.push((joined, r.clone(), sub))
+                break
+            }
             if joined.len() > 0 {
                 out.push(f"{indent_of(line)}let {joined} = {r}.join(\"{sub}\")")
+                files.push((f"{joined}.path().to_text()", r.clone(), sub))
                 roots.push(joined)
                 done = true
                 changed += 1
@@ -439,12 +704,16 @@ fn rewrite(file: String, text: String) -> (String, i64) throws {
         let mut now = line.clone()
         for r in roots {
             now = as_text(now, r)
-            now = under_root(now, r, r)
+            now = under_root(now.replace(f"{{{r}.path().to_text()}}", f"{{{r}}}"), r, r)
             now = now.replace(f"{{{r}}}", f"{{{r}.path().to_text()}}")
         }
         for d in dirs {
             now = under_root(now, d, root_of(d, false))
         }
+        for (f, r, sub) in files {
+            now = file_under_root(now, f, r, sub)
+        }
+        now = pass_roots(now, hs, roots)
         if now != line {
             changed += 1
         }

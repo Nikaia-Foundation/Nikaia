@@ -3,17 +3,12 @@
 // and one before the start. Moved from the `nikaia-std` unit tests
 // `bytes::tests::{a_word_past_the_end_stops, a_word_before_the_start_stops}`
 // (#2082).
+use std::env
 use std::fs
 use std::process
 
 fn toolchain() -> String throws {
-    let exe = process::run(
-        "sh",
-        [
-            "-c",
-            "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\"",
-        ],
-    ).stdout.trim().clone()
+    let exe = env::current_exe()?.display() ?? ""
     if exe.len() > 0 { return exe }
     return "target/fast/nikaia"
 }
@@ -28,18 +23,17 @@ fn stops(text: String) -> String {
 }
 
 fn main() throws {
-    let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+    let tmp = fs::scratch()
     fs::write(
-        f"{tmp}/word.nika",
-        fs::Root::Anywhere,
+        "word.nika",
+        tmp,
         "use std::cli\n\nfn main() throws {\n    let mut n = 0\n    for a in cli::args() { n += 1 }\n    let b = Bytes([0, 0, 0, 0, 0, 0, 0, 0])\n    if n == 2 {\n        println(b.u64_le(1))\n    }\n    if n == 3 {\n        println(b.u32_le(n - 4))\n    }\n}\n",
     )
     for args in ["past", "before start"] {
         let out = process::run(
             "sh",
-            ["-c", f"\"$0\" run word.nika -- {args}", toolchain()]; dir: tmp.clone(),
+            ["-c", f"\"$0\" run word.nika -- {args}", toolchain()]; dir: tmp.path().to_text(),
         )
         println(f"{args}: exit {out.code}, {out.stdout.trim()}{stops(out.stderr)}")
     }
-    process::run("rm", ["-rf", tmp])
 }

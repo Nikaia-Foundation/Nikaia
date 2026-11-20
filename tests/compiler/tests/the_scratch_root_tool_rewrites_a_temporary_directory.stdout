@@ -1,7 +1,11 @@
-old.nika:10: left
+old.nika:15: left
 exit 0
 use std::fs
 use std::process
+
+fn put(tmp: ref fs::Root, text: String) throws {
+    fs::write("b.txt", tmp, text)
+}
 
 fn main() throws {
     let tmp = fs::scratch()
@@ -9,5 +13,6 @@ fn main() throws {
     fs::write("a.txt", tmp, "hi")
     let out = process::run("cat", ["a.txt"]; dir: tmp.path().to_text())
     println(fs::read_to_string("a.txt", tmp))
+    put(tmp, "b")
     let one = process::run("mktemp", []).stdout.trim().clone()
 }

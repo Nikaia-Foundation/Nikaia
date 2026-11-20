@@ -3,29 +3,26 @@
 // leaves them out of the lane's batch (#1678). `Part of #N` and a prose
 // mention finish nothing. A newer `Reopens #N` takes an older `Fixes #N`
 // back, and a newer `Fixes` wins over an older `Reopens` (#2152).
+use std::env
 use std::fs
 use std::process
 
 fn toolchain() -> String throws {
-    let exe = process::run("sh", ["-c", "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\""]).stdout.trim().clone()
+    let exe = env::current_exe()?.display() ?? ""
     if exe.len() > 0 { return exe }
     return "target/fast/nikaia"
 }
 
 fn root() -> String throws {
-    let here = process::run("pwd", []).stdout.trim().clone()
-    if fs::exists(f"{here}/scripts/drive.nika", fs::Root::Anywhere) { return here }
-    let parent = process::run("sh", ["-c", "readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/cwd"]).stdout.trim().clone()
-    if fs::exists(f"{parent}/scripts/drive.nika", fs::Root::Anywhere) { return parent }
-    return process::run("realpath", [f"{parent}/../.."]).stdout.trim().clone()
+    return env::current_main()?.parent()?.parent()?.parent()?.parent()?.display() ?? "../.."
 }
 
 fn main() throws {
     let repo = root()
     let nikaia = toolchain()
     let log = "target/drive_queue_fixed_log.txt"
-    fs::write(f"{repo}/{log}", fs::Root::Anywhere, "redo: the bundle again\n\nFixes #1800\nrevert: the bundle\n\nReopens #1700, #1800\ndocs: a citation\n\nFixes #1662\n\nCo-Authored-By: x\ndrive: two\n\nFixes #1500, #1501\nPart of #1400\nthe fix for #1300 waits\nbundle: lean\n\nFixes #1700\n")
+    fs::write(f"{log}", fs::Root::Dir(repo.clone()), "redo: the bundle again\n\nFixes #1800\nrevert: the bundle\n\nReopens #1700, #1800\ndocs: a citation\n\nFixes #1662\n\nCo-Authored-By: x\ndrive: two\n\nFixes #1500, #1501\nPart of #1400\nthe fix for #1300 waits\nbundle: lean\n\nFixes #1700\n")
     let out = process::run(nikaia, ["run", "scripts/drive.nika", "--", "--fixed-in", log.clone(), "1662", "1400", "1501", "1300", "166", "1500", "1700", "1800"]; dir: repo)
     println(out.stdout.trim())
-    fs::remove(f"{repo}/{log}", fs::Root::Anywhere)
+    fs::remove(f"{log}", fs::Root::Dir(repo.clone()))
 }

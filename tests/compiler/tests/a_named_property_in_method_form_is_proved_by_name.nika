@@ -2,24 +2,19 @@
 // `b.holds(n)` of a `sync` method that returns `bool`, is a name of the
 // prover keyed by the method and every argument: the second `assert` of
 // each is proved, known from the first.
+use std::env
 use std::fs
 use std::process
 
 fn toolchain() -> String throws {
-	let exe = process::run(
-		"sh",
-		[
-			"-c",
-			"e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\"",
-		],
-	).stdout.trim().clone()
+	let exe = env::current_exe()?.display() ?? ""
 	if exe.len() > 0 { return exe }
 	return "target/fast/nikaia"
 }
 
-fn shown(tmp: String, text: String) -> String {
+fn shown(tmp: ref fs::Root, text: String) -> String throws {
 	let mut lines: Vec[String] = []
-	for line in text.replace(tmp, "TMP").lines() {
+	for line in text.replace(tmp.path().to_text(), "TMP").lines() {
 		let t = line.trim()
 		if t.starts_with("Compiling") || t.starts_with("Finished") || t.starts_with("Running") {
 			continue
@@ -29,16 +24,15 @@ fn shown(tmp: String, text: String) -> String {
 	return lines.join("\n")
 }
 
-fn ran(tmp: String, file: String, text: String, args: Vec[String]) throws {
-	fs::write(f"{tmp}/{file}", fs::Root::Anywhere, text)
+fn ran(tmp: ref fs::Root, file: String, text: String, args: Vec[String]) throws {
+	fs::write(f"{file}", tmp, text)
 	println(f"== {args.join(" ")}")
-	let out = process::run(toolchain(), args; dir: tmp)
+	let out = process::run(toolchain(), args; dir: tmp.path().to_text())
 	println(shown(tmp, out.stdout))
 	println(f"exit {out.code}")
 }
 
 fn main() throws {
-	let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+	let tmp = fs::scratch()
 	ran(tmp, "method.nika", "struct Bag {\n\titems: Vec[i64],\n}\n\nimpl Bag {\n\tfn full(self) -> bool sync {\n\t\treturn self.items.len() > 2\n\t}\n\n\tfn holds(self, n: i64) -> bool sync {\n\t\treturn n < self.items.len()\n\t}\n}\n\nfn main() throws {\n\tlet b = Bag { items: [1, 2, 3] }\n\tlet n = 1\n\tassert(b.full())\n\tassert(b.full())\n\tassert(b.holds(n))\n\tassert(b.holds(n))\n\tprintln(\"ok\")\n}\n", ["check", "--asserts", "--unproved-claims=warn", "method.nika"])
-	process::run("rm", ["-rf", tmp])
 }

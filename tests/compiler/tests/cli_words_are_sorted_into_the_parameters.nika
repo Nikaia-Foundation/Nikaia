@@ -6,26 +6,21 @@
 // help, which names the precondition and the defaults. `cli::args().nth`
 // takes an `i64`. Moved from the `nikaia-std` unit tests `cli::tests::*`
 // (#2082).
+use std::env
 use std::fs
 use std::process
 
 fn toolchain() -> String throws {
-    let exe = process::run(
-        "sh",
-        [
-            "-c",
-            "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\"",
-        ],
-    ).stdout.trim().clone()
+    let exe = env::current_exe()?.display() ?? ""
     if exe.len() > 0 { return exe }
     return "target/fast/nikaia"
 }
 
 fn main() throws {
-    let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+    let tmp = fs::scratch()
     fs::write(
-        f"{tmp}/p.nika",
-        fs::Root::Anywhere,
+        "p.nika",
+        tmp,
         "use std::cli\n\n/// Multiplies.\nfn main(a: i64, rest: Vec[String]; times: i64 = 4, be_loud: bool = false, small: u8 = 0, big: u64 = 0, rate: f64 = 0.0, maybe: i32? = null) throws {\n    assert(a > 0)\n    println(f\"a {a} times {times} loud {be_loud} rest [{rest.iter().join(\", \")}] small {small} big {big} rate {rate} maybe {maybe ?? -1}\")\n    let at: i64 = 0\n    println(f\"{cli::args().nth(at) != null} {cli::args().nth(-1) == null} {cli::args().nth(9223372036854775807) == null}\")\n}\n",
     )
     let cases = [
@@ -48,7 +43,7 @@ fn main() throws {
     for case in cases {
         let out = process::run(
             "sh",
-            ["-c", f"\"$0\" run --unproved-claims=warn p.nika -- {case}", toolchain()]; dir: tmp.clone(),
+            ["-c", f"\"$0\" run --unproved-claims=warn p.nika -- {case}", toolchain()]; dir: tmp.path().to_text(),
         )
         println(f"== {case}: exit {out.code}")
         print(out.stdout)
@@ -57,8 +52,7 @@ fn main() throws {
             if t.starts_with("Compiling") || t.starts_with("Finished") || t.starts_with("Running") {
                 continue
             }
-            println(line.replace(tmp.clone(), "TMP"))
+            println(line.replace(tmp.path().to_text(), "TMP"))
         }
     }
-    process::run("rm", ["-rf", tmp])
 }

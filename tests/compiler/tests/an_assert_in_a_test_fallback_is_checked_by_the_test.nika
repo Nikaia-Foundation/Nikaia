@@ -3,27 +3,27 @@
 // a plain `test` is (spec 14.2), not refused NK1300: `nikaia test` has
 // turned the block into a function `__nikaia_test_N` before the prover
 // looks (#2020, `sv_cnf`'s tests in the package `logic`).
+use std::env
 use std::fs
 use std::process
 
 fn toolchain() -> String throws {
-    let exe = process::run("sh", ["-c", "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\""]).stdout.trim().clone()
+    let exe = env::current_exe()?.display() ?? ""
     if exe.len() > 0 { return exe }
     return "target/fast/nikaia"
 }
 
 fn main() throws {
-    let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+    let tmp = fs::scratch()
     let nikaia = toolchain()
-    process::run("mkdir", ["-p", f"{tmp}/src"])
-    fs::write(f"{tmp}/nikaia.toml", fs::Root::Anywhere, "[package]\nname = \"fallback\"\nversion = \"0.1.0\"\n")
-    fs::write(f"{tmp}/src/main.nika", fs::Root::Anywhere, "fn half(x: i64) -> i64? sync {\n    if x < 0 { return null }\n    return x / 2\n}\n\nfn two() -> i64 sync { return 2 }\n\nfn main() {}\n\ntest \"inside the fallback of an option\" {\n    let h = half(4) ?? {\n        assert(two() == 1)\n        return\n    }\n    assert(h == 2)\n}\n")
-    let out = process::run(nikaia, ["test"]; dir: tmp.clone())
+    process::run("mkdir", ["-p", f"{tmp.path().to_text()}/src"])
+    fs::write("nikaia.toml", tmp, "[package]\nname = \"fallback\"\nversion = \"0.1.0\"\n")
+    fs::write("src/main.nika", tmp, "fn half(x: i64) -> i64? sync {\n    if x < 0 { return null }\n    return x / 2\n}\n\nfn two() -> i64 sync { return 2 }\n\nfn main() {}\n\ntest \"inside the fallback of an option\" {\n    let h = half(4) ?? {\n        assert(two() == 1)\n        return\n    }\n    assert(h == 2)\n}\n")
+    let out = process::run(nikaia, ["test"]; dir: tmp.path().to_text())
     println(f"exit {out.code}")
     for line in f"{out.stdout}{out.stderr}".lines() {
         if line.starts_with("test ") || line.starts_with("error[") {
             println(line)
         }
     }
-    process::run("rm", ["-rf", tmp])
 }
