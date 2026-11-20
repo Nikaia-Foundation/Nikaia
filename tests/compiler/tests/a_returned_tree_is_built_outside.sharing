@@ -2,5 +2,5 @@ no `Shared` value here, so there is nothing to choose.
 
 Boxes of recursive types (ADR-327 D16):
     bound: `Tree::Node` outside: `t` is moved or handed on as a value
-    straight: `Tree::Node` outside: it is returned (across calls, ADR-327 D17)
-    straight: `Tree::Node` outside: it is returned (across calls, ADR-327 D17)
+    straight: `Tree::Node` in the block: its result stays in the task at every call (ADR-327 D17)
+    straight: `Tree::Node` in the block: its result stays in the task at every call (ADR-327 D17)

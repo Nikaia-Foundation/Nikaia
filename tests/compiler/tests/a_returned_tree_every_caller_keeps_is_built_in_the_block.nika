@@ -1,0 +1,27 @@
+// **A tree every caller keeps in its task is built in the task's block**
+// (ADR-327 D17, #2348): each call of `bottom_up` hands its result to
+// `check`, which only walks it, or to the box of a node `bottom_up` itself
+// returns, so the result leaves the task on no path and every node is
+// `Boxed::placed`. `--sharing` names the function.
+enum Tree { Leaf, Node(Tree, Tree) }
+
+fn bottom_up(depth: i64) -> Tree sync {
+	if depth == 0 { return Tree::Leaf }
+	return Tree::Node(bottom_up(depth - 1), bottom_up(depth - 1))
+}
+
+fn check(tree: Tree) -> i64 sync {
+	match tree {
+		Tree::Leaf => { return 1 }
+		Tree::Node(left, right) => { return 1 + check(left) + check(right) }
+	}
+}
+
+fn main() throws {
+	let long_lived = bottom_up(6)
+	let mut sum = 0
+	for depth in 1..<5 {
+		sum = sum + check(bottom_up(depth))
+	}
+	println(f"{sum} nodes, and {check(long_lived)} kept")
+}

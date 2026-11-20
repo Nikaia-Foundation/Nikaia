@@ -1,0 +1,22 @@
+// **A tree one caller stores in a `SharedMut` is built outside** (ADR-327
+// D17, #2348): the store lets `bottom_up`'s result outlive the task, so its
+// nodes are `Boxed::new` at every call.
+enum Tree { Leaf, Node(Tree, Tree) }
+
+fn bottom_up(depth: i64) -> Tree sync {
+    if depth == 0 { return Tree::Leaf }
+    return Tree::Node(bottom_up(depth - 1), bottom_up(depth - 1))
+}
+
+fn check(tree: Tree) -> i64 sync {
+    match tree {
+        Tree::Leaf => { return 1 }
+        Tree::Node(left, right) => { return 1 + check(left) + check(right) }
+    }
+}
+
+fn main() throws {
+    let held = SharedMut(Tree::Leaf)
+    held.set(bottom_up(2))
+    println(f"{check(bottom_up(3))} walked")
+}

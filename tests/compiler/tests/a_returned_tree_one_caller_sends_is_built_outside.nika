@@ -1,0 +1,30 @@
+use std::channel
+
+// **A tree one caller sends on a channel is built outside** (ADR-327 D17,
+// #2348): `bottom_up`'s result leaves the task through `send` at one call,
+// so its nodes are `Boxed::new` at every call, also where `main` only walks
+// the tree. `--sharing` names the call that lets it leave.
+enum Tree { Leaf, Node(Tree, Tree) }
+
+fn bottom_up(depth: i64) -> Tree sync {
+    if depth == 0 { return Tree::Leaf }
+    return Tree::Node(bottom_up(depth - 1), bottom_up(depth - 1))
+}
+
+fn check(tree: Tree) -> i64 sync {
+    match tree {
+        Tree::Leaf => { return 1 }
+        Tree::Node(left, right) => { return 1 + check(left) + check(right) }
+    }
+}
+
+fn give(tx: channel::Sender[Tree]) {
+    tx.send(bottom_up(2))
+}
+
+fn main() throws {
+    let (tx, rx) = channel::bounded[Tree](1)
+    give(tx)
+    let got: Tree? = rx.recv()
+    println(f"{check(bottom_up(3))} walked, {check(got ?? Tree::Leaf)} received")
+}

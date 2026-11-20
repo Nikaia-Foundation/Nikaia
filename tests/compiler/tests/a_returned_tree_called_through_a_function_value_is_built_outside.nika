@@ -1,0 +1,25 @@
+// **A tree whose function is called through a function value is built
+// outside** (ADR-327 D17, #2348): `apply` calls whatever it is given, and
+// the compiler does not follow `bottom_up` through `f`, so its result
+// counts as leaving and its nodes are `Boxed::new`.
+enum Tree { Leaf, Node(Tree, Tree) }
+
+fn bottom_up(depth: i64) -> Tree sync {
+    if depth == 0 { return Tree::Leaf }
+    return Tree::Node(bottom_up(depth - 1), bottom_up(depth - 1))
+}
+
+fn check(tree: Tree) -> i64 sync {
+    match tree {
+        Tree::Leaf => { return 1 }
+        Tree::Node(left, right) => { return 1 + check(left) + check(right) }
+    }
+}
+
+fn apply(f: fn(i64) -> Tree sync, depth: i64) -> Tree sync {
+    return f(depth)
+}
+
+fn main() throws {
+    println(f"{check(apply(bottom_up, 3))} nodes")
+}

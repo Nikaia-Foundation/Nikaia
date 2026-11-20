@@ -1,0 +1,43 @@
+use std::channel
+
+// **Mutually recursive builders are placed as a fixed point** (ADR-327 D17,
+// #2348): `leftward` and `rightward` return each other's results as
+// children, and every caller walks the tree, so both start task-local and
+// stay so: their nodes are `Boxed::placed`. `up` and `down` build the same way, but one
+// call sends `down`'s result on a channel, so `down` turns outside, and with
+// it `up`, whose result `down` returns.
+enum Tree { Leaf, Node(Tree, Tree) }
+
+fn leftward(depth: i64) -> Tree sync {
+    if depth == 0 { return Tree::Leaf }
+    return Tree::Node(rightward(depth - 1), Tree::Leaf)
+}
+
+fn rightward(depth: i64) -> Tree sync {
+    if depth == 0 { return Tree::Leaf }
+    return Tree::Node(Tree::Leaf, leftward(depth - 1))
+}
+
+fn up(depth: i64) -> Tree sync {
+    if depth == 0 { return Tree::Leaf }
+    return Tree::Node(down(depth - 1), Tree::Leaf)
+}
+
+fn down(depth: i64) -> Tree sync {
+    if depth == 0 { return Tree::Leaf }
+    return Tree::Node(Tree::Leaf, up(depth - 1))
+}
+
+fn check(tree: Tree) -> i64 sync {
+    match tree {
+        Tree::Leaf => { return 1 }
+        Tree::Node(l, r) => { return 1 + check(l) + check(r) }
+    }
+}
+
+fn main() throws {
+    let (tx, rx) = channel::bounded[Tree](1)
+    tx.send(down(3))
+    let got: Tree? = rx.recv()
+    println(f"{check(leftward(5))} and {check(up(4))} walked, {check(got ?? Tree::Leaf)} received")
+}

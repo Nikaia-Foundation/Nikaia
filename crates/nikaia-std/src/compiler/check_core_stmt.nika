@@ -4244,3 +4244,400 @@ fn check_core_stmt_slot_read(value: ref Expr) -> ref Expr {
         else => value,
     }
 }
+
+/// **Which returned trees stay in the task, across calls** (ADR-327 D17,
+/// #2348). After every body of the file is checked - the walk asks which
+/// arguments were lent - each call of a free function of this file is
+/// written down with where its result goes: kept in the caller (a `let`
+/// whose name D16 keeps in the function, an argument lent to its
+/// parameter, a box of a value placed in the block, a comparison, an
+/// `f"…"` hole, a statement whose value is dropped), the caller's own
+/// result, or anywhere else, which counts as leaving the task. A fixed
+/// point that starts from "task-local" turns a function to "outside" as
+/// soon as one call lets its result leave, or hands it to the result of a
+/// function that is outside. A function named anywhere but as a direct
+/// call (a function value, a task's body, a closure), `pub`, `extern` or
+/// `main` is outside, and a file with a grammar keeps every function
+/// outside. The box sites a task-local function returns are placed in
+/// the block (D16); `--sharing` names the function either way.
+fn check_core_place_returned(mut state: CheckState, world: ref CheckWorld) sync {
+    if state.facts.boxed_members.len() == 0 {
+        return
+    }
+    let mut candidates: collections::BTreeSet[String] = collections::BTreeSet()
+    let mut has_grammar = false
+    for item in world.here.items {
+        match item.node {
+            Item::Fn { name, is_public, is_extern, .. } => {
+                let sym = name ?? continue
+                let named = f"{world.words.resolve(sym)}"
+                if !is_public && !is_extern && named != "main" {
+                    candidates.insert(named)
+                }
+            },
+            Item::Grammar(_) => { has_grammar = true },
+            else => {},
+        }
+    }
+    if candidates.len() == 0 {
+        return
+    }
+    let mut calls: Vec[(String, String)] = []
+    let mut sites: Vec[(i64, String, String)] = []
+    for item in world.here.items {
+        match item.node {
+            Item::Fn { name, body, config, .. } => {
+                let sym = name ?? continue
+                let owner = f"{world.words.resolve(sym)}"
+                for option in config {
+                    check_core_returned_leaves(world, option.default, owner, candidates, calls)
+                }
+                check_core_returned_block(state, world, body, owner, f"<{owner}", candidates, calls, sites)
+            },
+            Item::Impl { target, methods, .. } => {
+                for method in methods {
+                    match method.node {
+                        Item::Fn { name, body, config, .. } => {
+                            let sym = name ?? continue
+                            let owner = f"{world.here.text(target.name)}::{world.words.resolve(sym)}"
+                            for option in config {
+                                check_core_returned_leaves(world, option.default, owner, candidates, calls)
+                            }
+                            check_core_returned_block(state, world, body, owner, f"<{owner}", candidates, calls, sites)
+                        },
+                        else => {},
+                    }
+                }
+            },
+            Item::Test { name, body } => check_core_returned_block(state, world, body, name, f"!{name}", candidates, calls, sites),
+            Item::Bench { name, body } => check_core_returned_block(state, world, body, name, f"!{name}", candidates, calls, sites),
+            Item::Comptime { value, .. } => check_core_returned_leaves(world, value, "a constant", candidates, calls),
+            Item::Struct { fields, rules, .. } => {
+                for field in fields {
+                    match field.default {
+                        null => {},
+                        given => check_core_returned_leaves(world, given.value, "a field's default", candidates, calls),
+                    }
+                }
+                for rule in rules {
+                    check_core_returned_leaves(world, rule.node, "a rule", candidates, calls)
+                }
+            },
+            else => {},
+        }
+    }
+    // **The fixed point**, from "task-local": a function turns outside at
+    // the first call that lets its result leave, and with it every
+    // function that returns its result.
+    let mut local: collections::BTreeSet[String] = if has_grammar { collections::BTreeSet() } else { candidates.clone() }
+    let mut why: collections::BTreeMap[String, String] = collections::BTreeMap()
+    if has_grammar {
+        for named in candidates {
+            why.insert(named.clone(), "a grammar in this file reads code the walk does not follow")
+        }
+    }
+    // A function the other files of the package name is called where this
+    // walk does not follow: it stays outside.
+    for named in check_core_returned_beside(world, candidates) {
+        if local.remove(named) {
+            why.insert(named.clone(), "another file of the package names it, where the walk does not follow")
+        }
+    }
+    let mut changed = true
+    while changed {
+        changed = false
+        for (callee, dest) in calls {
+            if !local.contains(callee) {
+                continue
+            }
+            let left: String? = match dest.strip_prefix("!") {
+                null => {
+                    match dest.strip_prefix("<") {
+                        null => null,
+                        given => if local.contains(given) { null } else { f"a call in `{given}` returns it, and the result of `{given}` leaves the task" },
+                    }
+                },
+                caller => f"a call in `{caller}` lets it leave the task",
+            }
+            match left {
+                null => {},
+                reason => {
+                    local.remove(callee)
+                    why.insert(callee.clone(), reason.clone())
+                    changed = true
+                },
+            }
+        }
+    }
+    for (key, site, owner) in sites {
+        if local.contains(owner) {
+            state.facts.placed_in_block.insert(key)
+            state.facts.box_sites.insert(key, f"{owner}: `{site}` in the block: its result stays in the task at every call (ADR-327 D17)")
+        } else if candidates.contains(owner) {
+            let reason = why.get(owner)?.clone() ?? "a call lets it leave the task"
+            state.facts.box_sites.insert(key, f"{owner}: `{site}` outside: it is returned, and {reason} (ADR-327 D17)")
+        }
+    }
+}
+
+/// Every function of `candidates` that `expr` names, written down as a
+/// call whose result leaves the task from `owner`.
+fn check_core_returned_leaves(world: ref CheckWorld, expr: ref Expr, owner: ref String, candidates: ref collections::BTreeSet[String], mut calls: Vec[(String, String)]) sync {
+    let mut read: collections::BTreeSet[String] = collections::BTreeSet()
+    names_in(expr, world.words, read)
+    for named in read {
+        if candidates.contains(named) {
+            calls.push((named.clone(), f"!{owner}"))
+        }
+    }
+}
+
+/// **The candidates the other files of the package name**, in a body, a
+/// constant, a field's default or a rule; all of them where one of those
+/// files holds a grammar, whose code the walk does not read (ADR-327 D17).
+/// A name is enough: which of them hold a call of this file's function the
+/// walk does not tell, so the answer stays on the safe side. `lower-std`
+/// gives a file the package without it (`here_at` -1); a package's check
+/// gives it among them, and its own place is passed over.
+fn check_core_returned_beside(world: ref CheckWorld, candidates: ref collections::BTreeSet[String]) -> collections::BTreeSet[String] {
+    let mut read: collections::BTreeSet[String] = collections::BTreeSet()
+    let mut at = -1
+    for other in world.beside {
+        at += 1
+        if at == world.here_at {
+            continue
+        }
+        for item in other.items {
+            match item.node {
+                Item::Fn { body, config, .. } => {
+                    for option in config {
+                        names_in(option.default, other.words, read)
+                    }
+                    names_in_block(body, other.words, read)
+                },
+                Item::Impl { methods, .. } => {
+                    for method in methods {
+                        match method.node {
+                            Item::Fn { body, config, .. } => {
+                                for option in config {
+                                    names_in(option.default, other.words, read)
+                                }
+                                names_in_block(body, other.words, read)
+                            },
+                            else => {},
+                        }
+                    }
+                },
+                Item::Test { body, .. } => names_in_block(body, other.words, read),
+                Item::Bench { body, .. } => names_in_block(body, other.words, read),
+                Item::Comptime { value, .. } => names_in(value, other.words, read),
+                Item::Struct { fields, rules, .. } => {
+                    for field in fields {
+                        match field.default {
+                            null => {},
+                            given => names_in(given.value, other.words, read),
+                        }
+                    }
+                    for rule in rules {
+                        names_in(rule.node, other.words, read)
+                    }
+                },
+                Item::Grammar(_) => {
+                    return candidates.clone()
+                },
+                else => {},
+            }
+        }
+    }
+    let mut named: collections::BTreeSet[String] = collections::BTreeSet()
+    for name in read {
+        if candidates.contains(name) {
+            named.insert(name.clone())
+        }
+    }
+    return named
+}
+
+/// **Where each statement of `block` sends the values it computes**, in
+/// `owner`; `dest` is where the block's own value goes: `=` kept in the
+/// task, `<f` the result of `f`, `!f` leaving it from `f`.
+fn check_core_returned_block(state: ref CheckState, world: ref CheckWorld, block: ref Block, owner: ref String, dest: ref String, candidates: ref collections::BTreeSet[String], mut calls: Vec[(String, String)], mut sites: Vec[(i64, String, String)]) sync {
+    let count = block.stmts.len() as i64
+    let leaves = f"!{owner}"
+    let result = f"<{owner}"
+    let mut at = 0
+    while at < count {
+        match block.stmts[at].node {
+            Stmt::Let { names, value, .. } => {
+                let mut kept = false
+                if names.len() == 1 {
+                    let name = f"{world.words.resolve(names[0])}"
+                    kept = check_core_view_list_bound_once(world, block, name)
+                    let mut later = at + 1
+                    while later < count && kept {
+                        kept = check_core_tree_stays_in_stmt(state, world, block.stmts[later].node, name).len() == 0
+                        later += 1
+                    }
+                }
+                check_core_returned_expr(state, world, value, owner, if kept { "=" } else { leaves }, candidates, calls, sites)
+            },
+            Stmt::Expr(value) => check_core_returned_expr(state, world, value, owner, if at == count - 1 { dest } else { "=" }, candidates, calls, sites),
+            Stmt::Return(value) => {
+                match value {
+                    null => {},
+                    given => check_core_returned_expr(state, world, given, owner, result, candidates, calls, sites),
+                }
+            },
+            Stmt::For { iter, body, .. } => {
+                check_core_returned_expr(state, world, iter, owner, leaves, candidates, calls, sites)
+                check_core_returned_block(state, world, body, owner, "=", candidates, calls, sites)
+            },
+            Stmt::While { cond, body } => {
+                check_core_returned_expr(state, world, cond, owner, "=", candidates, calls, sites)
+                check_core_returned_block(state, world, body, owner, "=", candidates, calls, sites)
+            },
+            Stmt::Assign { target, value, .. } => {
+                check_core_returned_leaves(world, target, owner, candidates, calls)
+                check_core_returned_expr(state, world, value, owner, leaves, candidates, calls, sites)
+            },
+            Stmt::Comptime { value, .. } => check_core_returned_leaves(world, value, owner, candidates, calls),
+            Stmt::Emit(value) => check_core_returned_leaves(world, value, owner, candidates, calls),
+            else => {},
+        }
+        at += 1
+    }
+}
+
+/// **Where `expr`'s parts send their values**, `expr`'s own going to
+/// `dest` (`check_core_returned_block`): a call of a function of this file
+/// is written down with it, and a box site the caller's result is built
+/// by with the function whose result it is.
+fn check_core_returned_expr(state: ref CheckState, world: ref CheckWorld, expr: ref Expr, owner: ref String, dest: ref String, candidates: ref collections::BTreeSet[String], mut calls: Vec[(String, String)], mut sites: Vec[(i64, String, String)]) sync {
+    let leaves = f"!{owner}"
+    match expr {
+        Expr::Call { func, args, config, .. } => {
+            let site = check_core_box_site(state, world, expr)
+            let mut parts: String = leaves.clone()
+            if site.len() > 0 {
+                let key = check_core_box_site_key(expr)
+                if state.facts.placed_in_block.contains(key) {
+                    parts = "="
+                } else {
+                    match dest.strip_prefix("<") {
+                        null => {},
+                        returned => {
+                            sites.push((key, site.clone(), returned.clone()))
+                            parts = dest.clone()
+                        },
+                    }
+                }
+            } else {
+                let callee: String? = match func {
+                    Expr::Variable(sym, _) => f"{world.words.resolve(sym)}",
+                    Expr::Path(segments, _) => if segments.len() == 1 { f"{world.words.resolve(segments[0])}" } else { null },
+                    else => null,
+                }
+                match callee {
+                    null => check_core_returned_leaves(world, func, owner, candidates, calls),
+                    named => {
+                        if candidates.contains(named) {
+                            calls.push((named.clone(), dest.clone()))
+                        }
+                    },
+                }
+            }
+            for arg in args {
+                let lent = site.len() == 0 && state.facts.lent_args.contains(node_key(arg))
+                check_core_returned_expr(state, world, arg, owner, if lent { "=" } else { parts }, candidates, calls, sites)
+            }
+            for option in config {
+                check_core_returned_leaves(world, option.value, owner, candidates, calls)
+            }
+        },
+        Expr::StructLit { fields, .. } => {
+            let site = check_core_box_site(state, world, expr)
+            let mut parts: String = leaves.clone()
+            if site.len() > 0 {
+                let key = check_core_box_site_key(expr)
+                if state.facts.placed_in_block.contains(key) {
+                    parts = "="
+                } else {
+                    match dest.strip_prefix("<") {
+                        null => {},
+                        returned => {
+                            sites.push((key, site.clone(), returned.clone()))
+                            parts = dest.clone()
+                        },
+                    }
+                }
+            }
+            for field in fields {
+                check_core_returned_expr(state, world, field.value ?? continue, owner, parts, candidates, calls, sites)
+            }
+        },
+        Expr::MethodCall { receiver, args, config, .. } => {
+            check_core_returned_leaves(world, receiver, owner, candidates, calls)
+            for arg in args {
+                check_core_returned_expr(state, world, arg, owner, if state.facts.lent_args.contains(node_key(arg)) { "=" } else { leaves }, candidates, calls, sites)
+            }
+            for option in config {
+                check_core_returned_leaves(world, option.value, owner, candidates, calls)
+            }
+        },
+        Expr::Match { value, arms, .. } => {
+            check_core_returned_leaves(world, value, owner, candidates, calls)
+            for arm in arms {
+                match arm.guard {
+                    null => {},
+                    guard => check_core_returned_expr(state, world, guard, owner, "=", candidates, calls, sites),
+                }
+                check_core_returned_expr(state, world, arm.body, owner, dest, candidates, calls, sites)
+            }
+        },
+        Expr::If { cond, then_branch, else_branch, .. } => {
+            check_core_returned_expr(state, world, cond, owner, "=", candidates, calls, sites)
+            check_core_returned_block(state, world, then_branch, owner, dest, candidates, calls, sites)
+            match else_branch {
+                null => {},
+                given => check_core_returned_block(state, world, given, owner, dest, candidates, calls, sites),
+            }
+        },
+        Expr::Block(inner, _) => check_core_returned_block(state, world, inner, owner, dest, candidates, calls, sites),
+        Expr::LitInterpolated { parts, .. } => {
+            for part in parts {
+                match part {
+                    FPart::Hole { expr: hole, .. } => check_core_returned_expr(state, world, hole, owner, "=", candidates, calls, sites),
+                    else => {},
+                }
+            }
+        },
+        Expr::Binary { op, lhs, rhs, .. } => {
+            let compared = match op {
+                BinaryOp::Eq => true,
+                BinaryOp::Ne => true,
+                BinaryOp::Lt => true,
+                BinaryOp::Le => true,
+                BinaryOp::Gt => true,
+                BinaryOp::Ge => true,
+                BinaryOp::And => true,
+                BinaryOp::Or => true,
+                else => false,
+            }
+            let parts: String = if compared { "=" } else { leaves }
+            check_core_returned_expr(state, world, lhs, owner, parts, candidates, calls, sites)
+            check_core_returned_expr(state, world, rhs, owner, parts, candidates, calls, sites)
+        },
+        Expr::Coalesce { value, fallback, .. } => {
+            check_core_returned_expr(state, world, value, owner, dest, candidates, calls, sites)
+            check_core_returned_expr(state, world, fallback, owner, dest, candidates, calls, sites)
+        },
+        Expr::Try(inner, _) => check_core_returned_expr(state, world, inner, owner, dest, candidates, calls, sites),
+        Expr::Return(value, _) => {
+            match value {
+                null => {},
+                given => check_core_returned_expr(state, world, given, owner, f"<{owner}", candidates, calls, sites),
+            }
+        },
+        else => check_core_returned_leaves(world, expr, owner, candidates, calls),
+    }
+}
