@@ -97,3 +97,11 @@ quotes a figure.
   runner's own high-water mark (ADR-368 D3): the header names that floor, and
   a value at the floor reads "at most the floor", not the solver's size.
   Memory under `--instructions` is valgrind's and is not quoted.
+* **A wall-clock limit is judged by counts, and with a margin** (#2445).
+  On the shared 4-core machine one file's wall time moves by about 0.7 s run
+  to run (#2401: `40_40_11_5_unsat` took 9.7-10.7 s against the 10 s limit).
+  So each step of the work is judged by callgrind counts (or the rod's case
+  count, `run --stats --cases N`) on a fixed budget, never by seconds, and
+  the limit itself is checked once at the end with `compare`. A file within
+  10 % of the limit is reported as at the limit, with the range of three
+  runs, so the supervisor sees how close it is.
