@@ -1,0 +1,24 @@
+// **A tree a function returns is built outside** (ADR-327 D16, #2406):
+// placing a value across calls is D17's, not built yet, so both the tree
+// bound and then returned and the one returned straight are `Boxed::new`.
+enum Tree { Leaf, Node(Tree, Tree) }
+
+fn count(t: Tree) -> i64 {
+    return match t {
+        Tree::Leaf => 1,
+        Tree::Node(l, r) => 1 + count(l) + count(r),
+    }
+}
+
+fn bound() -> Tree {
+    let t = Tree::Node(Tree::Leaf, Tree::Leaf)
+    return t
+}
+
+fn straight() -> Tree {
+    return Tree::Node(Tree::Leaf, Tree::Node(Tree::Leaf, Tree::Leaf))
+}
+
+fn main() throws {
+    println(f"{count(bound())} and {count(straight())} nodes returned")
+}

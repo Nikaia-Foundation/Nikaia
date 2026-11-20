@@ -50,7 +50,7 @@ impl EmitState {
         self.is_boxed(owner, field)
     }
     pub(crate) fn boxed_ty(&self, owner: &str, member: &str, lowered: String) -> String {
-        if self.is_boxed(owner, member) { return format!("std::boxed::Box<{}>", lowered); }
+        if self.is_boxed(owner, member) { return format!("nikaia_std::block::Boxed<{}>", lowered); }
         lowered
     }
     pub(crate) fn boxed_part(&self, world: &EmitWorld<'_, '_, '_, '_>, path: &[winnow_grammar::Symbol], at: i64) -> bool {

@@ -423,7 +423,7 @@ pub(crate) fn check_handed_expr(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, 
                 if check_handed_defines(world, view, &named) { only = Some(named); }
             }
             for callee in closed.iter() {
-                if !callee.ends_with(&*format!("::{}", word)) { continue; }
+                if !::core::convert::identity(match (AsRef::<str>::as_ref(&(callee)), AsRef::<str>::as_ref(&(word)), ) { (__nikaia_t, __nikaia_f1, ) => __nikaia_t.strip_suffix(__nikaia_f1).and_then(|__nikaia_r| __nikaia_r.strip_suffix("::")).is_some() }) { continue; }
                 if only.is_some() && *callee != nikaia_std::index::or(only.as_deref(), || "") { continue; }
                 let params = check_handed_params_of(world, view, callee);
                 let skip: i64 = if !params.is_empty() && *unsafe { nikaia_std::proven::read(&params, (0) as usize) } == "self" { 1 } else { 0 };
@@ -674,7 +674,7 @@ pub(crate) fn check_handed_carries(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_
             let receiver = nikaia_std::boxed::open(receiver); let method = *method;
             let word = view.text(method);
             let mut own = false;
-            for (name, contract) in world.own.functions.iter() { if !contract.described && name.ends_with(&*format!("::{}", word)) { own = true; } }
+            for (name, contract) in world.own.functions.iter() { if !contract.described && ::core::convert::identity(match (AsRef::<str>::as_ref(&(name)), AsRef::<str>::as_ref(&(word)), ) { (__nikaia_t, __nikaia_f1, ) => __nikaia_t.strip_suffix(__nikaia_f1).and_then(|__nikaia_r| __nikaia_r.strip_suffix("::")).is_some() }) { own = true; } }
             if !own { return None; }
             let origin = check_handed_carries(world, view, key, receiver, held);
             if origin.is_some() { return std::convert::identity(origin); }

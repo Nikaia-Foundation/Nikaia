@@ -8,6 +8,13 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1499] — 2026-11-20
+
+**Builders' changes (#2405, #2406)**
+- Fewer allocations in lowered code: a text's bytes collected only to be lent are the text's own (as_bytes), and a list pushed once per turn of a for over a list is sized before the loop (#2385)
+- A text formatted only to be compared is not built: `s.starts_with(f"{a}[")`, `ends_with`, `contains` and `==` with an f-string of text parts check in place, with no allocation (bounding_in_elements: 350,002 fewer allocations per 100,001 calls).
+- Boxes in the task's block (ADR-327 D16): a recursive enum or struct built and used in one function takes its boxes from the task's block, one pointer each, freed by address; a tree that is returned, sent, stored or moved into another task is built outside, and --sharing names each site's place and why. A depth-16 tree goes from 66,041 mallocs to none, -53 % instructions.
+
 ## [0.0.1498] — 2026-11-20
 
 **CI dates the sources the restored build was made from, so a warm cache no longer rebuilds every workspace crate**

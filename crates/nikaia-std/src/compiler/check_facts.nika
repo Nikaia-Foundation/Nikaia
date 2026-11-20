@@ -362,7 +362,9 @@ pub struct CheckFacts {
     /// D9, step 5 of #490), by the literal's node, and the texts by the
     /// `String` of their `String()`: the emitter writes `Place::Block`
     /// there, `Place::Outside` everywhere else
-    /// (`check_core_place_in_block`).
+    /// (`check_core_place_in_block`). And the box sites of a recursive type
+    /// (D16, #2406), by a variant call's callee or a struct literal: the
+    /// emitter writes `Boxed::placed` there (`check_core_place_boxes`).
     pub placed_in_block: collections::BTreeSet[i64],
     /// **The lists of views a `let` binds what they may view after** (#490),
     /// by the `let`'s start, with whether the list's `let` said `mut`: the
@@ -558,6 +560,13 @@ pub struct CheckFacts {
     pub path_comparisons: collections::BTreeSet[i64],
     pub mixed_comparisons: collections::BTreeMap[i64, bool],
     pub path_holes: collections::BTreeMap[i64, Vec[bool]],
+    /// **An `f"…"` whose holes are all text** (#2405), by the literal: no
+    /// spec, no bound names, every hole a `String` or a `str`. Compared with a
+    /// text, it is checked in place and never built.
+    pub text_formats: collections::BTreeSet[i64],
+    /// **`==` and `!=` of a text and a `text_formats` literal** (#2405), by
+    /// the operator's site: the lengths, then the parts, in place.
+    pub compared_formats: collections::BTreeSet[i64],
     /// A print call's argument that is `Bytes`, written as it is (ADR-019 D7).
     pub printed_bytes: collections::BTreeSet[i64],
     pub flattened_reaches: collections::BTreeSet[i64],
@@ -611,6 +620,13 @@ pub struct CheckFacts {
     pub lookup_keys: collections::BTreeSet[i64],
     pub boxed_members: collections::BTreeMap[String, collections::BTreeSet[String]],
     pub boxed_reads: collections::BTreeSet[i64],
+    /// **The boxed field reads `??` takes out of their box** (ADR-327 D16,
+    /// #2406), off a value of its own: `nikaia_std::boxed::open(x.f)`.
+    pub boxed_moves: collections::BTreeSet[i64],
+    /// **Each box site of a recursive type, with its place and the reason**
+    /// (ADR-327 D16, #2406), by the site's key (`check_core_place_boxes`),
+    /// for `--sharing`.
+    pub box_sites: collections::BTreeMap[i64, String],
     pub copied_bindings: collections::BTreeSet[(i64, String)],
     /// **A number copied out that the arm changes** (#730): changed in
     /// place, or handed to a `mut` parameter. The copy is the arm's own (Part
@@ -999,6 +1015,8 @@ impl CheckFacts {
             path_comparisons: collections::BTreeSet(),
             mixed_comparisons: collections::BTreeMap(),
             path_holes: collections::BTreeMap(),
+            text_formats: collections::BTreeSet(),
+            compared_formats: collections::BTreeSet(),
             printed_bytes: collections::BTreeSet(),
             flattened_reaches: collections::BTreeSet(),
             copied_reaches: collections::BTreeSet(),
@@ -1023,6 +1041,8 @@ impl CheckFacts {
             lookup_keys: collections::BTreeSet(),
             boxed_members: collections::BTreeMap(),
             boxed_reads: collections::BTreeSet(),
+            boxed_moves: collections::BTreeSet(),
+            box_sites: collections::BTreeMap(),
             copied_bindings: collections::BTreeSet(),
             changed_copies: collections::BTreeSet(),
             changed_bindings: collections::BTreeSet(),

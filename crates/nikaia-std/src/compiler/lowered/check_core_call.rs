@@ -515,7 +515,7 @@ pub(crate) fn check_core_call_rust_owner(state: &mut CheckState, world: &CheckWo
         let root: String = nikaia_std::block::Text::from(nikaia_std::index::or(written.split('.').next(), || "").to_string());
         let what = if owner == "Vec" { "list" } else { "text" };
         let mut whence = format!("`{}` holds what `{}` was handed, so it was built by a caller the compiler does not see.", root, origin);
-        if origin == format!("pub fn {}", current) {
+        if ::core::convert::identity(match (AsRef::<str>::as_ref(&(origin)), AsRef::<str>::as_ref(&(current)), ) { (__nikaia_t, __nikaia_f1, ) => __nikaia_t.len() == "pub fn ".len() + __nikaia_f1.len() && __nikaia_t.strip_prefix("pub fn ").and_then(|__nikaia_r| __nikaia_r.strip_prefix(__nikaia_f1)).is_some() }) {
             let mut parameter = false;
             let local = state.binding(&root);
             if local.is_some() {
@@ -818,7 +818,7 @@ pub(crate) fn check_core_free_call<H: CheckHost>(state: &mut CheckState, world: 
     let member = check_core_call_attribute_member(&state, world, func);
     if member != "" {
         let read: String = match check_attributes_an_attribute_read(state, world, args, span) { Some(__nikaia_value) => __nikaia_value, None => return Ty::Unknown };
-        if member == "attribute" { return Ty::Nullable(std::boxed::Box::new(check_core_call_named(&read))); }
+        if member == "attribute" { return Ty::Nullable(nikaia_std::block::Boxed::new(check_core_call_named(&read))); }
         return Ty::Named { name: String::from("Vec"), args: vec![check_core_call_named(&read)], view: false };
     }
     if state.inside_a_door {

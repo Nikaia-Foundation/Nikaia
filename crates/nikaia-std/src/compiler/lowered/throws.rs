@@ -195,7 +195,7 @@ pub fn error_sets(direct: &collections::BTreeMap<String, collections::BTreeSet<S
                 Some(__nikaia_it) => Some(__nikaia_it.clone()),
                 None => None,
             }, || collections::BTreeSet::new().into()) {
-                if places.contains(&callee) && callee.starts_with(&*format!("{}::", name)) {
+                if places.contains(&callee) && ::core::convert::identity(match (AsRef::<str>::as_ref(&(callee)), AsRef::<str>::as_ref(&(name)), ) { (__nikaia_t, __nikaia_f0, ) => __nikaia_t.strip_prefix(__nikaia_f0).and_then(|__nikaia_r| __nikaia_r.strip_prefix("::")).is_some() }) {
                     let held = nikaia_std::index::or(match *nikaia_std::index::get(&sets, &callee) {
                         Some(__nikaia_it) => Some(__nikaia_it.clone()),
                         None => None,

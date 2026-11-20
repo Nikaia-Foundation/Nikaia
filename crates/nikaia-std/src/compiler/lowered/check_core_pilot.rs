@@ -353,7 +353,7 @@ pub(crate) fn check_reflect_plain(ty: &Ty) -> Ty {
             if plain == "str" { plain = String::from("String"); }
             Ty::Named { name: plain, args: args.iter().map(|a| { check_reflect_plain(a) }).collect::<Vec<_>>(), view: false }
         },
-        Ty::Nullable(inner) => { let inner = nikaia_std::boxed::open(inner); Ty::Nullable(std::boxed::Box::new(check_reflect_plain(inner))) },
+        Ty::Nullable(inner) => { let inner = nikaia_std::boxed::open(inner); Ty::Nullable(nikaia_std::block::Boxed::new(check_reflect_plain(inner))) },
         Ty::Tuple(parts) => Ty::Tuple(parts.iter().map(|a| { check_reflect_plain(a) }).collect::<Vec<_>>()),
         Ty::Unknown => Ty::Named { name: String::from("i64"), args: vec![], view: false },
         _ => ty.clone(),

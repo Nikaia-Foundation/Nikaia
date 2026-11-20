@@ -29,7 +29,7 @@
 
 pub use task_block::text::{format, join, repeat, replace, replacen, to_lowercase, to_uppercase};
 pub use task_block::{
-    BLOCK, Block, Counting, Entered, Housed, List, Place, Text, count, enter, extend, full,
+    BLOCK, Block, Boxed, Counting, Entered, Housed, List, Place, Text, count, enter, extend, full,
     hand_over, held, leftover, list, outside, push, reserve, take_over,
 };
 
@@ -355,6 +355,13 @@ impl<T: DeepSize, E: DeepSize> DeepSize for Result<T, E> {
 impl<T: DeepSize + ?Sized> DeepSize for Box<T> {
     fn heap(&self) -> usize {
         std::mem::size_of_val::<T>(self) + T::heap(self)
+    }
+}
+
+/// **A box of a recursive type weighs as `Box` does** (ADR-327 D16).
+impl<T: DeepSize> DeepSize for Boxed<T> {
+    fn heap(&self) -> usize {
+        std::mem::size_of::<T>() + T::heap(self)
     }
 }
 

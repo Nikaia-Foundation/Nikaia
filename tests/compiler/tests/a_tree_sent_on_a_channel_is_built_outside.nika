@@ -1,0 +1,21 @@
+// **A tree sent on a channel is built outside every block** (ADR-327 D9,
+// D16, #2406): the receiver may run in another task, which outlives this
+// one's block, so each box of `t` is `Boxed::new`.
+use std::channel
+
+enum Tree { Leaf, Node(Tree, Tree) }
+
+fn count(t: Tree) -> i64 {
+    return match t {
+        Tree::Leaf => 1,
+        Tree::Node(l, r) => 1 + count(l) + count(r),
+    }
+}
+
+fn main() throws {
+    let (tx, rx) = channel::bounded[Tree](1)
+    let t = Tree::Node(Tree::Node(Tree::Leaf, Tree::Leaf), Tree::Leaf)
+    tx.send(t)
+    let heard: Tree? = rx.recv()
+    println(f"{count(heard ?? Tree::Leaf)} nodes heard")
+}

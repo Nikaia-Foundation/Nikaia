@@ -728,8 +728,8 @@ pub(crate) fn bounding_end_list(walk: &BoundsWalk, list: &str, key: &str) -> boo
     let root = path_root(list);
     if root == key_root(key) || !walk.end_roots.contains(&root) || walk.pinned.contains(&root) { return false; }
     if walk.steady.falls.contains(list) { return false; }
-    for name in walk.steady.values.iter() { if list == name || list.starts_with(&*format!("{}.", name)) { return false; } }
-    for name in walk.steady.parts.iter() { if list.starts_with(&*format!("{}.", name)) { return false; } }
+    for name in walk.steady.values.iter() { if list == name || ::core::convert::identity(match (AsRef::<str>::as_ref(&(list)), AsRef::<str>::as_ref(&(name)), ) { (__nikaia_t, __nikaia_f0, ) => __nikaia_t.strip_prefix(__nikaia_f0).and_then(|__nikaia_r| __nikaia_r.strip_prefix(".")).is_some() }) { return false; } }
+    for name in walk.steady.parts.iter() { if ::core::convert::identity(match (AsRef::<str>::as_ref(&(list)), AsRef::<str>::as_ref(&(name)), ) { (__nikaia_t, __nikaia_f0, ) => __nikaia_t.strip_prefix(__nikaia_f0).and_then(|__nikaia_r| __nikaia_r.strip_prefix(".")).is_some() }) { return false; } }
     true
 }
 
@@ -1603,7 +1603,7 @@ pub(crate) fn bounding_touches(walk: &BoundsWalk, term: i64, name: &str) -> bool
     false
 }
 
-pub(crate) fn bounding_in_elements(path: &str, name: &str) -> bool { path.starts_with(&*format!("{}[", name)) || path.contains(&*format!("[{}]", name)) }
+pub(crate) fn bounding_in_elements(path: &str, name: &str) -> bool { ::core::convert::identity(match (AsRef::<str>::as_ref(&(path)), AsRef::<str>::as_ref(&(name)), ) { (__nikaia_t, __nikaia_f0, ) => __nikaia_t.strip_prefix(__nikaia_f0).and_then(|__nikaia_r| __nikaia_r.strip_prefix("[")).is_some() }) || ::core::convert::identity(match (AsRef::<str>::as_ref(&(path)), AsRef::<str>::as_ref(&(name)), ) { (__nikaia_t, __nikaia_f1, ) => { let mut __nikaia_rest: &str = __nikaia_t; loop { match __nikaia_rest.find("[") { Some(__nikaia_i) => { if __nikaia_rest[__nikaia_i + "[".len()..].strip_prefix(__nikaia_f1).and_then(|__nikaia_r| __nikaia_r.strip_prefix("]")).is_some() { break true; } match __nikaia_rest[__nikaia_i..].chars().next() { Some(__nikaia_c) => __nikaia_rest = &__nikaia_rest[__nikaia_i + __nikaia_c.len_utf8()..], None => break false, } }, None => break false, } } } }) }
 
 pub(crate) fn bounding_forget_parts(walk: &BoundsWalk, facts: &mut BoundsFacts, name: &str) {
     let length = length_of(name);
@@ -1614,7 +1614,7 @@ pub(crate) fn bounding_forget_parts(walk: &BoundsWalk, facts: &mut BoundsFacts, 
         let mut read: collections::BTreeSet<String> = collections::BTreeSet::new();
         walk.arena.variables(fact, &mut read);
         let mut touched = false;
-        for v in read.iter() { if (v.starts_with(&*under) || v.starts_with(&*format!("{}[", name))) && *v != length && !v.contains('@') { touched = true; } }
+        for v in read.iter() { if (v.starts_with(&*under) || ::core::convert::identity(match (AsRef::<str>::as_ref(&(v)), AsRef::<str>::as_ref(&(name)), ) { (__nikaia_t, __nikaia_f0, ) => __nikaia_t.strip_prefix(__nikaia_f0).and_then(|__nikaia_r| __nikaia_r.strip_prefix("[")).is_some() })) && *v != length && !v.contains('@') { touched = true; } }
         if !touched { kept.push(fact); }
     }
     facts.facts = kept;
@@ -1710,14 +1710,14 @@ pub(crate) fn bounding_element_hit(v: &str, place: &str, keep_own: bool) -> bool
     let list = *unsafe { nikaia_std::proven::read(&parts, (0) as usize) };
     let at = *nikaia_std::index::get(&parts, 1);
     let rest = *nikaia_std::index::get(&parts, 2); ::core::mem::drop(parts);
-    if keep_own && v == format!("{}[{}]{}", list, at, rest) { return false; }
-    if at == "*" { return v.starts_with(&*format!("{}[", list)); }
-    if v == bounding_element_of(list) || v.starts_with(&*format!("{}.", bounding_element_of(list))) { return true; }
-    if v.starts_with(&*format!("{}[", list)) {
+    if keep_own && ::core::convert::identity(match (AsRef::<str>::as_ref(&(v)), AsRef::<str>::as_ref(&(list)), AsRef::<str>::as_ref(&(at)), AsRef::<str>::as_ref(&(rest)), ) { (__nikaia_t, __nikaia_f0, __nikaia_f2, __nikaia_f4, ) => __nikaia_t.len() == __nikaia_f0.len() + "[".len() + __nikaia_f2.len() + "]".len() + __nikaia_f4.len() && __nikaia_t.strip_prefix(__nikaia_f0).and_then(|__nikaia_r| __nikaia_r.strip_prefix("[")).and_then(|__nikaia_r| __nikaia_r.strip_prefix(__nikaia_f2)).and_then(|__nikaia_r| __nikaia_r.strip_prefix("]")).and_then(|__nikaia_r| __nikaia_r.strip_prefix(__nikaia_f4)).is_some() }) { return false; }
+    if at == "*" { return ::core::convert::identity(match (AsRef::<str>::as_ref(&(v)), AsRef::<str>::as_ref(&(list)), ) { (__nikaia_t, __nikaia_f0, ) => __nikaia_t.strip_prefix(__nikaia_f0).and_then(|__nikaia_r| __nikaia_r.strip_prefix("[")).is_some() }); }
+    if v == bounding_element_of(list) || ::core::convert::identity(match (AsRef::<str>::as_ref(&(v)), AsRef::<str>::as_ref(&(bounding_element_of(list))), ) { (__nikaia_t, __nikaia_f0, ) => __nikaia_t.strip_prefix(__nikaia_f0).and_then(|__nikaia_r| __nikaia_r.strip_prefix(".")).is_some() }) { return true; }
+    if ::core::convert::identity(match (AsRef::<str>::as_ref(&(v)), AsRef::<str>::as_ref(&(list)), ) { (__nikaia_t, __nikaia_f0, ) => __nikaia_t.strip_prefix(__nikaia_f0).and_then(|__nikaia_r| __nikaia_r.strip_prefix("[")).is_some() }) {
         let after: String = nikaia_std::block::Text::from(nikaia_std::index::or(v.split(']').last(), || "").to_string());
-        return at.is_empty() || rest.is_empty() || after.is_empty() || after == rest || after.starts_with(&*format!("{}.", rest)) || rest.starts_with(&*format!("{}.", after));
+        return at.is_empty() || rest.is_empty() || after.is_empty() || after == rest || ::core::convert::identity(match (AsRef::<str>::as_ref(&(after)), AsRef::<str>::as_ref(&(rest)), ) { (__nikaia_t, __nikaia_f0, ) => __nikaia_t.strip_prefix(__nikaia_f0).and_then(|__nikaia_r| __nikaia_r.strip_prefix(".")).is_some() }) || ::core::convert::identity(match (AsRef::<str>::as_ref(&(rest)), AsRef::<str>::as_ref(&(after)), ) { (__nikaia_t, __nikaia_f0, ) => __nikaia_t.strip_prefix(__nikaia_f0).and_then(|__nikaia_r| __nikaia_r.strip_prefix(".")).is_some() });
     }
-    at.is_empty() && v.starts_with(&*format!("{}.", list)) && v.contains('[')
+    at.is_empty() && ::core::convert::identity(match (AsRef::<str>::as_ref(&(v)), AsRef::<str>::as_ref(&(list)), ) { (__nikaia_t, __nikaia_f0, ) => __nikaia_t.strip_prefix(__nikaia_f0).and_then(|__nikaia_r| __nikaia_r.strip_prefix(".")).is_some() }) && v.contains('[')
 }
 
 pub(crate) fn bounding_forget_elements_at(walk: &BoundsWalk, facts: &mut BoundsFacts, name: &str) {
@@ -1727,7 +1727,7 @@ pub(crate) fn bounding_forget_elements_at(walk: &BoundsWalk, facts: &mut BoundsF
         let mut read: collections::BTreeSet<String> = collections::BTreeSet::new();
         walk.arena.variables(fact, &mut read);
         let mut touched = false;
-        for v in read.iter() { if v.contains(&*format!("[{}]", name)) { touched = true; } }
+        for v in read.iter() { if ::core::convert::identity(match (AsRef::<str>::as_ref(&(v)), AsRef::<str>::as_ref(&(name)), ) { (__nikaia_t, __nikaia_f1, ) => { let mut __nikaia_rest: &str = __nikaia_t; loop { match __nikaia_rest.find("[") { Some(__nikaia_i) => { if __nikaia_rest[__nikaia_i + "[".len()..].strip_prefix(__nikaia_f1).and_then(|__nikaia_r| __nikaia_r.strip_prefix("]")).is_some() { break true; } match __nikaia_rest[__nikaia_i..].chars().next() { Some(__nikaia_c) => __nikaia_rest = &__nikaia_rest[__nikaia_i + __nikaia_c.len_utf8()..], None => break false, } }, None => break false, } } } }) { touched = true; } }
         if !touched { kept.push(fact); }
     }
     facts.facts = kept;
