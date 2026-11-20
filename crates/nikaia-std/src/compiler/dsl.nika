@@ -1,7 +1,7 @@
 // crates/nikaia-std/src/compiler/dsl.nika
 //
 // **The holes of a `dsl` block's body**, for the compiler's deferred
-// parameters (ADR-296 D4).
+// parameters (ADR-grammar-build-time-v1 D11).
 //
 // The second piece of the compiler moved from Rust to Nikaia (0.0.248), by
 // ADR-rust-boundary-1's route, the one `spelling.nika` took: written here, lowered ahead
@@ -20,7 +20,7 @@ use std::collections
 /// therefore an approximation**: a colon and a name inside the foreign
 /// syntax's own string literal (`SELECT ':id'`) is read as one, because telling
 /// them apart means knowing where that language's strings begin, which is a
-/// grammar's job (ADR-296 D4). A false hole is a refused call rather than a
+/// grammar's job (ADR-grammar-build-time-v1 D11). A false hole is a refused call rather than a
 /// wrong program: the parameter it invents has to be passed, and the message
 /// names it.
 pub fn parameters(body: ref String) -> Vec[String] sync {
@@ -90,7 +90,7 @@ comptime TEMPLATE: ref String = "html"
 /// Whether a `dsl <target> { … } eod` body's holes are deferred parameters.
 /// For every target but `html` the holes are the grammar author's business,
 /// and the only binding this compiler can give them without inventing a
-/// meaning is the deferred one (ADR-296 D4).
+/// meaning is the deferred one (ADR-grammar-build-time-v1 D11).
 pub fn is_deferred(target: ref String, body: ref String) -> bool sync {
     return target != TEMPLATE && parameters(body).len() > 0
 }
@@ -439,7 +439,7 @@ fn bound_argument(args: ref Vec[Expr], words: ref winnow_grammar::InternerContex
 // A call that passes options with a bound statement among its subjects.
 // **The parameters arrive at a driver, or nowhere**: what stands after the
 // `;` becomes the shadow value only where the callee declared `...args:
-// Self::dsl`, and anywhere else it was dropped on the way down (ADR-296 D5,
+// Self::dsl`, and anywhere else it was dropped on the way down (ADR-grammar-build-time-v1 D12,
 // ADR-296).
 fn a_parameter_call(callee: ref String, passed: Vec[String], subject: String?, span: ref Span, bound: ref collections::BTreeMap[String, Vec[String]], takers: ref Vec[String], mut found: Vec[Finding]) {
     if passed.len() == 0 {

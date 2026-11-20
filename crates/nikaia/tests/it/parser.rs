@@ -241,7 +241,7 @@ fn the_grammar_sublanguages_words_are_still_names() {
 /// in that position.
 ///
 /// `Self::dsl` is the case that requires it: the shadow type of a
-/// deferred-parameter DSL is spelled with the keyword (ADR-296 D5).
+/// deferred-parameter DSL is spelled with the keyword (ADR-grammar-build-time-v1 D12).
 #[test]
 fn a_path_segment_may_be_a_reserved_word() {
     let source = "\

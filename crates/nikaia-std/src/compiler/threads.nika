@@ -302,7 +302,7 @@ fn field_named_at(field: ref String, part: ref String, at: ref String?, why: Ref
 
 // What the ledgers say about a type, by the name a program writes: the
 // program's own first, then `std`'s, by the whole key and then by a key that
-// ends in `::` and the name (ADR-296 D17).
+// ends in `::` and the name (ADR-grammar-lowering-v1 D2).
 fn ledger_type(name: ref String, own: ref Ledger, library: ref Ledger) -> TypeContract? {
     let suffix = f"::{name}"
     let mine = in_one_ledger(name, suffix, own)

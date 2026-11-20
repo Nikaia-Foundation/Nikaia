@@ -124,7 +124,7 @@ implementation.
 | [367](adr-367.md) | A fold over a grammar's input takes no more steps than the input has room for; a counter that grows by a fixed amount a step is proved from that, a sum is checked once before the fold; only where the input's length is known, never over a stream | Accepted | no |
 | [368](adr-368.md) | A program can measure time and what another program used: `time::now()` and `Instant`, `Duration::in_nanos`, and `process::run`'s `elapsed`, `user_time`, `system_time`, `max_rss_kib` for that one child | Accepted | no |
 | [369](adr-369.md) | A type's invariant: an `assert` after a struct's fields, proved or checked at every construction, at the end of every method that changes the value and after every outside write, and a fact wherever the value is read; where none is written, the compiler may find one over private fields and use it as a fact only | Accepted | no |
-| [370](adr-370.md) | `@inline`, `@inline(always)` and `@inline(never)` on a function or method, a hint that never changes meaning and makes a `pub fn` inlinable across packages; the compiler adds the hint itself only where it knows better than the backend, case by measured case (ADR-296 D41 first) | Accepted | no |
+| [370](adr-370.md) | `@inline`, `@inline(always)` and `@inline(never)` on a function or method, a hint that never changes meaning and makes a `pub fn` inlinable across packages; the compiler adds the hint itself only where it knows better than the backend, case by measured case (ADR-grammar-lowering-v1 D4 first) | Accepted | no |
 | [371](adr-371.md) | Portable vector lanes, `crc32c` and a prefetch hint are `std`'s, with a meaning on every target; an instruction of one architecture is a safe function of its backend module (`std::backend::x86::pext`), callable only in a build for a CPU level that has it; assembly stays the last way out; the API is decided by a record of its own | Accepted | no |
 | [372](adr-372.md) | Parallel folding without a grammar: `task::cores()` (the user pool's size, `1` at `user_parallelism = no`), `Par::fold(init, step, merge)` with nothing shared, `b.par_pieces(sep)`; pieces are claimed while the work runs, for `par_fold` too; order is kept unless `order: par::Order::Any` gives it up for one accumulator per worker; `workers:` and `piece:` tune and change no result | Accepted | no |
 | [373](adr-373.md) | A `Bytes` carries what owns its memory - its own allocation, a `Vec[u8]` handed over with `Bytes(v)` (no copy), or a mapping, so a `Mapped` is a `Bytes` read or kept; a `ref Bytes` that is only read takes any run of bytes, as a slice | Accepted | no |
@@ -196,7 +196,6 @@ implementation.
 | [166](adr-166.md) | Cargo's target-info probe, `rustc -` with a `--print`, is given an empty standard input. | Accepted | yes |
 | [171](adr-171.md) | A refusal from the lowering names its line, with a caret, as every `NK…` diagnostic does. | Accepted | yes |
 | [172](adr-172.md) | A `for` may iterate a sequence whose step pauses; `Seq[T] pauses` is a third state beside `sync` and nothing said, and the step is awaited. | Accepted | yes |
-| [177](adr-177.md) | A grammar that runs while the program is built is run by compiling the parser it generates, not by interpreting the grammar. | Accepted | yes |
 | [260](adr-260.md) | A file belongs to its project, and the single-file commands are the verbs `lower`, `interpret`, `explain` and `run f.nika`. Everything after `nikaia run f.nika` is the program's; a `#!` line opens an entry point; `nikaia new` writes a project that builds, runs and tests (D6-D8). | Accepted | yes |
 | [263](adr-263.md) | A file operation with nothing else in flight runs on the calling thread once a measurement shows it pays, and the normal path does no work it does not need. | Accepted | yes |
 | [188](adr-188.md) | The escape set is the language below's, written down once in Part I 2.5, and an escape outside it is refused with `NK1184`. | Accepted | yes |
@@ -219,11 +218,13 @@ implementation.
 
 | ADR | Decides | Status | Built |
 | :--- | :--- | :--- | :--- |
-| [296](adr-296.md) | A grammar is part of the language: scannerless, entered by a call to any `entry rule`, cut in parallel only where a checked frame says so, lowered name for name, and its actions neither pause nor fail without a name. | Accepted | partly: D5's `args.values()` |
+| [296](adr-296.md) | A grammar is part of the language: scannerless, entered by a call to any `entry rule`, cut in parallel only where a checked frame says so, lowered name for name, and its actions neither pause nor fail without a name. | Accepted | yes |
 | [grammar-syntax-v1](adr-grammar-syntax-v1.md) | How a grammar is written: scannerless, a DSL block ends with `} eod`, a grammar is parsed, comments are whitespace and strings Nikaia's own; entered by an ordinary call to any `entry rule` (`Json::value(x)`, no `parse` alias, `pub` belongs to the grammar); Part II 10.8 lists every element; an action stands after `->` and a brace after a pattern is a bound; a rule takes values as a function does (Subject ; Config), a bound may be a value, a guard `if(cond)`, `count(p)` an `i64`; `span(p)`, `here`, `same_line`, `///` a rule, no state and no `extern rule`; hardware instructions leave the core, auto-AST and regex terminals are goals | Accepted | no |
 | [grammar-input-v1](adr-grammar-input-v1.md) | What a grammar reads and how it holds it: an entry takes a `String` or a `Bytes`, the argument decides; over `Bytes` what becomes text is checked as UTF-8 where it becomes text (a map's key only where the map misses), a bad byte is a parse error at its offset, `bytes(p)` hands back the bytes; `asset("…")` says where the bytes come from; identifiers are interned and bulk text is a view with the input's lifetime; a view key may be hashed from a prefix, never compared by one; the interning table is the caller's, handed as `words:` (`NK1330` where the result can hold a `Symbol`), made in `std`; a read-only buffer's teardown may be skipped at exit | Accepted | no |
 | [grammar-actions-v1](adr-grammar-actions-v1.md) | What a rule's action may do and how a parse fails: an action may not pause and a call that can is `NK2209` where it stands, so an entry is `sync` (asserted in the ledger); an action may fail and a pausing body may enter a grammar; a parse fails with the prelude's `ParseError`, which carries the message and nothing else, and every entry's ledger says so, read by the `throws` fixpoint though an entry is no `Item::Fn`; a rule's values are lent as a function's are, never cloned per call | Accepted | yes |
 | [grammar-parallel-v1](adr-grammar-parallel-v1.md) | Frames and folds, and how fast a grammar scans: `@frame` declares a resynchronisation unit the compiler checks and never rewrites; parallel parsing is a frame plus a monoid, `par_fold`, written, never inferred, the same result at any number of pieces; pieces are claimed while the work runs and each advances past its first boundary; a boundary or terminator is found a word at a time, never byte by byte; `user_parallelism` chooses the `Parallelism` and nothing else; a `par_fold` rule's value is the fold's; a fold's `init`, `step` and `merge` are walked by the ordinary expression walk, see the rule's own bindings, are not held to its declared type, and meet `NK1132` on the one lambda path | Accepted | yes |
+| [grammar-lowering-v1](adr-grammar-lowering-v1.md) | How a grammar is lowered: as a `grammar! { … }` macro invocation, name for name, never dropped silently; syntactic, guessing no meaning (an accumulator is threaded only where a lookup in the declarations finds a `&mut self` method returning nothing); `@frame` lowers key for key and its check stays the backend's; what a fold's step calls directly is written `#[inline(always)]`; a map is `std`'s own type over hashbrown's table, text keys hashed and compared a word at a time | Accepted | yes |
+| [grammar-build-time-v1](adr-grammar-build-time-v1.md) | How a grammar runs while the program is built, and what it hands back: one spelling at either stage (`comptime` says when, `asset("…")` where the bytes come from); the grammar is not interpreted, its generated parser is compiled and run, cached on its text; a result outside what crosses is `NK1178` before a parser is built; invalid input fails the build in the parser's words; `std::meta::Type` describes a type as data, a statement's grammar returns a `meta::Statement { row, parameters }` (no `meta::column`, no `meta::parameter`) and only the compiler writes the type, saying where it came from; a hole binds immediately (`meta::capture`) or deferred, and deferred parameters make a shadow type (`NK1112`, `NK1113`) | Accepted | no |
 | [016](adr-016.md) | The UTF-8 check is divided across frames, never skipped, and each piece is checked with SIMD (`simdutf8`), answering as the standard library does; it is made where a mapping becomes text (`m.text()`), not where the file is mapped (D5). | Accepted | yes |
 
 ### Diagnostics
@@ -281,7 +282,6 @@ implementation.
 | [326](adr-326.md) | `net::serve` accepts connections, a task each, below every protocol; no connection count is configured, an exchangeable `net::Admission` strategy decides beside the hot path; a panic ends only its task, at both settings. Timers: `head_timeout` 10 s, `body_bytes_per_second` 500, keep-alive with `idle_timeout` 75 s, closed early only after a response (D6-D9). | Accepted | no |
 | [325](adr-325.md) | The tools below Nikaia read no configuration from the project: Cargo and `rustc` start in the compiler's own directory outside it, with a configuration the compiler writes from `nikaia.toml`; the user's own still applies. | Accepted | no |
 | [324](adr-324.md) | A package links a C library by name: `extern(library: "x")` in the code, `[library.x] pkg-config = "…"` in the manifest, found only through `pkg-config` with listed linker flags; `extern` is written without `"C"`; there is no build script, and a package brings no C sources yet. | Accepted | no |
-| [323](adr-323.md) | A grammar describes a type as data, `std::meta::Type` (scalars, `Maybe`, `List`, `Record`; `Named` gone by ADR-330 D7), handed back by a statement's grammar as a `meta::Statement { row, parameters }` (D5, no `meta::column`); the compiler writes the block's row and parameter types from it, and a message about such a type names the block that declared it. | Accepted | no |
 | [322](adr-322.md) | A decimal whole number may end in a scale, `K M G T P` decimal and `Ki Mi Gi Ti Pi` binary, which is a spelling of its value; an exponent is written with a lower-case `e`. | Accepted | no |
 | [321](adr-321.md) | Build-time code is compiled and run, not interpreted: against the package's dependencies through one generated dynamic library, one crate per package compiled by `rustc` directly, results cached, run beside the rest of the build, and bounded by a step budget counted in loop turns and calls (10 billion) and a memory bound counted by its allocator (4 GiB), each raised at the `comptime` that needs it; a dependency's function runs only on ledger entries this build derived from its sources, and no Rust code but `std`'s runs then. A grammar calls its package's Nikaia; the build-time program holds no foreign code, not even linked, and nothing lets it run (D13-D15). | Accepted | no |
 | [287](adr-287.md) | A `comptime` binding is evaluated while the program is built, where an item or a statement stands, by a body that is `sync` and touches at most the build's parameters; at item level in any order, in a body in written order. The word marks the name and is never an expression; an integer `comptime` is an open number each use takes in its own type. | Accepted | partly: the build's parameters in the cache key; D19's lone `NK1117` (#380) |
@@ -354,7 +354,6 @@ makes the next version of the changed topic instead. Records replaced as a whole
 | [340](adr-340.md) D1 | [383](adr-383.md) D1-D3 | the id is given by a numbering pass right after the parse, in input order without gaps, not by the parser as it makes the node |
 | [269](adr-269.md) D9 | [381](adr-381.md) D1-D3 | a pure `bool` call over unchanged values is a name of the prover (a property), proved by name |
 | [344](adr-344.md) D3, D6a | [grammar-2](adr-grammar-2.md) D1, D3, D10 | `json::read[T]` forwards to the grammar entry `Json::read[T]`, emitted per type; `parse` is the grammar's second entry |
-| [299](adr-299.md) D2, [296](adr-296.md) D4 | [323](adr-323.md) D5 | a statement's grammar returns a `meta::Statement`; `meta::column` and `meta::parameter` are gone, `meta::capture` stands |
 | [330](adr-330.md) D9 | [grammar-2](adr-grammar-2.md) D11 | no `NK1233` where a type argument fills a parameter no value parameter's type names |
 | [299](adr-299.md) D16-D18 | [grammar-2](adr-grammar-2.md) D3, D9 | one mapping rule with `members[S]` (Part II 10.8); SQL keeps its strict settings |
 | [010](adr-010.md) D2, D3 | [365](adr-365.md) D1-D3 | standard input and files are untrusted; `trusted: true` at the source; assets trusted |
@@ -376,9 +375,6 @@ makes the next version of the changed topic instead. Records replaced as a whole
 | [299](adr-299.md) D4, D8 | [338](adr-338.md) D2 | the database protocol is the official package `db` |
 | [017](adr-017.md), [289](adr-289.md) | [338](adr-338.md) D2 | `std::html`, `std::http1` and `std::db` are the official packages `html`, `http1` and `db` |
 | [329](adr-329.md) D1 | [330](adr-330.md) D5 | `.ty` is the field's type, not a `meta::Type` |
-| [323](adr-323.md) D1 | [330](adr-330.md) D3 | a `meta::Type`'s parts are types; it exists only at build time |
-| [323](adr-323.md) D1, D3 | [330](adr-330.md) D7 | there is no `Named`; a grammar names no type of the program |
-| [323](adr-323.md) §3 | [330](adr-330.md) D9 | type arguments at a call, `f[T]()`, are allowed, with a warning |
 | [330](adr-330.md) D3 | [332](adr-332.md) D1 | a function type's kind is `Fn(F)`; `NK1232` retired |
 | [330](adr-330.md) §3 | [333](adr-333.md) D3 | a function's parameter may be `comptime` |
 | [304](adr-304.md) D6 | [330](adr-330.md) D1 | a shape walk's type may come from the call |
@@ -389,7 +385,6 @@ makes the next version of the changed topic instead. Records replaced as a whole
 | [184](adr-184.md) D3 | [views-3](adr-views-3.md) D11 | a lent or `mut` parameter `Array[T]` is a view of a run; a field, element or result is one where a piece of a buffer flows in, else `NK1182` |
 | [251](adr-251.md) D4 | [views-3](adr-views-3.md) D10 | the ledger writes `-> T from a \| b` |
 | [358](adr-358.md) D3 | [views-3](adr-views-3.md) D2, D4 | `mut` and `keep` belong to the whole parameter |
-| [002](adr-002.md) D2 | [177](adr-177.md) D1 | a grammar that runs while the program is built is compiled from the parser it generates; other `comptime` code is evaluated in the compiler's process |
 | [002](adr-002.md) D3 | [021](adr-021.md) D9 | Cranelift is an option for development builds, not the default |
 | [203](adr-203.md) D2 | [204](adr-204.md) D1 | a unit-only `enum` compares by the structural walk that decides every type, not by a rule of its own |
 | [083](adr-083.md) D2 | [views-3](adr-views-3.md) D7 | a field of the subject handed back is a view of it, not refused; `NK1131` stands where a field is bound or passed |
@@ -401,7 +396,7 @@ makes the next version of the changed topic instead. Records replaced as a whole
 
 ## Topics in use
 
-`async`, `catch`, `collections`, `decision-records`, `failure-return`, `grammar-actions`, `grammar-input`, `grammar-parallel`, `grammar-syntax`, `lambdas`, `raw-sinks`, `regex`, `registry`, `rust-boundary`, `shared-handle-cycles`, `specialization`, `views`, `yaml`.
+`async`, `catch`, `collections`, `decision-records`, `failure-return`, `grammar-actions`, `grammar-build-time`, `grammar-input`, `grammar-lowering`, `grammar-parallel`, `grammar-syntax`, `lambdas`, `raw-sinks`, `regex`, `registry`, `rust-boundary`, `shared-handle-cycles`, `specialization`, `views`, `yaml`.
 
 ## Reserved numbers
 
@@ -411,8 +406,6 @@ the same time do not take the same name.
 
 | ADR | Claimed for | Where |
 | :--- | :--- | :--- |
-| grammar-lowering-v1 | how a grammar is lowered (ADR-296) | #904 |
-| grammar-build-time-v1 | a grammar run at build time and what it hands back (ADR-177, ADR-296, ADR-323) | #904 |
 | grammar-typed-read-v1 | an entry that takes a type (grammar-2) | #904 |
 | database-v1 | database statements (ADR-299) | #904 |
 | views-v4 | views (views-1 to views-3) | #904 |

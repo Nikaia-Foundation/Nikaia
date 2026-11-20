@@ -314,7 +314,7 @@ pub struct Parsed {
     ///
     /// **Here because every consumer holds a `Parsed` and none of them should
     /// have to know about aliasing.** An alias is a name local to one file, so
-    /// resolving it is not name resolution in ADR-296 D17's sense - it is reading
+    /// resolving it is not name resolution in ADR-grammar-lowering-v1 D2's sense - it is reading
     /// the file's own dictionary, and the dictionary is part of what was parsed.
     /// The alternative was the same lookup at fourteen call sites in three
     /// modules, where the fifteenth would have been the one that forgot.
@@ -1429,7 +1429,7 @@ grammar! {
         // never positional - which is what the separator buys, and why it is a
         // separator rather than a convention about where the flags go.
         //
-        // ADR-296 D5 puts one more thing there: `...args: Self::dsl`, the typed
+        // ADR-grammar-build-time-v1 D12 puts one more thing there: `...args: Self::dsl`, the typed
         // spread a DSL driver accepts deferred parameters with. It is tried
         // first because `...` cannot begin an option's name, so a `;` followed
         // by one is unambiguous.
@@ -1575,7 +1575,7 @@ grammar! {
         // follows a `::` and no construct begins in that position, so the word
         // is a name whatever else it is elsewhere. `Self::dsl` is the case that
         // requires it - the shadow type of a deferred-parameter DSL is spelled
-        // with the keyword (ADR-296 D5, Part II 10.5) - and the general rule is
+        // with the keyword (ADR-grammar-build-time-v1 D12, Part II 10.5) - and the general rule is
         // the reason to allow it rather than that one type.
         rule path_segment -> Symbol = "::" n:SEGMENT -> { n }
 
@@ -1584,7 +1584,7 @@ grammar! {
         // already decided that what follows is a member: after `::` and after
         // `.`. No construct begins in either position, so a reserved word there
         // is a name whatever it is elsewhere - which is what lets `Self::dsl`
-        // (ADR-296 D5) and `scope.spawn fn { … }` (Part II 12.5) keep their
+        // (ADR-grammar-build-time-v1 D12) and `scope.spawn fn { … }` (Part II 12.5) keep their
         // spellings.
         //
         // Everywhere a name is *declared* or stands on its own, `NAME` is what
@@ -1995,7 +1995,7 @@ grammar! {
         // A type may be named by a path: `postgres::Connection`, `html::Raw`.
         //
         // The whole path is interned as one name, because that is what the name
-        // *is* to a compiler that lowers name for name (ADR-296 D17) - nothing
+        // *is* to a compiler that lowers name for name (ADR-grammar-lowering-v1 D2) - nothing
         // here resolves a module, and a path can therefore never collide with a
         // struct this file declares, which is correct.
         rule type_name -> Symbol =
@@ -2168,7 +2168,7 @@ grammar! {
 
         // `rule expr -> Expr # "expression" = …`: what the rule is called when
         // it fails where it began. Spelled as the backend spells it, because
-        // the lowering is name for name (ADR-296 D17) and a second spelling for
+        // the lowering is name for name (ADR-grammar-lowering-v1 D2) and a second spelling for
         // the same thing would be one more thing to know.
         rule rule_label -> String = "#" text:STRING -> { text }
 
@@ -3398,7 +3398,7 @@ grammar! {
           | "." name:SEGMENT args:called? -> {
                 match args {
                     // Kap 5.1's `;` reaches a method call too, and what stands
-                    // after it is kept: ADR-296 D5's deferred parameters arrive
+                    // after it is kept: ADR-grammar-build-time-v1 D12's deferred parameters arrive
                     // exactly here, and dropping them was why a `dsl` statement
                     // could not be given any.
                     Some((args, config)) => Postfix::Method(name, args, config),

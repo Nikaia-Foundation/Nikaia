@@ -191,7 +191,7 @@ impl EmitState {
             // D2): the lowering's temporaries borrowing the local would live
             // past it inside `Ok(..)`; a `let` makes them drop at the `;`.
             // Only where the lowering writes the borrow, so every other tail
-            // keeps `Ok(x)` (ADR-296 D17).
+            // keeps `Ok(x)` (ADR-grammar-lowering-v1 D2).
             let binds = wrap && self.a_tail_that_enters_a_grammar(world, stmt.node)
             // **The keeps a statement needs are declared before it** (ADR-283),
             // and before the `Ok(` a tail is wrapped in.

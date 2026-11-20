@@ -661,7 +661,7 @@ pub struct ProjectMembersForeign {
     /// a program writes (`hyper_shim::serve_once`).
     ///
     /// **One ledger and not one per crate**, because a name is resolved in one
-    /// place (ADR-296 D17) and the crate a name belongs to is the prefix on it.
+    /// place (ADR-grammar-lowering-v1 D2) and the crate a name belongs to is the prefix on it.
     /// Two descriptions cannot disagree about a name without disagreeing about
     /// whose it is.
     pub descriptions: Ledger,

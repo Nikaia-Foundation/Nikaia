@@ -909,7 +909,7 @@ fn check_core_with[H: CheckHost](mut state: CheckState, world: ref CheckWorld, h
     for init in fields {
         check_core_places_a_with_field(state, world, host, expr, name, declared, init, seen, span)
     }
-    // **The type, for the emitter** (ADR-296 D17).
+    // **The type, for the emitter** (ADR-grammar-lowering-v1 D2).
     state.facts.with_types.insert(id_of(expr) as i64, name.clone())
     return found
 }

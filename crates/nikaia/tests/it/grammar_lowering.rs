@@ -311,7 +311,7 @@ fn a_rejected_parse_is_rendered_against_the_input_it_parsed() {
 
 /// `# "…"` between a rule's return type and its `=`: what the rule is called
 /// when it fails where it began. The backend's own spelling, because the
-/// lowering is name for name (ADR-296 D17) and a second spelling for the same
+/// lowering is name for name (ADR-grammar-lowering-v1 D2) and a second spelling for the same
 /// thing would be one more thing to know.
 #[test]
 fn a_rule_label_is_lowered_where_the_backend_expects_it() {

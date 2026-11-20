@@ -3579,7 +3579,7 @@ signature = "[T](self: ref Shared[T]) -> ref(self) T"
 # `examples/` named it as the callee nobody had described, which is what asked
 # for the entry. **The key stays `String::new`** and the spelling is `String()`
 # (ADR-140 D2): the key is what the lowering writes, and the lowering is name
-# for name (ADR-296 D17).
+# for name (ADR-grammar-lowering-v1 D2).
 # Text with nothing in it. It is written `String()`.
 [fn."String::new"]
 pub = true

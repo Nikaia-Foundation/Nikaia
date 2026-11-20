@@ -1,5 +1,5 @@
 //! **A map: `std`'s own type over `hashbrown`'s table**
-//! ([ADR-296](../../../docs/specification/adr/adr-296.md) D42).
+//! ([ADR-grammar-lowering-v1](../../../docs/specification/adr/adr-grammar-lowering-v1.md) D5).
 //!
 //! Every Nikaia map, keyed or trusted, is this one type. It is `hashbrown`'s
 //! `HashTable` with the hash and the equality chosen here per key type, and
@@ -354,7 +354,7 @@ impl<K: Eq + Hash, V, S: BuildHasher> HashMap<K, V, S> {
     /// The place `key` names, filled or not.
     ///
     /// **Always inlined**: a fold's step is this call and little else
-    /// (ADR-296 D41), and returned through memory the place costs more than
+    /// (ADR-grammar-lowering-v1 D4), and returned through memory the place costs more than
     /// the search.
     #[inline(always)]
     pub fn entry(&mut self, key: K) -> Entry<'_, K, V, S> {

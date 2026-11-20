@@ -245,7 +245,7 @@ const cases = [
     expect: [[";", "punctuation.terminator.statement.nika"]],
   },
   {
-    name: "the typed spread (ADR-296 D5)",
+    name: "the typed spread (ADR-grammar-build-time-v1 D12)",
     src: `pub fn prepare(&self, statement: &str; ...args: Self::dsl) -> Self::dsl { }\n`,
     expect: [
       ["...", "keyword.operator.spread.nika"],

@@ -227,7 +227,7 @@ Writing the two programs surfaced spec questions that a real implementation must
 a type was a name with optional arguments, and `postgres::Connection` is a name with a path in
 front of it. Found by `fortunes.nika` the moment its template stopped being the first thing that
 failed. The whole path is interned as one name, because that is what the name *is* to a compiler
-that lowers name for name (ADR-296 D17) — nothing here resolves a module, and a path can therefore
+that lowers name for name (ADR-grammar-lowering-v1 D2) — nothing here resolves a module, and a path can therefore
 never collide with a struct the file declares, which is correct.
 
 **A hole in an interpolated string could not hold a string literal.** `"{f(\"a\")}"` handed the
@@ -512,7 +512,7 @@ hole and does not have to know which case it is. `examples/escaping/src/main.nik
 
 **Control flow is there too**: `<for row in :rows> … </for>`, written as an *element* because
 the file is markup and an editor that highlights it keeps working, with `:rows` captured from the
-enclosing scope (ADR-296 D4). The position check runs through a loop's body, so nothing becomes
+enclosing scope (ADR-grammar-build-time-v1 D11). The position check runs through a loop's body, so nothing becomes
 safe by being repeated. `fortunes.nika`'s `render` lowers and runs today; what that file still
 waits on is the `postgres` block and **G6**'s runtime binding — since
 [ADR-277](../docs/specification/adr/adr-277.md) removed the `fn:` form, the whole file parses.

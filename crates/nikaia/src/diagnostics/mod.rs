@@ -9,13 +9,13 @@ use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 // file the user never wrote. That is not a small annoyance: it is the whole
 // difference between a compiler and a code generator with a compiler bolted on.
 //
-// The fix is not a second checker (ADR-296 D18). It is a map: the emitter
+// The fix is not a second checker (ADR-grammar-lowering-v1 D3). It is a map: the emitter
 // records which `.nika` span produced which byte range of the emitted Rust
 // (`emit::SourceMap`), rustc reports byte offsets into that same text with
 // `--error-format=json`, and this module trades one for the other.
 //
 // What it deliberately does not do is rewrite the message. Because the lowering
-// is name-for-name (ADR-296 D17), "`until(…)` in rule `NAME` can run through the
+// is name-for-name (ADR-grammar-lowering-v1 D2), "`until(…)` in rule `NAME` can run through the
 // boundary" is already a sentence about the Nikaia source - only its position
 // was wrong. Correcting a position is a lookup; translating a text would be a
 // second compiler.
@@ -246,7 +246,7 @@ pub struct Diagnostic {
     /// ([ADR-rust-boundary-1](../../../../docs/specification/adr/adr-rust-boundary-1.md) D21 reads it).
     pub label: Option<String>,
     /// Whether the message is a statement about the program rather than this
-    /// compiler's defect: the parser backend's frame check (ADR-296 D18,
+    /// compiler's defect: the parser backend's frame check (ADR-grammar-lowering-v1 D3,
     /// `tools/diagnostics.nika`) or a stale ledger ([`a_stale_boundary`]).
     /// Every other backend error is `NK1343` (Part III C.1, #1373).
     pub about_the_program: bool,

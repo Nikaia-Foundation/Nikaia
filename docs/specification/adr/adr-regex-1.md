@@ -231,7 +231,7 @@ that built them, its layout is not promised, and its handle writes a count).
 
 `regex::Regex[regex::Dynamic]` wraps `regex-automata`'s `meta::Regex` (with
 `regex-syntax`), as `std`'s maps wrap `hashbrown`'s table
-([ADR-296](adr-296.md) D42). No type of the crate appears in a program, in the
+([ADR-grammar-lowering-v1](adr-grammar-lowering-v1.md) D5). No type of the crate appears in a program, in the
 ledger or in a message. The crate is pinned in `Cargo.lock`; a version that
 changes what a pattern matches is caught by D5.1 before it is taken.
 

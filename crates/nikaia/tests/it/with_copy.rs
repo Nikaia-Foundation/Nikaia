@@ -10,7 +10,7 @@
 //! the type, and this node does not carry one — so the checker records what it
 //! worked out and the emitter reads it back, which is the handover a
 //! `comptime`'s value already makes
-//! ([ADR-296](../../../docs/specification/adr/adr-296.md) D17). A `with` this
+//! ([ADR-grammar-lowering-v1](../../../../docs/specification/adr/adr-grammar-lowering-v1.md) D2). A `with` this
 //! compiler could not name a type for is refused rather than guessed at, and
 //! that is why the emitter's lookup cannot fail.
 //!

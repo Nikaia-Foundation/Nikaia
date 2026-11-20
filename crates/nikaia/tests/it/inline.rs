@@ -152,7 +152,7 @@ fn both_entries_of_a_checked_function_carry_the_hint() {
 }
 
 /// D2: a written `@inline(never)` wins over the hint a fold's step's callee
-/// gains (ADR-296 D41).
+/// gains (ADR-grammar-lowering-v1 D4).
 #[test]
 fn a_written_never_wins_over_the_fold_hint() {
     let source = std::fs::read_to_string(concat!(

@@ -1546,7 +1546,7 @@ fn struct_field(owner: ref String, literal: i64, field: ref FieldInit, asked: re
 // of it out each time (ADR-281 D3); a lambda handed to a walk that runs in
 // parallel - `par_iter()`, or one chained onto it - runs on every core
 // (ADR-235 D1); and a method nothing describes is a body this compiler cannot
-// see the end of (ADR-296 D17).
+// see the end of (ADR-grammar-lowering-v1 D2).
 fn sharing_method(call: ref Expr, asked: ref Asked, holes_of: fn(ref Expr) -> Vec[Expr] sync, ty_of: fn(ref Type) -> Ty sync, mut walk: SharingWalk) {
     let (receiver, method, args, config) = match call {
         Expr::MethodCall { receiver, method, args, config, .. } => (receiver, asked.names.resolve(method).clone(), args, config),
@@ -1764,7 +1764,7 @@ fn unseen_kind(called: ref SharingCall) -> Fallback {
 // A callee's ledger key and the parameters a call passes - name and declared
 // type - where a ledger has them: the program's own ledger first, then the
 // library's, by the name or with the suffix rule every other resolution uses
-// (ADR-296 D17). The type answers one question: whether the position takes
+// (ADR-grammar-lowering-v1 D2). The type answers one question: whether the position takes
 // the handle by value (a second handle, ADR-312 D1) or lends it.
 struct Described {
     key: String,

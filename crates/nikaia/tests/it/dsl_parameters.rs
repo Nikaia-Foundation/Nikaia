@@ -1,4 +1,4 @@
-//! A DSL with deferred parameters generates a shadow type (ADR-296 D5).
+//! A DSL with deferred parameters generates a shadow type (ADR-grammar-build-time-v1 D12).
 //!
 //! Three claims, and each has a test that would fail if it were quietly
 //! relaxed: the type is generated from the body's `:name` holes and from
@@ -59,7 +59,7 @@ fn a_spread_is_a_parameter_the_body_may_use() {
 
 /// The type carries the body's names, and takes its field types from the call
 /// site - because nothing in `… id = :id …` says what `:id` is, and an emitter
-/// that decided would be guessing (ADR-296 D17).
+/// that decided would be guessing (ADR-grammar-lowering-v1 D2).
 #[test]
 fn the_shadow_type_carries_the_names_and_the_call_site_the_types() {
     let rust = emit(&fixture("sql_statement.nika"));

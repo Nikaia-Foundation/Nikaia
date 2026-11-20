@@ -16,7 +16,7 @@
 // `+` says nothing about which side is owned and should not have to.
 //
 // **A trait, and the reason is the one `index::At` gives.** This emitter does
-// not know types (ADR-296 D17), so it writes one call and the language below
+// not know types (ADR-grammar-lowering-v1 D2), so it writes one call and the language below
 // picks. What that buys here is not merely *working*: it is that each shape
 // keeps the lowering that suits it. Measured over three million
 // concatenations, best of three — `String + &str` as it lowers today, 42 ms;

@@ -14,7 +14,7 @@
 //! nothing in their program contains.
 //!
 //! **Why a trait and not a function.** The emitter puts this around *every* index
-//! it writes, because it does not know types (ADR-296 D17) and a map is indexed
+//! it writes, because it does not know types (ADR-grammar-lowering-v1 D2) and a map is indexed
 //! too: `counts[path]` takes a `&str`. So the conversion has to be chosen by the
 //! type of what is in the brackets, and choosing on a type is what a trait is. For
 //! anything that is not an integer this is the identity, which is why a uniform
@@ -182,7 +182,7 @@ pub fn part_through<I: At<Out = std::ops::RangeInclusive<usize>>>(
 ///
 /// One trait with an **output type per container**, which is the same
 /// arrangement [`Set`] has and for the same reason: this emitter does not know
-/// types ([ADR-296](../../../docs/specification/adr/adr-296.md) D17), so it
+/// types ([ADR-grammar-lowering-v1](../../../docs/specification/adr/adr-grammar-lowering-v1.md) D2), so it
 /// writes the same three tokens for a map and for a sequence and the language
 /// below picks.
 ///
@@ -428,7 +428,7 @@ where
 
 /// **A view of a container reads like the container**, because this emitter
 /// writes `get(&x, …)` whether `x` is owned or already a view
-/// ([ADR-296](../../../docs/specification/adr/adr-296.md) D17) — so a `&&str`
+/// ([ADR-grammar-lowering-v1](../../../docs/specification/adr/adr-grammar-lowering-v1.md) D2) — so a `&&str`
 /// arrives here and has to answer what a `&str` would.
 ///
 /// **The answer is tied to the inner reference and not to this borrow**, which
@@ -919,7 +919,7 @@ where
 /// three spellings the program never wrote, which is Part III C.1's class at its
 /// worst. `insert` takes `K` by value and pins it exactly, and a sequence's
 /// write is still an indexed assignment — so the two are one trait for the same
-/// reason `At` above is one: **this emitter does not know types** (ADR-296 D17),
+/// reason `At` above is one: **this emitter does not know types** (ADR-grammar-lowering-v1 D2),
 /// and a rule applied everywhere cannot be applied to the wrong container.
 pub trait Set<K, V> {
     fn set(&mut self, key: K, value: V);

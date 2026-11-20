@@ -1,5 +1,5 @@
 //! **What a fold's step calls directly is written `#[inline(always)]`**
-//! ([ADR-296](../../../docs/specification/adr/adr-296.md) D41, #433, #695): the
+//! ([ADR-grammar-lowering-v1](../../../../docs/specification/adr/adr-grammar-lowering-v1.md) D4, #433, #695): the
 //! step runs once per item, and LLVM left 1BRC's `Summary::record` out of line -
 //! 319.1 instructions a row against 300.1 with `#[inline]`, and at one codegen
 //! unit out of line even with that.
