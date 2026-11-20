@@ -1,0 +1,44 @@
+// A function whose every returned value is proved hands back a value that
+// is not outside, whatever its arguments are (ADR-raw-sinks-1 D14, "a
+// function hands back its proof", #2375): a literal, or a name guarded by
+// `path::is_component` joined after a clean part, here the parameter
+// `store`, whose argument is not outside. The guard is the bare negated
+// predicate, `return ... if` it, or one side of an `||`; the join is
+// returned as written, bound first, or as an arm of an `if`. The program
+// runs in a branch not taken.
+use std::cli
+use std::env
+use std::path
+use std::process
+
+fn built(store: String, key: String) -> String {
+    if key == "" || !path::is_component(key) { return "" }
+    return f"{store}/{key}/bin"
+}
+
+fn kept(store: String, key: String) -> String {
+    return "" if !path::is_component(key)
+    let joined = f"{store}/target/{key}/bin"
+    return joined
+}
+
+fn chosen(store: String, key: String) -> String {
+    if !path::is_component(key) {
+        return ""
+    }
+    return if store == "" { "/nikaia-none" } else { "/nikaia-none/" + key }
+}
+
+fn main() throws {
+    let store = env::current_main()?.display() ?? "."
+    let asked = cli::args().nth(1) ?? "abc"
+    let bin = built(store.clone(), asked.clone())
+    let other = kept(store.clone(), asked.clone())
+    let third = chosen(store, asked)
+    if cli::args().nth(5) != null {
+        process::run(bin, [])
+        process::run(other, [])
+        process::run(third, [])
+    }
+    println("built")
+}

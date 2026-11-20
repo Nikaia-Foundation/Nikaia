@@ -203,6 +203,7 @@ pub fn prove_outside(program: &Program, words: &winnow_grammar::InternerContext,
     let first = prover_outside(program, words, library, &state, &mut *holes_of);
     state.outside.returning = first.returning;
     state.outside.valued = first.valued;
+    state.outside.leads = first.leads;
     let bound = unsafe { nikaia_std::proven::add::<i64>(program.items.len() as i64, 2) };
     for _ in 0..bound {
         let found = prover_outside(program, words, library, &state, &mut *holes_of);
