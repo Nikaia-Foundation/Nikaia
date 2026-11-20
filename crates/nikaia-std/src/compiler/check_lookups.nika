@@ -130,7 +130,7 @@ impl CheckState {
         }
         let name = written.join("::")
         let at = name.find("::") ?? return false
-        let owner = name[0..<at].clone()
+        let owner = name.before(at.start).clone()
         return self.grammars.contains_key(owner) && !world.own.functions.contains_key(name)
     }
 

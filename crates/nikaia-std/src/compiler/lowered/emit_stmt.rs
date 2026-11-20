@@ -17,7 +17,14 @@ pub(crate) fn emit_stmt_makes_a_map(world: &EmitWorld<'_, '_, '_, '_>, node: &Ex
     }
 }
 
-pub(crate) fn emit_stmt_first(buf: &str, what: &str, from: i64) -> i64 { nikaia_std::index::or(nikaia_std::search::find(&buf, &what, from), || 9223372036854775807i64) }
+pub(crate) fn emit_stmt_first(buf: &str, what: &str, from: i64) -> i64 {
+    let tail = match nikaia_std::bytes::text_of_a_cut(&*buf, nikaia_std::index::get(&buf.as_bytes(), nikaia_std::index::at(from..))) {
+        Ok(value) => value,
+        Err(_error) => { return 9223372036854775807i64; },
+    };
+    let found = match nikaia_std::text::find_first(&tail, &what) { Some(__nikaia_value) => __nikaia_value, None => return 9223372036854775807i64 };
+    from + tail.before(found.start).as_bytes().len() as i64
+}
 
 pub(crate) fn emit_stmt_tuple_pattern(names: &[String], shape: &[i64]) -> String {
     if shape.is_empty() {
@@ -232,8 +239,10 @@ impl EmitState {
                 if (walk.async_rests.len() as i64) > before {
                     let cell = nikaia_std::block::Text::from((*nikaia_std::index::get(&walk.async_rests, nikaia_std::index::at(unsafe { nikaia_std::proven::sub::<i64>(walk.async_rests.len() as i64, 1) }))).to_string());
                     let declared = format!("let {} = nikaia_std::task::Rest::new(); ", cell);
-                    let found = nikaia_std::index::or(nikaia_std::search::find(&out.buf, &declared, 0), || -1);
-                    if found >= st { at = found + declared.len() as i64; }
+                    match nikaia_std::text::find_first(&out.buf, &declared) {
+                        None => { },
+                        Some(found) => { if (out.buf.before(found.start).as_bytes().len() as i64) >= st { at = out.buf.before(found.end).as_bytes().len() as i64; } },
+                    }
                 }
                 out.insert_at(at, "let __nikaia_rested = { ");
                 out.push(" };");

@@ -7,12 +7,12 @@ fn after(s: String) -> String {
 	if i == null {
 		return s
 	}
-	return s[i..]
+	return s.after(i.start)
 }
 
 fn from_l(s: String) -> String {
 	let i = s.find("l") ?? return s
-	return s[i..]
+	return s.after(i.start)
 }
 
 fn main() throws {

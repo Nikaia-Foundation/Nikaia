@@ -144,8 +144,8 @@ pub fn emit_seeds_read<H: EmitSeedsHost>(host: &H, units: &[ParsedView<'_, '_, '
         let mut bad = tables.self_handers(&impls);
         for (key, conflict, _, _) in host.analysed(&tables) {
             if !conflict { continue; }
-            let at = match nikaia_std::search::find(&key, &"::", 0) { Some(__nikaia_value) => __nikaia_value, None => continue };
-            let target = nikaia_std::block::Text::from(nikaia_std::index::get(&key, nikaia_std::index::at(0..at)).to_string());
+            let at = match nikaia_std::text::find_first(&key, &"::") { Some(__nikaia_value) => __nikaia_value, None => continue };
+            let target = nikaia_std::block::Text::from(key.before(at.start).to_string());
             if tables.arity(&target) > 0 && !nikaia_std::list::contains(&bad, &target) { bad.push(target); }
         }
         if bad.is_empty() { break; }

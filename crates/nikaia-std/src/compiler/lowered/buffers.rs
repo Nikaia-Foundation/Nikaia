@@ -670,7 +670,7 @@ pub(crate) fn copies_text(receiver: &Expr, ask: &BufferAsk<'_, '_, '_, '_, '_, '
     }
 }
 
-pub(crate) fn buffers_a_trim(method: &str) -> bool { nikaia_std::list::contains(&vec!["trim", "trim_start", "trim_end", "trim_matches", "trim_start_matches", "trim_end_matches", "clone"], &method) }
+pub(crate) fn buffers_a_trim(method: &str) -> bool { nikaia_std::list::contains(&vec!["trim", "trim_start", "trim_end", "trim_matches", "trim_start_matches", "trim_end_matches", "before", "after", "between", "clone"], &method) }
 
 pub(crate) fn clones_text(receiver: &Expr, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_, '_, '_, '_>, walk: &BufferWalk) -> bool {
     match receiver {

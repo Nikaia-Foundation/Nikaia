@@ -221,8 +221,8 @@ pub(crate) fn property_paths(args: &[Expr], from: i64, words: &winnow_grammar::I
 pub(crate) fn property_mark() -> String { String::from("prop@") }
 
 pub(crate) fn property_base(name: &str) -> Option<String> {
-    let at = match nikaia_std::search::find(&name, &format!(".{}", property_mark()), 0) { Some(__nikaia_value) => __nikaia_value, None => return None };
-    Some(nikaia_std::block::Text::from(nikaia_std::index::get(&name, nikaia_std::index::at(0..at)).to_string()))
+    let at = match nikaia_std::text::find_first(&name, &format!(".{}", property_mark())) { Some(__nikaia_value) => __nikaia_value, None => return None };
+    Some(nikaia_std::block::Text::from(name.before(at.start).to_string()))
 }
 
 pub(crate) fn property_called(name: &str) -> Option<String> {
@@ -252,8 +252,8 @@ pub(crate) fn property_carried(name: &str) -> bool {
 }
 
 pub(crate) fn property_inner(called: &str) -> Option<String> {
-    let open = match nikaia_std::search::find(&called, &"(", 0) { Some(__nikaia_value) => __nikaia_value, None => return None };
-    let tail = nikaia_std::index::get(&called, nikaia_std::index::at(open..));
+    let open = match nikaia_std::text::find_first(&called, &"(") { Some(__nikaia_value) => __nikaia_value, None => return None };
+    let tail = called.after(open.start);
     let inner = match tail.strip_prefix('(') { Some(__nikaia_value) => __nikaia_value, None => return None };
     Some(nikaia_std::block::Text::from(match inner.strip_suffix(')') { Some(__nikaia_value) => __nikaia_value, None => return None }.to_string()))
 }
@@ -262,8 +262,8 @@ pub(crate) fn property_shown(name: &str) -> String {
     let on = match property_base(name) { Some(__nikaia_value) => __nikaia_value, None => return nikaia_std::block::Text::from(name.to_string()) };
     let called = match property_called(name) { Some(__nikaia_value) => __nikaia_value, None => return nikaia_std::block::Text::from(name.to_string()) };
     if called.starts_with('.') { return format!("{}{}", on, called); }
-    let open = match nikaia_std::search::find(&called, &"(", 0) { Some(__nikaia_value) => __nikaia_value, None => return nikaia_std::block::Text::from(name.to_string()) };
-    let callee = nikaia_std::block::Text::from(nikaia_std::index::get(&called, nikaia_std::index::at(0..open)).to_string());
+    let open = match nikaia_std::text::find_first(&called, &"(") { Some(__nikaia_value) => __nikaia_value, None => return nikaia_std::block::Text::from(name.to_string()) };
+    let callee = nikaia_std::block::Text::from(called.before(open.start).to_string());
     let inner = nikaia_std::index::or(property_inner(&called), || "".into());
     if inner.is_empty() { return format!("{}({})", callee, on); }
     format!("{}({}, {})", callee, on, inner)

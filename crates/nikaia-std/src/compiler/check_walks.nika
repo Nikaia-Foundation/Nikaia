@@ -599,12 +599,13 @@ impl CheckState {
         // hull.
         let mut constructs = self.variant_parts.contains_key(name) || self.declares_a_type(world, name) || is_hull(name)
         if !constructs {
-            let at = name.find("::")
-            if at != null {
-                let cut = at ?? 0
-                let ty = name[0..<cut].clone()
-                let variant = name[cut + "::".len()..].clone()
-                constructs = self.is_variant(ty, variant)
+            match name.find("::") {
+                null => {},
+                cut => {
+                    let ty = name.before(cut.start).clone()
+                    let variant = name.after(cut.end).clone()
+                    constructs = self.is_variant(ty, variant)
+                },
             }
         }
         if constructs {

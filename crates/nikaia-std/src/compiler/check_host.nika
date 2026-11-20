@@ -702,11 +702,12 @@ impl CheckState {
         let line = host_stopped_line(said)
         let mut place: String = ""
         let mut why: String = line.clone()
-        let cut = line.find(": the program stopped: ")
-        if cut != null {
-            let at = cut ?? 0
-            place = line[0..<at].clone()
-            why = line[at + ": the program stopped: ".len()..].clone()
+        match line.find(": the program stopped: ") {
+            null => {},
+            at => {
+                place = line.before(at.start).clone()
+                why = line.after(at.end).clone()
+            },
         }
         let found = check_walked_place_of(world, place, here)
         self.a_build_time_run_that_stopped_at(bound, why, found.at, found.function, span)

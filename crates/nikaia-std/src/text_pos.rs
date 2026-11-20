@@ -67,6 +67,37 @@ impl TextPositions for str {
     }
 }
 
+/// **The first match of `needle` at or after `from`** (ADR-374 D2), a
+/// `text::Match` of `text`: its `end` is where a scanner goes on. `from` is a
+/// position of `text`; until the compiler tracks that (D5), Rust's cut checks
+/// it.
+#[inline]
+pub fn find<'s, N: crate::search::TextNeedle + ?Sized>(text: &'s str, needle: &N, from: Pos) -> Option<Match<'s>> {
+    let at = from.0 + needle.first_in(&text[from.0..])?;
+    Some(Match::of(text, at..at + needle.byte_len()))
+}
+
+/// **The first match of `needle`** (ADR-374 D2): `find` from the start.
+#[inline]
+pub fn find_first<'s, N: crate::search::TextNeedle + ?Sized>(text: &'s str, needle: &N) -> Option<Match<'s>> {
+    let at = needle.first_in(text)?;
+    Some(Match::of(text, at..at + needle.byte_len()))
+}
+
+/// **The last match of `needle`** (ADR-374 D2), a `text::Match` of `text`.
+#[inline]
+pub fn rfind<'s, N: crate::search::TextNeedle + ?Sized>(text: &'s str, needle: &N) -> Option<Match<'s>> {
+    let at = needle.last_in(text)?;
+    Some(Match::of(text, at..at + needle.byte_len()))
+}
+
+/// **`text` cut in two at `at`** (ADR-374 D3): `before(at)` and `after(at)`
+/// at once, each a view of `text`.
+#[inline]
+pub fn split_at(text: &str, at: Pos) -> (&str, &str) {
+    text.split_at(at.0)
+}
+
 #[cold]
 #[inline(never)]
 #[track_caller]

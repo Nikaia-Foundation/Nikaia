@@ -61,7 +61,7 @@ fn main() throws {
 	println(f"exit {out.code}")
 	for line in out.stdout.lines() {
 		let at = line.find(" PAR-2") ?? continue
-		println(line[0..<at].trim())
+		println(line.before(at.start).trim())
 	}
 	for line in out.stdout.lines() {
 		if line.contains("not on the path") { println(line.trim()) }

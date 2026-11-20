@@ -638,8 +638,8 @@ fn ledger_code_at_once(mut ledger: Ledger, derives: ref LedgerDerives) {
     }
     for one in at_once {
         let at = one.rfind("::") ?? continue
-        let key = one[0..<at]
-        let param = one[at + 2..]
+        let key = one.before(at.start)
+        let param = one.after(at.end)
         let mut contract = ledger.functions.get(key) ?? continue
         if !contract.at_once.contains(param) {
             contract.at_once.push(param.clone())

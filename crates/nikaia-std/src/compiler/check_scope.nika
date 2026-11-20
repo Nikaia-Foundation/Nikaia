@@ -163,7 +163,7 @@ fn resolve_method(world: ref CheckWorld, key: ref String) -> CheckResolved? sync
     }
     // `collections::HashMap::len` was asked for; `HashMap::len` is the key.
     let at = key.find("::") ?? return null
-    let without_the_module = key[at + 2..<key.len()].clone()
+    let without_the_module = key.after(at.end).clone()
     if !without_the_module.contains("::") {
         return null
     }

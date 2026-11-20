@@ -127,8 +127,8 @@ pub(crate) fn resolve_method<'r>(world: &CheckWorld<'r, 'r, 'r, 'r, 'r, 'r, 'r>,
         let contract = match check_scope_found(&world.library.functions, &best) { Some(__nikaia_value) => __nikaia_value, None => return None };
         return Some(CheckResolved { key: nikaia_std::block::Text::from(best.to_string()), contract });
     }
-    let at = match nikaia_std::search::find(&key, &"::", 0) { Some(__nikaia_value) => __nikaia_value, None => return None };
-    let without_the_module = nikaia_std::block::Text::from(nikaia_std::index::get(&key, nikaia_std::index::at(at + 2..)).to_string());
+    let at = match nikaia_std::text::find_first(&key, &"::") { Some(__nikaia_value) => __nikaia_value, None => return None };
+    let without_the_module = nikaia_std::block::Text::from(key.after(at.end).to_string());
     if !without_the_module.contains("::") { return None; }
     if world.own.functions.contains_key(&without_the_module) {
         let contract = match check_scope_found(&world.own.functions, &without_the_module) { Some(__nikaia_value) => __nikaia_value, None => return None };

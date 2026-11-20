@@ -9,9 +9,13 @@ fn tail(head: String) -> String {
         }
         st = after
     }
-    let f = st.rfind(" for ") ?? 0
-    if f > 0 {
-        st = st[f + " for ".len()..].clone()
+    match st.rfind(" for ") {
+        null => {},
+        f => {
+            if f.start > st.start() {
+                st = st.after(f.end).clone()
+            }
+        },
     }
     let mut name: String = ""
     for ch in st.trim().scalars {

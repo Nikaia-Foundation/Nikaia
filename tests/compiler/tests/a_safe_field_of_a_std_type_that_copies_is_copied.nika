@@ -1,0 +1,16 @@
+// `?.` over a field whose type a ledger says copies gives the value, not a view
+// of it (ADR-294 D9.3): `m?.end` of a `text::Match?` held in a local is a
+// `text::Pos?`, handed to a cut that takes a `text::Pos` (#743).
+use std::regex
+use std::text
+
+fn main() throws {
+    let s = "ab::cd"
+    let found = s.find("::")
+    println(s.after(found?.end ?? s.end()))
+    let missing = s.find("x")
+    println(f"[{s.after(missing?.end ?? s.end())}]")
+    let re = regex::dynamic("c")
+    let m = re.find(s)
+    println(s.before(m?.start ?? s.start()))
+}

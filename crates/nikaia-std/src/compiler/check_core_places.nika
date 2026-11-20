@@ -1083,7 +1083,7 @@ fn check_core_places_block_position(state: ref CheckState, world: ref CheckWorld
 }
 
 /// **A position a text hands out, and where it came from** (ADR-320 D5,
-/// Part I 2.6): `t.find(…)`, `t.rfind(…)`, either end of `t` (`0`, `t.len()`), a name an
+/// Part I 2.6): either end of `t` (`0`, `t.len()`), a name an
 /// immutable `let` bound to one, and one moved by the byte length of a text
 /// literal - `+ ";".len()`, or `+ 1` after a `find(";")`, or `"ab".len()` from
 /// the start - and an `if` whose
@@ -1104,9 +1104,8 @@ fn check_core_places_text_position(state: ref CheckState, world: ref CheckWorld,
             if state.a_text_bytes_view(world, receiver) {
                 return null
             }
-            if (called == "find" || called == "rfind") && args.len() >= 1 {
-                return CheckTextPosition { text: check_core_places_text_key(state, world, receiver), step: check_core_places_literal_bytes(args[0]) }
-            }
+            // `t.find(…)` gives a `text::Match`, which cuts by name (ADR-374
+            // D2, D3), never in brackets.
             // `"ab".len()`: the start of any text, moved by a literal's length.
             if called == "len" && args.len() == 0 && check_core_places_literal_bytes(receiver) >= 0 {
                 return CheckTextPosition { text: "", step: -1 }
@@ -1208,7 +1207,7 @@ fn check_core_places_text_cut(mut state: CheckState, world: ref CheckWorld, text
         if message == "" {
             let position: CheckTextPosition? = check_core_places_text_position(state, world, bound)
             if position == null {
-                message = f"`{shown}` is cut at `{written_expression(world.words, bound)}`, a number the program made up: a text is cut only by a position it handed out (`find`, or one moved by the length of a text literal)."
+                message = f"`{shown}` is cut at `{written_expression(world.words, bound)}`, a number the program made up: a text is cut at its own positions, by name (ADR-374 D3)."
             } else {
                 let p = position ?? CheckTextPosition { text: "", step: -1 }
                 if p.text != "" && p.text != key {
@@ -1231,7 +1230,7 @@ fn check_core_places_text_cut(mut state: CheckState, world: ref CheckWorld, text
             else => {},
         }
     }
-    state.findings.push(check_refusal("NK1214", span, message, ["A number counts bytes, scalars or graphemes only through a view; the text's own positions are bytes it knows to be on a scalar's start."], f"Say the view: `{shown}.bytes[{cut}].text()` for bytes, {readers}."))
+    state.findings.push(check_refusal("NK1214", span, message, ["A number counts bytes, scalars or graphemes only through a view; the text's own positions are bytes it knows to be on a scalar's start."], f"Cut at a match with `{shown}.before(m.start)`, `{shown}.after(m.end)` or `{shown}.between(p, q)`; or say the view: `{shown}.bytes[{cut}].text()` for bytes, {readers}."))
 }
 
 /// **An index into what a lock handed out** (ADR-281 D22, D23, #2208): a

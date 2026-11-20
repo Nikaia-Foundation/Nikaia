@@ -1,0 +1,44 @@
+// A text is searched from a position on and from its end, cut at a match's
+// position, and replaced a counted number of times (ADR-374 D2, D3,
+// `std::search`): a one-byte needle finds what the text needle finds, a
+// search from a match's end finds the next one, a negative count replaces
+// nothing. A position is shown as the bytes before it. Moved from the
+// `nikaia-std` unit tests `search::tests::*` (#2082).
+use std::text
+
+fn at(t: String, found: text::Match?) -> i64 {
+    let m = found ?? return -1
+    return t.before(m.start).bytes.len()
+}
+
+fn main() throws {
+    let t = "Hamburg;12.0"
+    let (city, rest) = t.split_at((t.find(";") ?? return).start)
+    println(f"[{city}] [{rest}]")
+    let abc = "abc"
+    let (none, all) = abc.split_at(abc.start())
+    println(f"[{none}] [{all}]")
+    let (whole, empty) = abc.split_at(abc.end())
+    println(f"[{whole}] [{empty}]")
+
+    let s = "a;b;c"
+    println(f"{at(s, s.rfind(";"))} {at(s, s.rfind(';'))}")
+    println(f"{"1.2.3".replacen(".", "", 1)} {"1.2.3".replacen('.', "", 1)}")
+    let u = "äa;"
+    println(f"{at(u, u.find(";"))} {at(u, u.find(';'))}")
+
+    let c = "a::b::c"
+    println(f"{at(c, c.rfind("::"))} {abc.rfind("x") == null}")
+    println(f"{"aaa".replacen("a", "b", 2)} {"aaa".replacen("a", "b", -1)}")
+
+    let line = "Hamburg;12.0;x"
+    let first = line.find(";") ?? return
+    let second = line.find(";"; from: first.end) ?? return
+    println(f"{at(line, first)} {at(line, second)} {line.find(";"; from: second.end) == null}")
+    println(f"{at(abc, abc.find(""; from: abc.end()))} {abc.find("x"; from: abc.end()) == null} {at(abc, abc.find("a"; from: abc.start()))}")
+
+    // `ä` is two bytes; a search from a position after one finds the next match.
+    let v = "äa;ä;"
+    let w = "äöü"
+    println(f"{at(v, v.find(";"; from: (v.find("a") ?? return).end))} {at(w, w.find("ü"; from: (w.find("ö") ?? return).start))}")
+}

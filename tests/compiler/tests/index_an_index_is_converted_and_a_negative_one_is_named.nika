@@ -23,9 +23,9 @@ fn main() throws {
     counts.insert("host", 7)
     println(f"{counts["host"] ?? -1}")
     let text = "abcdef"
-    let b = text.find("b") ?? 0
-    let d = text.find("d") ?? 0
-    println(f"{text[b..<d]} {text[b..d]}")
+    let b = text.find("b") ?? return
+    let d = text.find("d") ?? return
+    println(f"{text.between(b.start, d.start)} {text.between(b.start, d.end)}")
     let tmp = fs::scratch()
     fs::write(
         "neg.nika",

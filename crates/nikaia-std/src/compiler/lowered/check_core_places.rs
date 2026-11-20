@@ -824,7 +824,6 @@ pub(crate) fn check_core_places_text_position(state: &CheckState, world: &CheckW
             let receiver = nikaia_std::boxed::open(receiver); let method = *method;
             let called = world.words.resolve(method);
             if state.a_text_bytes_view(world, receiver) { return None; }
-            if (called == "find" || called == "rfind") && !args.is_empty() { return Some(CheckTextPosition { text: check_core_places_text_key(state, world, receiver), step: check_core_places_literal_bytes(unsafe { nikaia_std::proven::read(&args, (0) as usize) }) }); }
             if called == "len" && args.is_empty() && check_core_places_literal_bytes(receiver) >= 0 { return Some(CheckTextPosition { text: String::from(""), step: -1 }); }
             if called == "len" && args.is_empty() { return Some(CheckTextPosition { text: check_core_places_text_key(state, world, receiver), step: -1 }); }
             return None;
@@ -908,7 +907,7 @@ pub(crate) fn check_core_places_text_cut(state: &mut CheckState, world: &CheckWo
         let bound = *bound;
         if message == "" {
             let position: Option<CheckTextPosition> = check_core_places_text_position(&state, world, bound);
-            if position.is_none() { message = format!("`{}` is cut at `{}`, a number the program made up: a text is cut only by a position it handed out (`find`, or one moved by the length of a text literal).", shown, written_expression(world.words, bound)); } else {
+            if position.is_none() { message = format!("`{}` is cut at `{}`, a number the program made up: a text is cut at its own positions, by name (ADR-374 D3).", shown, written_expression(world.words, bound)); } else {
                 let p = nikaia_std::index::or(position, || CheckTextPosition { text: String::from(""), step: -1 });
                 if p.text != "" && p.text != key { message = format!("`{}` is cut at `{}`, a position of another text.", shown, written_expression(world.words, bound)); }
             }
@@ -925,7 +924,7 @@ pub(crate) fn check_core_places_text_cut(state: &mut CheckState, world: &CheckWo
             _ => { },
         }
     }
-    state.findings.push(check_refusal("NK1214", span, message, vec![String::from("A number counts bytes, scalars or graphemes only through a view; the text's own positions are bytes it knows to be on a scalar's start.")], Some(format!("Say the view: `{}.bytes[{}].text()` for bytes, {}.", shown, cut, readers))));
+    state.findings.push(check_refusal("NK1214", span, message, vec![String::from("A number counts bytes, scalars or graphemes only through a view; the text's own positions are bytes it knows to be on a scalar's start.")], Some(format!("Cut at a match with `{}.before(m.start)`, `{}.after(m.end)` or `{}.between(p, q)`; or say the view: `{}.bytes[{}].text()` for bytes, {}.", shown, shown, shown, shown, cut, readers))));
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before

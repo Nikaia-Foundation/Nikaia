@@ -319,6 +319,34 @@ pub fn covered<'a, S: Clone + std::fmt::Debug>(
     &all[at.start - origin..at.end - origin]
 }
 
+/// **`here` over text, a `text::Pos` of the input** (ADR-374 D7): the
+/// backend's position, which stands between two tokens and so on a scalar's
+/// start, less the window's `origin`, as in [`covered`].
+#[doc(hidden)]
+#[inline]
+pub fn position<S: Clone + std::fmt::Debug>(
+    input: &winnow_grammar::ParseInput<'_, S>,
+    at: usize,
+) -> crate::text::Pos {
+    crate::text::Pos::at(at - input.state.origin)
+}
+
+/// **`span(p)` over text, a `text::Match` of the input** (ADR-374 D7): the
+/// range `p` covered, its ends positions of the input, its `text()` the
+/// covered text.
+#[doc(hidden)]
+#[inline]
+pub fn matched<'a, S: Clone + std::fmt::Debug>(
+    input: &winnow_grammar::ParseInput<'a, S>,
+    at: std::ops::Range<usize>,
+) -> crate::text::Match<'a> {
+    let mut whole = input.input;
+    whole.reset_to_start();
+    let all: &'a str = *whole;
+    let origin = input.state.origin;
+    crate::text::Match::of(all, at.start - origin..at.end - origin)
+}
+
 /// [`covered`] over a `Bytes`: the covered bytes checked as UTF-8 where they
 /// become text, failing as the backend's `text(p)` does (ADR-grammar-input-v1 D2).
 #[doc(hidden)]

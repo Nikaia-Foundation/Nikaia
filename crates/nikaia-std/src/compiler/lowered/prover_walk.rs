@@ -956,17 +956,17 @@ pub(crate) fn prover_summed(walk: &mut ProverWalk, callee: &str, written: &[Expr
 pub(crate) fn prover_summed_function(program: &Program, words: &winnow_grammar::InternerContext, callee: &str) -> Option<FreeFunction> {
     let free = free_function(program, words, callee);
     if free.is_some() { return std::convert::identity(free); }
-    let cut = match nikaia_std::search::rfind(&callee, &"::") { Some(__nikaia_value) => __nikaia_value, None => return None };
-    let owner = nikaia_std::block::Text::from(nikaia_std::index::get(&callee, nikaia_std::index::at(0..cut)).to_string());
-    let name = nikaia_std::block::Text::from(nikaia_std::index::get(&callee, nikaia_std::index::at(cut + 2..)).to_string());
+    let cut = match nikaia_std::text::rfind(&callee, &"::") { Some(__nikaia_value) => __nikaia_value, None => return None };
+    let owner = nikaia_std::block::Text::from(callee.before(cut.start).to_string());
+    let name = nikaia_std::block::Text::from(callee.after(cut.end).to_string());
     own_method(program, words, &owner, &name)
 }
 
 pub(crate) fn prover_own_method_callee(receiver: &Expr, method: winnow_grammar::Symbol, at: &ProverWhere, words: &winnow_grammar::InternerContext) -> Option<String> {
     if nikaia_std::index::or(prover_variable_named(Some(receiver), words), || "".into()) != "self" { return None; }
     let function = match carrying_function((at.function).as_deref()) { Some(__nikaia_value) => __nikaia_value, None => return None };
-    let cut = match nikaia_std::search::rfind(&function, &"::") { Some(__nikaia_value) => __nikaia_value, None => return None };
-    let owner = nikaia_std::block::Text::from(nikaia_std::index::get(&function, nikaia_std::index::at(0..cut)).to_string());
+    let cut = match nikaia_std::text::rfind(&function, &"::") { Some(__nikaia_value) => __nikaia_value, None => return None };
+    let owner = nikaia_std::block::Text::from(function.before(cut.start).to_string());
     Some(format!("{}::{}", owner, words.resolve(method)))
 }
 
@@ -2765,8 +2765,8 @@ pub(crate) fn prover_a_method_call(walk: &mut ProverWalk, receiver: &Expr, metho
         return;
     }
     let function = match carrying_function((at.function).as_deref()) { Some(__nikaia_value) => __nikaia_value, None => return };
-    let cut = match nikaia_std::search::rfind(&function, &"::") { Some(__nikaia_value) => __nikaia_value, None => return };
-    let owner = nikaia_std::block::Text::from(nikaia_std::index::get(&function, nikaia_std::index::at(0..cut)).to_string());
+    let cut = match nikaia_std::text::rfind(&function, &"::") { Some(__nikaia_value) => __nikaia_value, None => return };
+    let owner = nikaia_std::block::Text::from(function.before(cut.start).to_string());
     let name = nikaia_std::block::Text::from(words.resolve(method).to_string());
     let callee = format!("{}::{}", owner, name);
     walk.state.edges.insert((nikaia_std::block::Text::from(function.to_string()), nikaia_std::block::Text::from(callee.to_string())));
@@ -2790,8 +2790,8 @@ pub(crate) fn prover_a_call_on(walk: &mut ProverWalk, receiver: &Expr, method: w
         Some(__nikaia_it) => Some(__nikaia_it.clone()),
         None => None,
     } { Some(__nikaia_value) => __nikaia_value, None => return };
-    let cut = match nikaia_std::search::rfind(&callee, &"::") { Some(__nikaia_value) => __nikaia_value, None => return };
-    let owner = nikaia_std::block::Text::from(nikaia_std::index::get(&callee, nikaia_std::index::at(0..cut)).to_string());
+    let cut = match nikaia_std::text::rfind(&callee, &"::") { Some(__nikaia_value) => __nikaia_value, None => return };
+    let owner = nikaia_std::block::Text::from(callee.before(cut.start).to_string());
     let name = nikaia_std::block::Text::from(words.resolve(method).to_string());
     let mine = own_method(program, words, &owner, &name);
     if mine.is_none() {
@@ -2871,7 +2871,7 @@ pub(crate) fn prover_std_requires(walk: &mut ProverWalk, key: &str, library: &Le
     let contract = match *nikaia_std::index::get(&library.functions, key) { Some(__nikaia_value) => __nikaia_value, None => return None };
     if contract.requires.is_empty() { return None; }
     let mut shape = foreign_shape(contract);
-    let owner = nikaia_std::block::Text::from(nikaia_std::index::get(&key, nikaia_std::index::at(0..nikaia_std::index::or(nikaia_std::search::rfind(&key, &"::"), || 0))).to_string());
+    let owner = nikaia_std::block::Text::from(key.before(nikaia_std::index::or(nikaia_std::text::rfind(&key, &"::").as_ref().map(|__nikaia_it| __nikaia_it.start), || key.start().into())).to_string());
     let mut requires: Vec<i64> = vec![];
     requires.reserve(contract.requires.iter().size_hint().0); for text in contract.requires.iter() {
         let property = prover_std_property_named(text, &owner, &walk.state.std_properties);
@@ -2883,8 +2883,8 @@ pub(crate) fn prover_std_requires(walk: &mut ProverWalk, key: &str, library: &Le
 
 pub(crate) fn prover_std_property_named(text: &str, owner: &str, properties: &collections::BTreeSet<String>) -> Option<String> {
     let called = match text.strip_prefix("self.") { Some(__nikaia_value) => __nikaia_value, None => return None };
-    let open = match nikaia_std::search::find(&called, &"(", 0) { Some(__nikaia_value) => __nikaia_value, None => return None };
-    if !called.ends_with(')') || !properties.contains(&format!("{}::{}", owner, nikaia_std::index::get(&called, nikaia_std::index::at(0..open)))) { return None; }
+    let open = match nikaia_std::text::find_first(&called, &"(") { Some(__nikaia_value) => __nikaia_value, None => return None };
+    if !called.ends_with(')') || !properties.contains(&format!("{}::{}", owner, called.before(open.start))) { return None; }
     Some(format!("self.{}.{}", property_mark(), called))
 }
 
@@ -3144,7 +3144,7 @@ pub(crate) fn prover_std_ensured(library: &Ledger, properties: &collections::BTr
         if contract.ensures.is_empty() { continue; }
         let signature = match contract.signature.as_ref() { Some(__nikaia_value) => __nikaia_value, None => continue };
         if !signature.takes_a_receiver() { continue; }
-        let owner = nikaia_std::block::Text::from(nikaia_std::index::get(&key, nikaia_std::index::at(0..nikaia_std::index::or(nikaia_std::search::rfind(&key, &"::"), || 0))).to_string());
+        let owner = nikaia_std::block::Text::from(key.before(nikaia_std::index::or(nikaia_std::text::rfind(&key, &"::").as_ref().map(|__nikaia_it| __nikaia_it.start), || key.start().into())).to_string());
         #[allow(unused_mut)] let mut rests: Vec<String> = vec![];
         rests.reserve(contract.ensures.iter().size_hint().0); for text in contract.ensures.iter() {
             let named = match prover_std_property_named(text, &owner, properties) { Some(__nikaia_value) => __nikaia_value, None => continue };

@@ -12,8 +12,8 @@ fn pushed() -> ref Array[i64] {
 fn cut() -> String {
     let mut s = String()
     s.push_str("hello world")
-    let i = s.find(" ") ?? 0
-    return s[0..<i]
+    let i = s.find(" ")?.start ?? s.start()
+    return s.before(i)
 }
 
 fn grown(n: i64) -> ref Array[i64] {

@@ -5373,30 +5373,29 @@ sync = true
 touches = []
 signature = "(self: ref String, suffix: ?) -> ref(self) String?"
 
-# **The byte position of the first match at or after `from`**, or nothing
-# ([ADR-320](../../docs/specification/adr/adr-320.md) D6). `from` may be any
-# byte position: a match of a valid needle always starts on a scalar, so a
-# search begun inside one finds the next match. A one-byte needle is a byte
-# search of the kind `memchr` does. The position cuts the text it came from.
-# **`needle` is a text or one scalar** (#877), as `contains`'s and `split`'s
-# pattern is; so is `rfind`'s, `replace`'s and `replacen`'s `from`.
+# **The first match at or after `from`**, a `text::Match` of the text, or
+# nothing ([ADR-374](../../docs/specification/adr/adr-374.md) D2): its `start`
+# and `end` are positions of the text, `end` where a scanner goes on. `from` is
+# a position of the text, its start where none is written. A one-byte needle
+# is a byte search of the kind `memchr` does. **`needle` is a text or one
+# scalar** (#877), as `contains`'s and `split`'s pattern is; so is `rfind`'s,
+# `replace`'s and `replacen`'s `from`.
 [fn."str::find"]
 pub = true
-panics = false
+panics = true
 sync = true
 touches = []
-ensures = ["result == null || (0 <= result && result + needle.len() <= self.len())"]
-signature = "(self: ref String, needle: ?; from: i64 = 0) -> i64?"
+returns = "ref(self)"
+signature = "(self: ref String, needle: ?; from: text::Pos = self.start()) -> text::Match?"
 
-# **The byte position of the last match**, or nothing. The position cuts the
-# text it came from, as `find`'s does.
+# **The last match**, a `text::Match` of the text, or nothing (ADR-374 D2).
 [fn."str::rfind"]
 pub = true
 panics = false
 sync = true
 touches = []
-ensures = ["result == null || (0 <= result && result + needle.len() <= self.len())"]
-signature = "(self: ref String, needle: ?) -> i64?"
+returns = "ref(self)"
+signature = "(self: ref String, needle: ?) -> text::Match?"
 
 # The lines of the text, each a view into it, without its line ending.
 #
@@ -5453,6 +5452,7 @@ pub = true
 panics = true
 sync = true
 touches = []
+ensures = ["result.len() <= self.len()"]
 signature = "(self: ref String, p: text::Pos) -> ref(self) String"
 
 # **The text from `p` on**, a view of it (ADR-374 D3).
@@ -5461,6 +5461,7 @@ pub = true
 panics = true
 sync = true
 touches = []
+ensures = ["result.len() <= self.len()"]
 signature = "(self: ref String, p: text::Pos) -> ref(self) String"
 
 # **The text from `p` up to `q`**, a view of it (ADR-374 D3); `q` before `p`
@@ -5470,16 +5471,17 @@ pub = true
 panics = true
 sync = true
 touches = []
+ensures = ["result.len() <= self.len()"]
 signature = "(self: ref String, p: text::Pos, q: text::Pos) -> ref(self) String"
 
-# The text cut in two at a byte position: what stands before it and what from
-# it on, both views into it. A position off a scalar's start aborts.
+# **The text cut in two at `at`** (ADR-374 D3): `before(at)` and `after(at)`
+# at once, both views of it.
 [fn."str::split_at"]
 pub = true
 panics = true
 sync = true
 touches = []
-signature = "(self: ref String, at: i64) -> (ref(self) String, ref(self) String)"
+signature = "(self: ref String, at: text::Pos) -> (ref(self) String, ref(self) String)"
 
 # The text cut in two at the first `sep`: what stands before it and what after
 # it, both views into it, the separator in neither; nothing where `sep` does

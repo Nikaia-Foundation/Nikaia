@@ -5,7 +5,7 @@ fn size(x: String?) -> i64 {
 
 fn main() throws {
     let owned: String = "abc"
-    let s = owned[..<(owned.find("c") ?? return)]
+    let s = owned.before((owned.find("c") ?? return).start)
     let none: String? = null
     println(f"{size(s) + size(owned) + size(none)}")
 }

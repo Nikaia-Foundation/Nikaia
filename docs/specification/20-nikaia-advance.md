@@ -755,7 +755,7 @@ and `rule WS = "" { }` skips nothing.
 | `text(p)` | `p`, handing back the text it covered instead of its value; a name inside `p` is bound as it is without the `text(..)` around it, bound or not, in the same one pass (`s:text(ps:P*)`, `text(ps:P*)`), and a guard after it reads it too | text |
 | `bytes(p)` | `p`, handing back the bytes it covered, unchecked | a view of the input's bytes |
 | `span(p)` | `p`, handing back the range it covered | over text a `text::Match` of the input; over `Bytes` a `Span` (two `u32`) |
-| `here` | the position, consuming nothing | over text a `text::Pos` of the input; over `Bytes` a `u32` |
+| `here` | the position, consuming nothing | over text a `text::Pos` of the input; over `Bytes` a `u32`; a grammar that writes `here` or `span(p)` and is entered with both kinds is refused (`NK1187`, [ADR-374](adr/adr-374.md) D7) |
 | `count(p)` | `p` as often as it matches | how often, an `i64`, never below 0 (ADR-grammar-syntax-v1 D15) |
 | `if(cond)`, `if(cond, "what")` | nothing, where the `bool` `cond` holds; otherwise the alternative fails there without consuming, and the next is tried; the message names `"what"`, or the condition as written (D4) | nothing |
 | `same_line` | nothing; fails where the whitespace skipped just before this position held a line break | nothing |

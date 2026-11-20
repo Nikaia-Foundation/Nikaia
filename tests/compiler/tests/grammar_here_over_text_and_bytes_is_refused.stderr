@@ -1,0 +1,9 @@
+error[NK1187]: `G::top` is handed text and a `Bytes`, and its grammar uses `here`, whose type depends on which.
+   --> tests/grammar_here_over_text_and_bytes_is_refused.nika:10:5
+    |
+ 10 |     let b = G::top(Bytes([97, 98])) catch { 0 }
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: Over text `here` is a `text::Pos` or a `text::Match` of the input, over a `Bytes` a `u32` or a `text::Span` (ADR-374 D7); an action of the grammar is checked for one of them.
+    = help: Hand the entries of `G` one kind of input.
+1 type error

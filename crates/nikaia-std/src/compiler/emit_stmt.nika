@@ -27,7 +27,9 @@ fn emit_stmt_makes_a_map(world: ref EmitWorld, node: ref Expr) -> bool {
 
 /// Where `what` first occurs in `buf` from `from`, or a number past any end.
 fn emit_stmt_first(buf: ref String, what: ref String, from: i64) -> i64 {
-    return buf.find(what; from: from) ?? 9223372036854775807
+    let tail = buf.bytes[from..].text() catch { return 9223372036854775807 }
+    let found = tail.find(what) ?? return 9223372036854775807
+    return from + tail.before(found.start).bytes.len()
 }
 
 /// **Rust's own tuple pattern for a head** (ADR-291, ADR-356): one name as it
@@ -340,9 +342,13 @@ impl EmitState {
                 if walk.async_rests.len() > before {
                     let cell = walk.async_rests[walk.async_rests.len() - 1].clone()
                     let declared = f"let {cell} = nikaia_std::task::Rest::new(); "
-                    let found = out.buf.find(declared) ?? -1
-                    if found >= st {
-                        at = found + declared.len()
+                    match out.buf.find(declared) {
+                        null => {},
+                        found => {
+                            if out.buf.before(found.start).bytes.len() >= st {
+                                at = out.buf.before(found.end).bytes.len()
+                            }
+                        },
                     }
                 }
                 out.insert_at(at, "let __nikaia_rested = { ")
