@@ -8,6 +8,12 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1497] — 2026-11-20
+
+**Builders' changes (#1133)**
+- `mut` on one name of a tuple pattern: `let (a, mut b) = …` and `for (k, mut v) in m` mark that name alone, and a map's values are written in place (`iter_mut()`, `values_mut()` under `_`); NK1307 remains for a lambda's tuple parameter.
+- The prover and its integer solver allocate a third less: Fourier-Motzkin elimination works on rank forms and borrows its atoms, key texts start with room, and `s.push_str(f"…")` formats into `s`; allocator Ir of a check 1,009M -> 678M, total Ir 2,764M -> 2,190M.
+
 ## [0.0.1496] — 2026-11-20
 
 **mem::allocations is shown on a joined String with room ahead, in its test and in Part I 6.9 (#2112)**
