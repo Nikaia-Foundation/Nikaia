@@ -818,7 +818,7 @@ pub(crate) fn check_core_free_call<H: CheckHost>(state: &mut CheckState, world: 
     let member = check_core_call_attribute_member(&state, world, func);
     if member != "" {
         let read: String = match check_attributes_an_attribute_read(state, world, args, span) { Some(__nikaia_value) => __nikaia_value, None => return Ty::Unknown };
-        if member == "attribute" { return Ty::Nullable(std::boxed::Box::new(check_core_call_named(&read))); }
+        if member == "attribute" { return Ty::Nullable(nikaia_std::block::Boxed::new(check_core_call_named(&read))); }
         return Ty::Named { name: String::from("Vec"), args: vec![check_core_call_named(&read)], view: false };
     }
     if state.inside_a_door {

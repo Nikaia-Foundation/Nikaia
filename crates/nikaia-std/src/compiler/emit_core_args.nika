@@ -653,6 +653,8 @@ impl EmitState {
         // inside one of these arguments does not see it.
         let boxed_mask: Vec[bool] = (walk.boxed_args?.clone() ?? [])
         walk.boxed_args = null
+        let boxed_built: String = if walk.boxed_placed { "placed" } else { "new" }
+        walk.boxed_placed = false
         let method_callee: String? = walk.method_callee?.clone()
         walk.method_callee = null
         let part_counts: Vec[Count] = (walk.variant_counts?.clone() ?? [])
@@ -675,13 +677,13 @@ impl EmitState {
             }
             if hoisted.contains(i) {
                 let mut one = EmitOut::empty()
-                self.emit_core_argument(world, walk, one, host, callee, method_callee, arg, i, boxed_mask, part_counts, takes_a_handle, depth, flow, scope)
+                self.emit_core_argument(world, walk, one, host, callee, method_callee, arg, i, boxed_mask, boxed_built, part_counts, takes_a_handle, depth, flow, scope)
                 lets.push(f"let __nikaia_arg{i} = ")
                 lets.append(one)
                 lets.push("; ")
                 out.push(f"__nikaia_arg{i}")
             } else {
-                self.emit_core_argument(world, walk, out, host, callee, method_callee, arg, i, boxed_mask, part_counts, takes_a_handle, depth, flow, scope)
+                self.emit_core_argument(world, walk, out, host, callee, method_callee, arg, i, boxed_mask, boxed_built, part_counts, takes_a_handle, depth, flow, scope)
             }
             if os_text {
                 out.push(")")
@@ -694,7 +696,7 @@ impl EmitState {
     }
 
     /// One argument.
-    fn emit_core_argument[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, callee: ref String, method_callee: ref String?, arg: ref Expr, i: i64, boxed_mask: ref Vec[bool], part_counts: ref Vec[Count], takes_a_handle: ref Vec[bool], depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
+    fn emit_core_argument[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, callee: ref String, method_callee: ref String?, arg: ref Expr, i: i64, boxed_mask: ref Vec[bool], boxed_built: ref String, part_counts: ref Vec[Count], takes_a_handle: ref Vec[bool], depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
         // **A value a log sink writes escaped** (ADR-398 D3): written as its
         // text, escaped.
         if self.escaped_wholes.contains(node_key(arg)) {
@@ -763,7 +765,7 @@ impl EmitState {
         // around everything else this argument is written with.
         let boxed_here = i < boxed_mask.len() && boxed_mask[i]
         if boxed_here {
-            out.push("std::boxed::Box::new(")
+            out.push(f"nikaia_std::block::Boxed::{boxed_built}(")
         }
         let node = node_key(arg)
         // **A lookup's key of no known type** (0.0.235): the reference the map

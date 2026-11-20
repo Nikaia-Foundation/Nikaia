@@ -44,7 +44,7 @@ pub(crate) fn check_core_places_bound(bound: &collections::BTreeMap<String, Ty>,
 
 pub(crate) fn check_core_places_unrolled_default(unrolling: Option<&CheckUnrolling>) -> Ty {
     let u: &CheckUnrolling = match unrolling { Some(__nikaia_value) => __nikaia_value, None => return Ty::Unknown };
-    Ty::Nullable(std::boxed::Box::new(u.field.ty.clone()))
+    Ty::Nullable(nikaia_std::block::Boxed::new(u.field.ty.clone()))
 }
 
 pub(crate) fn check_core_places_offered(name: &str) -> bool { name == "i32" || name == "i64" || name == "u8" || name == "u32" || name == "u64" || name == "f32" || name == "f64" || name == "bool" || name == "char" || name == "scalar" || name == "String" || name == "str" }
@@ -107,12 +107,12 @@ pub(crate) fn check_core_places_a_named_field(state: &mut CheckState, world: &Ch
     }
     if (ty == "String" || ty == "str") && field == "scalars" {
         state.facts.text_scalars.insert(id_of(expr) as i64);
-        return Ty::Seq { item: std::boxed::Box::new(check_core_places_named("scalar")), is_sync: true, pauses: false, can_throw: false, parallel: false, shape: Shape { ends: true, sized: false, replays: false, timed: false } };
+        return Ty::Seq { item: nikaia_std::block::Boxed::new(check_core_places_named("scalar")), is_sync: true, pauses: false, can_throw: false, parallel: false, shape: Shape { ends: true, sized: false, replays: false, timed: false } };
     }
     if (ty == "String" || ty == "str") && field == "graphemes" {
         state.facts.text_graphemes.insert(id_of(expr) as i64);
         let grapheme = check_core_places_str_view();
-        return Ty::Seq { item: std::boxed::Box::new(grapheme), is_sync: true, pauses: false, can_throw: false, parallel: false, shape: Shape { ends: false, sized: false, replays: false, timed: false } };
+        return Ty::Seq { item: nikaia_std::block::Boxed::new(grapheme), is_sync: true, pauses: false, can_throw: false, parallel: false, shape: Shape { ends: false, sized: false, replays: false, timed: false } };
     }
     let boxed = state.facts.boxed_members.get(ty);
     if boxed.is_some() {
@@ -944,7 +944,7 @@ pub(crate) fn check_core_index<H: CheckHost>(state: &mut CheckState, world: &Che
     if !stamped { return read; }
     match read {
         Ty::Unknown => Ty::Unknown,
-        Ty::Nullable(ref held) => { let held = nikaia_std::boxed::open(held); Ty::Nullable(std::boxed::Box::new(a_seen_ty(held.unseen()))) },
+        Ty::Nullable(ref held) => { let held = nikaia_std::boxed::open(held); Ty::Nullable(nikaia_std::block::Boxed::new(a_seen_ty(held.unseen()))) },
         _ => a_seen_ty(read.unseen()),
     }
 }
@@ -965,7 +965,7 @@ pub(crate) fn check_core_index_of(state: &mut CheckState, world: &CheckWorld<'_,
         Ty::Pointed { ref item, slice, mutable } => {
             let item = nikaia_std::boxed::open(item);
             if slice {
-                if written_range { return Ty::Pointed { item: std::boxed::Box::new(item.clone()), slice: true, mutable }; }
+                if written_range { return Ty::Pointed { item: nikaia_std::block::Boxed::new(item.clone()), slice: true, mutable }; }
                 state.number_asked(world, index, &check_core_places_named("i64"), span, false);
                 state.facts.list_indices.insert(id_of(base) as i64);
                 return item.clone();
@@ -1035,12 +1035,12 @@ pub(crate) fn check_core_index_of(state: &mut CheckState, world: &CheckWorld<'_,
                 Ty::Nullable(ref held) => {
                     let held = nikaia_std::boxed::open(held);
                     state.facts.flat_reads.insert(id_of(expr) as i64);
-                    return Ty::Nullable(std::boxed::Box::new(held.clone()));
+                    return Ty::Nullable(nikaia_std::block::Boxed::new(held.clone()));
                 },
                 _ => { },
             }
         }
-        return Ty::Nullable(std::boxed::Box::new(value));
+        return Ty::Nullable(nikaia_std::block::Boxed::new(value));
     }
     Ty::Unknown
 }
@@ -1094,6 +1094,6 @@ pub(crate) fn check_core_range<H: CheckHost>(state: &mut CheckState, world: &Che
     let to = check_core_expr(state, world, host, end, span);
     let mut item: Ty = from;
     if item.is_unknown() { item = to; }
-    Ty::Seq { item: std::boxed::Box::new(item), is_sync: true, pauses: false, can_throw: false, parallel: false, shape: Shape { ends: true, sized: true, replays: true, timed: false } }
+    Ty::Seq { item: nikaia_std::block::Boxed::new(item), is_sync: true, pauses: false, can_throw: false, parallel: false, shape: Shape { ends: true, sized: true, replays: true, timed: false } }
 }
 

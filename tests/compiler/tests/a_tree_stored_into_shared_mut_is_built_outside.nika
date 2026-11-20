@@ -1,0 +1,18 @@
+// **A tree stored into a `SharedMut` is built outside** (ADR-327 D9, D16,
+// #2406): the shared value may cross to another task, so each box of `t`
+// is `Boxed::new`.
+enum Tree { Leaf, Node(Tree, Tree) }
+
+fn count(t: Tree) -> i64 {
+    return match t {
+        Tree::Leaf => 1,
+        Tree::Node(l, r) => 1 + count(l) + count(r),
+    }
+}
+
+fn main() throws {
+    let t = Tree::Node(Tree::Node(Tree::Leaf, Tree::Leaf), Tree::Leaf)
+    let shared = SharedMut(t)
+    let n: i64 = shared.access fn(open) { count(open) }
+    println(f"{n} nodes shared")
+}

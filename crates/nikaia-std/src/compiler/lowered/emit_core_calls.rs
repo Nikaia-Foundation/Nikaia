@@ -623,6 +623,7 @@ impl EmitState {
                 if self.is_variant(world, &owner, &variant) { for arg in args.iter() { if emit_call_builds_a_hull(world, arg) { holds_a_hull = true; } } }
                 if !any && !holds_a_hull { return Ok(false); }
                 walk.boxed_args = Some(mask);
+                walk.boxed_placed = self.facts.placed_in_block.contains(&node_key(func));
                 let mut counts: Vec<Count> = vec![];
                 for at in 0..args.len() as i64 { counts.push(self.count_at(host.crossings_are_possible(), "<field>", &variant_slot(&owner, &variant, at))); }
                 walk.variant_counts = Some(counts);
@@ -635,6 +636,7 @@ impl EmitState {
                 out.push("(");
                 self.emit_core_args(world, walk, out, host, &variant, args, &vec![], depth, flow, scope)?;
                 walk.boxed_args = None;
+                walk.boxed_placed = false;
                 walk.variant_counts = None;
                 out.push(")");
                 return Ok(true);
@@ -1504,8 +1506,8 @@ pub(crate) fn emit_tuple_part_copy(i: i64, word: &str) -> String {
 }
 
 pub(crate) fn emit_tuple_part_copies(parts: &[String]) -> String {
-    let copies: Vec<String> = parts.iter().enumerate().map(|(at, item)| (at as i64, item)).map(|__nikaia_tuple111788| {
-        let (i, word) = __nikaia_tuple111788;
+    let copies: Vec<String> = parts.iter().enumerate().map(|(at, item)| (at as i64, item)).map(|__nikaia_tuple111918| {
+        let (i, word) = __nikaia_tuple111918;
         emit_tuple_part_copy(i, word)
     }).collect::<Vec<_>>();
     if copies.len() == 1 { return format!("({},)", *unsafe { nikaia_std::proven::read(&copies, (0) as usize) }); }

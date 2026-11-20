@@ -362,7 +362,9 @@ pub struct CheckFacts {
     /// D9, step 5 of #490), by the literal's node, and the texts by the
     /// `String` of their `String()`: the emitter writes `Place::Block`
     /// there, `Place::Outside` everywhere else
-    /// (`check_core_place_in_block`).
+    /// (`check_core_place_in_block`). And the box sites of a recursive type
+    /// (D16, #2406), by a variant call's callee or a struct literal: the
+    /// emitter writes `Boxed::placed` there (`check_core_place_boxes`).
     pub placed_in_block: collections::BTreeSet[i64],
     /// **The lists of views a `let` binds what they may view after** (#490),
     /// by the `let`'s start, with whether the list's `let` said `mut`: the
@@ -618,6 +620,13 @@ pub struct CheckFacts {
     pub lookup_keys: collections::BTreeSet[i64],
     pub boxed_members: collections::BTreeMap[String, collections::BTreeSet[String]],
     pub boxed_reads: collections::BTreeSet[i64],
+    /// **The boxed field reads `??` takes out of their box** (ADR-327 D16,
+    /// #2406), off a value of its own: `nikaia_std::boxed::open(x.f)`.
+    pub boxed_moves: collections::BTreeSet[i64],
+    /// **Each box site of a recursive type, with its place and the reason**
+    /// (ADR-327 D16, #2406), by the site's key (`check_core_place_boxes`),
+    /// for `--sharing`.
+    pub box_sites: collections::BTreeMap[i64, String],
     pub copied_bindings: collections::BTreeSet[(i64, String)],
     /// **A number copied out that the arm changes** (#730): changed in
     /// place, or handed to a `mut` parameter. The copy is the arm's own (Part
@@ -1032,6 +1041,8 @@ impl CheckFacts {
             lookup_keys: collections::BTreeSet(),
             boxed_members: collections::BTreeMap(),
             boxed_reads: collections::BTreeSet(),
+            boxed_moves: collections::BTreeSet(),
+            box_sites: collections::BTreeMap(),
             copied_bindings: collections::BTreeSet(),
             changed_copies: collections::BTreeSet(),
             changed_bindings: collections::BTreeSet(),

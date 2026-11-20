@@ -1,0 +1,6 @@
+no `Shared` value here, so there is nothing to choose.
+
+Boxes of recursive types (ADR-327 D16):
+    main: `Tree::Node` outside: `t` is taken into a task, which can outlive this one
+    main: `Tree::Node` outside: `t` is taken into a task, which can outlive this one
+    main: `Tree::Node` outside: `t` is taken into a task, which can outlive this one

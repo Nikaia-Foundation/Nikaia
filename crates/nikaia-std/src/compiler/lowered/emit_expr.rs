@@ -350,7 +350,7 @@ impl EmitState {
                     match body {
                         Expr::Closure { body: block, .. } => {
                             let guarded = Expr::Block(block.clone(), numbered_id(id_of(expr)));
-                            let caught = Expr::TryCatch { expr: std::boxed::Box::new(guarded), handler: handler.clone(), id: numbered_id(id.get()) };
+                            let caught = Expr::TryCatch { expr: nikaia_std::block::Boxed::placed(guarded), handler: handler.clone(), id: numbered_id(id.get()) };
                             let kind = self.emit_child_kind(id_of(expr) as i64, &flow)?;
                             self.emit_async_task(world, walk, out, host, &caught, id_of(expr) as i64, &kind, depth, &flow, scope)?;
                         },

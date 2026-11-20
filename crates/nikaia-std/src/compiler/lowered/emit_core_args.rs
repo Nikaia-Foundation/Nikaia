@@ -451,6 +451,8 @@ impl EmitState {
             None => None,
         }, || vec![].into());
         walk.boxed_args = None;
+        let boxed_built: String = if walk.boxed_placed { String::from("placed") } else { String::from("new") };
+        walk.boxed_placed = false;
         let method_callee: Option<String> = match walk.method_callee.as_ref() {
             Some(__nikaia_it) => Some(__nikaia_it.clone()),
             None => None,
@@ -474,12 +476,12 @@ impl EmitState {
             if os_text { out.push("std::ffi::OsStr::new("); }
             if hoisted.contains(nikaia_std::index::AsKey::as_key(&i)) {
                 let mut one = EmitOut::empty();
-                self.emit_core_argument(world, walk, &mut one, host, callee, (method_callee).as_deref(), arg, i, &boxed_mask, &part_counts, takes_a_handle, depth, flow, scope)?;
+                self.emit_core_argument(world, walk, &mut one, host, callee, (method_callee).as_deref(), arg, i, &boxed_mask, &boxed_built, &part_counts, takes_a_handle, depth, flow, scope)?;
                 lets.push(&format!("let __nikaia_arg{} = ", i));
                 lets.append(&one);
                 lets.push("; ");
                 out.push(&format!("__nikaia_arg{}", i));
-            } else { self.emit_core_argument(world, walk, out, host, callee, (method_callee).as_deref(), arg, i, &boxed_mask, &part_counts, takes_a_handle, depth, flow, scope)?; }
+            } else { self.emit_core_argument(world, walk, out, host, callee, (method_callee).as_deref(), arg, i, &boxed_mask, &boxed_built, &part_counts, takes_a_handle, depth, flow, scope)?; }
             if os_text { out.push(")"); }
             i = unsafe { nikaia_std::proven::add::<i64>(i, 1) };
         }
@@ -489,7 +491,7 @@ impl EmitState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    pub(crate) fn emit_core_argument<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, callee: &str, method_callee: Option<&str>, arg: &Expr, i: i64, boxed_mask: &[bool], part_counts: &[Count], takes_a_handle: &[bool], depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
+    pub(crate) fn emit_core_argument<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, callee: &str, method_callee: Option<&str>, arg: &Expr, i: i64, boxed_mask: &[bool], boxed_built: &str, part_counts: &[Count], takes_a_handle: &[bool], depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
         if self.escaped_wholes.contains(&node_key(arg)) {
             out.push("nikaia_std::text::escape_control(&format!(\"{}\", ");
             self.emit_expr(world, walk, out, host, arg, depth, flow, scope)?;
@@ -537,7 +539,7 @@ impl EmitState {
             }
         }
         let boxed_here = i < boxed_mask.len() as i64 && *unsafe { nikaia_std::proven::read(&boxed_mask, (i) as usize) };
-        if boxed_here { out.push("std::boxed::Box::new("); }
+        if boxed_here { out.push(&format!("nikaia_std::block::Boxed::{}(", boxed_built)); }
         let node = node_key(arg);
         if i == 0 && self.facts.lookup_keys.contains(&node) {
             out.push("nikaia_std::index::AsKey::as_key(&");

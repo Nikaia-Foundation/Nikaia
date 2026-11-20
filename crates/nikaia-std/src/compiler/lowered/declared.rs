@@ -12,40 +12,40 @@ pub fn written_ty(names: &winnow_grammar::InternerContext, aliases: &collections
     if ty.count.is_some() { return Ty::Count(count); }
     if ty.is_view && !ty.is_slice && names.resolve(ty.name) == ARRAY && ty.generics.len() == 1 {
         let item = written_ty(names, aliases, unsafe { nikaia_std::proven::read(&ty.generics, (0) as usize) });
-        if ty.is_nullable { return Ty::Pointed { item: std::boxed::Box::new(Ty::Nullable(std::boxed::Box::new(item))), slice: true, mutable: ty.is_mut }; }
-        return Ty::Pointed { item: std::boxed::Box::new(item), slice: true, mutable: ty.is_mut };
+        if ty.is_nullable { return Ty::Pointed { item: nikaia_std::block::Boxed::new(Ty::Nullable(nikaia_std::block::Boxed::new(item))), slice: true, mutable: ty.is_mut }; }
+        return Ty::Pointed { item: nikaia_std::block::Boxed::new(item), slice: true, mutable: ty.is_mut };
     }
     if ty.is_mut && !ty.is_view && !ty.is_slice {
         let mut changed = ty.clone();
         changed.is_mut = false;
-        return Ty::Pointed { item: std::boxed::Box::new(written_ty(names, aliases, &changed)), slice: false, mutable: true };
+        return Ty::Pointed { item: nikaia_std::block::Boxed::new(written_ty(names, aliases, &changed)), slice: false, mutable: true };
     }
     if ty.is_slice || ty.is_mut {
         let item = lent_item(names, aliases, ty);
-        if ty.is_nullable { return Ty::Pointed { item: std::boxed::Box::new(Ty::Nullable(std::boxed::Box::new(item))), slice: ty.is_slice, mutable: ty.is_mut }; }
-        return Ty::Pointed { item: std::boxed::Box::new(item), slice: ty.is_slice, mutable: ty.is_mut };
+        if ty.is_nullable { return Ty::Pointed { item: nikaia_std::block::Boxed::new(Ty::Nullable(nikaia_std::block::Boxed::new(item))), slice: ty.is_slice, mutable: ty.is_mut }; }
+        return Ty::Pointed { item: nikaia_std::block::Boxed::new(item), slice: ty.is_slice, mutable: ty.is_mut };
     }
     if ty.is_tuple {
-        if ty.is_nullable { return Ty::Nullable(std::boxed::Box::new(Ty::Tuple(written_all(names, aliases, &ty.generics)))); }
+        if ty.is_nullable { return Ty::Nullable(nikaia_std::block::Boxed::new(Ty::Tuple(written_all(names, aliases, &ty.generics)))); }
         return Ty::Tuple(written_all(names, aliases, &ty.generics));
     }
     if (*ty.code).is_some() && ty.is_nullable {
         let mut inner = ty.clone();
         inner.is_nullable = false;
-        return Ty::Nullable(std::boxed::Box::new(written_ty(names, aliases, &inner)));
+        return Ty::Nullable(nikaia_std::block::Boxed::new(written_ty(names, aliases, &inner)));
     }
     if (*ty.code).is_some() {
         let read = code_as_read(names, ty);
-        let code = match (*read.code) { Some(__nikaia_value) => __nikaia_value, None => return Ty::Unknown };
+        let code = match nikaia_std::boxed::open(read.code) { Some(__nikaia_value) => __nikaia_value, None => return Ty::Unknown };
         let params = written_all(names, aliases, &read.generics);
         let spelled = code_spelled(names, ty);
-        let result = match (*code.result) { Some(__nikaia_value) => __nikaia_value, None => return Ty::Fn { params, result: std::boxed::Box::new(None), is_sync: code.is_sync, can_throw: code.can_throw, spelled } };
-        return Ty::Fn { params, result: std::boxed::Box::new(Some(written_ty(names, aliases, &result))), is_sync: code.is_sync, can_throw: code.can_throw, spelled };
+        let result = match nikaia_std::boxed::open(code.result) { Some(__nikaia_value) => __nikaia_value, None => return Ty::Fn { params, result: nikaia_std::block::Boxed::new(None), is_sync: code.is_sync, can_throw: code.can_throw, spelled } };
+        return Ty::Fn { params, result: nikaia_std::block::Boxed::new(Some(written_ty(names, aliases, &result))), is_sync: code.is_sync, can_throw: code.can_throw, spelled };
     }
     if ty.is_nullable {
         let mut inner = ty.clone();
         inner.is_nullable = false;
-        return Ty::Nullable(std::boxed::Box::new(written_ty(names, aliases, &inner)));
+        return Ty::Nullable(nikaia_std::block::Boxed::new(written_ty(names, aliases, &inner)));
     }
     let written_name = unaliased_in(aliases, names.resolve(ty.name));
     let named = if written_name == "char" { String::from("scalar") } else { written_name };
@@ -139,7 +139,7 @@ pub(crate) fn self_named(ty: &Ty, owner: &Ty) -> Ty {
             Ty::Named { name: nikaia_std::block::Text::from(name.to_string()), args: args.iter().map(|a| { self_named(a, owner) }).collect::<Vec<_>>(), view }
         },
         Ty::Tuple(parts) => Ty::Tuple(parts.iter().map(|a| { self_named(a, owner) }).collect::<Vec<_>>()),
-        Ty::Nullable(inner) => { let inner = nikaia_std::boxed::open(inner); Ty::Nullable(std::boxed::Box::new(self_named(inner, owner))) },
+        Ty::Nullable(inner) => { let inner = nikaia_std::boxed::open(inner); Ty::Nullable(nikaia_std::block::Boxed::new(self_named(inner, owner))) },
         _ => ty.clone(),
     }
 }

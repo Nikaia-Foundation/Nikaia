@@ -995,7 +995,7 @@ impl EmitState {
                 let mut at: u32 = 0u32;
                 if flow.statement > 0 { at = u32::try_from(flow.statement).unwrap_or_else(|_| panic!("the value does not fit in an `u32`")); }
                 let guarded = Expr::Block(body.clone(), numbered_id(id_of(task)));
-                let caught = Expr::TryCatch { expr: std::boxed::Box::new(guarded), handler: handler.clone(), id: numbered_id(id) };
+                let caught = Expr::TryCatch { expr: nikaia_std::block::Boxed::new(guarded), handler: handler.clone(), id: numbered_id(id) };
                 let wrapped = Block { stmts: vec![Spanned::new(Stmt::Expr(caught), Span { start: at, end: at })] };
                 self.emit_flow_task(world, walk, out, host, node_key(lambda), &wrapped, depth, &flow, scope)?;
             },

@@ -1921,7 +1921,7 @@ pub(crate) fn rsrc_block(unit: &Unit, asked: &Asked<'_, '_, '_>, here: &Here, kn
                     match value {
                         Expr::StructLit { name, .. } => {
                             let name = *name;
-                            flow.built.insert(nikaia_std::block::Text::from(asked.names.resolve(*unsafe { nikaia_std::proven::read(&names, (0) as usize) }).to_string()), Type { name, generics: vec![], is_view: false, is_tuple: false, is_nullable: false, code: std::boxed::Box::new(None), count: None, is_mut: false, is_slice: false, either: false, lasting: false });
+                            flow.built.insert(nikaia_std::block::Text::from(asked.names.resolve(*unsafe { nikaia_std::proven::read(&names, (0) as usize) }).to_string()), Type { name, generics: vec![], is_view: false, is_tuple: false, is_nullable: false, code: nikaia_std::block::Boxed::new(None), count: None, is_mut: false, is_slice: false, either: false, lasting: false });
                         },
                         _ => { },
                     }

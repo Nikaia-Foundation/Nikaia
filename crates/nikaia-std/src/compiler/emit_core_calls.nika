@@ -918,6 +918,7 @@ impl EmitState {
                     return false
                 }
                 walk.boxed_args = mask
+                walk.boxed_placed = self.facts.placed_in_block.contains(node_key(func))
                 let mut counts: Vec[Count] = []
                 for at in 0..<args.len() {
                     counts.push(self.count_at(host.crossings_are_possible(), "<field>", variant_slot(owner, variant, at)))
@@ -931,6 +932,7 @@ impl EmitState {
                 out.push("(")
                 self.emit_core_args(world, walk, out, host, variant, args, [], depth, flow, scope)
                 walk.boxed_args = null
+                walk.boxed_placed = false
                 walk.variant_counts = null
                 out.push(")")
                 return true

@@ -310,7 +310,7 @@ pub(crate) fn prover_stmt(walk: &mut ProverWalk, stmt: &Spanned<Stmt>, scope: &m
                     None => None,
                 }, || BinaryOp::Add);
                 if given == BinaryOp::Add || given == BinaryOp::Sub || given == BinaryOp::Mul || given == BinaryOp::Div || given == BinaryOp::Rem {
-                    let written_out = Expr::Binary { op: given, lhs: std::boxed::Box::new(target.clone()), rhs: std::boxed::Box::new(value.clone()), span, grouped: false, id: fresh_id() };
+                    let written_out = Expr::Binary { op: given, lhs: nikaia_std::block::Boxed::placed(target.clone()), rhs: nikaia_std::block::Boxed::placed(value.clone()), span, grouped: false, id: fresh_id() };
                     prover_unwritten_check(walk, &written_out, span, &scope, &nested, words, library, &mut &mut *holes_of, &mut &mut *ask, &mut &mut *model, &mut &mut *written_of);
                 }
             }

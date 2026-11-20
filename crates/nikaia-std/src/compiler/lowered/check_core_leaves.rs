@@ -555,7 +555,7 @@ pub(crate) fn check_core_lambda_some_at_plain_ends(state: &mut CheckState, retur
     if !nullable { return result; }
     if tail_plain { for value in block_tail(body) { state.some_at_the_tails(value); } }
     for one in returns.iter() { if !check_function_is_nullable(&one.ty) && check_core_lambda_plain(&one.ty) { for value in one.value.iter() { state.some_at_the_tails(value); } } }
-    Ty::Nullable(std::boxed::Box::new(held))
+    Ty::Nullable(nikaia_std::block::Boxed::new(held))
 }
 
 pub(crate) fn check_core_lambda_plain(ty: &Ty) -> bool { wholly_known(ty) && !check_core_lambda_a_unit(ty) && !check_function_is_nullable(ty) }

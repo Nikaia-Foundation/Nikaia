@@ -222,7 +222,7 @@ pub fn refine_with(parsed: &mut Parsed, beside: &BesideFields) {
             is_view: false,
             is_tuple: false,
             is_nullable: false,
-            code: Box::new(None),
+            code: nikaia_std::block::Boxed::new(None),
             count: None,
             is_mut: false,
             is_slice: false,
@@ -469,7 +469,7 @@ fn wrap_item(item: &mut Item, wraps: &BTreeMap<usize, usize>, into: [winnow_gram
 fn wrapped(expr: &mut Expr, method: winnow_grammar::Symbol) {
     let value = std::mem::replace(expr, Expr::LitNull(crate::ast::NodeId::fresh()));
     *expr = Expr::MethodCall {
-        receiver: Box::new(value),
+        receiver: nikaia_std::block::Boxed::new(value),
         method,
         args: Vec::new(),
         config: Vec::new(),

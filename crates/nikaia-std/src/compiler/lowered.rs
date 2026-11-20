@@ -3759,7 +3759,7 @@ pub mod rustc_words {
 }
 pub mod sharing {
     #[allow(unused_imports)]
-    pub use super::{Fallback, every_fallback, Decision, Sharing, sharing_report, slot, unseen, rust_name, lock_name, FIELDS, Handle, Forced, Slots, decided, SharingWalk, SharingMoves, sharing_moves_unknown, sharing_moves_of, sharing_of};
+    pub use super::{Fallback, every_fallback, Decision, Sharing, sharing_report, box_sites_report, slot, unseen, rust_name, lock_name, FIELDS, Handle, Forced, Slots, decided, SharingWalk, SharingMoves, sharing_moves_unknown, sharing_moves_of, sharing_of};
 }
 pub mod signature {
     #[allow(unused_imports)]
@@ -3916,4 +3916,4 @@ pub fn nikaia_run_tests(filters: &[std::string::String], list: bool, more: std::
 /// **The digest of this lowered set** (#1610): every file `lower-std` wrote
 /// beside this index, and the index above this line. Compiled into the same
 /// crate as the code it names, it is the compiler's identity for its caches.
-pub const LOWERED_DIGEST: &str = "14c04a763dea1745036cc6dfafcca323b4ad437994a323af84ba9464cfd8fa89";
+pub const LOWERED_DIGEST: &str = "0596151417fa49ab359ab985f4f0737d46116a6d8f170b1497a8a0ae13b5f8ff";

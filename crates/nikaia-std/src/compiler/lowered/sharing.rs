@@ -130,6 +130,13 @@ pub fn sharing_report(sharing: &Sharing) -> String {
     out
 }
 
+pub fn box_sites_report(sites: &collections::BTreeMap<i64, String>) -> String {
+    if sites.is_empty() { return String::from(""); }
+    let mut out: String = String::from("\nBoxes of recursive types (ADR-327 D16):\n");
+    for (_, site) in sites.iter() { out.push_str(&format!("    {}\n", site)); }
+    out
+}
+
 pub(crate) fn fallback_text(fallback: Option<&Fallback>) -> String {
     let row = match fallback { Some(__nikaia_value) => __nikaia_value, None => return String::from("") };
     row.as_str()
