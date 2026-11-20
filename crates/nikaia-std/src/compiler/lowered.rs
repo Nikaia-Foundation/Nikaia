@@ -3072,11 +3072,11 @@ pub mod bounds_report {
 }
 pub mod bounds_rules {
     #[allow(unused_imports)]
-    pub use super::{BoundsRule};
+    pub use super::{BoundsRule, rules_checked_keep};
 }
 pub mod bounds_shape {
     #[allow(unused_imports)]
-    pub use super::{BodyShape, Around, tracks};
+    pub use super::{BodyShape, RulesChecked, Around, tracks};
 }
 pub mod bounds_walk {
     #[allow(unused_imports)]
@@ -3916,4 +3916,4 @@ pub fn nikaia_run_tests(filters: &[std::string::String], list: bool, more: std::
 /// **The digest of this lowered set** (#1610): every file `lower-std` wrote
 /// beside this index, and the index above this line. Compiled into the same
 /// crate as the code it names, it is the compiler's identity for its caches.
-pub const LOWERED_DIGEST: &str = "2f2dcd9a30dbdc58cf8e222da5bd312266d3b4efe087ea896e6b87af264963b2";
+pub const LOWERED_DIGEST: &str = "72e29d3148258f6ebcad896764134ff6dee6f82d415302a9f909cceb8d140041";

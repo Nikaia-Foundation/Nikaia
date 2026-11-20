@@ -1451,8 +1451,9 @@ fn rules_built(expr: ref Expr, owner: ref String, lists: ref collections::BTreeM
 /// at the start of the body for `self` and for each such parameter.
 ///
 /// What it finds itself, not given in `context.around.held`, it hands back,
-/// for the bodies after it (#1581).
-fn rules_settle(mut walk: BoundsWalk, args: ref Vec[FnArg], body: ref Block, context: ref BoundsContext, program: ref Program, words: ref winnow_grammar::InternerContext, ask: fn(ref logic::TermArena, ref Vec[i64], i64) -> bool sync) -> collections::BTreeMap[String, Vec[BoundsRule]] {
+/// for the bodies after it (#1581); so it does what each method it walked
+/// to check them failed, into `checked` (#2396).
+fn rules_settle(mut walk: BoundsWalk, args: ref Vec[FnArg], body: ref Block, context: ref BoundsContext, program: ref Program, words: ref winnow_grammar::InternerContext, ask: fn(ref logic::TermArena, ref Vec[i64], i64) -> bool sync, mut checked: collections::BTreeMap[String, RulesChecked]) -> collections::BTreeMap[String, Vec[BoundsRule]] {
     let mut found: collections::BTreeMap[String, Vec[BoundsRule]] = collections::BTreeMap()
     if context.around.rules.is_empty() {
         return found
@@ -1473,7 +1474,7 @@ fn rules_settle(mut walk: BoundsWalk, args: ref Vec[FnArg], body: ref Block, con
             held.extend(given?.clone() ?? [])
             continue
         }
-        let holding = rules_holding(of, context, program, words, ask)
+        let holding = rules_holding(of, context, program, words, ask, checked)
         found.insert(of.clone(), holding.clone())
         held.extend(holding)
     }
@@ -1532,16 +1533,23 @@ fn rules_roots(owner: ref String, args: ref Vec[FnArg], shape: ref BodyShape, ru
 /// **The candidates of `owner` that hold**: each method that writes its
 /// fields through `mut self`, and each method a `result` candidate names,
 /// is walked with every candidate left given at its start; a candidate one
-/// of them does not keep is dropped, and the rest are checked again.
-fn rules_holding(owner: ref String, context: ref BoundsContext, program: ref Program, words: ref winnow_grammar::InternerContext, ask: fn(ref logic::TermArena, ref Vec[i64], i64) -> bool sync) -> Vec[BoundsRule] {
+/// of them does not keep is dropped, and the rest are checked again. What a
+/// walk failed is read from `context.around.checked` or `checked` where the
+/// same walk ran before, and kept in `checked` where not (#2396).
+fn rules_holding(owner: ref String, context: ref BoundsContext, program: ref Program, words: ref winnow_grammar::InternerContext, ask: fn(ref logic::TermArena, ref Vec[i64], i64) -> bool sync, mut checked: collections::BTreeMap[String, RulesChecked]) -> Vec[BoundsRule] {
     let mut held: Vec[BoundsRule] = []
-    for rule in context.around.rules {
+    // Each rule held by its place among all candidates, for `checked`'s key.
+    let mut ids: Vec[i64] = []
+    for (k, rule) in context.around.rules.iter().enumerate() {
         if rule.owner == owner {
             held.push(rule.clone())
+            ids.push(k)
         }
     }
     let mut round = 0
     while !held.is_empty() && round < rules_rounds() {
+        let given = rules_given_key(owner, ids, context)
+        let shared = rules_checked_valid(context)
         let mut failed: collections::BTreeSet[i64] = collections::BTreeSet()
         for item in program.items {
             match item.node {
@@ -1554,7 +1562,8 @@ fn rules_holding(owner: ref String, context: ref BoundsContext, program: ref Pro
                         let mut owners: collections::BTreeSet[String] = collections::BTreeSet()
                         owners.insert(owner.clone())
                         let made = rules_builder(body, owners, program, words)
-                        rules_check(held, owner, "", made.0, args, body, locals, context, program, words, ask, failed)
+                        let key = rules_checked_key(given, "", made.0, args, body, context)
+                        rules_check_once(key, shared, held, owner, "", made.0, args, body, locals, context, program, words, ask, failed, checked)
                     }
                 },
                 Item::Impl { target, methods, .. } => {
@@ -1568,12 +1577,14 @@ fn rules_holding(owner: ref String, context: ref BoundsContext, program: ref Pro
                                 let changing = receiver?.is_mut ?? false
                                 if own && receiver != null && (changing || rules_has_result(held, m)) {
                                     let locals = rules_locals(owner, args, body, impl_of, context, words)
-                                    rules_check(held, owner, m, "", args, body, locals, context, program, words, ask, failed)
+                                    let key = rules_checked_key(given, m, "", args, body, context)
+                                    rules_check_once(key, shared, held, owner, m, "", args, body, locals, context, program, words, ask, failed, checked)
                                     continue
                                 }
                                 let locals = rules_locals(owner, args, body, impl_of, context, words)
                                 if !locals.is_empty() || rules_names_lists(body, owner, impl_of, held, words) {
-                                    rules_check(held, owner, "", "", args, body, locals, context, program, words, ask, failed)
+                                    let key = rules_checked_key(given, "", "", args, body, context)
+                                    rules_check_once(key, shared, held, owner, "", "", args, body, locals, context, program, words, ask, failed, checked)
                                 }
                             },
                             else => {},
@@ -1587,12 +1598,15 @@ fn rules_holding(owner: ref String, context: ref BoundsContext, program: ref Pro
             return held
         }
         let mut kept: Vec[BoundsRule] = []
+        let mut kept_ids: Vec[i64] = []
         for (at, rule) in held.iter().enumerate() {
             if !failed.contains(at) {
                 kept.push(rule.clone())
+                kept_ids.push(ids[at])
             }
         }
         held = kept
+        ids = kept_ids
         round += 1
     }
     if round >= rules_rounds() {
@@ -1621,6 +1635,115 @@ fn rules_has_result(rules: ref Vec[BoundsRule], method: ref String) -> bool {
         }
     }
     return false
+}
+
+/// **What `rules_holding` walks a body with, but the body**: the type, the
+/// rules given (by their places among all candidates) and the type of the
+/// body being walked, which a call on `self` reads (#2396).
+fn rules_given_key(owner: ref String, ids: ref Vec[i64], context: ref BoundsContext) -> String {
+    let mut out = f"{owner}\t{context.owner}\t"
+    for id in ids {
+        out.push_str(f"{id},")
+    }
+    return out
+}
+
+/// **Everything a `rules_check` walk reads that changes between the bodies
+/// of `bounds_proven`** (#2396): `given` (`rules_given_key`), the method,
+/// the builder's value, the body (by `derived_key`) and the derived
+/// precondition at its start (ADR-391 D1), the one part of
+/// `context.around.derived` a walk reads.
+fn rules_checked_key(given: ref String, method: ref String, built: ref String, args: ref Vec[FnArg], body: ref Block, context: ref BoundsContext) -> String? {
+    let at = derived_key(args, body) ?? return null
+    let mut out = f"{given}\t{method}\t{built}\t{at}\t"
+    let held = context.around.derived.entry[at] ?? return out
+    for claim in held {
+        out.push_str(f"{derived_written(claim)};")
+    }
+    return out
+}
+
+/// **Whether `context.around.checked` was found under the field bounds and
+/// list-returning functions `context` holds**: what a walk reads besides
+/// its key and the returns of its callees.
+fn rules_checked_valid(context: ref BoundsContext) -> bool {
+    return context.around.checked_fields == context.around.field_bounds && context.around.checked_returning == context.around.returning
+}
+
+/// **What the walks of a body failed, kept for the bodies after** (#2396):
+/// into `context.around.checked`, emptied first where it was found under
+/// other field bounds or list-returning functions than `context` holds.
+pub fn rules_checked_keep(mut context: BoundsContext, found: ref collections::BTreeMap[String, RulesChecked]) {
+    if !rules_checked_valid(context) {
+        context.around.checked.clear()
+        context.around.checked_fields = context.around.field_bounds.clone()
+        context.around.checked_returning = context.around.returning.clone()
+    }
+    for (key, failed) in found {
+        context.around.checked.insert(key.clone(), failed.clone())
+    }
+}
+
+/// **`rules_check`, once for each `key`**: where the same walk ran before
+/// (`context.around.checked`, `checked`), what it failed is taken again;
+/// else it is walked and kept in `checked`. Not under `--bounds-trace`,
+/// whose lines come from the walks (#1495), nor without a key.
+fn rules_check_once(key: ref String?, shared: bool, held: ref Vec[BoundsRule], owner: ref String, method: ref String, built: ref String, args: ref Vec[FnArg], body: ref Block, locals: ref collections::BTreeMap[String, String], context: ref BoundsContext, program: ref Program, words: ref winnow_grammar::InternerContext, ask: fn(ref logic::TermArena, ref Vec[i64], i64) -> bool sync, mut failed: collections::BTreeSet[i64], mut checked: collections::BTreeMap[String, RulesChecked]) {
+    let known = key ?? ""
+    if known.is_empty() || !context.trace.is_empty() {
+        rules_check(held, owner, method, built, args, body, locals, context, program, words, ask, failed)
+        return
+    }
+    let reads = rules_returns_read(body, context, words)
+    if shared && context.around.checked.contains_key(known) {
+        let got = context.around.checked.get(known) ?? return
+        if got.reads == reads {
+            failed.extend(got.failed.clone())
+            return
+        }
+    }
+    if checked.contains_key(known) {
+        let got = checked.get(known) ?? return
+        if got.reads == reads {
+            failed.extend(got.failed.clone())
+            return
+        }
+    }
+    let mut own: collections::BTreeSet[i64] = collections::BTreeSet()
+    rules_check(held, owner, method, built, args, body, locals, context, program, words, ask, own)
+    failed.extend(own.clone())
+    checked.insert(known.clone(), RulesChecked { reads: reads, failed: own })
+}
+
+/// **The found returns a walk of `body` could read** (ADR-306 D23): those
+/// of each callee a call in it names, a free function by its name, a method
+/// as `Type.method` of the receiver's type, with the entries of the fields
+/// of its struct result (`callee#field`).
+fn rules_returns_read(body: ref Block, context: ref BoundsContext, words: ref winnow_grammar::InternerContext) -> collections::BTreeMap[String, BoundsReturns] {
+    let mut out: collections::BTreeMap[String, BoundsReturns] = collections::BTreeMap()
+    if context.returns.is_empty() {
+        return out
+    }
+    let mut callees: collections::BTreeSet[String] = collections::BTreeSet()
+    for expr in visited_in_block(body) {
+        match expr {
+            Expr::Call { func, .. } => {
+                callees.insert(bounding_callee(func, words) ?? continue)
+            },
+            Expr::MethodCall { method, .. } => {
+                let owner = context.std_receivers.get(node_key(expr)) ?? continue
+                callees.insert(f"{owner}.{words.resolve(method)}")
+            },
+            else => {},
+        }
+    }
+    for (key, found) in context.returns {
+        let callee = key.split("#").next() ?? ""
+        if callees.contains(callee) {
+            out.insert(key.clone(), found.clone())
+        }
+    }
+    return out
 }
 
 /// **One method walked to check `held`**: the indexes of those it does not
