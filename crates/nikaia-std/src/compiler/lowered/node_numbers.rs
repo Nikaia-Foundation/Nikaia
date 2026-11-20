@@ -269,7 +269,7 @@ pub(crate) fn numbers_maybe_block(block: Option<Block>, st: &mut NodeNumbersStat
 
 pub(crate) fn numbers_stmt(stmt: Stmt, st: &mut NodeNumbersState) -> Stmt {
     match stmt {
-        Stmt::Let { names, shape, mutable, deep, ty, value } => { return Stmt::Let { names, shape, mutable, deep, ty, value: numbers_expr(value, st) }; },
+        Stmt::Let { names, shape, mutable, mut_names, deep, ty, value } => { return Stmt::Let { names, shape, mutable, mut_names, deep, ty, value: numbers_expr(value, st) }; },
         Stmt::Comptime { name, ty, value, bounds } => {
             let value2 = numbers_expr(value, st);
             let bounds2 = numbers_config(bounds, st);
@@ -280,10 +280,10 @@ pub(crate) fn numbers_stmt(stmt: Stmt, st: &mut NodeNumbersState) -> Stmt {
             let value2 = numbers_expr(value, st);
             return Stmt::Assign { target: target2, op, value: value2 };
         },
-        Stmt::For { bindings, shape, mutable, iter, body } => {
+        Stmt::For { bindings, shape, mutable, mut_names, iter, body } => {
             let iter2 = numbers_expr(iter, st);
             let body2 = numbers_block(body, st);
-            return Stmt::For { bindings, shape, mutable, iter: iter2, body: body2 };
+            return Stmt::For { bindings, shape, mutable, mut_names, iter: iter2, body: body2 };
         },
         Stmt::While { cond, body } => {
             let cond2 = numbers_expr(cond, st);

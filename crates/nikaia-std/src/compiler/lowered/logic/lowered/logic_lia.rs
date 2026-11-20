@@ -584,18 +584,17 @@ pub(crate) fn lg_contradictory_at(atoms: &[LgLin], places: &[i64], budget: &LgBu
     let mut round_places: Vec<Vec<i64>> = vec![];
     let mut held: Vec<LgHeld> = Vec::with_capacity(nikaia_std::count::of(unsafe { nikaia_std::proven::mul::<i64>(4, places.len() as i64) }));
     let mut alive: Vec<i64> = Vec::with_capacity(nikaia_std::count::of(places.len() as i64));
-    let mut every: collections::BTreeSet<String> = collections::BTreeSet::new();
+    let mut ranks: collections::BTreeMap<String, i64> = collections::BTreeMap::new();
     for at in places.iter() {
         let at = nikaia_std::num::value(at);
-        for (name, _) in nikaia_std::index::get(&atoms, nikaia_std::index::at(at)).terms.iter() { if !every.contains(name) { every.insert(nikaia_std::block::Text::from(name.to_string())); } }
+        for (name, _) in nikaia_std::index::get(&atoms, nikaia_std::index::at(at)).terms.iter() { if !ranks.contains_key(name) { ranks.insert(nikaia_std::block::Text::from(name.to_string()), 0); } }
     }
-    let mut ranks: collections::BTreeMap<String, i64> = collections::BTreeMap::new();
-    let mut rank_names: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut round_names = round_names;
-    let mut quotients: Vec<bool> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-    for name in every.into_iter() {
-        ranks.insert(nikaia_std::block::Text::from(name.to_string()), ranks.len() as i64);
+    let mut rank_names: Vec<String> = Vec::with_capacity(nikaia_std::count::of(ranks.len() as i64)); #[allow(unused_mut, clippy::redundant_locals)] let mut round_names = round_names;
+    let mut quotients: Vec<bool> = Vec::with_capacity(nikaia_std::count::of(ranks.len() as i64));
+    for (name, rank) in ranks.iter_mut() {
+        *rank = rank_names.len() as i64;
         quotients.push(name.starts_with("quot#"));
-        rank_names.push(name);
+        rank_names.push(nikaia_std::block::Text::from(name.to_string()));
     }
     let mut present: Vec<bool> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     let mut ups: Vec<i64> = nikaia_std::block::list(nikaia_std::block::Place::Block);

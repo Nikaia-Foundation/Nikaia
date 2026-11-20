@@ -816,22 +816,22 @@ fn lg_contradictory_at(atoms: ref Vec[LgLin], places: ref Vec[i64], budget: ref 
     // now, so an elimination copies no bound it keeps (#727).
     let mut held: Vec[LgHeld] = Vec(capacity: 4 * places.len())
     let mut alive: Vec[i64] = Vec(capacity: places.len())
-    // Every name an elimination meets is one of the case's own: ranked once.
-    let mut every: collections::BTreeSet[String] = collections::BTreeSet()
+    // Every name an elimination meets is one of the case's own: ranked once,
+    // in the map's order, the rank written in place (#1133).
+    let mut ranks: collections::BTreeMap[String, i64] = collections::BTreeMap()
     for at in places {
         for (name, _) in atoms[at].terms {
-            if !every.contains(name) {
-                every.insert(name.clone())
+            if !ranks.contains_key(name) {
+                ranks.insert(name.clone(), 0)
             }
         }
     }
-    let mut ranks: collections::BTreeMap[String, i64] = collections::BTreeMap()
-    let mut rank_names: Vec[String] = []
-    let mut quotients: Vec[bool] = []
-    for name in every.drain() {
-        ranks.insert(name.clone(), ranks.len())
+    let mut rank_names: Vec[String] = Vec(capacity: ranks.len())
+    let mut quotients: Vec[bool] = Vec(capacity: ranks.len())
+    for (name, mut rank) in ranks {
+        rank = rank_names.len()
         quotients.push(name.starts_with("quot#"))
-        rank_names.push(name)
+        rank_names.push(name.clone())
     }
     // How many bounds each name is above and below in, by its rank: made
     // once, cleared each round (#727).

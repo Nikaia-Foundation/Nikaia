@@ -3821,7 +3821,7 @@ pub mod traits {
 }
 pub mod tree_build {
     #[allow(unused_imports)]
-    pub use super::{Postfix, split_mut, unpacked, flat_shape, lambda, params_of, guarded, fold_binary, grouped, fold_postfix, counted_pattern};
+    pub use super::{Postfix, split_mut, unpacked, flat_shape, marked_names, lambda, params_of, guarded, fold_binary, grouped, fold_postfix, counted_pattern};
 }
 pub mod trust {
     #[allow(unused_imports)]
@@ -3916,4 +3916,4 @@ pub fn nikaia_run_tests(filters: &[std::string::String], list: bool, more: std::
 /// **The digest of this lowered set** (#1610): every file `lower-std` wrote
 /// beside this index, and the index above this line. Compiled into the same
 /// crate as the code it names, it is the compiler's identity for its caches.
-pub const LOWERED_DIGEST: &str = "7c769d832eda84fbb6cef62e24b4ecae6944117c11d959c1b9304c2a543adf57";
+pub const LOWERED_DIGEST: &str = "e14470c31c47f49881b5487de877f3440a21aa2b81956dc23bc639ead43aaf70";

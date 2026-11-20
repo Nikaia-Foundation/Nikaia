@@ -1,6 +1,6 @@
 # Nikaia Language Specification
 **Part I: The Language Core**
-**Version:** 0.0.1496 (Draft)
+**Version:** 0.0.1497 (Draft)
 **Date:** 2026-11-20
 
 ---
@@ -1238,9 +1238,11 @@ walked as pairs, `for (key, value) in scores`. A `for` head takes the pattern a 
 `let`** ([ADR-views-v4](adr/adr-views-v4.md) D24, D25). A change to a binding without it is
 refused with `NK1139`. `mut` stands in front of the whole head,
 `for mut p in team`, `for mut (a, b) in pairs`, as in front of a `let`'s, and
-marks every name in it. In front of one name of a tuple, `for (k, mut v) in m`
-or `let (tx, mut rx) = …`, it is not supported yet, `NK1307`: refused now,
-possible later, and the help writes `mut` in front of the whole pattern. Over a
+marks every name in it. In front of one name of a tuple, `let (tx, mut rx) = …`
+or `for (k, mut v) in m`, it marks that name alone, as `let mut` on it would;
+over a map, `for (k, mut v) in m` changes the values in place, and a `mut` on
+the key is `NK1306`. In a lambda's tuple parameter one marked name is not
+supported yet, `NK1307`. Over a
 list or an array that the function may change, the binding is a view of the
 element, and a change reaches the list:
 

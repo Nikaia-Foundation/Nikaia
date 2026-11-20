@@ -320,7 +320,7 @@ impl EmitState {
         self.write_keep_prelude(walk, out, &scope.function, at, depth);
         self.emit_core_hold_temporaries(world, walk, out, host, node, span, depth, &tail, here, scope)?;
         match node {
-            Stmt::Let { names, shape, mutable, ty, value, .. } => { let mutable = *mutable; self.emit_stmt_let(world, walk, out, host, names, shape, mutable, (ty).as_ref(), value, span, depth, here, scope)?; },
+            Stmt::Let { names, shape, mutable, mut_names, ty, value, .. } => { let mutable = *mutable; self.emit_stmt_let(world, walk, out, host, names, shape, mutable, mut_names, (ty).as_ref(), value, span, depth, here, scope)?; },
             Stmt::Comptime { name, .. } => {
                 let name = *name;
                 let bound = emit_text(world, name);
@@ -358,7 +358,7 @@ impl EmitState {
                 }
                 self.emit_stmt_block_opening_with(world, walk, out, host, body, depth, here.inside_a_loop(), scope, &EmitTail::Statement, emit_counted_turn(host.counts_steps(), None))?;
             },
-            Stmt::For { bindings, shape, mutable, iter, body } => { let mutable = *mutable; self.emit_stmt_for(world, walk, out, host, bindings, shape, mutable, iter, body, span, depth, here, scope)?; },
+            Stmt::For { bindings, shape, mutable, mut_names, iter, body } => { let mutable = *mutable; self.emit_stmt_for(world, walk, out, host, bindings, shape, mutable, mut_names, iter, body, span, depth, here, scope)?; },
             Stmt::Break => { self.emit_stmt_jump(out, "break", &here)?; },
             Stmt::Continue => { self.emit_stmt_jump(out, "continue", &here)?; },
             Stmt::Return(value) => {
@@ -476,7 +476,7 @@ impl EmitState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    pub(crate) fn emit_stmt_let<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, names: &[winnow_grammar::Symbol], shape: &[i64], mutable: bool, ty: Option<&Type>, value: &Expr, span: &Span, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
+    pub(crate) fn emit_stmt_let<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, names: &[winnow_grammar::Symbol], shape: &[i64], mutable: bool, mut_names: &[bool], ty: Option<&Type>, value: &Expr, span: &Span, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
         let at = span.start as i64;
         let unmuted = host.given_up_unmuted(at) || self.facts.mut_view_reads.contains_key(&node_key(value));
         let mut mut_word = if mutable && !unmuted { "mut " } else { "" };
@@ -488,11 +488,14 @@ impl EmitState {
             walk.kept_names.remove(&emit_text(world, each));
         }
         if names.len() > 1 || !shape.is_empty() {
-            let mut bound: Vec<String> = vec![];
+            #[allow(unused_mut)] let mut bound: Vec<String> = vec![];
+            let mut index: i64 = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut bound = bound;
             for each in names.iter() {
                 let each = *each;
                 let local = self.emit_stmt_local(&emit_text(world, each));
-                if mut_word != "" && local != "_" { bound.push(format!("mut {}", local)); } else { bound.push(local); }
+                let marked = mut_names.is_empty() || *nikaia_std::index::get(&mut_names, (index) as usize);
+                index = unsafe { nikaia_std::proven::add::<i64>(index, 1) };
+                if mut_word != "" && local != "_" && marked { bound.push(format!("mut {}", local)); } else { bound.push(local); }
             }
             let pattern = emit_stmt_tuple_pattern(&bound, shape);
             if mut_word != "" { out.push("#[allow(unused_mut)] "); }
@@ -863,7 +866,7 @@ impl EmitState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    pub(crate) fn emit_stmt_for<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, bindings: &[winnow_grammar::Symbol], shape: &[i64], mutable: bool, iter: &Expr, body: &Block, span: &Span, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
+    pub(crate) fn emit_stmt_for<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, bindings: &[winnow_grammar::Symbol], shape: &[i64], mutable: bool, mut_names: &[bool], iter: &Expr, body: &Block, span: &Span, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
         let at = span.start as i64;
         if walk.specialising.is_some() {
             let parameter = nikaia_std::block::Text::from(nikaia_std::index::or(walk.specialising.as_ref().map(|__nikaia_it| __nikaia_it.first.as_str()), || "").to_string());
@@ -917,8 +920,19 @@ impl EmitState {
             if fallible && local == "_" { each.push(format!("__nikaia_step_{}", each.len() as i64)); } else { each.push(local); }
         }
         let viewed = mutable && is_a_place(iter) && self.facts.mut_view_reads.contains_key(&node_key(iter));
-        let mut written: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut each = each;
-        for one in each.iter() { if mutable && !viewed && one != "_" { written.push(format!("mut {}", one)); } else { written.push(nikaia_std::block::Text::from(one.to_string())); } }
+        let map_view = viewed && match self.facts.mut_view_reads.get(&node_key(iter)) {
+            None => false,
+            Some(marker) => marker == "map",
+        };
+        let values_only = map_view && each.len() == 2 && *unsafe { nikaia_std::proven::read(&each, (0) as usize) } == "_";
+        if values_only { each.remove(0); }
+        #[allow(unused_mut)] let mut written: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut each = each;
+        let mut index: i64 = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut each = each; #[allow(unused_mut, clippy::redundant_locals)] let mut written = written;
+        for one in each.iter() {
+            let marked = mut_names.is_empty() || *nikaia_std::index::get(&mut_names, nikaia_std::index::at(if values_only { unsafe { nikaia_std::proven::add::<i64>(index, 1) } } else { index }));
+            index = unsafe { nikaia_std::proven::add::<i64>(index, 1) };
+            if mutable && !viewed && one != "_" && marked { written.push(format!("mut {}", one)); } else { written.push(nikaia_std::block::Text::from(one.to_string())); }
+        }
         let names = nikaia_std::block::Text::from(written.join(", ")); #[allow(unused_mut, clippy::redundant_locals)] let mut each = each;
         let bound = emit_stmt_tuple_pattern(&written, shape);
         let mut allowed = ""; #[allow(unused_mut, clippy::redundant_locals)] let mut each = each;
@@ -948,7 +962,7 @@ impl EmitState {
         let lends = is_a_place(iter) && !self.facts.owned_loops.contains(&at) && !timed;
         self.emit_stmt_for_iter(world, walk, out, host, iter, lends, depth, flow, scope)?;
         if timed { out.push(")?"); }
-        if lends && viewed { out.push(".iter_mut()"); } else if lends {
+        if lends && values_only { out.push(".values_mut()"); } else if lends && viewed { out.push(".iter_mut()"); } else if lends {
             out.push(".iter()");
             if self.reads_through_handle(world, &walk, &scope.function, iter) { out.push(".map(|held| held.get())"); }
         }
@@ -975,9 +989,12 @@ impl EmitState {
         let mut inside = scope.clone();
         if viewed {
             let mut changed: Vec<winnow_grammar::Symbol> = scope.changed.copy_owned();
+            let mut index: i64 = 0;
             for one in bindings.iter() {
                 let one = *one;
-                if emit_text(world, one) != "_" { changed.push(one.copy_owned()); }
+                let marked = !map_view || *nikaia_std::index::get(&mut_names, (index) as usize);
+                index = unsafe { nikaia_std::proven::add::<i64>(index, 1) };
+                if emit_text(world, one) != "_" && marked { changed.push(one.copy_owned()); }
             }
             inside = EmitScope { changed: changed, ..scope.clone() };
         }

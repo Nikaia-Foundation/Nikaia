@@ -1,0 +1,7 @@
+// A lambda's tuple parameter still takes `mut` on the whole pattern only
+// (NK1307; ADR-views-v4 section 6 builds `let` and `for`, #1133).
+fn main() throws {
+    let pairs: Vec[(i64, i64)] = [(1, 2)]
+    let sums: Vec[i64] = pairs.iter().map(fn((a, mut b)) { b += a; b }).collect()
+    println(f"{sums[0]}")
+}
