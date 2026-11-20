@@ -22,7 +22,7 @@ test "a map written through the brackets compiles and runs" {
 // **A sequence is written the same way and means the same thing**, which is
 // what makes this one rule rather than two: `Set` for a `Vec` *is* an indexed
 // assignment, chosen by the language below on the container's type because this
-// emitter does not know it (ADR-296 D17).
+// emitter does not know it (ADR-grammar-lowering-v1 D2).
 test "a sequence written through the brackets still works" {
     let mut xs = Vec()
     xs.push(10)

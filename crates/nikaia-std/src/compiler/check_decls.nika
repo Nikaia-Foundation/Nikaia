@@ -399,7 +399,7 @@ impl CheckState {
     /// then **another file of this program** by the qualified name a caller
     /// writes (`pool::Conn`) - by the exact key and never by suffix - and then
     /// `std`'s, matched the other way, since a value's type does not carry the
-    /// module a library writes in front of it (ADR-296 D17).
+    /// module a library writes in front of it (ADR-grammar-lowering-v1 D2).
     fn fields_of(ref self, world: ref CheckWorld, name: ref String) -> Vec[FieldContract]? sync {
         if self.structs.contains_key(name) {
             let fields = self.structs[name] ?? return null

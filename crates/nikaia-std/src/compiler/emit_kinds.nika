@@ -7,7 +7,7 @@
 // library's, what an `impl` says about a method, a refusal with its place, the
 // build's settings as booleans, and the two halves `Flow` splits into.
 
-/// Where a statement stands in the body it is in (ADR-296 D17's "the lowering
+/// Where a statement stands in the body it is in (ADR-grammar-lowering-v1 D2's "the lowering
 /// never guesses a meaning"): not a value position, a value, or a value that
 /// may be a `return`.
 pub enum EmitTail {

@@ -48,7 +48,7 @@ fn one(source: &str) -> (String, String) {
 
 // --- how they are lowered ------------------------------------------------
 
-/// The lowering is name for name (ADR-296 D17), and this is what says so — the
+/// The lowering is name for name (ADR-grammar-lowering-v1 D2), and this is what says so — the
 /// one assertion in this file about emitted text rather than about behaviour,
 /// because *"it compiles to a jump and not to a flag"* is the claim
 /// `docs/history/break-continue-cost.md` rests its numbers on.

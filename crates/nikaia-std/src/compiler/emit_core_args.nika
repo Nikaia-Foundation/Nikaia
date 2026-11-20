@@ -1586,7 +1586,7 @@ impl EmitState {
         }
         // Not passed, so the declaration's default is the value. It is a
         // literal, and Nikaia spells a literal the way the language below does
-        // (ADR-296 D17). A list crosses as the view the parameter is (ADR-318
+        // (ADR-grammar-lowering-v1 D2). A list crosses as the view the parameter is (ADR-318
         // D4): `[4, 5]` for a `ref Vec[i64]` is a list lent for the call.
         if option.default.starts_with("[") && option.ty.is_a_view() {
             out.push("&vec!")
