@@ -4,5 +4,5 @@ error[NK1230]: `Num::read` takes a type here, not a value.
  9 | 	let n: i64 = Num::read[42](Bytes("7".bytes().collect())) catch {
    |                         ^^
    |
-   = note: `Num::read` is a rule that takes types, so the call writes types in its brackets (ADR-grammar-2 D1).
+   = note: `Num::read` is a rule that takes types, so the call writes types in its brackets (ADR-grammar-typed-read-v1 D1).
    = help: Write the type: `Num::read[i64](…)`, not a value of it.

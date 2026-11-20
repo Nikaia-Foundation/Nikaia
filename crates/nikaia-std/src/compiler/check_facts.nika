@@ -111,7 +111,7 @@ pub struct CheckFacts {
     pub walks_fields: collections::BTreeMap[String, String],
     pub unrolled_calls: collections::BTreeMap[i64, String],
     /// **The copies of a function that takes a reflected field** (Part II
-    /// 10.3, ADR-grammar-2 D4): keyed by the function and the struct whose
+    /// 10.3, ADR-grammar-typed-read-v1 D4): keyed by the function and the struct whose
     /// fields it is called with, one copy per field.
     pub field_copies: collections::BTreeMap[(String, String), Vec[FieldContract]],
     /// **The kind of each type a copy is made for, or a path names**
@@ -597,7 +597,7 @@ pub struct CheckFacts {
     /// one, so nothing is cloned per call.
     pub lent_rule_values: collections::BTreeSet[String],
     /// **A `@stream` entry whose items are handed over by `emit`**
-    /// (ADR-grammar-2 D7, amended 2026-11-18, #2061), by `Grammar::rule`: its
+    /// (ADR-grammar-typed-read-v1 D7, amended 2026-11-18, #2061), by `Grammar::rule`: its
     /// engine items are `Option<Item>`, the repetition's own values `None` and
     /// each emitted item `Some`, and its walk hands on only the `Some`.
     pub emitting_entries: collections::BTreeSet[String],

@@ -1,5 +1,5 @@
 // `emit` hands an item to the walk of a `@stream` entry, so only the action
-// of a rule such an entry reaches may hold one (ADR-grammar-2 D7, amended
+// of a rule such an entry reaches may hold one (ADR-grammar-typed-read-v1 D7, amended
 // 2026-11-18, #2061): each `emit` here is NK1371.
 
 struct Item {

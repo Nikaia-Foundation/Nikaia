@@ -1,5 +1,5 @@
 // #1512: a program walks another package's `@stream` entry that takes
-// values and options (ADR-grammar-syntax-v1 D12, ADR-grammar-2 D7): the values go to
+// values and options (ADR-grammar-syntax-v1 D12, ADR-grammar-typed-read-v1 D7): the values go to
 // the walk the package writes beside its `pub grammar`, each option as given
 // or left to the default the package declares, which the caller cannot see.
 use std::fs

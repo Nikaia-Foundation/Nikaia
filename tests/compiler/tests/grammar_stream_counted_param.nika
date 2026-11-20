@@ -1,5 +1,5 @@
 // An `@stream` entry walks a repetition counted by the entry's own parameter
-// (ADR-grammar-syntax-v1 D13, ADR-grammar-2 D7, #1499): `items(n: i64) = item{n}`
+// (ADR-grammar-syntax-v1 D13, ADR-grammar-typed-read-v1 D7, #1499): `items(n: i64) = item{n}`
 // takes exactly `n` items and `item{1, n}` stops after the `n`-th.
 
 struct Item {
