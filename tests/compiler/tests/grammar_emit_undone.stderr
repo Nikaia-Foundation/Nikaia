@@ -4,7 +4,7 @@ error[NK1370]: This `emit` in rule `line` could be undone: option 2 of a choice 
  12 | 	rule line = w:until(";") ";" -> { emit Item { word: w.clone() } }
     |                                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
     |
-    = note: The item goes to the caller's walk when the action runs (ADR-grammar-2 D7): if what follows the call of `line` fails, the parse goes back and tries option 2 of a choice in rule `items`, and the item is already handed over. The compiler does not hold items back to hide that.
+    = note: The item goes to the caller's walk when the action runs (ADR-grammar-typed-read-v1 D7): if what follows the call of `line` fails, the parse goes back and tries option 2 of a choice in rule `items`, and the item is already handed over. The compiler does not hold items back to hide that.
     = help: Commit before the call: a cut `=>` in front of it, or the choice made before it, so that the parse cannot go back past the `emit`.
 error[NK1370]: This `emit` in rule `line` could be undone: the end of a repetition in rule `items` can still be tried after it runs.
    --> tests/grammar_emit_undone.nika:19:36
@@ -12,7 +12,7 @@ error[NK1370]: This `emit` in rule `line` could be undone: the end of a repetiti
  19 | 	rule line = w:until(";") ";" -> { emit Item { word: w.clone() } }
     |                                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
     |
-    = note: The item goes to the caller's walk when the action runs (ADR-grammar-2 D7): if what follows the call of `line` fails, the parse goes back and tries the end of a repetition in rule `items`, and the item is already handed over. The compiler does not hold items back to hide that.
+    = note: The item goes to the caller's walk when the action runs (ADR-grammar-typed-read-v1 D7): if what follows the call of `line` fails, the parse goes back and tries the end of a repetition in rule `items`, and the item is already handed over. The compiler does not hold items back to hide that.
     = help: Commit before the call: a cut `=>` in front of it, or the choice made before it, so that the parse cannot go back past the `emit`.
 error[NK1370]: This `emit` in rule `line` could be undone: alternative 2 in rule `pair` can still be tried after it runs.
    --> tests/grammar_emit_undone.nika:25:36
@@ -20,6 +20,6 @@ error[NK1370]: This `emit` in rule `line` could be undone: alternative 2 in rule
  25 | 	rule line = w:until(";") ";" -> { emit Item { word: w.clone() } }
     |                                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
     |
-    = note: The item goes to the caller's walk when the action runs (ADR-grammar-2 D7): if what follows the call of `line` fails, the parse goes back and tries alternative 2 in rule `pair`, and the item is already handed over. The compiler does not hold items back to hide that.
+    = note: The item goes to the caller's walk when the action runs (ADR-grammar-typed-read-v1 D7): if what follows the call of `line` fails, the parse goes back and tries alternative 2 in rule `pair`, and the item is already handed over. The compiler does not hold items back to hide that.
     = help: Commit before the call: a cut `=>` in front of it, or the choice made before it, so that the parse cannot go back past the `emit`.
 3 type errors

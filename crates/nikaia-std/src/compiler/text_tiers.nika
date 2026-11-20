@@ -7369,7 +7369,7 @@ fn bind_rule_value(name: winnow_grammar::Symbol, ty: ref Type, ask: ref TierAsk,
     bind_tier_local(ask.names.resolve(name).clone(), local, walk)
 }
 
-/// **A stream entry's items are owned** (ADR-grammar-2 D7, amended
+/// **A stream entry's items are owned** (ADR-grammar-typed-read-v1 D7, amended
 /// 2026-11-08): an item outlives the step that read it, so the text its type
 /// holds is text of its own, never a view of the input.
 fn own_stream_items(ret_type: ref Type?, ask: ref TierAsk, mut walk: TierWalk) {

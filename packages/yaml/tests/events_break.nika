@@ -1,4 +1,4 @@
-// A walk of `Yaml::events` that stops early (ADR-grammar-2 D7, #1443): a
+// A walk of `Yaml::events` that stops early (ADR-grammar-typed-read-v1 D7, #1443): a
 // `break` after the first document ends the parse there, so the error in the
 // third document is never read; walked to the end, the same stream fails.
 // The limits are the parse's own option (D8).

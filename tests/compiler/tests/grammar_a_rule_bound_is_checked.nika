@@ -1,4 +1,4 @@
-// ADR-grammar-2 D1, Part II 10.8: a bound on a rule's type parameter is
+// ADR-grammar-typed-read-v1 D1, Part II 10.8: a bound on a rule's type parameter is
 // checked at the call, as a function's is (NK1164): `[S: Struct]` takes a
 // type declared with `struct`, and `i64` is not one.
 grammar Obj {

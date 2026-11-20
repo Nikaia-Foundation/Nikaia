@@ -1,4 +1,4 @@
-// ADR-grammar-2 D2, D6, Part II 10.8: a rule body `match T::kind { … }`
+// ADR-grammar-typed-read-v1 D2, D6, Part II 10.8: a rule body `match T::kind { … }`
 // chooses its pattern by the kind of the type each copy is for. `Maybe(A)`
 // names the type inside, and its arm hands it on to `Value[A]`; the arm no
 // copy takes (`Text`) is not copied at all.

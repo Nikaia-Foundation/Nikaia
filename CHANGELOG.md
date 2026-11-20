@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1483] — 2026-11-20
+
+**The decisions on a grammar entry that takes a type live in one record, ADR-grammar-typed-read-v1 (#2270)**
+- The decisions on a grammar entry that takes a type (type parameters on rules, a match on a kind, members[S] and its mapping rule, the format's name: function, @stream entries, write[T], json::read forwarding to Json, type arguments in brackets, fields with a text form of their own, payload-free enum variants) live in one record, ADR-grammar-typed-read-v1; ADR-grammar-2 archived.
+
 ## [0.0.1482] — 2026-11-20
 
 **Builders' changes (#2071, #2072, #2349)**
