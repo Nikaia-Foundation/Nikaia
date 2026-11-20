@@ -8,6 +8,12 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1505] — 2026-11-20
+
+**Builders' changes (#2437)**
+- Nikaia pins winnow-grammar e417f40, whose stream walk keeps emitted items in a Vec of their type instead of a box each: deep.yaml's stream program falls from 212.2M to 188.7M instructions (in-memory 157.6M), with the same output
+- A text is cut by name at its own positions (ADR-374): text::Pos from s.start(), s.end() and a regex match's start/end; s.before(p), s.after(p), s.between(p, q) (q before p stops the program); text::Cursor(t) with until/rest/at/go/text for scanners that keep their place; + on a text::Pos is NK1191.
+
 ## [0.0.1504] — 2026-11-20
 
 **A walk of a @stream entry over a String or Bytes hands its items over in batches of 256**

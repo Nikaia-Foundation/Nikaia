@@ -1,0 +1,7 @@
+// A position in a text is no number and takes no arithmetic (ADR-374 D1):
+// `+` on a `text::Pos` is NK1191, and the help names the cuts.
+fn main() throws {
+    let t = "abc"
+    let p = t.start() + 1
+    println(t.before(p))
+}

@@ -1,0 +1,21 @@
+// A scanner keeps its place in a `text::Cursor` (ADR-374 D6): `until` hands
+// out the text up to the next needle and moves past it, `null` where none
+// follows; `rest`, `at`, `go` and `text` read and set the place.
+use std::text
+
+fn main() throws {
+    let t = "Hamburg;12.0\nBulawayo;8.9\nPalembang;38.8\ntail"
+    let mut c = text::Cursor(t)
+    let mut rows = 0
+    while true {
+        let row = c.until("\n") ?? break
+        let mut fields = text::Cursor(row)
+        let name = fields.until(';') ?? break
+        println(f"{name} = {fields.rest()}")
+        rows += 1
+    }
+    println(f"{rows} rows, rest [{c.rest()}], {c.at() == t.end()}")
+    c.go(t.start())
+    println(f"[{c.until("Bula") ?? ""}] [{c.text().before(c.at())}]")
+    println(f"{c.until("none") == null} {c.at() < t.end()}")
+}

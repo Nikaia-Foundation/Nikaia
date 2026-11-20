@@ -491,7 +491,7 @@ pub(crate) fn check_core_stmt_wraps_into_nullable<H: CheckHost>(state: &mut Chec
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn check_core_stmt_has_no_arithmetic(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, ty: &Ty) -> bool { is_a_collection_type(ty) || declared_with_no_arithmetic(&world.here, ty).is_some() }
+pub(crate) fn check_core_stmt_has_no_arithmetic(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, ty: &Ty) -> bool { is_a_collection_type(ty) || declared_with_no_arithmetic(&world.here, ty).is_some() || is_a_text_position(ty) }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
