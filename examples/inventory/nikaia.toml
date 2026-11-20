@@ -1,3 +1,10 @@
 [package]
 name = "inventory"
 version = "0.1.0"
+
+# The stock list it reads and the page it writes are the two paths its
+# user names on the command line: opening them is the program's job
+# (ADR-raw-sinks-1 D15).
+[allow]
+untrusted-paths-read = ["args"]
+untrusted-paths-write = ["args"]
