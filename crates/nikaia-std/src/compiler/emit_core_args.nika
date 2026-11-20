@@ -442,6 +442,27 @@ impl EmitState {
         return keeps_its_bytes(world.library.functions.get(callee) ?? return false, i)
     }
 
+    /// Whether argument `i` of a call goes to a parameter the library's or a
+    /// described crate's entry names in `os_text` (Part III 13.5, #2351): one
+    /// its Rust function takes as `&OsStr`. This unit's own functions take
+    /// none.
+    fn emit_arg_os_text(ref self, world: ref EmitWorld, callee: ref String, method_callee: ref String?, i: i64) -> bool {
+        let key = method_callee ?? callee
+        if self.own_contracts.functions.contains_key(key) {
+            return false
+        }
+        let contract = world.library.functions.get(key) ?? self.described.functions.get(key) ?? return false
+        if contract.os_text.is_empty() {
+            return false
+        }
+        let signature = contract.signature ?? return false
+        let params = call_arguments(signature)
+        if i >= params.len() {
+            return false
+        }
+        return contract.os_text.contains(params[i].0)
+    }
+
     /// The opening a lent view gets inside the option a nullable parameter is:
     /// the declaration's own where this unit has the callee, else the one every
     /// method of that name agrees on (#462). Empty where there is none. **A
@@ -524,6 +545,12 @@ impl EmitState {
             if i > 0 {
                 out.push(", ")
             }
+            // **A Rust `&OsStr` parameter** (Part III 13.5 `os_text`, 15.2,
+            // #2351): the `String` crosses for free, as `OsStr::new(arg)`.
+            let os_text = self.emit_arg_os_text(world, callee, method_callee, i)
+            if os_text {
+                out.push("std::ffi::OsStr::new(")
+            }
             if hoisted.contains(i) {
                 let mut one = EmitOut::empty()
                 self.emit_core_argument(world, walk, one, host, callee, method_callee, arg, i, boxed_mask, part_counts, takes_a_handle, depth, flow, scope)
@@ -533,6 +560,9 @@ impl EmitState {
                 out.push(f"__nikaia_arg{i}")
             } else {
                 self.emit_core_argument(world, walk, out, host, callee, method_callee, arg, i, boxed_mask, part_counts, takes_a_handle, depth, flow, scope)
+            }
+            if os_text {
+                out.push(")")
             }
             i += 1
         }

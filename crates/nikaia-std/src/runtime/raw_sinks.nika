@@ -12,6 +12,8 @@
 // `std.contracts` writes its entry by hand, as for `env::vars`.
 // `db::is_identifier` is the `db` package's (`packages/db/src/main.nika`).
 
+use std::html
+
 /// Whether `part` holds none of the characters markup reads as more than
 /// text: `&`, `<`, `>`, `"` and `'` (ADR-raw-sinks-1 D2, the precondition of
 /// `html::Raw`). The empty text is plain.
@@ -30,4 +32,12 @@ pub fn is_plain(part: ref String) -> bool sync {
         }
     }
     return true
+}
+
+/// The safe way in: escape first, and the result is markup by construction,
+/// not escaped twice when it is written out again (`src/html.rs`, #2304).
+test "escaped text becomes markup" {
+    let markup = html::Raw::escaped("a < b & c")
+    assert(markup.as_str() == "a &lt; b &amp; c")
+    assert(html::Raw(markup.as_str()).as_str() == "a &lt; b &amp; c")
 }

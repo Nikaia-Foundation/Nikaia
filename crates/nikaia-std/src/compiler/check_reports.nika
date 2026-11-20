@@ -304,8 +304,10 @@ impl CheckState {
         }
         let suffix = f"::{name}"
         let mut keys: Vec[String] = []
-        for (key, _) in world.library.functions {
-            if key.ends_with(ref suffix) {
+        // A `pub = false` entry is `std`'s own (`abort::lookup`): a program
+        // cannot call it, so the hint does not send it there.
+        for (key, contract) in world.library.functions {
+            if contract.public && key.ends_with(ref suffix) {
                 keys.push(key.clone())
             }
         }

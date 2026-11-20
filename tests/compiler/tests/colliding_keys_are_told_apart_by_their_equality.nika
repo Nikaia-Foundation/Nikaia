@@ -1,0 +1,35 @@
+// Keys that share a hash are told apart by their equality (ADR-010 D12, #2315):
+// `Key`'s own `impl Hash` feeds every key the same value, so every key
+// collides, and the law holds since equal keys feed the same value. Each key
+// still finds its own value, an overwrite leaves the others alone, and
+// `remove` and `len` stay right. Was map.rs's Rust test
+// `colliding_keys_are_told_apart`, which gave the map a hasher of its own,
+// something D12 keeps from a program.
+use std::collections
+
+struct Key { text: String }
+
+impl Hash for Key {
+	fn hash(ref self, mut into: Hasher) sync {
+		into.add(0)
+	}
+}
+
+fn main() throws {
+	let words = ["a", "b", "ab", "ba", "", "abcdefgh", "abcdefgi", "abcdefghijklmnopq"]
+	let mut m: collections::HashMap[Key, i64] = collections::HashMap()
+	let mut n = 0
+	for word in words {
+		m.insert(Key { text: word }, n)
+		n += 1
+	}
+	println(f"len {m.len()}")
+	for word in words {
+		println(f"{word:?} {m[Key { text: word }] ?? -1}")
+	}
+	m.insert(Key { text: "ba" }, 30)
+	println(f"ba {m[Key { text: "ba" }] ?? -1}, ab {m[Key { text: "ab" }] ?? -1}, len {m.len()}")
+	println(f"removed ab: {m.remove(Key { text: "ab" }) ?? -1}")
+	println(f"ab {m[Key { text: "ab" }] ?? -1}, ba {m[Key { text: "ba" }] ?? -1}, len {m.len()}")
+	println(f"abcdefgi {m[Key { text: "abcdefgi" }] ?? -1}, missing {m[Key { text: "abcdefgj" }] ?? -1}")
+}

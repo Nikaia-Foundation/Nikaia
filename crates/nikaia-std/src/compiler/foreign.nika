@@ -468,13 +468,41 @@ fn a_named_call(func: ref Expr, args: ref Vec[Expr], config: ref Vec[ConfigArg],
     found.seen.push(Seen::Call { name: name, wrote: wrote, span: span.clone(), literals: literals, trusted: says_trusted(names, config) })
 }
 
+/// **The entries of the package's own Rust that publish** (ADR-rust-boundary-1
+/// D26, #2297): each entry of `contracts/crate.contracts` saying `pub = true`
+/// is `NK2508`, once, at its line in `own.entries`, whether anything calls it
+/// or not.
+pub fn foreign_own_published(own: ref ProjectMembersOwnRust) -> Vec[CheckFinding] {
+    let mut out: Vec[CheckFinding] = []
+    if own.published.is_empty() {
+        return out
+    }
+    let lines: Vec[String] = own.entries.split("\n").map(fn(line) { line.clone() }).collect()
+    for (name, line) in own.published {
+        let mut start: i64 = 0
+        let mut end: i64 = 0
+        for (at, text) in lines.iter().enumerate() {
+            if at as i64 + 1 == line {
+                end = start + text.trim_end().len() as i64
+                break
+            }
+            start += text.len() as i64 + 1
+        }
+        let span = Span { start: start as u32, end: end as u32 }
+        let notes: Vec[String] = ["What a package publishes is its Nikaia API and what its `[rust-library] root` re-exports; the entries for its own Rust are for its own code, and no dependent sees them."]
+        out.push(check_refusal("NK2508", span, f"`{name}` is described with `pub = true`, and the package's own Rust stays the package's.", notes, "Write `pub = false` in this entry."))
+    }
+    return out
+}
+
 /// **The calls into the package's own Rust that no entry may answer**
 /// (ADR-rust-boundary-1 D24-D27), among `written`, each qualified name the
 /// unit writes beside its statement's span: a name under one of `own`'s
 /// heads with no entry in `contracts/crate.contracts` is `NK2504`, once per
-/// item, and so is one whose entry says `pub = true` (D26); and where a Rust
-/// file moved since the entries were reviewed, the first call is `NK2505`.
-/// Each names `nikaia describe crate`.
+/// item; and where a Rust file moved since the entries were reviewed, the
+/// first call is `NK2505`. Each names `nikaia describe crate`. An entry
+/// saying `pub = true` is refused at the entry, once for the package
+/// (`foreign_own_published`), not at its calls.
 pub fn foreign_own_refused(written: ref Vec[(String, Span)], program: ref Program, names: ref winnow_grammar::InternerContext, own: ref ProjectMembersOwnRust) -> Vec[CheckFinding] {
     let mut out: Vec[CheckFinding] = []
     if own.heads.is_empty() {
@@ -508,14 +536,6 @@ pub fn foreign_own_refused(written: ref Vec[(String, Span)], program: ref Progra
             continue
         }
         met.insert(name.clone())
-        match own.published.get(name) {
-            null => {},
-            line => {
-                let notes: Vec[String] = [f"Its entry is at `contracts/crate.contracts:{line}`.", "What a package publishes is its Nikaia API and what its `[rust-library] root` re-exports; the entries for its own Rust are for its own code, and no dependent sees them."]
-                out.push(check_refusal("NK2508", span, f"`{name}` is described with `pub = true`, and the package's own Rust stays the package's.", notes, "Write `pub = false` in its entry in `contracts/crate.contracts`."))
-                continue
-            },
-        }
         if !own.described.contains(name) && own.narrow.contains(name) {
             let head = name.split("::").next() ?? ""
             let file = (own.files.get(head) ?? "its file").clone()

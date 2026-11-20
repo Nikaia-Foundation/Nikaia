@@ -352,7 +352,7 @@ pub(crate) fn function_key(entry: &mut FnContract, name: &str, key: &str, value:
         if spelled.mutates { entry.mutates = true; }
         if !spelled.borrows.is_empty() { entry.borrows = spelled.borrows.copy_owned(); }
         entry.signature = Some(spelled.signature);
-    } else if key == "keeps" { entry.keeps = entries(value, n)?; } else if key == "at_once" { entry.at_once = entries(value, n)?; } else if key == "mutates" { entry.mutates = value == "true"; } else if key == "locks" {
+    } else if key == "keeps" { entry.keeps = entries(value, n)?; } else if key == "at_once" { entry.at_once = entries(value, n)?; } else if key == "os_text" { entry.os_text = entries(value, n)?; } else if key == "mutates" { entry.mutates = value == "true"; } else if key == "locks" {
         let said = value.trim();
         if said == "true" { entry.touches_a_lock = Lock::Holds; } else if said == "\"?\"" { entry.touches_a_lock = Lock::Undecided; } else { entry.touches_a_lock = Lock::No; }
     } else if key == "panics" {

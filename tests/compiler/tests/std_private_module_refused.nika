@@ -1,0 +1,7 @@
+// `rt` is `std`'s own: every entry under it in `std.contracts` is
+// `pub = false` (ADR-rust-boundary-1 D24), so a program's `use std::rt` is
+// `NK1186`, and the list of what `std` offers leaves `rt` out (#2320).
+use std::rt
+
+fn main() {
+}

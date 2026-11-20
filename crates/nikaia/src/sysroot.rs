@@ -940,10 +940,6 @@ fn lower_package(
         } else {
             (None, facts)
         };
-        let (unit, wrappers) = match &tests {
-            Some(Ok((again, wrappers))) => (again, wrappers.as_str()),
-            _ => (unit, ""),
-        };
         if let Some(Err(e)) = &tests {
             return (
                 Err(anyhow::anyhow!("{}: {e}", path.display())),
@@ -951,13 +947,28 @@ fn lower_package(
                 std::time::Duration::ZERO,
             );
         }
+        // **A test that pauses is an `async fn`** (#2316): the package's
+        // ledger was drawn before the tests were functions, so theirs are
+        // inferred here, against it and `std`, and the list runs a pausing
+        // one through `block_on`.
+        let with_tests;
+        let (unit, own, wrappers) = match &tests {
+            Some(Ok((again, titles, stem))) => {
+                let (ledger, pausing) = with_test_contracts(again, &own, &library, titles.len());
+                with_tests = ledger;
+                let wrappers =
+                    nikaia_std::compiler::modules::modules_test_wrappers(titles, stem, &pausing);
+                (again, &with_tests, wrappers)
+            }
+            _ => (unit, &own, String::new()),
+        };
         // A file lowered with its tests as functions holds functions the
         // package's graphs were not drawn over, so its own are drawn.
         let file_graphs = tests.is_none().then(|| graphs.clone());
         let lowered = crate::emit::emit_std_items_against_at(
             unit,
             &beside,
-            &own,
+            own,
             &described,
             build,
             provenance,
@@ -1030,7 +1041,7 @@ fn lower_package(
 fn with_tests_as_functions(
     path: &Path,
     all: &[crate::parser::Parsed],
-) -> Result<(crate::parser::Parsed, String)> {
+) -> Result<(crate::parser::Parsed, Vec<String>, String)> {
     let source = std::fs::read_to_string(path)?;
     let mut again = crate::parser::parse_unrefined(&source).map_err(|e| anyhow::anyhow!("{e}"))?;
     let read: Vec<&crate::parser::Parsed> = all.iter().collect();
@@ -1049,8 +1060,40 @@ fn with_tests_as_functions(
         .unwrap_or_default()
         .to_string_lossy()
         .to_text();
-    let wrappers = nikaia_std::compiler::modules::modules_test_wrappers(&titles, &stem);
-    Ok((again, wrappers))
+    Ok((again, titles, stem))
+}
+
+/// `own` with an entry for each of the `count` test functions of `again`
+/// (`modules_tests_as_functions`) that pauses, which is what makes the emitter
+/// write it as an `async fn`, and whether each pauses (#2316): its calls
+/// against `own` and `library`, as a `sync` promise would check them.
+fn with_test_contracts(
+    again: &crate::parser::Parsed,
+    own: &crate::contracts::Ledger,
+    library: &crate::contracts::Ledger,
+    count: usize,
+) -> (crate::contracts::Ledger, Vec<bool>) {
+    let names: Vec<String> = (0..count as i64)
+        .map(nikaia_std::compiler::modules::test_function)
+        .collect();
+    let pausing = nikaia_std::compiler::sync::unit_pausing(
+        &again.program,
+        &again.interner,
+        &mut |name: &str| again.unaliased(name),
+        &mut |expr: &crate::ast::Expr| crate::emit::literal_expressions(again, expr),
+        own,
+        library,
+        &names,
+    );
+    let mut ledger = own.clone();
+    for (name, pauses) in names.into_iter().zip(&pausing) {
+        if *pauses {
+            ledger
+                .functions
+                .insert(name, crate::contracts::FnContract::empty());
+        }
+    }
+    (ledger, pausing)
 }
 
 /// **A package as `lower-std` writes it** (#667 step 4): the index

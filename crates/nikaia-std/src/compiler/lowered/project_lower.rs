@@ -47,6 +47,7 @@ pub trait ProjectLowerHost {
     fn check_open(&self) -> Vec<CheckUnit>;
     fn unit_source(&self, at: i64) -> String;
     fn check_unit(&self, at: i64) -> Result<UnitSaid, std::boxed::Box<dyn std::error::Error>>;
+    fn check_package(&self) -> Option<UnitSaid>;
     fn check_close(&self, refused: &[String]) -> Result<(), std::boxed::Box<dyn std::error::Error>>;
     fn in_a_batch(&self) -> bool;
     fn digest(&self, text: &str) -> String;
@@ -148,6 +149,11 @@ pub fn project_lower_check<H: ProjectLowerHost>(host: &H) -> Result<String, std:
             Some(UnitSaid::Warned(ref text)) => { warnings = format!("{}{}", warnings, text); },
             Some(UnitSaid::Refused(text)) => { refused.push(text); },
         }
+    }
+    match host.check_package() {
+        None => { },
+        Some(UnitSaid::Refused(text)) => { refused.push(text); },
+        _ => { },
     }
     host.check_close(&refused)?;
     Ok(warnings)

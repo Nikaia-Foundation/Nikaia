@@ -343,6 +343,30 @@ pub fn unit_violations(program: &Program, names: &winnow_grammar::InternerContex
     found
 }
 
+pub fn unit_pausing(program: &Program, names: &winnow_grammar::InternerContext, unaliased: &mut impl FnMut(&str) -> String, holes_of: &mut impl FnMut(&Expr) -> Vec<Expr>, own: &Ledger, library: &Ledger, wanted: &[String]) -> Vec<bool> {
+    let mut answers: Vec<bool> = vec![];
+    for one in wanted.iter() {
+        let mut pauses = false;
+        for item in program.items.iter() {
+            match &item.node {
+                Item::Fn { name, args, body, .. } => {
+                    let name = *name;
+                    let key = key_of_function((name).as_ref(), "", names);
+                    if key == *one {
+                        let promise = match promise_of(&key, args, body, true, &vec![], names) { Some(__nikaia_value) => __nikaia_value, None => continue };
+                        let mut found: Vec<Violation> = vec![];
+                        violations_in(&seen_in(body, names, &mut *unaliased, &mut *holes_of, &mut no_root, false), &promise, program, names, own, library, &mut found);
+                        pauses = !found.is_empty();
+                    }
+                },
+                _ => { },
+            }
+        }
+        answers.push(pauses);
+    }
+    answers
+}
+
 pub(crate) fn promise_of(caller: &str, args: &[FnArg], body: &Block, is_sync: bool, sync_by: &[winnow_grammar::Symbol], names: &winnow_grammar::InternerContext) -> Option<Promise> {
     if !is_sync && sync_by.is_empty() { return None; }
     let mut allowed: collections::BTreeSet<String> = collections::BTreeSet::new();

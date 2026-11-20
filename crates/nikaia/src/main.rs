@@ -18,6 +18,13 @@ use nikaia::{diagnostics, interpreter, parser, refuse};
 use nikaia_std::compiler::cli_commands::{self, CliCommandsRefusal};
 use nikaia_std::compiler::project_tests;
 
+/// **The compiler counts its heap like every program** (ADR-400 D1, #2338):
+/// the line `emit_program.nika`'s `EMIT_PROGRAM_COUNTING_HEAP` writes into an
+/// emitted program, so `mem::allocations()` counts in the test blocks
+/// `nikaia test --std` runs in this process. Host Rust: the binary's root.
+#[global_allocator]
+static NIKAIA_HEAP: nikaia_std::block::Counting = nikaia_std::block::Counting;
+
 /// The Nikaia compiler: `nikaia build` for a project, `nikaia lower` for one
 /// file.
 #[derive(Parser, Debug)]

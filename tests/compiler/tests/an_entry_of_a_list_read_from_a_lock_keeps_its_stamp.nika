@@ -1,0 +1,8 @@
+// An entry read by index out of what a lock handed out keeps the stamp
+// (ADR-281 D23, #2208): it does not go back into a lock blind (D25).
+fn main() throws {
+    let order: SharedMut[Vec[i64]] = SharedMut([7, 8])
+    let first: SharedMut[i64] = SharedMut(0)
+    let seen = order.get()
+    first.set(seen[0])
+}
