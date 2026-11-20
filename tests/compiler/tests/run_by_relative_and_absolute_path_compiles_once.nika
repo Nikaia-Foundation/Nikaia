@@ -1,0 +1,40 @@
+// One script run by a relative and by an absolute path in turn: its
+// generated places table names the path as given (ADR-300 D9), so the two
+// runs compile different Rust. With one place in the run cache each run took
+// it from the other and compiled the program again, which made the driver's
+// tests that run scripts/drive.nika both ways pay `rustc` on every call. Each
+// form now keeps its own compiled program: after one run of each, later runs
+// compile nothing (the programs' inodes stay).
+use std::process
+
+fn toolchain() -> String throws {
+    let exe = process::run("sh", ["-c", "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\""]).stdout.trim().clone()
+    if exe.len() > 0 { return exe }
+    return "target/fast/nikaia"
+}
+
+fn programs(tmp: String) -> String throws {
+    return process::run("sh", ["-c", "find \"$0/cache\" -path '*/fast/slots/*/both_ways' -type f -exec stat -c %i {} + | sort", tmp]).stdout.trim().clone()
+}
+
+fn run(nikaia: String, tmp: String, script: String) throws {
+    let out = process::run("sh", ["-c", "cd \"$2\" && NIKAIA_CACHE_DIR=\"$2/cache\" \"$0\" run \"$1\"", nikaia, script, tmp])
+    println(f"{out.stdout.trim()}")
+}
+
+fn main() throws {
+    let tmp = process::run("sh", ["-c", "cd \"$(mktemp -d)\" && pwd -P"]).stdout.trim().clone()
+    let nikaia = toolchain()
+    process::run("sh", ["-c", "printf 'fn main() throws {\\n    println(\"ran\")\\n}\\n' > \"$0/both_ways.nika\"", tmp.clone()])
+    run(nikaia.clone(), tmp.clone(), "both_ways.nika")
+    run(nikaia.clone(), tmp.clone(), f"{tmp}/both_ways.nika")
+    let first = programs(tmp.clone())
+    println(f"compiled programs: {first.lines().count()}")
+    for _ in 0..<3 {
+        run(nikaia.clone(), tmp.clone(), "both_ways.nika")
+        run(nikaia.clone(), tmp.clone(), f"{tmp}/both_ways.nika")
+    }
+    let later = programs(tmp.clone())
+    println(f"compiled again: {later != first}")
+    process::run("rm", ["-rf", tmp])
+}
