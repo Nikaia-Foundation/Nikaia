@@ -16,7 +16,7 @@ Only wording, typos, dead links and the **Built** column are changed in place.
 The live record is the one to read and the one to cite; a version cited in an
 old commit message is still read, in the history.
 
-The records of the earlier schemes (`ADR-299`, `ADR-views-3`) keep their
+The records of the earlier schemes (`ADR-338`, `ADR-views-3`) keep their
 names until something changes them; a change to one of them consolidates its
 topic into a `-v` record (D4). Until then such a record may still carry
 *Changed by ADR-MMM Dn* notes from before.
@@ -77,7 +77,7 @@ implementation.
 | [346](adr-346.md) | Every task error has a receiver: an unbound `spawn` is detached; a bound `TaskHandle` must be taken by `join`, `join(within:)`, `detach` or `cancel`, or handed on (`NK2109`); `join` throws the body's errors; `join(within:)` cancels on time-out and throws `task::TimedOut`; a detached task's error is logged, a fatal one sets the exit status at `main`'s end; supervisors do not restart a fatal error; `task::scope` hands errors on as `overlap`. | Accepted | in part (#605) |
 | [345](adr-345.md) | A type is fatal where `impl Fatal for T` says so; a `catch` takes a fatal error only in a `match` arm naming its type, and otherwise it passes on (`throws`, `NK2605`); `process::exit(code)` throws the fatal `process::Exit(code)`, which ends `main` with the code on ADR-343 D1's ordered path; in a task it ends the task; `NK2607` and the ledger's `exits` are retired. | Accepted | yes, but a task's failure reaching its joiner is a lowering defect (#605) |
 | [yaml-1](adr-yaml-1.md) | The official package `yaml` is `packages/yaml/` with its own version; a grammar over `ref Bytes` builds a tree whose strings are views of the input and whose nodes carry spans; YAML 1.2 core schema (`yes` is a string), a duplicate key an error, `<<` merged only on request; events are a walk of the tree in the yaml-test-suite's vocabulary; limits (depth, alias expansion, size) on by default; tests its own, then the suite vendored byte for byte with a pass list; the serde_yaml facade waits on #978, `stream` on #978 and the lowering of winnow-grammar's `#[stream]` | Accepted | no |
-| [344](adr-344.md) | Official packages live in `packages/<name>/` with their own version; `json::read[T]` reads into the caller's struct with a decoder generated at build time, matched by ADR-299 D16-D18 (`NK1250`); a JSON Schema is a build-time input `T` is checked against (`NK1251`); `json::Value` for text of unknown shape; `json::write[T]` writes. | Accepted | no |
+| [344](adr-344.md) | Official packages live in `packages/<name>/` with their own version; `json::read[T]` reads into the caller's struct with a decoder generated at build time, matched by ADR-database-v1 D16-D18 (`NK1250`); a JSON Schema is a build-time input `T` is checked against (`NK1251`); `json::Value` for text of unknown shape; `json::write[T]` writes. | Accepted | no |
 | [343](adr-343.md) | `process::exit(code)` ends `main` now with that code on the path a normal end of `main` takes: cleanups run, unjoined tasks run out under `cleanup-deadline`; a code outside `0..=255` panics, a constant one is refused; code that may end the program (a ledger column, derived over calls) is refused in a task (`NK2607`). | Accepted | partly: D1-D4 (#603), a callback's function type carries no `exits` yet |
 | [342](adr-342.md) | A list's `map` whose result goes straight into the next step runs element by element with it, with no list between; where a chain's lambdas touch nothing, the order they run in and which panic stops it are not fixed, an overflow may stop it after its last element, and a filter's conditions may be read without a branch; what can be slower than today's code is measured first. | Accepted | no |
 | [341](adr-341.md) | `Eq` and `Ord` are traits of the language, always in scope; a bound on them gives the body the operators, and `a < b` on an unbounded `T` is `NK1248`; a bound is answered by an `impl` or, for the language's own types and declared types' equality, by the walk; a program writes `impl Eq`/`impl Ord` for the types it declares (`NK1249` otherwise); an ordered map's key is `Ord`. | Accepted | yes |
@@ -264,7 +264,7 @@ implementation.
 | [307](adr-307.md) | A comment is `//` or a nesting `/* … */`, and a run of `///` before an item is its documentation, kept by the parser and not carried by the contract. | Accepted | partly: a field's and a variant's `///` |
 | [301](adr-301.md) | A condition is an ordinary expression: the head of an `if`, `while` or `for` parses the body's language minus the forms a `{` begins, which take parentheses. | Accepted | yes |
 | [298](adr-298.md) | A word the language uses is reserved and only for a construct, and a word the language below reserves is escaped where it is written. | Accepted | yes |
-| [299](adr-299.md) | A database statement is SQL a driver's grammar checks at build time against a schema, run on a connection typed by that schema; a block may name the struct its rows are (`-> T`), matched by name, strictly, a `NULL` only into a `T?`. A grammar from a package is named `package::Grammar`, always (D20). A block names its entry where a grammar has several, `dsl Json::value { … }`, unless one is `main entry rule` (D21). | Accepted | no |
+| [database-v1](adr-database-v1.md) | A database statement is SQL a driver's grammar checks at build time against a schema, run on a connection typed by that schema; a block may name the struct its rows are (`-> T`), matched by name, strictly, a `NULL` only into a `T?`. A grammar from a package is named `package::Grammar`, always (D20). A block names its entry where a grammar has several, `dsl Json::value { … }`, unless one is `main entry rule` (D21). | Accepted | no |
 | [292](adr-292.md) | Statement order is the written order; a program asks for concurrency with `overlap`, which keeps every result and failure, or `select`, which keeps the first. | Accepted | yes |
 | [285](adr-285.md) | An integer is one of five types and aborts where a value does not fit, and a number without an annotation is typed by its uses; one integer type takes another without `as` where no value can be lost (D32).  A narrowing `as` is written only where it is shown to fit, `NK1241` otherwise, with `checked_<T>()` and `truncating_<T>()` as the named ways (D12, D13); the same bits with the other sign are `bits_as_<T>()` (D42). `f32` is a type beside `f64`: literals typed by use, no mixing without `as` (D33). A list written in number literals is one open number (D34). Text becomes a number by `text::parse_<T>`, a `T?` per type (D35). | Accepted | partly: `u8`'s arithmetic names; D32 not built (#439) |
 | [315](adr-315.md) | Arithmetic and a conversion that may not fit can be asked whether they do: `checked_add`, `_sub`, `_mul`, `_div`, `_rem`, `_neg`, `_abs` and `checked_i32()` … `checked_u64()` answer `T?`, `null` where there is no answer (a division by zero included); no `checked_shl`/`_shr`. | Accepted | yes |
@@ -372,7 +372,6 @@ one), the new `-v` record's **Supersedes / Related** line names that change
 | [283](adr-283.md) D25 | [views-3](adr-views-3.md) D8, D9 | a result may point into several parameters, view by view; giving an argument up while viewed is allowed; a change in place is `NK2305` |
 | [346](adr-346.md) D7 | [351](adr-351.md) D5 | a supervisor throws a child's fatal error itself; no `supervisor::Handed` |
 | [343](adr-343.md) D1-D3 | [345](adr-345.md) D3-D5 | `exit` throws the fatal `process::Exit`; no `exits` column, no `NK2607` |
-| [299](adr-299.md) D4, D8 | [338](adr-338.md) D2 | the database protocol is the official package `db` |
 | [017](adr-017.md), [289](adr-289.md) | [338](adr-338.md) D2 | `std::html`, `std::http1` and `std::db` are the official packages `html`, `http1` and `db` |
 | [329](adr-329.md) D1 | [330](adr-330.md) D5 | `.ty` is the field's type, not a `meta::Type` |
 | [330](adr-330.md) D3 | [332](adr-332.md) D1 | a function type's kind is `Fn(F)`; `NK1232` retired |
@@ -396,7 +395,7 @@ one), the new `-v` record's **Supersedes / Related** line names that change
 
 ## Topics in use
 
-`async`, `catch`, `collections`, `decision-records`, `failure-return`, `grammar-actions`, `grammar-build-time`, `grammar-input`, `grammar-lowering`, `grammar-parallel`, `grammar-syntax`, `grammar-typed-read`, `lambdas`, `raw-sinks`, `regex`, `registry`, `rust-boundary`, `shared-handle-cycles`, `specialization`, `views`, `yaml`.
+`async`, `catch`, `collections`, `database`, `decision-records`, `failure-return`, `grammar-actions`, `grammar-build-time`, `grammar-input`, `grammar-lowering`, `grammar-parallel`, `grammar-syntax`, `grammar-typed-read`, `lambdas`, `raw-sinks`, `regex`, `registry`, `rust-boundary`, `shared-handle-cycles`, `specialization`, `views`, `yaml`.
 
 ## Reserved numbers
 
@@ -406,7 +405,6 @@ the same time do not take the same name.
 
 | ADR | Claimed for | Where |
 | :--- | :--- | :--- |
-| database-v1 | database statements (ADR-299) | #904 |
 | views-v4 | views (views-1 to views-3) | #904 |
 | collections-v3 | collections (collections-1, collections-2) | #904 |
 

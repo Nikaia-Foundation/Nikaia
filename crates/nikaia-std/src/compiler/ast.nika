@@ -618,7 +618,7 @@ pub enum Expr {
     Dsl {
         target: winnow_grammar::Symbol,          // z.B. sql
         /// `dsl sqlite::Sql`: the package a grammar comes from
-        /// ([ADR-299](../../../docs/specification/adr/adr-299.md) D20). `None`
+        /// ([ADR-database-v1](../../../../docs/specification/adr/adr-database-v1.md) D20). `None`
         /// for a grammar the program declares, and for `html`.
         package: winnow_grammar::Symbol?,
         context: winnow_grammar::Symbol?, // z.B. db (optional)

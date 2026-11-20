@@ -208,7 +208,7 @@ fn the_toolchains_own_module_says_why_it_is_not_reachable() {
 /// is [Part III C.4](../../../docs/specification/30-nikaia-tooling.md): the day
 /// it lands the line is unchanged, so refusing it today refuses a correct
 /// program. `use std::db` is how
-/// [ADR-299](../../../docs/specification/adr/adr-299.md)'s driver is reached.
+/// [ADR-database-v1](../../../../docs/specification/adr/adr-database-v1.md)'s driver is reached.
 #[test]
 fn a_module_a_record_promises_is_accepted() {
     for module in [

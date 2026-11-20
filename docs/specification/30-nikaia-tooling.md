@@ -1765,7 +1765,7 @@ comptime APP = asset("schema.sql")            // the schema, read while building
 
 fn query_data() throws {
     // Transparently starts the required sidecar (thread or worker). The
-    // connection is typed by the schema it was opened for (ADR-299), so a
+    // connection is typed by the schema it was opened for (ADR-database-v1), so a
     // statement checked against another schema is refused at `execute`.
     let db = sqlite::open("app.db"; schema: APP)
 
