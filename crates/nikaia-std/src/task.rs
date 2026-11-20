@@ -349,6 +349,42 @@ pub fn cores() -> i64 {
     i64::try_from(crate::rt::user_cores()).unwrap_or(i64::MAX)
 }
 
+/// **Give the thread up once** (`task::yield()`, Part II 11.1): a suspension
+/// point with no I/O and no time behind it. The calling task goes behind the
+/// tasks that are ready and goes on when it is polled again; nothing says which
+/// task runs in between. `yield` is Rust's reserved word, so the name is raw,
+/// which is how the emitter writes every such name (`escaped`, ADR-298 D9).
+pub async fn r#yield() {
+    Yield::once().await
+}
+
+/// The future behind [`r#yield`]: pending once, and it wakes itself, so the
+/// executor queues the task again behind those already ready.
+pub struct Yield(bool);
+
+impl Yield {
+    pub fn once() -> Yield {
+        Yield(false)
+    }
+}
+
+impl std::future::Future for Yield {
+    type Output = ();
+
+    fn poll(
+        mut self: std::pin::Pin<&mut Self>,
+        context: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<()> {
+        if self.0 {
+            return std::task::Poll::Ready(());
+        }
+        self.0 = true;
+        // Wake at once: this is not a wait, it is a place to be interrupted.
+        context.waker().wake_by_ref();
+        std::task::Poll::Pending
+    }
+}
+
 /// **Whether the code running on this thread is a task's** rather than
 /// `main`'s ([ADR-326](../../../docs/specification/adr/adr-326.md) D4): a panic
 /// there ends the task, and the program goes on.

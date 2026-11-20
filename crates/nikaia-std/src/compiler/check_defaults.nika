@@ -3,7 +3,7 @@
 // **What is computed where it is declared** (ADR-294, #125, #558, C-7, U-d3):
 // an option's default (ADR-318), a field's (ADR-331 D5), an attribute's
 // argument (`check_attributes.nika`), every item-level `comptime` (ADR-287),
-// and a grammar's folds (ADR-296). Free functions over the state, the world and
+// and a grammar's folds (ADR-grammar-parallel-v1). Free functions over the state, the world and
 // a host; the walk comes back through the hub `check_core_expr`.
 
 use std::collections

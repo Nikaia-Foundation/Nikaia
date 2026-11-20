@@ -17,6 +17,11 @@
 // alone, but where each error carries an edit. The edits are made in order
 // and do not move one another; two that overlap are both left, and the run
 // names them.
+//
+// **`--only CODE`** (#2183) makes only the edits of the findings `CODE` names
+// (repeatable): a migration that adds one fix-able finding runs `fix` over a
+// whole tree without the edits of the others (`NK1350`, `NK1354`) mixed in.
+// Which files are left alone for their errors does not change with it.
 
 use std::collections
 use std::fs
@@ -43,7 +48,8 @@ struct FixEdit {
 /// **`nikaia fix`**: the exit code. Each file is written where it changes and
 /// each edit named; with `dry_run` nothing is written and the diff of each
 /// file is printed instead. 1 where a file was left alone or could not be read.
-pub fn fix_run[H: LspHost](host: ref H, named: ref Vec[String], dry_run: bool) -> i64 throws {
+/// A non-empty `only` keeps the edits of the findings it names, and no other.
+pub fn fix_run[H: LspHost](host: ref H, named: ref Vec[String], dry_run: bool, only: ref Vec[String]) -> i64 throws {
     let mut files: Vec[String] = []
     for path in named {
         fix_files_under(path, files)
@@ -66,7 +72,7 @@ pub fn fix_run[H: LspHost](host: ref H, named: ref Vec[String], dry_run: bool) -
             fix_diagnosed(host, file, key, open, said_of)
         }
         let here = said_of[key]?.clone() ?? []
-        let plan = fix_planned(file, source, here)
+        let plan = fix_planned(file, source, here, only)
         if plan.left {
             code = 1
         }
@@ -109,8 +115,9 @@ fn fix_diagnosed[H: LspHost](host: ref H, file: ref String, key: ref String, ope
 /// `path`): none where one of them is an error that carries no edit. An
 /// error with an edit is one `fix` answers (`NK1353`'s `.chars()`, #1974),
 /// so it is made like a warning's. The edits are made in the order of the
-/// file; one that overlaps the one before it is left, and said.
-fn fix_planned(path: ref String, source: ref String, found: ref Vec[Shown]) -> FixPlan sync {
+/// file; one that overlaps the one before it is left, and said. A non-empty
+/// `only` drops the edits of every finding it does not name.
+fn fix_planned(path: ref String, source: ref String, found: ref Vec[Shown], only: ref Vec[String]) -> FixPlan sync {
     for shown in found {
         if !shown.warning && shown.edit == null {
             return FixPlan { text: source.clone(), said: [f"{path}: not fixed: its check has errors"], left: true }
@@ -120,6 +127,9 @@ fn fix_planned(path: ref String, source: ref String, found: ref Vec[Shown]) -> F
     let mut edits: Vec[FixEdit] = []
     for shown in found {
         let edit = shown.edit ?? continue
+        if !only.is_empty() && !only.contains(shown.code) {
+            continue
+        }
         let one = FixEdit { start: edit.span.start as i64, end: edit.span.end as i64, text: edit.text.clone(), code: shown.code.clone() }
         if one.start > one.end || one.end > size {
             continue

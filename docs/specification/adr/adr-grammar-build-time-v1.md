@@ -10,8 +10,9 @@ nothing in the source writes that type
 [#178](https://github.com/Nikaia-Foundation/Nikaia/issues/178),
 [#904](https://github.com/Nikaia-Foundation/Nikaia/issues/904))
 **Supersedes / Related:** takes the decisions on a grammar run at build time
-and what it hands back from [ADR-296](adr-296.md) (its other decisions are
-elsewhere); changes [ADR-002](adr-002.md) D2 (a grammar run at build time is
+and what it hands back from the numbered grammar record now in the history
+(its other decisions are in the other `grammar-*-v1` records); changes
+[ADR-002](adr-002.md) D2 (a grammar run at build time is
 compiled from the parser it generates; other `comptime` code is evaluated in
 the compiler's process) and [ADR-299](adr-299.md) D2 (a block whose entry
 returns a `meta::Statement` is a statement); [ADR-287](adr-287.md) D6 (the

@@ -1,6 +1,6 @@
 //! **Whether a key type is text, decided per type when compiling**, and the
-//! key's bytes where it is ([ADR-296](../../../docs/specification/adr/adr-296.md)
-//! D42).
+//! key's bytes where it is ([ADR-grammar-lowering-v1](../../../../docs/specification/adr/adr-grammar-lowering-v1.md)
+//! D5).
 //!
 //! The caller is `nikaia-std`'s map (`map.rs`): one type for every key, which
 //! hashes and compares a text key a word at a time instead of through `str`'s

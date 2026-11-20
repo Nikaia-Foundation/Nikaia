@@ -1,0 +1,25 @@
+committed SHA8 local
+-- message
+a subject
+
+Co-Authored-By: T <t@example.com>
+-- report
+Result: done
+Files: a.txt
+Commit: a subject
+Changelog: none
+Reviewed: DIGEST
+Pushed: local SHA
+Attribution:
+Co-Authored-By: T <t@example.com>
+-- a Reviewed: below the trailers
+second
+
+Co-Authored-By: T <t@example.com>
+Result: done
+Files: a.txt
+Commit: second
+Reviewed: DIGEST
+Pushed: local SHA
+Attribution:
+Co-Authored-By: T <t@example.com>

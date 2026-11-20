@@ -8,7 +8,7 @@ what it is tested against, and in which order its later layers come (#928)
 [ADR-344](adr-344.md) D1, D2 (an official package lives in `packages/<name>/` with its own version, taken in by path);
 [ADR-338](adr-338.md) D2 (formats are official packages; `yaml` joins the list), §6 (editing a text in place: answered here for `yaml`);
 [ADR-grammar-syntax-v1](adr-grammar-syntax-v1.md) D12-D14 (rule parameters, bounds, guards: YAML's indentation `n` and context `c`);
-[ADR-296](adr-296.md) (a grammar is part of the language, lowered to the winnow-grammar engine);
+[ADR-grammar-syntax-v1](adr-grammar-syntax-v1.md) (a grammar is part of the language, lowered to the winnow-grammar engine);
 [ADR-282](adr-282.md) D12, D13 (a field holding only views is a view position);
 [ADR-016](adr-016.md) D5 (a grammar over a mapping checks UTF-8 as it reads)
 

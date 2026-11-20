@@ -401,7 +401,7 @@ position, a parameter, a `match` arm, and nowhere else — and refuses
   ledger keeps the key, because that is what the lowering writes; a **package's**
   types (`Raw`, `Server`) follow the same rule the day their ledger exists.
 * **Path separator**: `Op::Times`, `Summary::merge`, `http::Request` — and
-  `Json.value(input)`, `T.fields` (ADR-296, 10.3) with a dot. Same kind of
+  `Json.value(input)`, `T.fields` (ADR-grammar-syntax-v1, 10.3) with a dot. Same kind of
   thing, two spellings. *Decided and **built**:*
   [ADR-140](specification/adr/adr-140.md) D3 — `::` everywhere, with `NK1147`
   naming it; `T::fields` is a page edit, since that construct is itself unbuilt.
@@ -494,7 +494,7 @@ designed:
 
 None of this is wrong; all of it is undocumented and looks like the tool it is
 built on. It deserves the same pass Part I got: one page, every built-in, one
-spelling for actions. *Decided since:* [ADR-296](specification/adr/adr-296.md)
+spelling for actions. *Decided since:* [ADR-grammar-syntax-v1](specification/adr/adr-grammar-syntax-v1.md) D8-D10
 — Part II 10.8 is the page, the action is the block after the pattern, `tag`
 and `digit1` go; the case convention (ANTLR's), `WS` (pest's `WHITESPACE`),
 `=>` and `# "…"` stay, with precedent on their side.

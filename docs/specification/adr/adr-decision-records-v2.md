@@ -11,7 +11,7 @@ The scheme before this one named a record `ADR-<topic>-<n>`, the number counting
 the records of a topic. That let records on one topic live side by side:
 `grammar-1` and `grammar-2`, `views-1` to `views-3`, `collections-1` and
 `collections-2`, each deciding a different part, and next to them the numbered
-records on the same subject (ADR-296 and `grammar-1` both decide that an action
+records on the same subject (a numbered grammar record and `grammar-1` both decided that an action
 stands after `->`). A reader looking for the rules of a topic reads several
 documents and cannot tell which one holds.
 
@@ -84,7 +84,7 @@ from several places; the new version states it once).
 
 ### D4 — The records of the earlier schemes are consolidated when they are changed.
 
-A numbered record (`ADR-296`) and a record of the scheme before (`ADR-views-3`)
+A numbered record (`ADR-299`) and a record of the scheme before (`ADR-views-3`)
 keep their names while nothing changes them. A change to a decision in one of
 them is made by consolidating: the topic's next `-v` record takes the decisions
 of every earlier record on that topic, and those records move to the history

@@ -10,7 +10,8 @@ exit ([#557](https://github.com/Nikaia-Foundation/Nikaia/issues/557),
 [#664](https://github.com/Nikaia-Foundation/Nikaia/issues/664),
 [#904](https://github.com/Nikaia-Foundation/Nikaia/issues/904))
 **Supersedes / Related:** takes the decisions on a grammar's input from
-[ADR-296](adr-296.md) (its other decisions stay there) and the whole of two
+the numbered grammar record now in the history (its other
+decisions are in the other `grammar-*-v1` records) and the whole of two
 records now in [`docs/history/adr/`](../../history/adr/README.md) (`Bytes`
 input; the interning table); [ADR-016](adr-016.md) D1 (a view of a mapping is
 text because the mapping was checked); [ADR-005](adr-005.md) D4,

@@ -1364,10 +1364,19 @@ nothing else.
 | 2026-11-20 | 15c373 | check | 39 | 2.0 | 0 | - | |
 | 2026-11-20 | 48be9a | check | 68 | 4.5 | 0 | - | |
 | 2026-11-20 | 8bc595 | check | 65 | 5.9 | 0 | - | |
+| 2026-11-20 | 38f6e8 | check | 17 | 0.7 | 0 | - | |
+| 2026-11-20 | b8a9a7 | check | 46 | 2.4 | 0 | - | |
+| 2026-11-20 | 952a2b | check | 31 | 1.7 | 0 | - | |
+| 2026-11-20 | d26086 | check | 13 | 0.6 | 0 | - | |
+| 2026-11-20 | 705660 | check | 16 | 0.8 | 0 | - | |
+| 2026-11-20 | e237da | check | 7 | 0.3 | 0 | - | |
+| 2026-11-20 | c9d64b | check | 22 | 1.3 | 0 | - | |
+| 2026-11-20 | c98ec6 | check | 10 | 0.4 | 0 | - | |
 | 2026-11-20 | e4d5dc | check | 22 | 0.9 | 0 | - | |
 | 2026-11-20 | 83275d | check | 7 | 0.2 | 0 | - | |
 | 2026-11-20 | 245620 | check | 53 | 2.9 | 0 | - | |
 | 2026-11-20 | 553420 | check | 137 | 10.1 | 0 | - | |
+| 2026-11-20 | a9a625 | check | 54 | 4.0 | 0 | - | |
 
 Moved lines are attributed by `scripts/tokenspeed.nika`: commits in the agent's
 window that changed a file it edited (Edit/Write/`git add` in its transcript)
