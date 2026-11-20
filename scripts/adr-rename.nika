@@ -116,6 +116,7 @@ fn rename_searched(file: String) -> bool {
     if file.starts_with("docs/history/") || file.starts_with("target/") || file.contains("/target/") { return false }
     if file == "scripts/adr-rename.nika" { return false }
     if file.starts_with("crates/") { return file.ends_with(".rs") || file.ends_with(".nika") || file.ends_with("/Cargo.toml") }
+    if file.starts_with("packages/") { return file.ends_with(".nika") || file.ends_with(".rs") || file.ends_with(".md") || file.ends_with("/nikaia.toml") || file.ends_with("/Cargo.toml") }
     for dir in ["tests/", "examples/", "benches/", "scripts/", "editors/"] {
         if file.starts_with(dir) { return true }
     }
