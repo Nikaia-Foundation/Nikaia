@@ -43,7 +43,7 @@ pub fn lg_normal_of(arena: &TermArena, facts: &[i64], goal: i64) -> LgNormal {
 }
 
 pub(crate) fn lg_written(arena: &TermArena, id: i64, shape: bool, turn: bool) -> String {
-    let mut out: String = String::from("");
+    let mut out = String::with_capacity(nikaia_std::count::of(128));
     lg_write(arena, id, shape, turn, &mut out);
     out
 }
@@ -272,7 +272,7 @@ impl LgNormal {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     pub fn text(&self) -> String {
-        let mut out: String = String::from("");
+        let mut out = String::with_capacity(nikaia_std::count::of(256 * (unsafe { nikaia_std::proven::add::<i64>(self.facts.len() as i64, 1) })));
         for fact in self.facts.iter() {
             let fact = nikaia_std::num::value(fact);
             lg_write(&self.arena, fact, false, false, &mut out);

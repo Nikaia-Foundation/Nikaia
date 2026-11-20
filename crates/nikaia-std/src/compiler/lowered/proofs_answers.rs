@@ -134,7 +134,7 @@ pub fn proofs_shown(place: &(Option<String>, Option<i64>, Option<String>), root:
 }
 
 pub(crate) fn proofs_written(arena: &logic::TermArena, facts: &[i64], goal: i64) -> String {
-    let mut out: String = String::from("");
+    let mut out = String::with_capacity(nikaia_std::count::of(128 * (unsafe { nikaia_std::proven::add::<i64>(facts.len() as i64, 1) })));
     for fact in facts.iter() {
         let fact = nikaia_std::num::value(fact);
         proofs_write_term(arena, fact, &mut out);

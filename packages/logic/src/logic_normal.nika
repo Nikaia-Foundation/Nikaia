@@ -76,7 +76,8 @@ pub fn lg_normal_of(arena: ref TermArena, facts: ref Vec[i64], goal: i64) -> LgN
 /// as `b < a`, down through `not`, `and` and `or`: one way of writing each
 /// comparison, so that the two spellings share a key.
 fn lg_written(arena: ref TermArena, id: i64, shape: bool, turn: bool) -> String {
-    let mut out: String = ""
+    // Room for a usual term, so the text seldom grows (#2382).
+    let mut out = String(capacity: 128)
     lg_write(arena, id, shape, turn, out)
     return out
 }
@@ -289,7 +290,7 @@ fn lg_copy(mut normal: LgNormal, from: ref TermArena, id: i64, mut renamed: coll
 impl LgNormal {
     /// The normal form written out: what the key is the hash of.
     pub fn text(ref self) -> String sync {
-        let mut out: String = ""
+        let mut out = String(capacity: 256 * (self.facts.len() + 1))
         for fact in self.facts {
             lg_write(self.arena, fact, false, false, out)
             out.push_str("\n")
