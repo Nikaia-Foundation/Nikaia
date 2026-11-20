@@ -495,7 +495,7 @@ unsolved files, each a timeout):
 | QF_LIA tightrhombus | 1 | 0 | 1 | 1 | 1 | behind | |
 | QF_LRA 2017-Heizmann | 4 | 0 | 4 | 0 | 0 | level | |
 | QF_LRA LassoRanker | 1 | 0 | 1 | 1 | 1 | behind | |
-| QF_LRA clock_synchro | 4 | 1 | 3 | 3 | 3 | behind | |
+| QF_LRA clock_synchro | 4 | 3 (5.0 s) | 1 | 3 (5.0 s) | 3 | level | (#2400: 2 overflows fewer) |
 | QF_LRA keymaera | 2 | 2 | 0 | 2 | 2 | level | |
 | QF_LRA sal | 3 | 3 | 0 | 3 | 3 | level | |
 | QF_LRA seeds | 499 | 499 | 0 | 499 | 499 | level | |
@@ -503,17 +503,30 @@ unsolved files, each a timeout):
 | QF_LRA tta_startup | 2 | 2 (1.0 s) | 0 | 2 (0.0 s) | 2 (0.1 s) | level | |
 | QF_LRA uart | 2 | 1 (14.2 s) | 0 | 1 (11.0 s) | 1 (13.7 s) | level | 1 timeout nobody solves |
 | **QF_LIA** | 578 | 521 (2.3 s) | 38 | 569 (0.4 s) | 545 (1.4 s) | behind | 15 timeouts, 4 unknown |
-| **QF_LRA** | 519 | 510 (0.3 s) | 8 | 513 (0.2 s) | 513 (0.2 s) | behind | 1 timeout |
+| **QF_LRA** | 519 | 512 (0.2 s) | 6 | 513 (0.2 s) | 513 (0.2 s) | behind | 1 timeout |
 
-Of the 57 QF_LIA files ours does not solve, 38 leave `i64`; of the 9 QF_LRA
-files, 8. Since #2307 a simplex pivot whose row leaves `i64` is combined in
+Of the 57 QF_LIA files ours does not solve, 38 leave `i64`; of the 7 QF_LRA
+files, 6. The QF_LRA column of ours was measured again on 2026-11-20 at
+0.0.1503 (#2400, `compare target/smtlib/qflra`, z3 only, no wrong answer, no
+disagreement): clock_synchro's 3clocks and 8clocks `main_invar.base`, two of
+the 8 overflows of 0.0.1481, are proved since #2307's double-width pivot;
+the other families answered as before (z3 solved one Heizmann file at the
+limit in that run). The 9clocks `main_invar.induct` file (z3 and cvc5 past
+the limit too) still leaves `i64`: of the 28 distinct pivots that fail
+there, 26 form rows whose entries do not fit `i64` even reduced by their gcd
+(up to 72 bits; the first, on column 0, an entry of 15839712064400095872
+with gcd 1); the two others fit reduced, but none of their entries fits
+before the reduction, so no gcd is begun. A 128-bit gcd for those, and a
+pivot on another violated row where every pivot of the lowest overflows,
+were tried in #2400's run: both let the search go further, neither answers
+the file. Since #2307 a simplex pivot whose row leaves `i64` is combined in
 double width and reduced by its gcd: the seeds overflows fell from 48 to 36
 (9 files solved, 4 now `unknown`); of the 36, 22 rows do not fit `i64`
 reduced, and in 14 no entry fits, so no gcd is taken. Without them ours is
 behind by the 15 QF_LIA timeouts, the 4 seeds `unknown` and the one
 QF_LRA timeout, of which 7 neither z3 nor cvc5 solves within the limit
 either: what is left to catch up on is 10 files, 6 of them SMPT. Level on
-twelve of the twenty families, ahead of cvc5 on c_inference (27 against 12)
+thirteen of the twenty families, ahead of cvc5 on c_inference (27 against 12)
 and nec-smt, level with cvc5 on cut_lemmas. Against 2026-11-18 (0.0.1430),
 ours solves 23 SMPT files more, one c_inference, two QF_LIA seeds, one
 rings_preprocessed, both tta_startup and one uart file; no family lost a
