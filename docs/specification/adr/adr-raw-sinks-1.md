@@ -299,6 +299,19 @@ after the guard as `html::is_plain`'s does (ADR-396 D2):
 | `path::is_component(p)` | one component, no separator, not `.` or `..` | `p` under a `Dir` whose root passes D11, or joined to a part that is not outside |
 | `path::is_below(p)` | relative, no root, no drive, no `..` component | the same |
 
+"Joined to a part that is not outside" (supervisor, 2026-11-20, the
+question of #2358): the guarded name with a literal or another clean part
+before it, as in `f"{store}/{key}/bin"`, passes under `Anywhere`; the bare
+name under `Anywhere` does not, since it names a file wherever the program
+runs. The proof holds for the joined text as for the name: a binding made
+from it (`let kept = f"{store}/{key}/bin"`) carries it to the sink.
+
+The same join admits the program `process::run` runs (D10; supervisor,
+2026-11-20, the question of #2369): the guard keeps the name inside a
+directory the program chose, as it does for a file it opens. A whole
+program name from outside, with no clean part before it, stays `NK1308`:
+it is looked up on `PATH` or names any file.
+
 Neither proves where a symlink points; under `Dir` the run time check does
 (ADR-108 D3), under `Anywhere` nothing does, as for a literal. A check of the
 file system (`fs::exists`, a `metadata` call) proves nothing: the answer is
