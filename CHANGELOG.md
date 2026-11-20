@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1489] — 2026-11-20
+
+**The decisions on database statements live in one record, ADR-database-v1 (#2272)**
+- The decisions on database statements (SQL a driver's grammar checks against a schema, the connection as subject typed by its schema, a row's namespaces and short names, -> T mapping, package::Grammar, the main entry) live in one record, ADR-database-v1; ADR-299 archived.
+
 ## [0.0.1488] — 2026-11-20
 
 **Builders' changes (#2259)**

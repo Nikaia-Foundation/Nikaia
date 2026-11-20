@@ -18,7 +18,7 @@ at such a path is refused while the program is built)
 [ADR-397](adr-397.md), [ADR-399](adr-399.md) (which data is from outside);
 [ADR-017](adr-017.md) and [ADR-398](adr-398.md) (escaping in templates and in
 the log); [ADR-243](adr-243.md) (a process without a shell);
-[ADR-299](adr-299.md) D5 (dynamic SQL); [ADR-380](adr-380.md) D2 and
+[ADR-database-v1](adr-database-v1.md) D5 (dynamic SQL); [ADR-380](adr-380.md) D2 and
 [ADR-396](adr-396.md) D1, D2, D6 (a claim on outside data is proved, and the
 way out is a guard)
 
@@ -62,7 +62,7 @@ program says that it means it.
 The form a program writes first is the one that cannot be steered:
 
 1. SQL takes its values as parameters (`execute(conn; parameters:)`, a `dsl`
-   block, ADR-299);
+   block, ADR-database-v1);
 2. a process takes its arguments as a list, with no shell between (ADR-243);
 3. a path names its root, and `Dir` keeps it inside (ADR-108);
 4. text written to the log has its control characters and terminal sequences
