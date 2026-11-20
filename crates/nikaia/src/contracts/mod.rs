@@ -661,9 +661,11 @@ fn computed_literal(
 
 /// **A package's ledger, its units checked on every core** where `parallel`
 /// (#1277): `lower-std`'s tools package, whose files are checked on worker
-/// threads for the lowering too. A project's build keeps one thread: its
-/// checker reads thread-local state the build sets around it (the proofs'
-/// file, a default's build-time directory).
+/// threads for the lowering too. A project's build checks its units on one
+/// thread; the panics proof runs on every core in both (#1949), with the
+/// thread-local state the build sets around it (the proofs' file, a
+/// default's build-time directory) carried to the workers by
+/// [`crate::proofs::in_parallel`].
 pub fn infer_package_parallel(
     units: &[&Parsed],
     library: &Ledger,
@@ -980,7 +982,6 @@ impl nikaia_std::compiler::ledger_items::LedgerInferHost for InferHost<'_> {
                 self.library,
                 &self.resolved.borrow(),
                 &self.checked.borrow(),
-                self.parallel,
             )
         });
     }
