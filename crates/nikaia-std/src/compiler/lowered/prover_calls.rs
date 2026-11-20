@@ -169,11 +169,14 @@ pub(crate) fn from_outside(expr: &Expr, tainted: &collections::BTreeSet<String>,
         Expr::Tuple(parts, _) => any_from_outside(parts, tainted, words, library, state, &mut &mut *holes_of),
         Expr::Coalesce { value, fallback, .. } => { let value = nikaia_std::boxed::open(value); let fallback = nikaia_std::boxed::open(fallback); from_outside(value, tainted, words, library, state, &mut &mut *holes_of) || from_outside(fallback, tainted, words, library, state, &mut &mut *holes_of) },
         Expr::TryCatch { expr, .. } => { let expr = nikaia_std::boxed::open(expr); from_outside(expr, tainted, words, library, state, &mut &mut *holes_of) },
-        Expr::If { cond, .. } => { let cond = nikaia_std::boxed::open(cond); from_outside(cond, tainted, words, library, state, &mut &mut *holes_of) },
-        Expr::Match { value, arms, .. } => {
-            let value = nikaia_std::boxed::open(value);
-            if from_outside(value, tainted, words, library, state, &mut &mut *holes_of) { return true; }
-            for arm in arms.iter() { if maybe_from_outside((arm.guard).as_ref(), tainted, words, library, state, &mut &mut *holes_of) || from_outside(&arm.body, tainted, words, library, state, &mut &mut *holes_of) { return true; } }
+        Expr::If { then_branch, else_branch, .. } => {
+            if tail_from_outside(then_branch, tainted, words, library, state, &mut &mut *holes_of) { return true; }
+            let other = match else_branch { Some(__nikaia_value) => __nikaia_value, None => return false };
+            tail_from_outside(other, tainted, words, library, state, &mut &mut *holes_of)
+        },
+        Expr::Block(block, _) => tail_from_outside(block, tainted, words, library, state, &mut &mut *holes_of),
+        Expr::Match { arms, .. } => {
+            for arm in arms.iter() { if from_outside(&arm.body, tainted, words, library, state, &mut &mut *holes_of) { return true; } }
             false
         },
         Expr::StructLit { fields, .. } => {
@@ -195,6 +198,11 @@ pub(crate) fn from_outside(expr: &Expr, tainted: &collections::BTreeSet<String>,
         },
         _ => false,
     }
+}
+
+pub(crate) fn tail_from_outside(block: &Block, tainted: &collections::BTreeSet<String>, words: &winnow_grammar::InternerContext, library: &Ledger, state: &ProverState, holes_of: &mut dyn FnMut(&Expr) -> Vec<Expr>) -> bool {
+    let tail = match tail_value_of(block) { Some(__nikaia_value) => __nikaia_value, None => return false };
+    from_outside(tail, tainted, words, library, state, &mut &mut *holes_of)
 }
 
 pub(crate) fn maybe_from_outside(expr: Option<&Expr>, tainted: &collections::BTreeSet<String>, words: &winnow_grammar::InternerContext, library: &Ledger, state: &ProverState, holes_of: &mut dyn FnMut(&Expr) -> Vec<Expr>) -> bool {
@@ -275,6 +283,27 @@ pub(crate) fn outside_source(expr: &Expr, tainted: &collections::BTreeSet<String
         Expr::Index { base, index, .. } => { let base = nikaia_std::boxed::open(base); let index = nikaia_std::boxed::open(index); return nikaia_std::index::or_maybe(outside_source(index, tainted, sources, words, library, state, &mut &mut *holes_of), || outside_source(base, tainted, sources, words, library, state, &mut &mut *holes_of)); },
         Expr::Coalesce { value, fallback, .. } => { let value = nikaia_std::boxed::open(value); let fallback = nikaia_std::boxed::open(fallback); return nikaia_std::index::or_maybe(outside_source(value, tainted, sources, words, library, state, &mut &mut *holes_of), || outside_source(fallback, tainted, sources, words, library, state, &mut &mut *holes_of)); },
         Expr::TryCatch { expr, .. } => { let expr = nikaia_std::boxed::open(expr); return outside_source(expr, tainted, sources, words, library, state, &mut &mut *holes_of); },
+        Expr::If { then_branch, else_branch, .. } => {
+            let then_tail = tail_value_of(then_branch);
+            if then_tail.is_some() {
+                let first = outside_source(match then_tail { Some(__nikaia_value) => __nikaia_value, None => return None }, tainted, sources, words, library, state, &mut &mut *holes_of);
+                if first.is_some() { return std::convert::identity(first); }
+            }
+            let other = match else_branch { Some(__nikaia_value) => __nikaia_value, None => return None };
+            let else_tail = match tail_value_of(other) { Some(__nikaia_value) => __nikaia_value, None => return None };
+            return outside_source(else_tail, tainted, sources, words, library, state, &mut &mut *holes_of);
+        },
+        Expr::Block(block, _) => {
+            let tail = match tail_value_of(block) { Some(__nikaia_value) => __nikaia_value, None => return None };
+            return outside_source(tail, tainted, sources, words, library, state, &mut &mut *holes_of);
+        },
+        Expr::Match { arms, .. } => {
+            for arm in arms.iter() {
+                let found = outside_source(&arm.body, tainted, sources, words, library, state, &mut &mut *holes_of);
+                if found.is_some() { return std::convert::identity(found); }
+            }
+            return None;
+        },
         Expr::StructLit { fields, .. } => {
             for field in fields.iter() {
                 let named = words.resolve(field.name);
