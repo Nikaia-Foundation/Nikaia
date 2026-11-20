@@ -31,7 +31,7 @@ use crate::runtime::hash::{fx_add, fx_finish, hash_bytes, hash_long, hash_short}
 use std::hash::{BuildHasherDefault, Hasher};
 
 /// **A map**: `std`'s own type over `hashbrown`'s table (`map.rs`,
-/// ADR-296 D42), with the keyed hasher unless the type names another (#420).
+/// ADR-grammar-lowering-v1 D5), with the keyed hasher unless the type names another (#420).
 /// `std`'s `HashMap` is the same table behind a wrapper whose `entry` reserves
 /// a slot on every call, found or not; this one does not, and it compares and
 /// hashes a text key a word at a time.

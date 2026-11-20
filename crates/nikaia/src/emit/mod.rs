@@ -553,7 +553,7 @@ fn std_ledger() -> &'static crate::contracts::Ledger {
 /// `self`), which is [ADR-298](../../../docs/specification/adr/adr-298.md) D11.
 /// A source name, written so the language below can read it.
 ///
-/// **This is [ADR-296](../../../docs/specification/adr/adr-296.md) D17 paying one
+/// **This is [ADR-grammar-lowering-v1](../../../../docs/specification/adr/adr-grammar-lowering-v1.md) D2 paying one
 /// of its bills.** The emitter writes a name for a name and resolves nothing, so
 /// a Nikaia name that Rust happens to spell as a keyword went out verbatim and
 /// `rustc` answered *"expected identifier, found keyword `type`"* about a file

@@ -447,7 +447,7 @@ fn a_while_is_one_statement_and_not_three() {
 }
 
 /// …and it lowers name for name, because the language below spells it the same
-/// way (ADR-296 D17).
+/// way (ADR-grammar-lowering-v1 D2).
 #[test]
 fn a_while_lowers_to_a_while() {
     let rust = emit(

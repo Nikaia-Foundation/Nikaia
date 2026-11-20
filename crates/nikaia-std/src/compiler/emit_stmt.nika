@@ -534,7 +534,7 @@ impl EmitState {
         }
     }
 
-    /// `break` and `continue`, name for name (ADR-296 D17), refused outside a
+    /// `break` and `continue`, name for name (ADR-grammar-lowering-v1 D2), refused outside a
     /// loop: the checker's `NK1132` is the message a program meets, and this is
     /// what makes its walk's completeness hold (ADR-276 D6).
     fn emit_stmt_jump(ref self, mut out: EmitOut, word: String, flow: EmitFlow) sync throws {

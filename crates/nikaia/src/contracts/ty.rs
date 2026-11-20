@@ -8,7 +8,7 @@ use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 // `Unknown`, which is not a type but the absence of a claim - see below. The
 // subtraction is the interner: a ledger is a file, so a name here is text, and
 // two types are the same when they are written the same. That is name-for-name
-// (ADR-296 D17) applied to types: nothing resolves a module or an alias, so
+// (ADR-grammar-lowering-v1 D2) applied to types: nothing resolves a module or an alias, so
 // `postgres::Connection` and `Connection` are different types, which is correct
 // for a compiler that does not know they are not.
 //

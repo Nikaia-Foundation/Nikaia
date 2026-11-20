@@ -227,7 +227,7 @@ Writing the two programs surfaced spec questions that a real implementation must
 a type was a name with optional arguments, and `postgres::Connection` is a name with a path in
 front of it. Found by `fortunes.nika` the moment its template stopped being the first thing that
 failed. The whole path is interned as one name, because that is what the name *is* to a compiler
-that lowers name for name (ADR-296 D17) — nothing here resolves a module, and a path can therefore
+that lowers name for name (ADR-grammar-lowering-v1 D2) — nothing here resolves a module, and a path can therefore
 never collide with a struct the file declares, which is correct.
 
 **A hole in an interpolated string could not hold a string literal.** `"{f(\"a\")}"` handed the

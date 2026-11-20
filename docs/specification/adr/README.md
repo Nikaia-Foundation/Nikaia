@@ -124,7 +124,7 @@ implementation.
 | [367](adr-367.md) | A fold over a grammar's input takes no more steps than the input has room for; a counter that grows by a fixed amount a step is proved from that, a sum is checked once before the fold; only where the input's length is known, never over a stream | Accepted | no |
 | [368](adr-368.md) | A program can measure time and what another program used: `time::now()` and `Instant`, `Duration::in_nanos`, and `process::run`'s `elapsed`, `user_time`, `system_time`, `max_rss_kib` for that one child | Accepted | no |
 | [369](adr-369.md) | A type's invariant: an `assert` after a struct's fields, proved or checked at every construction, at the end of every method that changes the value and after every outside write, and a fact wherever the value is read; where none is written, the compiler may find one over private fields and use it as a fact only | Accepted | no |
-| [370](adr-370.md) | `@inline`, `@inline(always)` and `@inline(never)` on a function or method, a hint that never changes meaning and makes a `pub fn` inlinable across packages; the compiler adds the hint itself only where it knows better than the backend, case by measured case (ADR-296 D41 first) | Accepted | no |
+| [370](adr-370.md) | `@inline`, `@inline(always)` and `@inline(never)` on a function or method, a hint that never changes meaning and makes a `pub fn` inlinable across packages; the compiler adds the hint itself only where it knows better than the backend, case by measured case (ADR-grammar-lowering-v1 D4 first) | Accepted | no |
 | [371](adr-371.md) | Portable vector lanes, `crc32c` and a prefetch hint are `std`'s, with a meaning on every target; an instruction of one architecture is a safe function of its backend module (`std::backend::x86::pext`), callable only in a build for a CPU level that has it; assembly stays the last way out; the API is decided by a record of its own | Accepted | no |
 | [372](adr-372.md) | Parallel folding without a grammar: `task::cores()` (the user pool's size, `1` at `user_parallelism = no`), `Par::fold(init, step, merge)` with nothing shared, `b.par_pieces(sep)`; pieces are claimed while the work runs, for `par_fold` too; order is kept unless `order: par::Order::Any` gives it up for one accumulator per worker; `workers:` and `piece:` tune and change no result | Accepted | no |
 | [373](adr-373.md) | A `Bytes` carries what owns its memory - its own allocation, a `Vec[u8]` handed over with `Bytes(v)` (no copy), or a mapping, so a `Mapped` is a `Bytes` read or kept; a `ref Bytes` that is only read takes any run of bytes, as a slice | Accepted | no |
@@ -224,6 +224,7 @@ implementation.
 | [grammar-input-v1](adr-grammar-input-v1.md) | What a grammar reads and how it holds it: an entry takes a `String` or a `Bytes`, the argument decides; over `Bytes` what becomes text is checked as UTF-8 where it becomes text (a map's key only where the map misses), a bad byte is a parse error at its offset, `bytes(p)` hands back the bytes; `asset("…")` says where the bytes come from; identifiers are interned and bulk text is a view with the input's lifetime; a view key may be hashed from a prefix, never compared by one; the interning table is the caller's, handed as `words:` (`NK1330` where the result can hold a `Symbol`), made in `std`; a read-only buffer's teardown may be skipped at exit | Accepted | no |
 | [grammar-actions-v1](adr-grammar-actions-v1.md) | What a rule's action may do and how a parse fails: an action may not pause and a call that can is `NK2209` where it stands, so an entry is `sync` (asserted in the ledger); an action may fail and a pausing body may enter a grammar; a parse fails with the prelude's `ParseError`, which carries the message and nothing else, and every entry's ledger says so, read by the `throws` fixpoint though an entry is no `Item::Fn`; a rule's values are lent as a function's are, never cloned per call | Accepted | yes |
 | [grammar-parallel-v1](adr-grammar-parallel-v1.md) | Frames and folds, and how fast a grammar scans: `@frame` declares a resynchronisation unit the compiler checks and never rewrites; parallel parsing is a frame plus a monoid, `par_fold`, written, never inferred, the same result at any number of pieces; pieces are claimed while the work runs and each advances past its first boundary; a boundary or terminator is found a word at a time, never byte by byte; `user_parallelism` chooses the `Parallelism` and nothing else; a `par_fold` rule's value is the fold's; a fold's `init`, `step` and `merge` are walked by the ordinary expression walk, see the rule's own bindings, are not held to its declared type, and meet `NK1132` on the one lambda path | Accepted | yes |
+| [grammar-lowering-v1](adr-grammar-lowering-v1.md) | How a grammar is lowered: as a `grammar! { … }` macro invocation, name for name, never dropped silently; syntactic, guessing no meaning (an accumulator is threaded only where a lookup in the declarations finds a `&mut self` method returning nothing); `@frame` lowers key for key and its check stays the backend's; what a fold's step calls directly is written `#[inline(always)]`; a map is `std`'s own type over hashbrown's table, text keys hashed and compared a word at a time | Accepted | yes |
 | [016](adr-016.md) | The UTF-8 check is divided across frames, never skipped, and each piece is checked with SIMD (`simdutf8`), answering as the standard library does; it is made where a mapping becomes text (`m.text()`), not where the file is mapped (D5). | Accepted | yes |
 
 ### Diagnostics
@@ -401,7 +402,7 @@ makes the next version of the changed topic instead. Records replaced as a whole
 
 ## Topics in use
 
-`async`, `catch`, `collections`, `decision-records`, `failure-return`, `grammar-actions`, `grammar-input`, `grammar-parallel`, `grammar-syntax`, `lambdas`, `raw-sinks`, `regex`, `registry`, `rust-boundary`, `shared-handle-cycles`, `specialization`, `views`, `yaml`.
+`async`, `catch`, `collections`, `decision-records`, `failure-return`, `grammar-actions`, `grammar-input`, `grammar-lowering`, `grammar-parallel`, `grammar-syntax`, `lambdas`, `raw-sinks`, `regex`, `registry`, `rust-boundary`, `shared-handle-cycles`, `specialization`, `views`, `yaml`.
 
 ## Reserved numbers
 
@@ -411,7 +412,6 @@ the same time do not take the same name.
 
 | ADR | Claimed for | Where |
 | :--- | :--- | :--- |
-| grammar-lowering-v1 | how a grammar is lowered (ADR-296) | #904 |
 | grammar-build-time-v1 | a grammar run at build time and what it hands back (ADR-177, ADR-296, ADR-323) | #904 |
 | grammar-typed-read-v1 | an entry that takes a type (grammar-2) | #904 |
 | database-v1 | database statements (ADR-299) | #904 |

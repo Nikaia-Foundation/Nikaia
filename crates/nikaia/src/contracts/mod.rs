@@ -384,7 +384,7 @@ impl LedgerOps for Ledger {
     /// is the whole rule.
     ///
     /// It used to match on the last segment, which was name-for-name resolution
-    /// (ADR-296 D17) rather than import tracking, and it is what a compiler
+    /// (ADR-grammar-lowering-v1 D2) rather than import tracking, and it is what a compiler
     /// without a module graph could honestly do before there was a written
     /// list. What it cost, beyond the prelude being undefined, was answering
     /// about the **wrong function**: a program with its own `fn read` found
