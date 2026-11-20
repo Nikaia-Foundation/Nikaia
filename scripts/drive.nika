@@ -1463,11 +1463,14 @@ fn drive_merge_try(cause: String, lower: String, build: String, badges: String, 
 		drive_merge_abort_paths(cause, "no unmerged path", f"git said: {drive_git_said(said)}")
 	}
 	// A conflict in sources escalates naming only them: the lowered files
-	// beside them are re-lowered once the sources are resolved (#1820).
+	// beside them are re-lowered once the sources are resolved (#1820). A
+	// conflicted ledger or badge is generated too (drive_is_generated): it
+	// takes their side and drive_merge_regenerate writes it again from the
+	// merged tree (a `packages/logic/nikaia.lock` conflict, 2026-11-20).
 	let mut sources: Vec[String] = []
 	let mut lowered = false
 	for p in unmerged.split(" ") {
-		if drive_is_lowered(p.clone()) { lowered = true } else { sources.push(p.clone()) }
+		if drive_is_generated(p.clone()) { lowered = true } else { sources.push(p.clone()) }
 	}
 	if sources.len() > 0 {
 		let after = if lowered { " (lowered files re-lowered after)" } else { "" }

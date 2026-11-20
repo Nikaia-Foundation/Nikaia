@@ -207,14 +207,30 @@ fn pause_path(chain: ref Vec[String]) -> String {
 /// again. A written `sync` needs no warning, because a body that breaks it
 /// is refused (`NK2202`). `render` says a finding at the statement of the unit
 /// it names (`diagnostics::render_finding`).
+///
+/// **In two steps** (#2395): what the program says of each function
+/// (`lost_sync_all`) is stored with a cached lowering, and the committed
+/// ledger, which is not part of the cache's key, picks from it
+/// (`lost_sync_against`), so a cache hit says what a miss would.
 pub fn lost_sync(contracts: ref Ledger, theirs: ref collections::BTreeMap[String, Ledger], pauses: ref collections::BTreeMap[String, ModulesPause], committed: ref Ledger, render: fn(ref CheckFinding, i64) -> String sync) -> String {
-    let mut out: String = ""
+    return lost_sync_against(lost_sync_all(contracts, theirs, pauses, render), committed)
+}
+
+/// **ADR-288 D32's warning for one function**, said whatever the committed
+/// ledger holds: `lost_sync_against` keeps it where that ledger says the
+/// function could not pause.
+pub struct SyncLost {
+    pub key: String,
+    pub said: String,
+}
+
+/// The warning of `lost_sync` for every `pub` function of the program's own
+/// that can pause now and promises nothing about it, before the committed
+/// ledger is asked.
+pub fn lost_sync_all(contracts: ref Ledger, theirs: ref collections::BTreeMap[String, Ledger], pauses: ref collections::BTreeMap[String, ModulesPause], render: fn(ref CheckFinding, i64) -> String sync) -> Vec[SyncLost] {
+    let mut out: Vec[SyncLost] = []
     for (key, now) in contracts.functions {
         if of_a_dependency(key, theirs) || !now.public || now.sync_claim.is_sync() {
-            continue
-        }
-        let before = committed.functions[key] ?? continue
-        if !inferred_sync(before.sync_claim) {
             continue
         }
         let message = f"`{key}` could not pause before, and now it can."
@@ -223,11 +239,11 @@ pub fn lost_sync(contracts: ref Ledger, theirs: ref collections::BTreeMap[String
         // statement this walk can point at, and the warning says so
         // without one rather than not at all.
         let pause = pauses[key] ?? {
-            out.push_str(lost_sync_unplaced(message, help))
+            out.push(SyncLost { key: key.clone(), said: lost_sync_unplaced(message, help) })
             continue
         }
         let site = pause.site?.clone() ?? {
-            out.push_str(lost_sync_unplaced(message, help))
+            out.push(SyncLost { key: key.clone(), said: lost_sync_unplaced(message, help) })
             continue
         }
         let mut notes: Vec[String] = []
@@ -236,7 +252,20 @@ pub fn lost_sync(contracts: ref Ledger, theirs: ref collections::BTreeMap[String
         }
         notes.push(f"{site.what} can pause.")
         let finding = CheckFinding { severity: CheckSeverity::Warning, span: Span { start: site.span.start, end: site.span.end }, code: "NK2211", message: message, notes: notes, help: help, labels: [], edit: null }
-        out.push_str(render(finding, pause.unit))
+        out.push(SyncLost { key: key.clone(), said: render(finding, pause.unit) })
+    }
+    return out
+}
+
+/// The warnings of `all` whose function the committed ledger says could not
+/// pause (`"inferred"`), joined in their order.
+pub fn lost_sync_against(all: ref Vec[SyncLost], committed: ref Ledger) -> String {
+    let mut out: String = ""
+    for lost in all {
+        let before = committed.functions[lost.key] ?? continue
+        if inferred_sync(before.sync_claim) {
+            out.push_str(lost.said)
+        }
     }
     return out
 }

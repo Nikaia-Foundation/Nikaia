@@ -7,6 +7,10 @@ pub struct ProjectLowerArtifacts {
     pub ledger: String,
     pub derived: String,
     pub warnings: String,
+    pub promise: String,
+    pub lost: Vec<SyncLost>,
+    pub keepers: collections::BTreeMap<String, collections::BTreeMap<String, Vec<String>>>,
+    pub theirs: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -33,11 +37,14 @@ pub enum UnitSaid {
 
 pub trait ProjectLowerHost {
     fn read_program(&self) -> Result<(), std::boxed::Box<dyn std::error::Error>>;
+    fn infer_program(&self) -> Result<(), std::boxed::Box<dyn std::error::Error>>;
     fn open_cache(&self);
     fn source_paths(&self) -> Vec<fs::Path>;
     fn could_promise(&self) -> String;
     fn committed_ledger(&self) -> Option<Ledger>;
-    fn lost_sync(&self, committed: &Ledger) -> String;
+    fn sync_lost(&self) -> Vec<SyncLost>;
+    fn keepers(&self) -> collections::BTreeMap<String, collections::BTreeMap<String, Vec<String>>>;
+    fn theirs(&self) -> Vec<String>;
     fn export(&self) -> Result<(), std::boxed::Box<dyn std::error::Error>>;
     fn cached(&self) -> Option<ProjectLowerArtifacts>;
     fn record(&self, made: &ProjectLowerArtifacts);
@@ -58,7 +65,7 @@ pub trait ProjectLowerHost {
     fn published(&self) -> collections::BTreeMap<String, Published>;
     fn render(&self, ledger: &Ledger) -> (String, String);
     fn unused_reads(&self) -> Vec<String>;
-    fn changed_contracts(&self, now: &Ledger, committed: &Ledger) -> String;
+    fn changed_contracts(&self, now: &Ledger, committed: &Ledger, keepers: &collections::BTreeMap<String, collections::BTreeMap<String, Vec<String>>>, theirs: &[String]) -> String;
     fn parse_ledger(&self, text: &str) -> Option<Ledger>;
 }
 
@@ -66,26 +73,29 @@ pub fn project_lower_reading<H: ProjectLowerHost>(host: &H, in_project: bool) ->
     host.open_cache();
     host.read_program()?;
     let sources = host.source_paths();
-    let mut notes = host.could_promise();
-    if in_project {
-        match host.committed_ledger() {
-            None => { },
-            Some(ref committed) => {
-                let lost = host.lost_sync(committed);
-                notes = format!("{}{}", lost, notes);
-            },
-        }
-    }
-    host.export()?;
     let cached = host.cached();
     let reused = cached.is_some();
     let made = match cached {
-        None => project_lower_made(host)?,
+        None => {
+            host.infer_program()?;
+            host.export()?;
+            project_lower_made(host)?
+        },
         Some(artifacts) => {
             if !host.in_the_wrapper() { host.eprint(&artifacts.warnings); }
             artifacts
         },
     };
+    let mut notes = nikaia_std::block::Text::from(made.promise.to_string());
+    if in_project {
+        match host.committed_ledger() {
+            None => { },
+            Some(ref committed) => {
+                let lost = lost_sync_against(&made.lost, committed);
+                notes = format!("{}{}", lost, notes);
+            },
+        }
+    }
     if in_project {
         match host.committed_ledger() {
             None => { },
@@ -93,7 +103,7 @@ pub fn project_lower_reading<H: ProjectLowerHost>(host: &H, in_project: bool) ->
                 match host.parse_ledger(&made.ledger) {
                     None => { },
                     Some(ref now) => {
-                        let changed = host.changed_contracts(now, committed);
+                        let changed = host.changed_contracts(now, committed, &made.keepers, &made.theirs);
                         notes = format!("{}{}", changed, notes);
                     },
                 }
@@ -104,16 +114,20 @@ pub fn project_lower_reading<H: ProjectLowerHost>(host: &H, in_project: bool) ->
 }
 
 pub(crate) fn project_lower_made<H: ProjectLowerHost>(host: &H) -> Result<ProjectLowerArtifacts, std::boxed::Box<dyn std::error::Error>> {
-    let mut warnings = project_lower_check(host)?;
-    let rust = host.emit()?;
+    let promise = host.could_promise();
+    let lost = host.sync_lost();
+    let keepers = host.keepers();
+    let theirs = host.theirs();
+    let mut warnings = project_lower_check(host)?; #[allow(clippy::redundant_locals)] let theirs = theirs;
+    let rust = host.emit()?; #[allow(clippy::redundant_locals)] let theirs = theirs;
     let ledger = project_lower_published(host.contracts(), &host.published());
-    let (text, derived) = host.render(&ledger);
+    let (text, derived) = host.render(&ledger); #[allow(clippy::redundant_locals)] let theirs = theirs;
     for entry in host.unused_reads() {
         let line = format!("warning: the allowlist names `{}` and nothing read it\n", entry);
         host.eprint(&line);
         warnings = format!("{}{}", warnings, line);
     }
-    let made = ProjectLowerArtifacts { rust, ledger: text, derived, warnings };
+    let made = ProjectLowerArtifacts { rust, ledger: text, derived, warnings, promise, lost, keepers, theirs };
     if host.proofs_settled() { host.record(&made); }
     Ok(made)
 }
