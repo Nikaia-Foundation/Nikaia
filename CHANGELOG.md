@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1498] — 2026-11-20
+
+**CI dates the sources the restored build was made from, so a warm cache no longer rebuilds every workspace crate**
+- CI: a warm build cache no longer rebuilds every workspace crate. Files unchanged since the cached commit are dated back before "Build the tests", and the step logs which crates it compiled (#2403).
+
 ## [0.0.1497] — 2026-11-20
 
 **Builders' changes (#1133)**
