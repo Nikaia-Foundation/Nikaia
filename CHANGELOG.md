@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1504] — 2026-11-20
+
+**A walk of a @stream entry over a String or Bytes hands its items over in batches of 256**
+- A walk of a `@stream` entry over a `String` or `Bytes` hands its items from the parser's thread in batches of 256 instead of one at a time: deep.yaml's stream program falls from 239.6M to 212.2M instructions, with the same output, the same order and the same errors
+
 ## [0.0.1503] — 2026-11-20
 
 **Builders' changes (#2409, #2411, #2418)**
