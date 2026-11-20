@@ -169,7 +169,7 @@ pub struct CheckFacts {
     /// (ADR-010 D12): the emitter writes the part's own hash.
     pub hasher_adds: collections::BTreeSet[i64],
     /// **A method of text whose result is a view of the text it is called
-    /// on** (`s.trim()`, `s.split(",")`, ADR-views-3 D9, #1478), by the
+    /// on** (`s.trim()`, `s.split(",")`, ADR-views-v4 D9, #1478), by the
     /// call's node: the view-change walk watches the receiver while the
     /// result is used.
     pub receiver_views: collections::BTreeSet[i64],
@@ -379,7 +379,7 @@ pub struct CheckFacts {
     pub in_place_bindings: collections::BTreeMap[i64, collections::BTreeSet[String]],
     pub taking_arms: collections::BTreeMap[i64, String],
     /// **A part taken out of a `mut` parameter or a `let mut` view** to be
-    /// given back (ADR-views-1 D3), by the field's node: what stands in its
+    /// given back (ADR-views-v4 D20), by the field's node: what stands in its
     /// place meanwhile, empty where the type's empty value does
     /// (`std::mem::take`).
     pub taken_parts: collections::BTreeMap[i64, String],
@@ -498,12 +498,12 @@ pub struct CheckFacts {
     /// no result.
     pub valueless_lambdas: collections::BTreeSet[i64],
     pub run_code_fails: collections::BTreeSet[i64],
-    /// **A run lambda that changes a binding bound outside it** (ADR-views-3
+    /// **A run lambda that changes a binding bound outside it** (ADR-views-v4
     /// D17): the first such binding, by the lambda's node.
     pub changing_lambdas: collections::BTreeMap[i64, String],
     /// The parameters of code a run lambda runs, by the lambda's node.
     pub lambda_runs: collections::BTreeMap[i64, Vec[String]],
-    /// **Code parameters run from tasks at once** (ADR-views-3 D17),
+    /// **Code parameters run from tasks at once** (ADR-views-v4 D17),
     /// `function::parameter`: lowered shared, where every other parameter of
     /// code a body runs lowers to code that changes what it captures. The
     /// package's ledger reads them into `FnContract.at_once`.
@@ -635,9 +635,9 @@ pub struct CheckFacts {
     pub wrapped: collections::BTreeMap[i64, FactWrap],
     pub compared_views: collections::BTreeSet[(i64, String)],
     /// The calls whose result, a view of a parameter of a type bound to a
-    /// copied word, is read at the call (ADR-views-3 D12, #1239).
+    /// copied word, is read at the call (ADR-views-v4 D12, #1239).
     pub copied_results: collections::BTreeSet[i64],
-    /// **Text of its own lent as the view a type variable holds** (ADR-views-3
+    /// **Text of its own lent as the view a type variable holds** (ADR-views-v4
     /// D12, #1498): in `second(o, "p")` of `fn second[T](x: T, y: T) -> T`,
     /// `T` is the `&str` the literal is, so `o` goes as `&o.as_str()`.
     pub lent_text_views: collections::BTreeSet[i64],
@@ -707,7 +707,7 @@ pub struct CheckFacts {
     pub byte_literals: collections::BTreeSet[i64],
     pub owned_texts: collections::BTreeSet[i64],
     /// A text literal handed to a type variable the callee lends
-    /// (ADR-views-3 D2, #1342): the view it is, with the one `&` the
+    /// (ADR-views-v4 D2, #1342): the view it is, with the one `&` the
     /// parameter takes, `&"b"`.
     pub lent_literals: collections::BTreeSet[i64],
     /// A `catch` whose guarded value is a view of text and whose handler's is
@@ -761,7 +761,7 @@ pub struct CheckFacts {
     pub kept_text_bytes: collections::BTreeSet[i64],
     /// The `let`s, by start, that declare `Bytes` and are bound to a text's
     /// own bytes: the view, written without the annotation (ADR-320 D11,
-    /// ADR-views-3 D15, #1271).
+    /// ADR-views-v4 D15, #1271).
     pub text_bytes_typed_lets: collections::BTreeSet[i64],
     /// The receivers of a `Bytes`'s `clone()`: a `Bytes` or a `&[u8]` below,
     /// copied into a `Bytes` of its own (ADR-320 D11).

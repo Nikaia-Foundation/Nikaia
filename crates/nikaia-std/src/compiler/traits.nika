@@ -210,7 +210,7 @@ fn receiver_text(receiver: Receiver?) -> String {
     if taken.is_mut {
         return "`mut self`"
     }
-    // The only receiver taken by value (ADR-views-3 D1).
+    // The only receiver taken by value (ADR-views-v4 D1).
     return "`keep self`"
 }
 

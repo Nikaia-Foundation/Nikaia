@@ -1,4 +1,4 @@
-// ADR-views-3 D14: a function whose result is a view of its parameter fits
+// ADR-views-v4 D14: a function whose result is a view of its parameter fits
 // a function type whose result reads that parameter with `from`.
 
 fn first(s: String) -> String {

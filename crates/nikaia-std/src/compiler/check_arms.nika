@@ -325,7 +325,7 @@ fn arms_that_disagree(arms: ref Vec[CheckArm], is_if: bool, span: ref Span) -> C
         article = "`if`"
     }
     let mut shown: Vec[String] = []
-    // Each type as a message says it (ADR-views-3 D4, #1528), a view in
+    // Each type as a message says it (ADR-views-v4 D4, #1528), a view in
     // words.
     for ty in known {
         let text = spoken(ty, null)

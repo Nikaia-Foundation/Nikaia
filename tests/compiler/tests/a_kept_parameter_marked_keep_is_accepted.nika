@@ -1,4 +1,4 @@
-// A parameter the body keeps, marked `keep`, is accepted (ADR-views-3 D2).
+// A parameter the body keeps, marked `keep`, is accepted (ADR-views-v4 D2).
 fn store(mut into: Vec[String], keep s: String) {
 	into.push(s)
 }

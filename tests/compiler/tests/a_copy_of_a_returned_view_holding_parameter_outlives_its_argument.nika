@@ -1,4 +1,4 @@
-// A parameter handed back whole is a view of it (ADR-views-3 D12, #1498);
+// A parameter handed back whole is a view of it (ADR-views-v4 D12, #1498);
 // where its type holds views, the view of the parameter and what it views
 // are two lifetimes, `fn leaf<'r, 'a>(n: &'r N<'a>) -> &'r N<'a>`, so a
 // copy of the result outlives the local it was read from.

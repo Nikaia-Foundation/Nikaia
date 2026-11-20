@@ -1,5 +1,5 @@
 // A part `v[a..<b]` handed to an `Array[T]` is `b - a` long, so the callee's
-// precondition on its length is proved at the call (ADR-views-3 D11, #1209).
+// precondition on its length is proved at the call (ADR-views-v4 D11, #1209).
 
 fn second(xs: Array[u32]) -> u32 {
     assert(xs.len() >= 2)

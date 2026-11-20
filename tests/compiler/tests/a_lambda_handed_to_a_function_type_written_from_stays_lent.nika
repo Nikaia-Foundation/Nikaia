@@ -1,5 +1,5 @@
 // A lambda handed where a function type's result writes `from` hands back a
-// view of its parameter, lent and never copied (ADR-views-3 D14, #1263).
+// view of its parameter, lent and never copied (ADR-views-v4 D14, #1263).
 fn apply(f: fn(s: String) -> String from s, s: String) -> String from s {
 	f(s)
 }

@@ -1,6 +1,6 @@
 migrated TMP/p.md
-TMP/p.md:5: `pick` hands back a view but says of no parameter whose data it points into: write one of `from a`, `from b`, `from a | b` after its result type, or drop `ref` to hand back text of its own (ADR-views-3 D14)
-TMP/p.md:16: `none` hands back a view but says of no parameter whose data it points into: or drop `ref` to hand back text of its own (ADR-views-3 D14)
+TMP/p.md:5: `pick` hands back a view but says of no parameter whose data it points into: write one of `from a`, `from b`, `from a | b` after its result type, or drop `ref` to hand back text of its own (ADR-views-v4 D14)
+TMP/p.md:16: `none` hands back a view but says of no parameter whose data it points into: or drop `ref` to hand back text of its own (ADR-views-v4 D14)
 exit 1
 Intro
 

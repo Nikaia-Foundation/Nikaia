@@ -3848,7 +3848,7 @@ sync = true
 touches = []
 signature = "[T](self: ref Array[T, ?]) -> Seq[ref(self) T] sync ends sized"
 
-# **A changeable run changes in place** (ADR-views-3 D11, #1209): an array
+# **A changeable run changes in place** (ADR-views-v4 D11, #1209): an array
 # of a `mut` place, a `mut xs: Array[T]` and a part `v[a..<b]` of a `mut`
 # list are sorted, swapped, turned round and filled as a list is. They are
 # Rust's `[T]` methods.
@@ -4598,7 +4598,7 @@ sync = true
 touches = []
 signature = "(mut self: ref Vec[?])"
 
-# **Every element set to one value, in place** (ADR-views-3 D11, #1209).
+# **Every element set to one value, in place** (ADR-views-v4 D11, #1209).
 #
 # The list **keeps** the value: each place gets a copy of it.
 [fn."Vec::fill"]
@@ -6782,7 +6782,7 @@ fields = ["pub code: i64", "pub ok: bool", "pub stdout: String", "pub stderr: St
 #
 # The wait gives the thread up, so other tasks run while the program does.
 #
-# **It keeps every list and text it is handed** (ADR-views-3 D14, #1797):
+# **It keeps every list and text it is handed** (ADR-views-v4 D14, #1797):
 # `args`, `env`, `env_remove` and `stdin` are owned below, so a parameter
 # handed to one is moved, not lent.
 [fn."process::run"]

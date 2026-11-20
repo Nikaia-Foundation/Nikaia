@@ -1,7 +1,7 @@
 use compiler_tests
 
 /// A trait method's written `keep` is its `keeps` column for every caller
-/// (ADR-views-3 D2): `src/trait_keep_beside.nika` calls
+/// (ADR-views-v4 D2): `src/trait_keep_beside.nika` calls
 /// `TraitKeepBesideSink::put(keep text)` through a bound, with no impl in its
 /// own package, and the ledger said the method kept nothing, so the library
 /// lent `text` and rustc refused the code (NK1343, #116).

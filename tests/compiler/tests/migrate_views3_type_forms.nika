@@ -1,4 +1,4 @@
-// ADR-views-3 D4, D14, #1254: `nikaia migrate views-3` drops `ref` from a
+// ADR-views-v4 D4, D14, #1254: `nikaia migrate views-3` drops `ref` from a
 // parameter's and a `comptime`'s type, and writes a function type
 // with a `ref` result as D14 does: its parameters named by position, its
 // result `from` the old `ref` ones, and the result of the function that

@@ -1,5 +1,5 @@
 // A call of a function field of a parameter keeps only the arguments its
-// type keeps; a plain text parameter is lent (ADR-views-3 D2, D14, #1254).
+// type keeps; a plain text parameter is lent (ADR-views-v4 D2, D14, #1254).
 struct Parser {
     parse: fn(s: String) -> i64 sync,
 }

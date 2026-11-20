@@ -4,7 +4,7 @@ error[NK1335]: `P::pick` hands back a view of `b`'s data, but its result says `f
  36 |     fn pick(self, a: String, b: String) -> String from a {
     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
     |
-    = note: A caller reads the signature: it keeps `a` unchanged while the result is used, and nothing holds `b` (ADR-views-3 D8).
+    = note: A caller reads the signature: it keeps `a` unchanged while the result is used, and nothing holds `b` (ADR-views-v4 D8).
     = help: Write `from a | b`, or hand back a copy of what comes from `b` with `.clone()`.
 error[NK1335]: `P::pick_all` hands back a view of `b`'s data, but its result says `from a`.
    --> tests/an_impl_handing_back_an_owned_parameter_is_refused_once.nika:42:5
@@ -12,7 +12,7 @@ error[NK1335]: `P::pick_all` hands back a view of `b`'s data, but its result say
  42 |     fn pick_all(self, a: Vec[i64], b: Vec[i64]) -> Vec[i64] from a {
     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
     |
-    = note: A caller reads the signature: it keeps `a` unchanged while the result is used, and nothing holds `b` (ADR-views-3 D8).
+    = note: A caller reads the signature: it keeps `a` unchanged while the result is used, and nothing holds `b` (ADR-views-v4 D8).
     = help: Write `from a | b`, or hand back a copy of what comes from `b` with `.clone()`.
 error[NK1335]: `P::pick_named` hands back a view of `b`'s data, but its result says `from a`.
    --> tests/an_impl_handing_back_an_owned_parameter_is_refused_once.nika:48:5
@@ -20,7 +20,7 @@ error[NK1335]: `P::pick_named` hands back a view of `b`'s data, but its result s
  48 |     fn pick_named(self, a: Named, b: Named) -> Named from a {
     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
     |
-    = note: A caller reads the signature: it keeps `a` unchanged while the result is used, and nothing holds `b` (ADR-views-3 D8).
+    = note: A caller reads the signature: it keeps `a` unchanged while the result is used, and nothing holds `b` (ADR-views-v4 D8).
     = help: Write `from a | b`, or hand back a copy of what comes from `b` with `.clone()`.
 error[NK1335]: `P::pick_number` hands back a view of `b`'s data, but its result says `from a`.
    --> tests/an_impl_handing_back_an_owned_parameter_is_refused_once.nika:54:5
@@ -28,6 +28,6 @@ error[NK1335]: `P::pick_number` hands back a view of `b`'s data, but its result 
  54 |     fn pick_number(self, a: Number, b: Number) -> Number from a {
     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
     |
-    = note: A caller reads the signature: it keeps `a` unchanged while the result is used, and nothing holds `b` (ADR-views-3 D8).
+    = note: A caller reads the signature: it keeps `a` unchanged while the result is used, and nothing holds `b` (ADR-views-v4 D8).
     = help: Write `from a | b`, or hand back a copy of what comes from `b` with `.clone()`.
 4 type errors

@@ -16,7 +16,7 @@ Only wording, typos, dead links and the **Built** column are changed in place.
 The live record is the one to read and the one to cite; a version cited in an
 old commit message is still read, in the history.
 
-The records of the earlier schemes (`ADR-338`, `ADR-views-3`) keep their
+The records of the earlier schemes (`ADR-338`, `ADR-async-5`) keep their
 names until something changes them; a change to one of them consolidates its
 topic into a `-v` record (D4). Until then such a record may still carry
 *Changed by ADR-MMM Dn* notes from before.
@@ -147,11 +147,9 @@ implementation.
 
 | ADR | Decides | Status | Built |
 | :--- | :--- | :--- | :--- |
-| [views-3](adr-views-3.md) | A parameter that keeps its argument says `keep`, a plain one is lent, the body is checked against it; `ref` leaves the language outside `extern "C"`; views in fields, elements and lets are inferred; a result's source is inferred and may be written `-> T from a \| b`, required where there is no body; `Array[T]` is a view of a run where it does not own; a returned parameter is a view, not kept; `keep` and `from` are not reserved | Accepted | no |
+| [views-v4](adr-views-v4.md) | A parameter that keeps its argument says `keep`, a plain one is lent, the body is checked against it; `ref` leaves the language outside `extern "C"`; views in fields, elements and lets are inferred; a result's source is inferred and may be written `-> T from a \| b`, required where there is no body; `Array[T]` is a view of a run where it does not own; a returned parameter is a view, not kept; `keep` and `from` are not reserved. A part taken out of a `let mut` view of a place is given back before the view's block is left, as out of a `mut` parameter (`NK2108`), lowered as `mem::take`/`mem::replace`. `mut` on a `for` binding means what it means on a `let`: over a list or an array the element writes through (`iter_mut()`), over owned elements it is the loop's own; a key and a set element are refused; `mut` on one name of a tuple refused now, possible later (`NK1307`) | Accepted | no |
 | [text-reuse-1](adr-text-reuse-1.md) | A copy is written, a give is not: `.to_string()` on text is refused (`NK1301`), a type parameter keeps it; a changed view takes its source's buffer where the source can be given, and a later read of the source is the use-after-give error; `replace` on a source not read again works in its buffer; the ledger narrates each give | Accepted | partly: D1 |
 | [shared-handle-cycles-1](adr-shared-handle-cycles-1.md) | No cycle of handles is built: a store through a `SharedMut` door or into a `Locked` field that can close one is refused (`NK1352`) unless a back field is proved, which is lowered as non-owning; types reaching no `SharedMut` or `Locked`, and `immutable` values, are free of cycles; summaries carry it across functions and packages; graphs use indices; no runtime detection | Accepted | no |
-| [views-2](adr-views-2.md) | `mut` on a `for` binding means what it means on a `let`: `mut` in front of the whole head (`for mut x`, `for mut (a, b)`); over a list or an array the element is a view that writes through (`iter_mut()`), over owned elements it is the loop's own; a key and a set element are refused with their reason; the list is not used in the body. `mut` on one name of a tuple, and so map values in place, refused now, possible later (`NK1307`) | Accepted | no |
-| [views-1](adr-views-1.md) | A part taken out of a `let mut` view of a place (`let mut c = m[k] ?? continue`) is given back before the view's block is left, as out of a `mut` parameter (`NK2108`); lowered as `mem::take`/`mem::replace`; no `std::mem` | Accepted | no |
 | [312](adr-312.md) | A handle on a shared value is duplicated, never moved; it may go into a task of our own but not into code nothing describes, and at one user thread its count is plain. | Accepted | partly: D9's bridge type |
 | [302](adr-302.md) | A call into C is written inside `unsafe`, and what crosses is a view for the call or an opaque handle that may be absent, never a raw pointer. | Accepted | yes |
 | [281](adr-281.md) | Shared mutable state is `SharedMut[T]`: its shape is chosen per value, it opens through four doors, a lock inside a lock is refused, and what leaves a door is stamped `Seen[T]`. | Accepted | partly: D33 for a stored lambda |
@@ -352,7 +350,6 @@ one), the new `-v` record's **Supersedes / Related** line names that change
 | [346](adr-346.md) D7, [328](adr-328.md) D10 | [async-5](adr-async-5.md) D20, D21 | `task::scope` is removed; its rules hold for an `async` group's children |
 | [327](adr-327.md) D6 | [async-5](adr-async-5.md) D19 | a full block ends a task or a child with `task::OverBudget`; no panic hook; in a group it fails only that child |
 | [276](adr-276.md) D16 | [async-5](adr-async-5.md) D10, D30 | a task an `async` form starts is a boundary no jump leaves; D13 stands: no loop has a value |
-| [094](adr-094.md) D7 | [views-1](adr-views-1.md) D1-D3 | a part taken out of a `let mut` view of a place is given back as one out of a `mut` parameter |
 | [253](adr-253.md) D2 | [collections-1](adr-collections-1.md) D3 | `extend` takes a list, a set or a sequence of owned elements, on `Vec` and on both sets |
 | [269](adr-269.md) D4 | [380](adr-380.md) D1, D2 | an `assert` not proved refuses the program (`NK1300`) unless `unproved-claims = "warn"`, where it is checked |
 | [340](adr-340.md) D1 | [383](adr-383.md) D1-D3 | the id is given by a numbering pass right after the parse, in input order without gaps, not by the parser as it makes the node |
@@ -369,7 +366,6 @@ one), the new `-v` record's **Supersedes / Related** line names that change
 | [023](adr-023.md) D4, [280](adr-280.md) D18, [308](adr-308.md) D11 | [357](adr-357.md) D1-D3 | the set of error types at a `catch` is closed; a `match` naming every type needs no `else`, and a grown set refuses it |
 | [291](adr-291.md) D1, D5 | [356](adr-356.md) D1, D2 | a `let` and a `for` head take a nested tuple; a variant there is `NK1259` |
 | [349](adr-349.md) D3 | [355](adr-355.md) D3 | `E::V(a, ..)` and `(a, ..)` are the remaining values; `NK1255` only on a variant without values |
-| [283](adr-283.md) D25 | [views-3](adr-views-3.md) D8, D9 | a result may point into several parameters, view by view; giving an argument up while viewed is allowed; a change in place is `NK2305` |
 | [346](adr-346.md) D7 | [351](adr-351.md) D5 | a supervisor throws a child's fatal error itself; no `supervisor::Handed` |
 | [343](adr-343.md) D1-D3 | [345](adr-345.md) D3-D5 | `exit` throws the fatal `process::Exit`; no `exits` column, no `NK2607` |
 | [017](adr-017.md), [289](adr-289.md) | [338](adr-338.md) D2 | `std::html`, `std::http1` and `std::db` are the official packages `html`, `http1` and `db` |
@@ -378,15 +374,8 @@ one), the new `-v` record's **Supersedes / Related** line names that change
 | [330](adr-330.md) §3 | [333](adr-333.md) D3 | a function's parameter may be `comptime` |
 | [304](adr-304.md) D6 | [330](adr-330.md) D1 | a shape walk's type may come from the call |
 | [100](adr-100.md) D3 | [251](adr-251.md) D1 | the source hashes live in `nikaia.derived` beside the ledger, not in its header; the ledger is believed while they match |
-| [094](adr-094.md) D2 | [views-3](adr-views-3.md) D2 | a parameter that keeps its argument says `keep`; the inference checks it |
-| [094](adr-094.md) D6 | [views-3](adr-views-3.md) D4 | `ref` leaves the language outside `extern "C"` |
-| [184](adr-184.md) D1 | [views-3](adr-views-3.md) D4 | `ref X` stands only inside `extern "C"`; elsewhere a view is inferred |
-| [184](adr-184.md) D3 | [views-3](adr-views-3.md) D11 | a lent or `mut` parameter `Array[T]` is a view of a run; a field, element or result is one where a piece of a buffer flows in, else `NK1182` |
-| [251](adr-251.md) D4 | [views-3](adr-views-3.md) D10 | the ledger writes `-> T from a \| b` |
-| [358](adr-358.md) D3 | [views-3](adr-views-3.md) D2, D4 | `mut` and `keep` belong to the whole parameter |
 | [002](adr-002.md) D3 | [021](adr-021.md) D9 | Cranelift is an option for development builds, not the default |
 | [203](adr-203.md) D2 | [204](adr-204.md) D1 | a unit-only `enum` compares by the structural walk that decides every type, not by a rule of its own |
-| [083](adr-083.md) D2 | [views-3](adr-views-3.md) D7 | a field of the subject handed back is a view of it, not refused; `NK1131` stands where a field is bound or passed |
 | [013](adr-013.md) D4 | [140](adr-140.md) D2 | a type is built by its anonymous constructor, not `new` |
 | [013](adr-013.md) D5 | [277](adr-277.md) D2 | a lambda takes the arguments it names |
 | [014](adr-014.md) D1 | [002](adr-002.md) D4 | `std`'s Nikaia half is lowered at release time and the `.rs` is committed |
@@ -405,7 +394,6 @@ the same time do not take the same name.
 
 | ADR | Claimed for | Where |
 | :--- | :--- | :--- |
-| views-v4 | views (views-1 to views-3) | #904 |
 | collections-v3 | collections (collections-1, collections-2) | #904 |
 
 A row here is a claim and nothing else: it says the number is spoken for, not

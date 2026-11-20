@@ -354,7 +354,7 @@ fn check_core_method_run(on: ref Ty) -> Ty? {
             }
         },
         // **An `Array[T]` with no length is a run whether or not it is
-        // written `ref`** (ADR-views-3 D11, #1472): a plain parameter
+        // written `ref`** (ADR-views-v4 D11, #1472): a plain parameter
         // `xs: Array[i64]` views the caller's elements as `ref` does.
         Ty::Named { name, args, .. } => {
             if name == ARRAY && args.len() == 1 {
@@ -417,7 +417,7 @@ fn check_core_method_changes(mut state: CheckState, world: ref CheckWorld, recei
     state.a_changed_binding_says_mut(root, f"changed here, by `{name}`", span.clone())
     state.a_shared_name_changed_in_parallel(root, span)
     // **An element a call changes is a place** (0.0.250, #526), and so is
-    // a part of a list (ADR-views-3 D11, #1209): `v[2..<4].sort()` sorts
+    // a part of a list (ADR-views-v4 D11, #1209): `v[2..<4].sort()` sorts
     // `v[2..4]` itself.
     if an_element_beneath(receiver) || check_core_method_a_part(receiver) {
         state.facts.changed_elements.insert(id_of(receiver) as i64)
@@ -624,7 +624,7 @@ fn check_core_method_called[H: CheckHost](mut state: CheckState, world: ref Chec
         }
         state.a_replace_seen(world, receiver, args, span)
     }
-    // **A view of the receiver** (ADR-views-3 D9, #1478): `s.trim()` points
+    // **A view of the receiver** (ADR-views-v4 D9, #1478): `s.trim()` points
     // into `s`, so a change to `s` while it is used is NK2305.
     if text && views_what_it_is_called_on(name) {
         state.facts.receiver_views.insert(id_of(expr) as i64)

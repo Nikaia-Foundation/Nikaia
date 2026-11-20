@@ -1,5 +1,5 @@
 // A `pub extern fn` of a C library whose body runs its code parameter one call
-// at a time lowers it to `&mut impl FnMut` (ADR-views-3 D17), so the C export
+// at a time lowers it to `&mut impl FnMut` (ADR-views-v4 D17), so the C export
 // wrapper binds the C callback `let mut` and lends it `&mut` (#2076). Before,
 // the wrapper lent `&` and the library reached rustc as NK1343. The C caller
 // counts the calls through its context.

@@ -4,5 +4,5 @@ warning[NK1334]: `s` is marked `keep`, but `look` never keeps it.
  3 | fn look(keep s: String) -> i64 {
    |         ^^^^^^^^^^^^^^
    |
-   = note: A parameter the body only reads or changes is lent (ADR-views-3 D2).
+   = note: A parameter the body only reads or changes is lent (ADR-views-v4 D2).
    = help: Remove `keep` before `s`.

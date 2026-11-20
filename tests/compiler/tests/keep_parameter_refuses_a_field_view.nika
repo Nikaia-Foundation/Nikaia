@@ -1,4 +1,4 @@
-// A `keep` parameter holds a value of its own (ADR-views-3 D5, #1532): a
+// A `keep` parameter holds a value of its own (ADR-views-v4 D5, #1532): a
 // field of a lent value, here a `for` binding, handed to it is refused with
 // a `.clone()` help.
 struct Holder {

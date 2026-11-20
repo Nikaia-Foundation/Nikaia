@@ -1,4 +1,4 @@
-// #1271 (ADR-views-3 D15): a `Bytes` field that every literal fills with a
+// #1271 (ADR-views-v4 D15): a `Bytes` field that every literal fills with a
 // cut (`a[1..]`) or a lent `Bytes` parameter is a view, as an `Array[T]`
 // field is (D11); a `let` declared `Bytes` over `s.bytes`, a cut or a call
 // whose result views its argument holds the view. Each reached rustc as

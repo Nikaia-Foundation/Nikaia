@@ -637,14 +637,14 @@ impl EmitState {
         // and made of a lent place, which the call only reads.
         let lent_path = self.facts.lent_args.contains(node) && emit_arg_made_a_path(self.facts.nullable_args, node)
         // A literal at a type variable the callee lends takes the `&` the
-        // parameter does (ADR-views-3 D2, #1342), `&"b"`.
+        // parameter does (ADR-views-v4 D2, #1342), `&"b"`.
         let mut lend = self.facts.lent_args.contains(node) && (!(emit_arg_is_text_literal(arg) && !self.facts.owned_texts.contains(node)) || self.facts.lent_literals.contains(node))
         if lent_path && !emit_arg_names_a_place(arg) {
             lend = false
         }
         // **And `&mut` for a parameter the callee declared `mut`** (D3), and
         // for code handed to a parameter that changes what it captures
-        // (ADR-views-3 D17): a lambda or other code lent `&mut`, a parameter of
+        // (ADR-views-v4 D17): a lambda or other code lent `&mut`, a parameter of
         // the same kind lent on, one lowered shared lent as code that is.
         let changing_code = self.facts.changing_code_args.get(node) ?? 0
         if changing_code == 3 {
@@ -877,7 +877,7 @@ impl EmitState {
             out.push(")")
         }
         // **Text of its own lent where a type variable holds a view of text**
-        // (ADR-views-3 D12, #1498): `&o.as_str()`, the `&str` beside the
+        // (ADR-views-v4 D12, #1498): `&o.as_str()`, the `&str` beside the
         // literal's `&"p"`.
         if lend && self.facts.lent_text_views.contains(node) {
             out.push(".as_str()")
@@ -1008,7 +1008,7 @@ impl EmitState {
                 names.push(f"__nikaia_a{n}")
             }
             let joined = names.join(", ")
-            // **One `&` only** (ADR-views-3 D2, #1254): behind two, Rust no
+            // **One `&` only** (ADR-views-v4 D2, #1254): behind two, Rust no
             // longer reads the closure's signature off the `AsyncFn` bound,
             // and a lent parameter's lifetime is then not general enough. The
             // `&mut ` of code that changes what it captures is that one.
@@ -2290,7 +2290,7 @@ impl EmitState {
                     }
                     at += 1
                     // A type variable the copy's function lends is `&T` there
-                    // (ADR-views-3 D2, #1342): the argument takes the `&`.
+                    // (ADR-views-v4 D2, #1342): the argument takes the `&`.
                     if self.facts.lent_args.contains(node_key(arg)) && (!(emit_arg_is_text_literal(arg) && !self.facts.owned_texts.contains(node_key(arg))) || self.facts.lent_literals.contains(node_key(arg))) {
                         out.push("&")
                     }

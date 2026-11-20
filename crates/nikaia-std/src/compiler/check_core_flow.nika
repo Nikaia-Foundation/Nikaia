@@ -522,7 +522,7 @@ fn check_core_flow_through_a_view(state: ref CheckState, world: ref CheckWorld, 
     }
     let local: CheckLocal = state.binding(name) ?? return false
     // A name a `get` handed back past a jump is a view of the element (#1089).
-    // A place in a parameter the contract lends is one too (ADR-views-3 D1):
+    // A place in a parameter the contract lends is one too (ADR-views-v4 D1):
     // `match response.body` binds its parts through the reference, as the
     // `ref Response` it replaces did.
     return local.lent || local.ty.is_a_view() || state.a_lent_let(world, root) || state.got_past_a_jump.contains(name) || state.a_lent_parameter(world, root)
@@ -1069,7 +1069,7 @@ fn check_core_flow_copied_parts(mut state: CheckState, world: ref CheckWorld, ar
     // which is already the view (`Some(text)` binds the `&T`), and nothing is
     // copied out of it - a view copies, but `*text` would be the text itself.
     // So is the name over a lent parameter, whose type was made the view
-    // (ADR-views-3 D1): `Some(text)` through the `&Option<String>` binds the
+    // (ADR-views-v4 D1): `Some(text)` through the `&Option<String>` binds the
     // `&String`.
     let viewed = match typed {
         Ty::Nullable(inner) => inner.is_a_view(),
@@ -1545,7 +1545,7 @@ pub fn check_core_flow_match[H: CheckHost](mut state: CheckState, world: ref Che
     // of the part: its own arms bind through it as well.
     let in_place_binding = if a_variable { check_core_flow_bound_in_place(state, world, value) } else { -1 }
     let in_place_name = in_place_binding >= 0
-    // **A parameter the contract lends arrives as a reference** (ADR-views-3
+    // **A parameter the contract lends arrives as a reference** (ADR-views-v4
     // D1), a type that copies as well: its arms bind through it, without
     // `ref`, and a copied part is read out of it.
     // So does a part an arm bound out of one (#1805).
@@ -1676,7 +1676,7 @@ pub fn check_core_flow_match[H: CheckHost](mut state: CheckState, world: ref Che
 }
 
 /// **A field of a `for mut` element is matched through `&mut` where an arm
-/// changes a part** (#1267): the element is the list's own (ADR-views-2 D2),
+/// changes a part** (#1267): the element is the list's own (ADR-views-v4 D25),
 /// so `match w.node` with an arm that pushes to a part it binds changes that
 /// part in place. Lent as `&subject` the part would be behind a `&`; the arm
 /// opens no `let mut` copy of it either, since the part is a `&mut` already.

@@ -1,4 +1,4 @@
-// The same through a `keep` parameter the body only calls (ADR-views-3 D17,
+// The same through a `keep` parameter the body only calls (ADR-views-v4 D17,
 // #1553).
 fn hold(keep f: fn(i64)) {
     f(1)

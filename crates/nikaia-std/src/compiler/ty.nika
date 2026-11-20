@@ -103,7 +103,7 @@ pub enum Ty {
 /// **The names a function type's parameters were declared with** (#2007,
 /// decision 2 on #1528, point 3): `fn(s: String) -> String from s`, from a
 /// written function type with names, a named function or a lambda. Two
-/// function types that differ only in them are the same type (ADR-views-3
+/// function types that differ only in them are the same type (ADR-views-v4
 /// D14), so they compare equal and hash to nothing; [`Ty::text`], which keys
 /// tables, does not write them, and a ledger does not keep them.
 pub struct CodeNames {
@@ -351,7 +351,7 @@ fn sequence(item: String, is_sync: bool, pauses: bool, can_throw: bool, parallel
 }
 
 impl Ty {
-    /// **A type as a message prints it** (ADR-views-3 D4, D10, #1528): in the
+    /// **A type as a message prints it** (ADR-views-v4 D4, D10, #1528): in the
     /// source's spelling, which writes no `ref` outside `extern "C"`. A view,
     /// and a view's element or field type, prints as written (`Vec[String]`,
     /// not `Vec[ref String]`); whether a part is a view is said in words, by
@@ -467,7 +467,7 @@ fn shown_param(part: ref Ty) -> (String, String) {
 }
 
 /// **The `from` of a function type's view result, in the declaration's
-/// names** (#2007, ADR-views-3 D8, D14): `a | b` as `spelled` names them, or
+/// names** (#2007, ADR-views-v4 D8, D14): `a | b` as `spelled` names them, or
 /// the one parameter a result with one can point into. `null` where the
 /// result holds no view or the names are not known, and a message says it
 /// in words.
@@ -493,7 +493,7 @@ fn code_names_its_from(ty: ref Ty) -> bool {
     }
 }
 
-/// **Whether a kept parameter of this type is written `keep`** (ADR-views-3
+/// **Whether a kept parameter of this type is written `keep`** (ADR-views-v4
 /// D2): a number, a `bool`, a `char` and a `scalar` copy, and the source
 /// marks no copy it keeps.
 fn marked_keep(ty: ref Ty) -> bool {
@@ -626,7 +626,7 @@ fn parts_said_as_own(parts: ref String) -> String {
     return f"whose {parts} are their own"
 }
 
-/// **A type said in a message** (ADR-views-3 D4, D10; decision 2 on #1528):
+/// **A type said in a message** (ADR-views-v4 D4, D10; decision 2 on #1528):
 /// `` `T` `` where no part of it is a view; a view in words, ``a view of a
 /// `String` ``, ``a `Vec[String]` whose items are views``. Against `other`,
 /// where the two differ only in what is a view, the side that owns its
@@ -656,7 +656,7 @@ pub fn spoken(ty: ref Ty, other: ref Ty?) -> String {
     return f"{article_of(written)} `{written}` {parts_said_as_own(parts)}"
 }
 
-/// **A message with its types said** (ADR-views-3 D4, D10, #1528): each
+/// **A message with its types said** (ADR-views-v4 D4, D10, #1528): each
 /// written `` `T` `` that is the text of `first` or `second` is replaced by
 /// [`spoken`], each against the other, and an `a` in front of it that the
 /// words already bring is dropped. The message is written with
@@ -1526,11 +1526,11 @@ impl Signature {
         return self.written(false, keeps)
     }
 
-    /// **As a message prints it** (ADR-views-3 D4, D10, #1528, #2007): the
+    /// **As a message prints it** (ADR-views-v4 D4, D10, #1528, #2007): the
     /// declaration's spelling, `self` for the receiver, each type as
     /// [`Ty::shown`] writes it, with no `ref`, and `mut` and `keep` where the
     /// declaration writes them. `keeps` is the contract's: the parameters the
-    /// body keeps, which a views-3 signature marks `keep` (ADR-views-3 D2).
+    /// body keeps, which a views-3 signature marks `keep` (ADR-views-v4 D2).
     pub fn shown(ref self, keeps: ref Vec[String]) -> String {
         return self.written(true, keeps)
     }
@@ -1635,7 +1635,7 @@ pub struct FnContract {
     pub provenance_by: String,
     pub signature: Signature?,
     pub borrows: Vec[String],
-    /// **Each view's own sources, by its path** (ADR-views-3 D8, D10):
+    /// **Each view's own sources, by its path** (ADR-views-v4 D8, D10):
     /// `left: ref(a), right: ref(b)`. Empty where every view the result holds
     /// may point into all of `borrows`.
     pub returns: String,
@@ -1645,14 +1645,14 @@ pub struct FnContract {
     /// out from the body for this unit's own functions; not spelled.
     pub stores: Vec[String],
     /// **Parameters of this unit's own method lowered by value though the
-    /// body does not keep them** (ADR-views-3 D1, #1213): one whose type holds
+    /// body does not keep them** (ADR-views-v4 D1, #1213): one whose type holds
     /// a view, which a borrow would need a lifetime for, and every parameter
     /// of a method named as a function value, whose type a `fn(..)` parameter
     /// fixes. Worked out with `keeps`; not spelled.
     pub by_value: Vec[String],
     pub keeps: Vec[String],
     /// **The parameters of code its body runs from tasks at once**
-    /// (ADR-views-3 D17): a `par_iter()` lambda, a task of `task::scope` or
+    /// (ADR-views-v4 D17): a `par_iter()` lambda, a task of `task::scope` or
     /// an `async` task that names one, or a callee's such parameter it is
     /// handed on to. Every other parameter of code it runs, one call at a
     /// time, takes a lambda that changes what it captures; one of these
@@ -2435,7 +2435,7 @@ fn bind_arguments(pattern_name: ref String, pattern_args: ref Array[Ty], name: r
         return
     }
     // **A run `Array[T]` and an array `Array[T, N]` share their element**
-    // (ADR-views-3 D11, #1209): `mut xs: Array[T]` answers a ledger's
+    // (ADR-views-v4 D11, #1209): `mut xs: Array[T]` answers a ledger's
     // `self: ref Array[T, ?]`, so `T` binds from the first argument alone.
     if args.len() != pattern_args.len() {
         if name == "Array" && args.len() >= 1 && pattern_args.len() >= 1 {

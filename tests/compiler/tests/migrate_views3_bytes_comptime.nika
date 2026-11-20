@@ -1,4 +1,4 @@
-// ADR-views-3 D4, D15, #1254: `nikaia migrate views-3` drops `ref` from a
+// ADR-views-v4 D4, D15, #1254: `nikaia migrate views-3` drops `ref` from a
 // read-only `Bytes` parameter, a `Bytes` result that is a view of one, and
 // from a `comptime` text. The migrated file runs, the `comptime` in a
 // `Vec[String]` too.

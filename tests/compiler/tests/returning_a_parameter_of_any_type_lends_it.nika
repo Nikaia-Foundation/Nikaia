@@ -1,5 +1,5 @@
 // Returning a parameter hands back a view of it and does not keep it, for
-// every type (ADR-views-3 D12, #1498): `pick` and `second` lend both
+// every type (ADR-views-v4 D12, #1498): `pick` and `second` lend both
 // arguments, the result is `from y`, and the caller reuses `x` and `y`.
 
 struct P {

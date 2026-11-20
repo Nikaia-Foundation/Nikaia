@@ -392,7 +392,7 @@ fn check_core_stmt_a_part_of_an_owned_parameter(state: ref CheckState, world: re
 
 /// A field path whose root is a `let` without `mut` that owns what it holds
 /// (#1142), or the binding of a `for` over elements the loop owns (`drain()`,
-/// a produced sequence; ADR-views-2): not a view of a place, not a `for`
+/// a produced sequence; ADR-views-v4 D26): not a view of a place, not a `for`
 /// binding over one, not a parameter.
 fn check_core_stmt_a_part_of_an_unchanged_let(state: ref CheckState, world: ref CheckWorld, value: ref Expr) -> bool sync {
     return match value {
@@ -638,7 +638,7 @@ fn check_core_stmt_lent_let(mut state: CheckState, world: ref CheckWorld, names:
 }
 
 /// **An element or a field read off a place, under a `let` that declares a
-/// view of it** ([ADR-views-3](../../docs/specification/adr/adr-views-3.md) D5, #613):
+/// view of it** ([ADR-views-v4](../../../../docs/specification/adr/adr-views-v4.md) D5, #613):
 /// 1 where the read is lent, 2 where it is a word by its kind and is copied
 /// (`NK1257`), 0 where the rule has nothing to say.
 fn check_core_stmt_element_view(state: ref CheckState, world: ref CheckWorld, value: ref Expr, found: ref Ty, want: ref Ty) -> i64 sync {
@@ -993,12 +993,12 @@ fn check_core_stmt_let[H: CheckHost](mut state: CheckState, world: ref CheckWorl
         let want = written_ty(world.words, world.here.aliases, t)
         seen_through = !found.fits(want) && state.fits_through_deref(world, found, want)
         // **A whole list or array under a `let` declared a view of a run is
-        // lent** (ADR-views-3 D11, #1362): `let c: Array[T] = v` cannot own,
+        // lent** (ADR-views-v4 D11, #1362): `let c: Array[T] = v` cannot own,
         // having no length, so it looks at what `v` holds and `v` stays.
         seen_through = seen_through || check_core_stmt_a_whole_run_viewed(found, want)
     }
     // **An element or a field read off a place under a `ref T` is a view of
-    // it** (ADR-views-3 D5, #613).
+    // it** (ADR-views-v4 D5, #613).
     let mut element_view = 0
     if names.len() == 1 && ty != null {
         let t: ref Type = ty ?? return check_core_stmt_unit()
@@ -1059,7 +1059,7 @@ fn check_core_stmt_let[H: CheckHost](mut state: CheckState, world: ref CheckWorl
         check_core_stmt_lent_let(state, world, names, span)
     }
     // **The place a `let mut` is a view of**, for the messages that name it
-    // (ADR-views-1).
+    // (ADR-views-v4 D18).
     if mutable && names.len() == 1 && shape.len() == 0 {
         let place = check_core_stmt_view_place(state, world, value)
         if place != null {
@@ -1097,14 +1097,14 @@ fn check_core_stmt_let[H: CheckHost](mut state: CheckState, world: ref CheckWorl
             found_kept = want.clone()
         } else if element_view == 2 {
             // **A word is copied at a read, so there is no view of it to
-            // declare** (ADR-views-3 D4).
+            // declare** (ADR-views-v4 D4).
             let shown = found.unseen().text()
             let written = check_core_stmt_read_shown(world, value)
             state.findings.push(check_refusal("NK1257", span, f"A `{shown}` read out of a place is a copy, so it can't be bound as a `ref {shown}`.", ["A number, a `bool`, a `scalar` and an enum whose variants hold nothing are copied at a read (ADR-279 D8); there is no view of them to keep."], f"an `{shown}` is copied at a read; write `let {name} = {written}`."))
             found_kept = want.clone()
         }
         // **A declared function that lends a parameter fits a function type
-        // that lends it** (ADR-views-3 D2, D14, #1254): `let k: fn(s: String)
+        // that lends it** (ADR-views-v4 D2, D14, #1254): `let k: fn(s: String)
         // -> i64 = count` with `count(s: String)`, as an argument does.
         if state.lends_where_a_function_type_reads(world, value, found_kept, want) {
             found_kept = want.clone()
@@ -1140,7 +1140,7 @@ fn check_core_stmt_let[H: CheckHost](mut state: CheckState, world: ref CheckWorl
             let none_lent = lent == null
             bound = lent ?? found.clone()
             // **A plain `let` over a `String` place of a local is a view of
-            // it** (ADR-views-3 D5, #1404), as one read through a `ref`
+            // it** (ADR-views-v4 D5, #1404), as one read through a `ref`
             // parameter is (#839): the emitter lends it (`lent_lets`), so a
             // keeper handed it is refused here with a `.clone()` help instead
             // of by the language below.
@@ -1358,7 +1358,7 @@ fn check_core_stmt_let[H: CheckHost](mut state: CheckState, world: ref CheckWorl
     }
     if bytes_view {
         state.text_bytes_lets.insert(id)
-        // **A `let` that declares `Bytes` holds the view too** (ADR-views-3
+        // **A `let` that declares `Bytes` holds the view too** (ADR-views-v4
         // D15, #1271): `let b: Bytes = s.bytes` is written without its
         // annotation, as `let b = s.bytes` is.
         if ty != null {
@@ -1850,7 +1850,7 @@ fn check_core_stmt_assign[H: CheckHost](mut state: CheckState, world: ref CheckW
         state.gives.push(CheckGive { path: written.clone(), at: span.start as i64, choices: choices })
         state.written_at.push((written, span.start as i64))
     }
-    // **An element assigned gives back one taken out** (ADR-views-1 D1,
+    // **An element assigned gives back one taken out** (ADR-views-v4 D18,
     // #1208): `w[i] = []` after `keep(w[i])`.
     let element = state.an_element_path(world, target, false)
     if path == null && element != null {
@@ -2161,7 +2161,7 @@ fn check_core_stmt_for_a_range(mut state: CheckState, world: ref CheckWorld, ite
 
 /// Why the element a `for` walks cannot be changed in place, as a word: `map`
 /// (its key is part of the head), `set`, or `adapter` (it lends read-only
-/// views); empty where it can (ADR-views-2 D4).
+/// views); empty where it can (ADR-views-v4 D27).
 fn check_core_stmt_unwritable_element(state: ref CheckState, world: ref CheckWorld, iter: ref Expr, over: ref Ty) -> String sync {
     match over {
         Ty::Named { name, .. } => {
@@ -2333,7 +2333,7 @@ fn check_core_stmt_for[H: CheckHost](mut state: CheckState, world: ref CheckWorl
     }
     // **A `for` over a place lends** (ADR-094 D4).
     let lent = is_a_place(iter) && !owned
-    // **`mut` in front of the head** (ADR-views-2 D1-D3): over elements the loop
+    // **`mut` in front of the head** (ADR-views-v4 D24-D26): over elements the loop
     // owns (a range, `drain()`, a produced sequence) every name is a `let mut`
     // of the turn. Over a place, the element is a view of it (D2, step 2).
     let mut mut_view = false
@@ -2432,7 +2432,7 @@ fn check_core_stmt_for[H: CheckHost](mut state: CheckState, world: ref CheckWorl
         }
         local.lent = lent && !mut_view && !copied && !a_view
         // **A `for` binding changes only with `mut`** (Part I 3.3, #734,
-        // ADR-views-2): its head is a `let`'s pattern, so a change to one
+        // ADR-views-v4 D24): its head is a `let`'s pattern, so a change to one
         // without it is `NK1139`.
         if !mutable {
             local.without_mut = CheckImmutable { at: Span { start: span.start, end: span.end }, kind: CheckKind::Loop, over: walked_list.clone() }
@@ -2546,8 +2546,8 @@ fn check_core_stmt_for[H: CheckHost](mut state: CheckState, world: ref CheckWorl
     if collected && steps.len() == 0 {
         state.a_loop_over_a_needless_collect(world, iter, body, mutable, span)
     }
-    // **A turn's element is whole again where the turn ends** (ADR-views-1 D2,
-    // ADR-views-2).
+    // **A turn's element is whole again where the turn ends** (ADR-views-v4 D19,
+    // D28).
     if mut_view && body.stmts.len() > 0 {
         state.views_end(frame_at, body.stmts[body.stmts.len() - 1].span.end as i64)
     }
@@ -2581,7 +2581,7 @@ fn check_core_stmt_jump(mut state: CheckState, word: ref String, span: ref Span)
         state.a_jump_with_nowhere_to_go(word, span)
     }
     state.failing_cleanups_left(span)
-    // **A jump leaves the views bound inside its loop** (ADR-views-1 D2).
+    // **A jump leaves the views bound inside its loop** (ADR-views-v4 D19).
     state.a_way_out(word, "", span)
     return Ty::Unknown
 }

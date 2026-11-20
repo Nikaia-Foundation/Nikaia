@@ -671,7 +671,7 @@ fn check_core_places_a_declared_field[H: CheckHost](mut state: CheckState, world
             found = want.clone()
         }
         // **An element or a field read off a place is a view of it**
-        // (ADR-views-3 D5, #1274), as under a `let` that declares a view:
+        // (ADR-views-v4 D5, #1274), as under a `let` that declares a view:
         // `W { own: xs[0] }` is `W { own: ref xs[0] }`. A `ref T?` field
         // wraps it on the widened slot's path below.
         let plain = match want {
@@ -683,7 +683,7 @@ fn check_core_places_a_declared_field[H: CheckHost](mut state: CheckState, world
         }
     }
     // **A declared function that lends a parameter fits a field whose function
-    // type lends it** (ADR-views-3 D2, D14, #1254), as a `let` and an argument do.
+    // type lends it** (ADR-views-v4 D2, D14, #1254), as a `let` and an argument do.
     if state.lends_where_a_function_type_reads(world, value, found, want) {
         found = want.clone()
     }
@@ -994,7 +994,7 @@ fn check_core_places_lent_field(want: ref Ty, given: ref Ty) -> bool sync {
 /// Whether a field's value is a local of this body, or a field read off one
 /// (#1152): a place that lives on past the literal, so it can be lent. A cut
 /// of one (`a[1..]`) is a piece of that place, a `Bytes`'s too (ADR-320 D7,
-/// ADR-views-3 D15, #1271).
+/// ADR-views-v4 D15, #1271).
 fn check_core_places_a_local_lent(state: ref CheckState, world: ref CheckWorld, value: ref Expr) -> bool sync {
     return match value {
         Expr::Variable(name, _) => state.binding(world.words.resolve(name)) != null,

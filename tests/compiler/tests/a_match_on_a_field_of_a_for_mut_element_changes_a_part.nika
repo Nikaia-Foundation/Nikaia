@@ -1,5 +1,5 @@
 // A `match` over a field of a `for mut` element whose arm changes a part
-// changes it in place in the list (ADR-views-2 D2, #1267): the subject is
+// changes it in place in the list (ADR-views-v4 D25, #1267): the subject is
 // matched through `&mut`, not lent as `&`.
 enum Shape { Many { xs: Vec[i64] }, One }
 struct W { node: Shape }

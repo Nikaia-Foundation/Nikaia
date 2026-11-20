@@ -574,7 +574,7 @@ impl Holder {
 }
 "#,
     );
-    // ADR-views-3 D8: the result points into `self` and `name`; nothing is
+    // ADR-views-v4 D8: the result points into `self` and `name`; nothing is
     // refused for what it points into any more.
     assert!(refused.is_empty(), "{refused:#?}");
 }
@@ -710,7 +710,7 @@ fn main() {
 }
 
 /// #706: changing the argument in place while the list that holds views of
-/// it is still read is `NK2305` (ADR-views-3 D9), at the change.
+/// it is still read is `NK2305` (ADR-views-v4 D9), at the change.
 #[test]
 fn changing_an_argument_kept_in_a_parameters_place_is_refused() {
     let source = r#"

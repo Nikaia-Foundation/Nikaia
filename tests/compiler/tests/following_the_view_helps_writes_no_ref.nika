@@ -1,5 +1,5 @@
 // Each help of `a_view_handed_back_is_never_offered_ref`, followed: a
-// program, and no NK1261 (ADR-views-3 D4, D7, D11; #1403).
+// program, and no NK1261 (ADR-views-v4 D4, D7, D11; #1403).
 
 struct Item { n: i64, s: String }
 

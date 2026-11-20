@@ -1,4 +1,4 @@
-// #1254, ADR-views-3 D8, ADR-282 D12: a body that ends in an `if` or a
+// #1254, ADR-views-v4 D8, ADR-282 D12: a body that ends in an `if` or a
 // `match` hands back each arm's value as a `return` in each arm does. A
 // plain `String` parameter one arm hands back is lent, beside text of the
 // body's own in another arm, so the caller uses its text again (was NK2105,

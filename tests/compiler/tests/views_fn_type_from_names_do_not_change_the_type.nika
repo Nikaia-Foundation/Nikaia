@@ -1,6 +1,6 @@
 // The names in a function type are part of nothing but its `from` and the
 // reader: `fn(s: String, n: i64) -> String` and `fn(String, i64) -> String`
-// are the same type, either way round (ADR-views-3 D14).
+// are the same type, either way round (ADR-views-v4 D14).
 fn named(f: fn(s: String, n: i64) -> String, s: String) -> String {
     return f(s, 2)
 }

@@ -1,4 +1,4 @@
-// #949, ADR-views-1 D2: a `continue` between taking `c.names` out of the view
+// #949, ADR-views-v4 D19: a `continue` between taking `c.names` out of the view
 // and giving it back leaves the map's entry without it.
 use std::collections
 struct C { pub names: Vec[String], pub skip: bool }

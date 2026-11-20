@@ -100,7 +100,7 @@ narrower type, so twice as many fit in a vector register. Two lists that
 cannot overlap let reads and writes be reordered, and in Nikaia that fact
 comes from the language rather than the prover, because a function declares
 what it keeps and changes and a value may not change while a view of it is
-in use ([ADR-views-3](/docs/specification/adr/adr-views-3.html)). Bounds on a loop let checks move
+in use ([ADR-views-v4](/docs/specification/adr/adr-views-v4.html)). Bounds on a loop let checks move
 out of it ([ADR-361](/docs/specification/adr/adr-361.html)). In the solver's own kernels,
 converting an index with a check for a negative value cost the big-number
 kernel a factor of 3.3 against hand-written Rust
@@ -144,6 +144,6 @@ bodies of Nikaia's functions cost.
 | A check is dropped only where a proof shows it cannot fail, and dropping is asked for | [ADR-306](/docs/specification/adr/adr-306.html) |
 | Every proof is checked by a certificate, and Alethe lets a checker from outside check it too | [ADR-270](/docs/specification/adr/adr-270.html) D5, D6 |
 | A claim about the input may be believed with `assume`, visibly, and is checked in the default build | [ADR-376](/docs/specification/adr/adr-376.html) |
-| A function declares what it keeps and changes, and a value does not change under a view | [ADR-views-3](/docs/specification/adr/adr-views-3.html) |
+| A function declares what it keeps and changes, and a value does not change under a view | [ADR-views-v4](/docs/specification/adr/adr-views-v4.html) |
 | Performance is counted in instructions against tuned Rust and not timed | [measuring](/docs/measuring.html) |
 | Our own optimiser from the facts we have, and a fast backend behind it | [#1235](https://github.com/Nikaia-Foundation/Nikaia/issues/1235) |

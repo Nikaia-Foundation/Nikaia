@@ -1,5 +1,5 @@
 // A part `v[a..<b]` handed to an `Array[T]` is `b - a` long, so one too short
-// for the callee's precondition is refused at the call (ADR-views-3 D11,
+// for the callee's precondition is refused at the call (ADR-views-v4 D11,
 // #1209).
 
 fn second(xs: Array[u32]) -> u32 {

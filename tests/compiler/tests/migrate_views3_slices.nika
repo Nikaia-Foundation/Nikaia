@@ -1,4 +1,4 @@
-// ADR-views-3 D4, D11, #1254: `nikaia migrate views-3` drops `ref` from a
+// ADR-views-v4 D4, D11, #1254: `nikaia migrate views-3` drops `ref` from a
 // slice parameter and a slice result. The migrated file runs: the parameter
 // is lent an `Array[T, N]` and a `Vec`, the result `xs[1..]` is a view, so
 // is one chosen between two parameters (D8), and a call's slice result is

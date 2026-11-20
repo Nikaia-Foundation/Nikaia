@@ -223,7 +223,7 @@ Paths: `check_`, `checker`, `text_tiers`, `tiers.nika`, `view_changes`, `keeps.n
 * A `from` fix for text must also be probed with a struct type: the trait lowers only text `from` as a view, so a fix in `keeps.nika` breaks the struct case. (issue-1250)
 * A text `+` is a `Binary` node that the emitter recognises by `facts.concatenations.contains(span.start as i64)`, using the operator span, not `node_key`. (issue-1251)
 * A `let` bound by `x ?? null` used to lose `x`'s `ref` (it was typed as the `null`); if a `&` appears in front of a `match` in the lowered code, check the checker's result type of the `??` first (`check_core_ops.nika`). (issue-1340)
-* a view of a lent parameter handed to an owning `String` result is a refusal with a `.clone()` hint by ADR-282 D8 and views-3 D12/D14, whatever an issue's expected output says. (issue-1263)
+* a view of a lent parameter handed to an owning `String` result is a refusal with a `.clone()` hint by ADR-282 D8 and ADR-views-v4 D12/D14, whatever an issue's expected output says. (issue-1263)
 * A text view in the checker's `Ty` is `Named { name: "str", view: true }` (printed as `ref String`), and `is_a_view_of_a_string` misses it; match `TEXT_VIEW` too. (issue-1264)
 * A refusal of a view handed back where `String` is wanted must exempt static text: ask `text_literal(world, a_string_type(), value, true)`, or `"x"` is refused too. (issue-1264)
 * A `let x: Array[T]` (no length) is made a view by `lv_let_views` in `text_tiers.nika`, like fields (`sf_slice_fields`) and results (`hb_fn`); extend those passes rather than the checker. (issue-1270)
@@ -692,7 +692,7 @@ fix it or wait; **[works]**: use it, do not copy an old way around.
   null,`), and a literal in any file of the package leaves it out: a field
   added to a struct with many literals (`CheckFinding`) gets one, not an
   `edit: null` in each; literals in hand-written Rust still name it;
-* [gap: ADR-views-2 §6] `mut` on one name of a tuple (`for (k, mut v) in m`),
+* [gap: ADR-views-v4 §6] `mut` on one name of a tuple (`for (k, mut v) in m`),
   and so `values_mut()` / `iter_mut()`, is `NK1307`: stops the slice;
 * [design: Part I 3.3, 3.4] `a..b` includes `b`, half-open is `a..<b`; the
   catch-all arm is `else =>`;

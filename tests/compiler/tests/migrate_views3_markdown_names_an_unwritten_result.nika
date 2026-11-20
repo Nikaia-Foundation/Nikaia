@@ -1,4 +1,4 @@
-// ADR-views-3 D14, #1295: a fenced `nika` or `nikaia` block of a Markdown
+// ADR-views-v4 D14, #1295: a fenced `nika` or `nikaia` block of a Markdown
 // file is code under the same rule as a `.nika` file. A trait `ref` result
 // whose source the old declaration does not fix keeps its `ref`, and
 // `nikaia migrate views-3` names it with its line in the Markdown file and

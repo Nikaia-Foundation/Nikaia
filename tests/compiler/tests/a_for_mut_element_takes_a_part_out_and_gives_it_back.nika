@@ -1,4 +1,4 @@
-// #949, #951, ADR-views-1 per turn (ADR-views-2): `p` is a `let mut` view of
+// #949, #951, ADR-views-v4 D18-D23 per turn (D28): `p` is a `let mut` view of
 // each element in turn; `p.names` is taken out to a keeper and given back
 // before the turn ends.
 struct P { pub names: Vec[String], pub count: i64 }

@@ -1,4 +1,4 @@
-// #1208, ADR-views-1 D1-D3: an element of a `mut` list, or of a list in
+// #1208, ADR-views-v4 D18-D20: an element of a `mut` list, or of a list in
 // `mut self`, handed to a keeper is taken out, and assigning it gives it back.
 struct TakenWatches {
 	watches: Vec[Vec[u32]],

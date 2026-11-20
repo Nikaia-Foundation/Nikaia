@@ -1,4 +1,4 @@
-// A field the program changes in place holds text of its own (ADR-views-3
+// A field the program changes in place holds text of its own (ADR-views-v4
 // D5, #1213): given a copy of a piece of the buffer, it is accepted. Without
 // the `.clone()` it is `a_view_into_a_field_changed_in_place_is_refused`.
 struct Cursor { input: String, pos: i64 }

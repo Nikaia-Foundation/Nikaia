@@ -3,7 +3,7 @@ use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 // crates/nikaia/src/view_changes.rs
 //
 // **What happens to data while a view of it is still used**
-// ([ADR-views-3](../../docs/specification/adr/adr-views-3.md) D9; Part I 6.6).
+// ([ADR-views-v4](../../../docs/specification/adr/adr-views-v4.md) D9; Part I 6.6).
 // The walk is Nikaia's (`tools/view_changes.nika`, ADR-294); what is left
 // here hands it the unit and a literal's holes, which only the parser reads.
 

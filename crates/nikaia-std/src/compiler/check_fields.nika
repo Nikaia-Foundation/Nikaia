@@ -71,7 +71,7 @@ impl CheckState {
     /// A read that lends what it finds (`m.get(k)`, `v.first()`) off a
     /// binding is a place as much as `m[k]` is (#1194): the member is lent
     /// out of it, never moved. So is a base that is a view (`viewed`), such as
-    /// a method that hands back a field of its receiver (ADR-views-3 D7, #1486).
+    /// a method that hands back a field of its receiver (ADR-views-v4 D7, #1486).
     fn a_safe_reach(ref mut self, world: ref CheckWorld, base: ref Expr, held_ty: ref Ty, viewed: bool) -> Ty sync {
         let place = viewed || roots_in_a_binding(base) || shapes_lends_from_a_binding(world, base)
         let key = fact_key(base)
@@ -341,10 +341,10 @@ impl CheckState {
     /// is a view** (#1386): in an `impl` of a trait whose result writes
     /// `from`, a parameter the trait does not name is not lent, and the views
     /// pass refuses handing it back with NK2302, in the trait's words
-    /// (ADR-views-3 D14). An NK1104 asking for `ref` would refuse the same
+    /// (ADR-views-v4 D14). An NK1104 asking for `ref` would refuse the same
     /// fault twice, in a word that left the language (D4). Only where the
     /// views pass marks the parameter: its type holds text or a list. **A
-    /// lent parameter handed back is a view of it, of any type** (ADR-views-3
+    /// lent parameter handed back is a view of it, of any type** (ADR-views-v4
     /// D12, #1498): what its `from` names is NK1335's to refuse.
     fn an_owned_parameter_handed_back(ref self, world: ref CheckWorld, found: ref Ty, want: ref Ty, given: ref Expr) -> bool sync {
         if found.is_a_view() || !want.is_a_view() || want.text() != f"ref {found.text()}" {

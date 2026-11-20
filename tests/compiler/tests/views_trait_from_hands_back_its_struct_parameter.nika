@@ -1,5 +1,5 @@
 // A trait method whose result says `from` and hands back the parameter it
-// names lends that parameter whatever its type (ADR-views-3 D2, D8, #1327):
+// names lends that parameter whatever its type (ADR-views-v4 D2, D8, #1327):
 // a struct, or an element of a list, is lowered as the view it is in the
 // trait and in the impl alike, so the caller still has its value after the
 // call, through the impl and through a bound.

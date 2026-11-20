@@ -2540,7 +2540,7 @@ pub(crate) fn rsrc_report(asked: &Asked<'_, '_, '_>, of: &str, sources: &[String
                 if trait_name.is_some() && !trait_from.is_empty() {
                     let written = nikaia_std::block::Text::from(trait_from.join(" | "));
                     let message = format!("{} implements a trait method that hands back views of `{}` only, but this hands back a view of `{}`, which it takes by value.", of, written, owned);
-                    let note = format!("The trait's result says `from {}`, so `{}` is not lent: it is moved into {} and ends with it, and a view of it can't outlive the call (ADR-views-3 D14).", written, owned, of);
+                    let note = format!("The trait's result says `from {}`, so `{}` is not lent: it is moved into {} and ends with it, and a view of it can't outlive the call (ADR-views-v4 D14).", written, owned, of);
                     let help = format!("Hand back a view of what the trait names, or write `from {} | {}` on the trait's result.", written, owned);
                     out.push(refusal("NK2302", Span { start: way.span.start, end: way.span.end }, message, vec![note], help));
                     return;
@@ -2560,7 +2560,7 @@ pub(crate) fn rsrc_report(asked: &Asked<'_, '_, '_>, of: &str, sources: &[String
     if declared_result.found && !declared_result.view {
         for source in named.iter() {
             let message = format!("{} implements a trait method whose result is text of its own, but this hands back a view of `{}`'s data.", of, source);
-            let note: String = String::from("The trait's result writes no `from`, so whoever calls it through the trait gets a value of its own (ADR-views-3 D14).");
+            let note: String = String::from("The trait's result writes no `from`, so whoever calls it through the trait gets a value of its own (ADR-views-v4 D14).");
             let help = format!("Hand back a copy with `.clone()`, or write `from {}` on the trait's result.", source);
             out.push(refusal("NK2302", Span { start: at.start, end: at.end }, message, vec![note], help));
             return;

@@ -1,5 +1,5 @@
 // A `let` declared `Array[T]` over a whole list or a field holding one is a
-// view of it, and the list stays (ADR-views-3 D11, #1362).
+// view of it, and the list stays (ADR-views-v4 D11, #1362).
 struct Item { name: String }
 
 struct Bag { items: Vec[Item] }

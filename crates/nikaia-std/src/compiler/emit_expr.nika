@@ -319,7 +319,7 @@ impl EmitState {
     /// `emit_expr_as_written`, past the copy of a text's bytes: the dispatch.
     fn emit_expr_written[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, node: ref Expr, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
         let at = node_key(node)
-        // **An arm read off a place under a `ref T` is lent** (ADR-views-3 D5),
+        // **An arm read off a place under a `ref T` is lent** (ADR-views-v4 D5),
         // but a name whose buffer a keep holds is a reference already, handed
         // as it is (#99): `either(a)`, not `either(&a)` (#1658).
         if self.facts.lent_reads.contains(at) && !self.emit_stmt_a_kept_name(world, walk, node) {
@@ -464,7 +464,7 @@ impl EmitState {
                 if breaks {
                     out.push("match ")
                 }
-                // A view of a copied word is read at the call (ADR-views-3
+                // A view of a copied word is read at the call (ADR-views-v4
                 // D12, #1239): `Clone::clone(hand(&3))`, which leaves the open `3` to
                 // the type its uses decide (#497).
                 // `id[i64](3)` is checked on its callee's name (#1498).

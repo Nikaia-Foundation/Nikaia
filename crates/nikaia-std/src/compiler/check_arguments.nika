@@ -368,7 +368,7 @@ fn check_arguments[H: CheckHost](mut state: CheckState, world: ref CheckWorld, h
     }
     let own = world.own.functions.contains_key(key)
     let offset = if signature.takes_a_receiver() { 1 } else { 0 }
-    // **Text of two tiers meeting in one type variable** (ADR-views-3 D12,
+    // **Text of two tiers meeting in one type variable** (ADR-views-v4 D12,
     // #1498): a type variable this program's function lends holds what the
     // caller holds behind one `&` (#1342), so where one argument is a view of
     // text (or a literal), the variable is that `&str`, every text of its own
@@ -518,7 +518,7 @@ fn check_arguments[H: CheckHost](mut state: CheckState, world: ref CheckWorld, h
                 found_here = state.text_literal(world, literal_wants, value, kept) ?? state.tuple_literal(world, found_here, literal_wants, value) ?? state.tuple_list_literal(world, found_here, literal_wants, value) ?? found_here.clone()
             }
             // **A text literal a method lends is the view it is** (ADR-282
-            // D5, ADR-views-3 D2, #1230): a method call walks its arguments
+            // D5, ADR-views-v4 D2, #1230): a method call walks its arguments
             // against the parameter's type (ADR-288), which made the literal
             // text of its own before the position was known to be lent.
             if lent && a_text_literal_expr(value) {
@@ -536,7 +536,7 @@ fn check_arguments[H: CheckHost](mut state: CheckState, world: ref CheckWorld, h
             continue
         }
         // **A type variable this program's function lends takes one `&`**
-        // (ADR-views-3 D2, #1342): `c: C` lowers `c: &C`, and a generic is not
+        // (ADR-views-v4 D2, #1342): `c: C` lowers `c: &C`, and a generic is not
         // reached through the language below's deref coercion, so the
         // argument has exactly one. None where it is a view of a value
         // already (a lent `C` handed on, a `for` element); one otherwise, text
@@ -560,7 +560,7 @@ fn check_arguments[H: CheckHost](mut state: CheckState, world: ref CheckWorld, h
             continue
         }
         // **A declared function that lends a parameter fits a function type
-        // whose `from` reads it** (ADR-views-3 D14).
+        // whose `from` reads it** (ADR-views-v4 D14).
         if state.lends_where_a_function_type_reads(world, given_here, found_here, want) {
             let value = given_here ?? continue
             if lent {
@@ -569,7 +569,7 @@ fn check_arguments[H: CheckHost](mut state: CheckState, world: ref CheckWorld, h
             continue
         }
         // **A library function's text view is lent where it is read**
-        // (ADR-views-3 D1, D4, #1213): `html::escape` hands back a view the
+        // (ADR-views-v4 D1, D4, #1213): `html::escape` hands back a view the
         // language below holds as a value of its own (a `Cow`), so the
         // compiler writes the `&` the source no longer does.
         if (lent || want.is_a_view()) && given_here != null {
@@ -625,7 +625,7 @@ fn check_arguments[H: CheckHost](mut state: CheckState, world: ref CheckWorld, h
             check_overflow_list_into_nullables(state, value, found_here, want)
         }
         // **A list, or a part of a list or an array, handed to a lent
-        // `Array[T]`** (ADR-views-3 D11, #1209): the parameter is a view of
+        // `Array[T]`** (ADR-views-v4 D11, #1209): the parameter is a view of
         // the run, so a list is lent (`&v`) and a part is one already
         // (`&v[a..b]`), as a call's result that is a view of a run is
         // (#1254). A `mut` one is `lent_to_a_mut_parameter`'s below.
@@ -671,7 +671,7 @@ fn check_arguments[H: CheckHost](mut state: CheckState, world: ref CheckWorld, h
         }
         // **An element or a field read off a place, handed to a `ref T?`
         // slot (a `Vec` element), is lent and goes inside the option**
-        // (ADR-views-3 D5, #655): `v.push(given[1])` is `v.push(Some(&given[1]))`.
+        // (ADR-views-v4 D5, #655): `v.push(given[1])` is `v.push(Some(&given[1]))`.
         if given_here != null && check_arguments_nullable(want) && !check_arguments_nullable(found_here) {
             let value = given_here ?? continue
             if check_core_stmt_element_view(state, world, value, found_here, want) == 1 {
@@ -820,7 +820,7 @@ fn check_arguments_mut_differs(found: ref Ty, want: ref Ty) -> i64 sync {
 
 impl CheckState {
     /// **A declared function that lends a parameter, handed where a function
-    /// type's `from` reads it** (ADR-views-3 D14): `first(s: String) ->
+    /// type's `from` reads it** (ADR-views-v4 D14): `first(s: String) ->
     /// String` that hands back a view of `s` fits `fn(s: String) -> String
     /// from s`, whose `s` is lent and whose result is a view; the language
     /// below takes both as `&str`. A parameter the function keeps does not

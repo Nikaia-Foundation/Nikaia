@@ -1699,7 +1699,7 @@ fn mentions(unit: ref Unit, asked: ref Asked, here: ref Here, node: ref Expr) ->
 }
 
 // **A call's result carries only what its result points into** (#1094,
-// ADR-views-3 D8): an argument counts where the callee's ledger lists its
+// ADR-views-v4 D8): an argument counts where the callee's ledger lists its
 // parameter among `borrows`, so `leaf(e.key, input)` with `-> N` from `n`
 // carries no view of `input`. A callee nobody describes, one whose sources
 // are not known, or one that may keep an argument in another's place, is
@@ -2079,7 +2079,7 @@ fn rsrc_join(mut into: collections::BTreeSet[String], more: ref collections::BTr
     into.extend(more.clone())
 }
 
-// **A source per view** (ADR-views-3 D8): an entry is a parameter, which every view
+// **A source per view** (ADR-views-v4 D8): an entry is a parameter, which every view
 // of the value may point into, or `path:parameter`, which only the view at that
 // path does: `left:a` for `Pair { left: a, .. }`, `left.name:a` one further in.
 fn rsrc_param_of(entry: ref String) -> String {
@@ -3107,7 +3107,7 @@ fn rsrc_callee(asked: ref Asked, known: ref collections::BTreeMap[String, Result
 }
 
 // The ledger's sources as (path, parameter): `returns = "left: ref(a)"` per
-// view (ADR-views-3 D10), else every parameter for every view.
+// view (ADR-views-v4 D10), else every parameter for every view.
 fn rsrc_written_paths(contract: ref FnContract) -> Vec[(String, String)] {
     let mut out: Vec[(String, String)] = []
     if contract.returns.len() == 0 {
@@ -3383,7 +3383,7 @@ fn rsrc_function(unit: ref Unit, asked: ref Asked, subject: ref Type?, trait_nam
     return false
 }
 
-// **What an `impl`'s trait declares for the method's result** (ADR-views-3
+// **What an `impl`'s trait declares for the method's result** (ADR-views-v4
 // D14, #1224): `found` where the trait is one of this file's; `view` where the
 // result is a view at all (it writes `from`, or `ref` until the migration);
 // `from` the positions its `from` names, -1 for the receiver, else the
@@ -3484,7 +3484,7 @@ fn rsrc_report(asked: ref Asked, of: ref String, sources: ref Vec[String], decla
                 if trait_name != null && !trait_from.is_empty() {
                     let written = trait_from.join(" | ")
                     let message = f"{of} implements a trait method that hands back views of `{written}` only, but this hands back a view of `{owned}`, which it takes by value."
-                    let note = f"The trait's result says `from {written}`, so `{owned}` is not lent: it is moved into {of} and ends with it, and a view of it can't outlive the call (ADR-views-3 D14)."
+                    let note = f"The trait's result says `from {written}`, so `{owned}` is not lent: it is moved into {of} and ends with it, and a view of it can't outlive the call (ADR-views-v4 D14)."
                     let help = f"Hand back a view of what the trait names, or write `from {written} | {owned}` on the trait's result."
                     out.push(refusal("NK2302", Span { start: way.span.start, end: way.span.end }, message, [note], help))
                     return
@@ -3510,7 +3510,7 @@ fn rsrc_report(asked: ref Asked, of: ref String, sources: ref Vec[String], decla
             named.push(source.clone())
         }
     }
-    // Two or more parameters reached is no refusal (ADR-views-3 D8): the
+    // Two or more parameters reached is no refusal (ADR-views-v4 D8): the
     // result points into each of them, and the ledger writes them all.
     // An `impl` of a trait hands back what the trait's declaration names
     // (D26): the receiver, else the only view. A result that writes `from`
@@ -3526,7 +3526,7 @@ fn rsrc_report(asked: ref Asked, of: ref String, sources: ref Vec[String], decla
     if declared_result.found && !declared_result.view {
         for source in named {
             let message = f"{of} implements a trait method whose result is text of its own, but this hands back a view of `{source}`'s data."
-            let note: String = "The trait's result writes no `from`, so whoever calls it through the trait gets a value of its own (ADR-views-3 D14)."
+            let note: String = "The trait's result writes no `from`, so whoever calls it through the trait gets a value of its own (ADR-views-v4 D14)."
             let help = f"Hand back a copy with `.clone()`, or write `from {source}` on the trait's result."
             out.push(refusal("NK2302", Span { start: at.start, end: at.end }, message, [note], help))
             return
@@ -3568,7 +3568,7 @@ fn rsrc_report(asked: ref Asked, of: ref String, sources: ref Vec[String], decla
 }
 
 // A function type that takes no view and hands one back has nothing to
-// point at; with several, the result points into each (ADR-views-3 D8).
+// point at; with several, the result points into each (ADR-views-v4 D8).
 fn rsrc_function_type(unit: ref Unit, asked: ref Asked, ty: ref Type, at: ref Span, mut out: Vec[Finding]) {
     if ty.code != null {
         let code = ty.code ?? return
@@ -3606,14 +3606,14 @@ fn rsrc_function_types(unit: ref Unit, asked: ref Asked, args: ref Vec[FnArg], r
 pub struct ResultSource {
     pub key: String,
     pub borrows: Vec[String],
-    // Each view's own sources by its path where they differ (ADR-views-3 D8, D10):
+    // Each view's own sources by its path where they differ (ADR-views-v4 D8, D10):
     // `left: ref(a), right: ref(b)`; empty where every view has them all.
     pub returns: String,
 }
 
 /// The answer of D25 for every function of the unit that hands back a view,
 /// the ledger's `ref(..)` (#580 step 5): a written `from` as written
-/// (ADR-views-3 D10), else what the body reaches.
+/// (ADR-views-v4 D10), else what the body reaches.
 pub fn result_sources(asked: ref Asked, items: ref Vec[Spanned[Item]], own_buffer: fn(ref Expr) -> bool sync) -> Vec[ResultSource] {
     return result_sources_in(asked, result_package(asked), items, own_buffer)
 }
