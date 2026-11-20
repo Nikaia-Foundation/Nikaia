@@ -275,8 +275,8 @@ jobs:
       - name: Install stable, and nightly with Miri
         run: |
           rustup show
-          rustup toolchain install nightly --component miri --profile minimal
-          cargo +nightly miri setup
+          rustup toolchain install nightly-2026-11-18 --component miri --profile minimal
+          cargo +nightly-2026-11-18 miri setup
 
       - name: Check every crate under crates/unsafe
         run: sh scripts/check-unsafe-crates.sh "${{ matrix.crate }}"
