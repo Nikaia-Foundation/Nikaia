@@ -1,0 +1,4 @@
+no `Shared` value here, so there is nothing to choose.
+
+Boxes of recursive types (ADR-327 D16):
+    bottom_up: `Tree::Node` outside: it is returned, and a call in `main` lets it leave the task (ADR-327 D17)

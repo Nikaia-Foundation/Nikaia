@@ -1,0 +1,7 @@
+no `Shared` value here, so there is nothing to choose.
+
+Boxes of recursive types (ADR-327 D16):
+    leftward: `Tree::Node` in the block: its result stays in the task at every call (ADR-327 D17)
+    rightward: `Tree::Node` in the block: its result stays in the task at every call (ADR-327 D17)
+    up: `Tree::Node` outside: it is returned, and a call in `down` returns it, and the result of `down` leaves the task (ADR-327 D17)
+    down: `Tree::Node` outside: it is returned, and a call in `main` lets it leave the task (ADR-327 D17)

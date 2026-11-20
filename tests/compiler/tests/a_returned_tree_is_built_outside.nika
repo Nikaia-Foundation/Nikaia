@@ -1,6 +1,7 @@
-// **A tree a function returns is built outside** (ADR-327 D16, #2406):
-// placing a value across calls is D17's, not built yet, so both the tree
-// bound and then returned and the one returned straight are `Boxed::new`.
+// **A tree a function binds and then returns is built outside** (ADR-327
+// D16, #2406): `t` is handed on as a value, so `bound`'s node is
+// `Boxed::new`. The tree `straight` returns is built in the block (D17,
+// #2348): its one caller only counts it, so it never leaves the task.
 enum Tree { Leaf, Node(Tree, Tree) }
 
 fn count(t: Tree) -> i64 {

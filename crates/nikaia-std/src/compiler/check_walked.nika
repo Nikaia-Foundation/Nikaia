@@ -420,6 +420,9 @@ pub fn check_walked_walk[H: CheckHost, P: CheckWalkedPasses](mut state: CheckSta
     // **And once more per unrolled turn** (ADR-304 D7, D6), which the walk
     // above is what found: a call may stand above the function it names.
     check_program_unroll(state, world, host)
+    // **A returned tree is placed across calls** (ADR-327 D17), once every
+    // body has said which of its arguments it lends.
+    check_core_place_returned(state, world)
     check_walked_unsigned_slots(state, fn(facts, nodes) { passes.nonnegative(facts, nodes) })
     state.walls_a_refusal_explains()
     state.facts.walks_fields = state.walks_fields.clone()
