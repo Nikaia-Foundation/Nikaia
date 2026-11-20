@@ -44,7 +44,11 @@
 // build-time one (D25), so a file ours would prove past 1024 cases is not
 // scored `unknown (cases)`. One line per file (a disagreement marked
 // `DISAGREE`), then per directory and solver: solved, wrong (against the
-// status), PAR-2 in seconds (an unsolved file counts twice the limit), peak
+// status), the files left by reason (`overflow`, ours' `unknown (overflow)`:
+// the file leaves `i64`, ADR-270 D11, also where ours ran past the limit
+// and the rod at the build-time budget answers so; `timeout`, past the
+// limit otherwise; `unknown`,
+// any other, the case budget among them; #2259), PAR-2 in seconds (an unsolved file counts twice the limit), peak
 // and median memory (never below the runner's own, which the header names). `--instructions`
 // runs each solver under callgrind and adds the mean instructions per solved
 // file; time is then not the figure, and the limit is a hundred times wider.
@@ -1662,7 +1666,18 @@ fn solver_collected(stderr: String) -> i64 {
 	return -1
 }
 
-// One solver on one file. A run past its limit is `unknown`; under
+// Whether the rod at the build-time case budget answers `path` with
+// `unknown (overflow)` within `timeout` seconds.
+fn solver_rod_overflows(bin: String, path: String, timeout: i64) -> bool throws {
+	let out = process::run(bin, ["new", path]; within: timeout.seconds())
+	if out.timed_out || !out.ok { return false }
+	let line = out.stdout.trim().lines().nth(0) ?? ""
+	return line.starts_with("unknown (overflow) ")
+}
+
+// One solver on one file. A run past its limit is `timeout`, ours' file
+// that leaves `i64` `overflow`, any other answer but `sat` and `unsat`
+// `unknown`; under
 // `instructions` the run goes through callgrind, with a hundred times the
 // limit, the CLIs' own included, for valgrind's slowdown.
 fn solver_one(
@@ -1676,7 +1691,7 @@ fn solver_one(
 	// The CLIs' own limit is widened with the runner's: under callgrind they
 	// would give up after a tenth of their work.
 	let own = if instructions { timeout * 100 } else { timeout }
-	let (cmd, args) = solver_command(solver.clone(), bin, exe, path, own)
+	let (cmd, args) = solver_command(solver.clone(), bin.clone(), exe, path.clone(), own)
 	let mut run_cmd = cmd.clone()
 	let mut run_args: Vec[String] = []
 	let mut limit = timeout + 5
@@ -1691,14 +1706,25 @@ fn solver_one(
 	let kib = out.max_rss_kib ?? -1
 	let counted = if instructions { solver_collected(out.stderr) } else { -1 }
 	if out.timed_out || (!instructions && millis > timeout * 1000) {
-		return SolverRun { answer: "unknown", millis: millis, kib: kib, instructions: counted }
+		// Ours past the limit: a search that left `i64` hands over to the
+		// walk, which the case budget of `compare` lets run until it is
+		// killed, so the killed run names no overflow. The search is the
+		// same at the build-time budget up to that point, and there it ends
+		// in a few hundred cases with `unknown (overflow)`: asked so,
+		// untimed by the row, the file counts as `overflow` (#2259).
+		let mut answer: String = "timeout"
+		if solver == "ours" && solver_rod_overflows(bin, path, timeout) { answer = "overflow" }
+		return SolverRun { answer: answer, millis: millis, kib: kib, instructions: counted }
 	}
 	let mut answer: String = "unknown"
 	if solver == "ours" {
 		if out.ok {
 			let line = out.stdout.trim().lines().nth(0) ?? ""
 			let at = line.rfind(" ") ?? line.len()
-			answer = solver_rod_answer(f"{line[0..<at]}")
+			// The rod's `unknown (overflow)`: the file leaves `i64` (ADR-270
+			// D11), counted apart from a miss (#2259).
+			let said = f"{line[0..<at]}"
+			answer = if said == "unknown (overflow)" { "overflow" } else { solver_rod_answer(said) }
 		}
 	} else {
 		answer = solver_cli_answer(out.stdout)
@@ -1723,8 +1749,9 @@ fn solver_median(xs: Vec[i64]) -> i64 {
 }
 
 // One solver's row over the files `at` of `runs`: solved, wrong against the
-// status, PAR-2 in seconds (the wall time of a solved file, twice the limit
-// otherwise), peak memory (the most and the median) and, where counted, the
+// status, the rest by reason (ours' overflow, a timeout, any other unknown;
+// the CLIs never overflow, so their row leaves that count out), PAR-2 in
+// seconds (the wall time of a solved file, twice the limit otherwise), peak memory (the most and the median) and, where counted, the
 // instructions of the solved files.
 fn solver_compare_row(
 	solver: String,
@@ -1740,12 +1767,22 @@ fn solver_compare_row(
 	let mut kibs: Vec[i64] = []
 	let mut instructions = 0
 	let mut counted = 0
+	let mut overflow = 0
+	let mut timeouts = 0
+	let mut unknown = 0
 	for i in at {
 		let r = runs[i][k]
 		let status = statuses[i]
 		let answered = r.answer == "sat" || r.answer == "unsat"
 		if answered && status != "" && r.answer != status { wrong += 1 }
 		if r.answer == "rejected" { wrong += 1 }
+		if r.answer == "overflow" {
+			overflow += 1
+		} else if r.answer == "timeout" {
+			timeouts += 1
+		} else if !answered && r.answer != "rejected" {
+			unknown += 1
+		}
 		if answered && (status == "" || r.answer == status) {
 			solved += 1
 			par2 += r.millis
@@ -1765,7 +1802,8 @@ fn solver_compare_row(
 	let n = at.len()
 	let mean = if n > 0 { par2 / n / 100 } else { 0 }
 	let shown = if counted > 0 { f", {instructions / counted} instructions per solved" } else { "" }
-	return f"{solver} solved {solved} wrong {wrong} PAR-2 {solver_tenths(mean)} s, peak {most / 1024} MiB (median {solver_median(kibs) / 1024}){shown}"
+	let over = if solver == "ours" { f" overflow {overflow}" } else { "" }
+	return f"{solver} solved {solved} wrong {wrong}{over} timeout {timeouts} unknown {unknown} PAR-2 {solver_tenths(mean)} s, peak {most / 1024} MiB (median {solver_median(kibs) / 1024}){shown}"
 }
 
 fn solver_compare(repo: String, nikaia: String, args: Vec[String]) throws {
