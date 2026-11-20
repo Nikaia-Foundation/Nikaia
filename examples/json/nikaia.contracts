@@ -28,6 +28,7 @@ signature = "(value: Json) -> i64"
 throws = ["io::IoError"]
 locks = true
 panics = true
+trusted = ["cli::args at main.nika:211"]
 signature = "()"
 
 [fn."show"]
