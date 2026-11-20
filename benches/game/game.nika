@@ -237,7 +237,7 @@ fn sh(script: String) -> process::Output throws {
 fn must(script: String, what: String) throws {
 	let r = sh(script)
 	if r.code != 0 {
-		println(f"{what} failed:\n{r.stdout}{r.stderr}")
+		println(f"{what} failed (exit {r.code}):\n{r.stdout}{r.stderr}")
 		process::exit(1)
 	}
 }
@@ -405,13 +405,21 @@ struct Count {
 }
 
 // Instructions and mispredicted branches of one run, from callgrind's totals
-// (`events: Ir Bc Bcm Bi Bim`).
+// (`events: Ir Bc Bcm Bi Bim`). The totals and valgrind's log are named after
+// the binary's path under `work`, so a failure shows its own log, not the last run's (#2359);
+// valgrind's `brk segment overflow` there is a warning, not the failure.
 fn count(work: String, env: String, bin: String, args: String) -> Count throws {
-	let file = f"{work}/out/callgrind.out"
-	must(
-		f"{env}valgrind --tool=callgrind --branch-sim=yes --callgrind-out-file={file} {bin} {args} > /dev/null 2>{work}/out/valgrind.log",
-		f"callgrind of {bin}",
+	let name = bin.replace(f"{work}/", "").replace("/", "-")
+	let file = f"{work}/out/{name}.callgrind.out"
+	let log = f"{work}/out/{name}.valgrind.log"
+	let r = sh(
+		f"{env}valgrind --tool=callgrind --branch-sim=yes --callgrind-out-file={file} {bin} {args} > /dev/null 2>{log}",
 	)
+	if r.code != 0 {
+		let tail = sh(f"tail -20 {log}").stdout
+		println(f"callgrind of {bin} failed (exit {r.code}); the end of {log}:\n{r.stderr}{tail}")
+		process::exit(1)
+	}
 	let totals = sh(f"grep -E '^(totals|summary):' {file} | head -1").stdout.trim().clone()
 	let fields: Vec[String] = totals.split_whitespace().collect()
 	return Count {

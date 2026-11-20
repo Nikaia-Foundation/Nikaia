@@ -11,7 +11,7 @@ print the same bytes and counts them with callgrind.
 | level | Nikaia | Rust |
 |---|---|---|
 | the tree | [`tree.nika`](tree.nika): `json::parse` into a `json::Value`, written back with `json::to_string` | [`rust-tree.rs`](rust-tree.rs): `serde_json::Value`, written back with `serde_json::to_string` |
-| a type of the program | not built yet: the package's way is `json::read[T]` (ADR-344 D3, ADR-grammar-2 D10), which waits for its build (#604) | `#[derive(Deserialize)]`, with it |
+| a type of the program | not built yet: the package's way is `json::read[T]` (ADR-344 D3, ADR-grammar-typed-read-v1 D10), which waits for its build (#604) | `#[derive(Deserialize)]`, with it |
 
 serde_json is built with `preserve_order` (an object keeps its members in the
 order of the text, as `json::Value` does), `arbitrary_precision` (a number is

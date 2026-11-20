@@ -5,8 +5,9 @@ every ADR name belongs to one record (2 checked)
 no live file cites an archived record
 exit 0
 --- one case per check
-2 dangling ADR citation(s):
+3 dangling ADR citation(s):
   crates/a/src/lib.rs: ADR~alpha-v1 D7 — no such decision
+  packages/p/src/main.nika: ADR~alpha-v1 D8 — no such decision
   crates/a/src/lib.rs: ADR~alpha-v1 §9 — no such section
 1 ADR(s) citing a section of a notes file as authority:
   docs/specification/adr/adr~alpha-v1.md:7: As handoff.md §3 says.
@@ -20,8 +21,9 @@ exit 0
   A name is taken when it is claimed in the index's reserved table,
   and a record is written once. Two rows or a mismatched title means
   two records are wearing one name - move the later one.
-1 citation(s) of an archived ADR outside the history:
+2 citation(s) of an archived ADR outside the history:
   crates/a/src/lib.rs:1: ADR~old-v1
+  packages/p/src/lib.nika:1: ADR~old-v1
   Cite the record that replaced it (docs/history/adr/README.md maps
   every archived decision to its live one).
 2 ADR name(s) that no record carries:

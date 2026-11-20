@@ -1,10 +1,12 @@
 crates/a/src/lib.rs: 3
 docs/notes.md: 7
 docs/specification/adr/adr~903.md: 3
+packages/p/src/main.nika: 1
 crates/a/src/lib.rs:4: ADR~901 D3,\n// D4: a list of decisions that goes on past a line break
 docs/notes.md:6: ADR~901 D3, D5: the decisions land in different records (moved-v1, other-v1)
 docs/notes.md:7: ADR~901 §2: a § citation
 docs/notes.md:8: ADR~901 D9: D9 is not in the table
+docs/notes.md:10: [ADR~901](adr~901.md) D3: a link whose path resolves to `docs`, not to docs/specification/adr/
 exit 0
 --- docs/notes.md
 One: ADR~901 D3.
@@ -20,10 +22,12 @@ Astray: [ADR~901](adr~901.md) D3.
 crates/a/src/lib.rs: 3
 docs/notes.md: 7
 docs/specification/adr/adr~903.md: 3
+packages/p/src/main.nika: 1
 crates/a/src/lib.rs:4: ADR~901 D3,\n// D4: a list of decisions that goes on past a line break
 docs/notes.md:6: ADR~901 D3, D5: the decisions land in different records (moved-v1, other-v1)
 docs/notes.md:7: ADR~901 §2: a § citation
 docs/notes.md:8: ADR~901 D9: D9 is not in the table
+docs/notes.md:10: [ADR~901](adr~901.md) D3: a link whose path resolves to `docs`, not to docs/specification/adr/
 exit 0
 --- docs/notes.md
 One: ADR~moved-v1 D1.
@@ -44,6 +48,8 @@ Links: [ADR~moved-v1](adr~moved-v1.md) D1, [moved-v1](adr~moved-v1.md) D2, [move
     // D2), and more
 // ADR~901 D3,
 // D4 past the break
+--- packages/p/src/main.nika
+// ADR~moved-v1 D2 in a package
 --- docs/history/adr/README.md
 ADR~901 D3 is archived.
 --- src/main.nika

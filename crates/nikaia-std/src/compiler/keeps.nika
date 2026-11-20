@@ -1969,7 +1969,7 @@ pub fn keeps_infer[H: KeepsHost](mut ledger: Ledger, units: ref Vec[ParsedView],
                             }
                         }
                         // **An `@stream` entry's options are kept too**
-                        // (ADR-grammar-2 D7, #1443): its walk parses on a
+                        // (ADR-grammar-typed-read-v1 D7, #1443): its walk parses on a
                         // thread of its own, which owns what it is handed, so
                         // a caller hands an option by value, not a lent
                         // parameter's `&T`.

@@ -217,11 +217,23 @@ read the record in the right-hand column.
 | [async-4](adr-async-4.md) | `async` Is an Expression Prefix; `async e` Is Waited Where Its Value Is First Needed, `async(handle)` Gives a Handle Bound to the Group, and Only a Handle Is Cancelled | [ADR-async-5](../../specification/adr/adr-async-5.md) | D1→D5, D2→D6, D3→D7, D4→D11, D5→D12, D6→D13, D7→D9, D8→D31, D9→D10, D10→D14, D11→D22, D12→D33, D13→D34, D14→D17, D15→D16 |
 | [decision-records-1](adr-decision-records-1.md) | A Record Is Named by Its Topic and a Number, `ADR-<topic>-<n>`; the Numbered Records Keep Their Numbers Until a Consolidation Replaces Them | [ADR-decision-records-v2](../../specification/adr/adr-decision-records-v2.md) | D1→D1 (a version `v<n>`, not a count of records), D2→D2 (one live record per topic; changes no longer in place), D3→D4 (consolidated when changed), D4→D5, D5→D6 |
 | [grammar-1](adr-grammar-1.md) | A Grammar Takes Values - Rule Parameters and Options, Bounds and Guards - and an Action Stands After `->` | [ADR-grammar-syntax-v1](../../specification/adr/adr-grammar-syntax-v1.md) (D1-D5), [ADR-grammar-actions-v1](../../specification/adr/adr-grammar-actions-v1.md) (D6) | D1→syntax D9, D2→syntax D12, D3→syntax D13, D4→syntax D14, D5→syntax D15, D6→actions D7 |
+| [350](adr-350.md) | A Test That Proves a `T?` Is Not `null` Makes It a `T` | [ADR-382](../../specification/adr/adr-382.md) | D1→D1, D2→D2, D3→D3, D4→D4-D6 |
+| [339](adr-339.md) | A Grammar Can Say Where a Match Was (`span(p)`, `here`) and Whether a Line Break Precedes It (`same_line`); `///` Is a Rule, and No Grammar Declares a State or an `extern rule` | [ADR-grammar-syntax-v1](../../specification/adr/adr-grammar-syntax-v1.md) | D1→D16, D2→D17, D3→D18, D4→D19 |
+| [366](adr-366.md) | A Grammar Reads `Bytes` as Readily as Text; What Becomes Text Is Checked Where It Becomes Text | [ADR-grammar-input-v1](../../specification/adr/adr-grammar-input-v1.md) | D1→D1, D2→D2, D3→D3, D4→D4, D5→D5 |
+| [388](adr-388.md) | The Table a Grammar Interns Into Is the Caller's, Handed to the Entry as `words:` | [ADR-grammar-input-v1](../../specification/adr/adr-grammar-input-v1.md) | D1→D10, D2→D11, D3→D12 |
+| [353](adr-353.md) | A Result's Views Point Where the Body Says, and a Viewed Buffer Outlives Its Owner's Name | [ADR-views-3](../../specification/adr/adr-views-3.md) | D1→D8, D2→D8, D3→D9, D4→D9, D5→D10, D6→D9, D7→D10, D8→D9, D9→D9, D10→D10 |
+| [354](adr-354.md) | An Element or a Field Read off a Place Is a View Where a `ref T` Is Declared, and a Word Is Not | [ADR-views-3](../../specification/adr/adr-views-3.md) | D1→D5, D2→D4, D3→D4 |
+| [177](adr-177.md) | A Grammar Runs While the Program Is Built by **Compiling the Parser It Generates** | [ADR-grammar-build-time-v1](../../specification/adr/adr-grammar-build-time-v1.md) | D1→D2, D2→D3, D3→D4, D4→D5, D5→D6 |
+| [323](adr-323.md) | A Grammar Describes a Type as Data — `meta::Type`, From Which the Compiler Writes a Block's Parameters and Result | [ADR-grammar-build-time-v1](../../specification/adr/adr-grammar-build-time-v1.md) | D1→D7, D2→D8, D3→D9, D4→D10, D5→D8 |
+| [grammar-2](adr-grammar-2.md) | A Grammar Entry May Take a Type, and the Compiler Builds a Parser per Type; `members[S]` Fills a Struct by the Compiler's Rules, So a Typed Read Is a Grammar and Not a Library Walk | [ADR-grammar-typed-read-v1](../../specification/adr/adr-grammar-typed-read-v1.md) | D1→D1 … D13→D13 |
 
 ## What the archived records displaced in one another
 
 The history of partial supersessions among these records, as the live index
-carried it before they were archived.
+carried it before they were archived. A row whose other side is still live
+(an archived record changed a live one) is here too; the consolidating `-v`
+record's **Supersedes / Related** line names that change for the live
+record's reader.
 
 | Displaced or amended | By | What moved |
 | :--- | :--- | :--- |
@@ -303,11 +315,6 @@ carried it before they were archived.
 | [323](adr-323.md) D1, D3 | [330](../../specification/adr/adr-330.md) D7 | there is no `Named`; a grammar names no type of the program |
 | [323](adr-323.md) §3 | [330](../../specification/adr/adr-330.md) D9 | type arguments at a call, `f[T]()`, are allowed, with a warning |
 | [002](../../specification/adr/adr-002.md) D2 | [177](adr-177.md) D1 | a grammar that runs while the program is built is compiled from the parser it generates; other `comptime` code is evaluated in the compiler's process |
-| [350](adr-350.md) | A Test That Proves a `T?` Is Not `null` Makes It a `T` | [ADR-382](../../specification/adr/adr-382.md) | D1→D1, D2→D2, D3→D3, D4→D4-D6 |
-| [339](adr-339.md) | A Grammar Can Say Where a Match Was (`span(p)`, `here`) and Whether a Line Break Precedes It (`same_line`); `///` Is a Rule, and No Grammar Declares a State or an `extern rule` | [ADR-grammar-syntax-v1](../../specification/adr/adr-grammar-syntax-v1.md) | D1→D16, D2→D17, D3→D18, D4→D19 |
-| [366](adr-366.md) | A Grammar Reads `Bytes` as Readily as Text; What Becomes Text Is Checked Where It Becomes Text | [ADR-grammar-input-v1](../../specification/adr/adr-grammar-input-v1.md) | D1→D1, D2→D2, D3→D3, D4→D4, D5→D5 |
-| [388](adr-388.md) | The Table a Grammar Interns Into Is the Caller's, Handed to the Entry as `words:` | [ADR-grammar-input-v1](../../specification/adr/adr-grammar-input-v1.md) | D1→D10, D2→D11, D3→D12 |
-| [353](adr-353.md) | A Result's Views Point Where the Body Says, and a Viewed Buffer Outlives Its Owner's Name | [ADR-views-3](../../specification/adr/adr-views-3.md) | D1→D8, D2→D8, D3→D9, D4→D9, D5→D10, D6→D9, D7→D10, D8→D9, D9→D9, D10→D10 |
-| [354](adr-354.md) | An Element or a Field Read off a Place Is a View Where a `ref T` Is Declared, and a Word Is Not | [ADR-views-3](../../specification/adr/adr-views-3.md) | D1→D5, D2→D4, D3→D4 |
-| [177](adr-177.md) | A Grammar Runs While the Program Is Built by **Compiling the Parser It Generates** | [ADR-grammar-build-time-v1](../../specification/adr/adr-grammar-build-time-v1.md) | D1→D2, D2→D3, D3→D4, D4→D5, D5→D6 |
-| [323](adr-323.md) | A Grammar Describes a Type as Data — `meta::Type`, From Which the Compiler Writes a Block's Parameters and Result | [ADR-grammar-build-time-v1](../../specification/adr/adr-grammar-build-time-v1.md) | D1→D7, D2→D8, D3→D9, D4→D10, D5→D8 |
+| [344](../../specification/adr/adr-344.md) D3, D6a | [grammar-2](adr-grammar-2.md) D1, D3, D10 | `json::read[T]` forwards to the grammar entry `Json::read[T]`, emitted per type; `parse` is the grammar's second entry |
+| [330](../../specification/adr/adr-330.md) D9 | [grammar-2](adr-grammar-2.md) D11 | no `NK1233` where a type argument fills a parameter no value parameter's type names |
+| [299](../../specification/adr/adr-299.md) D16-D18 | [grammar-2](adr-grammar-2.md) D3, D9 | one mapping rule with `members[S]` (Part II 10.8); SQL keeps its strict settings |

@@ -1,4 +1,4 @@
-// ADR-grammar-2 D2: a `match` in a rule body chooses while the program is
+// ADR-grammar-typed-read-v1 D2: a `match` in a rule body chooses while the program is
 // built, by the kind of a type the rule takes; a value such as a parameter
 // is only known while reading, so a `match` on it is refused (NK1310).
 grammar R {

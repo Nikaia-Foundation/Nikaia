@@ -88,13 +88,16 @@ fn commit_field(text: String, key: String) -> String {
     return ""
 }
 
-// The lines after `Attribution:` up to the end of the report.
+// The lines after `Attribution:` up to the end of the report, without the
+// fields this script writes (`Reviewed:`, `Pushed:`): a report whose
+// `Reviewed:` an older run appended below the trailers must not commit it as
+// one (#2173).
 fn commit_attribution(report: String) -> String {
     let mut out: Vec[String] = []
     let mut on = false
     for line in report.split("\n") {
         if on {
-            out.push(line.trim_end().clone())
+            if !line.starts_with("Reviewed:") && !line.starts_with("Pushed:") { out.push(line.trim_end().clone()) }
         } else if line.starts_with("Attribution:") {
             on = true
         }
@@ -295,14 +298,21 @@ fn commit_put_pushed(path: String, text: String, sha: String) throws {
 
 // Writes `KEY VALUE` into the report at PATH (text TEXT): in place of its
 // `KEY` line, else after its last line.
+// A new field goes right before `Attribution:`, which stays the report's last
+// field with only its trailer lines below it (#2173).
 fn commit_put_field(path: String, text: String, key: String, value: String) throws {
     let mut out: Vec[String] = []
     let mut done = false
     for line in text.trim_end().split("\n") {
         if line.starts_with(key.clone()) {
-            out.push(f"{key} {value}")
+            // one an older run appended below the trailers is moved up
+            if !done { out.push(f"{key} {value}") }
             done = true
         } else {
+            if !done && line.starts_with("Attribution:") {
+                out.push(f"{key} {value}")
+                done = true
+            }
             out.push(line.clone())
         }
     }

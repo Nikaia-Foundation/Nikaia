@@ -8,6 +8,29 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1485] — 2026-11-20
+
+**Builders' changes (#2183, #2363)**
+- `nikaia fix --only CODE` makes only the edits of the findings `CODE` names (repeatable), so a migration to one new fix-able finding leaves the others' edits out
+- The ADR citation check and adr-rename search packages/; adr-rename lists a link that reaches no record directory; briefs may quote example ADR names.
+
+## [0.0.1484] — 2026-11-20
+
+**The ADR citation check and adr-rename search packages/ too (#2362)**
+- The ADR citation check (scripts/check-adr-refs.nika) and scripts/adr-rename.nika also search packages/, so a package that cites an archived record now fails the check and gets rewritten by the rename tool.
+
+## [0.0.1483] — 2026-11-20
+
+**The decisions on a grammar entry that takes a type live in one record, ADR-grammar-typed-read-v1 (#2270)**
+- The decisions on a grammar entry that takes a type (type parameters on rules, a match on a kind, members[S] and its mapping rule, the format's name: function, @stream entries, write[T], json::read forwarding to Json, type arguments in brackets, fields with a text form of their own, payload-free enum variants) live in one record, ADR-grammar-typed-read-v1; ADR-grammar-2 archived.
+
+## [0.0.1482] — 2026-11-20
+
+**Builders' changes (#2071, #2072, #2349)**
+- json: reading no longer builds the path text of every value; it is made only when reading fails (json-large -39 % instructions)
+- json: reading walks the input's bytes in place and takes a number or an escape-free string run as one cut instead of collecting the text into scalars (json-large -12 % instructions)
+- An unannotated list of integer literals that stays in its function (`let mut w = [4, 5]`, push, len, a `for`) is now built in the task's block like any other placeable list (ADR-327 D9).
+
 ## [0.0.1481] — 2026-11-20
 
 **Builders' changes (#1960, #2013, #2114, #2318)**

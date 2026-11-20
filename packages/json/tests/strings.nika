@@ -53,4 +53,10 @@ fn main() throws {
     line("\"\\u12g4\"")
     line("\"\\x\"")
     line("\"café\"")
+    // A run between escapes is cut from the input's bytes whole (#2072):
+    // runs of longer scalars around escapes, and a column after them.
+    line("\"é\\tü€ x\\u0041ö\"")
+    line("{\"ké\": \"vä\", \"n\": -1.5e3}")
+    line("[\"äöü\", x]")
+    line("\"äö\u{1}\"")
 }

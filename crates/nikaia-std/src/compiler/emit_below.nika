@@ -435,9 +435,11 @@ impl EmitState {
                 return f"{chosen}::default"
             }
         }
+        // **A segment Rust reserves is written raw** (ADR-298 D9), as every
+        // other name is: `task::yield` is `task::r#yield` below.
         let mut mapped: Vec[String] = []
         for segment in segments {
-            mapped.push(self.map_name(trusting, segment))
+            mapped.push(escaped_name(self.map_name(trusting, segment)))
         }
         let joined = mapped.join("::")
         return unaliased_in(world.aliases, joined)

@@ -1,4 +1,4 @@
-// ADR-grammar-2 D6: an arm that is `refuse("why")` refuses the types it
+// ADR-grammar-typed-read-v1 D6: an arm that is `refuse("why")` refuses the types it
 // takes at the call (NK1250), with the reason it gives.
 grammar Lit {
 	rule WS = "" -> { }
