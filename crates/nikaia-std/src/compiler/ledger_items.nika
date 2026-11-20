@@ -140,7 +140,7 @@ fn declared_grammar(words: ref winnow_grammar::InternerContext, aliases: ref col
             result = written_ty(words, aliases, written)
         }
         // **An `@stream` entry hands its items over one at a time**
-        // (ADR-grammar-2 D7): its call is a sequence of the item type, walked
+        // (ADR-grammar-typed-read-v1 D7): its call is a sequence of the item type, walked
         // once, each step of which may fail as the parse does.
         if rule.stream && result != null {
             let item = result ?? Ty::Unknown

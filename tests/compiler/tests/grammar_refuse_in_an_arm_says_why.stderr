@@ -4,5 +4,5 @@ error[NK1250]: `Lit::read[String]` can't read a `String`: this grammar reads no 
  14 | 	let s: String = Lit::read[String](Bytes("abc".bytes().collect())) catch {
     |                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
     |
-    = note: The arm `Text` of the `match` in `Value` refuses it with `refuse(…)` (ADR-grammar-2 D6), reached by `Lit::read[String]` then `Value[String]`.
+    = note: The arm `Text` of the `match` in `Value` refuses it with `refuse(…)` (ADR-grammar-typed-read-v1 D6), reached by `Lit::read[String]` then `Value[String]`.
     = help: Call it with a type the grammar reads.

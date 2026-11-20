@@ -335,7 +335,7 @@ fn plain_char(x: scalar, flow: bool, after_space: bool) -> bool sync {
 
 // The grammar is public for its `@stream` entry: `for ev in
 // yaml::Yaml::events(input)` walks the stream's events as the parse reaches
-// them (D7, ADR-grammar-2 D7).
+// them (D7, ADR-grammar-typed-read-v1 D7).
 pub grammar Yaml {
 	// Whitespace is structure: nothing is skipped, every space is written.
 	rule WS = "" -> { }
@@ -349,7 +349,7 @@ pub grammar Yaml {
 	// document's prefix; it is not content.
 	rule Bom = "\u{feff}" Blanks -> { }
 
-	// `l-yaml-stream` as events (ADR-grammar-2 D7, amended 2026-11-18): the
+	// `l-yaml-stream` as events (ADR-grammar-typed-read-v1 D7): the
 	// stream's start at once, then each document's events, its end and, after
 	// the last, the stream's end, handed over with `emit` as soon as the parse
 	// has read the document and what follows it. A block node stays open to
@@ -2440,8 +2440,8 @@ pub enum EventKind {
 // `tag:yaml.org,2002:int`, a verbatim `!<t>` is `t`); `style` and `value` a
 // scalar's as written (`Node.raw`), and `text` a `Value::Str`'s value through
 // `text()` (null for every other event); `value` is an alias's name; `""` and
-// `Plain` elsewhere. An event owns its text (ADR-grammar-2 D7, as amended
-// 2026-11-08): it outlives the input, so a walk of `Yaml::events` may keep it.
+// `Plain` elsewhere. An event owns its text (ADR-grammar-typed-read-v1 D7): it
+// outlives the input, so a walk of `Yaml::events` may keep it.
 pub struct Event {
 	pub kind: EventKind,
 	pub start: u32,

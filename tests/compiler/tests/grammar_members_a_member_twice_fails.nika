@@ -1,4 +1,4 @@
-// A member given twice fails the parse, naming the field (ADR-grammar-2
+// A member given twice fails the parse, naming the field (ADR-grammar-typed-read-v1
 // D5), a `null` member as well as a value.
 struct Point { x: i64, y: i64 = 0, label: String?, }
 grammar J {

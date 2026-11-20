@@ -520,7 +520,7 @@ impl EmitState {
                 }
             },
             Stmt::Expr(expr) => self.emit_stmt_expr(world, walk, out, host, expr, span, depth, tail, here, scope),
-            // **An item handed to a `@stream` entry's walk** (ADR-grammar-2
+            // **An item handed to a `@stream` entry's walk** (ADR-grammar-typed-read-v1
             // D7, amended 2026-11-18, #2061): the action reaches the engine's
             // sink through its context (winnow-grammar ADR 28), which holds
             // the item until the parse takes what emitted it. The entry's

@@ -1,5 +1,5 @@
 // A field the input leaves out takes its default, else `null` in a `T?`,
-// else the parse fails, naming the field (ADR-grammar-2 D5).
+// else the parse fails, naming the field (ADR-grammar-typed-read-v1 D5).
 struct Point { x: i64, y: i64 = 0, label: String?, }
 grammar J {
 	rule WS = "" -> { }
