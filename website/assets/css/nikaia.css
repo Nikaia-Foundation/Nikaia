@@ -1892,6 +1892,10 @@ details.study-card {
  *   answer shown by measured figures.
  *
  * `.rq-metric` is a measured share. Colours are the theme's tokens.
+ * `.rq-metric-goal` marks the goal on a metric bar (a thin line placed with
+ * `left: N%`; the bar's `aria-label` names it), and `.rq-behind` on a
+ * `.rq-metric-bar` fills a share that is behind its goal in the muted
+ * colour instead of the accent.
  */
 .rq-bars { margin: 0.5rem 0 1.25rem; }
 .rq-row {
@@ -1934,6 +1938,15 @@ details.study-card {
 .rq-conf-neg { right: 50%; background: var(--nk-fg-muted); }
 .rq-metric { margin: 0.5rem 0 1rem; }
 .rq-metric-bar span { display: block; height: 100%; background: var(--nk-accent); }
+.rq-metric-bar.rq-behind span:not(.rq-metric-goal) { background: var(--nk-fg-muted); }
+.rq-metric-bar .rq-metric-goal {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  margin-left: -1px;
+  background: var(--nk-fg);
+}
 .markdown-body .rq-note {
   margin: 0.2rem 0 0;
   font-size: 0.85rem;
@@ -1952,6 +1965,8 @@ details.study-card {
 .rq-key-known { background: var(--nk-border); }
 .rq-key-unknown { background: repeating-linear-gradient(135deg, var(--nk-border) 0 3px, transparent 3px 6px); }
 .rq-key-conf { background: var(--nk-accent); }
+.rq-key-behind { background: var(--nk-fg-muted); }
+.rq-key-goal { width: 2px; background: var(--nk-fg); border: none; border-radius: 0; }
 @media (max-width: 480px) {
   .rq-row { grid-template-columns: 5rem 1fr; font-size: 0.75rem; }
 }

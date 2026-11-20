@@ -447,6 +447,10 @@ file, `examples/n-body`, is +1.2 %.
 
 ## 9. Against z3 and cvc5 on SMT-LIB (#1338)
 
+The prover research page shows these figures as bars, reached and behind
+per family (`website/research/prover/index.md`, *Against z3 and cvc5*):
+when this section is measured again, that section is updated with it.
+
 **Ran on 2026-11-20** (0.0.1481, at 0e4862662), on the set `scripts/solver.nika
 fetch` builds from GitHub at fixed commits (`tests/solver/SOURCES.md`): 578
 QF_LIA and 519 QF_LRA files, each one query with a status and at most 1 MiB.
