@@ -15,6 +15,7 @@ would run: rm -rf target/debug (unless a cargo in this checkout builds into it) 
 would run: a suite still running (target/suite.lock/testing): wait for it first (SUITE <sha8> waiting)
 would run: git fetch origin develop; git rev-list --count origin/develop..HEAD (0: nothing to test)
 would run: git log --format= --name-only origin/develop..HEAD: all documentation by scripts/ci-changes.sh's rule, push HEAD without the suite (SUITE <sha8> docs-only, pushed without the suite), empty T/unpushed.txt
+would run: all documentation or helper scripts with named tests (drive_scripts_only): after the lock, the named tests here; green: push HEAD without the suite (SUITE <sha8> scripts-only, local tests green, pushed without the suite), empty T/unpushed.txt; red: Gate: red local-tests, QA
 would run: mkdir target/suite.lock (wait while its owner's pid lives)
 would run: after the lock and before each suite: git fetch origin develop; git rev-list --count origin/develop..HEAD (0: SUITE nothing new after the lock, empty T/unpushed.txt, rm -rf target/suite.lock)
 would run: git push --force origin <sha>:refs/heads/ci/<last part of DIR> (the whole CI workflow runs on that push); in the background: target/fast/nikaia run scripts/drive.nika -- --ci-wait <sha> T/suite.log target/suite.lock/exit-<sha> (gh api every 30 s; Gate: green, or Gate: red <failed jobs> with their log tails)
@@ -28,6 +29,7 @@ would run: rm -rf target/debug (unless a cargo in this checkout builds into it) 
 would run: a suite still running (target/suite.lock/testing): wait for it first (SUITE <sha8> waiting)
 would run: git fetch origin develop; git rev-list --count origin/develop..HEAD (0: nothing to test)
 would run: git log --format= --name-only origin/develop..HEAD: all documentation by scripts/ci-changes.sh's rule, push HEAD without the suite (SUITE <sha8> docs-only, pushed without the suite), empty T/unpushed.txt
+would run: all documentation or helper scripts with named tests (drive_scripts_only): after the lock, the named tests here; green: push HEAD without the suite (SUITE <sha8> scripts-only, local tests green, pushed without the suite), empty T/unpushed.txt; red: Gate: red local-tests, QA
 would run: mkdir target/suite.lock (wait while its owner's pid lives)
 would run: after the lock and before each suite: git fetch origin develop; git rev-list --count origin/develop..HEAD (0: SUITE nothing new after the lock, empty T/unpushed.txt, rm -rf target/suite.lock)
 would run: git push --force origin <sha>:refs/heads/ci/<last part of DIR> (the whole CI workflow runs on that push); in the background: target/fast/nikaia run scripts/drive.nika -- --ci-wait <sha> T/suite.log target/suite.lock/exit-<sha> (gh api every 30 s; Gate: green, or Gate: red <failed jobs> with their log tails)
@@ -53,6 +55,7 @@ would run: rm -rf target/debug (unless a cargo in this checkout builds into it) 
 would run: a suite still running (target/suite.lock/testing): wait for it first (SUITE <sha8> waiting)
 would run: git fetch origin develop; git rev-list --count origin/develop..HEAD (0: nothing to test)
 would run: git log --format= --name-only origin/develop..HEAD: all documentation by scripts/ci-changes.sh's rule, push HEAD without the suite (SUITE <sha8> docs-only, pushed without the suite), empty T/unpushed.txt
+would run: all documentation or helper scripts with named tests (drive_scripts_only): after the lock, the named tests here; green: push HEAD without the suite (SUITE <sha8> scripts-only, local tests green, pushed without the suite), empty T/unpushed.txt; red: Gate: red local-tests, QA
 would run: mkdir target/suite.lock (wait while its owner's pid lives)
 would run: after the lock and before each suite: git fetch origin develop; git rev-list --count origin/develop..HEAD (0: SUITE nothing new after the lock, empty T/unpushed.txt, rm -rf target/suite.lock)
 would run: git push --force origin <sha>:refs/heads/ci/<last part of DIR> (the whole CI workflow runs on that push); in the background: target/fast/nikaia run scripts/drive.nika -- --ci-wait <sha> T/suite.log target/suite.lock/exit-<sha> (gh api every 30 s; Gate: green, or Gate: red <failed jobs> with their log tails)

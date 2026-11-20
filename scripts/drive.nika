@@ -141,7 +141,18 @@
 // skips its build and test jobs for them too), HEAD is pushed as on green
 // without a suite, `SUITE <sha8> docs-only, pushed without the suite`, and
 // unpushed.txt is emptied. `--docs-only FILE` prints `docs`/`code` for each
-// path in FILE and `docs-only` or `suite` (for tests).
+// path in FILE and `docs-only` or `suite` (for tests). The same trade-off
+// holds for helper scripts (owner, 2026-11-19, #2347; the compiler does not
+// change, and the tests named after the script are the real check): when every
+// path is documentation or a `scripts/X.nika` that no workflow runs (read from
+// .github/workflows/*.yml, a comment not counting), that is not pre-push and
+// that has a test named after it (`drive_scripts_only`; tools/, tests,
+// ci-changes.sh and the workflows stay code), the named tests run here after
+// the lock as before a ci/ push; green pushes HEAD without the suite, `SUITE
+// <sha8> scripts-only, local tests green, pushed without the suite`, and
+// empties unpushed.txt; red is `Gate: red local-tests` as below. CI's
+// `changes` job skips build and test for the same set. `--scripts-only FILE`
+// prints `scripts`/`docs`/`code` for each path and `scripts-only` or `suite`.
 // Before a suite is pushed to its `ci/` branch, the tests named after the
 // changed scripts run here (owner, 2026-11-06; drive_named_filters,
 // `LOCAL tests ...`): red writes `Gate: red local-tests` and their output to
@@ -2192,8 +2203,13 @@ fn drive_ledgers_refresh_on(name: String, built: String) -> Vec[String] throws {
 }
 
 fn drive_launch(dir: String) throws {
-	drive_badges()
-	drive_ledgers("cargo build -q --profile fast -p nikaia")
+	let paths = drive_unpushed_paths()
+	// A helper-scripts batch changes neither the badge's share nor a ledger.
+	let quick = drive_scripts_only(paths.clone())
+	if !quick {
+		drive_badges()
+		drive_ledgers("cargo build -q --profile fast -p nikaia")
+	}
 	let sha = process::run("git", ["rev-parse", "HEAD"]).stdout.trim().clone()
 	let branch = drive_ci_branch(dir)
 	let log = process::run("realpath", [dir.clone()]).stdout.trim() + "/suite.log"
@@ -2203,7 +2219,7 @@ fn drive_launch(dir: String) throws {
 	for l in drive_read(f"{dir}/unpushed.txt").split("\n") {
 		if l.trim() != "" { covered += 1 }
 	}
-	let failed = drive_local_tests(drive_unpushed_paths())
+	let failed = drive_local_tests(paths)
 	if failed != "" {
 		fs::write(
 			log.clone(),
@@ -2213,6 +2229,13 @@ fn drive_launch(dir: String) throws {
 		fs::write(exit.clone(), fs::Root::Anywhere, "1\n")
 		fs::write(drive_lock_dir() + "/testing", fs::Root::Anywhere, f"{sha} {covered}\n")
 		println(f"SUITE {drive_short(sha)} red locally (tests named after the changed scripts), not sent to CI")
+		return
+	}
+	if quick {
+		println(f"SUITE {drive_short(sha)} scripts-only, local tests green, pushed without the suite")
+		let how = drive_push(dir.clone(), sha)
+		if how != "none" { fs::write(f"{dir}/unpushed.txt", fs::Root::Anywhere, "") }
+		drive_unlock()
 		return
 	}
 	// The branch is the driver's, but someone else may have pushed to it (the
@@ -2519,6 +2542,64 @@ fn drive_docs_only(paths: Vec[String]) -> bool {
 	return any
 }
 
+// The scripts a workflow runs, as X for each `scripts/X.nika` written on a
+// line of a .github/workflows/*.yml outside a comment (`#` at the line's
+// start or after a blank): read each time, so the list never goes stale.
+// scripts/ci-changes.sh reads the same list.
+fn drive_workflow_scripts() -> Vec[String] throws {
+	let mut out: Vec[String] = []
+	let wf = ".github/workflows"
+	if !fs::exists(wf, fs::Root::Anywhere) { return out }
+	for entry in fs::read_dir(wf, fs::Root::Anywhere) {
+		let file = entry.to_text()
+		if !file.ends_with(".yml") && !file.ends_with(".yaml") { continue }
+		for raw in drive_read(f"{wf}/{file}").split("\n") {
+			if raw.trim().starts_with("#") { continue }
+			let line = raw.split(" #").collect()[0].clone()
+			let parts: Vec[String] = line.split("scripts/").collect()
+			let mut i: i64 = 1
+			while i < parts.len() {
+				let part = parts[i]
+				i += 1
+				if !part.contains(".nika") { continue }
+				let name = part.split(".nika").collect()[0].clone()
+				if name == "" || name.contains(" ") || name.contains("/") { continue }
+				if !out.contains(name.clone()) { out.push(name) }
+			}
+		}
+	}
+	return out
+}
+
+// True when PATH is a helper script whose change needs no suite (owner,
+// 2026-11-19, #2347): `scripts/X.nika` directly under scripts/, X not run by a
+// workflow (RUN, drive_workflow_scripts), not pre-push (the gate itself), and
+// with a test named after it (drive_named_filters): without one nothing has
+// checked it. tools/ is lowered into the build and stays code; so do
+// scripts/ci-changes.sh and every other script that is not `.nika`.
+fn drive_script_path(path: String, run: Vec[String]) -> bool throws {
+	let parts: Vec[String] = path.split("/").collect()
+	if parts.len() != 2 || parts[0] != "scripts" || !parts[1].ends_with(".nika") { return false }
+	let name = parts[1].replace(".nika", "")
+	if name == "pre-push" || run.contains(name) { return false }
+	return drive_named_filters([path]).len() > 0
+}
+
+// True when every path is documentation (drive_docs_path) or a helper script
+// (drive_script_path), and at least one is a script: the batch is pushed
+// after its named tests ran green here, without the suite.
+fn drive_scripts_only(paths: Vec[String]) -> bool throws {
+	let run = drive_workflow_scripts()
+	let mut any = false
+	for p in paths {
+		if p == "" { continue }
+		if drive_docs_path(p.clone()) { continue }
+		if !drive_script_path(p.clone(), run.clone()) { return false }
+		any = true
+	}
+	return any
+}
+
 // The paths the unpushed commits touch, each commit's own.
 fn drive_unpushed_paths() -> Vec[String] throws {
 	let log = process::run(
@@ -2654,6 +2735,11 @@ fn drive_suite(exe: String, dry: bool, dir: String) throws {
 		dry,
 		"git log --format= --name-only origin/develop..HEAD: all documentation by scripts/ci-changes.sh's rule, push HEAD without the suite (SUITE <sha8> docs-only, pushed without the suite), empty "
 			+ f"{dir}/unpushed.txt",
+	)
+	drive_say(
+		dry,
+		"all documentation or helper scripts with named tests (drive_scripts_only): after the lock, the named tests here; green: push HEAD without the suite (SUITE <sha8> scripts-only, local tests green, pushed without the suite), empty "
+			+ f"{dir}/unpushed.txt; red: Gate: red local-tests, QA",
 	)
 	drive_say(dry, "mkdir target/suite.lock (wait while its owner's pid lives)")
 	drive_say(
@@ -5407,6 +5493,24 @@ fn main() throws {
 			paths.push(p)
 		}
 		if drive_docs_only(paths) { println("docs-only") } else { println("suite") }
+		return
+	}
+	if args.len() == 3 && args[1] == "--scripts-only" {
+		let run = drive_workflow_scripts()
+		let mut paths: Vec[String] = []
+		for line in drive_read(args[2]).split("\n") {
+			let p = line.trim().clone()
+			if p == "" { continue }
+			if drive_docs_path(p.clone()) {
+				println(f"docs {p}")
+			} else if drive_script_path(p.clone(), run.clone()) {
+				println(f"scripts {p}")
+			} else {
+				println(f"code {p}")
+			}
+			paths.push(p)
+		}
+		if drive_scripts_only(paths) { println("scripts-only") } else { println("suite") }
 		return
 	}
 	if args.len() == 3 && args[1] == "--local-tests" {

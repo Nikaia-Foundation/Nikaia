@@ -140,6 +140,13 @@ Moved from `CLAUDE.md` (2026-11-01); there each rule has its short form.
   older pending one, so most commits never got an answer.) `promote` skips a
   commit `main` already contains, so runs finishing out of order are safe. A
   docs-only push skips the build and test jobs (`scripts/ci-changes.sh`).
+  So does a scripts-only one (owner, 2026-11-19, #2347): every path is
+  documentation or a `scripts/X.nika` that no workflow runs, that is not
+  `pre-push.nika` and that has a test named after it (tools/, tests,
+  `ci-changes.sh` and the workflows stay code). The driver runs those named
+  tests and, green, pushes without a `ci/` run (`SUITE <sha8> scripts-only`,
+  `drive_scripts_only` in `scripts/drive.nika`); a script without a named
+  test gets the suite.
 * **How issues close.** `promote` closes an issue only when a commit it brings
   to `main` names it with `Fixes`, `Closes` or `Resolves`
   (`scripts/fixed-issues.py`); `(#N)` and `Part of #N` close nothing. Any tense

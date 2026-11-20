@@ -1,6 +1,6 @@
 -- refused, blessed: exit 1
-program "typed" (tests/typed.nika) ... FAILED (the program is refused and no .stderr expects it, so it is not blessed)
-program "undeclared" (tests/undeclared.nika) ... FAILED (the program is refused and no .stderr expects it, so it is not blessed)
+program "typed" (tests/typed.nika) ... FAILED (the program is refused, no .stderr expects it and --bless-stderr was not given, so it is not blessed)
+program "undeclared" (tests/undeclared.nika) ... FAILED (the program is refused, no .stderr expects it and --bless-stderr was not given, so it is not blessed)
 test result: FAILED. 0 passed; 2 failed
 typed.stdout made: false
 typed.stderr made: false
