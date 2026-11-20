@@ -49,20 +49,29 @@ signature = "(v: Value) -> u64"
 sync = "inferred"
 panics = false
 touches = []
+views = ["r: borrowed"]
 signature = "(r: Reader) -> bool"
 
 [fn."blanks"]
 sync = "inferred"
 panics = true
 touches = []
+views = ["r: borrowed"]
 signature = "(mut r: Reader)"
+
+[fn."cut"]
+sync = "inferred"
+panics = true
+touches = []
+views = ["r: borrowed"]
+signature = "(r: Reader, from: i64, to: i64) -> String"
 
 [fn."expect_word"]
 sync = "inferred"
 throws = ["Error"]
 panics = true
 touches = []
-views = ["word: borrowed"]
+views = ["r: borrowed", "word: borrowed"]
 signature = "(mut r: Reader, word: String)"
 
 [fn."fail"]
@@ -70,6 +79,7 @@ sync = "inferred"
 keeps = ["message"]
 panics = false
 touches = []
+views = ["r: borrowed"]
 signature = "(r: Reader, message: String) -> Error"
 
 [fn."hex4"]
@@ -77,6 +87,7 @@ sync = "inferred"
 throws = ["Error"]
 panics = true
 touches = []
+views = ["r: borrowed"]
 ensures = ["result >= 0 && result <= 65535"]
 from = ["assert(n >= 0 && n <= 65535)"]
 signature = "(mut r: Reader) -> i64"
@@ -85,7 +96,7 @@ signature = "(mut r: Reader) -> i64"
 sync = "inferred"
 panics = false
 touches = []
-signature = "(c: scalar) -> bool"
+signature = "(c: u8) -> bool"
 
 [fn."kind_of"]
 sync = "inferred"
@@ -98,6 +109,7 @@ sync = "inferred"
 throws = ["Error"]
 panics = true
 touches = []
+views = ["r: borrowed"]
 signature = "(mut r: Reader) -> Value"
 
 [fn."number_text"]
@@ -121,13 +133,15 @@ signature = "(text: String) -> Value"
 sync = "inferred"
 panics = true
 touches = []
-signature = "(r: Reader) -> scalar"
+views = ["r: borrowed"]
+signature = "(r: Reader) -> u8"
 
 [fn."string"]
 sync = "inferred"
 throws = ["Error"]
 panics = true
 touches = []
+views = ["r: borrowed"]
 signature = "(mut r: Reader) -> String"
 
 [fn."to_string"]
@@ -144,6 +158,7 @@ sync = "inferred"
 throws = ["Error"]
 panics = true
 touches = []
+views = ["r: borrowed"]
 signature = "(mut r: Reader, depth: i64) -> Value"
 
 [fn."within"]
@@ -203,10 +218,11 @@ equates = true
 hashes = true
 
 [type."Reader"]
-fields = ["cs: Vec[scalar]", "pos: i64"]
+fields = ["bs: ref Bytes", "pos: i64"]
 compares = true
 equates = true
 hashes = true
+tethered = ["bs"]
 
 [type."Value"]
 pub = true

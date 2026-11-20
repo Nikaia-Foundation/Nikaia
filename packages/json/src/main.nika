@@ -54,8 +54,11 @@ impl Error for ConvertError {
     }
 }
 
+// The input's own bytes, read in place, and a byte offset into them (#2072).
+// Every byte the reader stops at is ASCII, so a cut at two such offsets is a
+// whole text.
 struct Reader {
-    cs: Vec[scalar],
+    bs: ref Bytes,
     pos: i64,
 }
 
@@ -66,11 +69,13 @@ fn fail(r: Reader, keep message: String) -> Error {
     let mut line = 1
     let mut column = 1
     let mut i = 0
-    while i < r.pos && i < r.cs.len() as i64 {
-        if r.cs[i] == '\n' {
+    while i < r.pos && i < r.bs.len() {
+        let b = r.bs[i]
+        if b == '\n' {
             line += 1
             column = 1
-        } else {
+        } else if (b & 0xC0) != 0x80 {
+            // A scalar's first byte: the column counts scalars.
             column += 1
         }
         i += 1
@@ -84,21 +89,21 @@ fn within(keep e: Error, step: String) -> Error {
 }
 
 fn at_end(r: Reader) -> bool {
-    return r.pos >= r.cs.len() as i64
+    return r.pos >= r.bs.len()
 }
 
-// The character at the position; NUL at the end (check `at_end` first where
-// the end is an error of its own).
-fn peek(r: Reader) -> scalar {
-    if r.pos < r.cs.len() as i64 {
-        return r.cs[r.pos]
+// The byte at the position; NUL at the end (check `at_end` first where the
+// end is an error of its own).
+fn peek(r: Reader) -> u8 {
+    if r.pos < r.bs.len() {
+        return r.bs[r.pos]
     }
     return '\u{0}'
 }
 
 fn blanks(mut r: Reader) {
-    while r.pos < r.cs.len() as i64 {
-        let c = r.cs[r.pos]
+    while r.pos < r.bs.len() {
+        let c = r.bs[r.pos]
         if c == ' ' || c == '\n' || c == '\t' || c == '\r' {
             r.pos += 1
         } else {
@@ -108,7 +113,7 @@ fn blanks(mut r: Reader) {
 }
 
 fn expect_word(mut r: Reader, word: String) throws {
-    for w in word.scalars {
+    for w in word.bytes {
         if at_end(r) {
             throw fail(r, f"expected `{word}`")
         }
@@ -148,27 +153,41 @@ fn hex4(mut r: Reader) -> i64 throws {
     return n
 }
 
+// The input's text from byte `from` up to `to`, both offsets at ASCII bytes.
+fn cut(r: Reader, from: i64, to: i64) -> String {
+    // A text cut at ASCII bytes is UTF-8, so nothing is replaced.
+    return r.bs[from..<to].text_lossy()
+}
+
 // The string after its opening quote up to and including the closing one.
+// A run without escapes is taken as one cut of the input.
 fn string(mut r: Reader) -> String throws {
     let mut out = String()
+    let mut run = r.pos
     while true {
         if at_end(r) {
             throw fail(r, "unterminated string")
         }
         let c = peek(r)
-        let code = c as i64
         if c == '"' {
+            if out.is_empty() {
+                out = cut(r, run, r.pos)
+            } else {
+                out.push_str(cut(r, run, r.pos))
+            }
             r.pos += 1
             return out
         }
-        if code < 32 {
+        if c < 32 {
             throw fail(r, "control character in string")
         }
         if c != '\\' {
-            out.push(c)
+            // A byte of a longer scalar is 128 or more: never `"`, `\\`
+            // or a control character.
             r.pos += 1
             continue
         }
+        out.push_str(cut(r, run, r.pos))
         r.pos += 1
         if at_end(r) {
             throw fail(r, "unterminated string")
@@ -203,6 +222,7 @@ fn string(mut r: Reader) -> String throws {
                 throw fail(r, "lone surrogate")
             }
             out.push(scalar::from(cp))
+            run = r.pos
             continue
         }
         if e == 'n' {
@@ -216,16 +236,17 @@ fn string(mut r: Reader) -> String throws {
         } else if e == 'f' {
             out.push('\u{c}')
         } else if e == '"' || e == '\\' || e == '/' {
-            out.push(e)
+            out.push(e as scalar)
         } else {
             throw fail(r, "unknown escape")
         }
         r.pos += 1
+        run = r.pos
     }
     return out
 }
 
-fn is_digit(c: scalar) -> bool {
+fn is_digit(c: u8) -> bool {
     let d = c as i64
     return d >= 48 && d <= 57
 }
@@ -265,13 +286,7 @@ fn number(mut r: Reader) -> Value throws {
             r.pos += 1
         }
     }
-    let mut text = String()
-    let mut i = start
-    while i < r.pos {
-        text.push(r.cs[i])
-        i += 1
-    }
-    return Value::Number(text)
+    return Value::Number(cut(r, start, r.pos))
 }
 
 fn value(mut r: Reader, depth: i64) -> Value throws {
@@ -376,12 +391,12 @@ fn value(mut r: Reader, depth: i64) -> Value throws {
 // The value `text` holds, or the `Error` where it is not JSON. Anything but
 // blanks after the value is an error.
 pub fn parse(text: String) -> Value sync throws {
-    let mut r = Reader { cs: text.scalars.collect(), pos: 0 }
+    let mut r = Reader { bs: text.bytes, pos: 0 }
     let v = value(r, 0) catch {
         throw within(error, "$")
     }
     blanks(r)
-    if r.pos < r.cs.len() as i64 {
+    if r.pos < r.bs.len() {
         throw within(fail(r, "unexpected character after the value"), "$")
     }
     return v
