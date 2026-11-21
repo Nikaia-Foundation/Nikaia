@@ -456,7 +456,10 @@ Moved from the former `docs/architect.md` (2026-10-31). `nikaia` here means
   after each run; the supervisor watches the driver's log for `builder done`,
   reads the debrief at once and, before the next brief is written, turns each
   point into one of three things: a line in `docs/builder-facts-lookup.md` (a trap, a
-  location, a recipe), a fix to the brief template or a wrong fact in a
+  location, a recipe, or a work area's file, measure or figure in its topic
+  section; owner, 2026-11-21: topic facts in place of a resumed agent; a newer
+  figure replaces the older, what no longer holds is deleted, and an `UNPLACED`
+  topic gets its section with a `Paths:` line), a fix to the brief template or a wrong fact in a
   waiting brief, or a `ready` issue when the toolchain lacks what the builder
   needed. A point two builders reported is never left for a third.
 * **Cost watch.** A builder past about 120 turns or 200k context is told to push what is verified and end; the

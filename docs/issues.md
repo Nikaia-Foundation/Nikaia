@@ -159,6 +159,10 @@ Before filing, run `nikaia run scripts/issue-check.nika -- --body FILE` (or
   its output, never a guessed path. Added Rust names what allows it (a
   CLAUDE.md exception, a dated decision, a move into Nikaia first), else `no
   decision yet` (I6).
+  * The work area's facts: a `Facts: <section>, ...` line naming the topic
+    sections of `docs/builder-facts-lookup.md` (CI and caches, Ledger and
+    bounds proofs, ...) the builder starts from; an issue of a new area names
+    none and the first debrief opens one.
   * Limits it runs into: caps (`most_facts()`), silently trimmed sets. A change
     to a pass every build runs names the time before (command, file, wall or
     user, commit) and per-body recomputation it multiplies; one limit over

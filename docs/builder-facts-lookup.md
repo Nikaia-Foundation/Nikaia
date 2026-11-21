@@ -9,6 +9,11 @@ that line, the sections whose `Paths:` line (the first under each `###`
 heading: path fragments and words, any case) has a fragment in the brief or its
 issues, at most three (#2002). A new trap goes into the section of its topic,
 in one line, with the run that paid for it; a new section gets a `Paths:` line.
+A *topic section* (CI and caches, Ledger and bounds proofs) holds what a work
+area's next builder needs first: its files, its measure command and its latest
+figures, each with date and commit or run. A builder adds to it through its
+debrief (`Fact: <topic> | ...`); the supervisor, reviewing, replaces a figure a
+newer one superseded and deletes what no longer holds.
 
 ## Traps already met
 
@@ -612,6 +617,31 @@ Paths: `callgrind`, `measure`, `instructions`, `cost`, `bench`, `valgrind`
 * A whole `lower-std` under callgrind takes hours; an A/B of it is user time with the bash `time` keyword, two interleaved rounds, twin binaries built from the same source. Uncached: set `NIKAIA_LOWER_CACHE_SALT` and pass `--sysroot` a copy laid out as `X/crates` with `X/packages` beside it. To profile one phase, run it with `NIKAIA_LOWER_TIMES=1`: each phase and ledger pass prints a `lower-std~ NAME ended` line the moment it ends, so `callgrind_control -d` then dumps the phase so far (`--dump-after=` misses them, the phase functions are inlined). A criterion in instructions over a whole `lower-std` (ADR-361 D15) is counted on its parts as `docs/measuring.md` says. (issue-1473, #1979, #1980)
 * The `lower-std` cache key includes the `Build` settings, so an A/B of two settings needs a warm-up run for each binary; the first run with a fresh salt is the cold figure. (issue-1473)
 * **A Nikaia program counted by hand under callgrind needs `NIKAIA_RUNTIME_CONFIG`** naming a file with `io-method = "blocking"` (`docs/measuring.md`): valgrind 3.22 runs the executor's `io_uring_enter` wait without blocking, so a program reading standard input (a `benches/game` binary rerun outside `game.nika`) waits for ever, silently. `game.nika` writes that file as `target/game-bench/io-blocking.toml`: `NIKAIA_RUNTIME_CONFIG=target/game-bench/io-blocking.toml valgrind --tool=callgrind ... BIN < target/game-bench/out/NAME.input`. Bound every such run with `timeout -s KILL` (a plain `timeout` does not end it). (#1874, #2361)
+
+### CI and caches
+
+Paths: `.github/workflows`, `suite.yml`, `nikaia.yml`, `shard`, `mtime`, `CI run`, `job duration`
+
+A topic section: the files, the measure and the latest figures of the work
+area, each figure with its date and commit or run; a newer figure replaces the
+older one.
+
+* Files: `.github/workflows/nikaia.yml` (the entry, calls `suite.yml` once per architecture), `.github/workflows/suite.yml` (build once, test in shards, sweep; the shard list and its comments carry the measured figures). (#2082, #2403)
+* The build cache is keyed per commit (`cargo-incr-<Cargo.lock hash>-<sha>`) and restored from the newest prefix; the sources unchanged since the cached commit are dated to 2000-01-01 first, or the checkout's fresh mtimes rebuild every workspace crate. (#2403)
+* A CI step's shell is tested by copying it out of the workflow with awk and running it in a scratch repo with a bare origin and a depth-1 clone; a repo with no origin skips a fetch by sha silently. (issue-2403)
+* A job's duration is read from the run with `mcp__github__actions_get` / `actions_list` (a builder has no GitHub tool: the supervisor quotes it, or the report asks for it); per-test times come from the job log. (#2474)
+* Figures (2026-11-20, run 44726537733): build x86 with a warm cache of a commit 207 files back 1:56 (23 of 196 targets, `std` once); arm64 with no cache 4:53; a warm cache before the mtime fix 3:08 with no crate changed (run 44711416045). (#2403)
+* Figures (2026-11-21, after 0.0.1511 / 5651724e): heavy-rest is the longest job; `bytes::the_corpus_needs_no_tether` 108 s -> 676 s, `contracts::a_toolchain_module_is_not_part_of_std` 33 s -> 266 s, fmt step 100 s -> 200 s; it-2 test step 240 s -> 635 s. (#2474)
+
+### Ledger and bounds proofs
+
+Paths: `ledger`, `bounds_walk`, `bounds_proven`, `proven_taken`, `panics::infer`, `Ledger::infer`, `bounds proof`
+
+A topic section as above: files, measure, latest figures with date and commit.
+
+* Files: `crates/nikaia-std/src/compiler/ledger*.nika` (the ledger and its first search), `panics.nika` (`panics::infer`, asks `bounds::proven_for_lowering`), `bounds_*.nika` (the proof; `bounds_proven.nika` keeps a unit's `Proven` with a digest, `bounds::proven_taken` reuses it when the digest matches). There is no `compiler/contracts/` directory. (5651724e)
+* Measure: callgrind of `nikaia check src/main.nika` on a copy of `packages/logic` with `target/` removed; the corpus tests (`crates/nikaia/tests/it/bytes.rs`, `contracts.rs`, `tethers.rs`, `sharing.rs`) run only the ledger over the whole corpus. (5651724e, #2474)
+* Figures (2026-11-21, 5651724e, ADR-361 D16): `packages/logic` ledger parallel first search 179.9 G -> 493.9 G Ir (through loops), lowering's second proof 352.2 G -> 45.1 G, total 554.5 G -> 565.0 G. (#2451)
 
 ### Wip branches and drafts
 
