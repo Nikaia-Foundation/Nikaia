@@ -47,6 +47,8 @@
 use allocator_api2::alloc::{AllocError, Allocator, Global, Layout};
 use std::alloc::{GlobalAlloc, System};
 use std::cell::{Cell, UnsafeCell};
+use std::collections::HashMap;
+use std::hash::{BuildHasherDefault, Hasher};
 use std::ptr::NonNull;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
@@ -113,9 +115,43 @@ struct Chain {
     extra: usize,
     /// Segments that were current once and hold something still.
     parked: Vec<Parked>,
+    /// **Where each parked segment is in `parked`**, by its number (its
+    /// start over [`BLOCK`], segments being aligned to their size): a free
+    /// beyond the current segment finds its own in one look-up, not a walk
+    /// over every parked one, which a task holding a large tree pays per
+    /// node (#1879).
+    numbered: HashMap<usize, usize, BuildHasherDefault<Numbers>>,
     /// Runs of whole segments, one allocation each: where it starts and how
     /// many segments it is.
     runs: Vec<(*mut u8, usize)>,
+}
+
+/// **A hash of a segment's number**: one multiplication, whose high bits the
+/// table reads; the numbers are addresses over [`BLOCK`], so neighbours.
+#[derive(Default)]
+struct Numbers(u64);
+
+impl Hasher for Numbers {
+    fn finish(&self) -> u64 {
+        self.0
+    }
+
+    fn write(&mut self, bytes: &[u8]) {
+        for &byte in bytes {
+            self.0 = (self.0.rotate_left(8) ^ u64::from(byte)).wrapping_mul(0x9E37_79B9_7F4A_7C15);
+        }
+    }
+
+    fn write_usize(&mut self, number: usize) {
+        self.0 = (number as u64).wrapping_mul(0x9E37_79B9_7F4A_7C15);
+    }
+}
+
+/// The number of the segment `ptr` is in, segments being aligned to
+/// [`BLOCK`].
+#[inline(always)]
+fn number(ptr: *mut u8) -> usize {
+    ptr.addr() / BLOCK
 }
 
 /// **A segment that is not the current one**: the fields of [`Block`]'s
@@ -262,6 +298,7 @@ impl Block {
                 budget: (bytes / BLOCK).max(1),
                 extra: 0,
                 parked: Vec::new(),
+                numbered: HashMap::default(),
                 runs: Vec::new(),
             }),
             outside: Cell::new(0),
@@ -342,8 +379,9 @@ impl Drop for Spares {
     }
 }
 
-/// The layout of a block's memory.
-const MEMORY: std::alloc::Layout = match std::alloc::Layout::from_size_align(BLOCK, PAGE) {
+/// The layout of a block's memory, aligned to its size, so the segment an
+/// address is in is the address over [`BLOCK`] ([`number`]).
+const MEMORY: std::alloc::Layout = match std::alloc::Layout::from_size_align(BLOCK, BLOCK) {
     Ok(layout) => layout,
     Err(_) => panic!("a block's layout"),
 };
@@ -499,6 +537,7 @@ impl Block {
                         return None;
                     }
                     chain.extra += 1;
+                    chain.numbered.insert(number(memory), chain.parked.len());
                     chain.parked.push(Parked {
                         start: memory,
                         free: ALL & !1,
@@ -510,7 +549,13 @@ impl Block {
                     chain.parked.len() - 1
                 }
             };
+            // The parked one becomes current, the current one takes its
+            // place in `parked`.
+            chain.numbered.remove(&number(chain.parked[index].start));
             self.swap(&mut chain.parked[index]);
+            chain
+                .numbered
+                .insert(number(chain.parked[index].start), index);
         }
         self.take(size, align)
     }
@@ -581,7 +626,7 @@ impl Block {
     fn in_chain(&self, ptr: *mut u8) -> bool {
         // SAFETY: as in `next`; only read.
         let chain = unsafe { &*self.chain.get() };
-        chain.parked.iter().any(|p| p.ours(ptr))
+        chain.numbered.contains_key(&number(ptr))
             || chain
                 .runs
                 .iter()
@@ -590,9 +635,20 @@ impl Block {
 
     /// Give back an allocation in a segment beyond the current one: a run
     /// goes back to the system, a parked segment emptied whole to the spares.
+    /// Whether `ptr` was the chain's: one look-up both finds and frees, where
+    /// [`Block::chained`] and then this would look twice.
+    #[inline]
+    fn give_if_chained(&self, ptr: *mut u8, size: usize) -> bool {
+        // SAFETY: as in `next`; only read.
+        let extra = unsafe { (*self.chain.get()).extra };
+        extra != 0 && self.give_chained(ptr, size)
+    }
+
+    /// [`Block::give_if_chained`] where the chain holds more than the current
+    /// segment.
     #[cold]
     #[inline(never)]
-    fn give_chained(&self, ptr: *mut u8, size: usize) {
+    fn give_chained(&self, ptr: *mut u8, size: usize) -> bool {
         // SAFETY: as in `next`.
         let chain = unsafe { &mut *self.chain.get() };
         if let Some(at) = chain.runs.iter().position(|&(start, _)| start == ptr) {
@@ -601,16 +657,22 @@ impl Block {
             unsafe { System.dealloc(start, run_layout(segments)) };
             SEGMENTS.fetch_sub(segments, Ordering::Relaxed);
             chain.extra -= segments;
-            return;
+            return true;
         }
-        let Some(at) = chain.parked.iter().position(|p| p.ours(ptr)) else {
-            return;
+        let Some(&at) = chain.numbered.get(&number(ptr)) else {
+            return false;
         };
+        debug_assert!(chain.parked[at].ours(ptr));
         if chain.parked[at].give(ptr, size) {
             let emptied = chain.parked.swap_remove(at);
+            chain.numbered.remove(&number(emptied.start));
+            if let Some(moved) = chain.parked.get(at) {
+                chain.numbered.insert(number(moved.start), at);
+            }
             chain.extra -= 1;
             hand_back(emptied.start);
         }
+        true
     }
 
     /// Give back an allocation of `size` bytes at `ptr`, wherever in the
@@ -695,6 +757,7 @@ impl Drop for Block {
         hand_back(memory);
         let chain = self.chain.get_mut();
         if chain.extra != 0 {
+            chain.numbered.clear();
             for parked in chain.parked.drain(..) {
                 hand_back(parked.start);
             }
@@ -923,8 +986,7 @@ unsafe impl Allocator for Place {
                 block.give(at, layout.size());
                 tally(false, -layout.size().cast_signed());
             }
-            Some(block) if block.chained(at) => {
-                block.give_chained(at, layout.size());
+            Some(block) if block.give_if_chained(at, layout.size()) => {
                 tally(false, -layout.size().cast_signed());
             }
             // SAFETY: not a block's, so the global allocator's.
