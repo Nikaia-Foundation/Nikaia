@@ -883,16 +883,24 @@ fn walk_block(unit: ref Unit, asked: ref Asked, block: ref Block, tail: bool, ow
                 stores(unit, asked, value, span, own_buffer, here)
             }
             Stmt::Assign { target, value, .. } => {
-                if mentions(unit, asked, here, value) {
-                    match target {
-                        Expr::Variable(name, _) => {
-                            here.carriers.insert(asked.names.resolve(name).clone())
+                // **A literal set as an element of a `mut` parameter's place**
+                // (ADR-283 D27, ADR-views-v4 D32, #2425): `out[0] = E { v: s }`
+                // points into the caller's argument, as one pushed there does.
+                if a_literal_set_into_a_place(asked, here, target, value) {
+                    stores(unit, asked, target, span, own_buffer, here)
+                    descend(unit, asked, value, span, own_buffer, here)
+                } else {
+                    if mentions(unit, asked, here, value) {
+                        match target {
+                            Expr::Variable(name, _) => {
+                                here.carriers.insert(asked.names.resolve(name).clone())
+                            }
+                            else => assigned(unit, asked, target, span, here),
                         }
-                        else => assigned(unit, asked, target, span, here),
                     }
+                    stores(unit, asked, target, span, own_buffer, here)
+                    stores(unit, asked, value, span, own_buffer, here)
                 }
-                stores(unit, asked, target, span, own_buffer, here)
-                stores(unit, asked, value, span, own_buffer, here)
             }
             Stmt::Return(value) => handed_back_maybe(unit, asked, value, span, own_buffer, here),
             Stmt::Emit(expr) => stores(unit, asked, expr, span, own_buffer, here),
@@ -1411,11 +1419,28 @@ fn a_push_into_a_local(asked: ref Asked, here: ref Here, receiver: ref Expr, met
 }
 
 fn a_push_into_a_place(asked: ref Asked, here: ref Here, receiver: ref Expr, method: winnow_grammar::Symbol) -> bool {
-    if asked.names.resolve(method) != "push" {
+    // An element pushed or a value inserted (ADR-views-v4 D32).
+    let name = asked.names.resolve(method)
+    if name != "push" && name != "push_back" && name != "push_front" && name != "insert" {
         return false
     }
     return match receiver {
         Expr::Variable(n, _) => here.places.contains(asked.names.resolve(n)),
+        else => false,
+    }
+}
+
+// `out[i] = E { .. }` with `out` a `mut` parameter's place.
+fn a_literal_set_into_a_place(asked: ref Asked, here: ref Here, target: ref Expr, value: ref Expr) -> bool {
+    match value {
+        Expr::StructLit { .. } => {},
+        else => return false,
+    }
+    return match target {
+        Expr::Index { base, .. } => match base {
+            Expr::Variable(n, _) => here.places.contains(asked.names.resolve(n)),
+            else => false,
+        },
         else => false,
     }
 }

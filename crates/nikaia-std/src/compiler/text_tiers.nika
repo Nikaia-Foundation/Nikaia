@@ -3006,7 +3006,12 @@ fn tier_statement(stmt: ref Stmt, at: i64, ask: ref TierAsk, mut walk: TierWalk)
         }
         Stmt::Assign { target, op, value } => {
             tie_stored(target, value, ask, walk)
+            let before = walk.handed_back
+            if op == null && into_a_changed_parameter(target, ask, walk) {
+                walk.handed_back = handed_struct(value)
+            }
             tier_assign(target, value, op != null, ask, walk)
+            walk.handed_back = before
             if op != null {
                 changed_in_place(target, tier_written(target, ask), ask, walk)
             }
@@ -3062,7 +3067,18 @@ fn tier_statement(stmt: ref Stmt, at: i64, ask: ref TierAsk, mut walk: TierWalk)
             walk.handed_back = before
             flow_result(given, kinds, ask, walk)
         }
-        Stmt::Expr(expr) => return tier_expr(expr, ask, walk),
+        Stmt::Expr(expr) => {
+            let before = walk.handed_back
+            let stored = stored_struct(expr, ask, walk)
+            if stored >= 0 {
+                walk.handed_back = stored
+            }
+            let kinds = tier_expr(expr, ask, walk)
+            if stored >= 0 {
+                walk.handed_back = before
+            }
+            return kinds
+        }
         else => {}
     }
     return no_kinds()
@@ -3508,6 +3524,46 @@ fn count_arm_use(value: ref Expr, ask: ref TierAsk, mut walk: TierWalk) {
     let word = lendable_parameter(value, ask, walk) ?? return
     let before = walk.flows.arm_uses[word] ?? 0
     walk.flows.arm_uses.insert(word, before + 1)
+}
+
+/// **A struct literal stored into a `mut` parameter** (ADR-views-v4 D32,
+/// #2425): `out.push(E { v: s })` puts a view of `s` into what the caller
+/// lent, as `return E { v: s }` hands one back (#678), so a `String`
+/// parameter in one of its fields is lent the same way. The literal's id, and
+/// -1 for any other statement.
+fn stored_struct(expr: ref Expr, ask: ref TierAsk, mut walk: TierWalk) -> i64 {
+    match expr {
+        Expr::MethodCall { receiver, method, args, .. } => {
+            let name = ask.names.resolve(method)
+            let puts = name == "push" || name == "push_back" || name == "push_front" || name == "insert"
+            if !puts || !into_a_changed_parameter(receiver, ask, walk) {
+                return -1
+            }
+            for arg in args {
+                let id = handed_struct(arg)
+                if id >= 0 {
+                    return id
+                }
+            }
+            return -1
+        }
+        else => return -1,
+    }
+}
+
+/// Whether a place starts at a parameter of this function written `mut`
+/// (ADR-views-v4 D32): `out`, `out.last`, `out[0]`.
+fn into_a_changed_parameter(place: ref Expr, ask: ref TierAsk, mut walk: TierWalk) -> bool {
+    let root = hb_place_root(place, ask.names) ?? return false
+    let local = tier_local(root, walk) ?? return false
+    let declared = local.declared ?? return false
+    return match declared.owner {
+        TextOwner::Param(key, at) => {
+            let function = walk.declared.fns[key] ?? return false
+            at < function.changes.len() && function.changes[at]
+        },
+        else => false,
+    }
 }
 
 /// The id of a struct literal handed back as it is, and -1 for anything else.
