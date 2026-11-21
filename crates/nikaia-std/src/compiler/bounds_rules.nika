@@ -1663,21 +1663,47 @@ fn rules_checked_key(given: ref String, method: ref String, built: ref String, a
     return out
 }
 
-/// **Whether `context.around.checked` was found under the field bounds and
-/// list-returning functions `context` holds**: what a walk reads besides
-/// its key and the returns of its callees.
+/// **Whether `context.around.checked` was found under the list-returning
+/// functions `context` holds**: what a walk reads besides its key, the
+/// returns of its callees and the field bounds each entry keeps.
 fn rules_checked_valid(context: ref BoundsContext) -> bool {
-    return context.around.checked_fields == context.around.field_bounds && context.around.checked_returning == context.around.returning
+    return context.around.checked_returning == context.around.returning
+}
+
+/// **Whether the field bounds `got`'s walk read are those `context` holds**
+/// (#2396): each it found the same, none of those it found absent added.
+fn rules_checked_fresh(got: ref RulesChecked, context: ref BoundsContext) -> bool {
+    for (key, bound) in got.fields {
+        let now = context.around.field_bounds.get(key) ?? return false
+        if now != bound {
+            return false
+        }
+    }
+    for key in got.absent {
+        if context.around.field_bounds.contains_key(key) {
+            return false
+        }
+    }
+    return true
 }
 
 /// **What the walks of a body failed, kept for the bodies after** (#2396):
 /// into `context.around.checked`, emptied first where it was found under
-/// other field bounds or list-returning functions than `context` holds.
+/// other list-returning functions than `context` holds; of the rest, an
+/// entry whose walk read a field bound that changed since is dropped.
 pub fn rules_checked_keep(mut context: BoundsContext, found: ref collections::BTreeMap[String, RulesChecked]) {
     if !rules_checked_valid(context) {
         context.around.checked.clear()
-        context.around.checked_fields = context.around.field_bounds.clone()
         context.around.checked_returning = context.around.returning.clone()
+    }
+    let mut stale: Vec[String] = []
+    for (key, got) in context.around.checked {
+        if !rules_checked_fresh(got, context) {
+            stale.push(key.clone())
+        }
+    }
+    for key in stale {
+        context.around.checked.remove(key)
     }
     for (key, failed) in found {
         context.around.checked.insert(key.clone(), failed.clone())
@@ -1697,22 +1723,31 @@ fn rules_check_once(key: ref String?, shared: bool, held: ref Vec[BoundsRule], o
     let reads = rules_returns_read(body, context, words)
     if shared && context.around.checked.contains_key(known) {
         let got = context.around.checked.get(known) ?? return
-        if got.reads == reads {
+        if got.reads == reads && rules_checked_fresh(got, context) {
             failed.extend(got.failed.clone())
             return
         }
     }
     if checked.contains_key(known) {
         let got = checked.get(known) ?? return
-        if got.reads == reads {
+        if got.reads == reads && rules_checked_fresh(got, context) {
             failed.extend(got.failed.clone())
             return
         }
     }
     let mut own: collections::BTreeSet[i64] = collections::BTreeSet()
-    rules_check(held, owner, method, built, args, body, locals, context, program, words, ask, own)
+    let asked = rules_check(held, owner, method, built, args, body, locals, context, program, words, ask, own)
     failed.extend(own.clone())
-    checked.insert(known.clone(), RulesChecked { reads: reads, failed: own })
+    let mut fields: collections::BTreeMap[String, Range] = collections::BTreeMap()
+    let mut absent: collections::BTreeSet[String] = collections::BTreeSet()
+    for key in asked {
+        let bound = context.around.field_bounds.get(key) ?? {
+            absent.insert(key.clone())
+            continue
+        }
+        fields.insert(key.clone(), bound.clone())
+    }
+    checked.insert(known.clone(), RulesChecked { reads: reads, fields: fields, absent: absent, failed: own })
 }
 
 /// **The found returns a walk of `body` could read** (ADR-306 D23): those
@@ -1747,8 +1782,9 @@ fn rules_returns_read(body: ref Block, context: ref BoundsContext, words: ref wi
 }
 
 /// **One method walked to check `held`**: the indexes of those it does not
-/// keep go into `failed`.
-fn rules_check(held: ref Vec[BoundsRule], owner: ref String, method: ref String, built: ref String, args: ref Vec[FnArg], body: ref Block, locals: ref collections::BTreeMap[String, String], context: ref BoundsContext, program: ref Program, words: ref winnow_grammar::InternerContext, ask: fn(ref logic::TermArena, ref Vec[i64], i64) -> bool sync, mut failed: collections::BTreeSet[i64]) {
+/// keep go into `failed`; it hands back the field keys of
+/// `context.around.field_bounds` the walk asked for (#2396).
+fn rules_check(held: ref Vec[BoundsRule], owner: ref String, method: ref String, built: ref String, args: ref Vec[FnArg], body: ref Block, locals: ref collections::BTreeMap[String, String], context: ref BoundsContext, program: ref Program, words: ref winnow_grammar::InternerContext, ask: fn(ref logic::TermArena, ref Vec[i64], i64) -> bool sync, mut failed: collections::BTreeSet[i64]) -> collections::BTreeSet[String] {
     let mut walk = bounding_new(args, body, collections::BTreeSet(), context, program, words)
     let self_owner = if method.is_empty() { "" } else { owner }
     walk.rule_roots = rules_roots(self_owner, args, walk.shape, held, words)
@@ -1770,6 +1806,7 @@ fn rules_check(held: ref Vec[BoundsRule], owner: ref String, method: ref String,
     for at in walk.rule_failed {
         failed.insert(at)
     }
+    return walk.assumed_read.clone()
 }
 
 /// The `node_key` of the literal a builder binds `built` to (`rules_builder`:

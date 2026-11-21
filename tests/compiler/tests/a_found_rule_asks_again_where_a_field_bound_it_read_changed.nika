@@ -1,0 +1,88 @@
+/// A method's check of the found rules is kept across the walk's rounds by
+/// the field bounds it read (#2396): `jump` sets `used` from `steps`, so
+/// `used <= limit` holds only once `steps`' values are bounded by 1. Its
+/// check, failed while no bound of `steps` was found yet, is asked again
+/// when one is; the checks of `tick` and `grow`, which read none, are not.
+struct Budget {
+	used: i64,
+	limit: i64,
+	steps: Vec[i64],
+}
+
+impl Budget {
+	fn tick(mut self) -> bool sync {
+		if self.used == self.limit {
+			return false
+		}
+		self.used += 1
+		return true
+	}
+
+	fn jump(mut self, at: i64) sync {
+		if at < 0 || at >= self.steps.len() {
+			return
+		}
+		self.limit = 1
+		self.used = self.steps[at]
+	}
+
+	fn grow(mut self) sync {
+		self.steps.push(0)
+		self.steps.push(1)
+	}
+}
+
+fn budget() -> Budget {
+	return Budget { used: 0, limit: 0, steps: [] }
+}
+
+/// The same with `steps` growing past any bound: the rule fails and the
+/// raise keeps its check.
+struct Loose {
+	used: i64,
+	limit: i64,
+	marks: Vec[i64],
+}
+
+impl Loose {
+	fn tick(mut self) -> bool sync {
+		if self.used == self.limit {
+			return false
+		}
+		self.used += 1
+		return true
+	}
+
+	fn jump(mut self, at: i64) sync {
+		if at < 0 || at >= self.marks.len() {
+			return
+		}
+		self.limit = 1
+		self.used = self.marks[at]
+	}
+
+	fn grow(mut self) sync {
+		if self.marks.is_empty() {
+			self.marks.push(0)
+			return
+		}
+		let last = self.marks[0]
+		self.marks.push(last + 1)
+	}
+}
+
+fn loose() -> Loose {
+	return Loose { used: 0, limit: 0, marks: [] }
+}
+
+fn main() throws {
+	let mut b = budget()
+	b.grow()
+	b.jump(1)
+	println(f"{b.used} {b.limit} {b.tick()}")
+	let mut l = loose()
+	l.grow()
+	l.grow()
+	l.jump(1)
+	println(f"{l.used} {l.limit} {l.tick()}")
+}

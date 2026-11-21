@@ -16,6 +16,8 @@ pub struct BodyShape {
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct RulesChecked {
     pub reads: collections::BTreeMap<String, BoundsReturns>,
+    pub fields: collections::BTreeMap<String, Range>,
+    pub absent: collections::BTreeSet<String>,
     pub failed: collections::BTreeSet<i64>,
 }
 
@@ -28,7 +30,6 @@ pub struct Around {
     pub rules: Vec<BoundsRule>,
     pub held: collections::BTreeMap<String, Vec<BoundsRule>>,
     pub checked: collections::BTreeMap<String, RulesChecked>,
-    pub checked_fields: collections::BTreeMap<String, Range>,
     pub checked_returning: collections::BTreeSet<String>,
     pub derived: Derived,
     pub fields: collections::BTreeSet<String>,
