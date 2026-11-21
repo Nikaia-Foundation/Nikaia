@@ -1,0 +1,18 @@
+// Probe for #2674: named function eat taking String passed to map on Vec[String]
+// should succeed and print the length, like the lambda form.
+
+fn eat(a: String) -> i64 {
+    return a.len()
+}
+
+fn make() -> String {
+    let mut s = String()
+    s.push_str("made")
+    return s
+}
+
+fn main() throws {
+    let v = [make(), make()]
+    let n: Vec[i64] = v.iter().map(eat).collect()
+    println(n.len())
+}
