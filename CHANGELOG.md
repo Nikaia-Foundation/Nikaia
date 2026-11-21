@@ -8,6 +8,12 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1513] — 2026-11-21
+
+**Builders' changes (#2120)**
+- The panic hook's `.nika` line lookup is Nikaia (`runtime::lookup`); a code parameter handed on to two std methods now compiles (lent, not moved).
+- A function's parameter of code handed to two `std` methods (`is_sorted_by_key(f)` then `binary_search_by_key(k, f)`) compiles: it is lent on, not moved (it was an internal compiler error, rustc E0382).
+
 ## [0.0.1512] — 2026-11-21
 
 **Builders' changes (#2307, #2400, #2401)**

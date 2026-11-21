@@ -1,0 +1,27 @@
+// **A parameter of code handed on to a `std` method is lent on, not moved**
+// (#2120): the order check and the search by halving both take `key`, the
+// way `runtime/abort_lines.nika`'s `lookup` hands its key on twice.
+
+struct Site {
+    at: int,
+    file: String,
+}
+
+fn at_of(s: ref Site) -> int sync {
+    return s.at
+}
+
+fn lookup[T](table: ref Vec[T], wanted: int, key: fn(ref T) -> int sync) -> int? sync {
+    if !table.is_sorted_by_key(key) {
+        return null
+    }
+    return table.binary_search_by_key(wanted, key)
+}
+
+fn main() throws {
+    let sites = [Site { at: 1, file: "a" }, Site { at: 5, file: "b" }, Site { at: 9, file: "c" }]
+    println((lookup(sites, 5, at_of) ?? -1).to_string())
+    println((lookup(sites, 4, at_of) ?? -1).to_string())
+    let unsorted = [Site { at: 9, file: "c" }, Site { at: 1, file: "a" }]
+    println((lookup(unsorted, 1, at_of) ?? -1).to_string())
+}

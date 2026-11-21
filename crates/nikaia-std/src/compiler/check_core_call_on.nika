@@ -1395,6 +1395,8 @@ fn check_core_call_on_described[H: CheckHost](mut state: CheckState, world: ref 
     state.call_keepers.clear()
     if world.own.functions.contains_key(key) {
         check_core_call_code_args(state, world, callee, key, args, span)
+    } else {
+        check_core_call_std_code_args(state, world, callee, key, args, parallel, span)
     }
     if keyed && args.len() == 1 && found.len() == 1 {
         check_core_call_on_a_viewed_key(state, world, args[0], found[0], span)

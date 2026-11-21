@@ -653,15 +653,6 @@ sync = true
 touches = []
 signature = "(self: ref html::Raw) -> ref String"
 
-# The `.nika` file and line for a line of the generated file. `std`'s own,
-# for its test blocks (#2310): the table is `comptime`, its text the build's.
-[fn."abort::lookup"]
-pub = false
-panics = false
-sync = true
-touches = []
-signature = "(table: ref Array[(u32, ref String, u32)], generated: u32) -> (ref String, u32)?"
-
 # The runtime a program starts with, and whether user code runs on a pool.
 # `std`'s own (#2304): a program finds the one runtime, never builds one.
 [type."rt::Runtime"]
