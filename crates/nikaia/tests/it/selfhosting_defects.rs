@@ -281,7 +281,7 @@ fn main() throws {
     let mut lines: Vec<&str> = said.lines().collect();
     lines.sort();
     assert_eq!(lines, ["1", "1 2", "2"]);
-    assert!(rust.contains("{ let db = db.clone(); nikaia_std::task::FailingTask::start(async move { let __nikaia_task = { nikaia_std::io::println(format_args!(\"{}\", db))? }; Ok::<_, std::boxed::Box<dyn std::error::Error>>(__nikaia_task) }"), "{rust}");
+    assert!(rust.contains("{ let db = db.clone(); nikaia_std::task::FailingTask::start(nikaia_std::error::started_paused(async move { let __nikaia_task = { nikaia_std::io::println(format_args!(\"{}\", db))? }; Ok::<_, std::boxed::Box<dyn std::error::Error>>(__nikaia_task) }, &\"main\")"), "{rust}");
 }
 
 /// **`throw made()` throws the type `made` returns**, as `throw Bad::No` does:

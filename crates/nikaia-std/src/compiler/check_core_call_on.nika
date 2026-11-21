@@ -1402,11 +1402,11 @@ fn check_core_call_on_described[H: CheckHost](mut state: CheckState, world: ref 
     // (ADR-async-5 D26): `map`, `filter` and `for_each`, and `fold`'s
     // `step` and `merge` (Part II 12.6).
     if parallel && (entry == "map" || entry == "filter" || entry == "for_each") && args.len() == 1 {
-        check_walks_a_lambda_against_itself(state, world, receiver, args[0], span)
+        check_walks_a_lambda_against_itself(state, world, on, args[0], span)
     }
     if key == "Par::fold" && args.len() >= 3 {
-        check_walks_a_lambda_against_itself(state, world, receiver, args[1], span)
-        check_walks_a_lambda_against_itself(state, world, receiver, args[2], span)
+        check_walks_a_lambda_against_itself(state, world, on, args[1], span)
+        check_walks_a_lambda_against_itself(state, world, on, args[2], span)
     }
     if keyed && args.len() == 1 && found.len() == 1 {
         check_core_call_on_a_viewed_key(state, world, args[0], found[0], span)

@@ -1,0 +1,10 @@
+error[NK1139]: You're changing `backup`, but it wasn't declared as mutable.
+   --> tests/async_deferred_start_needs_let_mut.nika:10:2
+    |
+  9 | 	let backup = async(deferred) fn { copy_all(1, 2) }
+    |      ------ declared here without `mut`
+ 10 | 	backup.start()
+    |  ^^^^^^ changed here, by `start`
+    |
+    = help: Add `mut` where it's declared: `let mut backup`.
+1 type error

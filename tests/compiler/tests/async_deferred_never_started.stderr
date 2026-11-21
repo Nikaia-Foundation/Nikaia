@@ -1,0 +1,33 @@
+error[NK2121]: The deferred task handle `h` is neither started nor cancelled on some path.
+  --> tests/async_deferred_never_started.nika:5:2
+   |
+ 5 | 	let mut h = async(deferred) fn { 1 }
+   |  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: A deferred task runs only from its handle's `start()`: on a path that leaves without it, the task never runs, and nothing says so.
+   = help: Write `h.start()` where the task should run, and `h.cancel()` on the path where it should not.
+error[NK2121]: The deferred task handle `h` is neither started nor cancelled on some path.
+   --> tests/async_deferred_never_started.nika:10:2
+    |
+ 10 | 	let mut h = async(detached, deferred) fn { 2 }
+    |  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: A deferred task runs only from its handle's `start()`: on a path that leaves without it, the task never runs, and nothing says so.
+    = help: Write `h.start()` where the task should run, and `h.cancel()` on the path where it should not.
+error[NK2121]: The deferred task handle `h` is neither started nor cancelled on some path.
+   --> tests/async_deferred_never_started.nika:18:2
+    |
+ 18 | 	let mut h = async(deferred) fn { n }
+    |  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: A deferred task runs only from its handle's `start()`: on a path that leaves without it, the task never runs, and nothing says so.
+    = help: Write `h.start()` where the task should run, and `h.cancel()` on the path where it should not.
+error[NK2121]: This deferred task is never started: nothing holds its handle.
+   --> tests/async_deferred_never_started.nika:27:2
+    |
+ 27 | 	async(deferred) fn { 3 }
+    |  ^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: A deferred task runs only from its handle's `start()`, so one whose handle is dropped never runs.
+    = help: Bind it, `let mut h = async(deferred) fn { … }`, and write `h.start()` where it should run; or write `async fn { … }` to start it at once.
+

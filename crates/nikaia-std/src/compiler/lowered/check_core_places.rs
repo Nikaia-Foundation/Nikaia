@@ -107,12 +107,12 @@ pub(crate) fn check_core_places_a_named_field(state: &mut CheckState, world: &Ch
     }
     if (ty == "String" || ty == "str") && field == "scalars" {
         state.facts.text_scalars.insert(id_of(expr) as i64);
-        return Ty::Seq { item: nikaia_std::block::Boxed::new(check_core_places_named("scalar")), is_sync: true, pauses: false, can_throw: false, parallel: false, shape: Shape { ends: true, sized: false, replays: false, timed: false } };
+        return Ty::Seq { item: nikaia_std::block::Boxed::new(check_core_places_named("scalar")), is_sync: true, pauses: false, can_throw: false, parallel: false, shape: Shape { ends: true, sized: false, replays: false, timed: false, one_at_a_time: false } };
     }
     if (ty == "String" || ty == "str") && field == "graphemes" {
         state.facts.text_graphemes.insert(id_of(expr) as i64);
         let grapheme = check_core_places_str_view();
-        return Ty::Seq { item: nikaia_std::block::Boxed::new(grapheme), is_sync: true, pauses: false, can_throw: false, parallel: false, shape: Shape { ends: false, sized: false, replays: false, timed: false } };
+        return Ty::Seq { item: nikaia_std::block::Boxed::new(grapheme), is_sync: true, pauses: false, can_throw: false, parallel: false, shape: Shape { ends: false, sized: false, replays: false, timed: false, one_at_a_time: false } };
     }
     let boxed = state.facts.boxed_members.get(ty);
     if boxed.is_some() {
@@ -1277,6 +1277,6 @@ pub(crate) fn check_core_range<H: CheckHost>(state: &mut CheckState, world: &Che
     let to = check_core_expr(state, world, host, end, span);
     let mut item: Ty = from;
     if item.is_unknown() { item = to; }
-    Ty::Seq { item: nikaia_std::block::Boxed::new(item), is_sync: true, pauses: false, can_throw: false, parallel: false, shape: Shape { ends: true, sized: true, replays: true, timed: false } }
+    Ty::Seq { item: nikaia_std::block::Boxed::new(item), is_sync: true, pauses: false, can_throw: false, parallel: false, shape: Shape { ends: true, sized: true, replays: true, timed: false, one_at_a_time: false } }
 }
 

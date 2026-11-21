@@ -348,10 +348,11 @@ impl EmitState {
             Expr::Binary { op, lhs, rhs, span, .. } => { let lhs = nikaia_std::boxed::open(lhs); let rhs = nikaia_std::boxed::open(rhs); self.emit_core_binary(world, walk, out, host, node, *op, lhs, rhs, span, depth, flow, scope)?; },
             Expr::Coalesce { value, fallback, .. } => { let value = nikaia_std::boxed::open(value); let fallback = nikaia_std::boxed::open(fallback); self.emit_core_coalesce(world, walk, out, host, node, value, fallback, depth, flow, scope)?; },
             Expr::TryCatch { expr, handler, id } => { let expr = nikaia_std::boxed::open(expr); let id = *id; match expr {
-                Expr::Spawn { body, child, within, admission, .. } if { let child = *child; child } => {
-                    let body = nikaia_std::boxed::open(body); let within = nikaia_std::boxed::open(within); let admission = nikaia_std::boxed::open(admission);
+                Expr::Spawn { body, child, deferred, within, admission, .. } if { let child = *child; child } => {
+                    let body = nikaia_std::boxed::open(body); let within = nikaia_std::boxed::open(within); let admission = nikaia_std::boxed::open(admission); let deferred = *deferred;
                     walk.async_within = self.emit_async_deadline(world, walk, host, (within).as_ref(), depth, &flow, scope)?;
                     walk.async_admission = self.emit_async_option(world, walk, host, (admission).as_ref(), depth, &flow, scope)?;
+                    walk.async_deferred = deferred;
                     match body {
                         Expr::Closure { body: block, .. } => {
                             let guarded = Expr::Block(block.clone(), numbered_id(id_of(expr)));
@@ -362,11 +363,22 @@ impl EmitState {
                         _ => { return Err(nikaia_std::error::throwing(EmitRefused { message: String::from("`async(handle)` takes a lambda. Write `async(handle) fn { … }`."), at: Some(flow.statement) }, &"emit_expr_written")); },
                     }
                 },
-                Expr::Spawn { body, written_async, within, admission, .. } if { let written_async = *written_async; written_async } => {
-                    let body = nikaia_std::boxed::open(body); let within = nikaia_std::boxed::open(within); let admission = nikaia_std::boxed::open(admission);
+                Expr::Spawn { body, written_async, deferred, within, admission, .. } if { let written_async = *written_async; written_async } => {
+                    let body = nikaia_std::boxed::open(body); let within = nikaia_std::boxed::open(within); let admission = nikaia_std::boxed::open(admission); let deferred = *deferred;
                     walk.async_within = self.emit_async_deadline(world, walk, host, (within).as_ref(), depth, &flow, scope)?;
                     walk.async_admission = self.emit_async_option(world, walk, host, (admission).as_ref(), depth, &flow, scope)?;
+                    walk.async_deferred = deferred;
                     self.emit_core_spawn_fallback(world, walk, out, host, expr, body, handler, id.get(), depth, &flow, scope)?;
+                },
+                Expr::Async(task, aid, within, admission) if { let aid = *aid; self.emit_async_kind(i64::from(aid.get())) == "spawn" } => {
+                    let task = nikaia_std::boxed::open(task); let within = nikaia_std::boxed::open(within); let admission = nikaia_std::boxed::open(admission); let aid = *aid;
+                    walk.async_within = self.emit_async_deadline(world, walk, host, (within).as_ref(), depth, &flow, scope)?;
+                    walk.async_admission = self.emit_async_option(world, walk, host, (admission).as_ref(), depth, &flow, scope)?;
+                    let mut at: u32 = 0u32;
+                    if flow.statement > 0 { at = u32::try_from(flow.statement).unwrap_or_else(|_| panic!("the value does not fit in an `u32`")); }
+                    let guarded = Expr::Block(Block { stmts: vec![Spanned::new(Stmt::Expr(task.clone()), Span { start: at, end: at })] }, numbered_id(aid.get()));
+                    let caught = Expr::TryCatch { expr: nikaia_std::block::Boxed::placed(guarded), handler: handler.clone(), id: numbered_id(id.get()) };
+                    self.emit_async_task(world, walk, out, host, &caught, i64::from(aid.get()), "spawn", depth, &flow, scope)?;
                 },
                 _ => { self.emit_core_try_catch(world, walk, out, host, expr, handler, depth, flow, scope)?; },
             }; },
@@ -375,17 +387,19 @@ impl EmitState {
             Expr::Break(_) => { self.emit_core_jump(out, true, &flow)?; },
             Expr::Continue(_) => { self.emit_core_jump(out, false, &flow)?; },
             Expr::Throw(inner, _) => { let inner = nikaia_std::boxed::open(inner); self.emit_core_throw(world, walk, out, host, inner, depth, flow, scope)?; },
-            Expr::Spawn { body, child, id, within, admission, .. } if { let child = *child; child } => {
-                let body = nikaia_std::boxed::open(body); let within = nikaia_std::boxed::open(within); let admission = nikaia_std::boxed::open(admission); let id = *id;
+            Expr::Spawn { body, child, deferred, id, within, admission, .. } if { let child = *child; child } => {
+                let body = nikaia_std::boxed::open(body); let within = nikaia_std::boxed::open(within); let admission = nikaia_std::boxed::open(admission); let deferred = *deferred; let id = *id;
                 walk.async_within = self.emit_async_deadline(world, walk, host, (within).as_ref(), depth, &flow, scope)?;
                 walk.async_admission = self.emit_async_option(world, walk, host, (admission).as_ref(), depth, &flow, scope)?;
+                walk.async_deferred = deferred;
                 let kind = self.emit_child_kind(id.get() as i64, &flow)?;
                 self.emit_async_task(world, walk, out, host, body, id.get() as i64, &kind, depth, &flow, scope)?;
             },
-            Expr::Spawn { body, within, admission, .. } => {
-                let body = nikaia_std::boxed::open(body); let within = nikaia_std::boxed::open(within); let admission = nikaia_std::boxed::open(admission);
+            Expr::Spawn { body, deferred, within, admission, .. } => {
+                let body = nikaia_std::boxed::open(body); let within = nikaia_std::boxed::open(within); let admission = nikaia_std::boxed::open(admission); let deferred = *deferred;
                 walk.async_within = self.emit_async_deadline(world, walk, host, (within).as_ref(), depth, &flow, scope)?;
                 walk.async_admission = self.emit_async_option(world, walk, host, (admission).as_ref(), depth, &flow, scope)?;
+                walk.async_deferred = deferred;
                 self.emit_core_spawn(world, walk, out, host, body, depth, &flow, scope)?;
             },
             Expr::Async(task, id, within, admission) => {
