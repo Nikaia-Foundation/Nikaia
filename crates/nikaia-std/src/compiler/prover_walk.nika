@@ -2834,9 +2834,11 @@ fn prover_raw_sink(mut walk: ProverWalk, callee: ref String, args: ref Vec[Expr]
                 root = written_of(written)
             }
             // D11: the root's own parts, under the call's one operation, or
-            // under all three where it has two (`copy`, `rename`).
-            let mut whole = raw_sink_operation(callee, 0, config, words, written_of)
-            if i > 1 && raw_sink_operation(callee, 1, config, words, written_of) != whole {
+            // under all three where it has two (`copy`, `rename`). The names
+            // a root governs start at `first` (ADR-platform-layer-v1 D4).
+            let first = raw_sink_first_name(callee, i)
+            let mut whole = raw_sink_operation(callee, first, config, words, written_of)
+            if i - first > 1 && raw_sink_operation(callee, first + 1, config, words, written_of) != whole {
                 whole = "anywhere"
             }
             let root_sink = ParamSink { index: -1, kind: "path", sink: f"the root `{root}` of `{callee}`, a directory a stranger may have chosen", operation: whole, root_part: true, guard: "" }
@@ -2867,7 +2869,7 @@ fn prover_raw_sink(mut walk: ProverWalk, callee: ref String, args: ref Vec[Expr]
             if !anywhere && !root_outside {
                 continue
             }
-            for j in 0..<i {
+            for j in first..<i {
                 let mut parts: Vec[Expr] = []
                 raw_sink_parts(args[j], holes_of, parts)
                 // D14: a guarded name is admitted joined after a part that
@@ -2963,14 +2965,26 @@ fn raw_sink_root_through(mut walk: ProverWalk, sink: ref ParamSink, shown: ref S
 }
 
 /// Whether the `i`th argument of the `std` file operation `callee` stands
-/// at its parameter `root` (ADR-raw-sinks-1 D11, #2591).
+/// at its parameter `root`, or `from_root` / `to_root` of a call on two roots
+/// (ADR-raw-sinks-1 D11, #2591; ADR-platform-layer-v1 D4).
 fn raw_sink_root_param(callee: ref String, i: i64, library: ref Ledger) -> bool {
     let contract = library.functions[callee] ?? return false
     let signature = contract.signature ?? return false
     if i < 0 || i >= signature.params.len() {
         return false
     }
-    return signature.params[i].0 == "root"
+    return signature.params[i].0 == "root" || signature.params[i].0.ends_with("_root")
+}
+
+/// **The first name the root at argument `i` of `callee` is resolved for**
+/// (ADR-platform-layer-v1 D4): a call on two names with two roots
+/// (`fs::copy_between(from, from_root, to, to_root)`) pairs each root with
+/// the name just before it; every other call has one root after its names.
+fn raw_sink_first_name(callee: ref String, i: i64) -> i64 {
+    if callee == "fs::copy_between" && i > 0 {
+        return i - 1
+    }
+    return 0
 }
 
 /// Whether a root the walk cannot see is a name that reads a parameter and
@@ -3181,7 +3195,7 @@ fn raw_sink_operation(callee: ref String, j: i64, config: ref Vec[ConfigArg], wo
     if callee == "fs::rename" {
         return if j == 0 { "remove" } else { "write" }
     }
-    if callee == "fs::copy" {
+    if callee == "fs::copy" || callee == "fs::copy_between" {
         return if j == 0 { "read" } else { "write" }
     }
     if callee == "fs::open" {

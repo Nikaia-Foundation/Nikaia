@@ -2068,8 +2068,9 @@ pub(crate) fn prover_raw_sink(walk: &mut ProverWalk, callee: &str, args: &[Expr]
             for part in root_parts.iter() { if raw_sink_outside(part, scope, words, library, &walk.state, &mut *holes_of) { root_outside = true; } }
             let mut root = written_of(&arg);
             if !joins.is_empty() { root = written_of(written); }
-            let mut whole = raw_sink_operation(callee, 0, config, words, &mut *written_of);
-            if i > 1 && raw_sink_operation(callee, 1, config, words, &mut *written_of) != whole { whole = String::from("anywhere"); }
+            let first = raw_sink_first_name(callee, i);
+            let mut whole = raw_sink_operation(callee, first, config, words, &mut *written_of);
+            if i - first > 1 && raw_sink_operation(callee, first + 1, config, words, &mut *written_of) != whole { whole = String::from("anywhere"); }
             let root_sink = ParamSink { index: -1, kind: String::from("path"), sink: format!("the root `{}` of `{}`, a directory a stranger may have chosen", root, callee), operation: whole, root_part: true, guard: String::from("") };
             for part in root_parts.iter() { raw_sink_part(walk, &root_sink, &root_sink.sink, part, span, scope, at, program, words, library, &mut *holes_of, &mut *ask, &mut *written_of); }
             if !anywhere {
@@ -2086,7 +2087,7 @@ pub(crate) fn prover_raw_sink(walk: &mut ProverWalk, callee: &str, args: &[Expr]
                 }
             }
             if !anywhere && !root_outside { continue; }
-            for j in 0..i {
+            for j in first..i {
                 let mut parts: Vec<Expr> = vec![];
                 raw_sink_parts(nikaia_std::index::get(&args, nikaia_std::index::at(j)), &mut *holes_of, &mut parts);
                 let joined = raw_sink_clean_lead(unsafe { nikaia_std::proven::read(&args, (j) as usize) }, scope, words, library, &walk.state, &mut *holes_of);
@@ -2151,7 +2152,12 @@ pub(crate) fn raw_sink_root_param(callee: &str, i: i64, library: &Ledger) -> boo
     let contract = match *nikaia_std::index::get(&library.functions, callee) { Some(__nikaia_value) => __nikaia_value, None => return false };
     let signature = match contract.signature.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return false };
     if i < 0 || i >= signature.params.len() as i64 { return false; }
-    unsafe { nikaia_std::proven::read(&signature.params, (i) as usize) }.0 == "root"
+    unsafe { nikaia_std::proven::read(&signature.params, (i) as usize) }.0 == "root" || unsafe { nikaia_std::proven::read(&signature.params, (i) as usize) }.0.ends_with("_root")
+}
+
+pub(crate) fn raw_sink_first_name(callee: &str, i: i64) -> i64 {
+    if callee == "fs::copy_between" && i > 0 { return unsafe { nikaia_std::proven::sub::<i64>(i, 1) }; }
+    0
 }
 
 pub(crate) fn raw_sink_carried_root(arg: &Expr, scope: &ProverScope, words: &winnow_grammar::InternerContext, library: &Ledger, state: &ProverState, holes_of: &mut impl FnMut(&Expr) -> Vec<Expr>) -> bool {
@@ -2286,7 +2292,7 @@ pub(crate) fn raw_sink_operation(callee: &str, j: i64, config: &[ConfigArg], wor
     if callee == "fs::write" || callee == "fs::create" || callee == "fs::create_dir" { return String::from("write"); }
     if callee == "fs::remove" { return String::from("remove"); }
     if callee == "fs::rename" { return if j == 0 { String::from("remove") } else { String::from("write") }; }
-    if callee == "fs::copy" { return if j == 0 { String::from("read") } else { String::from("write") }; }
+    if callee == "fs::copy" || callee == "fs::copy_between" { return if j == 0 { String::from("read") } else { String::from("write") }; }
     if callee == "fs::open" {
         for option in config.iter() {
             let named = words.resolve(option.name);
