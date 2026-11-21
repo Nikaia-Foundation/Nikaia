@@ -43,6 +43,10 @@ pub(crate) fn lin_term_in(expr: &Expr, words: &winnow_grammar::InternerContext, 
                 let length = length_path(receiver, words, &mut &mut *var);
                 if length.is_some() { return Some(built(logic::SolverTerm::Var(nikaia_std::index::or(length, || String::new().into())), out)); }
             }
+            let named = call_result_name(expr);
+            let ran = pinned(&named);
+            if ran.is_some() { return Some(built(logic::SolverTerm::Int(nikaia_std::index::or(ran, || 0)), out)); }
+            if var(&named) { return Some(built(logic::SolverTerm::Var(named), out)); }
             if !fresh { return None; }
             let result = built(logic::SolverTerm::Var(format!("call@{}", node_key(expr))), out);
             calls.push(result);

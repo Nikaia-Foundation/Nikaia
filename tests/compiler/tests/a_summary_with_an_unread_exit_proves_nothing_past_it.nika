@@ -1,0 +1,36 @@
+// ADR-359 D14: an exit the prover cannot read gives no fact on its own
+// path. Here it is the one taken where `t.len() != 1`, and it may hand back
+// a non-zero value, so `kind(t) != 0` does not show `t.len() >= 1`: the
+// precondition of `need` stays not proved (#2618).
+fn need(n: i64) -> i64 {
+    assert(n >= 1)
+    return n
+}
+
+fn total(t: ref Vec[i64]) -> i64 {
+    let mut s = 0
+    for v in t {
+        s = s + v
+    }
+    return s
+}
+
+fn kind(t: ref Vec[i64]) -> i64 {
+    if t.len() != 1 {
+        return total(t)
+    }
+    return 1
+}
+
+pub fn f(t: ref Vec[i64]) -> i64 {
+    let k = kind(t)
+    if k == 0 {
+        return 0
+    }
+    return need(t.len() as i64)
+}
+
+fn main() throws {
+    let one: Vec[i64] = [4]
+    println(f"{f(one)}")
+}

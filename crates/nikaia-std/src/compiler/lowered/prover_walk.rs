@@ -566,7 +566,7 @@ pub(crate) fn prover_let(walk: &mut ProverWalk, names: &[winnow_grammar::Symbol]
             },
             Expr::MethodCall { receiver, method, args, config, .. } => {
                 let receiver = nikaia_std::boxed::open(receiver); let method = *method;
-                let callee = prover_own_method_callee(receiver, method, nested, words);
+                let callee = nikaia_std::index::or_maybe(prover_own_method_callee(receiver, method, nested, words), || prover_method_callee(&walk, receiver));
                 if callee.is_some() {
                     let c = nikaia_std::index::or(callee, || "".into());
                     let target = prover_summed_function(program, words, &c);
@@ -856,7 +856,28 @@ pub(crate) fn prover_call_results(walk: &mut ProverWalk, expr: &Expr, top: bool,
             let alts = prover_summed(walk, &callee, args, config, &name, &scope, program, words, &written_of(expr));
             if alts.is_some() { scope.summed.insert(nikaia_std::block::Text::from(name.to_string()), nikaia_std::index::or(alts, || vec![].into())); }
         },
+        Expr::MethodCall { args, config, receiver, .. } => {
+            let receiver = nikaia_std::boxed::open(receiver);
+            for arg in args.iter() { prover_call_results(walk, arg, false, scope, program, words, own, &mut &mut *unaliased, &mut &mut *condition, &mut &mut *written_of); }
+            if top { return; }
+            let callee = match prover_method_callee(&walk, receiver) { Some(__nikaia_value) => __nikaia_value, None => return };
+            let target = match prover_summed_function(program, words, &callee) { Some(__nikaia_value) => __nikaia_value, None => return };
+            if !target.whole_result { return; }
+            let name = call_result_name(expr);
+            scope.rebind(&walk.arena, &name);
+            scope.ints.insert(nikaia_std::block::Text::from(name.to_string()));
+            scope.loose.insert(nikaia_std::block::Text::from(name.to_string()));
+            let alts = prover_summed(walk, &callee, args, config, &name, &scope, program, words, &written_of(expr));
+            if alts.is_some() { scope.summed.insert(nikaia_std::block::Text::from(name.to_string()), nikaia_std::index::or(alts, || vec![].into())); }
+        },
         _ => { },
+    }
+}
+
+pub(crate) fn prover_method_callee(walk: &ProverWalk, receiver: &Expr) -> Option<String> {
+    match walk.state.method_callees.get(&(id_of(receiver) as i64)) {
+        Some(__nikaia_it) => Some(__nikaia_it.clone()),
+        None => None,
     }
 }
 
@@ -959,7 +980,7 @@ pub(crate) fn prover_summed_function(program: &Program, words: &winnow_grammar::
     let cut = match nikaia_std::text::rfind(&callee, &"::") { Some(__nikaia_value) => __nikaia_value, None => return None };
     let owner = nikaia_std::block::Text::from(callee.before(cut.start).to_string());
     let name = nikaia_std::block::Text::from(callee.after(cut.end).to_string());
-    own_method(program, words, &owner, &name)
+    nikaia_std::index::or_maybe(own_method(program, words, &owner, &name), || own_associated(program, words, &owner, &name))
 }
 
 pub(crate) fn prover_own_method_callee(receiver: &Expr, method: winnow_grammar::Symbol, at: &ProverWhere, words: &winnow_grammar::InternerContext) -> Option<String> {
@@ -1367,6 +1388,7 @@ pub(crate) fn prover_expr_stmt(walk: &mut ProverWalk, expr: &Expr, span: Span, s
 pub(crate) fn prover_if(walk: &mut ProverWalk, cond: &Expr, then_branch: &Block, else_branch: Option<&Block>, span: Span, scope: &mut ProverScope, at: &ProverWhere, nested: &ProverWhere, program: &Program, words: &winnow_grammar::InternerContext, own: &Ledger, library: &Ledger, ask: &mut dyn FnMut(&logic::TermArena, &[i64], i64) -> SolverAnswer, model: &mut dyn FnMut(&logic::TermArena, &[i64], i64) -> Option<collections::BTreeMap<String, i64>>, escape: &mut dyn FnMut(&str) -> String, holes_of: &mut dyn FnMut(&Expr) -> Vec<Expr>, unaliased: &mut dyn FnMut(&str) -> String, written_of: &mut dyn FnMut(&Expr) -> String, condition: &mut dyn FnMut(&str, &collections::BTreeSet<String>) -> Vec<logic::SolverTerm>) -> bool {
     prover_expr(walk, cond, span, &scope, nested, program, words, own, library, &mut &mut *ask, &mut &mut *model, &mut &mut *escape, &mut &mut *holes_of, &mut &mut *unaliased, &mut &mut *written_of, &mut &mut *condition);
     prover_condition_lengths(walk, cond, scope, words);
+    if !walk.state.in_test { prover_call_results(walk, cond, false, scope, program, words, own, &mut &mut *unaliased, &mut &mut *condition, &mut &mut *written_of); }
     prover_read_properties(cond, scope, &walk.state, program, words);
     let holds = claim_term(cond, words, &mut |name| { scope.ints.contains(name) }, &mut |name| { prover_pinned(&walk.state.pinned, &scope, name) }, &mut walk.arena.nodes);
     let mut fails: Option<i64> = None;
@@ -2920,7 +2942,7 @@ pub(crate) fn prover_postconditions_of(walk: &mut ProverWalk, callee: &str, args
 }
 
 pub(crate) fn prover_returns_whole(walk: &mut ProverWalk, callee: &str, program: &Program, words: &winnow_grammar::InternerContext, own: &Ledger, condition: &mut impl FnMut(&str, &collections::BTreeSet<String>) -> Vec<logic::SolverTerm>) -> bool {
-    let function = free_function(program, words, callee);
+    let function = prover_summed_function(program, words, callee);
     if function.is_some() {
         let found = match function { Some(__nikaia_value) => __nikaia_value, None => return false };
         return found.whole_result;
