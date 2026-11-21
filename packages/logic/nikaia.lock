@@ -15,7 +15,7 @@ bitflags = ["2.13.2"]
 byte-blocks = ["0.1.0"]
 c-boundary = ["0.1.0"]
 c-text = ["0.1.0"]
-cc = ["1.11.3"]
+cc = ["1.11.2"]
 cfg-if = ["1.0.5"]
 checked-text = ["0.1.0"]
 child-usage = ["0.1.0"]
@@ -118,4 +118,4 @@ zerocopy-derive = ["0.8.63"]
 zeroize = ["1.9.2"]
 
 [units."src/main.nika"]
-source = "c3ed023d06e087810f6dcfb07348377574b64aab180f635c9d41ad0e0b66f542"
+source = "bcacde1cd398a1e14998683e572125ef95391f1de813814c58ff0228e04088bd"
