@@ -1383,6 +1383,7 @@ pub(crate) fn keeps_by_value(ledger: &mut Ledger, units: &[ParsedView<'_, '_, '_
         if !signature.takes_a_receiver() { continue; }
         let mut by_value: Vec<String> = vec![];
         for (name, ty) in signature.params.iter() { if name != "self" && (named.contains(key) || keeps_a_held_view(ty, &ledger, library)) { by_value.push(nikaia_std::block::Text::from(name.to_string())); } }
+        if named.contains(key) { by_value.reserve(signature.config.iter().size_hint().0); for option in signature.config.iter() { by_value.push(nikaia_std::block::Text::from(option.name.to_string())); } }
         found.insert(nikaia_std::block::Text::from(key.to_string()), by_value);
     }
     for (key, by_value) in found.iter() {

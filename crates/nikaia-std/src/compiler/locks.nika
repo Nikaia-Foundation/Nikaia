@@ -452,3 +452,40 @@ fn published(own: ref Ledger, field: ref String) -> bool {
     }
     return false
 }
+
+/// One node of a test graph: what it does itself and the one function it
+/// calls, if any.
+fn locks_test_node(mut graph: collections::BTreeMap[String, Reaches], name: String, itself: Lock, callee: String?) {
+    let mut reaches = Reaches { itself: itself, callees: collections::BTreeSet() }
+    if callee != null {
+        reaches.callees.insert(callee ?? "")
+    }
+    graph.insert(name, reaches)
+}
+
+/// **A pass entry is tested by a `test` block in its own file** (ADR-403 D3,
+/// #1983): `locking_of`, the whole-package fixpoint, over a call chain into a
+/// door, a recursive pair that opens none, and a call nothing describes; and
+/// the private `with_owner`, which a program outside std cannot reach.
+test "the locks entry answers a call chain, a recursive pair and an unknown call" {
+    let mut graph: collections::BTreeMap[String, Reaches] = collections::BTreeMap()
+    locks_test_node(graph, "a", Lock::No, "b")
+    locks_test_node(graph, "b", Lock::No, "c")
+    locks_test_node(graph, "c", Lock::Holds, null)
+    locks_test_node(graph, "p", Lock::No, "q")
+    locks_test_node(graph, "q", Lock::No, "p")
+    locks_test_node(graph, "r", Lock::No, "mystery")
+    let mut own = Ledger::blank()
+    for name in ["a", "b", "c", "p", "q", "r"] {
+        own.functions.insert(with_owner("", name), FnContract::empty())
+    }
+    let answer = locking_of(graph, collections::BTreeSet(), Ledger::blank(), own)
+    assert(answer.functions.len() == 6)
+    assert((answer.functions["a"] ?? Lock::No) == Lock::Holds)
+    assert((answer.functions["b"] ?? Lock::No) == Lock::Holds)
+    assert((answer.functions["c"] ?? Lock::No) == Lock::Holds)
+    assert((answer.functions["p"] ?? Lock::Holds) == Lock::No)
+    assert((answer.functions["q"] ?? Lock::Holds) == Lock::No)
+    assert((answer.functions["r"] ?? Lock::No) == Lock::Undecided)
+    assert(with_owner("Config", "set") == "Config::set")
+}

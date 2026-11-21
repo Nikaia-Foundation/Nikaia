@@ -84,7 +84,7 @@ fn check_program_program[H: CheckHost](mut state: CheckState, world: ref CheckWo
             },
             Item::Fn { .. } => {
                 state.an_entry_point(world, item.node, item.span, false)
-                // **`main`'s parameters are the command line** (ADR-360 D2).
+                // **`main`'s parameters are the command line** (ADR-cli-v1 D2).
                 state.main_parameters(world, item.node, item.span)
                 check_function_function(state, world, host, item.node, item.span, null)
             },

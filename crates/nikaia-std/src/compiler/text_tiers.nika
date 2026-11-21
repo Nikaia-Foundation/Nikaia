@@ -1269,12 +1269,31 @@ fn flow_tuple_parts(going: ref TierGoing, value: ref Expr, kinds: ref Kinds, ask
         }
         else => {}
     }
-    let from = source_of(value, ask, walk) ?? return false
+    let from = tuple_read(value, ask, walk) ?? return false
     if !a_followed_tuple(ask.names, from.ty) || from.ty.generics.len() != ty.generics.len() {
         return false
     }
-    link(from, [], Declaring { owner: going.owner.clone(), ty: ty.clone() }, going.path.clone(), ask, walk)
+    link(Declaring { owner: from.owner.clone(), ty: from.ty.clone() }, from.path.clone(), Declaring { owner: going.owner.clone(), ty: ty.clone() }, going.path.clone(), ask, walk)
     return true
+}
+
+/// **The declared tuple a value is read out of**, with the path inside its
+/// declaration: a name, a field, a call's result, `pairs[i]` of a list of
+/// them, and `.clone()` of any of these (#1311), which copies the parts as
+/// they are, so that the copy takes the tier of what it copies.
+fn tuple_read(value: ref Expr, ask: ref TierAsk, mut walk: TierWalk) -> TierGoing? {
+    match value {
+        Expr::MethodCall { receiver, method, args, .. } => {
+            if args.len() == 0 && ask.names.resolve(method) == "clone" {
+                return tuple_read(receiver, ask, walk)
+            }
+        }
+        Expr::Index { .. } => return part_root(value, ask, walk),
+        Expr::Field { .. } => return part_root(value, ask, walk),
+        else => {}
+    }
+    let from = source_of(value, ask, walk) ?? return null
+    return going_into(from.owner, from.ty, [], true)
 }
 
 /// A value going into one argument of a declared type, which is a position
@@ -3184,6 +3203,26 @@ fn tier_let(names: ref Vec[winnow_grammar::Symbol], value: ref Expr, ty: ref Typ
     if !written && !(bound.owned && (bound.view || bound.still)) && !bound.either {
         for name in names {
             bind_tier_local(ask.names.resolve(name).clone(), plain_local(bound.clone()), walk)
+        }
+        return
+    }
+    // **A tuple read out of a declared one binds each part as its position
+    // holds** (#1311): a part a function hands back as either kind
+    // (`EitherText`) is bound as that, not as text of its own.
+    if !written {
+        let whole = tuple_read(value, ask, walk) ?? return
+        if !a_followed_tuple(ask.names, whole.ty) || whole.ty.generics.len() != names.len() {
+            return
+        }
+        let mut part = 0
+        for name in names {
+            if plain_string(ask.names, whole.ty.generics[part]) {
+                let mut path = whole.path.clone()
+                path.push(part)
+                let held = kinds_of(whole.owner, whole.ty.generics[part], path, ask, walk)
+                bind_tier_local(ask.names.resolve(name).clone(), plain_local(held), walk)
+            }
+            part += 1
         }
     }
 }

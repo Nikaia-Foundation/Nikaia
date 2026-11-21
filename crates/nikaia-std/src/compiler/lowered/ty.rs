@@ -389,6 +389,11 @@ pub fn spoken(ty: &Ty, other: Option<&Ty>) -> String {
         if parts.is_some() { out.push_str(&format!(" {}", parts_said_as_views(ty, nikaia_std::index::or(parts.as_deref(), || "")))); }
         return out;
     }
+    let timed = match ty {
+        Ty::Seq { shape, .. } => shape.timed,
+        _ => false,
+    };
+    if timed { return format!("`{}` with a deadline (`within:`)", written); }
     let against = match other { Some(__nikaia_value) => __nikaia_value, None => return format!("`{}`", written) };
     if !holds_a_view(against) || ty_shown(against) != written { return format!("`{}`", written); }
     if a_whole_view(against) { return format!("{} `{}` of its own", article_of(&written), written); }

@@ -1,0 +1,35 @@
+// An optional enum field a test proved set, compared with a value (#1951):
+// below it is lent out of its option, so it is read through `*`.
+enum Hold { Shared, Alone }
+
+enum Named { Plain, Called(String) }
+
+struct E { r: Hold?, n: Named? }
+
+struct Outer { e: E }
+
+fn both(e: ref E) -> bool { return e.r != null && e.r == Hold::Alone }
+
+fn either(e: ref E) -> bool {
+    if e.r != null {
+        return Hold::Shared == e.r || e.r != Hold::Alone
+    } else {
+        return false
+    }
+}
+
+fn deep(o: ref Outer) -> bool { return o.e.r != null && o.e.r == Hold::Alone }
+
+fn owned(e: E) -> bool { return e.n != null && e.n == Named::Plain }
+
+fn main() throws {
+    let mut name = String()
+    name.push_str("x")
+    let e = E { r: Hold::Alone, n: Named::Called(name) }
+    println(both(e))
+    println(either(e))
+    let o = Outer { e: E { r: Hold::Shared, n: Named::Plain } }
+    println(deep(o))
+    println(owned(e))
+    println(owned(o.e))
+}

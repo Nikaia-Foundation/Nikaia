@@ -1118,6 +1118,13 @@ fn check_core_ops_coalesce[H: CheckHost](mut state: CheckState, world: ref Check
     if nullable && check_core_ops_variable(fallback) && (a_copy_by_value(held_word) || a_word_held) && (held_word == other || other.is_unknown() && check_core_ops_a_number(held_word)) {
         state.facts.word_fallbacks.insert(id_of(expr) as i64)
     }
+    // **And so is any value of the copy type the left side holds** (#1302):
+    // `m.get(k) ?? zero()` over a map of a struct that copies passes `zero()`
+    // as it is, and `index::or` copies the struct out of the `Option<&R>`;
+    // `zero().into()` left `Or`'s type open there, and rustc refused it.
+    if nullable && !other.is_a_view() && held_word == other && state.a_package_copy(world, held_word) {
+        state.facts.word_fallbacks.insert(id_of(expr) as i64)
+    }
     // **A value written out beside a view of a word is the word** (ADR-279
     // D8): `index::or` copies a `T: Copy` out of `&Option<T>` and
     // `Option<&T>` alike, so `op ?? BinaryOp::Mul` is a `BinaryOp` on both

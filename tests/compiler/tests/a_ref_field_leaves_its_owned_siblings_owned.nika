@@ -1,0 +1,29 @@
+// A struct with one `ref` field: its other fields own what they are given
+// (ADR-views-v4 D5, #1637). A parameter taken by value, or marked `keep`,
+// moves into an owned sibling field; only `name` points into the caller's
+// data.
+struct Plain { items: Vec[i64] }
+struct Holder { name: ref Plain, items: Vec[i64] }
+
+fn make(name: ref Plain, keep items: Vec[i64]) -> Holder {
+    return Holder { name: name, items: items }
+}
+
+fn make_short(name: ref Plain, keep items: Vec[i64]) -> Holder {
+    return Holder { name, items }
+}
+
+fn make_bound(name: ref Plain, keep items: Vec[i64]) -> Holder {
+    let h = Holder { name: name, items: items }
+    return h
+}
+
+fn main() throws {
+    let n = Plain { items: [9] }
+    let h = make(n, [1, 2, 3])
+    println(f"{h.name.items.len()} {h.items.len()}")
+    let s = make_short(n, [4, 5])
+    println(f"{s.name.items.len()} {s.items.len()}")
+    let b = make_bound(n, [6])
+    println(f"{b.name.items.len()} {b.items.len()}")
+}

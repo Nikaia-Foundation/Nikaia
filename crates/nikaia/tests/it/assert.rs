@@ -520,7 +520,7 @@ fn the_owners_program_with_a_parameter_is_proved_through_the_bodies() {
 }
 
 /// **`main`'s precondition carried back from a callee has a row** (ADR-269
-/// D15, ADR-360 D3): without `assert(a > 0)`, `positive`'s claim becomes
+/// D15, ADR-cli-v1 D3): without `assert(a > 0)`, `positive`'s claim becomes
 /// `10 + a > 0` at `main`'s entry, checked where the words arrive.
 #[test]
 fn a_precondition_of_main_carried_back_from_a_callee_is_listed() {

@@ -124,6 +124,8 @@ pub struct CheckFlow {
     pub option_values: Vec[i64],
     /// Which of them is a text literal, in the same order.
     pub option_literals: Vec[bool],
+    /// Which of them is an integer literal, in the same order (#1452).
+    pub option_integers: Vec[bool],
     /// Each of them as the author wrote it (`check_walked_written`), in the
     /// same order, and the callee as written before its `(`: what `NK1101`
     /// shows as the corrected call when the names belong to positional
@@ -132,9 +134,10 @@ pub struct CheckFlow {
     pub call_written: String,
     /// **The options a method call names after its `;`** (#1446), by its
     /// receiver's node, until the call resolves: each one's name, type,
-    /// address, whether it is a text literal and how it is written. A witness (`within:`,
+    /// address, whether it is a text literal, whether an integer literal
+    /// (#1452) and how it is written. A witness (`within:`,
     /// `after:`), `on_timeout:` and a DSL driver's options are not among them.
-    pub method_passed: collections::BTreeMap[i64, Vec[(String, Ty, i64, bool, String)]],
+    pub method_passed: collections::BTreeMap[i64, Vec[(String, Ty, i64, bool, bool, String)]],
     /// **The options a resolved method call moves** (#1595), by its
     /// receiver's node, for the walk that holds their values to hand over:
     /// each one's name, type and what the refusal says it was passed to.
@@ -538,6 +541,7 @@ impl CheckFlow {
             computes: computes,
             option_values: Vec(),
             option_literals: Vec(),
+            option_integers: Vec(),
             option_written: Vec(),
             call_written: "",
             method_passed: collections::BTreeMap(),

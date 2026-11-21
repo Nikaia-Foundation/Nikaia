@@ -492,11 +492,7 @@ impl CheckState {
             Ty::Nullable(_) => true,
             else => false,
         }
-        let certain = nullable || match on {
-            Ty::Tuple(_) => true,
-            else => self.kind_of_the_matched(on) != null,
-        }
-        if !certain {
+        if !self.kind_a_certain_subject(on) {
             return false
         }
         for arm in arms {
@@ -510,6 +506,23 @@ impl CheckState {
             return true
         }
         return false
+    }
+
+    /// Whether the type of a matched value is certain enough to refuse a
+    /// pattern naming nothing: a `T?`, a tuple, a value `kind_of_the_matched`
+    /// knows, and a list of such values (#1467: `[Op(t)]` reached rustc).
+    fn kind_a_certain_subject(ref self, on: ref Ty) -> bool sync {
+        match on {
+            Ty::Nullable(_) => return true,
+            Ty::Tuple(_) => return true,
+            Ty::Named { name, args, .. } => {
+                if (name == "Vec" || name == "Array" || name == "List") && args.len() > 0 {
+                    return self.kind_a_certain_subject(args[0])
+                }
+            },
+            else => {},
+        }
+        return self.kind_of_the_matched(on) != null
     }
 
     /// The first one-word name in `pattern` written as `name(…)` that names no
@@ -533,6 +546,14 @@ impl CheckState {
             MatchPattern::Named { fields, .. } => {
                 for field in fields {
                     let found = self.kind_an_undeclared_call(world, field.pat)
+                    if found != null {
+                        return found
+                    }
+                }
+            },
+            MatchPattern::List(parts) => {
+                for part in parts {
+                    let found = self.kind_an_undeclared_call(world, part)
                     if found != null {
                         return found
                     }

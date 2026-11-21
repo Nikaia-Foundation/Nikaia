@@ -304,7 +304,10 @@ pub(crate) fn check_crossings_a_value_with_a_cleanup_made(state: &mut CheckState
 pub(crate) fn check_crossings_a_value_with_a_cleanup_dying(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, name: &str, ty: &Ty, span: &Span) -> Option<bool> {
     let held = match state.cleanup_of(world, ty) { Some(__nikaia_value) => __nikaia_value, None => return None };
     check_crossings_settle(state, held.fails, held.pauses);
-    if held.pauses { state.a_cleanup_that_may_pause(name, span); }
+    if held.pauses {
+        state.a_cleanup_that_may_pause(name, span);
+        state.a_pausing_cleanup_in_a_sync_body(name, &held.owner, span, false);
+    }
     if held.fails { state.a_failing_cleanup_undeclared(name, ty, &held.owner, span); }
     Some(held.fails)
 }
@@ -314,7 +317,10 @@ pub(crate) fn check_crossings_a_value_with_a_cleanup_dying(state: &mut CheckStat
 pub(crate) fn check_crossings_a_value_with_a_cleanup_bound(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, name: &str, ty: &Ty, span: &Span) {
     let held = match state.cleanup_of(world, ty) { Some(__nikaia_value) => __nikaia_value, None => return };
     check_crossings_settle(state, held.fails, held.pauses);
-    if held.pauses { state.a_cleanup_that_may_pause(name, span); }
+    if held.pauses {
+        state.a_cleanup_that_may_pause(name, span);
+        state.a_pausing_cleanup_in_a_sync_body(name, &held.owner, span, true);
+    }
     state.facts.settle_lets.insert(span.start as i64, held.fails);
     if !held.fails { return; }
     let refused: Option<CheckFinding> = state.a_failing_cleanup_refusal(name, ty, &held.owner, span);

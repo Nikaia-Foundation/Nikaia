@@ -445,6 +445,7 @@ fn check_crossings_a_value_with_a_cleanup_dying(mut state: CheckState, world: re
     check_crossings_settle(state, held.fails, held.pauses)
     if held.pauses {
         state.a_cleanup_that_may_pause(name, span)
+        state.a_pausing_cleanup_in_a_sync_body(name, held.owner, span, false)
     }
     if held.fails {
         state.a_failing_cleanup_undeclared(name, ty, held.owner, span)
@@ -461,6 +462,7 @@ fn check_crossings_a_value_with_a_cleanup_bound(mut state: CheckState, world: re
     check_crossings_settle(state, held.fails, held.pauses)
     if held.pauses {
         state.a_cleanup_that_may_pause(name, span)
+        state.a_pausing_cleanup_in_a_sync_body(name, held.owner, span, true)
     }
     state.facts.settle_lets.insert(span.start as i64, held.fails)
     if !held.fails {

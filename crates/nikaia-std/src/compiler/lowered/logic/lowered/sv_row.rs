@@ -350,9 +350,9 @@ pub(crate) fn __nikaia_test_0() -> Result<(), std::boxed::Box<dyn std::error::Er
     let minus = nikaia_std::index::or(sv_row_of(vec![sv_row_test_term(0u32, 2)], -3), || sv_row_constant(0).into());
     out = nikaia_std::block::Text::from(nikaia_std::concat::plus(out, format!("{} tightened: {}\n", sv_row_text(&minus), sv_row_text(&sv_row_tightened(&minus)))));
     out = nikaia_std::block::Text::from(nikaia_std::concat::plus(out, "== evaluating\n"));
-    let values: Vec<SvRat> = vec![nikaia_std::index::or(sv_rat(1, 2), || sv_int(0).into()), sv_int(3), sv_int(-1)];
+    let values: Vec<SvRat> = vec![nikaia_std::index::or(sv_rat(1, 2), || sv_int(0)), sv_int(3), sv_int(-1)];
     let e = nikaia_std::index::or(sv_row_of(vec![sv_row_test_term(0u32, 4), sv_row_test_term(1u32, -1), sv_row_test_term(2u32, 2)], 1), || sv_row_constant(0).into());
-    out = nikaia_std::block::Text::from(nikaia_std::concat::plus(out, format!("{} at x0 = 1/2, x1 = 3, x2 = -1: {}\n", sv_row_text(&e), sv_rat_text(&nikaia_std::index::or(sv_row_eval(&e, &values), || sv_int(99).into())))));
+    out = nikaia_std::block::Text::from(nikaia_std::concat::plus(out, format!("{} at x0 = 1/2, x1 = 3, x2 = -1: {}\n", sv_row_text(&e), sv_rat_text(&nikaia_std::index::or(sv_row_eval(&e, &values), || sv_int(99))))));
     let missing = sv_row_eval(&r, &values);
     out = nikaia_std::block::Text::from(nikaia_std::concat::plus(out, format!("{} there: {}\n", sv_row_text(&r), if missing.is_none() { "refused, x5 has no value" } else { "?" })));
     out = nikaia_std::block::Text::from(nikaia_std::concat::plus(out, "== from logic_lia's LgLin\n"));

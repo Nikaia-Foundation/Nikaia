@@ -155,28 +155,29 @@ pub(crate) fn accounted_value(binds: Option<String>, value: &Expr, names: &winno
             if !beside && diverts_within(&handler.stmts, false) { return Accounted::DivertingHandler; }
             #[allow(unused_mut)] let mut reduced = Reduced { calls: vec![], performs: false, methods: vec![], refused: None };
             reduce(expr, names, &mut reduced);
+            let guarded = reduced.calls.len() as i64;
             reduce_handler(handler, names, &mut reduced);
             let mut mentions: collections::BTreeSet<String> = collections::BTreeSet::new(); #[allow(unused_mut, clippy::redundant_locals)] let mut reduced = reduced;
             names_in(expr, names, &mut mentions);
             names_in_block(handler, names, &mut mentions);
-            accounted_reduced(binds, mentions, &reduced, true, beside, walking)
+            accounted_reduced(binds, mentions, &reduced, guarded, beside, walking)
         },
         _ => {
             #[allow(unused_mut)] let mut reduced = Reduced { calls: vec![], performs: false, methods: vec![], refused: None };
             reduce(value, names, &mut reduced);
             let mut mentions: collections::BTreeSet<String> = collections::BTreeSet::new(); #[allow(unused_mut, clippy::redundant_locals)] let mut reduced = reduced;
             names_in(value, names, &mut mentions);
-            accounted_reduced(binds, mentions, &reduced, beside, beside, walking)
+            accounted_reduced(binds, mentions, &reduced, 0, beside, walking)
         },
     }
 }
 
-pub(crate) fn accounted_reduced(binds: Option<String>, mentions: collections::BTreeSet<String>, reduced: &Reduced, caught: bool, beside: bool, walking: &Walking<'_, '_>) -> Accounted {
+pub(crate) fn accounted_reduced(binds: Option<String>, mentions: collections::BTreeSet<String>, reduced: &Reduced, guarded: i64, beside: bool, walking: &Walking<'_, '_>) -> Accounted {
     if reduced.calls.is_empty() && !reduced.performs { return Accounted::NotAnOperation; }
     let mut reaches: Vec<Reached> = vec![];
     let mut named_by: Vec<String> = vec![];
-    for call in reduced.calls.iter() {
-        let refused = a_call_reaches(call, caught, walking, &mut reaches, &mut named_by);
+    for (at, call) in reduced.calls.iter().enumerate().map(|(at, item)| (at as i64, item)) {
+        let refused = a_call_reaches(call, beside || at < guarded, walking, &mut reaches, &mut named_by);
         if refused.is_some() { return nikaia_std::index::or(refused, || Accounted::NotAnOperation); }
     }
     for method in reduced.methods.iter() { if !reaches_nothing(method, walking) { return Accounted::NoTouches(nikaia_std::block::Text::from(method.to_string())); } }

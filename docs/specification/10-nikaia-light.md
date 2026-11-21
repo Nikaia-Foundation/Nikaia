@@ -1,6 +1,6 @@
 # Nikaia Language Specification
 **Part I: The Language Core**
-**Version:** 0.0.1520 (Draft)
+**Version:** 0.0.1521 (Draft)
 **Date:** 2026-11-21
 
 ---
@@ -1454,9 +1454,11 @@ enum with more than one variant is refused with `NK1252`.
 | `[]`, `[x]`, `[first, .., last]`, `[h, ..rest]` | a `Vec[T]`, an `Array[T]` or a view of either, element by element (ADR-355). `..` is the elements not named and binds nothing; `..rest` binds them as a view of the run. A pattern has at most one `..` (`NK1258`), and a `match` with a list pattern needs `else` |
 | `Point { x: 0, y }`, `Move { x: px, .. }` | a field against a pattern: `x: 0` matches where the field is `0`, `x: px` binds the field to the name `px`, and `x: Op::Times` or `x: (0, y)` reaches inside it. It names every field, or ends with `..`; one that leaves a field out otherwise is refused with `NK1234` |
 
-**`..` means two different things**: in a range pattern it is the range, and
+**`..` means three different things**: in a range pattern it is the range, and
 in a struct pattern it is *the rest of the fields*, in a tuple's, a variant's
-or a list's brackets *the rest of its values*. The position says which.
+or a list's brackets *the rest of its values*. In a call's parentheses,
+`..t` is a spread (5.1, [ADR-call-spread-v1](adr/adr-call-spread-v1.md)).
+The position says which.
 
 **A `match` reads what it binds.** Over a name the function owns, an arm that
 only reads a part it binds takes a view of it (6.5), and the name is whole
@@ -2247,6 +2249,27 @@ is.
 still passed second. The ledger records an option's name, type *and* default,
 the default as its value (Part III, 13.5).
 
+**A call may spread its arguments** ([ADR-call-spread-v1](adr/adr-call-spread-v1.md)).
+`..t` before the `;` passes the values of the tuple `t`, in order, as that many
+subjects at that place: `f(a, ..t)` with `t: (String, Vec[String])` is
+`f(a, t.0, t.1)`. `..s` after the `;` passes each field of the struct `s` as
+the option of the same name; an option the struct has no field for takes its
+default. An option written by name in the same call wins over the spread's
+field of that name, wherever it stands:
+
+```nika
+struct Opts { timeout: time::Duration, method: String }
+let o = Opts { timeout: 5.seconds(), method: "POST" }
+request("https://api.com"; ..o)                  // timeout: o.timeout, method: o.method
+request("https://api.com"; ..o, method: "PUT")   // the written name wins
+```
+
+The call is checked as the call written out, with that call's codes: a tuple
+of the wrong length `NK1101`, a wrong type `NK1102`, a field naming no option
+`NK1109`. A zone holds at most one spread; a second one, or a spread of a value
+that is not a tuple (before the `;`) or a struct (after it), is refused with
+`NK1355`. The spread value is evaluated once, before the call.
+
 **Optional Parentheses**
 A function declared without parameters may omit the parentheses, matching the
 block lambda style.
@@ -2472,7 +2495,7 @@ the second call in the callee that made it *many*.
 ### 5.5. `main`'s Parameters Are the Command Line
 
 A program starts at `main`. `main` may take parameters; they are the words the
-program is started with ([ADR-360](adr/adr-360.md)).
+program is started with ([ADR-cli-v1](adr/adr-cli-v1.md)).
 
 ```nika
 /// Multiplies a positive number.
@@ -2521,6 +2544,60 @@ fn main(a: int; times: int = 4, verbose: bool = false) throws {
   the program with status 0.
 * **A call to `main` inside the program is an ordinary call**, and
   `cli::args()` still returns every word the program was started with.
+* **An option whose type is a struct is flattened**: each field is a named
+  argument of its own, by the field's name and with the field's default
+  (`global: Global` with a field `verbose: bool = false` is `--verbose`). The
+  option's default is the struct with every field at its default; another
+  default, or a field of a type a word cannot be, is refused (`NK1273`).
+
+**A program with several commands** takes one subject `Command[f, g, …]`, a
+type of the prelude naming functions of the program
+([ADR-cli-v1](adr/adr-cli-v1.md) D9-D12):
+
+```nika
+/// Options every command takes.
+struct Global {
+	/// Prints each step.
+	verbose: bool = false,
+}
+
+fn main(command: Command[run, focus_next]; global: Global = Global {}) throws {
+	command.run(..command.args; ..command.options, global: global)
+}
+
+/// Builds the next issue of the lane.
+fn run(; global: Global = Global {}) throws { … }
+
+/// Moves FILE's focus to the next area.
+fn focus_next(file: String, skipped: Vec[String]; global: Global = Global {}) throws { … }
+```
+
+`prog --verbose focus-next areas.md parser`.
+
+* **The first positional word picks the function** whose name, with `_`
+  written `-`, it is; the words after it are read into that function's
+  parameters as `main`'s are. A first word that names no function is a wrong
+  word. The value has the fields `run` (the function picked), `args` (a tuple
+  of its subjects) and `options` (a struct of its options), and
+  `command.run(..command.args; ..command.options)` calls it with the words
+  given (5.1, spread). `Command` elsewhere than as `main`'s one subject is
+  refused (`NK1273`).
+* **`args` and `options` fit only the `run` of the same value**: they are
+  spread only into a call of `run` of the same, unchanged `command`
+  parameter. A copy of them, a spread into a named function and a
+  `mut command` are refused (`NK1358`).
+* **A name `main` declares is `main`'s**: `--verbose` is read into `main`'s
+  `global`. A function the `Command` names may declare the same option, for a
+  test or another caller; it receives `main`'s value only through the call in
+  `main`'s body, which must name it. A `command.run` call that leaves out an
+  option `main` and the picked function share is refused (`NK1356`). Two
+  parameters that flatten to the same name inside `main`, inside one
+  function, or in `main` and a function with another type, are refused
+  (`NK1357`).
+* **The help lists the commands**: `prog --help` prints
+  `prog [OPTIONS] COMMAND …`, `main`'s options and each command by its
+  command-line name with the first `///` line above it; `prog COMMAND --help`
+  prints that function's help followed by `main`'s options.
 
 ---
 

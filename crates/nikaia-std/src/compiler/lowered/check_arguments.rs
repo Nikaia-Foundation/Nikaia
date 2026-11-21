@@ -227,6 +227,13 @@ pub(crate) fn check_arguments<H: CheckHost>(state: &mut CheckState, world: &Chec
         for option in lowered_options(contract) {
             if option.name != *name || known { continue; }
             known = true;
+            if at < state.flow.option_integers.len() as i64 && *unsafe { nikaia_std::proven::read(&state.flow.option_integers, (at) as usize) } && found_option.is_unknown() && state.no_integer_is(world, &option.ty) {
+                let integer = Ty::Named { name: String::from("i64"), args: vec![], view: false };
+                let declared = nikaia_std::index::or(check_arguments_declared_option(contract, name), || option.ty.clone().into());
+                let ty = declared.text();
+                state.expect_type(world, &integer, &declared, span, "field", &mut |found_text, wanted_text| { format!("The option `{}` of `{}` takes `{}`, but you're passing `{}`.", name, key, ty, found_text) });
+                continue;
+            }
             if at < state.flow.option_values.len() as i64 && check_arguments_nullable(&option.ty) && option.ty.is_a_view() && !found_option.is_a_view() {
                 let value = *unsafe { nikaia_std::proven::read(&state.flow.option_values, (at) as usize) };
                 let wanted_inner = match option.ty {
@@ -622,5 +629,13 @@ impl CheckState {
         }
         any && Ty::Fn { params: eased, result: nikaia_std::block::Boxed::new(result), is_sync, can_throw, spelled }.fits(want)
     }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn check_arguments_declared_option(contract: &FnContract, name: &str) -> Option<Ty> {
+    let signature = match contract.signature.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return None };
+    for option in signature.config.iter() { if option.name == name { return Some(option.ty.clone()); } }
+    None
 }
 

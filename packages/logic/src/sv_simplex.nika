@@ -1995,10 +1995,8 @@ impl SvSimplex {
 			l_terms.push(SvTerm { col: form_b.cols[i], k: form_b.ks[i] })
 			i += 1
 		}
-		// The cut's columns and coefficients, parallel; a map's `get` with a
-		// default fails in rustc here: #1302.
-		let mut cut_cols: Vec[u32] = []
-		let mut cut_ks: Vec[SvRat] = []
+		// The cut's coefficient of each column.
+		let mut cut: collections::BTreeMap[u32, SvRat] = collections::BTreeMap()
 		let mut cut_c = sv_int(1)
 		let mut side1: Vec[SvRat] = []
 		let mut side2: Vec[SvRat] = []
@@ -2031,15 +2029,8 @@ impl SvSimplex {
 					l_terms.push(SvTerm { col: c, k: ks.checked_mul(form.ks[j]) ?? return null })
 				}
 				let add = sv_rat_mul(a_s, sv_int(form.ks[j])) ?? return null
-				let mut at = 0
-				while at < cut_cols.len() && cut_cols[at] != c {
-					at += 1
-				}
-				if at == cut_cols.len() {
-					cut_cols.push(c)
-					cut_ks.push(sv_int(0))
-				}
-				cut_ks[at] = sv_rat_sub(cut_ks[at], add) ?? return null
+				let had = cut.get(c) ?? sv_int(0)
+				cut.insert(c, sv_rat_sub(had, add) ?? return null)
 				j += 1
 			}
 			cut_c = sv_rat_add(cut_c, sv_rat_mul(a_s, bound) ?? return null) ?? return null
@@ -2055,19 +2046,13 @@ impl SvSimplex {
 		}
 		// The cut over one denominator.
 		let mut den: i64 = cut_c.den
-		for r in cut_ks {
+		for (_, r) in cut {
 			let g = sv_gcd(den, r.den) ?? return null
 			den = (den / g).checked_mul(r.den) ?? return null
 		}
 		let mut c_terms: Vec[SvTerm] = []
-		let mut n = 0
-		while n < cut_cols.len() {
-			let r = cut_ks[n]
-			c_terms.push(SvTerm {
-				col: cut_cols[n],
-				k: r.num.checked_mul(den / r.den) ?? return null,
-			})
-			n += 1
+		for (col, r) in cut {
+			c_terms.push(SvTerm { col: col, k: r.num.checked_mul(den / r.den) ?? return null })
 		}
 		let hold = sv_row_of(c_terms, cut_c.num.checked_mul(den / cut_c.den) ?? return null)
 			?? return null

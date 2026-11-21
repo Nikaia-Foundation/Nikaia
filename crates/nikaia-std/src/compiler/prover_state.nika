@@ -598,7 +598,7 @@ impl ProverState {
             // marker that says the operator chose them.
             let from_the_command_line = (scope.sources[first]?.clone() ?? "") == "cli::args"
             let help = if from_the_command_line {
-                f"{guard} Or take the word as a parameter of `main`: an `assert` about it there is checked where the words arrive (ADR-360 D4). Or write `cli::args(trusted: true)` where the operator chooses the command line."
+                f"{guard} Or take the word as a parameter of `main`: an `assert` about it there is checked where the words arrive (ADR-cli-v1 D4). Or write `cli::args(trusted: true)` where the operator chooses the command line."
             } else {
                 guard
             }

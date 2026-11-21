@@ -3902,6 +3902,7 @@ pub fn nikaia_tests() -> std::vec::Vec<(std::string::String, fn() -> Result<(), 
     let mut all: std::vec::Vec<(std::string::String, fn() -> Result<(), std::boxed::Box<dyn std::error::Error>>)> = std::vec::Vec::new();
     all.extend(ast_nikaia_tests().into_iter().map(|(name, run)| (name.to_string(), run)));
     all.extend(crossing_nikaia_tests().into_iter().map(|(name, run)| (name.to_string(), run)));
+    all.extend(locks_nikaia_tests().into_iter().map(|(name, run)| (name.to_string(), run)));
     all.extend(manifest_nikaia_tests().into_iter().map(|(name, run)| (name.to_string(), run)));
     all.extend(modules_nikaia_tests().into_iter().map(|(name, run)| (name.to_string(), run)));
     all.extend(paths_nikaia_tests().into_iter().map(|(name, run)| (name.to_string(), run)));
@@ -3950,4 +3951,4 @@ pub fn nikaia_run_tests(filters: &[std::string::String], list: bool, more: std::
 /// **The digest of this lowered set** (#1610): every file `lower-std` wrote
 /// beside this index, and the index above this line. Compiled into the same
 /// crate as the code it names, it is the compiler's identity for its caches.
-pub const LOWERED_DIGEST: &str = "7966ecda29ea66e73d022f59b18bc3ffd8a56759d18c8a75b4036afffe0a624b";
+pub const LOWERED_DIGEST: &str = "70276d85cf59ed2abebd2cecf356d9cd778ff071c07fbbf3ac9d719597445e18";

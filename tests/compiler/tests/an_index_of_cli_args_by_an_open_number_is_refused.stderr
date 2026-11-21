@@ -1,0 +1,9 @@
+error[NK1245]: The compiler can't tell what type `args[at]` is.
+  --> tests/an_index_of_cli_args_by_an_open_number_is_refused.nika:9:12
+   |
+ 9 |         if args[at] == "--exe" { println("exe") }
+   |            ^^^^^^^^^^^^^^^^^^^
+   |
+   = note: What is not known is not checked, so a type nothing can tell is refused rather than left to the language below.
+   = help: Write the type down where the value is made, such as `let x: T = …`, or pass it to a parameter that declares one.
+1 type error

@@ -321,7 +321,7 @@ fn prover_function(mut walk: ProverWalk, item: ref Spanned[Item], owner: String?
                 }
             }
             // **`main`'s preconditions are derived as every function's are**
-            // (ADR-360 D3): its caller is the command line, and the words are
+            // (ADR-cli-v1 D3): its caller is the command line, and the words are
             // checked where they arrive (D4).
             let mut no_precondition: String? = null
             if of_a_trait {

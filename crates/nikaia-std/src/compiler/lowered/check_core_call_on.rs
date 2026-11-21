@@ -1115,20 +1115,24 @@ pub(crate) fn check_core_call_on_described<H: CheckHost>(state: &mut CheckState,
     let mut passed: Vec<(String, Ty)> = vec![];
     let mut values: Vec<i64> = vec![];
     let mut literals: Vec<bool> = vec![];
+    let mut integers: Vec<bool> = vec![];
     let mut texts: Vec<String> = vec![];
-    for (name, ty, value, literal, text) in nikaia_std::index::or(state.flow.method_passed.remove(&node), || vec![].into()) {
+    for (name, ty, value, literal, integer, text) in nikaia_std::index::or(state.flow.method_passed.remove(&node), || vec![].into()) {
         passed.push((name, ty));
         values.push(value);
         literals.push(literal);
+        integers.push(integer);
         texts.push(text);
     }
     state.flow.option_values = values;
     state.flow.option_literals = literals;
+    state.flow.option_integers = integers;
     state.flow.option_written = texts;
     state.flow.call_written = format!("{}.{}", check_walked_written(receiver, world.words), written);
     let result = check_crossings_arguments(state, world, host, key, &written, contract, args, &found, &passed, span);
     state.flow.option_values = vec![];
     state.flow.option_literals = vec![];
+    state.flow.option_integers = vec![];
     state.flow.option_written = vec![];
     state.flow.call_written = String::from("");
     let moving = check_core_call_moving_options(&state, contract, &written, &passed);

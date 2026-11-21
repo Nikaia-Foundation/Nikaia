@@ -1,0 +1,32 @@
+// A method's plain text option it does not keep is lent, as a function's
+// is (#1452, ADR-282 D2): the name handed to it is still the caller's after
+// the call. Before, it moved and rustc refused the use after it.
+struct P {
+    x: i64,
+}
+
+impl P {
+    fn viewed(ref self; label: String = "none") -> String {
+        return f"{label}{self.x}"
+    }
+
+    fn maybe(ref self; label: String? = null) -> String {
+        let given = if label == null { "-" } else { "+" }
+        return f"{given}{self.x}"
+    }
+}
+
+fn made() -> String {
+    return f"own{1}"
+}
+
+fn main() throws {
+    let p = P { x: 1 }
+    let o = made()
+    println(p.viewed(label: o))
+    println(o)
+    println(p.maybe(label: o))
+    println(p.maybe())
+    println(p.viewed(label: "lit"))
+    println(o)
+}

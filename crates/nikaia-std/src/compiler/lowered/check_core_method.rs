@@ -464,6 +464,13 @@ pub(crate) fn check_core_method_called<H: CheckHost>(state: &mut CheckState, wor
     let outer_door = state.flow.at_a_write_door;
     state.flow.at_a_write_door = at_a_door;
     let holding = (name == "update" || name == "access") && locked_content_of(&on).is_some();
+    let door_content = if name == "access" { locked_content_of(&on) } else { None };
+    if door_content.is_some() && !args.is_empty() {
+        match unsafe { nikaia_std::proven::read(&args, (nikaia_std::proven::sub::<i64>(args.len() as i64, 1)) as usize) } {
+            Expr::Closure { params, body, .. } => { if params.len() == 1 { door_views_handed_back(state, world, body, *unsafe { nikaia_std::proven::read(&params, (0) as usize) }, nikaia_std::index::or(door_content.as_ref(), || &Ty::Unknown), span); } },
+            _ => { },
+        }
+    }
     let outer_inside = state.inside_a_door;
     state.inside_a_door = holding;
     check_core_method_changes(state, world, &on, receiver, &name, span);
@@ -854,12 +861,12 @@ pub(crate) fn check_core_method_walked<H: CheckHost>(state: &mut CheckState, wor
     let witness = check_core_method_witness(world, &name, config);
     let on_timeout = check_core_method_on_timeout(world, &name, config, witness);
     let driver = state.dsl_drivers.contains(&name);
-    let mut passed: Vec<(String, Ty, i64, bool, String)> = vec![];
+    let mut passed: Vec<(String, Ty, i64, bool, bool, String)> = vec![];
     let mut at: i64 = 0;
     while at < config.len() as i64 {
         if at != witness && at != on_timeout {
             let ty = check_core_expr(state, world, host, &unsafe { nikaia_std::proven::read(&config, (at) as usize) }.value, span);
-            if !driver { passed.push((nikaia_std::block::Text::from(world.words.resolve(unsafe { nikaia_std::proven::read(&config, (at) as usize) }.name).to_string()), ty, id_of(&unsafe { nikaia_std::proven::read(&config, (at) as usize) }.value) as i64, a_text_literal_expr(&unsafe { nikaia_std::proven::read(&config, (at) as usize) }.value), check_walked_written(&unsafe { nikaia_std::proven::read(&config, (at) as usize) }.value, world.words))); }
+            if !driver { passed.push((nikaia_std::block::Text::from(world.words.resolve(unsafe { nikaia_std::proven::read(&config, (at) as usize) }.name).to_string()), ty, id_of(&unsafe { nikaia_std::proven::read(&config, (at) as usize) }.value) as i64, a_text_literal_expr(&unsafe { nikaia_std::proven::read(&config, (at) as usize) }.value), an_integer_literal(&unsafe { nikaia_std::proven::read(&config, (at) as usize) }.value), check_walked_written(&unsafe { nikaia_std::proven::read(&config, (at) as usize) }.value, world.words))); }
         }
         at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
     }
