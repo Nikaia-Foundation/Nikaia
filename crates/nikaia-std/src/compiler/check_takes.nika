@@ -677,6 +677,7 @@ impl CheckState {
     /// or a lambda around its binding that does not give it a new value.
     /// `value` is the read the handle is handed on by, `whole` what it is
     /// handed into (the call, the literal), whose other reads count too.
+    @inline(never)
     fn a_handle_handed_on(ref mut self, world: ref CheckWorld, value: ref Expr, ty: ref Ty, whole: ref Span) sync {
         let name = match value {
             Expr::Variable(symbol, _) => world.words.resolve(symbol).clone(),
@@ -1287,6 +1288,7 @@ impl CheckState {
     /// **A `.clone()` met**: said at once where the value's type copies,
     /// held to the body's end where it clones a `let` that may not be read
     /// again.
+    @inline(never)
     fn a_clone_seen(ref mut self, world: ref CheckWorld, expr: ref Expr, receiver: ref Expr, copy: ref Ty, span: ref Span) sync {
         if self.reading_only || self.task_bindings.len() > 0 {
             return
@@ -1453,6 +1455,7 @@ impl CheckState {
     /// **A `for` over a clone of a place it only walks** (`NK1350`): the body
     /// names nothing of the place, and keeps no element it walks unless the
     /// elements copy. The clone's last-use question is not asked again.
+    @inline(never)
     fn a_loop_over_a_needless_clone(ref mut self, world: ref CheckWorld, iter: ref Expr, over: ref Ty, body: ref Block, items: ref Vec[CheckLocal], handed_before: i64, mutable: bool, span: ref Span) sync {
         if mutable || self.reading_only || self.task_bindings.len() > 0 {
             return
@@ -1627,6 +1630,7 @@ impl CheckState {
     /// **The place clones only read**, said where the body ends: not handed
     /// over, not handed back, read in no loop or lambda around, and nothing
     /// changed or took the place's root between the `let` and its last read.
+    @inline(never)
     fn needless_place_clones_said(ref mut self) sync {
         let places = self.flow.place_clones.clone()
         let changes = self.flow.changes_seen.clone()
@@ -1696,6 +1700,7 @@ impl CheckState {
     }
 
     /// **The clones no read followed**, said where the body ends.
+    @inline(never)
     fn needless_clones_said(ref mut self) sync {
         let clones = self.flow.clones.clone()
         let loans = self.flow.clone_loans.clone()

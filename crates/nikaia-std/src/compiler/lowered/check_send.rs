@@ -13,6 +13,7 @@ pub(crate) fn a_lock_refusal(verdict: &Crossing) -> bool {
 impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
+    #[inline(never)]
     pub(crate) fn crosses_into_a_task(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, body: &Expr, span: &Span) {
         let mut named: collections::BTreeSet<String> = collections::BTreeSet::new();
         names_in(body, world.words, &mut named);
@@ -30,6 +31,7 @@ impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
+    #[inline(never)]
     pub fn crosses_into_an_unseen_call(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, callee: &str, args: &[Expr], found: &[Ty], config: &[ConfigArg], passed: &[(String, Ty)], span: &Span, why: &str) {
         let mut at: i64 = 0;
         while at < args.len() as i64 && at < found.len() as i64 {

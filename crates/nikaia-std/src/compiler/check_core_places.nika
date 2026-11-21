@@ -791,6 +791,7 @@ fn check_core_places_a_handle(ty: ref Ty) -> bool sync {
 /// **A handle read from a place and stored by value** (ADR-312 D1, #1411):
 /// a name or a field path of a handle's type put into a field or a list,
 /// which the lowering clones.
+@inline(never)
 fn check_core_places_store_handle(mut state: CheckState, value: ref Expr, ty: ref Ty) sync {
     if !check_core_places_a_handle(ty) {
         return
@@ -808,6 +809,7 @@ fn check_core_places_store_handle(mut state: CheckState, value: ref Expr, ty: re
 /// **A handle handed on by a `let`, an assignment, a tuple or a variant**
 /// (Part I 6.2, ADR-312 D1, D2, #1212): duplicated where its name is read
 /// again, moved at its last use, as one stored into a field or a list is.
+@inline(never)
 fn check_core_places_give_handle(mut state: CheckState, world: ref CheckWorld, value: ref Expr, ty: ref Ty, span: ref Span) sync {
     if !check_core_places_a_handle(ty) {
         return

@@ -288,6 +288,7 @@ pub(crate) fn types_word_by_ref_here(names: &winnow_grammar::InternerContext, ty
 
 pub(crate) fn types_word_by_ref_maybe(names: &winnow_grammar::InternerContext, ty: Option<&Type>, plain: &collections::BTreeSet<String>, span: &Span, out: &mut Vec<Finding>) { types_word_by_ref(names, match ty { Some(__nikaia_value) => __nikaia_value, None => return }, plain, "result", span, out); }
 
+#[inline(never)]
 pub(crate) fn types_text_by_ref(names: &winnow_grammar::InternerContext, ty: &Type, position: &str, views: &collections::BTreeSet<String>, key: &str, span: &Span, out: &mut Vec<Finding>) {
     if views.contains(key) { return; }
     if !ty.is_view || ty.is_mut || ty.is_slice || ty.is_tuple || !ty.generics.is_empty() { return; }
