@@ -620,20 +620,6 @@ own driver run:
 * **Other lanes** claim their issues with `wip` (the `yaml` lane,
   `docs/briefs/yaml/`, #928). An issue labelled `wip` is another lane's.
 
-**Two phases of the backlog** (owner, 2026-11-21): the open count is to show
-where the project stands, so it may first grow fast and then falls for good.
-1. **Split** (now): each lane splits its open `ready` and `blocked` issues
-   that break I9a of `docs/issues.md` (more than five *To build* items, two
-   passes, parts in another lane's files) and gives one without *To build* its
-   list, before its driver queues them; a `decision` issue gets the build
-   issues of its recommended option. The lane ends the phase when none of its
-   issues breaks I9a and says so in `docs/backlog.md`, one line.
-2. **Build down** (every lane done with 1): new issues only for a defect a
-   run found, a decision a run needs, or a goal the owner sets; each is filed
-   split (I9a). The supervisor writes the week's opened, closed and open
-   counts per lane into `docs/backlog.md`; a week with more opened than
-   closed names the issues that caused it.
-
 **The focus rotation** (owner, 2026-11-01): `drive.nika -- --focus` runs the
 lanes of `docs/briefs/focus.txt` (main and bugs) in turn, a block of
 up to `block` briefs each, a `Blocks:` bug brief before any block. `CUT`
