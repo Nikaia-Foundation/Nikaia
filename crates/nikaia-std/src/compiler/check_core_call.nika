@@ -1207,6 +1207,16 @@ fn check_core_free_call[H: CheckHost](mut state: CheckState, world: ref CheckWor
     state.declared_callee(world, func, name)
     // **A kept function value called by name.**
     if check_core_call_is_variable(func) && !state.run_code.contains(name) {
+            // **A type written with its generics, then called**, is refused
+            // at the checker, not lowered as an index into the constructor
+            // (#2635): which it means is not decided yet.
+            if check_core_call_a_typed_constructor(state, world, base) {
+                state.a_constructor_with_generics(world, base, index, span)
+                for arg in args {
+                    check_core_expr(state, world, host, arg, span)
+                }
+                return Ty::Unknown
+            }
         let mut looked: Ty = state.lookup(name) ?? Ty::Unknown
         // **Optional code a test proved not `null` is called as the code**
         // (#1117, ADR-382): the read is the narrowed one, unwrapped below.
@@ -1257,6 +1267,24 @@ fn check_core_call_filled[H: CheckHost](mut state: CheckState, world: ref CheckW
         else => return null,
     }
     if !pathed && state.lookup(name) != null {
+/// Whether `base`, the part before the brackets of `Name[…](…)`, names a
+/// type rather than a value: a declared type no binding in scope hides.
+fn check_core_call_a_typed_constructor(state: ref CheckState, world: ref CheckWorld, base: ref Expr) -> bool sync {
+    let name: String = match base {
+        Expr::Variable(word, _) => f"{world.words.resolve(word)}",
+        Expr::Path(segments, _) => world.here.unaliased(check_core_call_joined(world, segments)),
+        else => return false,
+    }
+    let pathed = match base {
+        Expr::Path(_, _) => true,
+        else => false,
+    }
+    if !pathed && state.lookup(name) != null {
+        return false
+    }
+    return state.declares_a_type(world, name) || check_core_call_on_built_in(name)
+}
+
         return null
     }
     let resolved: CheckResolved = resolve_call(world, name) ?? return null

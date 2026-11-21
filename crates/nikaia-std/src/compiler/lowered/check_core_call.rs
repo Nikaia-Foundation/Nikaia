@@ -931,6 +931,11 @@ pub(crate) fn check_core_free_call<H: CheckHost>(state: &mut CheckState, world: 
         let mut looked: Ty = nikaia_std::index::or(state.lookup(&name), || Ty::Unknown);
         match looked {
             Ty::Nullable(ref inner) => { let inner = nikaia_std::boxed::open(inner); match *inner {
+            if check_core_call_a_typed_constructor(&state, world, base) {
+                state.a_constructor_with_generics(world, base, index, span);
+                for arg in args.iter() { check_core_expr(state, world, host, arg, span); }
+                return Ty::Unknown;
+            }
                 Ty::Fn { .. } => {
                     let read = check_narrow_read_as_proved(state, func, &name, &looked, span);
                     match read {
@@ -975,6 +980,19 @@ pub(crate) fn check_core_call_filled<H: CheckHost>(state: &mut CheckState, world
     if pathed && resolved.key != name { return None; }
     let signature: Signature = match match resolved.contract.signature.as_ref() {
         Some(__nikaia_it) => Some(__nikaia_it.clone()),
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn check_core_call_a_typed_constructor(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, base: &Expr) -> bool {
+    let name: String = match base {
+        Expr::Variable(word, _) => { let word = *word; format!("{}", world.words.resolve(word)) },
+        Expr::Path(segments, _) => world.here.unaliased(&check_core_call_joined(world, segments)),
+        _ => return false,
+    };
+    let pathed = matches!(base, Expr::Path(_, _));
+    if !pathed && state.lookup(&name).is_some() { return false; }
+    state.declares_a_type(world, &name) || check_core_call_on_built_in(&name)
+}
+
         None => None,
     } { Some(__nikaia_value) => __nikaia_value, None => return None };
     #[allow(unused_mut)] let mut parameters: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
