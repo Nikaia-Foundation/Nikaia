@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1522] — 2026-11-21
+
+**A B-tree map that is a mut parameter, drained, is taken as it is**
+- Fixed: draining a B-tree map that is a `mut` parameter (`for (k, v) in kept.drain()`, `m.extend(kept.drain())`) no longer fails to compile
+
 ## [0.0.1521] — 2026-11-21
 
 **Hello World below Python: the run bundle linked -Bsymbolic-functions, release and C rows, the pass table (#2532)**
