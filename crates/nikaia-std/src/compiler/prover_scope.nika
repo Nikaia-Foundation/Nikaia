@@ -30,6 +30,14 @@ pub struct ProverScope {
     /// `path::is_component(key)`. Still from outside, but the binding carries
     /// the guard's proof to a path or program sink, as the joined text does.
     pub joined: collections::BTreeSet[String],
+    /// **Names bound to a root of a file operation** (ADR-raw-sinks-1 D2,
+    /// D11, #2440): `let at = fs::Root::Dir(dir)`, with the root's value, so
+    /// that a call opening a path under `at` judges `dir` as at the root.
+    pub roots: collections::BTreeMap[String, Expr],
+    /// **The parts a bound root joins under its base** (ADR-raw-sinks-1
+    /// D11, D14, #2441): `key` of `let at = fs::Root::Dir(cache).join(key)`,
+    /// each a part of the root where a call opens a path under `at`.
+    pub root_joins: collections::BTreeMap[String, Vec[Expr]],
     /// Names bound anywhere in this body, so a callee's name that a local
     /// shadows is not the callee.
     pub locals: collections::BTreeSet[String],
@@ -72,6 +80,11 @@ pub struct ProverScope {
     /// by a deferred body. Each is a variable of the proof until the next
     /// assignment, and a loop that changes it is read through its invariant.
     pub mutables: collections::BTreeSet[String],
+    /// **Names whose binding here is not `mut`** (ADR-381 D2, ADR-306
+    /// D17, #2450): a `let` or a parameter without `mut`. No call can change
+    /// one (a `mut` parameter refuses it, `NK1139`), so what a named
+    /// property knows of it goes only where it is bound again.
+    pub fixed: collections::BTreeSet[String],
     /// **The loops passed whose names are not bound again since** (ADR-361
     /// D2): a claim what is known leaves open is asked through them.
     pub loops: Vec[LoopRecord],
@@ -126,6 +139,8 @@ impl ProverScope {
             carried: collections::BTreeSet(),
             carried_from: collections::BTreeMap(),
             joined: collections::BTreeSet(),
+            roots: collections::BTreeMap(),
+            root_joins: collections::BTreeMap(),
             locals: collections::BTreeSet(),
             facts: [],
             entry: collections::BTreeMap(),
@@ -136,6 +151,7 @@ impl ProverScope {
             summed: collections::BTreeMap(),
             leaned: collections::BTreeMap(),
             mutables: collections::BTreeSet(),
+            fixed: collections::BTreeSet(),
             loops: [],
             around: [],
             history: [],
@@ -192,8 +208,11 @@ impl ProverScope {
         self.carried.remove(name)
         self.carried_from.remove(name)
         self.joined.remove(name)
+        self.roots.remove(name)
+        self.root_joins.remove(name)
         self.entry.remove(name)
         self.entry.remove(length)
+        self.fixed.remove(name)
         self.locals.insert(name.clone())
         self.loose.remove(name)
         self.loose.remove(length)
@@ -548,6 +567,8 @@ impl ProverScope {
         scope.carried = self.carried.clone()
         scope.carried_from = self.carried_from.clone()
         scope.joined = self.joined.clone()
+        scope.roots = self.roots.clone()
+        scope.root_joins = self.root_joins.clone()
         scope.locals = self.locals.clone()
         scope.maps = self.maps.clone()
         return scope

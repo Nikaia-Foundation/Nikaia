@@ -1,0 +1,36 @@
+// A part `Root::join` adds is a part of the root (ADR-raw-sinks-1 D11, D13):
+// `fs::Root::Dir(cache).join(key)` names `cache/../..` for a `key` of
+// `../..`, so a `key` from outside is `NK1308` (here a warning, `raw-sinks =
+// "warn"`), written in the call, bound to a name, joined again after it, or
+// under `fs::scratch()`. After `path::is_component(key)` (D14) the join under
+// a clean base passes; `Anywhere` stays `Anywhere`, whose join names nothing.
+use std::cli
+use std::fs
+use std::path
+
+fn main() throws {
+    let key = cli::args().nth(1) ?? "k"
+    let scratch = fs::scratch()
+    fs::create_dir("k", scratch)
+    fs::create_dir("k/x", scratch)
+    fs::create_dir("plain", scratch)
+    let cache = scratch.path()
+    println(fs::exists("blob", fs::Root::Dir(cache.clone()).join(key)))
+    let at = fs::Root::Dir(cache.clone()).join(key)
+    println(fs::exists("blob", at))
+    let deeper = at.join("x")
+    println(fs::exists("blob", deeper))
+    println(fs::exists("blob", scratch.join(key)))
+    println(fs::exists("blob", fs::Root::Anywhere.join(key)))
+    println(fs::exists("blob", fs::Root::Dir(cache.clone()).join("plain")))
+    return if !path::is_component(key)
+    println(fs::exists("blob", fs::Root::Dir(cache).join(key)))
+    guarded_under_scratch(scratch)
+    println("checked")
+}
+
+fn guarded_under_scratch(scratch: fs::Root) throws {
+    let key = cli::args().nth(1) ?? "k"
+    return if !path::is_component(key)
+    println(fs::exists("blob", scratch.join(key)))
+}

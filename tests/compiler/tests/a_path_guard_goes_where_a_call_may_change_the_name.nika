@@ -1,0 +1,18 @@
+// A path guard goes where a call may change the guarded name
+// (ADR-raw-sinks-1 D14, ADR-381 D2, #2450): a `let mut` handed to a `mut`
+// parameter may come back with any text, so the joined path after it is
+// outside again (`NK1308`).
+use std::cli
+use std::fs
+use std::path
+
+fn spoil(mut s: String) {
+    s.push_str("/../x")
+}
+
+fn main() throws {
+    let mut key = cli::args().nth(1) ?? "k"
+    return if !path::is_component(key)
+    spoil(key)
+    println(fs::exists(f"data/{key}", fs::Root::Anywhere))
+}

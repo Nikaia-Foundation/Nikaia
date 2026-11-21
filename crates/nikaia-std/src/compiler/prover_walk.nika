@@ -234,6 +234,9 @@ fn prover_function(mut walk: ProverWalk, item: ref Spanned[Item], owner: String?
                 // receiver in for `self`; not on a private field of a `pub`
                 // method, which its callers cannot see (D16).
                 let lent = receiver ?? Receiver { is_ref: true, is_mut: true, is_keep: false }
+                if !lent.is_mut {
+                    scope.fixed.insert("self")
+                }
                 if !lent.is_mut && has_owner {
                     let mut fields: collections::BTreeSet[String] = collections::BTreeSet()
                     prover_parameter_fields(walk, scope, fields, "self", owner ?? "", true, program, words)
@@ -250,6 +253,9 @@ fn prover_function(mut walk: ProverWalk, item: ref Spanned[Item], owner: String?
                 let arg_name = words.resolve(arg.name).clone()
                 scope.locals.insert(arg_name.clone())
                 scope.carry(arg_name, arg_name.clone())
+                if !arg.mutable {
+                    scope.fixed.insert(arg_name.clone())
+                }
                 let ty = words.resolve(arg.ty.name)
                 if !arg.mutable && arg.ty.generics.is_empty() && is_whole_number(ty) {
                     scope.ints.insert(arg_name.clone())
@@ -793,6 +799,12 @@ fn prover_let(mut walk: ProverWalk, names: ref Vec[winnow_grammar::Symbol], muta
     // D14: a guarded name joined after a clean part carries its proof to
     // the binding, asked before the binding drops what the name knew.
     let proved = tainted && !mutable && names.len() == 1 && raw_sink_proved_join(walk, value, scope, words, library, holes_of, ask)
+    // D11: a root bound to a name is judged where a call opens a path under
+    // the name, as written there (#2440).
+    // A root joined under it carries its parts too (#2441).
+    let mut joins: Vec[Expr] = []
+    let root = raw_sink_root(value, scope, words, written_of, joins)
+    let rooted = !mutable && names.len() == 1 && raw_sink_is_root(root, words, written_of)
     for name in names {
         let n = words.resolve(name).clone()
         scope.rebind(walk.arena, n)
@@ -807,6 +819,13 @@ fn prover_let(mut walk: ProverWalk, names: ref Vec[winnow_grammar::Symbol], muta
         }
         if proved {
             scope.joined.insert(n.clone())
+        }
+        if rooted {
+            scope.roots.insert(n.clone(), root.clone())
+            scope.root_joins.insert(n.clone(), joins.clone())
+        }
+        if !mutable {
+            scope.fixed.insert(n.clone())
         }
     }
     // **A map's index reads a key** (ADR-396 D4), a `let mut`'s too.
@@ -2774,13 +2793,19 @@ fn prover_raw_sink(mut walk: ProverWalk, callee: ref String, args: ref Vec[Expr]
             raw_sink_part(walk, sink, sink.sink, part, span, scope, at, program, words, library, holes_of, ask, written_of)
         }
     } else if callee.starts_with("fs::") && library.functions.contains_key(callee) {
-        for (i, arg) in args.iter().enumerate() {
+        for (i, written) in args.iter().enumerate() {
+            let mut joins: Vec[Expr] = []
+            let arg = raw_sink_root(written, scope, words, written_of, joins)
             let anywhere = raw_sink_anywhere(arg, words, written_of)
             let mut root_parts: Vec[Expr] = []
             if !anywhere {
                 match raw_sink_dir(arg, words) {
                     dir => raw_sink_parts(dir, holes_of, root_parts),
-                    null => continue,
+                    null => {
+                        if !raw_sink_scratch(arg, words) {
+                            continue
+                        }
+                    },
                 }
             }
             let mut root_outside = false
@@ -2789,7 +2814,10 @@ fn prover_raw_sink(mut walk: ProverWalk, callee: ref String, args: ref Vec[Expr]
                     root_outside = true
                 }
             }
-            let root = written_of(arg)
+            let mut root = written_of(arg)
+            if !joins.is_empty() {
+                root = written_of(written)
+            }
             // D11: the root's own parts, under the call's one operation, or
             // under all three where it has two (`copy`, `rename`).
             let mut whole = raw_sink_operation(callee, 0, config, words, written_of)
@@ -2799,6 +2827,27 @@ fn prover_raw_sink(mut walk: ProverWalk, callee: ref String, args: ref Vec[Expr]
             let root_sink = ParamSink { index: -1, kind: "path", sink: f"the root `{root}` of `{callee}`, a directory a stranger may have chosen", operation: whole, root_part: true, guard: "" }
             for part in root_parts {
                 raw_sink_part(walk, root_sink, root_sink.sink, part, span, scope, at, program, words, library, holes_of, ask, written_of)
+            }
+            // D11, D14 (#2441): a part `Root::join` adds under a `Dir` is a
+            // part of the root; a guarded one, joined after a base that is
+            // not outside, passes. `Anywhere` stays `Anywhere`, so its joins
+            // name nothing.
+            if !anywhere {
+                let mut guard = String()
+                if !root_outside {
+                    guard.push_str("path")
+                }
+                let join_sink = ParamSink { index: -1, kind: "path", sink: root_sink.sink.clone(), operation: root_sink.operation.clone(), root_part: false, guard: guard }
+                for join in joins {
+                    let mut parts: Vec[Expr] = []
+                    raw_sink_parts(join, holes_of, parts)
+                    for part in parts {
+                        if raw_sink_outside(part, scope, words, library, walk.state, holes_of) && !raw_sink_passes(walk, join_sink.guard, part, scope, words, ask) {
+                            root_outside = true
+                        }
+                        raw_sink_part(walk, join_sink, join_sink.sink, part, span, scope, at, program, words, library, holes_of, ask, written_of)
+                    }
+                }
             }
             if !anywhere && !root_outside {
                 continue
@@ -3059,6 +3108,53 @@ fn raw_sink_operation(callee: ref String, j: i64, config: ref Vec[ConfigArg], wo
         }
     }
     return "read"
+}
+
+/// **The root an argument names** (ADR-raw-sinks-1 D11, #2440): the value
+/// of a name bound to a root (`ProverScope::roots`), else the argument. A
+/// `root.join(part)` names the base `root` names, and each `part` it joins
+/// under the base goes into `joins`, in order (D13, #2441).
+fn raw_sink_root(arg: ref Expr, scope: ref ProverScope, words: ref winnow_grammar::InternerContext, written_of: fn(ref Expr) -> String sync, mut joins: Vec[Expr]) -> Expr {
+    match arg {
+        Expr::MethodCall { receiver, method, args, .. } => {
+            if words.resolve(method) == "join" && args.len() == 1 {
+                let mut under: Vec[Expr] = []
+                let base = raw_sink_root(receiver, scope, words, written_of, under)
+                if raw_sink_is_root(base, words, written_of) {
+                    joins.extend(under)
+                    joins.push(args[0].clone())
+                    return base
+                }
+            }
+            return arg.clone()
+        },
+        else => {},
+    }
+    let name = raw_sink_name(arg, words) ?? return arg.clone()
+    let base = scope.roots[name]?.clone() ?? return arg.clone()
+    joins.extend(scope.root_joins[name]?.clone() ?? [])
+    return base
+}
+
+/// Whether an expression is a root of a file operation: `fs::Root::Dir(..)`,
+/// `fs::Root::Anywhere` or `fs::scratch()` (ADR-raw-sinks-1 D2, D11, D12).
+fn raw_sink_is_root(arg: ref Expr, words: ref winnow_grammar::InternerContext, written_of: fn(ref Expr) -> String sync) -> bool {
+    return raw_sink_anywhere(arg, words, written_of) || raw_sink_dir(arg, words) != null || raw_sink_scratch(arg, words)
+}
+
+/// Whether an argument is `fs::scratch()`, a root nobody but the program
+/// chose (ADR-raw-sinks-1 D12): clean itself, its joins are judged (#2441).
+fn raw_sink_scratch(arg: ref Expr, words: ref winnow_grammar::InternerContext) -> bool {
+    return match arg {
+        Expr::Call { func, args, .. } => {
+            let named = match func {
+                Expr::Path(segments, _) => path_text(segments, words),
+                else => "",
+            }
+            named.ends_with("fs::scratch") && args.is_empty()
+        },
+        else => false,
+    }
 }
 
 /// The directory of `fs::Root::Dir(dir)`, or nothing for any other root
@@ -4308,8 +4404,13 @@ fn prover_a_method_property(program: ref Program, words: ref winnow_grammar::Int
 /// (ADR-381 D1, D2): `elements_change`, but the condition of an `if` that
 /// hands `base` only to named properties changes nothing, since a property
 /// changes nothing, so a guard `return if !p(xs)` keeps what it made known,
-/// and so does an `unsafe` block of `assume`s.
+/// and so does an `unsafe` block of `assume`s. Nor does anything but
+/// binding it again change a path from a name bound without `mut` (#2450,
+/// ADR-306 D17): no call can be handed it to change.
 fn prover_property_changed(stmt: ref Stmt, base: ref String, scope: ref ProverScope, state: ref ProverState, program: ref Program, words: ref winnow_grammar::InternerContext) -> bool {
+    if scope.fixed.contains(path_root(base)) {
+        return false
+    }
     let expr = match stmt {
         Stmt::Expr(e) => e,
         else => return elements_change(stmt, base, words),

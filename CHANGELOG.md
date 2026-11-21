@@ -8,6 +8,13 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1508] — 2026-11-20
+
+**Builders' changes (#2440, #2441, #2450)**
+- A file root bound to a name (`let at = fs::Root::Dir(dir)`, `let at = fs::Root::Anywhere`) is judged as a raw path sink at the call that uses it, as a root written in the call is (NK1308, ADR-raw-sinks-1 D2, D11).
+- A part `Root::join` adds from outside (`fs::Root::Dir(cache).join(key)`, bound to a name or chained, or under `fs::scratch()`) is judged as a part of the root, NK1308, and passes after `path::is_component` or `path::is_below` under a clean base (ADR-raw-sinks-1 D11, D14).
+- A path guard holds past a call handed the guarded name: what `path::is_component(key)` (or any named property) proves of a binding without `mut` stays known after `fs::exists(key, ...)`, `root.join(key)` or a function taking `key`, since no call can change such a binding (ADR-381 D2, ADR-raw-sinks-1 D14).
+
 ## [0.0.1507] — 2026-11-20
 
 **A builder's pre-push checks the version lines without the driver's badges (#2414)**
