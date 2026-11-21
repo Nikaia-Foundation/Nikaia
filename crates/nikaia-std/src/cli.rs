@@ -50,7 +50,7 @@ impl Iterator for Args {
 }
 
 /// **What `main`'s parameters make of the words** (Part I 5.5,
-/// [ADR-360](../../../docs/specification/adr/adr-360.md)): the lowering of a
+/// [ADR-cli-v1](../../../docs/specification/adr/adr-cli-v1.md)): the lowering of a
 /// `main` with parameters describes them here, reads the words with
 /// [`Words::read`] before the body runs, and checks `main`'s preconditions
 /// with [`Words::breach`] where one does not hold.
@@ -73,7 +73,7 @@ pub struct Param {
     pub pre: &'static [&'static str],
 }
 
-/// How a parameter takes its words (ADR-360 D1).
+/// How a parameter takes its words (ADR-cli-v1 D1).
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Kind {
     /// Positional and required.
@@ -112,7 +112,7 @@ impl Words {
     /// The words the program was started with, read into `interface`'s
     /// parameters. `--help` prints the help and ends the program with status
     /// 0; a wrong word prints one line and the usage to standard error and
-    /// ends it with status 2 (ADR-360 D4, D5).
+    /// ends it with status 2 (ADR-cli-v1 D4, D5).
     pub fn read(interface: &'static Interface) -> Words {
         let mut args = std::env::args();
         let program = args.next().unwrap_or_default();
@@ -254,7 +254,7 @@ impl Words {
         Some(self.converted(word, &shown, param.ty))
     }
 
-    /// **A precondition of `main` that does not hold** (ADR-360 D4): the
+    /// **A precondition of `main` that does not hold** (ADR-cli-v1 D4): the
     /// claim as written, with where it came from, and the values given.
     pub fn breach(&self, claim: &str, operands: &[(&str, Option<String>)]) -> ! {
         let values: Vec<String> = operands
@@ -322,7 +322,7 @@ pub fn usage(interface: &Interface, program: &str) -> String {
     text
 }
 
-/// **The help is the interface** (ADR-360 D5): the program's name, the `///`
+/// **The help is the interface** (ADR-cli-v1 D5): the program's name, the `///`
 /// lines above `main`, and each parameter with its type, default and
 /// preconditions.
 pub fn help(interface: &Interface, program: &str) -> String {
@@ -370,7 +370,7 @@ pub fn help(interface: &Interface, program: &str) -> String {
     text
 }
 
-/// **What a word can be** (ADR-360 D2): a number in the shape `std` reads one
+/// **What a word can be** (ADR-cli-v1 D2): a number in the shape `std` reads one
 /// from text (Part III 17.1) that fits its type, `true` or `false`, or the
 /// word itself.
 pub trait Word: Sized {

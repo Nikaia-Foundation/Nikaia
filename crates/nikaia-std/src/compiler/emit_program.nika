@@ -201,7 +201,7 @@ impl EmitState {
     fn emit_program_entry_point[H: EmitHost](ref self, world: ref EmitWorld, mut out: EmitOut, host: ref H) {
         let channel = self.error_channel(world, "main", true, EmitLifetimes::Elided.params(), EmitLifetimes::Static.params(), false)
         // **`main`'s parameters as its definition spells them**
-        // ([ADR-360](../../docs/specification/adr/adr-360.md) D1): the words
+        // ([ADR-cli-v1](../../docs/specification/adr/adr-cli-v1.md) D1): the words
         // are read into locals that own them, and a parameter the body only
         // reads (`&[T]`, `&str`) is lent from its local: `passing` writes the
         // argument, `{}` standing for the local.
