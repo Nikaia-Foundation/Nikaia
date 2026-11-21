@@ -2061,7 +2061,7 @@ pub(crate) fn prover_raw_sink(walk: &mut ProverWalk, callee: &str, args: &[Expr]
             if !anywhere {
                 match raw_sink_dir(&arg, words) {
                     Some(ref dir) => { raw_sink_parts(dir, &mut *holes_of, &mut root_parts); },
-                    None => { if !raw_sink_scratch(&arg, words) { continue; } },
+                    None => { if raw_sink_root_param(callee, i, library) && raw_sink_carried_root(&arg, scope, words, library, &walk.state, &mut *holes_of) { root_parts.push(arg.clone()); } else if !raw_sink_scratch(&arg, words) { continue; } },
                 }
             }
             let mut root_outside = false;
@@ -2111,11 +2111,52 @@ pub(crate) fn raw_sink_through(walk: &mut ProverWalk, callee: &str, args: &[Expr
     let all = arguments_in_order(&function, args, config, words);
     for sink in sinks.iter() {
         if sink.index < 0 || sink.index >= all.len() as i64 { continue; }
+        let shown = format!("{}, through `{}`", sink.sink, callee);
+        if sink.root_part {
+            raw_sink_root_through(walk, sink, &shown, unsafe { nikaia_std::proven::read(&all, (sink.index) as usize) }, span, scope, at, program, words, library, &mut *holes_of, &mut *ask, &mut *written_of);
+            continue;
+        }
         let mut parts: Vec<Expr> = vec![];
         raw_sink_parts(unsafe { nikaia_std::proven::read(&all, (sink.index) as usize) }, &mut *holes_of, &mut parts);
-        let shown = format!("{}, through `{}`", sink.sink, callee);
         for part in parts.iter() { raw_sink_part(walk, sink, &shown, part, span, scope, at, program, words, library, &mut *holes_of, &mut *ask, &mut *written_of); }
     }
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn raw_sink_root_through(walk: &mut ProverWalk, sink: &ParamSink, shown: &str, written: &Expr, span: Span, scope: &ProverScope, at: &ProverWhere, program: &Program, words: &winnow_grammar::InternerContext, library: &Ledger, holes_of: &mut impl FnMut(&Expr) -> Vec<Expr>, ask: &mut impl FnMut(&logic::TermArena, &[i64], i64) -> SolverAnswer, written_of: &mut impl FnMut(&Expr) -> String) {
+    let mut joins: Vec<Expr> = vec![];
+    let arg = raw_sink_root(written, scope, words, &mut *written_of, &mut joins);
+    if raw_sink_anywhere(&arg, words, &mut *written_of) { return; }
+    let mut root_parts: Vec<Expr> = vec![];
+    match raw_sink_dir(&arg, words) {
+        Some(ref dir) => { raw_sink_parts(dir, &mut *holes_of, &mut root_parts); },
+        None => { if !raw_sink_scratch(&arg, words) && raw_sink_carried_root(&arg, scope, words, library, &walk.state, &mut *holes_of) { root_parts.push(arg.clone()); } },
+    }
+    let mut root_outside = false;
+    for part in root_parts.iter() {
+        if raw_sink_outside(part, scope, words, library, &walk.state, &mut *holes_of) { root_outside = true; }
+        raw_sink_part(walk, sink, shown, part, span, scope, at, program, words, library, &mut *holes_of, &mut *ask, &mut *written_of);
+    }
+    let mut guard = String::new();
+    if !root_outside { guard.push_str("path"); }
+    let join_sink = ParamSink { index: sink.index, kind: nikaia_std::block::Text::from(sink.kind.to_string()), sink: nikaia_std::block::Text::from(sink.sink.to_string()), operation: nikaia_std::block::Text::from(sink.operation.to_string()), root_part: false, guard };
+    for join in joins.iter() {
+        let mut parts: Vec<Expr> = vec![];
+        raw_sink_parts(join, &mut *holes_of, &mut parts);
+        for part in parts.iter() { raw_sink_part(walk, &join_sink, shown, part, span, scope, at, program, words, library, &mut *holes_of, &mut *ask, &mut *written_of); }
+    }
+}
+
+pub(crate) fn raw_sink_root_param(callee: &str, i: i64, library: &Ledger) -> bool {
+    let contract = match *nikaia_std::index::get(&library.functions, callee) { Some(__nikaia_value) => __nikaia_value, None => return false };
+    let signature = match contract.signature.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return false };
+    if i < 0 || i >= signature.params.len() as i64 { return false; }
+    unsafe { nikaia_std::proven::read(&signature.params, (i) as usize) }.0 == "root"
+}
+
+pub(crate) fn raw_sink_carried_root(arg: &Expr, scope: &ProverScope, words: &winnow_grammar::InternerContext, library: &Ledger, state: &ProverState, holes_of: &mut impl FnMut(&Expr) -> Vec<Expr>) -> bool {
+    let name = match raw_sink_name(arg, words) { Some(__nikaia_value) => __nikaia_value, None => return false };
+    scope.carried.contains(&name) && !raw_sink_outside(arg, scope, words, library, state, &mut *holes_of)
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -2267,8 +2308,8 @@ pub(crate) fn raw_sink_root(arg: &Expr, scope: &ProverScope, words: &winnow_gram
                     joins.push((*unsafe { nikaia_std::proven::read(&args, (0) as usize) }).clone());
                     return base;
                 }
+                return arg.clone();
             }
-            return arg.clone();
         },
         _ => { },
     }
