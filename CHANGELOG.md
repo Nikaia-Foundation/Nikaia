@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1516] — 2026-11-21
+
+**check: a field of self whose type copies by std's ledger is given as a copy, not refused by NK1131 (#2468)**
+- A `time::Duration` (or other ledger-copied type) field of `self` can be passed by value in a `self` or `mut self` method; NK1131 no longer refuses it.
+
 ## [0.0.1515] — 2026-11-21
 
 **NK1308's help at process::run shows the literal match; --trust lists the raw sinks the build allows; D10's example writes else (ADR-raw-sinks-1 D10) (#2217)**
