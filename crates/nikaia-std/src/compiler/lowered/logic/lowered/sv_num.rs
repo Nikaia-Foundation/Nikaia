@@ -45,6 +45,7 @@ pub(crate) fn sv_content(ks: &[i64]) -> Option<i64> {
     let mut g: i64 = 0;
     for k in ks.iter() {
         let k = nikaia_std::num::value(k);
+        if g > 0 && k % g == 0 { continue; }
         g = match sv_gcd(g, k) { Some(__nikaia_value) => __nikaia_value, None => return None };
         if g == 1 { return Some(1); }
     }

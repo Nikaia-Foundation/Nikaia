@@ -192,6 +192,53 @@ pub struct SvSimplex {
 	touched: Vec[bool],
 	row_dirty: Vec[bool],
 	seen_atoms: u32,
+	/// The variables whose `touched` and the rows whose `row_dirty` is
+	/// set, each once, so `propagate` neither scans nor clears them all
+	/// (#2401).
+	touched_list: Vec[i64],
+	dirty_list: Vec[i64],
+	/// What a backtrack makes `propagate` read again (#2401): per level
+	/// above zero, `seen_atoms` and the lengths of `row_log` and `var_log`
+	/// when it began; `row_log` the rows marked to read again since (a
+	/// pivot's or a new row, or one waiting when a level began), `var_log`
+	/// the variables waiting as `touched` when a level began. A backtrack
+	/// to a level marks these again: what a later level read of them was
+	/// read against bounds that are gone. A row or a bound left as it was
+	/// implies after the backtrack what it implied when the level was
+	/// read, and that was propagated then.
+	level_seen: Vec[u32],
+	level_rows: Vec[i64],
+	level_vars: Vec[i64],
+	row_log: Vec[i64],
+	var_log: Vec[i64],
+	/// The atoms of the literals a backtrack took out of `implied`, each
+	/// once, read again as new by the next `propagate`: one the SAT core
+	/// had not taken yet (a backjump while it took the call's literals)
+	/// may still follow from the bounds and rows that stay.
+	redo: Vec[u32],
+	redo_in: Vec[bool],
+	/// Per variable: the atoms whose view reads it, and the rows that hold
+	/// it, unordered and possibly with rows that lost it since (dropped by
+	/// `compact` when the column is read: a search for each lost entry
+	/// cost more than the pivot, ADR-270 D10's column index). `propagate` reads only
+	/// the atoms of a touched variable or of the basic variable of a row
+	/// to read again, and a pivot or a refresh only the rows of its column
+	/// (#2401: every atom on every call was half the work on
+	/// `c_inference`).
+	var_atoms: Vec[Vec[u32]],
+	col_rows: Vec[Vec[i64]],
+	/// `compact`'s calls and the call that last kept each row.
+	mark_round: i64,
+	row_mark: Vec[i64],
+	/// `propagate`'s calls, and the call that last marked each row to
+	/// read again, worked out each row side's bound (`rb_has`, `rb_val`)
+	/// and took each atom.
+	prop_call: i64,
+	exam_at: Vec[i64],
+	rb_at: Vec[i64],
+	rb_has: Vec[bool],
+	rb_val: Vec[SvDelta],
+	atom_at: Vec[i64],
 	/// Stamps for the GCD test (#1960): a counter raised at each change, the
 	/// last change of each variable's bounds and of each row, and when each
 	/// row last passed the test. A row whose row and bounds did not change
@@ -200,6 +247,16 @@ pub struct SvSimplex {
 	bound_at: Vec[i64],
 	row_at: Vec[i64],
 	gcd_at: Vec[i64],
+	/// The rows whose row changed since the last GCD test, and the
+	/// variables whose bounds did, each once: only their rows can fail
+	/// the test again.
+	gcd_rows: Vec[i64],
+	gcd_row_in: Vec[bool],
+	gcd_vars: Vec[i64],
+	/// Rows a pivot replaced, whose room the next pivot's rows take
+	/// (#2401).
+	spare: Vec[SvRow],
+	gcd_var_in: Vec[bool],
 	/// The number of rows each variable occurs in (ADR-270 D10's column
 	/// index, its sizes): the entering rule prefers the shorter column,
 	/// whose pivot combines fewer rows (#1960).
@@ -259,10 +316,34 @@ fn sv_simplex(names: Vec[String]) -> SvSimplex {
 		touched: [],
 		row_dirty: [],
 		seen_atoms: 0,
+		touched_list: [],
+		dirty_list: [],
+		level_seen: [],
+		level_rows: [],
+		level_vars: [],
+		row_log: [],
+		var_log: [],
+		redo: [],
+		redo_in: [],
+		var_atoms: [],
+		col_rows: [],
+		mark_round: 0,
+		row_mark: [],
+		prop_call: 0,
+		exam_at: [],
+		rb_at: [],
+		rb_has: [],
+		rb_val: [],
+		atom_at: [],
 		stamp: 0,
 		bound_at: [],
 		row_at: [],
 		gcd_at: [],
+		gcd_rows: [],
+		gcd_row_in: [],
+		gcd_vars: [],
+		spare: [],
+		gcd_var_in: [],
 		col_count: [],
 		found: collections::BTreeMap(),
 		found_real: collections::BTreeMap(),
@@ -380,6 +461,10 @@ impl SvSimplex {
 		}
 		self.row_of.push(-1)
 		self.touched.push(true)
+		self.touched_list.push(v)
+		self.var_atoms.push([])
+		self.col_rows.push([])
+		self.gcd_var_in.push(false)
 		self.bound_at.push(0)
 		self.col_count.push(0)
 		self.values.push(sv_sx_zero())
@@ -441,15 +526,29 @@ impl SvSimplex {
 			}
 		}
 		self.rows.push(row)
+		let r = self.rows.len() - 1
 		self.row_dirty.push(true)
+		self.dirty_list.push(r)
+		if self.levels.len() > 0 {
+			self.row_log.push(r)
+		}
+		self.exam_at.push(-1)
+		self.row_mark.push(-1)
+		for _ in 0..<2 {
+			self.rb_at.push(-1)
+			self.rb_has.push(false)
+			self.rb_val.push(sv_sx_zero())
+		}
 		self.stamp += 1
 		self.row_at.push(self.stamp)
 		self.gcd_at.push(-1)
-		for c in self.rows[self.rows.len() - 1].cols {
+		self.gcd_row_in.push(false)
+		self.gcd_row(r)
+		for c in self.rows[r].cols {
 			self.col_count[c as i64] += 1
+			self.col_rows[c as i64].push(r)
 		}
 		self.basic.push(s)
-		let r = self.rows.len() - 1
 		self.row_of[s] = r
 		self.values[s] = self.row_value(r) ?? return null
 		self.slack_of.insert(key, s)
@@ -490,10 +589,16 @@ impl SvSimplex {
 	fn refresh(ref mut self, v: i64, old: ref SvDelta) -> bool {
 		let col = v.checked_u32() ?? return false
 		let moved = sv_delta_sub(self.values[v], old)
-		let mut r = 0
-		while r < self.rows.len() {
-			let a = sv_row_coef(self.rows[r], col)
+		// `v`'s list read once, each row in it once (`row_mark`).
+		self.mark_round += 1
+		let round = self.mark_round
+		let mut i = 0
+		while i < self.col_rows[v].len() {
+			let r = self.col_rows[v][i]
+			i += 1
+			let a = if self.row_mark[r] == round { 0 } else { sv_row_coef(self.rows[r], col) }
 			if a != 0 {
+				self.row_mark[r] = round
 				let b = self.basic[r]
 				let stepped = self.row_step(r, b, a, moved)
 				if stepped != null {
@@ -502,7 +607,6 @@ impl SvSimplex {
 					self.values[b] = self.row_value(r) ?? return false
 				}
 			}
-			r += 1
 		}
 		return true
 	}
@@ -581,9 +685,13 @@ impl SvSimplex {
 			}
 		}
 		self.undo.push(SvUndo { var: v, upper: upper, old: had })
-		self.touched[v] = true
+		if !self.touched[v] {
+			self.touched[v] = true
+			self.touched_list.push(v)
+		}
 		self.stamp += 1
 		self.bound_at[v] = self.stamp
+		self.gcd_var(v)
 		let value = side.value.clone()
 		if upper {
 			self.upper[v] = side
@@ -646,9 +754,42 @@ impl SvSimplex {
 	/// where a side is missing or a step leaves `i64`.
 	fn row_bound(ref self, r: i64, up: bool) -> SvDelta? {
 		let b = self.basic[r]
-		let mut sum = sv_sx_zero()
+		// Whole bounds summed as integers, the same sum the rationals give
+		// (#2401: these sums were a tenth of the work on `c_inference`);
+		// at the first bound that is no integer, the rational sum below.
+		let mut cn: i64 = 0
+		let mut kn: i64 = 0
 		let mut d: i64 = 1
+		let mut whole = true
 		let mut i = 0
+		while i < self.rows[r].cols.len() {
+			let v = self.rows[r].cols[i] as i64
+			let a = self.rows[r].ks[i]
+			i += 1
+			if v == b {
+				d = a.checked_neg() ?? return null
+				continue
+			}
+			let positive = a > 0
+			let wants_upper = positive == up
+			let side = if wants_upper { self.upper[v] } else { self.lower[v] }
+			if !side.set {
+				return null
+			}
+			if side.value.c.den != 1 || side.value.k.den != 1 {
+				whole = false
+				break
+			}
+			cn = cn.checked_add(side.value.c.num.checked_mul(a) ?? return null) ?? return null
+			kn = kn.checked_add(side.value.k.num.checked_mul(a) ?? return null) ?? return null
+		}
+		if whole {
+			let inverse = sv_rat(1, d) ?? return null
+			return sv_delta_scale(SvDelta { c: sv_int(cn), k: sv_int(kn) }, inverse)
+		}
+		let mut sum = sv_sx_zero()
+		d = 1
+		i = 0
 		while i < self.rows[r].cols.len() {
 			let v = self.rows[r].cols[i] as i64
 			let a = self.rows[r].ks[i]
@@ -682,45 +823,126 @@ impl SvSimplex {
 		// elimination gives the same row whichever sign `r` has, so `r`
 		// is turned (`j`'s coefficient negative) only once nothing failed.
 		let turn = sv_row_coef(self.rows[r], col) > 0
-		let mut changed: Vec[i64] = []
-		let mut made: Vec[SvRow] = []
-		let mut t = 0
-		while t < self.rows.len() {
-			if t != r && sv_row_coef(self.rows[t], col) != 0 {
-				let row = if exact { sv_row_eliminate_exact(self.rows[t], self.rows[r], col) } else {
-					sv_row_eliminate(self.rows[t], self.rows[r], col)
-				}
+		// `j`'s list read once, each row in it once (`row_mark`), as
+		// `compact` would leave it.
+		self.mark_round += 1
+		let round = self.mark_round
+		let mut changed: Vec[i64] = Vec(capacity: self.col_rows[j].len())
+		let mut made: Vec[SvRow] = Vec(capacity: self.col_rows[j].len())
+		// The columns each made row gained and lost, and where its run ends.
+		let mut came: Vec[u32] = []
+		let mut left: Vec[u32] = []
+		let mut came_end: Vec[i64] = Vec(capacity: self.col_rows[j].len())
+		let mut left_end: Vec[i64] = Vec(capacity: self.col_rows[j].len())
+		let mut k = 0
+		while k < self.col_rows[j].len() {
+			let t = self.col_rows[j][k]
+			k += 1
+			if t != r && self.row_mark[t] != round && sv_row_coef(self.rows[t], col) != 0 {
+				self.row_mark[t] = round
+				let spare = self.spare.pop() ?? sv_row_constant(0)
+				let row = sv_row_eliminate_into(spare, self.rows[t], self.rows[r], col, exact, came, left)
 				made.push(row ?? return false)
 				changed.push(t)
+				came_end.push(came.len())
+				left_end.push(left.len())
 			}
-			t += 1
 		}
 		if turn {
 			self.rows[r] = sv_row_scale(self.rows[r], -1) ?? return false
 		}
-		self.row_dirty[r] = true
+		self.mark_dirty(r)
 		self.stamp += 1
 		self.row_at[r] = self.stamp
+		self.gcd_row(r)
 		// Last to first, so each made row is moved out of `made` by `pop`.
 		let mut i = changed.len()
 		while i > 0 {
 			i -= 1
 			let row = made.pop() ?? return false
-			for c in self.rows[changed[i]].cols {
-				self.col_count[c as i64] -= 1
+			let t = changed[i]
+			// A column that left `t` keeps it in its list until it is
+			// compacted; one that came gets it.
+			let mut long: Vec[i64] = []
+			let mut m = if i > 0 { left_end[i - 1] } else { 0 }
+			while m < left_end[i] {
+				self.col_count[left[m] as i64] -= 1
+				m += 1
 			}
-			for c in row.cols {
-				self.col_count[c as i64] += 1
+			m = if i > 0 { came_end[i - 1] } else { 0 }
+			while m < came_end[i] {
+				let c = came[m] as i64
+				m += 1
+				self.col_count[c] += 1
+				self.col_rows[c].push(t)
+				if self.col_rows[c].len() > 2 * self.rows.len() + 8 {
+					long.push(c)
+				}
 			}
-			self.rows[changed[i]] = row
-			self.row_dirty[changed[i]] = true
-			self.row_at[changed[i]] = self.stamp
+			// The old row moved out to `spare`, not dropped.
+			let last = self.rows.len()
+			self.rows.push(row)
+			self.rows.swap(t, last)
+			self.spare.push(self.rows.pop() ?? return false)
+			for c in long {
+				self.compact(c)
+			}
+			self.mark_dirty(t)
+			self.row_at[t] = self.stamp
+			self.gcd_row(t)
 		}
+		// `j` is eliminated from every row but `r`.
+		self.col_rows[j] = [r]
 		let old = self.basic[r]
 		self.row_of[old] = -1
 		self.basic[r] = j
 		self.row_of[j] = r
 		return true
+	}
+
+	/// Row `r` marked to be tested again by the next GCD test.
+	fn gcd_row(ref mut self, r: i64) {
+		if !self.gcd_row_in[r] {
+			self.gcd_row_in[r] = true
+			self.gcd_rows.push(r)
+		}
+	}
+
+	/// Variable `v`'s rows marked to be tested again by the next GCD test.
+	fn gcd_var(ref mut self, v: i64) {
+		if !self.gcd_var_in[v] {
+			self.gcd_var_in[v] = true
+			self.gcd_vars.push(v)
+		}
+	}
+
+	/// Row `r` marked to be read again by the next `propagate`.
+	fn mark_dirty(ref mut self, r: i64) {
+		if !self.row_dirty[r] {
+			self.row_dirty[r] = true
+			self.dirty_list.push(r)
+			if self.levels.len() > 0 {
+				self.row_log.push(r)
+			}
+		}
+	}
+
+	/// Variable `c`'s column left with the rows that hold it, each once.
+	fn compact(ref mut self, c: i64) {
+		self.mark_round += 1
+		let round = self.mark_round
+		let col = c.checked_u32() ?? return
+		let mut kept: Vec[i64] = []
+		let mut i = 0
+		while i < self.col_rows[c].len() {
+			let t = self.col_rows[c][i]
+			i += 1
+			if self.row_mark[t] != round && sv_row_coef(self.rows[t], col) != 0 {
+				self.row_mark[t] = round
+				kept.push(t)
+			}
+		}
+		self.col_rows[c] = kept
 	}
 
 	/// The lowest basic variable outside its bounds: its row, and whether it
@@ -730,12 +952,16 @@ impl SvSimplex {
 		let mut r = 0
 		while r < self.rows.len() {
 			let b = self.basic[r]
+			r += 1
+			// Only a lower variable than the best yet can take its place.
+			if best.var >= 0 && b > best.var {
+				continue
+			}
 			let below = self.lower[b].set && sv_delta_cmp(self.values[b], self.lower[b].value) < 0
 			let above = self.upper[b].set && sv_delta_cmp(self.values[b], self.upper[b].value) > 0
-			if (below || above) && (best.var < 0 || b < best.var) {
-				best = SvViolation { row: r, var: b, below: below }
+			if below || above {
+				best = SvViolation { row: r - 1, var: b, below: below }
 			}
-			r += 1
 		}
 		return best
 	}
@@ -772,7 +998,8 @@ impl SvSimplex {
 			// Insert by `(size, rows, v)`; the columns come ascending, so a
 			// tie keeps the lower variable first.
 			let mut at = out.len()
-			while at > 0 && (cost[at - 1] > size || (cost[at - 1] == size && length[at - 1] > rows)) {
+			let score = size.saturating_mul(rows)
+			while at > 0 && (cost[at - 1].saturating_mul(length[at - 1]) > score || (cost[at - 1].saturating_mul(length[at - 1]) == score && cost[at - 1] > size)) {
 				at -= 1
 			}
 			out.insert(at, v)
@@ -939,6 +1166,90 @@ impl SvSimplex {
 		return out
 	}
 
+	/// The atoms of variable `v` not taken in call `call` yet, added to
+	/// `out`.
+	fn take_atoms(ref mut self, v: i64, call: i64, mut out: Vec[u32]) {
+		let mut k = 0
+		while k < self.var_atoms[v].len() {
+			let a = self.var_atoms[v][k]
+			k += 1
+			if self.atom_at[a as i64] != call {
+				self.atom_at[a as i64] = call
+				out.push(a)
+			}
+		}
+	}
+
+	/// `propagate` on atom `a`: each of its literals, neither asserted
+	/// nor propagated yet, that a bound of its variable implies (where
+	/// the atom is `fresh` or the variable touched), or, for a basic
+	/// variable, the bounds of its row (where the atom is fresh, the row
+	/// made in this call or marked to read again), added to `out`.
+	fn propagate_atom(
+		ref mut self,
+		a: u32,
+		fresh: bool,
+		book: ref SvBook,
+		rows_before: i64,
+		call: i64,
+		mut out: Vec[u32],
+	) {
+		for l in [sv_lit(a, false), sv_lit(a, true)] {
+			if self.is_held(l) {
+				continue
+			}
+			let seen = self.view(l, book)
+			if !seen.usable {
+				continue
+			}
+			let v = seen.var
+			let up = seen.upper
+			let side = if up { self.upper[v] } else { self.lower[v] }
+			if side.set && (fresh || self.touched[v]) {
+				let order = sv_delta_cmp(side.value, seen.value)
+				if (up && order <= 0) || (!up && order >= 0) {
+					self.implied.push(SvImplied {
+						lit: l,
+						level: self.level(),
+						parts: [sv_side_part(side, up, 1)],
+						d: 1,
+					})
+					self.hold(l, 1)
+					out.push(l)
+					continue
+				}
+			}
+			let r = self.row_of[v]
+			if r < 0 {
+				continue
+			}
+			if !fresh && r < rows_before && self.exam_at[r] != call {
+				continue
+			}
+			let at = if up { 2 * r + 1 } else { 2 * r }
+			if self.rb_at[at] != call {
+				self.rb_at[at] = call
+				let found = self.row_bound(r, up)
+				self.rb_has[at] = found != null
+				if found != null {
+					self.rb_val[at] = found ?? sv_sx_zero()
+				}
+			}
+			if !self.rb_has[at] {
+				continue
+			}
+			let order = sv_delta_cmp(self.rb_val[at], seen.value)
+			if (up && order <= 0) || (!up && order >= 0) {
+				let parts = self.row_parts(r, up) ?? continue
+				let d = sv_row_coef(self.rows[r], v.checked_u32() ?? continue).checked_neg()
+					?? continue
+				self.implied.push(SvImplied { lit: l, level: self.level(), parts: parts, d: d })
+				self.hold(l, 1)
+				out.push(l)
+			}
+		}
+	}
+
 	/// Whether literal `l` stands on the trail or among `implied`.
 	fn is_held(ref self, l: u32) -> bool {
 		let at = l as i64
@@ -971,6 +1282,13 @@ impl SvSimplex {
 		if got != null {
 			seen = got ?? seen
 		}
+		if seen.usable {
+			let a = l / 2
+			let n = self.var_atoms[seen.var].len()
+			if n == 0 || self.var_atoms[seen.var][n - 1] != a {
+				self.var_atoms[seen.var].push(a)
+			}
+		}
 		self.views[at] = seen.clone()
 		return seen
 	}
@@ -1002,6 +1320,15 @@ impl SvTh for SvSimplex {
 	fn push_level(ref mut self) {
 		self.levels.push(self.undo.len())
 		self.marks.push(self.trail.len())
+		self.level_seen.push(self.seen_atoms)
+		self.level_rows.push(self.row_log.len())
+		self.level_vars.push(self.var_log.len())
+		for r in self.dirty_list {
+			self.row_log.push(r)
+		}
+		for v in self.touched_list {
+			self.var_log.push(v)
+		}
 	}
 
 	fn level(ref self) -> i64 {
@@ -1131,103 +1458,96 @@ impl SvTh for SvSimplex {
 	fn propagate(ref mut self, book: ref SvBook) -> Vec[u32] {
 		let mut out: Vec[u32] = []
 		let count = book.atoms.len().checked_u32() ?? return out
-		// Each row's bound from above and below, worked out once per call
-		// (#1962): the bounds do not change while it runs, a row `view`
-		// adds leaves the others as they were, and the atoms of one form
-		// share a row. Per row and side: 0 not yet, 1 none, 2 in `bounds`.
-		let mut known: Vec[i64] = []
-		let mut bounds: Vec[SvDelta] = []
-		// The rows to read again: changed, or holding a variable whose bound
-		// changed. Atoms the last call saw are read only through these.
-		let mut examine: Vec[bool] = []
-		let mut r0 = 0
-		while r0 < self.rows.len() {
-			let mut hit = self.row_dirty[r0]
-			let mut i = 0
-			while !hit && i < self.rows[r0].cols.len() {
-				hit = self.touched[self.rows[r0].cols[i] as i64]
-				i += 1
-			}
-			examine.push(hit)
-			r0 += 1
+		// Each row's bound from above and below is worked out once per call
+		// (#1962, `rb_at`): the bounds do not change while it runs, a row
+		// `view` adds leaves the others as they were, and the atoms of one
+		// form share a row.
+		self.prop_call += 1
+		let call = self.prop_call
+		let rows_before = self.rows.len()
+		while self.atom_at.len() < count as i64 {
+			self.atom_at.push(-1)
 		}
 		let old_atoms = self.seen_atoms
-		let mut a: u32 = 0
-		while a < count {
-			let fresh = a >= old_atoms
-			for l in [sv_lit(a, false), sv_lit(a, true)] {
-				if self.is_held(l) {
-					continue
-				}
-				let seen = self.view(l, book)
-				if !seen.usable {
-					continue
-				}
-				let v = seen.var
-				let up = seen.upper
-				let side = if up { self.upper[v] } else { self.lower[v] }
-				if side.set && (fresh || self.touched[v]) {
-					let order = sv_delta_cmp(side.value, seen.value)
-					if (up && order <= 0) || (!up && order >= 0) {
-						self.implied.push(SvImplied {
-							lit: l,
-							level: self.level(),
-							parts: [sv_side_part(side, up, 1)],
-							d: 1,
-						})
-						self.hold(l, 1)
-						out.push(l)
-						continue
-					}
-				}
-				let r = self.row_of[v]
-				if r < 0 {
-					continue
-				}
-				// A row `view` made in this call is read too.
-				if !fresh && r < examine.len() && !examine[r] {
-					continue
-				}
-				while known.len() < 2 * self.rows.len() {
-					known.push(0)
-					bounds.push(sv_sx_zero())
-				}
-				let at = if up { 2 * r + 1 } else { 2 * r }
-				if known[at] == 0 {
-					known[at] = 1
-					let found = self.row_bound(r, up)
-					if found != null {
-						known[at] = 2
-						bounds[at] = found ?? sv_sx_zero()
-					}
-				}
-				if known[at] != 2 {
-					continue
-				}
-				let got = bounds[at].clone()
-				let order = sv_delta_cmp(got, seen.value)
-				if (up && order <= 0) || (!up && order >= 0) {
-					let parts = self.row_parts(r, up) ?? continue
-					let d = sv_row_coef(self.rows[r], v.checked_u32() ?? continue).checked_neg()
-						?? continue
-					self.implied.push(SvImplied { lit: l, level: self.level(), parts: parts, d: d })
-					self.hold(l, 1)
-					out.push(l)
+		// The atoms the last call saw are read again only where their
+		// variable's bound changed or their variable is basic in a row to
+		// read again, changed or holding such a variable (#1960); found
+		// through the indexes, not by reading every atom (#2401).
+		let mut again: Vec[u32] = []
+		if old_atoms > 0 {
+			let mut exam: Vec[i64] = []
+			let mut i = 0
+			while i < self.dirty_list.len() {
+				let r = self.dirty_list[i]
+				i += 1
+				if self.exam_at[r] != call {
+					self.exam_at[r] = call
+					exam.push(r)
 				}
 			}
+			i = 0
+			while i < self.touched_list.len() {
+				let v = self.touched_list[i]
+				i += 1
+				let col = v.checked_u32() ?? 0
+				let mut k = 0
+				while k < self.col_rows[v].len() {
+					let r = self.col_rows[v][k]
+					k += 1
+					if self.exam_at[r] != call && sv_row_coef(self.rows[r], col) != 0 {
+						self.exam_at[r] = call
+						exam.push(r)
+					}
+				}
+				self.take_atoms(v, call, again)
+			}
+			for r in exam {
+				self.take_atoms(self.basic[r], call, again)
+			}
+			for a in self.redo {
+				if self.atom_at[a as i64] != call {
+					self.atom_at[a as i64] = call
+					again.push(a)
+				}
+			}
+			// Many atoms: read in order off their marks, not sorted.
+			if again.len() > (old_atoms / 16) as i64 {
+				again.clear()
+				let mut a: u32 = 0
+				while a < old_atoms {
+					if self.atom_at[a as i64] == call {
+						again.push(a)
+					}
+					a += 1
+				}
+			} else {
+				again.sort()
+			}
+		}
+		for a in again {
+			if a < old_atoms {
+				let fresh = (a as i64) < self.redo_in.len() && self.redo_in[a as i64]
+				self.propagate_atom(a, fresh, book, rows_before, call, out)
+			}
+		}
+		for a in self.redo {
+			self.redo_in[a as i64] = false
+		}
+		self.redo.clear()
+		let mut a = old_atoms
+		while a < count {
+			self.propagate_atom(a, true, book, rows_before, call, out)
 			a += 1
 		}
 		self.seen_atoms = count
-		let mut v0 = 0
-		while v0 < self.touched.len() {
-			self.touched[v0] = false
-			v0 += 1
+		for v in self.touched_list {
+			self.touched[v] = false
 		}
-		let mut r1 = 0
-		while r1 < self.row_dirty.len() {
-			self.row_dirty[r1] = false
-			r1 += 1
+		self.touched_list.clear()
+		for r in self.dirty_list {
+			self.row_dirty[r] = false
 		}
+		self.dirty_list.clear()
 		return out
 	}
 
@@ -1260,13 +1580,24 @@ impl SvTh for SvSimplex {
 			return
 		}
 		let keep = self.levels[level]
-		// The basis stays: rows the pivots above `level` changed were read
-		// against bounds that are gone, so the next `propagate` reads all.
-		self.seen_atoms = 0
+		// The basis stays: the rows changed above `level`, the atoms seen
+		// and the bounds waiting since were read against bounds that are
+		// gone, so the next `propagate` reads them again (`row_log`).
+		if self.level_seen[level] < self.seen_atoms {
+			self.seen_atoms = self.level_seen[level]
+		}
+		let rows = self.row_log[self.level_rows[level]..].clone()
+		let vars = self.var_log[self.level_vars[level]..].clone()
+		self.row_log.truncate(self.level_rows[level])
+		self.var_log.truncate(self.level_vars[level])
+		self.level_seen.truncate(level)
+		self.level_rows.truncate(level)
+		self.level_vars.truncate(level)
 		while self.undo.len() > keep {
 			let u = self.undo.pop() ?? break
 			self.stamp += 1
 			self.bound_at[u.var] = self.stamp
+			self.gcd_var(u.var)
 			if u.upper {
 				self.upper[u.var] = u.old
 			} else {
@@ -1279,9 +1610,38 @@ impl SvTh for SvSimplex {
 		}
 		self.levels.truncate(level)
 		self.marks.truncate(level)
+		// Logged again whether or not still marked: a level below reads
+		// them again too.
+		let logged = self.levels.len() > 0
+		for r in rows {
+			if !self.row_dirty[r] {
+				self.row_dirty[r] = true
+				self.dirty_list.push(r)
+			}
+			if logged {
+				self.row_log.push(r)
+			}
+		}
+		for v in vars {
+			if !self.touched[v] {
+				self.touched[v] = true
+				self.touched_list.push(v)
+			}
+			if logged {
+				self.var_log.push(v)
+			}
+		}
 		while self.implied.len() > 0 && self.implied[self.implied.len() - 1].level > level {
 			let i = self.implied.pop() ?? break
 			self.hold(i.lit, -1)
+			let a = (i.lit / 2) as i64
+			while self.redo_in.len() <= a {
+				self.redo_in.push(false)
+			}
+			if !self.redo_in[a] {
+				self.redo_in[a] = true
+				self.redo.push(i.lit / 2)
+			}
 		}
 	}
 
@@ -1422,17 +1782,40 @@ impl SvSimplex {
 	/// The first row whose GCD test fails, as a Farkas lemma; `null` where
 	/// none does.
 	fn gcd_conflict(ref mut self, mut book: SvBook) -> SvClause? {
-		let mut r = 0
-		while r < self.rows.len() {
+		// Only a row marked since it passed can fail: one that changed, or
+		// one holding a variable whose bounds did.
+		let vars = self.gcd_vars.clone()
+		self.gcd_vars = []
+		for v in vars {
+			self.gcd_var_in[v] = false
+			let col = v.checked_u32() ?? 0
+			let mut i = 0
+			while i < self.col_rows[v].len() {
+				let t = self.col_rows[v][i]
+				i += 1
+				if !self.gcd_row_in[t] && sv_row_coef(self.rows[t], col) != 0 {
+					self.gcd_row(t)
+				}
+			}
+		}
+		let mut marked = self.gcd_rows.clone()
+		marked.sort()
+		let mut at = 0
+		while at < marked.len() {
+			let r = marked[at]
 			if !self.gcd_unchanged(r) {
 				let got = self.row_gcd(r, book)
 				if got != null {
+					// `r` and the rows after it stay marked.
+					self.gcd_rows = marked[at..].clone()
 					return got
 				}
 				self.gcd_at[r] = self.stamp
 			}
-			r += 1
+			self.gcd_row_in[r] = false
+			at += 1
 		}
+		self.gcd_rows = []
 		return null
 	}
 
@@ -1455,8 +1838,15 @@ impl SvSimplex {
 	fn is_fixed(ref self, v: i64) -> bool {
 		let lo = self.lower[v]
 		let hi = self.upper[v]
-		return lo.set && hi.set && lo.value.k.num == 0 && hi.value.k.num == 0
-			&& sv_rat_cmp(lo.value.c, hi.value.c) == 0
+		if !lo.set || !hi.set || lo.value.k.num != 0 || hi.value.k.num != 0 {
+			return false
+		}
+		// Two integers compared as such (#2401: once per column of each
+		// row the GCD test reads).
+		if lo.value.c.den == 1 && hi.value.c.den == 1 {
+			return lo.value.c.num == hi.value.c.num
+		}
+		return sv_rat_cmp(lo.value.c, hi.value.c) == 0
 	}
 
 	/// The GCD test on row `r` (see above).

@@ -142,11 +142,13 @@ pub(crate) fn sv_row_reduced(r: SvRow) -> SvRow {
     let ks_gcd = match sv_content(&r.ks) { Some(__nikaia_value) => __nikaia_value, None => return r };
     let g = match sv_gcd(ks_gcd, r.constant) { Some(__nikaia_value) => __nikaia_value, None => return r };
     if g <= 1 { return r; }
-    let mut out = SvRow { cols: r.cols.copy_owned(), ks: Vec::with_capacity(nikaia_std::count::of(r.ks.len() as i64)), constant: r.constant / g };
-    for k in r.ks.iter() {
-        let k = nikaia_std::num::value(k);
-        out.ks.push(k / g);
+    let mut out = r;
+    let mut i: i64 = 0;
+    while ((i) as usize) < out.ks.len() {
+        { let __nikaia_stored = *unsafe { nikaia_std::proven::read(&out.ks, (i) as usize) } / g; unsafe { nikaia_std::proven::write(&mut out.ks, (i) as usize, __nikaia_stored) }; }
+        i = unsafe { nikaia_std::proven::add::<i64>(i, 1) };
     }
+    out.constant = out.constant / g;
     out
 }
 
@@ -164,6 +166,67 @@ pub(crate) fn sv_row_tightened(r: &SvRow) -> SvRow {
 pub(crate) fn sv_row_eliminate(r: &SvRow, s: &SvRow, col: u32) -> Option<SvRow> {
     let ab = match sv_cancelling(sv_row_coef(r, col), sv_row_coef(s, col)) { Some(__nikaia_value) => __nikaia_value, None => return None };
     sv_row_combine(*nikaia_std::index::get(&ab, 0), r, *nikaia_std::index::get(&ab, 1), s)
+}
+
+pub(crate) fn sv_row_eliminate_into(room: SvRow, r: &SvRow, s: &SvRow, col: u32, exact: bool, came: &mut Vec<u32>, left: &mut Vec<u32>) -> Option<SvRow> {
+    let came_at = came.len() as i64;
+    let left_at = left.len() as i64;
+    let ab = match sv_cancelling(sv_row_coef(r, col), sv_row_coef(s, col)) { Some(__nikaia_value) => __nikaia_value, None => return None };
+    let mut spare = room;
+    let a = *nikaia_std::index::get(&ab, 0);
+    let b = *nikaia_std::index::get(&ab, 1);
+    spare.cols.clear();
+    spare.ks.clear();
+    spare.constant = match sv_mul_add(a, r.constant, b, s.constant) { Some(__nikaia_value) => __nikaia_value, None => return sv_row_wide_moved(exact, a, r, b, s, came_at, came, left_at, left) };
+    let mut i: i64 = 0;
+    let mut j: i64 = 0;
+    while ((i) as usize) < r.cols.len() || ((j) as usize) < s.cols.len() {
+        let mut c: u32 = 0u32;
+        let mut k: i64 = 0;
+        if ((j) as usize) >= s.cols.len() || ((i) as usize) < r.cols.len() && *unsafe { nikaia_std::proven::read(&r.cols, (i) as usize) } < *unsafe { nikaia_std::proven::read(&s.cols, (j) as usize) } {
+            c = *unsafe { nikaia_std::proven::read(&r.cols, (i) as usize) };
+            k = match a.checked_mul(*nikaia_std::index::get(&r.ks, (i) as usize)) { Some(__nikaia_value) => __nikaia_value, None => return sv_row_wide_moved(exact, a, r, b, s, came_at, came, left_at, left) };
+            i = unsafe { nikaia_std::proven::add::<i64>(i, 1) };
+        } else if ((i) as usize) >= r.cols.len() || *unsafe { nikaia_std::proven::read(&s.cols, (j) as usize) } < *unsafe { nikaia_std::proven::read(&r.cols, (i) as usize) } {
+            c = *unsafe { nikaia_std::proven::read(&s.cols, (j) as usize) };
+            k = match b.checked_mul(*nikaia_std::index::get(&s.ks, (j) as usize)) { Some(__nikaia_value) => __nikaia_value, None => return sv_row_wide_moved(exact, a, r, b, s, came_at, came, left_at, left) };
+            j = unsafe { nikaia_std::proven::add::<i64>(j, 1) };
+            came.push(c);
+        } else {
+            c = *unsafe { nikaia_std::proven::read(&r.cols, (i) as usize) };
+            k = match sv_mul_add(a, *nikaia_std::index::get(&r.ks, (i) as usize), b, *nikaia_std::index::get(&s.ks, (j) as usize)) { Some(__nikaia_value) => __nikaia_value, None => return sv_row_wide_moved(exact, a, r, b, s, came_at, came, left_at, left) };
+            i = unsafe { nikaia_std::proven::add::<i64>(i, 1) };
+            j = unsafe { nikaia_std::proven::add::<i64>(j, 1) };
+        }
+        if k != 0 {
+            spare.cols.push(c);
+            spare.ks.push(k);
+        } else { left.push(c); }
+    }
+    Some(sv_row_reduced(spare))
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn sv_row_wide_moved(exact: bool, a: i64, r: &SvRow, b: i64, s: &SvRow, came_at: i64, came: &mut Vec<u32>, left_at: i64, left: &mut Vec<u32>) -> Option<SvRow> {
+    if !exact { return None; }
+    let out = match sv_row_combine_wide(a, r, b, s) { Some(__nikaia_value) => __nikaia_value, None => return None };
+    came.truncate(nikaia_std::count::of(came_at));
+    left.truncate(nikaia_std::count::of(left_at));
+    let mut i: i64 = 0;
+    let mut j: i64 = 0;
+    while ((i) as usize) < r.cols.len() || ((j) as usize) < out.cols.len() {
+        if ((j) as usize) >= out.cols.len() || ((i) as usize) < r.cols.len() && *unsafe { nikaia_std::proven::read(&r.cols, (i) as usize) } < *unsafe { nikaia_std::proven::read(&out.cols, (j) as usize) } {
+            left.push(*unsafe { nikaia_std::proven::read(&r.cols, (i) as usize) });
+            i = unsafe { nikaia_std::proven::add::<i64>(i, 1) };
+        } else if ((i) as usize) >= r.cols.len() || *unsafe { nikaia_std::proven::read(&out.cols, (j) as usize) } < *unsafe { nikaia_std::proven::read(&r.cols, (i) as usize) } {
+            came.push(*unsafe { nikaia_std::proven::read(&out.cols, (j) as usize) });
+            j = unsafe { nikaia_std::proven::add::<i64>(j, 1) };
+        } else {
+            i = unsafe { nikaia_std::proven::add::<i64>(i, 1) };
+            j = unsafe { nikaia_std::proven::add::<i64>(j, 1) };
+        }
+    }
+    Some(out)
 }
 
 pub(crate) fn sv_row_eliminate_exact(r: &SvRow, s: &SvRow, col: u32) -> Option<SvRow> {

@@ -9,7 +9,9 @@ decision on [#1938](https://github.com/Nikaia-Foundation/Nikaia/issues/1938)); D
 place of `trusted:`) added November 19, 2026 (owner's decision on
 [#2242](https://github.com/Nikaia-Foundation/Nikaia/issues/2242)), which change D8;
 D17 (the compiler's own build paths) added November 21, 2026 (owner's decision on
-[#2442](https://github.com/Nikaia-Foundation/Nikaia/issues/2442))
+[#2442](https://github.com/Nikaia-Foundation/Nikaia/issues/2442)); D17 items 6-8
+added the same day (supervisor's decision on
+[#2460](https://github.com/Nikaia-Foundation/Nikaia/issues/2460))
 **Answers:** what the compiler does when data from outside the program reaches
 a place that reads text as code or as a location: a shell command, an SQL
 text, markup written as is, a path with no root to keep it in
@@ -404,7 +406,30 @@ none:
    self-check of the raw sinks in `std` (`project_check.nika`) reads its
    allowances from it instead of a list written into the code, and `--trust`
    shows them, so a later allowance is a visible line in a reviewed file,
-   never a change inside the checker.
+   never a change inside the checker. Its place is fixed by item 8.
+6. **The write root is `NIKAIA_TARGET_DIR`.** Cargo does not pass
+   `CARGO_TARGET_DIR` to the wrapper when the build names `--target-dir`, and
+   exporting it would make the compiler's nested Cargo runs share the outer
+   target directory and wait on its lock (#1774). The outer build therefore
+   sets `NIKAIA_TARGET_DIR` to the `--target-dir` it hands Cargo, beside
+   `NIKAIA_GEN_DIR` (`project_drive_cargo_env`); item 2 reads that variable,
+   not `CARGO_TARGET_DIR`. Without it the wrapper keeps no store (item 3).
+7. **The outer build's record has the outer build's roots.** The record that
+   lets a build skip Cargo (#1750, `project_drive_fresh` and
+   `project_drive_record`) is kept by the outer build, not the wrapper, and
+   the dep-info file it reads names the program's sources and `std`'s, not
+   only generated ones. Every path in it, and the binary and the record
+   themselves, must be proved below one of the roots the outer build already
+   holds: the project's root, the `std` sources of the sysroot and the target
+   directory, and is read through a root on it. A path below none of them
+   means no record and Cargo runs (item 3).
+8. **The manifest lies beside the sources, not above them.** The manifest of
+   item 5 is `crates/nikaia-std/trust/nikaia.toml`. A `nikaia.toml` in a
+   directory above the `std` sources would make every one of them a member of
+   a project (`Layout::resolve` takes the nearest `nikaia.toml` above a
+   file), so `nikaia check` of a compiler file would become a project build.
+   A directory beside them is above none of them; the file keeps the name and
+   form of every manifest, and `project_check.nika` reads it by its path.
 
 ## 4. Not decided here
 
@@ -463,7 +488,8 @@ own precondition, and only a proof of that one admits the value.
   [#2217](https://github.com/Nikaia-Foundation/Nikaia/issues/2217); the environment by
   [#2216](https://github.com/Nikaia-Foundation/Nikaia/issues/2216); D11-D16 by the issues
   listed on [#2242](https://github.com/Nikaia-Foundation/Nikaia/issues/2242); D17 by
-  [#2442](https://github.com/Nikaia-Foundation/Nikaia/issues/2442).
+  [#2442](https://github.com/Nikaia-Foundation/Nikaia/issues/2442) and
+  [#2460](https://github.com/Nikaia-Foundation/Nikaia/issues/2460).
 * Part III 13.3 names the keys of D15 and their source lists; Part III 17
   (`std::fs`, `std::path`) gives `Root::join`, `Root::path`,
   `path::is_component` and `path::is_below`.

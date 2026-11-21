@@ -204,18 +204,15 @@ fn find(places: &Places, file: &str, generated: u32) -> Option<(&'static str, u3
         }
     }
     if places.file.is_empty() || places.file == file {
-        return lookup(places.sites, generated);
+        // The `.nika` lines are Nikaia (`runtime/abort_lines.nika`, #2120): it
+        // gives the entry's place in the table, read here without a copy.
+        let at = crate::runtime::lookup(places.sites, i64::from(generated), &mut |site: &Site| {
+            i64::from(site.0)
+        })?;
+        let (_, file, line) = places.sites[usize::try_from(at).ok()?];
+        return Some((file, line));
     }
     None
-}
-
-/// The `.nika` file and line for a line of the generated file. `std`'s own
-/// test blocks ask it (`runtime/abort_lines.nika`, ADR-rust-boundary-1 D24).
-pub(crate) fn lookup(table: &[Site], generated: u32) -> Option<(&'static str, u32)> {
-    table
-        .binary_search_by_key(&generated, |(line, _, _)| *line)
-        .ok()
-        .map(|at| (table[at].1, table[at].2))
 }
 
 /// What the panic said, in the two shapes a payload comes in.
