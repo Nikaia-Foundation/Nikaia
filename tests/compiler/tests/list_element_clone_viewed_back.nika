@@ -1,0 +1,39 @@
+// A copy of a list's text element, bound without a type, is a buffer of the
+// frame's own: a view of it handed back lives in the caller's keep, as one of
+// `let next: String = xs[k].clone()` does (#2014; it was rustc NK1343,
+// "cannot return value referencing local variable `next`").
+fn pick(xs: ref Vec[String]) -> String {
+    let mut extra: String = ""
+    let mut k = 0
+    while k < xs.len() {
+        let next = xs[k].clone()
+        if next.starts_with("a=") {
+            extra = next.strip_prefix("a=") ?? ""
+        }
+        k = k + 1
+    }
+    return extra
+}
+
+fn trimmed(xs: ref Vec[String]) -> String {
+    let mut extra: String = ""
+    for k in 0..<xs.len() {
+        let next = xs[k].trim().clone()
+        if next.starts_with("b=") {
+            extra = next.strip_prefix("b=") ?? ""
+        }
+    }
+    return extra
+}
+
+fn made(text: String) -> String {
+    let mut s = String()
+    s.push_str(text)
+    return s
+}
+
+fn main() throws {
+    let xs = [made("b"), made("a=1"), made("  b=2 ")]
+    println(pick(xs))
+    println(trimmed(xs))
+}
