@@ -1652,7 +1652,12 @@ uses.
 `String(capacity: n)` and `HashMap(capacity: n)` build the same empty value as
 `Vec()`, with room for `n` elements (bytes, entries) held ahead, so the first
 `n` pushes ask for memory once. The option's default is `0`, which is `Vec()`;
-a negative room stops the program, as any negative count does.
+a negative room stops the program, as any negative count does. The compiler
+never holds room ahead on its own: a capacity is a promise about memory, and
+programs say their promises (ADR-149 D5). Where a `String` that starts empty
+grows only by pushes of the parts of one source its loop walks, so that the
+source's length bounds it, the compiler warns (`NK1385`, #1933) and its help
+writes `String(capacity: s.len())`.
 
 ```nika
 let n = 10
