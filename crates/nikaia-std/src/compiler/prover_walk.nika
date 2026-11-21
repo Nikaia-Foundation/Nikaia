@@ -2754,7 +2754,8 @@ fn prover_outside_index(mut walk: ProverWalk, expr: ref Expr, base: ref Expr, in
 }
 
 /// **Data from outside at a raw sink** (ADR-raw-sinks-1 D2, D3, D10, D11,
-/// D14, D15): each part of the markup of `html::Raw` and of the program
+/// D14, D15): each part of the markup of `html::Raw`, of the text of
+/// `db::raw` (after the guard `db::is_identifier`), of the program
 /// `process::run` runs, and each part of a path under a root that may name
 /// any file (`fs::Root::Anywhere`, `Dir("/")`, or a `Dir` whose directory
 /// comes from outside, D11) that comes from outside, is not a whole number
@@ -2776,6 +2777,13 @@ fn prover_raw_sink(mut walk: ProverWalk, callee: ref String, args: ref Vec[Expr]
             raw_sink_parts(arg, holes_of, parts)
         }
         let sink = ParamSink { index: -1, kind: "markup", sink: "the markup of `html::Raw`, written to the page as it is", operation: "", root_part: false, guard: "html::is_plain" }
+        for part in parts {
+            raw_sink_part(walk, sink, sink.sink, part, span, scope, at, program, words, library, holes_of, ask, written_of)
+        }
+    } else if callee == "db::raw" && !args.is_empty() {
+        let mut parts: Vec[Expr] = []
+        raw_sink_parts(args[0], holes_of, parts)
+        let sink = ParamSink { index: -1, kind: "sql", sink: "the text of `db::raw`, sent to the database as SQL", operation: "", root_part: false, guard: "db::is_identifier" }
         for part in parts {
             raw_sink_part(walk, sink, sink.sink, part, span, scope, at, program, words, library, holes_of, ask, written_of)
         }
@@ -2991,6 +2999,9 @@ fn raw_sink_finding(mut walk: ProverWalk, sink: ref ParamSink, shown: ref String
     if sink.kind == "markup" {
         notes.push("Markup from outside can carry a script that runs in the page of whoever opens it.")
         help = f"Check it where it arrives: `throw BadInput({first}) if !html::is_plain({first})`, after which it is proved; or write it as text, which `html` escapes. If the program means to write markup from outside, `untrusted-markup = true` under `[allow]` in the manifest builds it."
+    } else if sink.kind == "sql" {
+        notes.push("SQL from outside can carry a statement of its own: `x; DROP TABLE users`.")
+        help = f"Hand it to the statement as a value, a hole `:name` in the text and `{first}` under `\"name\"` in `execute`'s `parameters`; or, where it names a table or a column, check it where it arrives: `throw BadInput({first}) if !db::is_identifier({first})`, after which it is proved. If the program means to send SQL from outside, `untrusted-sql = true` under `[allow]` in the manifest builds it."
     } else {
         notes.push("No check makes a stranger's choice of program safe: a name is looked up on `PATH`, a path runs that file.")
         help = "Name the program with a literal, or choose it with a `match` whose arms are literals: `let editor = match env::var(\"EDITOR\") ?? \"\" { \"vim\" => \"vim\", \"nano\" => \"nano\", else => \"vi\", }`. If the program means to run a program from outside, `untrusted-program = true` under `[allow]` in the manifest builds it."

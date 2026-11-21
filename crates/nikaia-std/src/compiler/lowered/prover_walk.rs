@@ -2040,6 +2040,11 @@ pub(crate) fn prover_raw_sink(walk: &mut ProverWalk, callee: &str, args: &[Expr]
         for arg in args.iter() { raw_sink_parts(arg, &mut *holes_of, &mut parts); }
         let sink = ParamSink { index: -1, kind: String::from("markup"), sink: String::from("the markup of `html::Raw`, written to the page as it is"), operation: String::from(""), root_part: false, guard: String::from("html::is_plain") };
         for part in parts.iter() { raw_sink_part(walk, &sink, &sink.sink, part, span, scope, at, program, words, library, &mut *holes_of, &mut *ask, &mut *written_of); }
+    } else if callee == "db::raw" && !args.is_empty() {
+        let mut parts: Vec<Expr> = vec![];
+        raw_sink_parts(nikaia_std::index::get(&args, 0), &mut *holes_of, &mut parts);
+        let sink = ParamSink { index: -1, kind: String::from("sql"), sink: String::from("the text of `db::raw`, sent to the database as SQL"), operation: String::from(""), root_part: false, guard: String::from("db::is_identifier") };
+        for part in parts.iter() { raw_sink_part(walk, &sink, &sink.sink, part, span, scope, at, program, words, library, &mut *holes_of, &mut *ask, &mut *written_of); }
     } else if callee == "process::run" && !args.is_empty() {
         let mut parts: Vec<Expr> = vec![];
         raw_sink_parts(nikaia_std::index::get(&args, 0), &mut *holes_of, &mut parts);
@@ -2170,6 +2175,9 @@ pub(crate) fn raw_sink_finding(walk: &mut ProverWalk, sink: &ParamSink, shown: &
     if sink.kind == "markup" {
         notes.push(String::from("Markup from outside can carry a script that runs in the page of whoever opens it."));
         help = format!("Check it where it arrives: `throw BadInput({}) if !html::is_plain({})`, after which it is proved; or write it as text, which `html` escapes. If the program means to write markup from outside, `untrusted-markup = true` under `[allow]` in the manifest builds it.", first, first);
+    } else if sink.kind == "sql" {
+        notes.push(String::from("SQL from outside can carry a statement of its own: `x; DROP TABLE users`."));
+        help = format!("Hand it to the statement as a value, a hole `:name` in the text and `{}` under `\"name\"` in `execute`'s `parameters`; or, where it names a table or a column, check it where it arrives: `throw BadInput({}) if !db::is_identifier({})`, after which it is proved. If the program means to send SQL from outside, `untrusted-sql = true` under `[allow]` in the manifest builds it.", first, first, first);
     } else {
         notes.push(String::from("No check makes a stranger's choice of program safe: a name is looked up on `PATH`, a path runs that file."));
         help = String::from("Name the program with a literal, or choose it with a `match` whose arms are literals: `let editor = match env::var(\"EDITOR\") ?? \"\" { \"vim\" => \"vim\", \"nano\" => \"nano\", else => \"vi\", }`. If the program means to run a program from outside, `untrusted-program = true` under `[allow]` in the manifest builds it.");
