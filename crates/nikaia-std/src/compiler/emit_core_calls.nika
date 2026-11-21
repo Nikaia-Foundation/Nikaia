@@ -1421,7 +1421,13 @@ impl EmitState {
             let on = receiver ?? return
             if self.stays_the_callers(world, scope.function, on) || self.facts.kept_drains.contains(node_key(on)) {
                 if self.facts.take_drains.contains(node_key(on)) {
-                    out.push("std::mem::take(&mut ")
+                    // A `mut` parameter itself is `&mut` already: taken as it is,
+                    // not lent again (ADR-386 D2, ADR-094 D3).
+                    let lent = match on {
+                        Expr::Variable(name, _) => self.changes_in_place(scope.function, emit_text(world, name)),
+                        else => false,
+                    }
+                    out.push(if lent { "std::mem::take(" } else { "std::mem::take(&mut " })
                     self.emit_core_postfix_base(world, walk, out, host, on, depth, flow, scope)
                     out.push(").into_iter()")
                     return
