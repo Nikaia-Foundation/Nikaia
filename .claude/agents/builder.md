@@ -15,6 +15,10 @@ You build one small slice of an issue in the Nikaia repository and end.
   KEYWORD` (spec section, example test, facts lines) instead of reading the
   files whole; probe a snippet with `nikaia run scripts/probe.nika -- SNIPPET`; do not look up again
   what it or the brief's *Locations* say.
+  A *topic section* (CI and caches, Ledger and bounds proofs, ...) holds a
+  work area's files, measure command and latest figures, dated: start from
+  them, and add what you measured or found there in the debrief's question (7),
+  `Fact: <topic> | ...`, each figure with date and commit or run.
 * **Your work order is an issue** (inlined in your prompt; a brief `issue-N.md`
   only frames it), or an older brief that names its steps. Plan your own steps
   from the issue's *To build*, build and test each, commit it (only your files,
