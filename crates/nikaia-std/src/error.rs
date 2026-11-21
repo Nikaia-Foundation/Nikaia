@@ -84,6 +84,20 @@ struct Cold<S> {
     /// first one's has no place in `secondary`, which holds the first one's
     /// own type, and is kept here in the box rather than dropped.
     others: Vec<Box<dyn JoinedLater>>,
+    /// **Where it crossed a task's boundary** (ADR-async-5 D23): one pair per
+    /// crossing, the innermost first.
+    crossings: Vec<Crossing>,
+}
+
+/// **One crossing of a task's boundary** (ADR-async-5 D23, Part I 7.1): where
+/// the task was started (the `async` form), and where its failure arrived
+/// (the wait point, the `join` of a handle, or the group's end), both as text
+/// the compiler wrote; and, where `NIKAIA_TRACE` asked for one, the trace of
+/// the code that waited, captured where the failure arrived.
+struct Crossing {
+    started: &'static str,
+    arrived: Option<&'static str>,
+    trace: Option<Backtrace>,
 }
 
 impl<S> Tail<S> {
@@ -118,6 +132,7 @@ impl<S> Tail<S> {
             trace: Some(trace),
             secondary: Vec::new(),
             others: Vec::new(),
+            crossings: Vec::new(),
         })
     }
 
@@ -156,20 +171,67 @@ impl<S> Tail<S> {
     /// form, which is one allocation on a path that allocates a box anyway.
     fn map_into<T>(mut self, convert: impl FnMut(S) -> T) -> Tail<T> {
         let origin = self.origin();
-        let (trace, secondary, others) = match self.word.boxed_mut() {
+        let (trace, secondary, others, crossings) = match self.word.boxed_mut() {
             Some(cold) => (
                 cold.trace.take(),
                 std::mem::take(&mut cold.secondary),
                 std::mem::take(&mut cold.others),
+                std::mem::take(&mut cold.crossings),
             ),
-            None => (None, Vec::new(), Vec::new()),
+            None => (None, Vec::new(), Vec::new(), Vec::new()),
         };
         Tail::cold(Cold {
             origin,
             trace,
             secondary: secondary.into_iter().map(convert).collect(),
             others,
+            crossings,
         })
+    }
+
+    fn crossings(&self) -> &[Crossing] {
+        self.as_cold().map_or(&[], |cold| &cold.crossings)
+    }
+
+    /// **The failure leaves the task it was raised in, or passed through**
+    /// (ADR-async-5 D23): a crossing started at `site`, whose arrival is not
+    /// known yet. On the failure's path alone, so the box it needs is paid
+    /// only there.
+    fn start(&mut self, site: Origin) {
+        self.cold_mut().crossings.push(Crossing {
+            started: site,
+            arrived: None,
+            trace: None,
+        });
+    }
+
+    /// **The failure arrived where a task was waited for** (D23): every
+    /// crossing of it not arrived yet arrived at `site`, with the waiting
+    /// code's trace where this process was asked for one.
+    fn arrive(&mut self, site: Origin) {
+        if let Some(cold) = self.word.boxed_mut() {
+            for crossing in cold.crossings.iter_mut().filter(|c| c.arrived.is_none()) {
+                crossing.arrived = Some(site);
+                if tracing() {
+                    crossing.trace = Some(Backtrace::force_capture());
+                }
+            }
+        }
+    }
+
+    /// The failures that joined this one, to mark where they arrived.
+    fn secondary_mut(&mut self) -> &mut [S] {
+        match self.word.boxed_mut() {
+            Some(cold) => &mut cold.secondary,
+            None => &mut [],
+        }
+    }
+
+    fn others_mut(&mut self) -> &mut [Box<dyn JoinedLater>] {
+        match self.word.boxed_mut() {
+            Some(cold) => &mut cold.others,
+            None => &mut [],
+        }
     }
 
     /// The cold part, made on the spot if this is the first thing to need it
@@ -181,6 +243,7 @@ impl<S> Tail<S> {
                 trace: None,
                 secondary: Vec::new(),
                 others: Vec::new(),
+                crossings: Vec::new(),
             });
         }
         match self.word.boxed_mut() {
@@ -238,18 +301,18 @@ impl Raised {
             true => format!("{message}\n{BELOW}"),
             false => format!("{message}\n  raised at {}", self.tail.origin()),
         };
+        crossed_lines(&mut out, self.tail.crossings());
         let mut source = self.inner.source();
         while let Some(cause) = source {
             out.push_str(&format!("\n  caused by {}", shown(cause, escape)));
             source = cause.source();
         }
-        match self.tail.trace() {
-            Some(t) if t.status() == BacktraceStatus::Captured => {
-                out.push_str(&format!("\n{t}"));
-            }
-            _ if note_trace => out.push_str("\n  (no trace; set NIKAIA_TRACE=1 to capture one)"),
-            _ => {}
-        }
+        trace_part(
+            &mut out,
+            self.tail.trace(),
+            self.tail.crossings(),
+            note_trace,
+        );
         for later in self.tail.secondary() {
             let long = match later.downcast_ref::<Raised>() {
                 Some(raised) => raised.long(false, escape),
@@ -389,7 +452,14 @@ impl<E: fmt::Display> Thrown<E> {
     /// the same thing three times and buries the failures.
     fn long(&self, note_trace: bool, escape: bool) -> String {
         let tail = &self.tail;
-        let mut out = full_form_with(&self.inner, tail.origin(), tail.trace(), note_trace, escape);
+        let mut out = full_form_with(
+            &self.inner,
+            tail.origin(),
+            tail.trace(),
+            tail.crossings(),
+            note_trace,
+            escape,
+        );
         for later in tail.secondary() {
             out.push_str(&indented(&later.long(false, escape)));
         }
@@ -429,7 +499,12 @@ impl<E> Site<E> {
     where
         E: fmt::Display,
     {
-        let mut out = full_form(error, self.tail.origin(), self.tail.trace());
+        let mut out = full_form(
+            error,
+            self.tail.origin(),
+            self.tail.trace(),
+            self.tail.crossings(),
+        );
         for later in self.tail.secondary() {
             out.push_str(&indented(&later.long(false, false)));
         }
@@ -471,8 +546,9 @@ fn full_form<E: fmt::Display>(
     error: &E,
     origin: &'static str,
     trace: Option<&Backtrace>,
+    crossings: &[Crossing],
 ) -> String {
-    full_form_with(error, origin, trace, true, false)
+    full_form_with(error, origin, trace, crossings, true, false)
 }
 
 /// The same, told whether to say anything about the trace
@@ -481,6 +557,7 @@ fn full_form_with<E: fmt::Display>(
     error: &E,
     origin: &'static str,
     trace: Option<&Backtrace>,
+    crossings: &[Crossing],
     note_trace: bool,
     escape: bool,
 ) -> String {
@@ -494,14 +571,48 @@ fn full_form_with<E: fmt::Display>(
         true => format!("{message}\n{BELOW}"),
         false => format!("{message}\n  raised at {origin}"),
     };
+    crossed_lines(&mut out, crossings);
+    trace_part(&mut out, trace, crossings, note_trace);
+    out
+}
+
+/// **Where the error crossed a task's boundary** (ADR-async-5 D23, Part I
+/// 7.1): a `started` and an `arrived` line per crossing, under the `raised`
+/// one, the innermost first.
+fn crossed_lines(out: &mut String, crossings: &[Crossing]) {
+    for crossing in crossings {
+        out.push_str(&format!("\n  started at {}", crossing.started));
+        if let Some(arrived) = crossing.arrived {
+            out.push_str(&format!("\n  arrived at {arrived}"));
+        }
+    }
+}
+
+/// **The trace, or the note that there is none.** Under `NIKAIA_TRACE` an
+/// error that crossed a task's boundary shows the task's trace, then per
+/// crossing a line `── started at <site> ──` and the trace of the code that
+/// waited for it (ADR-async-5 D23).
+fn trace_part(
+    out: &mut String,
+    trace: Option<&Backtrace>,
+    crossings: &[Crossing],
+    note_trace: bool,
+) {
     match trace {
         Some(t) if t.status() == BacktraceStatus::Captured => {
             out.push_str(&format!("\n{t}"));
+            for crossing in crossings {
+                out.push_str(&format!("\n── started at {} ──", crossing.started));
+                if let Some(waited) = &crossing.trace
+                    && waited.status() == BacktraceStatus::Captured
+                {
+                    out.push_str(&format!("\n{waited}"));
+                }
+            }
         }
         _ if note_trace => out.push_str("\n  (no trace; set NIKAIA_TRACE=1 to capture one)"),
         _ => {}
     }
-    out
 }
 
 impl<E: fmt::Display> fmt::Display for Thrown<E> {
@@ -632,11 +743,114 @@ pub trait JoinedLater: Send + Sync {
     /// The long form, without the note about a missing trace, its texts
     /// escaped where it is printed uncaught (ADR-398 D3).
     fn long_form_in(&self, escape: bool) -> String;
+    /// Its crossings not arrived yet arrived at `site` (ADR-async-5 D23).
+    fn arrive_at(&mut self, site: Origin);
 }
 
 impl<W: fmt::Display + Send + Sync> JoinedLater for Thrown<W> {
     fn long_form_in(&self, escape: bool) -> String {
         self.long(false, escape)
+    }
+
+    fn arrive_at(&mut self, site: Origin) {
+        Crossed::arrived_at(self, site);
+    }
+}
+
+/// **An error that crosses a task's boundary records where**
+/// ([ADR-async-5](../../../docs/specification/adr/adr-async-5.md) D23, Part I
+/// 7.1): where the task was started, as the failure leaves it, and where the
+/// failure arrived, as the code that waited for it receives it. One trait so
+/// that the emitter's two calls, [`started`] and [`arrived`], need to know
+/// only that the channel can take them, whichever channel it is; a channel
+/// with no envelope (a crash, a full block) takes them and keeps nothing.
+pub trait Crossed {
+    /// A crossing started at `site`, its arrival not known yet.
+    fn started_at(&mut self, site: Origin);
+    /// Every crossing not arrived yet arrived at `site`, in this error and in
+    /// each that joined it, which carries its own.
+    fn arrived_at(&mut self, site: Origin);
+}
+
+/// **The failure leaves a task started at `site`** (D23): what the emitter
+/// writes around a task's body. Nothing on the success path but the branch
+/// the `Result` already has.
+#[inline]
+pub fn started<T, E: Crossed>(result: Result<T, E>, site: Origin) -> Result<T, E> {
+    match result {
+        Ok(value) => Ok(value),
+        Err(error) => Err(started_cold(error, site)),
+    }
+}
+
+#[cold]
+#[inline(never)]
+fn started_cold<E: Crossed>(mut error: E, site: Origin) -> E {
+    error.started_at(site);
+    error
+}
+
+/// [`started`] around a task's body that is a future: a detached task's.
+pub async fn started_paused<T, E: Crossed>(
+    body: impl std::future::Future<Output = Result<T, E>>,
+    site: Origin,
+) -> Result<T, E> {
+    started(body.await, site)
+}
+
+/// **The failure of a task arrived where it was waited for** (D23): what the
+/// emitter writes around a wait point, a handle's `join` and a group's end.
+#[inline]
+pub fn arrived<T, E: Crossed>(result: Result<T, E>, site: Origin) -> Result<T, E> {
+    match result {
+        Ok(value) => Ok(value),
+        Err(error) => Err(arrived_cold(error, site)),
+    }
+}
+
+#[cold]
+#[inline(never)]
+fn arrived_cold<E: Crossed>(mut error: E, site: Origin) -> E {
+    error.arrived_at(site);
+    error
+}
+
+impl<E> Crossed for Thrown<E> {
+    fn started_at(&mut self, site: Origin) {
+        self.tail.start(site);
+    }
+
+    fn arrived_at(&mut self, site: Origin) {
+        self.tail.arrive(site);
+        for later in self.tail.secondary_mut() {
+            later.arrived_at(site);
+        }
+        for later in self.tail.others_mut() {
+            later.arrive_at(site);
+        }
+    }
+}
+
+/// The box crosses through a downcast, as it joins: what this program raised
+/// into it is a [`Raised`]; an error from below Nikaia has no envelope to
+/// record in, and keeps nothing.
+impl Crossed for Box<dyn Error> {
+    fn started_at(&mut self, site: Origin) {
+        if let Some(raised) = self.downcast_mut::<Raised>() {
+            raised.tail.start(site);
+        }
+    }
+
+    fn arrived_at(&mut self, site: Origin) {
+        if let Some(raised) = self.downcast_mut::<Raised>() {
+            raised.tail.arrive(site);
+            for later in raised.tail.secondary_mut() {
+                later.arrived_at(site);
+            }
+            for later in raised.tail.others_mut() {
+                later.arrive_at(site);
+            }
+        }
     }
 }
 
@@ -921,6 +1135,7 @@ pub(crate) fn raised_at(inner: Box<dyn Error>, origin: &'static str) -> Box<dyn 
             trace: None,
             secondary: Vec::new(),
             others: Vec::new(),
+            crossings: Vec::new(),
         }),
     })
 }
@@ -933,6 +1148,10 @@ pub fn reopened<E: Error + 'static>(error: Box<dyn Error>) -> Thrown<E> {
             let Raised { inner, mut tail } = *raised;
             let origin = tail.origin();
             let trace = tail.word.boxed_mut().and_then(|cold| cold.trace.take());
+            let crossings = tail
+                .word
+                .boxed_mut()
+                .map_or_else(Vec::new, |cold| std::mem::take(&mut cold.crossings));
             Thrown {
                 inner: opened::<E>(inner),
                 tail: Tail::cold(Cold {
@@ -940,6 +1159,7 @@ pub fn reopened<E: Error + 'static>(error: Box<dyn Error>) -> Thrown<E> {
                     trace,
                     secondary: Vec::new(),
                     others: Vec::new(),
+                    crossings,
                 }),
             }
         }

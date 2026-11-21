@@ -1,0 +1,68 @@
+// `async(deferred) fn { … }` and `async(detached, deferred) fn { … }`
+// (ADR-async-5 D12, D13, #2512): the task runs only from the handle's
+// `start()`, then is joined as any task; the handle is `let mut`, since
+// `start()` changes it. A deferred task with a fallback (D22), and one that
+// pauses, start the same way; one cancelled on its path never runs.
+use std::time
+
+struct Bad {}
+
+impl Error for Bad {
+	fn message(ref self) -> String {
+		return "bad"
+	}
+}
+
+fn work(n: i64) -> i64 throws {
+	println(f"work {n} ran")
+	if n > 5 {
+		throw Bad {}
+	}
+	return n * 10
+}
+
+// Fails without printing: two such tasks run beside each other, and printed
+// lines of theirs would come in either order.
+fn fails(n: i64) -> i64 throws {
+	if n > 5 {
+		throw Bad {}
+	}
+	return n
+}
+
+fn slow(n: i64) -> i64 throws {
+	time::sleep(1.millis())
+	println(f"slow {n} ran")
+	return n + 1
+}
+
+fn backup(free: i64) throws {
+	let mut copy = async(deferred) fn { work(3) }
+	if free > 5 {
+		copy.start()
+		println(f"copied {copy.join()}")
+	} else {
+		copy.cancel()
+		println("not copied")
+	}
+}
+
+fn main() throws {
+	let mut h = async(deferred) fn { work(2) }
+	let mut p = async(deferred) fn { slow(4) }
+	println("nothing started")
+	h.start()
+	p.start()
+	println(f"{h.join()} {p.join()}")
+	let mut d = async(detached, deferred) fn { work(1) }
+	println("detached not started")
+	d.start()
+	println(f"{d.join()}")
+	let mut f = async(deferred) fn { fails(6) } catch { 7 }
+	f.start()
+	let mut g = async(deferred, detached) fn { fails(7) } catch { 8 }
+	g.start()
+	println(f"{f.join()} {g.join()}")
+	backup(10)
+	backup(1)
+}

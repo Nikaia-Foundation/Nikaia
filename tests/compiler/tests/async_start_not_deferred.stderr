@@ -1,0 +1,25 @@
+error[NK2121]: `h.start()` starts a task that started at once.
+  --> tests/async_start_not_deferred.nika:7:2
+   |
+ 7 | 	h.start()
+   |  ^^^^^^^^^
+   |
+   = note: Only a deferred task waits for its handle's `start()`: this one started when it was made.
+   = help: Write `let mut h = async(deferred) fn { … }` to start it here, or drop the `start()`.
+error[NK2121]: `h.start()` starts a task that started at once.
+   --> tests/async_start_not_deferred.nika:14:3
+    |
+ 14 | 		h.start()
+    |   ^^^^^^^^^
+    |
+    = note: Only a deferred task waits for its handle's `start()`: this one started when it was made.
+    = help: Write `let mut h = async(deferred) fn { … }` to start it here, or drop the `start()`.
+error[NK2121]: `h.start()` starts a task that started at once.
+   --> tests/async_start_not_deferred.nika:21:2
+    |
+ 21 | 	h.start()
+    |  ^^^^^^^^^
+    |
+    = note: Only a deferred task waits for its handle's `start()`: this one started when it was made.
+    = help: Write `let mut h = async(detached, deferred) fn { … }` to start it here, or drop the `start()`.
+

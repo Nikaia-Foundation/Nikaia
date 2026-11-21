@@ -1059,10 +1059,10 @@ pub(crate) fn check_core_call_on_described<H: CheckHost>(state: &mut CheckState,
     let found = check_core_arguments_bound(state, world, host, args, &patterns, &mut bound, &mut expected, world.own.functions.contains_key(key), (callee).as_ref(), span);
     state.call_keepers.clear();
     if world.own.functions.contains_key(key) { check_core_call_code_args(state, world, (callee).as_ref(), key, args, span); } else { check_core_call_std_code_args(state, world, (callee).as_ref(), key, args, parallel, span); }
-    if parallel && (entry == "map" || entry == "filter" || entry == "for_each") && args.len() == 1 { check_walks_a_lambda_against_itself(state, world, receiver, unsafe { nikaia_std::proven::read(&args, (0) as usize) }, span); }
+    if parallel && (entry == "map" || entry == "filter" || entry == "for_each") && args.len() == 1 { check_walks_a_lambda_against_itself(state, world, on, unsafe { nikaia_std::proven::read(&args, (0) as usize) }, span); }
     if key == "Par::fold" && args.len() >= 3 {
-        check_walks_a_lambda_against_itself(state, world, receiver, unsafe { nikaia_std::proven::read(&args, (1) as usize) }, span);
-        check_walks_a_lambda_against_itself(state, world, receiver, unsafe { nikaia_std::proven::read(&args, (2) as usize) }, span);
+        check_walks_a_lambda_against_itself(state, world, on, unsafe { nikaia_std::proven::read(&args, (1) as usize) }, span);
+        check_walks_a_lambda_against_itself(state, world, on, unsafe { nikaia_std::proven::read(&args, (2) as usize) }, span);
     }
     if keyed && args.len() == 1 && found.len() == 1 { check_core_call_on_a_viewed_key(state, world, unsafe { nikaia_std::proven::read(&args, (0) as usize) }, unsafe { nikaia_std::proven::read(&found, (0) as usize) }, span); }
     if key == "Par::fold" && args.len() >= 3 && found.len() >= 3 {

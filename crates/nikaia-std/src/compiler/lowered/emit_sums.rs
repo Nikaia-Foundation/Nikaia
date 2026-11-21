@@ -170,6 +170,14 @@ impl EmitState {
                 }
             }
             out.push("            _ => {}\n        }\n    }\n}\n");
+            let mut crossed: String = String::from("");
+            for member in members.iter() {
+                let variant = sum_variant(member);
+                if self.sum_member_held(world, member, &params).starts_with("nikaia_std::error::Thrown<") { crossed = format!("{}            {}::{}(e) => nikaia_std::error::Crossed::WHICH(e, site),\n", crossed, name, variant); }
+            }
+            let mut crossing: String = format!("impl{} nikaia_std::error::Crossed for {}{} {{\n", decl, name, params);
+            for which in ["started_at", "arrived_at"] { crossing = format!("{}    fn {}(&mut self, site: nikaia_std::error::Origin) {{\n        #[allow(unreachable_patterns)]\n        match self {{\n{}            _ => {{}}\n        }}\n    }}\n", crossing, which, nikaia_std::block::Text::from(crossed.replace("WHICH", which))); }
+            out.push(&format!("{}}}\n", crossing));
             if crashed { out.push(&format!("impl{} nikaia_std::task::Crosses for {}{} {{\n    type Sent = Self;\n    fn sent(self) -> Self {{ self }}\n    fn back(sent: Self) -> Self {{ sent }}\n}}\n", decl, name, params)); }
             let block_types = self.on_block_types();
             let into = if block_types { ".into()" } else { "" };

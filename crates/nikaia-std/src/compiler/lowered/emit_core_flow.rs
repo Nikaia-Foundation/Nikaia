@@ -1013,6 +1013,8 @@ impl EmitState {
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn emit_flow_task<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, task: i64, body: &Block, depth: i64, flow: &EmitFlow, scope: &EmitScope) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
         let handles = self.emit_task_handles(task);
+        let deferred = walk.async_deferred;
+        walk.async_deferred = false;
         let deadline = nikaia_std::block::Text::from(walk.async_within.to_string()); #[allow(clippy::redundant_locals)] let handles = handles;
         walk.async_within = String::from("");
         let admission = nikaia_std::block::Text::from(walk.async_admission.to_string()); #[allow(clippy::redundant_locals)] let handles = handles;
@@ -1056,7 +1058,10 @@ impl EmitState {
             kind = "FailingTask";
             if host.overlaps_user_code() && scope.channel == "std::boxed::Box<dyn std::error::Error>" { kind = "BoxedTask"; }
         }
-        if host.overlaps_user_code() { out.push(&format!("nikaia_std::task::{}::start_on_pool(async move ", kind)); } else { out.push(&format!("nikaia_std::task::{}::start(async move ", kind)); }
+        if deferred { out.push("nikaia_std::task::Deferred::new(move || "); }
+        let mut starter: &'static str = "async move ";
+        if failing { starter = "nikaia_std::error::started_paused(async move "; }
+        if host.overlaps_user_code() { out.push(&format!("nikaia_std::task::{}::start_on_pool({}", kind, starter)); } else { out.push(&format!("nikaia_std::task::{}::start({}", kind, starter)); }
         if failing {
             out.push(&format!("{{ {}let __nikaia_task = ", first));
             if bound_outside {
@@ -1064,7 +1069,7 @@ impl EmitState {
                 out.append(&inner);
                 out.push(&format!("; Ok::<_, {}>(__nikaia_value) }}).await?", scope.channel));
             } else { out.append(&inner); }
-            out.push(&format!("; Ok::<_, {}>(__nikaia_task) }}", scope.channel));
+            out.push(&format!("; Ok::<_, {}>(__nikaia_task) }}, &{})", scope.channel, rust_string(&scope.origin)));
             out.push(&format!(", |e: &{}| {{ #[allow(unused_imports)] use nikaia_std::task::{{ProbeEnding as _, ProbePlain as _}}; (&&nikaia_std::task::Probe(e)).report() }})", scope.channel));
         } else {
             let inside = EmitFlow { statement: flow.statement, ..EmitFlow::plain() };
@@ -1076,6 +1081,7 @@ impl EmitState {
             walk.async_bound = String::from("");
             out.push(")");
         }
+        if deferred { out.push(")"); }
         if opened { out.push(" }"); }
         Ok(())
     }

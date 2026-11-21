@@ -279,15 +279,24 @@ not `NK2109`.
 ### D12 - `async(deferred) fn { … }` hands back a handle that runs only from `h.start()`.
 
 ```nika
-let backup = async(deferred) fn { copy_all(src, dst) }
-if dst.free() > need { backup.start() } else { backup.cancel() }
-backup.join()
+let mut backup = async(deferred) fn { copy_all(src, dst) }
+if dst.free() > need {
+    backup.start()
+    backup.join()
+} else {
+    backup.cancel()
+}
 ```
 
 `deferred` implies `handle`. The task is not started until `h.start()`, which
 starts it and keeps the handle. A deferred handle that is not started on some
 path, and is not cancelled there, is `NK2121`; a second `start()` on a path is
-`NK2121` too. A deferred handle's window begins at its `start()`, and the
+`NK2121` too, and so is `start()` on a handle that is not deferred, which
+started at once. `start()` changes the handle (`start(mut self)`, Part III
+B.2), so the handle is bound with `let mut` (`NK1139`, as for every `mut self`
+method); `cancel()` takes it, so nothing is asked of it after a `cancel()`
+(supervisor, 2026-11-21, by *Language decisions*: the example's earlier form
+contradicted Part III B.2, #2644, #2645). A deferred handle's window begins at its `start()`, and the
 touch-set check is asked from there.
 
 ### D13 - `async(detached) fn { … }` hands back a free handle, which may outlive the group.

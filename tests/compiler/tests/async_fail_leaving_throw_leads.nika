@@ -1,0 +1,37 @@
+// A group left by a `throw` (ADR-async-5 D21, Part I 8.1.2, #2561): it waits
+// for its tasks, the thrown error leads, because its handlers are written for
+// it, and the failures nobody read are its `secondary`, in written order.
+
+enum Bad { Oops(i64) }
+impl Error for Bad {
+	fn message(ref self) -> String {
+		return match self {
+			Bad::Oops(n) => f"task {n} failed",
+		}
+	}
+}
+
+fn work(n: i64) -> i64 throws {
+	if n > 5 {
+		throw Bad::Oops(n)
+	}
+	return n
+}
+
+fn run(k: i64) -> i64 throws {
+	async work(7)
+	async work(8)
+	println("the group's statements run on")
+	if k > 0 {
+		throw Bad::Oops(k)
+	}
+	return k
+}
+
+fn main() throws {
+	let n = run(1) catch {
+		println(error.full())
+		0
+	}
+	println(f"{n}")
+}
