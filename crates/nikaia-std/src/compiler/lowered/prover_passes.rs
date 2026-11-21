@@ -201,8 +201,8 @@ pub(crate) fn carried_to(state: &ProverState) -> collections::BTreeMap<String, c
 
 pub(crate) fn checked_through(checked: &collections::BTreeMap<String, i64>, carried: &collections::BTreeMap<String, collections::BTreeSet<String>>, findings: &[Finding], function: &str) -> i64 {
     let mut seen: collections::BTreeSet<String> = collections::BTreeSet::new();
-    #[allow(unused_mut)] let mut todo: Vec<String> = nikaia_std::block::List::from_array_in([nikaia_std::block::Text::from(function.to_string())], nikaia_std::block::Place::Block);
-    let mut total: i64 = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut todo = todo;
+    let mut todo: Vec<String> = nikaia_std::block::List::from_array_in([nikaia_std::block::Text::from(function.to_string())], nikaia_std::block::Place::Block);
+    let mut total: i64 = 0;
     while !todo.is_empty() {
         let next = match todo.pop() { Some(__nikaia_value) => __nikaia_value, None => break };
         if seen.contains(&next) { continue; }

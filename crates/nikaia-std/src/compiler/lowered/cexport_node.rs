@@ -60,7 +60,7 @@ impl CxNode {
         #[allow(unused_mut)] let mut steps: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block); #[allow(unused_mut, clippy::redundant_locals)] let mut locals = locals;
         #[allow(unused_mut)] let mut args: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut locals = locals; #[allow(unused_mut, clippy::redundant_locals)] let mut steps = steps;
         #[allow(unused_mut)] let mut calls: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block); #[allow(unused_mut, clippy::redundant_locals)] let mut locals = locals; #[allow(unused_mut, clippy::redundant_locals)] let mut steps = steps; #[allow(unused_mut, clippy::redundant_locals)] let mut args = args;
-        let mut position: i64 = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut locals = locals; #[allow(unused_mut, clippy::redundant_locals)] let mut steps = steps; #[allow(unused_mut, clippy::redundant_locals)] let mut args = args; #[allow(unused_mut, clippy::redundant_locals)] let mut calls = calls;
+        let mut position: i64 = 0;
         let written = entry.written(); #[allow(unused_mut, clippy::redundant_locals)] let mut locals = locals; #[allow(unused_mut, clippy::redundant_locals)] let mut steps = steps; #[allow(unused_mut, clippy::redundant_locals)] let mut args = args; #[allow(unused_mut, clippy::redundant_locals)] let mut calls = calls;
         if entry.receiver.is_some() && owner_name.is_some() {
             let owner = nikaia_std::block::Text::from(owner_text.to_string());
@@ -75,7 +75,7 @@ impl CxNode {
                 args.push(String::from("self_ptr"));
             }
         }
-        let mut place: i64 = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut locals = locals; #[allow(unused_mut, clippy::redundant_locals)] let mut steps = steps; #[allow(unused_mut, clippy::redundant_locals)] let mut args = args; #[allow(unused_mut, clippy::redundant_locals)] let mut calls = calls;
+        let mut place: i64 = 0;
         while ((place) as usize) < entry.arg_names.len() {
             let name = nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&entry.arg_names, (place) as usize) }).to_string());
             let ty = (*nikaia_std::index::get(&entry.arg_types, (place) as usize)).clone();
@@ -155,8 +155,8 @@ impl CxNode {
                 CxIn::Callback { ref lent, result } => {
                     let trampoline = format!("nk_back_{}_{}", symbol, at);
                     #[allow(unused_mut)] let mut c_params: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-                    #[allow(unused_mut)] let mut handed: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block); #[allow(unused_mut, clippy::redundant_locals)] let mut c_params = c_params;
-                    let mut number = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut c_params = c_params; #[allow(unused_mut, clippy::redundant_locals)] let mut handed = handed;
+                    let mut handed: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block); #[allow(unused_mut, clippy::redundant_locals)] let mut c_params = c_params;
+                    let mut number = 0;
                     for part in lent.iter() {
                         match part {
                             CxLent::Value(shape) => {
@@ -197,7 +197,7 @@ impl CxNode {
                 },
             }
         }
-        let takes: i64 = position; #[allow(unused_mut, clippy::redundant_locals)] let mut locals = locals; #[allow(unused_mut, clippy::redundant_locals)] let mut steps = steps; #[allow(unused_mut, clippy::redundant_locals)] let mut args = args; #[allow(unused_mut, clippy::redundant_locals)] let mut calls = calls;
+        let takes: i64 = position;
         let found = cx_result_of(entry, words, &ctx.plains, &ctx.handles, &ctx.records);
         #[allow(unused_mut)] let mut body: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block); #[allow(unused_mut, clippy::redundant_locals)] let mut locals = locals; #[allow(unused_mut, clippy::redundant_locals)] let mut args = args;
         let mut has_finish = false;
@@ -286,7 +286,7 @@ impl CxNode {
             },
         }
         if by_value && entry.exclusive && owner_name.is_some() { body.push(format!("nk_assign_{}(env, argv[0], &self_value);", owner_text)); }
-        let mut argc: i64 = takes; #[allow(unused_mut, clippy::redundant_locals)] let mut locals = locals; #[allow(unused_mut, clippy::redundant_locals)] let mut steps = steps; #[allow(unused_mut, clippy::redundant_locals)] let mut calls = calls;
+        let mut argc: i64 = takes;
         if argc < 1 { argc = 1; }
         let function = cx_node_function(symbol); #[allow(unused_mut, clippy::redundant_locals)] let mut locals = locals; #[allow(unused_mut, clippy::redundant_locals)] let mut steps = steps; #[allow(unused_mut, clippy::redundant_locals)] let mut calls = calls;
         let mut text = format!("/* `{}` */\nstatic napi_value {}(napi_env env, napi_callback_info info) {{\n    size_t argc = {};\n    napi_value argv[{}];\n    napi_value self = NULL;\n    napi_value result = NULL;\n    nk_kept *kept = NULL;\n    int status = 0;\n", written, function, argc, argc); #[allow(unused_mut, clippy::redundant_locals)] let mut locals = locals; #[allow(unused_mut, clippy::redundant_locals)] let mut steps = steps; #[allow(unused_mut, clippy::redundant_locals)] let mut body = body;
@@ -520,8 +520,8 @@ pub(crate) fn cx_node_record_text(record: &CxRecord, ctx: &CxCtx) -> String {
     if record.is_enum() {
         #[allow(unused_mut)] let mut chosen: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         #[allow(unused_mut)] let mut cases: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block); #[allow(unused_mut, clippy::redundant_locals)] let mut chosen = chosen;
-        #[allow(unused_mut)] let mut names: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block); #[allow(unused_mut, clippy::redundant_locals)] let mut chosen = chosen; #[allow(unused_mut, clippy::redundant_locals)] let mut cases = cases;
-        let mut tag = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut chosen = chosen; #[allow(unused_mut, clippy::redundant_locals)] let mut cases = cases; #[allow(unused_mut, clippy::redundant_locals)] let mut names = names;
+        let mut names: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block); #[allow(unused_mut, clippy::redundant_locals)] let mut chosen = chosen; #[allow(unused_mut, clippy::redundant_locals)] let mut cases = cases;
+        let mut tag = 0;
         for variant in record.variants.iter() {
             let mut variant_reads: String = String::from("");
             let mut variant_writes: String = String::from("");

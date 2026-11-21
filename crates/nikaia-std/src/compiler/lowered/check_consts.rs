@@ -341,8 +341,8 @@ pub(crate) fn written_below(state: &CheckState, world: &CheckWorld<'_, '_, '_, '
         BuildValue::Variant { ty, variant, payload } => {
             if payload.is_empty() { return Some(format!("{}::{}", variant_path(ty), variant)); }
             let declared = nikaia_std::index::or(payloads(ty, variant), || vec![].into());
-            #[allow(unused_mut)] let mut written: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-            let mut at: i64 = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut written = written;
+            let mut written: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
+            let mut at: i64 = 0;
             written.reserve(payload.iter().size_hint().0); for held in payload.iter() {
                 let part_want = nth_type(&declared, at);
                 let text = match written_below(state, world, held, (part_want).as_ref(), &mut &mut *payloads, &mut &mut *float_text) { Some(__nikaia_value) => __nikaia_value, None => return None };
@@ -356,8 +356,8 @@ pub(crate) fn written_below(state: &CheckState, world: &CheckWorld<'_, '_, '_, '
                 Ty::Tuple(ref each) => each.copy_owned(),
                 _ => vec![],
             };
-            #[allow(unused_mut)] let mut written: Vec<String> = vec![];
-            let mut at: i64 = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut written = written;
+            let mut written: Vec<String> = vec![];
+            let mut at: i64 = 0;
             written.reserve(parts.iter().size_hint().0); for held in parts.iter() {
                 let part_want = nth_type(&declared, at);
                 let text = match written_below(state, world, held, (part_want).as_ref(), &mut &mut *payloads, &mut &mut *float_text) { Some(__nikaia_value) => __nikaia_value, None => return None };
@@ -394,7 +394,7 @@ impl CheckState {
         #[allow(unused_mut)] let mut keys: Vec<String> = vec![];
         #[allow(unused_mut)] let mut values: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block); #[allow(unused_mut, clippy::redundant_locals)] let mut keys = keys;
         let mut seen: collections::BTreeMap<String, i64> = collections::BTreeMap::new(); #[allow(unused_mut, clippy::redundant_locals)] let mut keys = keys; #[allow(unused_mut, clippy::redundant_locals)] let mut values = values;
-        let mut at: i64 = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut keys = keys; #[allow(unused_mut, clippy::redundant_locals)] let mut values = values;
+        let mut at: i64 = 0;
         for pair in pairs.iter() {
             let parts: Vec<BuildValue> = match pair {
                 BuildValue::Tuple(inner) => inner.copy_owned(),

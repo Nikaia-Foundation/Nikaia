@@ -320,10 +320,10 @@ pub(crate) fn migrate_a_ref_code(tokens: &[MigrateToken], k: i64, in_brackets: b
 pub(crate) fn migrate_name_a_code(tokens: &[MigrateToken], k: i64, prefix: &mut Vec<String>, suffix: &mut Vec<String>) {
     let open = unsafe { nikaia_std::proven::add::<i64>(k, 1) };
     let close = migrate_closing(tokens, open);
-    #[allow(unused_mut)] let mut sources: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
+    let mut sources: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     let mut start = open + 1;
-    let mut depth = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut sources = sources;
-    let mut position: i64 = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut sources = sources;
+    let mut depth = 0;
+    let mut position: i64 = 0;
     let mut j = open + 1;
     while j <= close {
         let ends = j == close || depth == 0 && unsafe { nikaia_std::proven::read(&tokens, (j) as usize) }.text == ",";
@@ -376,8 +376,8 @@ pub(crate) fn migrate_from_of_a_declaration(tokens: &[MigrateToken], k: i64, suf
     let close = migrate_closing(tokens, open);
     if migrate_text_at(tokens, unsafe { nikaia_std::proven::add::<i64>(close, 1) }) != "->" || migrate_text_at(tokens, unsafe { nikaia_std::proven::add::<i64>(close, 2) }) != "ref" || migrate_text_at(tokens, unsafe { nikaia_std::proven::add::<i64>(close, 3) }) == "mut" || migrate_text_at(tokens, unsafe { nikaia_std::proven::add::<i64>(close, 3) }) == "(" { return; }
     let mut takes_one = false;
-    #[allow(unused_mut)] let mut sources: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-    let mut depth = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut sources = sources;
+    let mut sources: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
+    let mut depth = 0;
     for j in open + 1..close {
         if migrate_a_ref_code(tokens, j, false) { takes_one = true; }
         match unsafe { nikaia_std::proven::read(&tokens, (j) as usize) }.kind {
@@ -411,7 +411,7 @@ pub(crate) fn migrate_trait_result(tokens: &[MigrateToken], k: i64) -> (i64, i64
     if migrate_text_at(tokens, after) == "from" || migrate_text_at(tokens, after) == "{" { return none; }
     let mut lent_self = false;
     #[allow(unused_mut)] let mut sources: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-    let mut depth = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut sources = sources;
+    let mut depth = 0;
     for j in open + 1..close {
         match unsafe { nikaia_std::proven::read(&tokens, (j) as usize) }.kind {
             MigrateKind::Open => { depth += 1; },
@@ -456,8 +456,8 @@ pub fn migrate_views3_markdown_unwritten(source: &str) -> Vec<String> {
     #[allow(unused_mut)] let mut out: Vec<String> = vec![];
     let mut block: String = String::from(""); #[allow(unused_mut, clippy::redundant_locals)] let mut out = out;
     let mut inside = false;
-    let mut opened: i64 = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut out = out;
-    let mut line: i64 = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut out = out;
+    let mut opened: i64 = 0;
+    let mut line: i64 = 0;
     for text in source.split("\n") {
         line += 1;
         let fence = text.trim();
@@ -482,9 +482,9 @@ pub(crate) fn migrate_unwritten_from(code: &str, before: i64) -> Vec<String> {
     let mut lexer = MigrateLexer { c: nikaia_std::list::scalars(code.chars()), at: 0, tokens: vec![] };
     lexer.run();
     let tokens = &lexer.tokens;
-    #[allow(unused_mut)] let mut out: Vec<String> = vec![];
-    let mut in_trait: i64 = -1; #[allow(unused_mut, clippy::redundant_locals)] let mut out = out;
-    let mut guarded: i64 = -1; #[allow(unused_mut, clippy::redundant_locals)] let mut out = out;
+    let mut out: Vec<String> = vec![];
+    let mut in_trait: i64 = -1;
+    let mut guarded: i64 = -1;
     for k in 0..tokens.len() as i64 {
         if unsafe { nikaia_std::proven::read(&tokens, (k) as usize) }.kind == MigrateKind::Word && unsafe { nikaia_std::proven::read(&tokens, (k) as usize) }.text == "extern" && k > guarded { guarded = migrate_extern_end(tokens, k); }
         if k > in_trait && k > guarded { in_trait = migrate_trait_end(tokens, k); }
@@ -556,12 +556,12 @@ pub fn migrate_views3_code(code: &str, keep_at: &[i64], by_value: &[bool], lent:
         suffix.push(String::from(""));
     }
     let in_params = migrate_in_params(tokens);
-    let mut in_trait: i64 = -1; #[allow(unused_mut, clippy::redundant_locals)] let mut prefix = prefix; #[allow(unused_mut, clippy::redundant_locals)] let mut suffix = suffix;
+    let mut in_trait: i64 = -1;
     let mut kept_ref: Vec<bool> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     kept_ref.reserve(tokens.iter().size_hint().0); for _t in tokens.iter() { kept_ref.push(false); }
     let mut brackets: Vec<bool> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-    let mut until: i64 = -1; #[allow(unused_mut, clippy::redundant_locals)] let mut prefix = prefix; #[allow(unused_mut, clippy::redundant_locals)] let mut suffix = suffix;
-    let mut k: i64 = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut prefix = prefix; #[allow(unused_mut, clippy::redundant_locals)] let mut suffix = suffix;
+    let mut until: i64 = -1;
+    let mut k: i64 = 0;
     while k < n {
         let t = nikaia_std::block::Text::from(unsafe { nikaia_std::proven::read(&tokens, (k) as usize) }.text.to_string());
         let kind = unsafe { nikaia_std::proven::read(&tokens, (k) as usize) }.kind;
@@ -612,7 +612,7 @@ pub fn migrate_views3_code(code: &str, keep_at: &[i64], by_value: &[bool], lent:
         }
     }
     let mut out: String = String::from(""); #[allow(unused_mut, clippy::redundant_locals)] let mut prefix = prefix; #[allow(unused_mut, clippy::redundant_locals)] let mut suffix = suffix;
-    let mut j: i64 = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut prefix = prefix; #[allow(unused_mut, clippy::redundant_locals)] let mut suffix = suffix;
+    let mut j: i64 = 0;
     while j < n {
         if !*unsafe { nikaia_std::proven::read(&gapless, (j) as usize) } { out.push_str(&unsafe { nikaia_std::proven::read(&tokens, (j) as usize) }.gap); }
         out.push_str(unsafe { nikaia_std::proven::read(&prefix, (j) as usize) });

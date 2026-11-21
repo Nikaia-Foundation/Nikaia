@@ -102,8 +102,8 @@ pub(crate) fn inferred_sync(claim: &Sync) -> bool { matches!(claim, Sync::Inferr
 pub(crate) fn no_sync(claim: &Sync) -> bool { matches!(claim, Sync::No) }
 
 pub(crate) fn pause_path(chain: &[String]) -> String {
-    #[allow(unused_mut)] let mut steps: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-    let mut k: i64 = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut steps = steps;
+    let mut steps: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
+    let mut k: i64 = 0;
     while ((k + 1) as usize) < chain.len() {
         steps.push(format!("`{}` calls `{}`", *unsafe { nikaia_std::proven::read(&chain, (k) as usize) }, *unsafe { nikaia_std::proven::read(&chain, (nikaia_std::proven::add::<i64>(k, 1)) as usize) }));
         k = unsafe { nikaia_std::proven::add::<i64>(k, 1) };

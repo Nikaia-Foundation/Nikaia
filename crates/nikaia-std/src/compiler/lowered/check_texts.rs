@@ -394,7 +394,7 @@ impl CheckState {
         if (wants.len() as i64) != parts.len() as i64 || (founds.len() as i64) != parts.len() as i64 { return None; }
         let mut built = false;
         let mut answered: Vec<Ty> = vec![];
-        let mut at: i64 = 0; #[allow(clippy::redundant_locals)] let parts = parts;
+        let mut at: i64 = 0;
         while at < parts.len() as i64 {
             let mut got = self.text_literal(world, unsafe { nikaia_std::proven::read(&wants, (at) as usize) }, *unsafe { nikaia_std::proven::read(&parts, (at) as usize) }, true);
             if got.is_none() { got = self.tuple_literal(world, unsafe { nikaia_std::proven::read(&founds, (at) as usize) }, unsafe { nikaia_std::proven::read(&wants, (at) as usize) }, *unsafe { nikaia_std::proven::read(&parts, (at) as usize) }); }
@@ -450,7 +450,7 @@ impl CheckState {
 pub(crate) fn ends_in_tuple(expr: &Expr) -> bool {
     let ends = tuple_ends(expr);
     if ends.is_empty() { return false; }
-    let mut tuples = 0; #[allow(clippy::redundant_locals)] let ends = ends;
+    let mut tuples = 0;
     for end in ends.iter() {
         let end = *end;
         match end {

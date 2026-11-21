@@ -22,8 +22,8 @@ pub(crate) fn raw_sinks_allow_value(table: &str, key: &str, word: &str, text: &s
         let ways = if key.starts_with("untrusted-paths-") { "`true`, `false` or a list of sources" } else { "`true` or `false`" };
         return Err(nikaia_std::error::throwing(Refused::Because(format!("`{}` in `{}` is {}, not `{}`.", key, table, ways, value)), &"raw_sinks_allow_value"));
     }
-    #[allow(unused_mut)] let mut words: Vec<String> = vec![];
-    let mut at = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut words = words;
+    let mut words: Vec<String> = vec![];
+    let mut at = 0;
     for piece in value.split("\"") {
         if at % 2 == 1 {
             if !contains(&raw_sinks_allow_sources(), piece) {

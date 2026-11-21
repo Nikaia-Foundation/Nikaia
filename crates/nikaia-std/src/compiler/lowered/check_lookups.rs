@@ -204,8 +204,8 @@ pub(crate) fn as_this_program_says(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_
     let segments: Vec<&str> = key.split("::").collect::<Vec<_>>();
     let mut take = unsafe { nikaia_std::proven::sub::<i64>(segments.len() as i64, 1) };
     while take >= 1 {
-        #[allow(unused_mut)] let mut prefix: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-        let mut at: i64 = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut prefix = prefix;
+        let mut prefix: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
+        let mut at: i64 = 0;
         while at < take {
             prefix.push(nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&segments, (at) as usize) }).to_string()));
             at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };

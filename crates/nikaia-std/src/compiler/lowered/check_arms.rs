@@ -208,7 +208,7 @@ pub(crate) fn arms_that_disagree(arms: &[CheckArm<'_>], is_if: bool, span: &Span
     }
     if numbers > 0 { shown.push(String::from("a number")); }
     let mut listed: String = String::from(""); #[allow(unused_mut, clippy::redundant_locals)] let mut shown = shown;
-    let mut index: i64 = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut shown = shown;
+    let mut index: i64 = 0;
     while index < shown.len() as i64 {
         let one = nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&shown, (index) as usize) }).to_string());
         if unsafe { nikaia_std::proven::add::<i64>(index, 1) } == shown.len() as i64 { listed = format!("{} and {}", listed, one); } else if index == 0 { listed = nikaia_std::block::Text::from(one.to_string()); } else { listed = format!("{}, {}", listed, one); }

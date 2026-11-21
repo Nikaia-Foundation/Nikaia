@@ -301,9 +301,9 @@ impl CheckState {
     // this was written - see `contracts::sync`.
     pub(crate) fn one_type_variable_two_integer_types(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, key: &str, wanted: &[(String, Ty)], given: &[Expr], found: &[Ty], span: &Span) {
         #[allow(unused_mut)] let mut variables: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-        #[allow(unused_mut)] let mut types: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block); #[allow(unused_mut, clippy::redundant_locals)] let mut variables = variables;
+        let mut types: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block); #[allow(unused_mut, clippy::redundant_locals)] let mut variables = variables;
         let mut places: Vec<i64> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-        let mut at: i64 = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut variables = variables; #[allow(unused_mut, clippy::redundant_locals)] let mut types = types;
+        let mut at: i64 = 0;
         while at < wanted.len() as i64 && at < found.len() as i64 {
             let here: i64 = at;
             at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };

@@ -10,10 +10,10 @@ pub struct SpecBlock {
 }
 
 pub fn blocks_in(text: &str) -> Vec<SpecBlock> {
-    #[allow(unused_mut)] let mut lines: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
+    let mut lines: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     for line in text.split("\n") { lines.push(nikaia_std::block::Text::from(line.to_string())); }
     let mut found: Vec<SpecBlock> = vec![];
-    let mut at: i64 = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut lines = lines;
+    let mut at: i64 = 0;
     while at < lines.len() as i64 {
         if (*nikaia_std::index::get(&lines, nikaia_std::index::at(at))).trim() != "```nika" {
             at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
@@ -95,8 +95,8 @@ pub(crate) fn wrapped(body: &str) -> String {
 pub(crate) fn split_at_the_first_statement(code: &str) -> Vec<String> {
     #[allow(unused_mut)] let mut lines: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     for line in code.trim_end().split("\n") { lines.push(nikaia_std::block::Text::from(line.to_string())); }
-    let mut head: i64 = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut lines = lines;
-    let mut depth: i64 = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut lines = lines;
+    let mut head: i64 = 0;
+    let mut depth: i64 = 0;
     for at in 0..lines.len() as i64 {
         let trimmed = (*unsafe { nikaia_std::proven::read(&lines, (at) as usize) }).trim();
         if depth == 0 {

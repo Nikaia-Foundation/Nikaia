@@ -36,8 +36,8 @@ impl EmitState {
     }
     pub(crate) fn lifetime_args(&self, name: &str, lifetime: &str) -> String {
         let slots = match self.view_slots.get(name) { Some(__nikaia_value) => __nikaia_value, None => return nikaia_std::block::Text::from(lifetime.to_string()) };
-        #[allow(unused_mut)] let mut parts: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block); #[allow(clippy::redundant_locals)] let slots = slots;
-        let mut at: i64 = 0; #[allow(clippy::redundant_locals)] let slots = slots; #[allow(unused_mut, clippy::redundant_locals)] let mut parts = parts;
+        let mut parts: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block); #[allow(clippy::redundant_locals)] let slots = slots;
+        let mut at: i64 = 0;
         while ((at) as usize) < slots.len() {
             parts.push(nikaia_std::block::Text::from(lifetime.to_string()));
             at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };

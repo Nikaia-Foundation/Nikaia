@@ -2054,7 +2054,10 @@ pub(crate) fn tier_statement(stmt: &Stmt, at: i64, ask: &TierAsk<'_, '_, '_, '_,
         },
         Stmt::Assign { target, op, value } => {
             tie_stored(target, value, ask, walk);
+            let before = walk.handed_back;
+            if op.is_none() && into_a_changed_parameter(target, ask, walk) { walk.handed_back = handed_struct(value); }
             tier_assign(target, value, op.is_some(), ask, walk);
+            walk.handed_back = before;
             if op.is_some() { changed_in_place(target, tier_written(target, ask), ask, walk); }
         },
         Stmt::For { bindings, iter, body, .. } => {
@@ -2109,7 +2112,14 @@ pub(crate) fn tier_statement(stmt: &Stmt, at: i64, ask: &TierAsk<'_, '_, '_, '_,
             walk.handed_back = before;
             flow_result(given, &kinds, ask, walk);
         },
-        Stmt::Expr(expr) => { return tier_expr(expr, ask, walk); },
+        Stmt::Expr(expr) => {
+            let before = walk.handed_back;
+            let stored = stored_struct(expr, ask, walk);
+            if stored >= 0 { walk.handed_back = stored; }
+            let kinds = tier_expr(expr, ask, walk);
+            if stored >= 0 { walk.handed_back = before; }
+            return kinds;
+        },
         _ => { },
     }
     no_kinds()
@@ -2465,6 +2475,36 @@ pub(crate) fn count_arm_use(value: &Expr, ask: &TierAsk<'_, '_, '_, '_, '_, '_, 
     let word = match lendable_parameter(value, ask, walk) { Some(__nikaia_value) => __nikaia_value, None => return };
     let before = nikaia_std::index::or(*nikaia_std::index::get(&walk.flows.arm_uses, &word), || 0);
     walk.flows.arm_uses.insert(word, before + 1);
+}
+
+pub(crate) fn stored_struct(expr: &Expr, ask: &TierAsk<'_, '_, '_, '_, '_, '_, '_>, walk: &mut TierWalk) -> i64 {
+    match expr {
+        Expr::MethodCall { receiver, method, args, .. } => {
+            let receiver = nikaia_std::boxed::open(receiver); let method = *method;
+            let name = ask.names.resolve(method);
+            let puts = name == "push" || name == "push_back" || name == "push_front" || name == "insert";
+            if !puts || !into_a_changed_parameter(receiver, ask, walk) { return -1; }
+            for arg in args.iter() {
+                let id = handed_struct(arg);
+                if id >= 0 { return id; }
+            }
+            return -1;
+        },
+        _ => return -1,
+    }
+}
+
+pub(crate) fn into_a_changed_parameter(place: &Expr, ask: &TierAsk<'_, '_, '_, '_, '_, '_, '_>, walk: &mut TierWalk) -> bool {
+    let root = match hb_place_root(place, ask.names) { Some(__nikaia_value) => __nikaia_value, None => return false };
+    let local = match tier_local(&root, &walk) { Some(__nikaia_value) => __nikaia_value, None => return false };
+    let declared = match local.declared { Some(__nikaia_value) => __nikaia_value, None => return false };
+    match declared.owner {
+        TextOwner::Param(ref key, at) => {
+            let function = match *nikaia_std::index::get(&walk.declared.fns, key) { Some(__nikaia_value) => __nikaia_value, None => return false };
+            at < function.changes.len() as i64 && *nikaia_std::index::get(&function.changes, nikaia_std::index::at(at))
+        },
+        _ => false,
+    }
 }
 
 pub(crate) fn handed_struct(value: &Expr) -> i64 {

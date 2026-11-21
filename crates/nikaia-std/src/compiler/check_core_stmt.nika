@@ -3405,6 +3405,11 @@ fn check_core_text_as_one(name: ref String) -> String {
 /// anywhere in it, or to one the checker does not know.
 fn check_core_a_binding_naming(state: ref CheckState, name: ref String, viewed: ref String) -> bool sync {
     let found = state.binding(name) ?? return true
+    // **An open number is a number** whatever type it takes (#2425): `let
+    // mut k = 0` holds no text, so the list is not bound again after it.
+    if found.open_number != null {
+        return false
+    }
     return check_core_ty_names(found.ty, viewed)
 }
 

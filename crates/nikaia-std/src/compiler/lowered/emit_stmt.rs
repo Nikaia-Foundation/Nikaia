@@ -497,8 +497,8 @@ impl EmitState {
             walk.kept_names.remove(&emit_text(world, each));
         }
         if names.len() > 1 || !shape.is_empty() {
-            #[allow(unused_mut)] let mut bound: Vec<String> = vec![];
-            let mut index: i64 = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut bound = bound;
+            let mut bound: Vec<String> = vec![];
+            let mut index: i64 = 0;
             for each in names.iter() {
                 let each = *each;
                 let local = self.emit_stmt_local(&emit_text(world, each));
@@ -935,8 +935,8 @@ impl EmitState {
         };
         let values_only = map_view && each.len() == 2 && *unsafe { nikaia_std::proven::read(&each, (0) as usize) } == "_";
         if values_only { each.remove(0); }
-        #[allow(unused_mut)] let mut written: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut each = each;
-        let mut index: i64 = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut each = each; #[allow(unused_mut, clippy::redundant_locals)] let mut written = written;
+        let mut written: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut each = each;
+        let mut index: i64 = 0;
         for one in each.iter() {
             let marked = mut_names.is_empty() || *nikaia_std::index::get(&mut_names, nikaia_std::index::at(if values_only { unsafe { nikaia_std::proven::add::<i64>(index, 1) } } else { index }));
             index = unsafe { nikaia_std::proven::add::<i64>(index, 1) };

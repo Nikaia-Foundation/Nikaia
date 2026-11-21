@@ -817,7 +817,7 @@ pub(crate) fn check_core_stmt_let<H: CheckHost>(state: &mut CheckState, world: &
         let single: String = format!("{}", world.words.resolve(*unsafe { nikaia_std::proven::read(&names, (0) as usize) }));
         check_crossings_a_value_with_a_cleanup_bound(state, world, &single, &found, span);
     }
-    #[allow(unused_mut)] let mut bound_names: Vec<String> = vec![];
+    let mut bound_names: Vec<String> = vec![];
     bound_names.reserve(names.iter().size_hint().0); for n in names.iter() {
         let n = *n;
         bound_names.push(format!("{}", world.words.resolve(n)));
@@ -831,7 +831,7 @@ pub(crate) fn check_core_stmt_let<H: CheckHost>(state: &mut CheckState, world: &
         seen_through = !found.fits(&want) && state.fits_through_deref(world, &found, &want);
         seen_through = seen_through || check_core_stmt_a_whole_run_viewed(&found, &want);
     }
-    let mut element_view: i64 = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut bound_names = bound_names;
+    let mut element_view: i64 = 0;
     if names.len() == 1 && ty.is_some() {
         let t: &Type = match ty { Some(__nikaia_value) => __nikaia_value, None => return check_core_stmt_unit() };
         let want = written_ty(world.words, world.here.aliases, t);
@@ -1732,8 +1732,8 @@ pub(crate) fn check_core_stmt_for<H: CheckHost>(state: &mut CheckState, world: &
     if value_only { unwritable = ""; }
     if unwritable != "" { state.a_for_mut_that_cannot_write(unwritable, iter, world, span); } else if mutable && lent {
         let list: Option<String> = dotted_path(world, iter);
-        #[allow(unused_mut)] let mut names: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-        let mut index: i64 = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut names = names;
+        let mut names: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
+        let mut index: i64 = 0;
         names.reserve(bindings.iter().size_hint().0); for b in bindings.iter() {
             let b = *b;
             let marked = !mut_names.is_empty() && *nikaia_std::index::get(&mut_names, (index) as usize);
@@ -2475,6 +2475,7 @@ pub(crate) fn check_core_text_as_one(name: &str) -> String {
 // this was written - see `contracts::sync`.
 pub(crate) fn check_core_a_binding_naming(state: &CheckState, name: &str, viewed: &str) -> bool {
     let found = match state.binding(name) { Some(__nikaia_value) => __nikaia_value, None => return true };
+    if found.open_number.is_some() { return false; }
     check_core_ty_names(&found.ty, viewed)
 }
 
