@@ -1,0 +1,4 @@
+no pid file: gone
+waiter running: alive
+waiter ended without a result: gone
+exit file written: done
