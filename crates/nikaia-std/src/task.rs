@@ -34,7 +34,7 @@ pub use gate::{
     Adaptive, Admission, Decision, Gate, Line, Load, OnLine, Placed, Pollable, Waiting,
     admission_first, admitted, admitted_sent, asked, limit,
 };
-pub use group::{ChildHandle, Deferred, Ended, Polled, Receiver, Rest};
+pub use group::{ChildHandle, Deferred, Ended, Polled, Read, Receiver, Rest};
 use group::{Group, ended, ran};
 
 /// **What a `spawn` hands back** (Part I 8.2,

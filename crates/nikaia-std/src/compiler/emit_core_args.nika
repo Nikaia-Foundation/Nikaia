@@ -705,6 +705,7 @@ impl EmitState {
             out.push("))")
             return
         }
+        let arg_start = out.buf.len()
         if i < part_counts.len() {
             walk.hull_count = part_counts[i]
         } else {
@@ -1016,7 +1017,13 @@ impl EmitState {
             let second = if in_place == 2 { "&__nk_x" } else { "__nk_x" }
             out.push(f"|mut __nk_acc, __nk_x| {{ nikaia_std::par::in_place(&mut __nk_acc, {second}, ")
         }
-        if future {
+        // **A read of a value tasks share, standing alone as the argument**
+        // (ADR-async-5 D8, #986): `*` is enough there, its brackets would be
+        // `unused_parens`.
+        let shared = emit_arg_a_shared_read(world, walk, arg)
+        if shared != "" && out.buf.len() == arg_start && in_place == 0 && !future {
+            out.push(shared)
+        } else if future {
             self.emit_arg_future(world, walk, out, host, arg, i, depth, inside, scope)
         } else {
             self.emit_arg_value(world, walk, out, host, arg, i, depth, inside, scope)
@@ -1491,6 +1498,23 @@ fn emit_async_at(statement: i64) -> i64? {
         return null
     }
     return statement
+}
+
+/// **A name of a pending value two tasks or more read** (D8, #986), as the
+/// read without its brackets, `*__task_N.join_now()?`; empty for any other
+/// argument.
+fn emit_arg_a_shared_read(world: ref EmitWorld, walk: ref EmitWalk, arg: ref Expr) -> String {
+    match arg {
+        Expr::Variable(name, _) => {
+            let handle = walk.async_handles.get(emit_text(world, name)) ?? return ""
+            if !handle.starts_with("(*") {
+                return ""
+            }
+            let opened = handle.strip_prefix("(") ?? return ""
+            return (opened.strip_suffix(")") ?? "").clone()
+        },
+        else => return "",
+    }
 }
 
 /// **The join of a task that never pauses** (D6), whose handle is `handle`:
@@ -2329,7 +2353,13 @@ impl EmitState {
                 out.push(" ")
             }
             first = false
+            // **Read by two tasks or more** (D8, a diamond, #986): the value is
+            // kept for all of them, each mention a read of it.
+            let shared = self.facts.async_shared.contains(each.1)
             out.push(f"let {handle} = ")
+            if shared {
+                out.push("nikaia_std::task::Read::new(")
+            }
             let mut started = EmitOut::empty()
             walk.async_fallback = fallback
             walk.async_within = deadlines[index].clone()
@@ -2343,8 +2373,14 @@ impl EmitState {
                 joined = emit_async_joined_paused(handle, channel, fallback, emit_async_line(walk.async_gates))
                 alone = emit_async_joined_paused(handle, channel, fallback, "")
             }
+            if shared {
+                alone = f"(*{alone})"
+            }
             inside.push(alone)
             out.append(started)
+            if shared {
+                out.push(")")
+            }
             out.push(";")
             walk.async_joining.insert(each.1, joined.clone())
             joins.push(joined)

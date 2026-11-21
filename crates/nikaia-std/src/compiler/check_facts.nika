@@ -358,6 +358,11 @@ pub struct CheckFacts {
     /// **Where each `async e` task is waited for**, by the `async` node
     /// (ADR-async-5 D6, D9): what the lowering joins it at.
     pub async_waits: collections::BTreeMap[i64, CheckAsyncWait],
+    /// **The `async e` bindings only other tasks name, two or more of them**
+    /// (ADR-async-5 D8, a diamond, #986), by the `async` node: they read the
+    /// one value, so the lowering keeps it for all (`task::Read`). One that
+    /// moves it leaves the other's mention refused (`NK2105`).
+    pub async_shared: collections::BTreeSet[i64],
     /// **`m.get(k)` on a map**, by the call: an `Option<&T>` below already,
     /// so a nullable view it is lent to opens nothing.
     pub map_gets: collections::BTreeSet[i64],
@@ -968,6 +973,7 @@ impl CheckFacts {
             optional_fallbacks: collections::BTreeSet(),
             flat_reads: collections::BTreeSet(),
             async_waits: collections::BTreeMap(),
+            async_shared: collections::BTreeSet(),
             copied_reads: collections::BTreeSet(),
             text_in_lists: collections::BTreeSet(),
             owned_patterns: collections::BTreeSet(),

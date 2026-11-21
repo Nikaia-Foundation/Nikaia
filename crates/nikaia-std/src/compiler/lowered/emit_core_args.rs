@@ -498,6 +498,7 @@ impl EmitState {
             out.push("))");
             return Ok(());
         }
+        let arg_start = out.buf.len() as i64;
         if i < part_counts.len() as i64 { walk.hull_count = Some(*unsafe { nikaia_std::proven::read(&part_counts, (i) as usize) }); } else { walk.hull_count = None; }
         let copies = self.facts.kept_fn_copies.contains(&node_key(arg)) && !self.facts.kept_functions.contains_key(&node_key(arg));
         if copies { walk.uncopied = node_key(arg); }
@@ -658,7 +659,8 @@ impl EmitState {
             let second = if in_place == 2 { "&__nk_x" } else { "__nk_x" };
             out.push(&format!("|mut __nk_acc, __nk_x| {{ nikaia_std::par::in_place(&mut __nk_acc, {}, ", second));
         }
-        if future { self.emit_arg_future(world, walk, out, host, arg, i, depth, &inside, scope)?; } else { self.emit_arg_value(world, walk, out, host, arg, i, depth, inside, scope)?; }
+        let shared = emit_arg_a_shared_read(world, &walk, arg);
+        if shared != "" && (out.buf.len() as i64) == arg_start && in_place == 0 && !future { out.push(&shared); } else if future { self.emit_arg_future(world, walk, out, host, arg, i, depth, &inside, scope)?; } else { self.emit_arg_value(world, walk, out, host, arg, i, depth, inside, scope)?; }
         if in_place > 0 { out.push("); __nk_acc }"); }
         if pointer == 1 { out.push(".as_ptr()"); } else if pointer == 2 { out.push(".as_mut_ptr()"); }
         if pointer == 6 { out.push(".lent()"); }
@@ -937,6 +939,19 @@ pub(crate) fn emit_async_group_name(group: i64) -> String {
 pub(crate) fn emit_async_at(statement: i64) -> Option<i64> {
     if statement < 0 { return None; }
     Some(statement)
+}
+
+pub(crate) fn emit_arg_a_shared_read(world: &EmitWorld<'_, '_, '_, '_>, walk: &EmitWalk, arg: &Expr) -> String {
+    match arg {
+        Expr::Variable(name, _) => {
+            let name = *name;
+            let handle = match walk.async_handles.get(&emit_text(world, name)) { Some(__nikaia_value) => __nikaia_value, None => return String::from("") };
+            if !handle.starts_with("(*") { return String::from(""); }
+            let opened = match handle.strip_prefix('(') { Some(__nikaia_value) => __nikaia_value, None => return String::from("") };
+            return nikaia_std::block::Text::from(nikaia_std::index::or(opened.strip_suffix(')'), || "").to_string());
+        },
+        _ => return String::from(""),
+    }
 }
 
 pub(crate) fn emit_async_joined(handle: &str, channel: &str, fallback: bool) -> String {
@@ -1469,7 +1484,9 @@ impl EmitState {
             let handle = format!("__task_{}", each.1);
             if !first { out.push(" "); }
             first = false;
+            let shared = self.facts.async_shared.contains(&each.1);
             out.push(&format!("let {} = ", handle));
+            if shared { out.push("nikaia_std::task::Read::new("); }
             let mut started = EmitOut::empty();
             walk.async_fallback = fallback;
             walk.async_within = nikaia_std::block::Text::from((*nikaia_std::index::get(&deadlines, nikaia_std::index::at(index))).to_string());
@@ -1483,8 +1500,10 @@ impl EmitState {
                 joined = emit_async_joined_paused(&handle, &channel, fallback, &emit_async_line(&walk.async_gates));
                 alone = emit_async_joined_paused(&handle, &channel, fallback, "");
             }
+            if shared { alone = format!("(*{})", alone); }
             inside.push(alone);
             out.append(&started);
+            if shared { out.push(")"); }
             out.push(";");
             walk.async_joining.insert(each.1, nikaia_std::block::Text::from(joined.to_string()));
             joins.push(joined);

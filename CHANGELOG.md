@@ -8,6 +8,12 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1519] — 2026-11-21
+
+**Builders' changes (#2497, #986)**
+- `nikaia check --overlaps` lists every task an `async` form starts: its window, where it is waited for, its group's end and whether it is started first
+- async: a task takes a name bound in a block that ends before its group (a later mention is NK2105), and two tasks that both wait for one pending binding (a diamond) read the one value
+
 ## [0.0.1518] — 2026-11-21
 
 **Builders' changes (#2459, #2592)**

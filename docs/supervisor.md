@@ -379,18 +379,25 @@ Moved from the former `docs/architect.md` (2026-10-31). `nikaia` here means
   stopped (`kill` is denied), so it is started on its own, its output
   appended to a log in the scratchpad:
 
-      cd /home/user/Nikaia && git fetch -q origin develop \
+      cd /home/user/Nikaia \
+        && { [ "$(git rev-parse --is-shallow-repository)" = false ] || git fetch -q --unshallow origin; } \
+        && git fetch -q origin develop \
         && cargo build -q --profile fast -p nikaia \
         && PATH=$PWD/target/fast:$PATH setsid nohup sh -c \
           'nikaia run scripts/drive.nika -- docs/briefs/LANE; echo "DRIVER EXIT $?"' \
           >> SCRATCHPAD/drive-LANE.log 2>&1 < /dev/null & disown
 
+  A fresh container's clone is shallow: there the driver's ancestry checks
+  fail (`ESCALATE drive: ci/LANE holds <sha>, which is not in HEAD's
+  history`) for a commit that is on `develop`, hence the `--unshallow`.
   Then a `Monitor` (timeout 30 minutes, re-armed when it expires) on that
   log greps `^WAKE ` and `DRIVER EXIT`, and once a minute checks with
   `ps -ef | grep "drive.nika -- docs/briefs/LANE"` that the driver still
   runs (`DRIVER GONE` when not). `DRIVER EXIT 4` is the time limit: start it
   again. A heartbeat every 45 minutes (`send_later`) checks the driver and
-  re-arms the monitor.
+  re-arms the monitor. Re-arming an expired monitor and a heartbeat that
+  finds the driver running are not reported to the owner (owner,
+  2026-11-21: noise); only what the driver's lines ask for is.
 * **Act only on that final line.** `cycle.nika -- DIR --done N` clears an
   OWNER line; after the owner's answer, start `drive.nika` again. A `RESTART
   drive: ...` line needs nothing: the driver runs the changed script again by

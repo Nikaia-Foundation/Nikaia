@@ -1073,6 +1073,37 @@ pub fn branch_starts_first<'p>(
     move |stmt| emitter.branch_pauses(stmt)
 }
 
+/// **Every task an `async` form starts**, for `--overlaps`
+/// ([ADR-async-5](../../../docs/specification/adr/adr-async-5.md) D32): the
+/// report is `tools/order.nika`'s; what it reads is the check's record of each
+/// task's wait point and group, and whether a task pauses, both the emitter's
+/// (ADR-292b), so it is handed an emitter built as `branch_starts_first`'s.
+pub fn task_report(
+    parsed: &Parsed,
+    source: &str,
+    build: Build,
+    contracts: &crate::contracts::Ledger,
+) -> String {
+    let emitter = Emitter::with_contracts(
+        parsed,
+        &[],
+        build,
+        crate::contracts::Provenance::Trusted,
+        contracts.clone(),
+        &crate::contracts::Ledger::blank(),
+        &Reads::none(),
+        None,
+        None,
+    );
+    nikaia_std::compiler::order::task_report(
+        &parsed.program.items,
+        &parsed.interner,
+        source,
+        &emitter.s.facts.async_waits,
+        &mut |task: &Expr| emitter.s.task_pauses(&emitter.world, task),
+    )
+}
+
 pub(crate) fn visit_block<'a>(block: &'a Block, f: &mut impl FnMut(&'a Expr)) {
     for expr in nikaia_std::compiler::emit_walk::visited_in_block(block) {
         f(expr);

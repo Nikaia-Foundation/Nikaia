@@ -147,6 +147,45 @@ pub(crate) fn check_walks_door_on(state: &CheckState, value: &Expr, receiver: &E
     CheckWalksDoor::Door(Operation { binds: None, mentions, reaches, callee: format!("{}::{}", lock, door) })
 }
 
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn check_walks_a_lambda_against_itself(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, walk: &Expr, lambda: &Expr, span: &Span) {
+    match lambda {
+        Expr::Closure { .. } => { },
+        _ => { return; },
+    }
+    if check_walks_one_at_a_time(world, walk) { return; }
+    let walking = Walking { own: world.own, library: world.library, into: Going::Ours };
+    let operations = match check_walks_task_operations(&state, lambda, world.words, &walking) { Some(__nikaia_value) => __nikaia_value, None => return };
+    let mut reaches: Vec<Reached> = vec![];
+    for operation in operations.iter() { for reached in operation.reaches.iter() { if reached.kind != "lock" { reaches.push(reached.clone()); } } }
+    let own = Operation { binds: None, mentions: collections::BTreeSet::new(), reaches, callee: String::from("") };
+    let found = verdict(&own, &own);
+    if found.is_overlap() { return; }
+    let why = capitalised(&found.why());
+    let start = nikaia_std::index::or(world.here.spans.get(&id_of(lambda)).map(|__nikaia_it| __nikaia_it.start), || span.start.into());
+    let end = nikaia_std::index::or(world.here.spans.get(&id_of(lambda)).map(|__nikaia_it| __nikaia_it.end), || span.end.into());
+    let at = Span { start, end };
+    state.findings.push(check_refusal("NK2104", &at, String::from("This lambda can't run beside its own other runs."), vec![format!("{}.", why), String::from("`par_iter()` runs the lambda once for every element, and those runs happen at the same time.")], Some(String::from("To run it one element at a time, write `par_iter(limit: 1)`, or walk with `iter()`."))));
+}
+
+pub(crate) fn check_walks_one_at_a_time(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, walk: &Expr) -> bool {
+    match walk {
+        Expr::MethodCall { receiver, method, config, .. } => {
+            let receiver = nikaia_std::boxed::open(receiver); let method = *method;
+            if world.words.resolve(method) != "par_iter" { return check_walks_one_at_a_time(world, receiver); }
+            for option in config.iter() {
+                if world.words.resolve(option.name) == "limit" {
+                    let value: Option<Expr> = Some(option.value.clone());
+                    return check_core_async_one_at_a_time((value).as_ref());
+                }
+            }
+            false
+        },
+        _ => false,
+    }
+}
+
 pub(crate) fn check_walks_task_clash(earlier: &CheckWalksTask, later: &CheckWalksTask) -> Option<Verdict> {
     let first = match earlier.operations.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return None };
     let second = match later.operations.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return None };
