@@ -1514,6 +1514,18 @@ nothing else.
 | 2026-11-21 | b8d062 | check | 9 | 0.3 | 0 | - | |
 | 2026-11-21 | 1da6a2 | check | 55 | 3.3 | 0 | - | |
 | 2026-11-21 | d394b7 | check | 72 | 5.6 | 0 | - | |
+| 2026-11-21 | 9874ec | check | 18 | 0.8 | 0 | - | |
+| 2026-11-21 | 922346 | check | 70 | 4.0 | 0 | - | |
+| 2026-11-21 | ec0468 | check | 51 | 3.1 | 0 | - | |
+| 2026-11-21 | 4d15f8 | check | 96 | 5.6 | 0 | - | |
+| 2026-11-21 | 69402a | check | 38 | 1.9 | 0 | - | |
+| 2026-11-21 | 8f98b9 | check | 44 | 2.7 | 0 | - | |
+| 2026-11-21 | 989a00 | check | 76 | 4.6 | 0 | - | |
+| 2026-11-21 | 89cde9 | check | 65 | 4.2 | 0 | - | |
+| 2026-11-21 | 994c7e | check | 80 | 4.3 | 0 | - | |
+| 2026-11-21 | a95147 | check | 33 | 1.6 | 0 | - | |
+| 2026-11-21 | 7c38a3 | check | 48 | 2.7 | 0 | - | |
+| 2026-11-21 | 4a4c21 | check | 41 | 2.7 | 0 | - | |
 
 Moved lines are attributed by `scripts/tokenspeed.nika`: commits in the agent's
 window that changed a file it edited (Edit/Write/`git add` in its transcript)
