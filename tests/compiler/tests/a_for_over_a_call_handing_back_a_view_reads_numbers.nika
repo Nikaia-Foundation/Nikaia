@@ -1,0 +1,31 @@
+// **A `for` over a call that hands back a view of a list of numbers binds
+// each number** (#2062): `for v in t.row(k)`, where `row` returns `ref
+// Vec[i64]`, lends the elements as a walk over the place does, so `v` is
+// the number itself and indexes a list. It was handed to rustc as a
+// reference (`expected i64, found &i64`).
+
+struct Table {
+	rows: Vec[Vec[i64]],
+}
+
+impl Table {
+	fn row(ref self, k: i64) -> ref Vec[i64] {
+		return self.rows[k]
+	}
+}
+
+fn main() throws {
+	let t = Table { rows: [[0, 2], [1]] }
+	let names = ["a", "b", "c"]
+	let mut seen: Vec[i64] = []
+	for v in t.row(0) {
+		seen.push(v)
+		println(names[v])
+	}
+	for v in t.row(1) {
+		if v >= seen.len() {
+			continue
+		}
+		println(f"{seen[v] + v}")
+	}
+}
