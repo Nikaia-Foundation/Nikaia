@@ -1,0 +1,29 @@
+// **A tree a task returns as its result is built outside its block**
+// (ADR-327 D9, D16, #1879): the task's result outlives the task and its
+// block, so each box of the tree `build` returns is built outside, and the
+// tree is read correctly after the task has ended.
+enum Tree { Leaf, Node(Tree, Tree) }
+
+fn count(t: Tree) -> i64 {
+    return match t {
+        Tree::Leaf => 1,
+        Tree::Node(l, r) => 1 + count(l) + count(r),
+    }
+}
+
+fn build(depth: i64) -> Tree {
+    if depth == 0 {
+        return Tree::Leaf
+    }
+    return Tree::Node(build(depth - 1), build(depth - 1))
+}
+
+fn main() throws {
+    let t = async build(10)
+    let mut beside = 0
+    for i in 0..<1000 {
+        beside += i
+    }
+    println(f"{beside} summed beside the task")
+    println(f"{count(t)} nodes read after the task ended")
+}

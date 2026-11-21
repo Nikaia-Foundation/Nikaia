@@ -1,0 +1,6 @@
+no `Shared` value here, so there is nothing to choose.
+
+Boxes of recursive types (ADR-327 D16):
+    main: `Tree::Node` in the block: `t` stays in this function
+    main: `Tree::Node` in the block: `t` stays in this function
+    main: `Tree::Node` in the block: `t` stays in this function

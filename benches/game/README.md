@@ -99,8 +99,8 @@ those of the Rust entry. Tokens are given once per program.
 | fannkuch-redux | Nikaia for speed, `--cpu=x86-64-v3` | 225.2 | 7.522 | 215.6 | 7.448 | 2.64 |  |
 | binary-trees | Rust #5, `target-cpu=ivybridge` | 49.3 | 0.577 | 43.3 | 0.471 | 1.00 | 502 |
 | binary-trees | Rust #5, one thread, `target-cpu=ivybridge` | 49.3 | 0.577 | 43.3 | 0.471 | 1.00 |  |
-| binary-trees | Nikaia, `--cpu=x86-64` | 255.5 | 1.320 | 248.8 | 1.360 | 5.75 | 237 |
-| binary-trees | Nikaia, `--cpu=x86-64-v3` | 255.5 | 1.321 | 248.8 | 1.360 | 5.75 |  |
+| binary-trees | Nikaia, `--cpu=x86-64` | 183.0 | 1.209 | 145.8 | 1.108 | 3.37 | 237 |
+| binary-trees | Nikaia, `--cpu=x86-64-v3` | 182.7 | 1.175 | 145.4 | 1.108 | 3.36 |  |
 | fasta | Rust entry 7, `taskset -c 0`, `target-cpu=ivybridge` | 33.3 | 0.014 | 25.7 | 0.014 | 1.00 | 1895 |
 | fasta | Nikaia, `--cpu=x86-64` | 81.4 | 1.039 | 79.3 | 1.058 | 3.08 | 633 |
 | fasta | Nikaia, `--cpu=x86-64-v3` | 80.6 | 1.063 | 77.7 | 1.029 | 3.02 |  |
@@ -151,12 +151,16 @@ figure has moved since, the paragraph says so.
   flips a prefix with one `pshufb` whose mask it picks at run time. `std::simd`
   has only constant shuffles; a run-time shuffle is undecided (ADR-377,
   section 4).
-* **binary-trees**, 5.75x. 71 % of Nikaia's instructions are `malloc` and
-  `free`, one each per node, where Rust #5 bumps a pointer in a `bumpalo`
-  arena and frees each tree whole. Nikaia offers no arena yet (#490 step 5).
-  The same boxed tree in plain Rust counts 197.1 a node, so Nikaia is 1.26x
-  of it. The extra is in building the tree, in drop glue and in the counting
-  allocator around each `malloc`.
+* **binary-trees**, 3.37x (re-counted on 2026-11-21 with Nikaia 0.0.1517;
+  5.75x before). Each node's box is built in the task's block (ADR-327 D16,
+  D17), `main`'s here, so `malloc` and `free` are no longer counted (71 % of
+  the instructions before). The block's own cut and free are now about 80 %:
+  37 % building a box (`Boxed::at`), 25 % dropping one, and 18 % freeing a
+  box in a segment of the chain beyond the current one (`give_chained`),
+  which the long-lived tree and each tree larger than a segment make common.
+  Rust #5 bumps a pointer in a `bumpalo` arena and frees each tree whole,
+  without a count per page. The same boxed tree in plain Rust counted 197.1
+  a node when binary-trees was added, so Nikaia is now below it.
 * **fasta**, 3.08x as first written, 0.78x for speed. The plain program's
   draw walks the cumulative probabilities and mispredicts about once a
   letter, where the entry counts with SSE2. It also grows one `String` a line
