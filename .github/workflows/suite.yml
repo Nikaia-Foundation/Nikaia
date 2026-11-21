@@ -625,7 +625,7 @@ jobs:
 
       - name: The Java binding prints what use.c prints
         if: matrix.shard == 'ledgers'
-        run: ./target/release/nikaia run scripts/java_binding.nika -- --exe "$PWD/target/release/nikaia"
+        run: ./target/release/nikaia run scripts/java_binding.nika
 
       - name: The samples, the page examples and the ledgers
         if: matrix.shard == 'ledgers'
