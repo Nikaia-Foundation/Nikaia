@@ -138,6 +138,7 @@ pub trait ProjectDriveHost {
     fn allowlist(&self) -> Result<Option<fs::Path>, std::boxed::Box<dyn std::error::Error>>;
     fn cpu_rustflags(&self) -> Result<Option<String>, std::boxed::Box<dyn std::error::Error>>;
     fn make_cargo(&self, manifest: &std::path::Path, env: &[(String, String)], unset: &[String], shared: bool) -> Result<(), std::boxed::Box<dyn std::error::Error>>;
+    fn target_dir(&self, manifest: &std::path::Path, shared: bool) -> Result<fs::Path, std::boxed::Box<dyn std::error::Error>>;
     fn is_library(&self) -> bool;
     fn cargo_messages(&self, verb: &str, args: &[String]) -> Result<(i32, String), std::boxed::Box<dyn std::error::Error>>;
     fn settle(&self);
@@ -290,7 +291,7 @@ pub fn project_drive_drive_to<H: ProjectDriveHost>(host: &H, subcommand: &str, n
         }
     }
     let shared = nikaia_std::index::or(env::var("CARGO_TARGET_DIR"), || "".into()) == "";
-    let env = project_drive_cargo_env(host, &link_flags, no_cache, shared, project_members_fetched_text(&members))?; #[allow(unused_mut, clippy::redundant_locals)] let mut build_args = build_args;
+    let env = project_drive_cargo_env(host, &manifest, &link_flags, no_cache, shared, project_members_fetched_text(&members))?; #[allow(unused_mut, clippy::redundant_locals)] let mut build_args = build_args;
     #[allow(unused_mut)] let mut unset: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut build_args = build_args;
     let mut env = env; #[allow(unused_mut, clippy::redundant_locals)] let mut build_args = build_args; #[allow(unused_mut, clippy::redundant_locals)] let mut unset = unset;
     match host.cpu_rustflags()? {
@@ -528,10 +529,11 @@ pub fn project_drive_no_std_for(triple: &str) -> String { format!("cannot build 
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn project_drive_cargo_env<H: ProjectDriveHost>(host: &H, link_flags: &[String], no_cache: bool, shared: bool, fetched: String) -> Result<Vec<(String, String)>, std::boxed::Box<dyn std::error::Error>> {
+pub(crate) fn project_drive_cargo_env<H: ProjectDriveHost>(host: &H, manifest: &std::path::Path, link_flags: &[String], no_cache: bool, shared: bool, fetched: String) -> Result<Vec<(String, String)>, std::boxed::Box<dyn std::error::Error>> {
     let mut env = host.settings_env();
     env.push((String::from("NIKAIA_RUSTC_WRAPPER"), String::from("1")));
     env.push((String::from("NIKAIA_GEN_DIR"), nikaia_std::fs::path::to_text(&(host.gen_dir()))?));
+    env.push((String::from("NIKAIA_TARGET_DIR"), nikaia_std::fs::path::to_text(&(host.target_dir(manifest, shared)?))?));
     if shared { env.push((String::from("NIKAIA_PROGRAM_TAG"), format!("_{}", host.root_tag()))); }
     env.push((String::from("NIKAIA_LINK_FLAGS"), nikaia_std::block::Text::from(link_flags.join("\u{1f}"))));
     if !fetched.is_empty() { env.push((project_members_fetched_variable(), fetched)); }
@@ -1131,8 +1133,8 @@ pub async fn project_drive_wrapper<H: ProjectDriveWrapperHost>(host: &H) -> Resu
     };
     let no_cache = env::var("NIKAIA_NO_CACHE").is_some();
     let args = host.args();
-    let a_program = args.iter().zip(args.iter().skip(1)).any(|__nikaia_tuple78458| {
-        let (a, b) = __nikaia_tuple78458;
+    let a_program = args.iter().zip(args.iter().skip(1)).any(|__nikaia_tuple78939| {
+        let (a, b) = __nikaia_tuple78939;
         AsRef::<str>::as_ref(&(a)) == AsRef::<str>::as_ref(&("--crate-type")) && AsRef::<str>::as_ref(&(b)) == AsRef::<str>::as_ref(&("bin"))
     });
     let batch: Option<String> = match a_program {
@@ -1407,8 +1409,8 @@ pub(crate) async fn project_drive_rustc_inputs(depends: &str, store: &ProjectDri
     for word in nikaia_std::block::Text::from(listed.replace("\\ ", "\u{1f}")).split(' ') {
         let path: fs::Path = std::path::PathBuf::from(nikaia_std::block::Text::from(word.replace("\u{1f}", " ")));
         if word.is_empty() || nikaia_std::fs::path::same(&(path), &(store.generated)) { continue; }
-        let __keep_93888 = nikaia_std::tether::Keep::new();
-        let below = match project_drive_rustc_below((&__keep_93888).put(nikaia_std::fs::path::display(&(path))), &store.within) { Some(__nikaia_value) => __nikaia_value, None => return None };
+        let __keep_94369 = nikaia_std::tether::Keep::new();
+        let below = match project_drive_rustc_below((&__keep_94369).put(nikaia_std::fs::path::display(&(path))), &store.within) { Some(__nikaia_value) => __nikaia_value, None => return None };
         let bytes = match fs::read(std::path::Path::new(&(below)), &store.sources).await {
             Ok(value) => value,
             Err(_error) => { return None; },

@@ -139,6 +139,10 @@ pub trait ProjectDriveHost {
     /// `unset`, and whether it builds in the shared directory of the user's
     /// cache (ADR-002 D4).
     fn make_cargo(ref self, manifest: ref fs::Path, env: ref Vec[(String, String)], unset: ref Vec[String], shared: bool) sync throws
+    /// The directory Cargo builds `manifest` in, `shared` as `make_cargo`
+    /// takes it: the tree of the user's cache, or where Cargo puts it unasked
+    /// (ADR-platform-layer-v1 D2, D7 item 2).
+    fn target_dir(ref self, manifest: ref fs::Path, shared: bool) -> fs::Path sync throws
     /// Whether the package is built as a C library.
     fn is_library(ref self) -> bool sync
     /// Cargo's `verb` (`build`, or `check` for `nikaia check --rustc`) with
@@ -442,7 +446,7 @@ pub fn project_drive_drive_to[H: ProjectDriveHost](host: ref H, subcommand: Stri
     // it is set: it is Cargo's own documented override, and a build that
     // asked for a directory has to get it. Set to nothing, it asked for none.
     let shared = (env::var("CARGO_TARGET_DIR") ?? "") == ""
-    let env = project_drive_cargo_env(host, link_flags, no_cache, shared, project_members_fetched_text(members))
+    let env = project_drive_cargo_env(host, manifest, link_flags, no_cache, shared, project_members_fetched_text(members))
     let mut unset: Vec[String] = []
     let mut env = env
     match host.cpu_rustflags() {
@@ -754,12 +758,14 @@ pub fn project_drive_no_std_for(triple: String) -> String {
 
 /// **The environment the wrapper is run in**: the build's switches, the
 /// marker that makes this compiler the wrapper, where the generated Rust is,
+/// the directory Cargo builds `manifest` in (ADR-raw-sinks-1 D17 item 6),
 /// the program's tag in the `shared` directory, the libraries' flags, the
 /// cache switch, the name a loose file is shown as and the allowlist.
-fn project_drive_cargo_env[H: ProjectDriveHost](host: ref H, link_flags: ref Vec[String], no_cache: bool, shared: bool, fetched: String) -> Vec[(String, String)] sync throws {
+fn project_drive_cargo_env[H: ProjectDriveHost](host: ref H, manifest: ref fs::Path, link_flags: ref Vec[String], no_cache: bool, shared: bool, fetched: String) -> Vec[(String, String)] sync throws {
     let mut env = host.settings_env()
     env.push(("NIKAIA_RUSTC_WRAPPER", "1"))
     env.push(("NIKAIA_GEN_DIR", host.gen_dir().to_text()))
+    env.push(("NIKAIA_TARGET_DIR", host.target_dir(manifest, shared).to_text()))
     // The program's crate is named for its project in the shared directory
     // (#495), and its generated file keeps its package's name.
     if shared {
