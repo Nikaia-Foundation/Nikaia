@@ -414,6 +414,9 @@ fn check_core_ops_equal[H: CheckHost](mut state: CheckState, world: ref CheckWor
     if lent_item && is_text_type(left.unseen()) && is_text_type(right.unseen()) {
         let added = state.facts.ordered_texts.insert(at.start as i64)
     }
+    if is_text_type(left.unseen()) && is_text_type(right.unseen()) {
+        let noted = state.facts.text_equalities.insert(at.start as i64)
+    }
     if names_a_path(left, right) {
         state.facts.path_comparisons.insert(at.start as i64)
     }

@@ -384,7 +384,8 @@ impl EmitState {
             let compared = self.emit_core_against_a_length(world, walk, out, host, op, lhs, rhs, depth, wide, scope)?;
             if compared { return Ok(()); }
         }
-        if self.facts.ordered_texts.contains(&site) {
+        let kept_side = self.emit_stmt_a_kept_name(world, &walk, lhs) || self.emit_stmt_a_kept_name(world, &walk, rhs);
+        if self.facts.ordered_texts.contains(&site) || (op == BinaryOp::Eq || op == BinaryOp::Ne) && kept_side && self.facts.text_equalities.contains(&site) {
             let symbol = binary_op(&op);
             out.push("AsRef::<str>::as_ref(&(");
             self.emit_expr(world, walk, out, host, lhs, depth, wide, scope)?;

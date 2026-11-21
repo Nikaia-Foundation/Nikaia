@@ -357,6 +357,44 @@ fn check_function_shrunk_leaves(mut state: CheckState, words: ref winnow_grammar
     }
 }
 
+/// **The names a body keeps** (ADR-views-v4 D23, #1994): a name returned,
+/// stored into a place that is not a local, or put into a container
+/// (`push`, `insert`, ...). Syntactic, because it is asked at the `let`,
+/// before the uses have been walked: a `let` over a part of a `mut` place
+/// that binds such a name takes the part, one that binds another views it.
+fn check_function_kept_names(words: ref winnow_grammar::InternerContext, body: ref Block) -> collections::BTreeSet[String] {
+    let mut leaving: Vec[ref Expr] = []
+    check_function_leaving_in(body, leaving)
+    for each in visited_in_block(body) {
+        match each {
+            Expr::Return(value, _) => {
+                match value {
+                    null => {},
+                    left => leaving.push(left),
+                }
+            },
+            Expr::MethodCall { method, args, .. } => {
+                if puts_its_argument(words.resolve(method)) {
+                    for arg in args {
+                        leaving.push(arg)
+                    }
+                }
+            },
+            else => {},
+        }
+    }
+    let mut out: collections::BTreeSet[String] = collections::BTreeSet()
+    for value in leaving {
+        match value {
+            Expr::Variable(name, _) => {
+                out.insert(words.resolve(name).clone())
+            },
+            else => {},
+        }
+    }
+    return out
+}
+
 /// The `return`s and the stores into a place that is not a local, in a block
 /// and the blocks inside it.
 fn check_function_leaving_in(block: ref Block, mut out: Vec[ref Expr]) {
@@ -1092,12 +1130,15 @@ fn check_function_fn[H: CheckHost](mut state: CheckState, world: ref CheckWorld,
     state.flow.high_bytes.clear()
     let outer_grown = state.flow.grown_text.clone()
     state.flow.grown_text = check_function_grown_text(world.here, body)
+    let outer_kept = state.flow.kept_names.clone()
+    state.flow.kept_names = check_function_kept_names(world.here.words, body)
     let outer_mixed = state.flow.mixed_text.clone()
     state.flow.mixed_text = check_function_mixed_text(world.here, body, state.flow.grown_text)
     let outer_lone = state.flow.lone_texts.clone()
     state.flow.lone_texts = lone_texts_of(world.here.words, body)
     let tail = check_core_block(state, world, host, body)
     state.flow.grown_text = outer_grown
+    state.flow.kept_names = outer_kept
     state.flow.mixed_text = outer_mixed
     let (tail_lent, tail_view) = check_function_handed_back(state, world, host, body, expected, tail)
     state.numbers_typed_by_their_uses()

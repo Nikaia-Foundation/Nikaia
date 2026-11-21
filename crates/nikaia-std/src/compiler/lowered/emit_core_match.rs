@@ -668,6 +668,7 @@ impl EmitState {
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn emit_core_match_over_a_box<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, arms: &[MatchArm], depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
+        let __keep_frame = nikaia_std::tether::Keep::new();
         #[allow(unused_mut)] let mut members: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         let mut home: Vec<i64> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         let mut catch_all = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut members = members;
@@ -698,9 +699,9 @@ impl EmitState {
             let mut inside = flow;
             let mut inside_scope = scope.clone();
             if m < count {
-                let member = nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&members, (m) as usize) }).to_string());
-                let own = self.name_of_error(world, &member) != 0;
-                let held = self.sum_member_held(world, &member, "");
+                let member = __keep_frame.put(nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&members, (m) as usize) }).to_string()));
+                let own = self.name_of_error(world, member) != 0;
+                let held = self.sum_member_held(world, member, "");
                 let mut bare = nikaia_std::block::Text::from(held.to_string());
                 if held.starts_with("nikaia_std::error::Thrown<") && held.ends_with('>') {
                     let opened: String = nikaia_std::block::Text::from(nikaia_std::index::or(held.strip_prefix("nikaia_std::error::Thrown<"), || "").to_string());
