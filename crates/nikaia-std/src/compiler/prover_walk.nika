@@ -3486,7 +3486,13 @@ fn prover_i64_refuted_check(mut walk: ProverWalk, goal: i64, term: i64, written:
             return
         }
     }
-    let always = refuting_values(walk.arena, scope.facts, goal, ask, model)
+    let mut always = refuting_values(walk.arena, scope.facts, goal, ask, model)
+    if always == null {
+        // **Forced values past the solver's reach** (#1810): at the type's
+        // ends the solver answers nothing, so the facts' own values are
+        // tried in checked arithmetic.
+        always = forced_overflow_values(walk.arena, scope.facts, term, read, ask, model)
+    }
     let values = always?.clone() ?? breaking_values(walk.arena, scope, goal, model) ?? return
     for name in read {
         if !values.contains_key(name) {

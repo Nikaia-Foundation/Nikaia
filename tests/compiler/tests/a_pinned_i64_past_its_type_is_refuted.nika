@@ -1,0 +1,19 @@
+// An `i64` the facts pin past what the operation leaves room for is still
+// refuted (ADR-396 D8 step 2, ADR-270 D11, #1810): the solver, counting in
+// `i64`, answers nothing at the type's ends, so the pinned value is tried in
+// checked arithmetic, and `x + 1000` at `9223372036854775000` is `NK1207`,
+// as its `i32` twin is. The window `±2^62` refutes nothing alone: `y + 1`
+// at `3000000000000000000` stays quiet.
+pub fn past(x: i64) -> i64 {
+    assert(x == 9223372036854775000)
+    return x + 1000
+}
+
+pub fn inside(y: i64) -> i64 {
+    assert(y == 3000000000000000000)
+    return y + 1
+}
+
+fn main() throws {
+    println(inside(3000000000000000000))
+}
