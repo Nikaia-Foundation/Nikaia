@@ -46,8 +46,8 @@ use anyhow::{Context, Result, anyhow};
 use orchestrator::cache::{Artifacts, Cache, Choices, Layout, Lockfile};
 use orchestrator::project::{
     Cargo, CargoProject, CrateKind, Invocation, Package, Profile, Workspace,
-    record_extra_dependencies, resolved_versions, toolchain_can_build_for, toolchain_is_new_enough,
-    write_if_changed,
+    record_extra_dependencies, resolved_versions, toolchain_can_build_for,
+    toolchain_is_new_enough_as, write_if_changed,
 };
 
 use crate::contracts::{Ledger, sync};
@@ -4295,13 +4295,18 @@ impl project_drive::ProjectDriveHost for DriveHost<'_> {
     }
 
     fn toolchain_is_new_enough(&self) -> Option<String> {
-        toolchain_is_new_enough(crate::emit::RUST_FLOOR)
-            .err()
-            .map(|error| format!("{error:#}"))
+        // The held answer (#2421): a run whose program is built asks no
+        // `rustc` for its version.
+        toolchain_is_new_enough_as(
+            crate::comptime_run::rustc_version(),
+            crate::emit::RUST_FLOOR,
+        )
+        .err()
+        .map(|error| format!("{error:#}"))
     }
 
     fn rustc_version(&self) -> String {
-        orchestrator::project::rustc_version().to_text()
+        crate::comptime_run::rustc_version().to_text()
     }
 
     fn cargo_fresh(&self, record: &Path, handed: &str) -> Option<String> {

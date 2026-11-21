@@ -49,7 +49,7 @@ pub(crate) fn compile(
     let key = crate::assets::digest(
         format!(
             "{rust}\n{}\n{}\n{crate_name}\n{}",
-            orchestrator::project::rustc_version(),
+            crate::comptime_run::rustc_version(),
             bundle.stamp,
             shown_as.display()
         )
