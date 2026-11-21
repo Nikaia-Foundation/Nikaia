@@ -21,6 +21,15 @@ fn work(n: i64) -> i64 throws {
 	return n * 10
 }
 
+// Fails without printing: two such tasks run beside each other, and printed
+// lines of theirs would come in either order.
+fn fails(n: i64) -> i64 throws {
+	if n > 5 {
+		throw Bad {}
+	}
+	return n
+}
+
 fn slow(n: i64) -> i64 throws {
 	time::sleep(1.millis())
 	println(f"slow {n} ran")
@@ -49,9 +58,9 @@ fn main() throws {
 	println("detached not started")
 	d.start()
 	println(f"{d.join()}")
-	let mut f = async(deferred) fn { work(6) } catch { 7 }
+	let mut f = async(deferred) fn { fails(6) } catch { 7 }
 	f.start()
-	let mut g = async(deferred, detached) fn { work(7) } catch { 8 }
+	let mut g = async(deferred, detached) fn { fails(7) } catch { 8 }
 	g.start()
 	println(f"{f.join()} {g.join()}")
 	backup(10)
