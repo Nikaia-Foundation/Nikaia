@@ -2024,7 +2024,7 @@ fn invalid_tagged(input: ref Bytes, n: ref Node, core: String) -> Error sync {
 		column: column,
 		offset: n.start as i64,
 		tag: f"tag:yaml.org,2002:{core}",
-		text: n.raw.clone(),
+		text: n.raw,
 	}
 }
 
@@ -2549,7 +2549,7 @@ fn resolved(ds: ref Vec[Dir], t: String?) -> String? sync {
 // are taken as UTF-8, a run that is not as U+FFFD.
 fn uri_decoded(s: String) -> String sync {
 	if !s.contains('%') {
-		return s.clone()
+		return s
 	}
 	let bs = s.bytes
 	let n = bs.len() as i64
