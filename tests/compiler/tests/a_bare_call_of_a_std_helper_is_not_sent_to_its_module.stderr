@@ -1,9 +1,9 @@
-error[NK1117]: There's no function called `lookup`.
+error[NK1117]: There's no function called `generation`.
   --> tests/a_bare_call_of_a_std_helper_is_not_sent_to_its_module.nika:4:5
    |
- 4 |     let found = lookup()
-   |     ^^^^^^^^^^^^^^^^^^^^
+ 4 |     let found = generation()
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^
    |
    = note: A function called by its name alone is one of yours or one that's always available. A function from a package is called with the package's name in front: `package::name(…)`.
-   = help: Declare it with `fn lookup(…)`, or call it through the package that has it.
+   = help: Declare it with `fn generation(…)`, or call it through the package that has it.
 1 type error

@@ -305,7 +305,7 @@ impl CheckState {
         }
         let suffix = f"::{name}"
         let mut keys: Vec[String] = []
-        // A `pub = false` entry is `std`'s own (`abort::lookup`): a program
+        // A `pub = false` entry is `std`'s own (`rt::io::generation`): a program
         // cannot call it, so the hint does not send it there.
         for (key, contract) in world.library.functions {
             if contract.public && key.ends_with(ref suffix) {
