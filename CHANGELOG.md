@@ -8,6 +8,13 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1520] — 2026-11-21
+
+**Builders' changes (#1879, #2530, #860)**
+- binary-trees 3.37x of Rust #5 (was 5.75x): each node's box is built in the task's block, main's included, and a free in a segment beyond a block's current one finds its segment by its address instead of a walk over all parked segments (248.8 → 145.8 instructions a node with checks off, callgrind binary-trees 16, 2026-11-21, Nikaia 0.0.1517)
+- Benchmarks: `benches/hello/` counts a warm `nikaia run` without its run record too: the record, which skips reading, checking and lowering an unchanged file, saves 35.4 M of nikaia's 44.7 M (warm run 1.25x Python's start instead of 2.13x)
+- Benchmarks: `benches/hello/` counts Hello World's start: built binary 0.01x Python, warm `nikaia run` 1.24x, after an edit 7.7x (Rust unchanged) to 17.3x, a new file 15.8x
+
 ## [0.0.1519] — 2026-11-21
 
 **Builders' changes (#2497, #986)**
