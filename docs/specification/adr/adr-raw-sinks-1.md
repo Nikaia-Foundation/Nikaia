@@ -414,6 +414,11 @@ none:
    sets `NIKAIA_TARGET_DIR` to the `--target-dir` it hands Cargo, beside
    `NIKAIA_GEN_DIR` (`project_drive_cargo_env`); item 2 reads that variable,
    not `CARGO_TARGET_DIR`. Without it the wrapper keeps no store (item 3).
+   The copy out of the store into the target directory is
+   `fs::copy_between`, which keeps the file's mode, and the variable is
+   handed through by the Rust host; both are platform primitives of
+   [ADR-platform-layer-v1](adr-platform-layer-v1.md) D7, so the choice
+   around them stays in Nikaia.
 7. **The outer build's record has the outer build's roots.** The record that
    lets a build skip Cargo (#1750, `project_drive_fresh` and
    `project_drive_record`) is kept by the outer build, not the wrapper, and
@@ -423,6 +428,9 @@ none:
    holds: the project's root, the `std` sources of the sysroot and the target
    directory, and is read through a root on it. A path below none of them
    means no record and Cargo runs (item 3).
+   The host hands those three roots through as accessors on
+   `ProjectDriveHost` (ADR-platform-layer-v1 D5, D7); choosing them stays
+   in the Rust host until the outer build moves to Nikaia (#125).
 8. **The manifest lies beside the sources, not above them.** The manifest of
    item 5 is `crates/nikaia-std/trust/nikaia.toml`. A `nikaia.toml` in a
    directory above the `std` sources would make every one of them a member of
