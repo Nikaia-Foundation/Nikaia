@@ -1,0 +1,9 @@
+error[NK1171]: `Wide[u64]` has no method called `abs`.
+  --> tests/wide_of_an_unsigned_has_no_abs.nika:6:2
+   |
+ 6 | 	let m = w.abs()
+   |  ^^^^^^^^^^^^^^^
+   |
+   = note: `abs` gives the magnitude of a signed value; a `Wide[u64]` is never below zero, so it is its own magnitude (Part I 2.2).
+   = help: Use the value as it is.
+1 type error

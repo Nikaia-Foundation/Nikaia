@@ -2542,7 +2542,8 @@ pub(crate) fn prover_i64_refuted_check(walk: &mut ProverWalk, goal: i64, term: i
     let mut read: collections::BTreeSet<String> = collections::BTreeSet::new();
     walk.arena.variables(goal, &mut read);
     for name in read.iter() { if scope.tainted.contains(name) { return; } }
-    let always = refuting_values(&mut walk.arena, &scope.facts, goal, &mut *ask, &mut *model);
+    let mut always = refuting_values(&mut walk.arena, &scope.facts, goal, &mut *ask, &mut *model);
+    if always.is_none() { always = forced_overflow_values(&mut walk.arena, &scope.facts, term, &read, &mut *ask, &mut *model); }
     let values = match match always.as_ref() {
         Some(__nikaia_it) => Some(__nikaia_it.clone()),
         None => None,

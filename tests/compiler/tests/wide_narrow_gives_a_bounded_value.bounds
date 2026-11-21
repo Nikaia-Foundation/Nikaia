@@ -1,0 +1,4 @@
+bounds in tests/wide_narrow_gives_a_bounded_value.nika: 1 indexes, 0 proved; 2 operations, 2 proved
+     8  n + 1  proved
+    16  n + 1  proved
+    25  xs[r]  checked: no fact bounds what it reads - a counter, a loop, a length, or one list as long as another (#432, #383, #388)

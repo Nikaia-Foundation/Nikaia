@@ -1,0 +1,9 @@
+error[NK1207]: `x + 1000` goes past what an `i64` holds every time it is reached.
+  --> tests/a_pinned_i64_past_its_type_is_refuted.nika:9:5
+   |
+ 9 |     return x + 1000
+   |     ^^^^^^^^^^^^^^^
+   |
+   = note: What is known before it rules the check out: `x` is 9223372036854775000.
+   = help: Use a wider type where the number needs more room, or check the operands before the operation.
+1 claim shown false

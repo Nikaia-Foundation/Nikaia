@@ -1,6 +1,6 @@
 # Nikaia Language Specification
 **Part I: The Language Core**
-**Version:** 0.0.1522 (Draft)
+**Version:** 0.0.1523 (Draft)
 **Date:** 2026-11-21
 
 ---
@@ -608,6 +608,39 @@ smaller than the divisor. It is on the same five types.
 ```nika
 let (q, r) = high.narrowing_div_rem(low, d) ?? return   // q * d + r == high * 2^64 + low
 ```
+
+**A computation that goes on in double width holds a `Wide[T]`** (owner,
+2026-11-21): std's exact value of twice the width of `T`, for the same five
+types, built from the methods above so that a program does not carry two
+halves, a carry and a sign by hand.
+
+```nika
+let t = Wide::product(a, x).add(Wide::product(b, y)) ?? return  // a*x + b*y, exact
+let r = t.rem(g) ?? return                                      // t mod g, in T
+let (q, _) = t.div_rem(g) ?? return                             // Wide[T], T
+let n = q.narrow() ?? return                                    // back in T where it fits
+```
+
+* **Made**: `Wide::of(v)`, `Wide::product(a, b)` (what `widening_mul` gives),
+  `Wide::from_halves(low, high)`; read back with `halves()`, `narrow() -> T?`
+  and `sign() -> i64`.
+* **Exact or `null`, never wrapped**: `add`, `sub`, `neg` and `mul(k: T)`
+  give `Wide[T]?`, `null` only where the value leaves twice the width;
+  `div_rem(d: T)` gives `(Wide[T], T)?` and `rem(d: T)` gives `T?`, rounded as
+  `/` and `%` round, `null` for `d == 0`; `abs` on a signed `T` gives the
+  magnitude as `Wide` of the unsigned type of the same width. `==` and the
+  comparisons are a `Wide[T]`'s with another of the same `T`.
+* **Not a number type**: no literal, no operator, no `as`, no `T` of more than
+  64 bits. Part I 2.2's types stay as they are ([ADR-294](adr/adr-294.md));
+  `Wide[T]` is a value the program reaches only through these methods, and
+  `narrow()` is the way back.
+* **No cost a program did not write**: the lowering gives `Wide[T]` the native
+  type of twice the width where the target has one (`i128` for an `i64`, as it
+  already does for `widening_mul`), so `add` is two instructions and `product`
+  one multiply; `div_rem` by a `T` is the two-step 128-by-64 division, not a
+  general wide one. It is a copy, 16 bytes at most. Values are still held in
+  `T` and taken into `Wide` only for the step that may leave it
+  ([ADR-270](adr/adr-270.md) D11).
 
 Two conversions lose digits without anything failing:
 
