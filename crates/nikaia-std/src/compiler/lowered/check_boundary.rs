@@ -298,6 +298,16 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
+    pub(crate) fn a_place_of_a_lent_let(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, value: &Expr) -> bool {
+        let a_field = matches!(value, Expr::Field { .. });
+        if !a_field { return false; }
+        let root = match self.rooted_at(world, value) { Some(__nikaia_value) => __nikaia_value, None => return false };
+        if root == "self" || !self.lent_here(&root) { return false; }
+        let found = match self.binding(&root) { Some(__nikaia_value) => __nikaia_value, None => return false };
+        !found.changing
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
     pub(crate) fn place_path(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, expr: &Expr) -> Option<String> { dotted_path(world, expr) }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.

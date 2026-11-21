@@ -266,6 +266,9 @@ impl EmitState {
         if either {
             out.push(")")
         }
+        if self.either_into_owned(world, value, scope.function, at) {
+            out.push(".into()")
+        }
         out.push(after)
     }
 

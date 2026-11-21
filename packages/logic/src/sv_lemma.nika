@@ -91,9 +91,9 @@ fn sv_lemma_formula(mut arena: TermArena, defs: ref Vec[SvNl], l: ref SvLemma) -
 		return null
 	}
 	let t = defs[l.def]
-	let m = t.name.clone()
-	let x = t.a.clone()
-	let y = t.b.clone()
+	let m = t.name
+	let x = t.a
+	let y = t.b
 	let zero = sv_int(0)
 	let one = sv_int(1)
 	let s = l.schema
