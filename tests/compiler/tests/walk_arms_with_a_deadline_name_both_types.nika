@@ -1,0 +1,10 @@
+// NK1245 names both arms where one is a walk with a deadline (#1424): the
+// two types printed alike, so the first arm's showed empty.
+use std::time
+
+fn main() throws {
+    let xs = [1, 2, 3]
+    let b = xs.len() > 2
+    let w = if b { xs.par_iter() } else { xs.par_iter(within: 5.millis()) }
+    println(f"{w.count()}")
+}

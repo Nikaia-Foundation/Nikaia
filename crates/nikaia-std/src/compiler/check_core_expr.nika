@@ -439,6 +439,13 @@ fn check_core_value_of[H: CheckHost](mut state: CheckState, world: ref CheckWorl
         Expr::Coalesce { value, fallback, .. } => check_core_ops_coalesce(state, world, host, expr, value, fallback, span),
         Expr::Index { base, index, .. } => {
             let read = check_core_index(state, world, host, expr, base, index, span)
+            // **An element read by index is lent** (ADR-094 D4, #1424): a
+            // sequence there is not walked out of its list.
+            let holder: String = match dotted_path(world, base) {
+                null => "its container",
+                path => f"`{path}`",
+            }
+            state.a_lent_sequence_is_taken("This element", holder.clone(), holder, read, check_span_at(world, expr, span))
             if world.here.given_pushes.contains(node_key(expr)) && read.is_a_view() && check_core_expr_pushed_cut(state, world, expr, span) {
                 return a_string_type()
             }

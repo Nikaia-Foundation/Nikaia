@@ -547,6 +547,10 @@ impl CheckState {
     // this was written - see `contracts::sync`.
     pub(crate) fn a_sequence_is_taken(&mut self, name: &str, ty: &Ty, span: &Span) {
         if self.reading_only || !a_sequence_that_is_used_up(ty) { return; }
+        if nikaia_std::index::or(self.binding(name).as_ref().map(|__nikaia_it| __nikaia_it.lent), || false) {
+            self.a_lent_sequence_is_taken(&format!("`{}`", name), "the list this loop walks", "that list", ty, span);
+            return;
+        }
         let taken = self.taken(nikaia_std::block::Text::from(name.to_string()), ty.clone(), self.read_seq, "", span);
         self.walked.push(taken);
         let bound = self.frame_of(name);
@@ -562,6 +566,13 @@ impl CheckState {
             help = format!("Collect it into a list before the loop and walk the list: `let {} = {}.collect()`.", name, name);
         }
         self.findings.push(check_refusal("NK2702", span, format!("`{}` is a sequence, and you're using it up inside a {} it was declared outside of.", name, what), vec![format!("A sequence of `{}` makes its elements as they're asked for, so walking it uses it up - and {}.", item, again), String::from("A `Vec` is different: it already holds its elements and can be walked as often as you like.")], Some(help)));
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub(crate) fn a_lent_sequence_is_taken(&mut self, what: &str, holder: &str, again: &str, ty: &Ty, span: &Span) {
+        if self.reading_only || !a_sequence_that_is_used_up(ty) { return; }
+        let item = an_item_text(ty);
+        self.findings.push(check_refusal("NK2702", span, format!("{} is a sequence lent by {}, and using it up would take it out of {}.", what, holder, again), vec![format!("A sequence of `{}` makes its elements as they're asked for, so walking it uses it up (ADR-105 D2): a `for`, a `collect()`, a `count()` or any other walk, or a `let` that names it.", item), String::from("A `for` over a list or a map, or an index into one, only lends the element (ADR-094 D4), and the container would still hold a sequence already used up.")], Some(String::from("Take the sequences out of the container to walk them: `for w in list.drain()`."))));
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.

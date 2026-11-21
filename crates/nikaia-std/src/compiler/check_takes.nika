@@ -849,6 +849,11 @@ impl CheckState {
         if self.reading_only || !a_sequence_that_is_used_up(ty) {
             return
         }
+        // A `for` binding over a list is lent the element (#1424).
+        if self.binding(name)?.lent ?? false {
+            self.a_lent_sequence_is_taken(f"`{name}`", "the list this loop walks", "that list", ty, span)
+            return
+        }
         let taken = self.taken(name.clone(), ty.clone(), self.read_seq, "", span)
         self.walked.push(taken)
         let bound = self.frame_of(name)
@@ -868,6 +873,18 @@ impl CheckState {
             help = f"Collect it into a list before the loop and walk the list: `let {name} = {name}.collect()`."
         }
         self.findings.push(check_refusal("NK2702", span, f"`{name}` is a sequence, and you're using it up inside a {what} it was declared outside of.", [f"A sequence of `{item}` makes its elements as they're asked for, so walking it uses it up - and {again}.", "A `Vec` is different: it already holds its elements and can be walked as often as you like."], help))
+    }
+
+    /// `NK2702`: a sequence a list lends, used up (#1424). A walk takes the
+    /// sequence by value (ADR-105 D2), and a `for` over a list or an index
+    /// into it only lends the element (ADR-094 D4): the walk would take it
+    /// out of a list that still holds it.
+    fn a_lent_sequence_is_taken(ref mut self, what: String, holder: String, again: String, ty: ref Ty, span: ref Span) sync {
+        if self.reading_only || !a_sequence_that_is_used_up(ty) {
+            return
+        }
+        let item = an_item_text(ty)
+        self.findings.push(check_refusal("NK2702", span, f"{what} is a sequence lent by {holder}, and using it up would take it out of {again}.", [f"A sequence of `{item}` makes its elements as they're asked for, so walking it uses it up (ADR-105 D2): a `for`, a `collect()`, a `count()` or any other walk, or a `let` that names it.", "A `for` over a list or a map, or an index into one, only lends the element (ADR-094 D4), and the container would still hold a sequence already used up."], "Take the sequences out of the container to walk them: `for w in list.drain()`."))
     }
 
     /// `NK2702`: a sequence walked twice, said once per site.
