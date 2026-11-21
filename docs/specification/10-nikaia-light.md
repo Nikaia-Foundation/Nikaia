@@ -221,7 +221,8 @@ is not moved, so a `let` over a place stays a view of it (6.5).
 changed, `p with { x: 1 }` (4.2).
 
 **`extern` and `unsafe` are reserved for their constructs**: an `extern`
-block, and the `unsafe { … }` a call into one is written in (Part III 15.1).
+block, and the `unsafe { … }` a call into one, and every operation on a raw
+pointer, is written in (Part III 15.1).
 
 **`select` is reserved for its construct**: the block that races several
 waits and takes the first to finish (Part II, 12.4).

@@ -185,7 +185,7 @@ fn check_core_places_a_named_field(mut state: CheckState, world: ref CheckWorld,
             state.facts.boxed_reads.insert(id_of(expr) as i64)
         }
     }
-    // **A handle has no fields** (ADR-302 D7).
+    // **A handle has no fields** (ADR-c-boundary-v1 D7).
     if state.opaque_handles.contains(ty) {
         state.a_handle_has_nothing_inside(ty, f"the field `{field}`", span)
         return Ty::Unknown
@@ -1497,7 +1497,7 @@ fn check_core_index_of(mut state: CheckState, world: ref CheckWorld, expr: ref E
         },
         else => return Ty::Unknown,
     }
-    // **And no indexing** (ADR-302 D7).
+    // **And no indexing** (ADR-c-boundary-v1 D7).
     if state.opaque_handles.contains(name) {
         state.a_handle_has_nothing_inside(name, "an index", span)
         return Ty::Unknown

@@ -30,7 +30,7 @@ fn types_declared_in(items: ref Vec[Spanned[Item]], words: ref winnow_grammar::I
         match item.node {
             Item::Struct { name, .. } => { declared.insert(words.resolve(name).clone()) },
             Item::Enum { name, .. } => { declared.insert(words.resolve(name).clone()) },
-            // **An opaque handle is a type this file declares** (ADR-302 D7):
+            // **An opaque handle is a type this file declares** (ADR-c-boundary-v1 D7):
             // it has no fields and no constructor, but a declaration is what
             // `NK1135` asks for and this is one.
             Item::Extern { opaque, .. } => {
@@ -94,7 +94,7 @@ fn is_a_number(expr: ref Expr) -> bool {
 }
 
 /// **An `extern` block's declarations are entries like any other, and read
-/// unlike a trait method** (ADR-302 D2): `sync`, asserted rather than inferred,
+/// unlike a trait method** (ADR-c-boundary-v1 D2): `sync`, asserted rather than inferred,
 /// because the body is in another language and C has no suspension point at
 /// all; and no `throws`, which is what a body-less declaration carries anyway.
 /// `touches` and `locks` stay absent, which is D4 and is fail-closed.
@@ -433,7 +433,7 @@ fn declare_items(units: ref Vec[ParsedView], borrowing: ref Vec[collections::BTr
                     }
                 },
                 // **An `extern` declaration is an entry like any other, and
-                // reads unlike a trait method** (ADR-302 D2): `declared_extern`.
+                // reads unlike a trait method** (ADR-c-boundary-v1 D2): `declared_extern`.
                 Item::Extern { declarations, .. } => {
                     for entry in declared_extern(view.words, view.aliases, declarations) {
                         ledger.functions.insert(entry.key, entry.contract)

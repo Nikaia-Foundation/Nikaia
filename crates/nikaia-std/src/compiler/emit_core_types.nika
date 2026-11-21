@@ -60,7 +60,7 @@ fn emit_counted_turn(counts_steps: bool, opening: String?) -> String? {
 
 impl EmitState {
     /// Which shape a declared parameter takes at the C boundary, or `null`
-    /// where it is an ordinary value (ADR-302 D5, D7).
+    /// where it is an ordinary value (ADR-c-boundary-v1 D5, D7).
     fn pointer_for(ref self, world: ref EmitWorld, callee: ref String, ty: ref Type) -> EmitPointer? {
         let name = world.words.resolve(ty.name)
         if self.opaque_handles.contains_key(name) && !ty.is_view && !ty.is_slice {

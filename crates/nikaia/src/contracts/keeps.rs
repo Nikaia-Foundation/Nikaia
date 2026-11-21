@@ -94,7 +94,7 @@ pub fn a_ledger_copies(ty: &super::ty::Ty, copying: &[&super::Ledger]) -> bool {
 /// copied — and whether this compiler can say so at all: `Unknown`, a type
 /// variable and a function type's absence of an answer are **no**, because what
 /// hangs on it is a reference this compiler would *write*
-/// ([ADR-312](../../../docs/specification/adr/adr-312.md) D1, ADR-302 D6,
+/// ([ADR-312](../../../docs/specification/adr/adr-312.md) D1, ADR-c-boundary-v1 D6,
 /// ADR-150 D1, ADR-152 D2, ADR-277 D6).
 pub fn moves(ty: &super::ty::Ty) -> bool {
     nikaia_std::compiler::lends::moves(ty)
