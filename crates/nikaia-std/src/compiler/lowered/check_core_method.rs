@@ -1026,7 +1026,18 @@ pub(crate) fn check_core_method_walked<H: CheckHost>(state: &mut CheckState, wor
         return Ty::Seq { item: nikaia_std::block::Boxed::new(check_core_method_named("scalar")), is_sync: true, pauses: false, can_throw: false, parallel: false, shape: Shape { ends: true, sized: false, replays: false, timed: false, one_at_a_time: false } };
     }
     if state.check_core_method_on_a_text_slot(world, receiver, &on) { return check_core_method_called(state, world, host, expr, Ty::Named { name: nikaia_std::block::Text::from(TEXT.to_string()), args: vec![], view: true }, receiver, method, args, &name, span); }
+    check_core_method_a_handle_taken(state, world, &on, receiver, &name, args, config, span);
     check_core_method_called(state, world, host, expr, on, receiver, method, args, &name, span)
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn check_core_method_a_handle_taken(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, on: &Ty, receiver: &Expr, name: &str, args: &[Expr], config: &[ConfigArg], span: &Span) {
+    if !args.is_empty() || !config.is_empty() || !check_core_method_task_handle(on) { return; }
+    if name != "join" && name != "cancel" && name != "detach" { return; }
+    let plain = matches!(receiver, Expr::Variable(_, _));
+    if plain { state.hands_over(world, receiver, on, &format!("taken by its `{}()`", name), span); }
 }
 
 pub(crate) fn check_core_method_pattern_at(name: &str) -> i64 {

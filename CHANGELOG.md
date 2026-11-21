@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1525] — 2026-11-21
+
+**checker: a task handle used after join(), cancel() or detach() took it is NK2105, not rustc's NK1343 (#2645)**
+- A task handle used after its join(), cancel() or detach() took it is now refused with NK2105, with its own note and help, instead of an internal error from rustc (NK1343).
+
 ## [0.0.1524] — 2026-11-21
 
 **Builders' changes (#2512, #2561, #2562, #2610, #2643, #2644)**

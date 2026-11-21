@@ -1,0 +1,55 @@
+// `std`'s strategy under a tiny descriptor ceiling (ADR-async-5 D18, ADR-327
+// D15, #987): where the process may hold no descriptor beyond the strategy's
+// reserve, `task::Adaptive()` starts none of the waiting tasks beside a
+// running one, so each waits for a place instead of failing; where none runs,
+// one starts whatever the strategy says. Every task ends, one at a time.
+use std::task
+use std::time
+
+// `std`'s strategy, shown a ceiling only its reserve above what is in use.
+struct Ceiling {
+	inner: task::Adaptive,
+	asked: SharedMut[i64],
+}
+
+impl task::Admission for Ceiling {
+	fn decide(mut self, load: task::Load) -> task::Decision sync {
+		self.asked.update fn(mut n) { n += 1 }
+		let tiny = task::Load {
+			running: load.running,
+			waiting: load.waiting,
+			descriptors_in_use: load.descriptors_in_use,
+			descriptors_allowed: load.descriptors_in_use + 64,
+			memory_reported: load.memory_reported,
+			memory_held: load.memory_held,
+		}
+		return self.inner.decide(tiny)
+	}
+}
+
+fn work(n: i64, now: SharedMut[i64], most: SharedMut[i64]) -> i64 {
+	now.update fn(mut v) { v += 1 }
+	let seen = now.get()
+	most.update fn(mut m) {
+		if seen > m {
+			m = seen
+		}
+	}
+	time::sleep(1.millis())
+	now.update fn(mut v) { v -= 1 }
+	return n
+}
+
+fn main() throws {
+	let now = SharedMut(0)
+	let most = SharedMut(0)
+	let asked = SharedMut(0)
+	let total = async(admission: Ceiling { inner: task::Adaptive(), asked: asked }) {
+		let a = async work(1, now, most)
+		let b = async work(2, now, most)
+		let c = async work(3, now, most)
+		let d = async work(4, now, most)
+		a + b + c + d
+	}
+	println(f"total {total}, at most {most.get()} at once, asked: {asked.get() > 0}")
+}

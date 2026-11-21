@@ -1471,7 +1471,29 @@ fn check_core_method_walked[H: CheckHost](mut state: CheckState, world: ref Chec
     if state.check_core_method_on_a_text_slot(world, receiver, on) {
         return check_core_method_called(state, world, host, expr, Ty::Named { name: TEXT.clone(), args: [], view: true }, receiver, method, args, name, span)
     }
+    check_core_method_a_handle_taken(state, world, on, receiver, name, args, config, span)
     return check_core_method_called(state, world, host, expr, on, receiver, method, args, name, span)
+}
+
+/// **A task handle's `join()`, `cancel()` and `detach()` take it** (Part III
+/// `NK2105`, ADR-async-5 D12, #2645): the receiver of a method that takes
+/// `self` is handed over, so a later use of the name is `NK2105`, not rustc's
+/// use of a moved value. A `join(within:)` is left out: in the handler of its
+/// `task::TimedOut` the handle is still live (Part I 8.2).
+fn check_core_method_a_handle_taken(mut state: CheckState, world: ref CheckWorld, on: ref Ty, receiver: ref Expr, name: ref String, args: ref Vec[Expr], config: ref Vec[ConfigArg], span: ref Span) sync {
+    if args.len() > 0 || config.len() > 0 || !check_core_method_task_handle(on) {
+        return
+    }
+    if name != "join" && name != "cancel" && name != "detach" {
+        return
+    }
+    let plain = match receiver {
+        Expr::Variable(_, _) => true,
+        else => false,
+    }
+    if plain {
+        state.hands_over(world, receiver, on, f"taken by its `{name}()`", span)
+    }
 }
 
 /// Which argument of a text method is its pattern, or -1 (#617).

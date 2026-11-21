@@ -1,0 +1,33 @@
+// A `Shared` handed to a struct literal written in an `async` form's
+// `admission:` (ADR-async-5 D18, #987) lands in the struct's field, so its
+// handle is the field's: at `user-parallelism = yes` the binding crosses as
+// the field does, in the group form and in the one-task form.
+use std::task
+
+struct Counted {
+	asked: SharedMut[i64],
+}
+
+impl task::Admission for Counted {
+	fn decide(mut self, load: task::Load) -> task::Decision sync {
+		self.asked.update fn(mut n) { n += 1 }
+		return task::Decision { start: 1, budget: 1048576 }
+	}
+}
+
+fn twice(n: i64) -> i64 {
+	return n * 2
+}
+
+fn main() throws {
+	let asked = SharedMut(0)
+	let total = async(admission: Counted { asked: asked }) {
+		let a = async twice(1)
+		let b = async twice(2)
+		a + b
+	}
+	let alone = SharedMut(0)
+	let one = async(admission: Counted { asked: alone }) twice(5)
+	let here = twice(7)
+	println(f"total {total}, one {one}, here {here}")
+}

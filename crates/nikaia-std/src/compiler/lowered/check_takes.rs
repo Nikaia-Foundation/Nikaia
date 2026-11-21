@@ -539,6 +539,10 @@ impl CheckState {
             if used.path == name { message = format!("You're using `{}` again, but it was {}.", name, taken.to); }
             if said.contains(&used.at) { continue; }
             said.insert(used.at);
+            if check_core_method_task_handle(&taken.ty) {
+                found.push(check_refusal("NK2105", &Span { start: u32::try_from(used.at).unwrap_or_else(|_| panic!("the value does not fit in an `u32`")), end: u32::try_from(used.at).unwrap_or_else(|_| panic!("the value does not fit in an `u32`")) }, message, vec![format!("`{}` is a `{}`: a task's handle is not copied, and its `join()`, `cancel()` and `detach()` take it.", name, taken.ty.shown())], Some(String::from("Take the handle once: bind what `join()` gives with `let` and use that."))));
+                continue;
+            }
             found.push(check_refusal("NK2105", &Span { start: u32::try_from(used.at).unwrap_or_else(|_| panic!("the value does not fit in an `u32`")), end: u32::try_from(used.at).unwrap_or_else(|_| panic!("the value does not fit in an `u32`")) }, message, vec![format!("`{}` is a `{}`, so it's handed over itself, not a copy. Nikaia never copies behind your back, because a copy costs as much as the value is large.", name, taken.ty.shown()), String::from("Numbers, `bool`s, `scalar`s and views would be fine: they're copied.")], Some(format!("If both need it, hand over a copy: `{}`.", a_copy_said(&name, &taken.ty)))));
         }
         self.handed = vec![];
