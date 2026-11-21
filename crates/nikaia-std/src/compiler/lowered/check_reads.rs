@@ -196,11 +196,13 @@ impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     pub(crate) fn a_narrowed_read_lent(&self, side: &Expr) -> bool {
-        match side {
-            Expr::Variable(_, _) => { },
-            _ => { return false; },
-        }
+        let field = match side {
+            Expr::Variable(_, _) => false,
+            Expr::Field { .. } => true,
+            _ => return false,
+        };
         let bits = match self.facts.narrowed_reads.get(&node_key(side)) { Some(__nikaia_value) => nikaia_std::num::value(__nikaia_value), None => return false };
+        if field { return bits / 4 % 2 == 1 && bits / 8 % 2 == 0 && bits / 16 % 2 == 0 && bits / 64 % 2 == 0; }
         bits % 2 == 0 && bits / 8 % 2 == 0 && bits / 32 % 2 == 0
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
