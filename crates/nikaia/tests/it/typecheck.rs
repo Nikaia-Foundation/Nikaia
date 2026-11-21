@@ -1712,7 +1712,7 @@ fn a_divisor_that_is_not_a_proven_zero_is_not_mentioned() {
 #[test]
 fn a_word_this_language_does_not_know_is_refused() {
     // **`unsafe` used to be one of these and is a construct now**
-    // ([ADR-302](../../../docs/specification/adr/adr-302.md) D1): the word
+    // ([ADR-c-boundary-v1](../../../docs/specification/adr/adr-c-boundary-v1.md) D1): the word
     // joined Part I 2.1's list the way that list says one does, with its rule
     // in the same change. It is here as the shape it left, because a word
     // moving *onto* the list is the direction that breaks programs and the one
