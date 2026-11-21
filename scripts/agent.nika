@@ -142,12 +142,13 @@ fn agent_transcript(session: String) -> String throws {
 
 // The environment claude runs with (#2459): NIKAIA_OLD, the absolute path of
 // HEAD's before-binary target/bins/<sha12>/nikaia, which the driver made
-// (drive_bins); none where it is missing.
+// (drive_bins); none where it is missing. Looked up under Anywhere: `target` may be a
+// symlink out of the working directory (the agent_script test), which a Dir root refuses.
 fn agent_old_env() -> Vec[(String, String)] throws {
     let mut env: Vec[(String, String)] = []
     let sha = process::run("git", ["rev-parse", "--short=12", "HEAD"]).stdout.trim().clone()
     let bin = f"target/bins/{sha}/nikaia"
-    if sha != "" && fs::exists(bin.clone(), fs::Root::Dir(".")) {
+    if sha != "" && fs::exists(bin.clone(), fs::Root::Anywhere) {
         env.push(("NIKAIA_OLD", process::run("realpath", [bin]).stdout.trim().clone()))
     }
     return env
