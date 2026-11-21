@@ -1474,20 +1474,24 @@ fn check_core_call_on_described[H: CheckHost](mut state: CheckState, world: ref 
     let mut passed: Vec[(String, Ty)] = []
     let mut values: Vec[i64] = []
     let mut literals: Vec[bool] = []
+    let mut integers: Vec[bool] = []
     let mut texts: Vec[String] = []
-    for (name, ty, value, literal, text) in state.flow.method_passed.remove(node) ?? [] {
+    for (name, ty, value, literal, integer, text) in state.flow.method_passed.remove(node) ?? [] {
         passed.push((name, ty))
         values.push(value)
         literals.push(literal)
+        integers.push(integer)
         texts.push(text)
     }
     state.flow.option_values = values
     state.flow.option_literals = literals
+    state.flow.option_integers = integers
     state.flow.option_written = texts
     state.flow.call_written = f"{check_walked_written(receiver, world.words)}.{written}"
     let result = check_crossings_arguments(state, world, host, key, written, contract, args, found, passed, span)
     state.flow.option_values = []
     state.flow.option_literals = []
+    state.flow.option_integers = []
     state.flow.option_written = []
     state.flow.call_written = ""
     // **What an option keeps, it is given** (#1595): the walk that holds
