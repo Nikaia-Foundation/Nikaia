@@ -232,6 +232,13 @@ pub fn render(untrusted: bool, reasons: &[Reason], places: &[Place], path: &str)
     out
 }
 
+pub fn render_allowed(allow: &[String]) -> String {
+    let mut out: String = String::from("raw sinks allowed data from outside unproved ([allow] and --allow):\n");
+    if allow.is_empty() { out.push_str("    none - every raw sink asks for a proof\n"); }
+    for word in allow.iter() { out.push_str(&format!("    {}\n", word)); }
+    out
+}
+
 pub(crate) fn provenance(untrusted: bool) -> String { if untrusted { String::from("untrusted") } else { String::from("trusted") } }
 
 

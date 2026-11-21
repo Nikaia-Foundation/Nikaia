@@ -57,7 +57,6 @@ fn bounds_around(
 		rules: [],
 		held: collections::BTreeMap(),
 		checked: collections::BTreeMap(),
-		checked_fields: collections::BTreeMap(),
 		checked_returning: collections::BTreeSet(),
 		derived: no_derived(),
 		fields: collections::BTreeSet(),

@@ -126,7 +126,9 @@
 // merge of origin/develop grew (#2022). A suite that has finished is handled
 // before the next builder (`drive_suite_done`). Before a bump, the next suite, or the end of the run
 // (an escalation and a RESTART too) the driver waits for it (`drive_settle`:
-// one line `SUITE <sha8> waiting`, a poll every 10 s) and handles its result.
+// one line `SUITE <sha8> waiting`, a poll every 10 s; a waiter gone without a
+// result is started once more, gone twice escalates with its stderr, #2458)
+// and handles its result.
 // Green pushes the tested sha; when that push is rejected and HEAD has moved
 // on, nothing is pushed and the next suite, on HEAD, pushes all. When `git rev-list --count origin/develop..HEAD` is 0
 // after a fetch, there is nothing to test (unpushed.txt is emptied). When every
@@ -172,7 +174,8 @@
 // on exactly the tested commit, never the shared checkout's unfinished files,
 // and nothing of it on this machine's small disk. A rejected push escalates,
 // the lock released and the commits left local. Then, detached from the driver
-// (`sh -c '( ... ) &'`), `<exe> run scripts/drive.nika -- --ci-wait <sha>
+// (`sh -c '( ... ) &'`, its pid in target/suite.lock/wait-<sha>.pid, its stderr
+// in wait-<sha>.err), `<compiler of HEAD> run scripts/drive.nika -- --ci-wait <sha>
 // DIR/suite.log target/suite.lock/exit-<sha>` waits for that run: `gh api
 // repos/.../actions/runs?head_sha=<sha>` every 30 s, the workflow Nikaia on a
 // ci/ branch; success writes `Gate: green`, any other conclusion `Gate: red
@@ -431,8 +434,18 @@ fn drive_escalate(why: String) throws {
 // drive_pull_or_restart): prints LINE, compiles and runs the new script with
 // the same arguments, its output inherited, and ends with its exit code. The lock is released first,
 // or the new run would wait on this one. Exit 3 where it cannot be started.
-fn drive_restart(exe: String, line: String) throws {
+// The new script runs with drive_child_exe, never drive_exe()'s pick (#2458:
+// the checkout's `target/fast/nikaia`, older than the merge, refused the merged
+// script with NK1245 and the driver ended with 1, unseen); a compiler that
+// does not build, or a script it refuses, escalates with the first error.
+fn drive_restart(line: String) throws {
 	println(line)
+	let child = drive_child_exe()
+	if child == "" { drive_escalate(f"{line}, but the compiler of HEAD did not build (the lines above): build it, restart the driver") }
+	let checked = process::run(child.clone(), ["check", "scripts/drive.nika"])
+	if !checked.ok {
+		drive_escalate(f"{line}, but {child} refuses scripts/drive.nika: {drive_first_error(checked.stdout + checked.stderr)}")
+	}
 	drive_unlock()
 	drive_merge_unlock()
 	let mut args: Vec[String] = []
@@ -445,13 +458,45 @@ fn drive_restart(exe: String, line: String) throws {
 	}
 	let started = f"{drive_now() - drive_elapsed()}"
 	let ran = process::run(
-		exe,
+		child,
 		again; stdout: process::Stream::Inherited,
 		stderr: process::Stream::Inherited,
 		env: [("NIKAIA_DRIVE_STARTED", started)],
 	)
 	if ran.code < 0 { process::exit(3) }
 	process::exit(ran.code)
+}
+
+// The compiler a child driver (drive_restart, the CI waiter of drive_launch)
+// runs with: the one built from HEAD's committed tree in the tree target
+// (drive_tree_exe), never drive_exe()'s pick, which a builder built from its
+// uncommitted change or which predates a merge (#2458). Taken as it is when
+// its stamp names HEAD's `crates/` (a merge's regeneration leaves it so),
+// else built there first, under the merge lock (the worktree is shared). Its
+// absolute path, or "" with the reason printed.
+fn drive_child_exe() -> String throws {
+	let exe = process::run("realpath", ["-m", drive_tree_target()]).stdout.trim() + "/fast/nikaia"
+	let crates = process::run("git", ["rev-parse", "HEAD:crates"]).stdout.trim().clone()
+	if crates != "" && fs::exists(exe.clone(), fs::Root::Anywhere) && drive_read(f"{exe}.crates").trim() == crates { return exe }
+	let owner = drive_read(drive_merge_lock_dir() + "/owner").split(" ").collect()[0].trim().clone()
+	let held = owner == drive_pid()
+	drive_merge_lock("building the compiler of HEAD for a child driver")
+	let head = process::run("git", ["rev-parse", f"HEAD^{{tree}}"]).stdout.trim().clone()
+	let built = drive_tree_exe(head)
+	if !held { drive_merge_unlock() }
+	return built
+}
+
+// The first line of a compiler's output that starts with `error`, else its
+// first non-blank line.
+fn drive_first_error(out: String) -> String {
+	let mut first: String = ""
+	for line in out.split("\n") {
+		let l = line.trim()
+		if l.starts_with("error") { return l.clone() }
+		if first == "" && l != "" { first = l.clone() }
+	}
+	return first
 }
 
 // Seconds since 1970.
@@ -1334,7 +1379,7 @@ fn drive_pull_or_restart(exe: String, when: String) throws {
 	if scripts == "" { return }
 	let lane = drive_lock_lane()
 	if lane != "" && drive_testing() != "" { drive_settle(exe.clone(), lane) }
-	drive_restart(exe, f"RESTART drive: the merge brought {scripts}")
+	drive_restart(f"RESTART drive: the merge brought {scripts}")
 }
 
 // The BUILD of a merge's regeneration, run in the tree worktree
@@ -2211,7 +2256,7 @@ fn drive_launch(dir: String) throws {
 	let branch = drive_ci_branch(dir)
 	let log = process::run("realpath", [dir.clone()]).stdout.trim() + "/suite.log"
 	let exit = process::run("realpath", [drive_lock_dir()]).stdout.trim() + f"/exit-{sha}"
-	process::run("rm", ["-f", exit.clone(), log.clone()])
+	process::run("rm", ["-f", exit.clone(), log.clone(), drive_waiter_file(sha.clone(), "pid"), drive_waiter_file(sha.clone(), "err")])
 	let mut covered: i64 = 0
 	for l in drive_read(f"{dir}/unpushed.txt").split("\n") {
 		if l.trim() != "" { covered += 1 }
@@ -2256,14 +2301,48 @@ fn drive_launch(dir: String) throws {
 	if !pushed.ok {
 		drive_escalate(f"git push origin {drive_short(sha)}:{branch} failed: {pushed.stderr.trim()}")
 	}
-	let bin = drive_exe()
-	let exe = process::run("realpath", [bin]).stdout.trim().clone()
-	let script = process::run("realpath", ["scripts/drive.nika"]).stdout.trim().clone()
-	let wait = f"'{exe}' run '{script}' -- --ci-wait {sha} '{log}' '{exit}'"
-	let started = process::run("sh", ["-c", f"( {wait} ) < /dev/null > /dev/null 2>&1 &"])
-	if !started.ok { drive_escalate(f"the CI waiter did not start: {started.stderr.trim()}") }
+	let why = drive_waiter_start(dir.clone(), sha.clone())
+	if why != "" { drive_escalate(f"the CI waiter did not start: {why}") }
 	fs::write(drive_lock_dir() + "/testing", fs::Root::Anywhere, f"{sha} {covered}\n")
 	println(f"SUITE {drive_short(sha)} started on CI ({branch})")
+}
+
+// The CI waiter's file KIND of the suite of SHA in the suite lock: `pid`
+// (the waiter's process, written as it starts) or `err` (its standard error,
+// #2458: it went to /dev/null, so a waiter that died left no trace).
+fn drive_waiter_file(sha: String, kind: String) -> String throws {
+	return process::run("realpath", ["-m", drive_lock_dir()]).stdout.trim() + f"/wait-{sha}.{kind}"
+}
+
+// Starts the CI waiter of SHA in the background (`--ci-wait SHA LOG EXIT`,
+// LOG the suite.log of lane DIR, EXIT `exit-SHA` in the suite lock) with
+// drive_child_exe, its pid and standard error in drive_waiter_file; "" when
+// started, else why not.
+fn drive_waiter_start(dir: String, sha: String) -> String throws {
+	let exe = drive_child_exe()
+	if exe == "" { return "the compiler of HEAD did not build (the lines above)" }
+	let log = process::run("realpath", ["-m", dir]).stdout.trim() + "/suite.log"
+	let exit = process::run("realpath", ["-m", drive_lock_dir()]).stdout.trim() + f"/exit-{sha}"
+	let script = process::run("realpath", ["scripts/drive.nika"]).stdout.trim().clone()
+	let pid = drive_waiter_file(sha.clone(), "pid")
+	let err = drive_waiter_file(sha.clone(), "err")
+	let wait = f"'{exe}' run '{script}' -- --ci-wait {sha} '{log}' '{exit}'"
+	let started = process::run("sh", ["-c", f"( {wait} ) < /dev/null > /dev/null 2> '{err}' & echo $! > '{pid}'"])
+	if !started.ok { return started.stderr.trim().clone() }
+	return ""
+}
+
+// The state of the CI waiter of SHA (#2458): `done` when its exit file is
+// there, `alive` while the process its pid file names runs, else `gone` (no
+// pid file, or the process ended without writing the exit file).
+fn drive_waiter_state(sha: String) -> String throws {
+	let exit = f"{drive_lock_dir()}/exit-{sha}"
+	if fs::exists(exit.clone(), fs::Root::Anywhere) { return "done" }
+	let pid = drive_read(drive_waiter_file(sha.clone(), "pid")).trim().clone()
+	if pid != "" && process::run("kill", ["-0", pid]).ok { return "alive" }
+	// It may have written the exit file just before it ended.
+	if fs::exists(exit, fs::Root::Anywhere) { return "done" }
+	return "gone"
 }
 
 // `--ci-wait SHA LOG EXIT`: follows the CI run of the push of SHA to a `ci/`
@@ -2453,7 +2532,7 @@ fn drive_qa_copy(dir: String) throws {
 // pushes the tested sha and drops the briefs it covered from unpushed.txt; red
 // starts the QA agent, and QA's commit gets its suite at once, waited for, at
 // most 2 QA rounds. Releases the lock on every path. One `SUITE <sha8> waiting`
-// line, polls every 10 s.
+// line, polls every 10 s (drive_settle_wait).
 fn drive_settle(exe: String, dir: String) throws {
 	let qa = drive_qa_brief(dir)
 	let mut rounds: i64 = 0
@@ -2468,10 +2547,7 @@ fn drive_settle(exe: String, dir: String) throws {
 		let exit = f"{drive_lock_dir()}/exit-{sha}"
 		if !fs::exists(exit, fs::Root::Anywhere) {
 			println(f"SUITE {drive_short(sha)} waiting")
-			while !fs::exists(exit, fs::Root::Anywhere) {
-				drive_proved_report(dir)
-				process::run("sleep", ["10"])
-			}
+			drive_settle_wait(dir.clone(), sha.clone())
 		}
 		let out = drive_read(f"{dir}/suite.log")
 		let steps = drive_red_steps(out)
@@ -2480,7 +2556,7 @@ fn drive_settle(exe: String, dir: String) throws {
 			let why = drive_time_check(dir)
 			if why != "" { drive_time_stop(why) }
 		}
-		process::run("rm", ["-f", exit, drive_lock_dir() + "/testing"])
+		process::run("rm", ["-f", exit, drive_lock_dir() + "/testing", drive_waiter_file(sha.clone(), "pid"), drive_waiter_file(sha.clone(), "err")])
 		if steps == "" {
 			println(f"SUITE {drive_short(sha)} green")
 			let how = drive_push(dir, sha)
@@ -2510,6 +2586,37 @@ fn drive_settle(exe: String, dir: String) throws {
 		drive_append(f"{dir}/unpushed.txt", qa)
 		if drive_nothing_new(dir) { return }
 		drive_launch(dir)
+	}
+}
+
+// drive_settle's wait for the exit file of the suite of SHA in lane DIR,
+// polling every 10 s, never without limit (#2458: a waiter that died left the
+// driver silent for 6.5 hours): a waiter gone without an exit file is started
+// once more (`SUITE <sha8> waiter gone, started again`, its standard error
+// tail printed); gone a second time, the suite is dropped and the driver
+// escalates with that tail.
+fn drive_settle_wait(dir: String, sha: String) throws {
+	let mut restarts: i64 = 0
+	while true {
+		let state = drive_waiter_state(sha.clone())
+		if state == "done" { return }
+		if state == "gone" {
+			let tail = drive_tail(drive_read(drive_waiter_file(sha.clone(), "err")), 20).trim().clone()
+			if restarts >= 1 {
+				process::run("rm", ["-f", drive_lock_dir() + "/testing"])
+				drive_escalate(f"the CI waiter of {drive_short(sha)} ended twice without a result; its stderr: {tail.replace("\n", " | ")}")
+			}
+			println(f"SUITE {drive_short(sha)} waiter gone, started again")
+			if tail != "" { println(tail) }
+			let why = drive_waiter_start(dir.clone(), sha.clone())
+			if why != "" {
+				process::run("rm", ["-f", drive_lock_dir() + "/testing"])
+				drive_escalate(f"the CI waiter of {drive_short(sha)} ended and did not start again: {why}")
+			}
+			restarts += 1
+		}
+		drive_proved_report(dir.clone())
+		process::run("sleep", ["10"])
 	}
 }
 
@@ -2746,7 +2853,7 @@ fn drive_suite(exe: String, dry: bool, dir: String) throws {
 	)
 	drive_say(
 		dry,
-		f"git push --force origin <sha>:refs/heads/ci/<last part of DIR> (the whole CI workflow runs on that push); in the background: {exe} run scripts/drive.nika -- --ci-wait <sha> {dir}/suite.log target/suite.lock/exit-<sha> (gh api every 30 s; Gate: green, or Gate: red <failed jobs> with their log tails)",
+		f"git push --force origin <sha>:refs/heads/ci/<last part of DIR> (the whole CI workflow runs on that push); in the background, with the compiler of HEAD (target/ledger-target/fast/nikaia, built there first unless its stamp names HEAD's crates/): run scripts/drive.nika -- --ci-wait <sha> {dir}/suite.log target/suite.lock/exit-<sha>, its pid to target/suite.lock/wait-<sha>.pid, its stderr to wait-<sha>.err (gh api every 30 s; Gate: green, or Gate: red <failed jobs> with their log tails)",
 	)
 	drive_say(
 		dry,
@@ -5066,7 +5173,7 @@ fn drive_focus(exe: String, dry: bool, max: i64, ignore_red: bool, lines_file: S
 		if !dry { drive_proved_report(dir) }
 		if !dry && drive_read("scripts/drive.nika") != own {
 			drive_settle(exe, dir)
-			drive_restart(exe.clone(), "RESTART drive: scripts/drive.nika changed")
+			drive_restart("RESTART drive: scripts/drive.nika changed")
 		}
 		let block = drive_focus_block(file)
 		let count = drive_focus_count(file)
@@ -5477,6 +5584,11 @@ fn main() throws {
 		drive_proved_report(args[2])
 		return
 	}
+	// `--waiter-state SHA`: done, alive or gone (drive_waiter_state).
+	if args.len() == 3 && args[1] == "--waiter-state" {
+		println(drive_waiter_state(args[2].clone()))
+		return
+	}
 	if args.len() == 5 && args[1] == "--ci-wait" {
 		drive_ci_wait(args[2], args[3], args[4].clone())
 		return
@@ -5555,7 +5667,7 @@ fn main() throws {
 		if !dry { drive_proved_report(dir) }
 		if !dry && drive_read("scripts/drive.nika") != own {
 			drive_settle(exe.clone(), dir)
-			drive_restart(exe.clone(), "RESTART drive: scripts/drive.nika changed")
+			drive_restart("RESTART drive: scripts/drive.nika changed")
 		}
 		// The lane's ready issues are queued here too, the area being DIR's
 		// last name (docs/briefs/yaml: yaml), as in --focus.

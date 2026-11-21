@@ -8,6 +8,16 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1515] — 2026-11-21
+
+**NK1308's help at process::run shows the literal match; --trust lists the raw sinks the build allows; D10's example writes else (ADR-raw-sinks-1 D10) (#2217)**
+- NK1308 at `process::run` shows the literal `match` to choose a program, and `--trust` lists the raw sinks `[allow]` and `--allow` let through (ADR-raw-sinks-1 D10).
+
+## [0.0.1514] — 2026-11-21
+
+**drive: child drivers run with the compiler of HEAD, the CI waiter is watched (#2458)**
+- The driver's restart after a merge and its CI waiter run with the compiler built from HEAD. A restarted script that does not compile, or a waiter that dies, now ends in ESCALATE (a dead waiter is first started once more) instead of a silent exit or a wait without end (#2458).
+
 ## [0.0.1513] — 2026-11-21
 
 **Builders' changes (#2120)**

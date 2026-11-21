@@ -1209,14 +1209,26 @@ pub(crate) fn rules_checked_key(given: &str, method: &str, built: &str, args: &[
     Some(out)
 }
 
-pub(crate) fn rules_checked_valid(context: &BoundsContext) -> bool { context.around.checked_fields == context.around.field_bounds && context.around.checked_returning == context.around.returning }
+pub(crate) fn rules_checked_valid(context: &BoundsContext) -> bool { context.around.checked_returning == context.around.returning }
+
+pub(crate) fn rules_checked_fresh(got: &RulesChecked, context: &BoundsContext) -> bool {
+    for (key, bound) in got.fields.iter() {
+        let bound = *bound;
+        let now = match context.around.field_bounds.get(key) { Some(__nikaia_value) => __nikaia_value, None => return false };
+        if *now != bound { return false; }
+    }
+    for key in got.absent.iter() { if context.around.field_bounds.contains_key(key) { return false; } }
+    true
+}
 
 pub fn rules_checked_keep(context: &mut BoundsContext, found: &collections::BTreeMap<String, RulesChecked>) {
     if !rules_checked_valid(&context) {
         context.around.checked.clear();
-        context.around.checked_fields = context.around.field_bounds.copy_owned();
         context.around.checked_returning = context.around.returning.copy_owned();
     }
+    let mut stale: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
+    for (key, got) in context.around.checked.iter() { if !rules_checked_fresh(got, &context) { stale.push(nikaia_std::block::Text::from(key.to_string())); } }
+    for key in stale.iter() { context.around.checked.remove(key); }
     for (key, failed) in found.iter() { context.around.checked.insert(nikaia_std::block::Text::from(key.to_string()), failed.clone()); }
 }
 
@@ -1230,22 +1242,31 @@ pub(crate) fn rules_check_once(key: Option<&str>, shared: bool, held: &[BoundsRu
     let reads = rules_returns_read(body, context, words);
     if shared && context.around.checked.contains_key(known) {
         let got = match context.around.checked.get(known) { Some(__nikaia_value) => __nikaia_value, None => return };
-        if got.reads == reads {
+        if got.reads == reads && rules_checked_fresh(got, context) {
             failed.extend(got.failed.iter().cloned());
             return;
         }
     }
     if checked.contains_key(known) {
         let got = match checked.get(known) { Some(__nikaia_value) => __nikaia_value, None => return };
-        if got.reads == reads {
+        if got.reads == reads && rules_checked_fresh(got, context) {
             failed.extend(got.failed.iter().cloned());
             return;
         }
     }
     let mut own: collections::BTreeSet<i64> = collections::BTreeSet::new();
-    rules_check(held, owner, method, built, args, body, locals, context, program, words, &mut *ask, &mut own);
+    let asked = rules_check(held, owner, method, built, args, body, locals, context, program, words, &mut *ask, &mut own);
     failed.extend(own.iter().cloned());
-    checked.insert(nikaia_std::block::Text::from(known.to_string()), RulesChecked { reads, failed: own });
+    let mut fields: collections::BTreeMap<String, Range> = collections::BTreeMap::new();
+    let mut absent: collections::BTreeSet<String> = collections::BTreeSet::new();
+    for key in asked.iter() {
+        let bound = match context.around.field_bounds.get(key) { Some(__nikaia_value) => __nikaia_value, None => {
+            absent.insert(nikaia_std::block::Text::from(key.to_string()));
+            continue;
+        } };
+        fields.insert(nikaia_std::block::Text::from(key.to_string()), bound.clone());
+    }
+    checked.insert(nikaia_std::block::Text::from(known.to_string()), RulesChecked { reads, fields, absent, failed: own });
 }
 
 pub(crate) fn rules_returns_read(body: &Block, context: &BoundsContext, words: &winnow_grammar::InternerContext) -> collections::BTreeMap<String, BoundsReturns> {
@@ -1274,7 +1295,7 @@ pub(crate) fn rules_returns_read(body: &Block, context: &BoundsContext, words: &
 }
 
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn rules_check(held: &[BoundsRule], owner: &str, method: &str, built: &str, args: &[FnArg], body: &Block, locals: &collections::BTreeMap<String, String>, context: &BoundsContext, program: &Program, words: &winnow_grammar::InternerContext, ask: &mut impl FnMut(&logic::TermArena, &[i64], i64) -> bool, failed: &mut collections::BTreeSet<i64>) {
+pub(crate) fn rules_check(held: &[BoundsRule], owner: &str, method: &str, built: &str, args: &[FnArg], body: &Block, locals: &collections::BTreeMap<String, String>, context: &BoundsContext, program: &Program, words: &winnow_grammar::InternerContext, ask: &mut impl FnMut(&logic::TermArena, &[i64], i64) -> bool, failed: &mut collections::BTreeSet<i64>) -> collections::BTreeSet<String> {
     let mut walk = bounding_new(args, body, collections::BTreeSet::new(), context, program, words);
     let self_owner = if method.is_empty() { "" } else { owner };
     walk.rule_roots = rules_roots(self_owner, args, &walk.shape, held, words);
@@ -1291,6 +1312,7 @@ pub(crate) fn rules_check(held: &[BoundsRule], owner: &str, method: &str, built:
         let at = nikaia_std::num::value(at);
         failed.insert(at);
     }
+    walk.assumed_read.copy_owned()
 }
 
 pub(crate) fn rules_built_literal(body: &Block, built: &str, owner: &str, words: &winnow_grammar::InternerContext) -> i64 {

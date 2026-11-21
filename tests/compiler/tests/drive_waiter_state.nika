@@ -1,0 +1,42 @@
+// scripts/drive.nika --waiter-state SHA (#2458): drive_settle's view of the
+// CI waiter of a suite. `done` once target/suite.lock/exit-SHA is there,
+// `alive` while the process named in wait-SHA.pid runs, else `gone` (no pid
+// file, or the process ended without an exit file): a gone waiter is started
+// once more, then escalated, never waited for without limit.
+use std::env
+use std::fs
+use std::process
+
+fn toolchain() -> String throws {
+    let exe = env::current_exe()?.display() ?? ""
+    if exe.len() > 0 { return exe }
+    return "target/fast/nikaia"
+}
+
+fn root() -> String throws {
+    return env::current_main()?.parent()?.parent()?.parent()?.parent()?.display() ?? "../.."
+}
+
+fn case(nikaia: String, repo: String, dir: String, name: String) throws {
+    let out = process::run(nikaia, ["run", f"{repo}/scripts/drive.nika", "--", "--waiter-state", "abc"]; dir: dir)
+    println(f"{name}: {out.stdout.trim()}")
+}
+
+fn main() throws {
+    let tmp = fs::scratch()
+    let dir = tmp.path().to_text()
+    let repo = root()
+    let nikaia = toolchain()
+    let lock = f"{dir}/target/suite.lock"
+    process::run("mkdir", ["-p", lock.clone()])
+    case(nikaia.clone(), repo.clone(), dir.clone(), "no pid file")
+    let live = process::run("sh", ["-c", "sleep 60 > /dev/null 2>&1 & echo $!"]).stdout.trim().clone()
+    fs::write(f"{lock}/wait-abc.pid", fs::Root::Anywhere, live.clone() + "\n")
+    case(nikaia.clone(), repo.clone(), dir.clone(), "waiter running")
+    process::run("kill", [live])
+    let dead = process::run("sh", ["-c", "echo $$"]).stdout.trim().clone()
+    fs::write(f"{lock}/wait-abc.pid", fs::Root::Anywhere, dead + "\n")
+    case(nikaia.clone(), repo.clone(), dir.clone(), "waiter ended without a result")
+    fs::write(f"{lock}/exit-abc", fs::Root::Anywhere, "0\n")
+    case(nikaia, repo, dir, "exit file written")
+}
