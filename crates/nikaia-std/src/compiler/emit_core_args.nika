@@ -1195,6 +1195,17 @@ impl EmitState {
             if !out.buf.ends_with("&") && !out.buf.ends_with("&mut ") {
                 out.push("&")
             }
+            // **Where tasks run on threads, the closure owns a clone of the
+            // value** (#2017): one that borrows it, or holds a `dyn` of its
+            // own, makes rustc's `Send` of the future around the call "not
+            // general enough", and the call's future is boxed for the same
+            // reason (`emit_call_sends_a_kept_value`).
+            if host.overlaps_user_code() {
+                out.push("{ let __nikaia_kept = (")
+                self.emit_expr(world, walk, out, host, arg, depth, inside, scope)
+                out.push(f").clone(); async move |{joined}| (*__nikaia_kept)({joined}).await }}")
+                return
+            }
             out.push(f"async |{joined}| (*")
             self.emit_expr(world, walk, out, host, arg, depth, inside, scope)
             out.push(f")({joined}).await")
@@ -1228,13 +1239,12 @@ impl EmitState {
             for n in 0..<never_fails {
                 names.push(f"__nikaia_a{n}")
             }
-            let joined = names.join(", ")
             let key: String = (emit_arg_function_key(world, arg) ?? "").clone()
             let pauses = key != "" && call_pauses(self.own_contracts, key)
             if arity >= 0 || pauses {
                 out.push("async ")
             }
-            out.push(f"|{joined}| Ok(")
+            out.push(f"|{self.emit_arg_closure_params(world, walk, host, arg, names)}| Ok(")
             self.emit_expr(world, walk, out, host, arg, depth, inside, scope)
             out.push(f"({emit_arg_passing(names, lent)})")
             if pauses {
@@ -1249,13 +1259,12 @@ impl EmitState {
             for n in 0..<boxed {
                 names.push(f"__nikaia_a{n}")
             }
-            let joined = names.join(", ")
             let key: String = (emit_arg_function_key(world, arg) ?? "").clone()
             let pauses = key != "" && call_pauses(self.own_contracts, key)
             if arity >= 0 || pauses {
                 out.push("async ")
             }
-            out.push(f"|{joined}| ")
+            out.push(f"|{self.emit_arg_closure_params(world, walk, host, arg, names)}| ")
             self.emit_expr(world, walk, out, host, arg, depth, inside, scope)
             out.push(f"({emit_arg_passing(names, lent)})")
             if pauses {
@@ -1269,8 +1278,7 @@ impl EmitState {
             for n in 0..<lent.len() {
                 names.push(f"__nikaia_a{n}")
             }
-            let joined = names.join(", ")
-            out.push(f"|{joined}| ")
+            out.push(f"|{self.emit_arg_closure_params(world, walk, host, arg, names)}| ")
             self.emit_expr(world, walk, out, host, arg, depth, inside, scope)
             out.push(f"({emit_arg_passing(names, lent)})")
             return
@@ -1286,8 +1294,7 @@ impl EmitState {
         for n in 0..<arity {
             names.push(f"__nikaia_a{n}")
         }
-        let joined = names.join(", ")
-        out.push(f"async |{joined}| ")
+        out.push(f"async |{self.emit_arg_closure_params(world, walk, host, arg, names)}| ")
         self.emit_expr(world, walk, out, host, arg, depth, inside, scope)
         out.push(f"({emit_arg_passing(names, lent)})")
     }
@@ -1328,6 +1335,53 @@ impl EmitState {
             return []
         }
         return lent
+    }
+
+    /// **The parameters of a closure around a named function, typed** (#2018):
+    /// where the parameter of function type takes a type variable, that name
+    /// gets the type the function wrote, behind a `&` where the slot lends it.
+    /// Untyped, the language below reads the type off the function's own view
+    /// (`&str` for `String`, `&[i64]` for `Vec[i64]`) and binds the variable
+    /// to that unsized view. A slot of a written type keeps its names untyped:
+    /// its lent form is the view (`&[u8]` for `Bytes`), which the closure then
+    /// reads off the bound. The names alone where the argument is no function
+    /// of this unit without a receiver or type parameters.
+    fn emit_arg_closure_params[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, host: ref H, arg: ref Expr, names: ref Vec[String]) -> String {
+        let joined = names.join(", ")
+        let wanted = match arg {
+            Expr::Variable(name, _) => emit_text(world, name),
+            else => return joined,
+        }
+        if self.facts.kept_functions.contains_key(node_key(arg)) {
+            return joined
+        }
+        let viewed = self.facts.named_fn_values.get(node_key(arg)) ?? return joined
+        let generic = self.facts.generic_fn_slots.get(node_key(arg)) ?? return joined
+        for item in world.items {
+            match item.node {
+                Item::Fn { name, receiver, generics, args, .. } => {
+                    let declared = name ?? continue
+                    if receiver != null || !generics.is_empty() || emit_text(world, declared) != wanted || args.len() != names.len() {
+                        continue
+                    }
+                    let mut typed: Vec[String] = []
+                    for at in 0..<args.len() {
+                        if at >= generic.len() || !generic[at] {
+                            typed.push(names[at].clone())
+                            continue
+                        }
+                        let mut ty = args[at].ty.clone()
+                        ty.is_view = false
+                        let written = self.emit_core_ty(world, walk, host.crossings_are_possible(), host.overlaps_user_code(), ty, EmitLifetimes::Elided)
+                        let lends = at < viewed.len() && viewed[at]
+                        typed.push(f"{names[at]}: {if lends { "&" } else { "" }}{written}")
+                    }
+                    return typed.join(", ")
+                },
+                else => {}
+            }
+        }
+        return joined
     }
 
     /// **A named function bound by a `let` without a type** (#582): the local
