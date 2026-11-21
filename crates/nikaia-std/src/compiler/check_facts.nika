@@ -18,6 +18,10 @@ pub enum FactWrap {
     Path,
     /// ...and a view of one.
     PathView,
+    /// ...and wrapped as a `T?` of it: text into `fs::Path?` (#1986).
+    PathSome,
+    /// ...and a view of one, where the slot lends it (`Option<&Path>`).
+    PathViewSome,
     /// An integer widened where no value can be lost: the type the slot states.
     Widen(String),
     /// ...and wrapped as a `T?` of it: `u32` into `i64?`.

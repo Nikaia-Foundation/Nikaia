@@ -124,6 +124,14 @@ impl CheckState {
         if text_as_a_path(found, want) >= 0 {
             return
         }
+        // ...and in its `Some`, where an `fs::Path?` is asked (#1986).
+        let path_some = match want {
+            Ty::Nullable(inner) => text_as_a_path(found, inner) >= 0,
+            else => false,
+        }
+        if path_some {
+            return
+        }
         // A mapping where a `Bytes` is taken (ADR-373 D3).
         if mapped_as_bytes(found, want) {
             return

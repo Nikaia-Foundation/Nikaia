@@ -75,6 +75,8 @@ pub(crate) fn emit_around_held(held: &FactWrap) -> Result<(String, String), nika
         FactWrap::Constructor => emit_two("Some(", ")"),
         FactWrap::Path => emit_two("std::path::PathBuf::from(", ")"),
         FactWrap::PathView => emit_two("std::path::Path::new(&(", "))"),
+        FactWrap::PathSome => emit_two("Some(std::path::PathBuf::from(", "))"),
+        FactWrap::PathViewSome => emit_two("Some(std::path::Path::new(&(", ")))"),
         FactWrap::MappedBytes => emit_two("(", ").bytes()"),
         FactWrap::Widen(into) => emit_two(&emit_widen(into)?, ")"),
         FactWrap::Unsigned(into) => emit_two(&emit_unsigned(into)?, ")"),

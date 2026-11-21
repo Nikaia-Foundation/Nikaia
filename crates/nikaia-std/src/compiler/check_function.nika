@@ -940,6 +940,12 @@ fn check_function_wrap_tail[H: CheckHost](mut state: CheckState, world: ref Chec
         FactWrap::WidenSome(into) => {
             state.facts.wrapped.insert(node, FactWrap::WidenSome(into.clone()))
         },
+        FactWrap::PathSome => {
+            state.facts.wrapped.insert(node, FactWrap::PathSome)
+        },
+        FactWrap::PathViewSome => {
+            state.facts.wrapped.insert(node, FactWrap::PathViewSome)
+        },
         FactWrap::Unsigned(into) => {
             state.facts.wrapped.insert(node, FactWrap::Unsigned(into.clone()))
         },

@@ -6,6 +6,8 @@ pub enum FactWrap {
     Constructor,
     Path,
     PathView,
+    PathSome,
+    PathViewSome,
     Widen(String),
     WidenSome(String),
     Unsigned(String),
