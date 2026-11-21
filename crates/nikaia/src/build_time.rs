@@ -15,8 +15,8 @@ use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 use nikaia_std::compiler::build_eval::{BtHost, BtRan, BtRead, bt_evaluate};
 
 use crate::assets::Reads;
-use crate::ast::{Expr, Item};
-use crate::contracts::ty::TyOps;
+use crate::ast::Expr;
+use crate::contracts::ty::Ty;
 use crate::parser::Parsed;
 
 /// **What a build-time expression came to**, in Nikaia
@@ -82,38 +82,29 @@ impl<'a> BuildTime<'a> {
     fn run(&self, expr: &Expr) -> Result<Value, Refusal> {
         let mut units: Vec<&Parsed> = vec![self.parsed];
         units.extend(self.beside.iter().copied());
+        let views: Vec<_> = units
+            .iter()
+            .map(|parsed| crate::check::parsed_view_of(parsed))
+            .collect();
         let host = Host {
-            units,
+            units: &units,
             reads: self.reads,
             known: self.known,
         };
-        bt_evaluate(expr, &host).map_err(|thrown| thrown.split().0)
+        bt_evaluate(expr, &views, &host).map_err(|thrown| thrown.split().0)
     }
 }
 
-/// What the evaluator asks the compiler: the files by number (0 is the one
-/// being checked), the ledger, what may be read, and the grammar build-time directory.
+/// What the evaluator asks the compiler and Nikaia cannot hold: the names
+/// already worked out, what may be read, and the run of a grammar, over the
+/// files by number (0 is the one being checked).
 struct Host<'h> {
-    units: Vec<&'h Parsed>,
+    units: &'h [&'h Parsed],
     reads: &'h Reads,
     known: Known<'h>,
 }
 
-impl Host<'_> {
-    /// The files in the order a name is looked for: the one the body being read
-    /// came from, and then every file beside the one being checked.
-    fn in_reach(&self, unit: i64) -> impl Iterator<Item = (usize, &Parsed)> {
-        std::iter::once(unit as usize)
-            .chain(1..self.units.len())
-            .map(|at| (at, self.units[at]))
-    }
-}
-
 impl BtHost for Host<'_> {
-    fn text(&self, unit: i64, symbol: winnow_grammar::Symbol) -> String {
-        self.units[unit as usize].text(symbol).to_text()
-    }
-
     fn char_of(&self, n: i64) -> Option<char> {
         char_of(n)
     }
@@ -122,53 +113,18 @@ impl BtHost for Host<'_> {
         (self.known)(name)
     }
 
-    fn constant(&self, unit: i64, name: &str) -> Option<Expr> {
-        let parsed = self.units[unit as usize];
-        parsed
-            .program
-            .items
-            .iter()
-            .find_map(|item| match &item.node {
-                Item::Comptime {
-                    name: declared,
-                    value,
-                    ..
-                } if parsed.text(*declared) == name => Some(value.clone()),
-                _ => None,
-            })
-    }
-
-    fn variant_of(&self, unit: i64, ty: &str, variant: &str) -> bool {
-        self.in_reach(unit).any(|(_, parsed)| {
-            parsed.program.items.iter().any(|item| match &item.node {
-                Item::Enum { name, variants, .. } if parsed.text(*name) == ty => variants
-                    .iter()
-                    .any(|held| parsed.text(held.name) == variant),
-                _ => false,
-            })
-        })
-    }
-
-    fn run_grammar(&self, unit: i64, which: &str, rule: &str, input: &str) -> BtRan {
-        let Some((parsed, result)) = self.rule_of(unit, which, rule) else {
-            return BtRan {
-                found: false,
-                value: None,
-                wall: None,
-            };
-        };
-        let beside: Vec<&Parsed> = Vec::from(&self.units[1..]);
+    fn run_grammar(&self, at: i64, which: &str, rule: &str, result: &Ty, input: &str) -> BtRan {
         let ask = crate::grammar_run::Ask {
             grammar: which,
             rule,
             input,
-            result: &result,
-            units: &beside,
+            result,
+            units: &self.units[1..],
         };
         let outcome = self
             .reads
             .build_time_dir()
-            .run(parsed, &ask)
+            .run(self.units[at as usize], &ask)
             .and_then(|dump| crate::grammar_run::decode(&dump));
         match outcome {
             Ok(value) => BtRan {
@@ -195,32 +151,6 @@ impl BtHost for Host<'_> {
                 denied: Some(why),
             },
         }
-    }
-}
-
-impl Host<'_> {
-    /// The file a grammar was declared in, and what its `entry` rule hands back.
-    fn rule_of(
-        &self,
-        unit: i64,
-        grammar: &str,
-        rule: &str,
-    ) -> Option<(&Parsed, crate::contracts::ty::Ty)> {
-        self.in_reach(unit).find_map(|(_, parsed)| {
-            let found = parsed
-                .program
-                .items
-                .iter()
-                .find_map(|item| match &item.node {
-                    Item::Grammar(def) if parsed.text(def.name) == grammar => def
-                        .rules
-                        .iter()
-                        .find(|r| r.is_entry && parsed.text(r.name) == rule),
-                    _ => None,
-                })?;
-            let ty = found.ret_type.as_ref()?;
-            Some((parsed, crate::contracts::ty::Ty::from_ast(parsed, ty)))
-        })
     }
 }
 
