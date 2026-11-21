@@ -3829,7 +3829,7 @@ pub mod tree_build {
 }
 pub mod trust {
     #[allow(unused_imports)]
-    pub use super::{Wrote, spelled, Reason, read_by_operator, first_literal, operator_read, SourceCall, source_calls, mark_trusted, main_parameters_source, takes_the_command_line, Place, render, MapPlan, trusted_maps, EscapePlan, EscapedCall, no_escapes, escaped_sinks, render_escapes};
+    pub use super::{Wrote, spelled, Reason, read_by_operator, first_literal, operator_read, SourceCall, source_calls, mark_trusted, main_parameters_source, takes_the_command_line, Place, render, render_allowed, MapPlan, trusted_maps, EscapePlan, EscapedCall, no_escapes, escaped_sinks, render_escapes};
 }
 pub mod ty {
     #[allow(unused_imports)]
