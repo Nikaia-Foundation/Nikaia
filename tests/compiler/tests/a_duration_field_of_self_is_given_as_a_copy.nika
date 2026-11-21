@@ -1,0 +1,27 @@
+// A field of `self` whose type `std`'s ledger copies is given away as a copy
+// (ADR-150, #2468): a `time::Duration` "is a value that copies", as an `i64`
+// is. `take(self.ceiling)`, `d.min(self.ceiling)` and, in a `mut self`
+// method, `d.saturating_sub(self.ceiling)` drew NK1131 "this method only
+// borrows `self`", where `m.min(self.n)` passed.
+use std::time
+
+struct B { ceiling: time::Duration, n: i64 }
+
+fn take(d: time::Duration) -> i64 sync { return d.in_millis() }
+
+impl B {
+    fn a(self) -> i64 sync { return take(self.ceiling) }
+    fn b(self, m: i64) -> i64 sync { return m.min(self.n) }
+    fn f(self, d: time::Duration) -> time::Duration sync { return d.min(self.ceiling) }
+    fn g(mut self, d: time::Duration) -> time::Duration sync {
+        self.n = self.n + 1
+        return d.saturating_sub(self.ceiling)
+    }
+}
+
+fn main() throws {
+    let mut b = B { ceiling: 5.millis(), n: 3 }
+    let d = 7.millis()
+    println(f"{b.a()} {b.b(9)} {b.f(d).in_millis()}")
+    println(f"{b.g(d).in_millis()} {b.n} {b.ceiling.in_millis()}")
+}
