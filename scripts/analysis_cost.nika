@@ -1,0 +1,187 @@
+// Instructions per checker analysis on the compiler's own package (#2187,
+// item 3 of #1625): `lower-std --findings` under callgrind, collected only
+// inside the check walk of each file (`check_walked_walk`), and the walk's
+// instructions split by the analysis whose function they ran in
+// (`docs/measuring.md`, *Instructions per checker analysis*).
+//
+//     nikaia run scripts/analysis_cost.nika [-- [--sysroot DIR] [--out FILE]]
+//     nikaia run scripts/analysis_cost.nika -- --read FILE [--lines N]
+//
+// Without `--read` it runs `target/fast/nikaia lower-std --findings` from
+// the checkout's root under callgrind (hours: valgrind runs the whole
+// command, and counts only the walk), writes callgrind's output to `--out`
+// (`target/analysis-cost.callgrind`), and reads it. `--sysroot DIR` checks
+// the package under `DIR/crates` instead (a cut of it, laid out as the
+// checkout). `--read FILE` reads a callgrind output written with
+// `--compress-strings=no --compress-pos=no`, as the run writes it. The lines
+// checked are those of the package's `.nika` files, or `--lines N`.
+//
+// An analysis is counted by the functions it runs in, each `@inline(never)`
+// in the `.nika` source: the instructions of every call into one of them
+// from a function that is not one of them, so a listed function called by
+// another of the same analysis is counted once. The rest of the walk is
+// what no analysis's function ran: the type walk itself, and the
+// bookkeeping an analysis does on the way (the reads the `.clone()` lint
+// records as the walk meets them).
+
+use std::cli
+use std::collections
+use std::fs
+use std::process
+use std::text
+
+// The analyses, each with the functions it runs in, as callgrind names them
+// (a part of the demangled name, ending where the name or a `::` or `<`
+// does).
+fn analyses() -> Vec[(String, Vec[String])] {
+    return [
+        ("handles (ADR-312)", ["check_core_places_lowered::check_core_places_store_handle", "check_core_places_lowered::check_core_places_give_handle", "CheckState>::a_handle_handed_on", "CheckState>::crosses_into_a_task", "CheckState>::crosses_into_an_unseen_call"]),
+        ("outside data (ADR-396)", ["check_walked_lowered::check_walked_outside"]),
+        ("bounds (ADR-385)", ["check_walked_lowered::check_walked_unsigned_slots"]),
+        ("proofs (ADR-269 D4, ADR-396 D5)", ["check_walked_lowered::check_walked_prove"]),
+        ("views (NK2302, NK2305, NK2303)", ["check_walked_lowered::check_walked_views"]),
+        ("lints (NK1261, NK1350)", ["types_lowered::types_text_by_ref", "CheckState>::a_clone_seen", "CheckState>::a_loop_over_a_needless_clone", "CheckState>::needless_place_clones_said", "CheckState>::needless_clones_said"]),
+    ]
+}
+
+// Whether callgrind's function `name` is `part`: `part` stands in it and
+// the name goes on after it with `::`, `<` or not at all.
+fn names(name: String, part: String) -> bool {
+    let (_, after) = name.split_once(part) ?? return false
+    return after.len() == 0 || after.starts_with(":") || after.starts_with("<")
+}
+
+// The analysis `name` belongs to, `""` for none.
+fn analysis_of(name: String, all: Vec[(String, Vec[String])]) -> String {
+    for (analysis, parts) in all {
+        for part in parts {
+            if names(name.clone(), part.clone()) { return analysis }
+        }
+    }
+    return ""
+}
+
+// `n` with a comma every three digits: `1,234,567`.
+fn grouped(n: i64) -> String {
+    let digits = f"{n}"
+    let mut out: String = ""
+    let mut k = 0
+    for c in digits.scalars {
+        if k > 0 && c != '-' && (digits.len() - k) % 3 == 0 { out.push_str(",") }
+        out.push(c)
+        k += 1
+    }
+    return out
+}
+
+// `part` of `whole` in percent, one decimal, without a float: `12.5`.
+fn percent(part: i64, whole: i64) -> String {
+    if whole == 0 { return "-" }
+    let tenths = (part * 1000 + whole / 2) / whole
+    return f"{tenths / 10}.{tenths % 10}"
+}
+
+// The first number of a cost line, the instructions after its position.
+fn cost_of(line: String) -> i64 {
+    let mut words: Vec[String] = Vec()
+    for w in line.split(" ") { words.push(w.clone()) }
+    if words.len() < 2 { return 0 }
+    return text::parse_i64(words[1]) ?? 0
+}
+
+// The lines of the package's `.nika` files under `root`.
+fn package_lines(root: String) -> i64 throws {
+    let out = process::run("sh", ["-c", f"cat {root}/crates/nikaia-std/src/compiler/*.nika | wc -l"])
+    return text::parse_i64(out.stdout.trim()) ?? 0
+}
+
+fn usage() throws {
+    eprintln("usage: nikaia run scripts/analysis_cost.nika [-- [--sysroot DIR] [--out FILE] | --read FILE [--lines N]]")
+    process::exit(2)
+}
+
+fn main() throws {
+    let mut args: Vec[String] = Vec()
+    for a in cli::args() { args.push(a) }
+    let mut read: String = ""
+    let mut out: String = "target/analysis-cost.callgrind"
+    let mut sysroot: String = ""
+    let mut lines = -1
+    let mut k = 1
+    while k < args.len() {
+        let word = args[k].clone()
+        if k + 1 >= args.len() { usage() }
+        let value = args[k + 1].clone()
+        if word == "--read" { read = value } else if word == "--out" { out = value } else if word == "--sysroot" { sysroot = value } else if word == "--lines" {
+            lines = text::parse_i64(value) ?? -1
+            if lines < 0 { usage() }
+        } else { usage() }
+        k += 2
+    }
+    if lines < 0 {
+        let mut root: String = "."
+        if sysroot.len() > 0 { root = sysroot.clone() }
+        lines = package_lines(root)
+    }
+    if read.len() == 0 {
+        let mut command: String = f"NIKAIA_CACHE_LIMIT=2G valgrind --tool=callgrind --collect-atstart=no '--toggle-collect=*check_walked_walk*' --compress-strings=no --compress-pos=no --callgrind-out-file={out} target/fast/nikaia lower-std --findings"
+        if sysroot.len() > 0 { command = f"{command} --sysroot {sysroot}/crates" }
+        let ran = process::run("sh", ["-c", f"{command} > /dev/null"])
+        if ran.code != 0 {
+            eprintln(ran.stderr)
+            eprintln(f"callgrind over lower-std --findings: exit {ran.code}")
+            process::exit(1)
+        }
+        read = out
+    }
+    let all = analyses()
+    let mut counted: collections::BTreeMap[String, i64] = collections::BTreeMap()
+    let mut total = 0
+    // The function the lines stand in, and its analysis.
+    let mut here: String = ""
+    // The analysis of the function a `calls=` line calls, and whether the
+    // next cost line is that call's.
+    let mut callee: String = ""
+    let mut a_call = false
+    for line in fs::read_to_string(read, fs::Root::Anywhere).lines() {
+        if line.starts_with("fn=") {
+            here = analysis_of(line.strip_prefix("fn=") ?? "", all)
+            continue
+        }
+        if line.starts_with("cfn=") {
+            callee = analysis_of(line.strip_prefix("cfn=") ?? "", all)
+            continue
+        }
+        if line.starts_with("calls=") {
+            a_call = true
+            continue
+        }
+        if line.starts_with("summary:") || line.starts_with("totals:") {
+            let (_, n) = line.split_once(":") ?? continue
+            total = text::parse_i64(n.trim()) ?? total
+            continue
+        }
+        let first = line.scalars.next() ?? continue
+        if !first.is_ascii_digit() && first != '+' && first != '-' && first != '*' { continue }
+        if a_call {
+            a_call = false
+            if callee.len() > 0 && callee != here {
+                counted.insert(callee.clone(), (counted[callee] ?? 0) + cost_of(line))
+            }
+        }
+    }
+    let mut per = lines
+    if per < 1 { per = 1 }
+    let mut named = 0
+    for (_, n) in counted { named += n }
+    println(f"Instructions per checker analysis, in the check walk (`check_walked_walk`) of {grouped(lines)} lines")
+    println("")
+    println("| Analysis | Instructions | Share of the walk | Per line |")
+    println("| :--- | ---: | ---: | ---: |")
+    for (analysis, _) in all {
+        let n = counted[analysis] ?? 0
+        println(f"| {analysis} | {grouped(n)} | {percent(n, total)} % | {grouped(n / per)} |")
+    }
+    println(f"| rest of the walk | {grouped(total - named)} | {percent(total - named, total)} % | {grouped((total - named) / per)} |")
+    println(f"| the walk | {grouped(total)} | 100.0 % | {grouped(total / per)} |")
+}

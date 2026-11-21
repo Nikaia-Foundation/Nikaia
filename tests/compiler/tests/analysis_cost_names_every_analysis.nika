@@ -1,0 +1,48 @@
+// scripts/analysis_cost.nika (#2187): a callgrind output of a check walk is
+// read into one row per checker analysis, with the rest of the walk and the
+// walk itself; a call from one function of an analysis into another of the
+// same one (`a_clone_seen` into `needless_clones_said`) is counted once.
+use std::env
+use std::fs
+use std::process
+
+// The checkout: the working directory, or (under `nikaia test`, which runs a
+// test in a directory of its own) the one `nikaia` was started in.
+fn root() -> String throws {
+    return env::current_main()?.parent()?.parent()?.parent()?.parent()?.display() ?? "../.."
+}
+
+// The toolchain that runs this test (CI builds target/release only); if the
+// test was started otherwise, the first built one in the checkout.
+fn toolchain(repo: String) -> String throws {
+    let exe = env::current_exe()?.display() ?? ""
+    if exe.len() > 0 { return exe }
+    return f"{repo}/target/fast/nikaia"
+}
+
+fn main() throws {
+    let tmp = fs::scratch()
+    let repo = root()
+    let nikaia = toolchain(repo.clone())
+    let walk = "nikaia_std::compiler::check_walked_lowered::check_walked_walk::<nikaia::check::host::Host, nikaia::check::host::Host>"
+    let state = "<nikaia_std::compiler::check_state_lowered::CheckState>"
+    let mut calls: Vec[String] = [
+        "nikaia_std::compiler::check_core_places_lowered::check_core_places_store_handle", f"{state}::crosses_into_a_task",
+        "nikaia_std::compiler::check_walked_lowered::check_walked_outside::<nikaia::check::host::Host>",
+        "nikaia_std::compiler::check_walked_lowered::check_walked_unsigned_slots",
+        "nikaia_std::compiler::check_walked_lowered::check_walked_prove::<nikaia::check::host::Host>",
+        "nikaia_std::compiler::check_walked_lowered::check_walked_views::<nikaia::check::host::Host>",
+        f"{state}::a_clone_seen", "nikaia_std::compiler::types_lowered::types_text_by_ref",
+    ]
+    let mut text: String = f"version: 1\nevents: Ir\nfn={walk}\n1 50\n"
+    let mut cost = 100
+    for name in calls {
+        text = f"{text}cfn={name}\ncalls=1 0\n2 {cost}\n"
+        cost += 100
+    }
+    text = f"{text}fn={state}::a_clone_seen\n3 400\ncfn={state}::needless_clones_said\ncalls=2 0\n4 300\nfn=nikaia_std::compiler::check_walked_lowered::check_walked_outside_of\n5 7\ntotals: 10000\n"
+    fs::write("walk.callgrind", tmp, text)
+    let out = process::run(nikaia.clone(), ["run", f"{repo}/scripts/analysis_cost.nika", "--", "--read", "walk.callgrind", "--lines", "1000"]; dir: tmp.path().to_text())
+    println(f"exit {out.code}")
+    print(out.stdout)
+}

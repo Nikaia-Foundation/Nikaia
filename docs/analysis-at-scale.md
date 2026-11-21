@@ -120,7 +120,8 @@ its own defect.
 ## Cost per analysis
 
 `lower-std --findings` took 2 min 0.7 s wall time (2 min 30.9 s user) for
-the 271 files. Instructions per analysis cannot be read today.
+the 271 files; on 2026-11-21 (f03819a5e) 3 min 52.9 s wall, 6 min 22.4 s
+user.
 
 * `NIKAIA_LOWER_TIMES=1` gives wall time only:
   * per `lower-std` phase: parse, ledger, trust, graphs, names, files,
@@ -128,8 +129,37 @@ the 271 files. Instructions per analysis cannot be read today.
   * per ledger pass (`InferHost::timed` in `contracts/mod.rs`): check_units,
     sync, throws, touch, sharing, maps, locks, panics, tether, ...;
   * per file, the check and emit time summed.
-* The checker's own analyses run inside the one `check` call per file, with
-  no split. These are handles (ADR-312), outside data (ADR-396), bounds
-  (ADR-385), the clone and `ref` lints, and the rest.
+* Instructions per analysis (#2187): `nikaia run scripts/analysis_cost.nika`
+  runs `lower-std --findings` under callgrind, counting only the check walk
+  of each file, and prints one row per analysis (`docs/measuring.md`,
+  *Instructions per checker analysis*). Each analysis has its own
+  `@inline(never)` functions in `.nika`: `check_walked_outside`,
+  `check_walked_prove`, `check_walked_views`, `check_walked_unsigned_slots`;
+  handles and the lints run woven into the type walk, so their rows count
+  only the functions they call.
 
-A report of instructions per analysis is its own work (the issue's item 3).
+On one file, `nikaia check scripts/analysis_scale.nika` (179 lines,
+2026-11-21, f03819a5e plus #2187's change, read with `--read`):
+
+| Analysis | Instructions | Share of the walk |
+| :--- | ---: | ---: |
+| handles (ADR-312) | 2,502 | 0.0 % |
+| outside data (ADR-396) | 10,176,230 | 8.2 % |
+| bounds (ADR-385) | 0 | 0.0 % |
+| proofs (ADR-269 D4, ADR-396 D5) | 43,878,584 | 35.4 % |
+| views (NK2302, NK2305, NK2303) | 26,228,170 | 21.2 % |
+| lints (NK1261, NK1350) | 189,707 | 0.2 % |
+| rest of the walk | 43,371,707 | 35.0 % |
+| the walk | 123,846,900 | 100.0 % |
+
+Bounds reads 0 there: a plain `check` does not run the unsigned-slot pass.
+The whole package under callgrind was not run: at about 50 times its 6 min
+22 s of user time, it takes longer than one run's time box.
+
+**Scaling by dependency cuts is open.** The package's files form one
+dependency cycle: 213 of the 271 files, 180,437 of about 205,000 lines
+(88 %), reference each other (names defined in one file used in another,
+counted on the text). So a 25 %, 50 % or 75 % cut that keeps every file's
+dependencies does not exist: the smallest closed cut is 88 %. How to cut
+(check a share of the files against the whole package beside, or one
+row per file against its lines) waits for a decision.

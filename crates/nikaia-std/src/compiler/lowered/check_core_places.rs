@@ -589,6 +589,7 @@ pub(crate) fn check_core_places_a_handle(ty: &Ty) -> bool {
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
+#[inline(never)]
 pub(crate) fn check_core_places_store_handle(state: &mut CheckState, value: &Expr, ty: &Ty) {
     if !check_core_places_a_handle(ty) { return; }
     let place = matches!(value, Expr::Variable(_, _) | Expr::Field { .. });
@@ -597,6 +598,7 @@ pub(crate) fn check_core_places_store_handle(state: &mut CheckState, value: &Exp
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
+#[inline(never)]
 pub(crate) fn check_core_places_give_handle(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, value: &Expr, ty: &Ty, span: &Span) {
     if !check_core_places_a_handle(ty) { return; }
     check_core_places_store_handle(state, value, ty);
