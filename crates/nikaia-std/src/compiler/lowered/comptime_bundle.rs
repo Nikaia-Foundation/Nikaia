@@ -427,7 +427,14 @@ pub(crate) async fn comptime_bundle_bundle_of<H: ComptimeBundleHost>(flavour: &C
     comptime_bundle_write_if_changed(&lib_rs, &bundle_source, &host.unique_beside(&lib_rs)).await?;
     let cargo = nikaia_std::index::or(env::var("CARGO"), || "cargo".into());
     let target = host.shared_target();
-    let built = match process::run(&cargo, vec![String::from("rustc"), String::from("--quiet"), String::from("--lib"), String::from("--crate-type"), String::from("dylib"), String::from("--message-format=json"), String::from("--manifest-path"), nikaia_std::fs::path::display(&(cargo_toml)), String::from("--target-dir"), nikaia_std::fs::path::display(&(target)), String::from("--target"), host.build_target(), String::from("--"), String::from("-C"), String::from("prefer-dynamic")], &nikaia_std::fs::path::display(&(host.where_tools_start())), vec![], vec![], false, None, process::Input::Closed, process::Stream::Captured, process::Stream::Captured).await {
+    let triple = host.build_target();
+    let elf = triple.contains("-linux");
+    let mut args: Vec<String> = vec![String::from("rustc"), String::from("--quiet"), String::from("--lib"), String::from("--crate-type"), String::from("dylib"), String::from("--message-format=json"), String::from("--manifest-path"), nikaia_std::fs::path::display(&(cargo_toml)), String::from("--target-dir"), nikaia_std::fs::path::display(&(target)), String::from("--target"), triple, String::from("--"), String::from("-C"), String::from("prefer-dynamic")];
+    if elf {
+        args.push(String::from("-C"));
+        args.push(String::from("link-arg=-Wl,-Bsymbolic-functions"));
+    }
+    let built = match process::run(&cargo, args, &nikaia_std::fs::path::display(&(host.where_tools_start())), vec![], vec![], false, None, process::Input::Closed, process::Stream::Captured, process::Stream::Captured).await {
         Ok(value) => value,
         Err(error) => { return Err(nikaia_std::error::throwing(ComptimeBundleFailed::Said(format!("running cargo: {}", error)), &"comptime_bundle_bundle_of")) },
     };
