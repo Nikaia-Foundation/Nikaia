@@ -1,0 +1,35 @@
+// A view out of a field of `self`, handed to a method that changes `self`,
+// is refused (ADR-views-v4 D11, ADR-282, #1300): no rustc borrow error.
+use std::collections
+
+struct F {
+	xs: Vec[i64],
+}
+
+struct R {
+	funs: collections::BTreeMap[String, F],
+	n: i64,
+}
+
+impl R {
+	fn use_it(ref mut self, f: ref F) -> i64 {
+		self.n += 1
+		return f.xs.len() + self.n
+	}
+
+	fn go(ref mut self, k: String) -> i64 {
+		match self.funs.get(k) {
+			null => {},
+			f => {
+				return self.use_it(f)
+			},
+		}
+		return 0
+	}
+}
+
+fn main() throws {
+	let mut r = R { funs: collections::BTreeMap(), n: 0 }
+	r.funs.insert("a", F { xs: [1, 2] })
+	println(r.go("a"))
+}

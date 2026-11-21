@@ -100,6 +100,10 @@ struct VcView {
     /// while it is used, a read of what it views is refused as well (Part I
     /// 6.8, #962).
     exclusive: bool,
+    /// Whether it is a read of a place by `get` (`m.get(k) ?? return`, an
+    /// arm's name), watched only by a call that changes the place and is
+    /// handed it (ADR-views-v4 D11, #1300); its later uses are not followed.
+    lent_only: bool,
 }
 
 struct VcWalk {
@@ -127,6 +131,11 @@ struct VcCall {
     /// same call reads while it is lent (ADR-views-v4 D11): `put(v[1..<3],
     /// v[0])`, a lambda that reads `v`.
     lent_and_read: Vec[String],
+    /// At a method call, the arguments that read the place it is called on,
+    /// by position, and each argument's place as written (`self.f`), where
+    /// it names one (#1300).
+    receiver_read: Vec[i64],
+    paths: Vec[String],
 }
 
 /// The refusals (`NK2305`) and the give-ups of one unit.
@@ -252,6 +261,18 @@ fn vc_through(root: ref String, part: String, outer: ref Vec[VcView]) -> (collec
     return (roots, parts)
 }
 
+/// A place as written, a name and its fields (`self.f`), or `""`.
+fn vc_place_written(expr: ref Expr, ask: ref VcAsk) -> String {
+    return match expr {
+        Expr::Variable(name, _) => ask.names.resolve(name).clone(),
+        Expr::Field { base, name, .. } => {
+            let written = vc_place_written(base, ask)
+            if written == "" { "" } else { f"{written}.{ask.names.resolve(name)}" }
+        },
+        else => "",
+    }
+}
+
 /// The last view called `name`, or `-1`.
 fn vc_last_named(views: ref Vec[VcView], name: ref String) -> i64 {
     let mut i = views.len() - 1
@@ -291,7 +312,12 @@ fn vc_last_viewing(views: ref Vec[VcView], root: ref String) -> i64 {
 /// changes: it points into `root`, and it reads all of it or a part that
 /// holds `path` or lies inside it.
 fn vc_watches(view: ref VcView, root: ref String, path: ref String) -> bool {
-    if view.used == null || !view.roots.contains(root) {
+    return view.used != null && vc_reads_into(view, root, path)
+}
+
+/// Whether a view may read the place `path` under `root`, used later or not.
+fn vc_reads_into(view: ref VcView, root: ref String, path: ref String) -> bool {
+    if !view.roots.contains(root) {
         return false
     }
     let mut read = false
@@ -354,11 +380,25 @@ fn vc_calls_in(expr: ref Expr, ask: ref VcAsk, holes_of: fn(ref Expr) -> Vec[Exp
         Expr::MethodCall { receiver, method, args, .. } => {
             let mut roots: Vec[String?] = []
             let mut names: Vec[String?] = []
+            let mut paths: Vec[String] = []
             for arg in args {
                 roots.push(root_of(ask.names, arg))
                 names.push(vc_variable(arg, ask))
+                paths.push(vc_place_written(arg, ask))
             }
-            out.push(VcCall { method: true, callee: ask.names.resolve(method).clone(), root: root_of(ask.names, receiver), path: vc_path_of(receiver, ask), roots: roots, names: names, lent_and_read: [] })
+            // An argument made in the call is read before the receiver is
+            // lent; a place read or a lambda is read while it is (#1300).
+            let path = vc_path_of(receiver, ask)
+            let mut receiver_read: Vec[i64] = []
+            if path != "" {
+                for j in 0..<args.len() {
+                    let bound_ahead = made_in_the_call(args[j]) && !emit_arg_is_closure(args[j])
+                    if !bound_ahead && vc_reads_path(args[j], path, ask, holes_of) {
+                        receiver_read.push(j)
+                    }
+                }
+            }
+            out.push(VcCall { method: true, callee: ask.names.resolve(method).clone(), root: root_of(ask.names, receiver), path: path, roots: roots, names: names, lent_and_read: [], receiver_read: receiver_read, paths: paths })
         }
         Expr::Call { func, args, .. } => {
             let mut roots: Vec[String?] = []
@@ -387,7 +427,7 @@ fn vc_calls_in(expr: ref Expr, ask: ref VcAsk, holes_of: fn(ref Expr) -> Vec[Exp
                     }
                 }
             }
-            out.push(VcCall { method: false, callee: callee, root: null, path: "", roots: roots, names: names, lent_and_read: lent_and_read })
+            out.push(VcCall { method: false, callee: callee, root: null, path: "", roots: roots, names: names, lent_and_read: lent_and_read, receiver_read: [], paths: [] })
         }
         else => {}
     }
@@ -510,6 +550,26 @@ fn vc_method_keeps(method: ref String, index: i64, ask: ref VcAsk, walk: ref VcW
         } else {
             let contract = ask.library.functions[entry.1] ?? continue
             if vc_subject_first(contract) && vc_owns(contract, index + 1) {
+                return true
+            }
+        }
+    }
+    return false
+}
+
+/// Whether a method of that name the ledgers know lends its argument
+/// `index`, counted after the subject, by reference (#1300).
+fn vc_method_lends(method: ref String, index: i64, ask: ref VcAsk, walk: ref VcWalk) -> bool {
+    let known = walk.methods[method] ?? return false
+    for entry in known {
+        if entry.0 {
+            let contract = ask.own.functions[entry.1] ?? continue
+            if vc_subject_first(contract) && lends_in_own(contract, index + 1, [ask.library]) {
+                return true
+            }
+        } else {
+            let contract = ask.library.functions[entry.1] ?? continue
+            if vc_subject_first(contract) && lends_in(contract, index + 1, [ask.library]) {
                 return true
             }
         }
@@ -652,6 +712,30 @@ fn vc_lent_mut(callee: ref String?, index: i64, ask: ref VcAsk) -> bool {
     return signature.mutable.contains(signature.params[index].0)
 }
 
+/// **The place a method changes is not read by the same call either**
+/// (ADR-views-v4 D11, ADR-282, #1300): `self.use_it(self.f)` lends `self`
+/// `mut` and `self.f` by reference at once. An argument lent by reference
+/// that reads the receiver's place, as written or through a view, is
+/// refused; one the method takes by value, or a scalar, is read first.
+fn vc_receiver_lent(call: ref VcCall, root: ref String, method: ref String, at: ref Span, views: ref Vec[VcView], ask: ref VcAsk, mut walk: VcWalk) {
+    for index in 0..<call.roots.len() {
+        let mut reads = call.receiver_read.contains(index)
+        if !reads {
+            let name = call.names[index] ?? continue
+            let v = vc_last_named(views, name)
+            reads = v >= 0 && vc_reads_into(views[v], root, call.path)
+        }
+        if !reads || !vc_method_lends(method, index, ask, walk) {
+            continue
+        }
+        let shown = call.paths[index]
+        let help = if shown == "" { f"Hand `{method}` a copy of what it reads, with `.clone()`." } else { f"Hand `{method}` a copy: `{shown}.clone()`." }
+        let labels: Vec[CheckLabel] = [vc_label(at.clone(), root, f"`{method}` changes `{root}` and is handed a view into it", true)]
+        walk.findings.push(Finding { code: "NK2305", span: at.clone(), message: f"`{root}` is read here, but `{method}` changes it in the same call.", notes: [f"`{method}` changes `{root}`, which it is called on, for the whole call, so no argument it borrows reads `{root}`."], help: help, warning: false, labels: labels })
+        return
+    }
+}
+
 /// The changes in place among a statement's own expressions.
 fn vc_changes_in(stmt: ref Stmt, at: ref Span, views: ref Vec[VcView], ask: ref VcAsk, holes_of: fn(ref Expr) -> Vec[Expr] sync, mut walk: VcWalk) {
     let calls = vc_calls(stmt, ask, holes_of)
@@ -674,6 +758,7 @@ fn vc_changes_in(stmt: ref Stmt, at: ref Span, views: ref Vec[VcView], ask: ref 
         let method = call.callee ?? continue
         if vc_methods_all(method, true, ask, walk) {
             changed.push((root.clone(), call.path.clone()))
+            vc_receiver_lent(call, root, method, at, views, ask, walk)
         }
     }
     for (root, path) in changed {
@@ -760,6 +845,11 @@ fn vc_view_of(at: ref Span, name: ref String, value: ref Expr, outer: ref Vec[Vc
             if ask.mut_viewed.contains(id_of(value) as i64) {
                 return vc_mut_view(at, name, left, outer, ask)
             }
+            // `m.get(k) ?? return` points into `m` (#1300).
+            match left {
+                Expr::MethodCall { .. } => return vc_got_view(at, name, left, outer, ask),
+                else => {}
+            }
             if !ask.coalesced.contains(id_of(value) as i64) && !ask.coalesced.contains(id_of(fallback) as i64) {
                 return null
             }
@@ -798,7 +888,7 @@ fn vc_view_of(at: ref Span, name: ref String, value: ref Expr, outer: ref Vec[Vc
                 shown.push(root_of(ask.names, arg) ?? "..")
             }
             let written = shown.join(", ")
-            return VcView { name: name.clone(), roots: roots, parts: parts, made: at.clone(), from: f"`{name}` is made here by `{callee}`", way_out: way_out, used: null, call: f"{callee}({written})", callee: callee.clone(), shown: shown, help: null, looped: false, exclusive: false }
+            return VcView { name: name.clone(), roots: roots, parts: parts, made: at.clone(), from: f"`{name}` is made here by `{callee}`", way_out: way_out, used: null, call: f"{callee}({written})", callee: callee.clone(), shown: shown, help: null, looped: false, exclusive: false, lent_only: false }
         }
         // **A method of text that hands back a view of it** (ADR-views-v4 D9,
         // #1478): `let t = s.trim()` points into `s`, as a cut does.
@@ -865,13 +955,13 @@ fn vc_loop_view(iter: ref Expr, at: ref Span, ask: ref VcAsk) -> VcView? {
     // not read in the body either.
     let viewed = ask.mut_viewed.contains(id_of(iter) as i64)
     let from = if viewed { f"`{path}` is lent to this loop, and each element is a mutable view of it" } else { f"`{path}` is lent to this loop" }
-    return VcView { name: path.clone(), roots: roots, parts: parts, made: at.clone(), from: from, way_out: collections::BTreeMap(), used: at.clone(), call: null, callee: null, shown: [], help: help, looped: true, exclusive: viewed }
+    return VcView { name: path.clone(), roots: roots, parts: parts, made: at.clone(), from: from, way_out: collections::BTreeMap(), used: at.clone(), call: null, callee: null, shown: [], help: help, looped: true, exclusive: viewed, lent_only: false }
 }
 
 fn vc_place_view(at: ref Span, name: ref String, place: ref Expr, outer: ref Vec[VcView], ask: ref VcAsk) -> VcView? {
     let root = root_of(ask.names, place) ?? return null
     let (roots, parts) = vc_through(root, vc_path_of(place, ask), outer)
-    return VcView { name: name.clone(), roots: roots, parts: parts, made: at.clone(), from: f"`{name}` is a view into `{root}`", way_out: collections::BTreeMap(), used: null, call: null, callee: null, shown: [], help: null, looped: false, exclusive: false }
+    return VcView { name: name.clone(), roots: roots, parts: parts, made: at.clone(), from: f"`{name}` is a view into `{root}`", way_out: collections::BTreeMap(), used: null, call: null, callee: null, shown: [], help: null, looped: false, exclusive: false, lent_only: false }
 }
 
 /// The view a `let mut` over an element or a field of a `mut` place binds
@@ -984,7 +1074,7 @@ fn vc_kept_in_places(at: ref Span, func: ref Expr, args: ref Vec[Expr], ask: ref
         roots.insert(root.clone())
         let mut way_out: collections::BTreeMap[String, String] = collections::BTreeMap()
         way_out.insert(root.clone(), f"`{callee}` keeps views of what it was given as `{source}` in `{place}`.")
-        out.push(VcView { name: holder.clone(), roots: roots, parts: collections::BTreeSet(), made: at.clone(), from: f"`{callee}` keeps a view of `{root}` in `{holder}` here", way_out: way_out, used: null, call: null, callee: null, shown: [], help: f"Use `{holder}` before this change, or hand `{callee}` a copy: `{root}.clone()`.", looped: false, exclusive: false })
+        out.push(VcView { name: holder.clone(), roots: roots, parts: collections::BTreeSet(), made: at.clone(), from: f"`{callee}` keeps a view of `{root}` in `{holder}` here", way_out: way_out, used: null, call: null, callee: null, shown: [], help: f"Use `{holder}` before this change, or hand `{callee}` a copy: `{root}.clone()`.", looped: false, exclusive: false, lent_only: false })
     }
     return out
 }
@@ -1049,7 +1139,9 @@ fn vc_block(block: ref Block, outer: ref Vec[VcView], ask: ref VcAsk, holes_of: 
         let stmt = block.stmts[j]
         for v in own_from..<views.len() {
             let name = views[v].name.clone()
-            views[v].used = vc_used_after(block, j + 1, name, ask, holes_of)
+            if !views[v].lent_only {
+                views[v].used = vc_used_after(block, j + 1, name, ask, holes_of)
+            }
         }
         let looping = match stmt.node {
             Stmt::For { .. } => true,
@@ -1097,7 +1189,7 @@ fn vc_block(block: ref Block, outer: ref Vec[VcView], ask: ref VcAsk, holes_of: 
         if looping {
             for mut view in inner_views {
                 let name = view.name.clone()
-                if view.used == null && vc_mentions_stmt(stmt.node, name, ask, holes_of) {
+                if view.used == null && !view.lent_only && vc_mentions_stmt(stmt.node, name, ask, holes_of) {
                     view.used = vc_first_use(stmt.node, name, ask, holes_of) ?? at.clone()
                 }
             }
@@ -1111,9 +1203,7 @@ fn vc_block(block: ref Block, outer: ref Vec[VcView], ask: ref VcAsk, holes_of: 
             }
             else => {}
         }
-        for inner in check_visit_stmt_blocks(stmt.node) {
-            vc_block(inner, inner_views, ask, holes_of, walk)
-        }
+        vc_descend(stmt.node, at, inner_views, ask, holes_of, walk)
     }
     // A `let mut` whose every change became a binding of its own.
     for (name, entry) in declared {
@@ -1136,6 +1226,91 @@ fn vc_block(block: ref Block, outer: ref Vec[VcView], ask: ref VcAsk, holes_of: 
         if rebound && !other {
             walk.give_ups.unmuted.insert(entry.0)
         }
+    }
+}
+
+/// The blocks of a statement, walked with the views around it. **The name an
+/// arm binds out of a read of a place is a view into it** (#1300): in
+/// `match self.funs.get(k) { f => self.use_it(f) }`, `f` points into `self`.
+fn vc_descend(stmt: ref Stmt, at: ref Span, views: ref Vec[VcView], ask: ref VcAsk, holes_of: fn(ref Expr) -> Vec[Expr] sync, mut walk: VcWalk) {
+    let matched = match stmt {
+        Stmt::Expr(value) => value,
+        Stmt::Return(value) => value ?? return,
+        Stmt::Let { value, .. } => value,
+        else => {
+            vc_descend_plainly(stmt, views, ask, holes_of, walk)
+            return
+        }
+    }
+    match matched {
+        Expr::Match { value, arms, .. } => {
+            for inner in check_visit_expr_blocks(value) {
+                vc_block(inner, views, ask, holes_of, walk)
+            }
+            for arm in arms {
+                let mut arm_views = views.clone()
+                match vc_arm_view(at, arm.pattern, value, views, ask) {
+                    null => {}
+                    bound => arm_views.push(bound),
+                }
+                match arm.guard {
+                    null => {}
+                    guard => {
+                        for inner in check_visit_expr_blocks(guard ?? continue) {
+                            vc_block(inner, arm_views, ask, holes_of, walk)
+                        }
+                    }
+                }
+                for inner in check_visit_expr_blocks(arm.body) {
+                    vc_block(inner, arm_views, ask, holes_of, walk)
+                }
+            }
+            return
+        }
+        else => {}
+    }
+    vc_descend_plainly(stmt, views, ask, holes_of, walk)
+}
+
+fn vc_descend_plainly(stmt: ref Stmt, views: ref Vec[VcView], ask: ref VcAsk, holes_of: fn(ref Expr) -> Vec[Expr] sync, mut walk: VcWalk) {
+    for inner in check_visit_stmt_blocks(stmt) {
+        vc_block(inner, views, ask, holes_of, walk)
+    }
+}
+
+/// The view an arm's bare name binds out of a read of a place.
+fn vc_arm_view(at: ref Span, pattern: ref MatchPattern, value: ref Expr, outer: ref Vec[VcView], ask: ref VcAsk) -> VcView? {
+    let name = match pattern {
+        MatchPattern::Path(segments) => {
+            if segments.len() != 1 {
+                return null
+            }
+            ask.names.resolve(segments[0]).clone()
+        }
+        else => return null,
+    }
+    // A capital names a variant or a constant, which binds nothing; `_x`
+    // is not used.
+    if name == "null" || name == "" || capitalised(name) == name {
+        return null
+    }
+    return vc_got_view(at, name, value, outer, ask)
+}
+
+/// The view `name` holds of a read of a place by `get`, or by a method that
+/// hands back a view of its receiver: watched only by the call it is handed
+/// to (`lent_only`).
+fn vc_got_view(at: ref Span, name: ref String, value: ref Expr, outer: ref Vec[VcView], ask: ref VcAsk) -> VcView? {
+    match value {
+        Expr::MethodCall { receiver, method, .. } => {
+            if ask.names.resolve(method) != "get" && !ask.receiver_views.contains(id_of(value) as i64) {
+                return null
+            }
+            let mut view = vc_place_view(at, name, receiver, outer, ask) ?? return null
+            view.lent_only = true
+            return view
+        }
+        else => return null,
     }
 }
 
@@ -1252,7 +1427,7 @@ fn vc_let(name: ref String, value: ref Expr, at: ref Span, mut views: Vec[VcView
     // call makes.
     if lent.len() > 0 {
         let root = lent.first() ?? ""
-        views.push(VcView { name: name.clone(), roots: lent, parts: collections::BTreeSet(), made: at.clone(), from: f"`{name}` is built here over `{root}`, which it views", way_out: collections::BTreeMap(), used: null, call: null, callee: null, shown: [], help: f"Use `{name}` before this change, or build it with a copy: `{root}.clone()`.", looped: false, exclusive: false })
+        views.push(VcView { name: name.clone(), roots: lent, parts: collections::BTreeSet(), made: at.clone(), from: f"`{name}` is built here over `{root}`, which it views", way_out: collections::BTreeMap(), used: null, call: null, callee: null, shown: [], help: f"Use `{name}` before this change, or build it with a copy: `{root}.clone()`.", looped: false, exclusive: false, lent_only: false })
     }
     // A move into a local (D3): the new name holds the same data, followed
     // as the argument was, and the old buffer lives in the frame's keep from
