@@ -1,0 +1,281 @@
+// benches/hello/bench.nika
+//
+// **What Hello World costs to start, in the four ways a Nikaia program is
+// started, against Python's** (#860). `hello.nika` computes nothing, so every
+// instruction counted is start-up: the built binary, a warm `nikaia run`, a
+// `nikaia run` after an edit (one that leaves the generated Rust as it was and
+// one that changes it), and a `nikaia run` of a file never run before.
+//
+// Counted by callgrind (`--branch-sim=yes`) with every child process
+// (`--trace-children=yes`): `nikaia run` starts `rustc`, and `rustc` the
+// linker. `nikaia run` `exec`s the program it built, which ends callgrind's
+// count of `nikaia` without a dump; `--dump-before=execve` writes it first.
+// A child's first such dump, taken in the fork before its `exec`, holds what
+// its parent had counted up to the fork (callgrind copies the counters), so
+// it is left out where its command is another process's of the same run.
+//
+// Every row prints what Python prints, byte for byte, or the bench stops.
+//
+//     nikaia run benches/hello/bench.nika
+//     NIKAIA=target/fast/nikaia nikaia run benches/hello/bench.nika
+//
+// The table goes into `benches/hello/README.md`, replaced when re-measured.
+
+use std::fs
+use std::process
+use std::text
+
+fn sh(script: String) -> process::Output throws {
+	return process::run("sh", ["-c", script])
+}
+
+fn must(script: String, what: String) -> String throws {
+	let r = sh(script)
+	if r.code != 0 {
+		println(f"{what} failed (exit {r.code}):\n{r.stdout}{r.stderr}")
+		process::exit(1)
+	}
+	return r.stdout.trim().clone()
+}
+
+// The compiler counted: `NIKAIA`, else the `nikaia` on the path, else the
+// checkout's release build.
+fn toolchain(repo: String) -> String throws {
+	let exe = sh("echo ${NIKAIA:-$(command -v nikaia)}").stdout.trim().clone()
+	if exe.len() > 0 { return must(f"realpath {exe}", "the compiler's path") }
+	must(
+		f"cargo build -q --release -p nikaia --manifest-path {repo}/Cargo.toml",
+		"the compiler's release build",
+	)
+	return f"{repo}/target/release/nikaia"
+}
+
+// One process image of a run: callgrind's file of it, the command it ran,
+// and its totals.
+struct Part {
+	pid: String,
+	// 0 for the image the process ended in, else the number of the dump
+	// before an `exec`.
+	dump: i64,
+	command: String,
+	instructions: i64,
+	mispredicted: i64,
+}
+
+// A row of the table.
+struct Count {
+	instructions: i64,
+	mispredicted: i64,
+	// Instructions by the program each counted image ran, in order of first
+	// appearance: `nikaia 9,300,196, hello 40,926,130`.
+	by_program: String,
+}
+
+// What the images of one program counted together.
+struct Tally {
+	name: String,
+	instructions: i64,
+}
+
+fn parts(dir: String) -> Vec[Part] throws {
+	let mut found: Vec[Part] = Vec()
+	let names = must(f"ls {dir} | grep '^cg\\.'", f"the callgrind files in {dir}")
+	for name in names.lines() {
+		let file = f"{dir}/{name}"
+		let words: Vec[String] = name.split(".").map(fn(w) { w.clone() }).collect()
+		let mut dump = 0
+		if words.len() > 2 { dump = text::parse_i64(words[2]) ?? 0 }
+		let command = sh(f"grep -m1 '^cmd:' {file}").stdout.trim().replace(
+			"cmd:",
+			"",
+		).trim().clone()
+		let totals = sh(f"grep -m1 -E '^(totals|summary):' {file}").stdout.trim().clone()
+		let fields: Vec[String] = totals.split_whitespace().map(fn(w) { w.clone() }).collect()
+		if fields.len() < 6 { continue }
+		found.push(Part {
+			pid: words[1].clone(),
+			dump: dump,
+			command: command,
+			instructions: text::parse_i64(fields[1]) ?? 0,
+			mispredicted: (text::parse_i64(fields[3]) ?? 0) + (text::parse_i64(fields[5]) ?? 0),
+		})
+	}
+	return found
+}
+
+// `12345678` as `12,345,678`.
+fn grouped(n: i64) -> String {
+	let digits = f"{n}"
+	let mut out = String()
+	let mut at = 0
+	for c in digits.scalars {
+		if at > 0 && (digits.len() - at) % 3 == 0 { out.push(',') }
+		out.push(c)
+		at += 1
+	}
+	return out
+}
+
+// The program an image ran, without its directory and arguments.
+fn program(command: String) -> String {
+	let first = command.split_whitespace().next() ?? ""
+	return first.rsplit("/").next() ?? first
+}
+
+fn total(dir: String) -> Count throws {
+	let root = must(f"cat {dir}/root.pid", "the pid of the run")
+	let all = parts(dir)
+	let mut instructions = 0
+	let mut mispredicted = 0
+	let mut tallies: Vec[Tally] = Vec()
+	for part in all {
+		let fork_copy = part.pid != root && part.dump == 1
+			&& all.iter().any(fn(other) { other.pid != part.pid && other.command == part.command })
+		if fork_copy { continue }
+		instructions += part.instructions
+		mispredicted += part.mispredicted
+		let name = program(part.command)
+		let mut seen = false
+		for mut tally in tallies {
+			if tally.name == name {
+				tally.instructions += part.instructions
+				seen = true
+			}
+		}
+		if !seen { tallies.push(Tally { name: name, instructions: part.instructions }) }
+	}
+	let mut by_program = String()
+	for tally in tallies {
+		if by_program.len() > 0 { by_program.push_str(", ") }
+		by_program.push_str(f"{tally.name} {grouped(tally.instructions)}")
+	}
+	return Count { instructions: instructions, mispredicted: mispredicted, by_program: by_program }
+}
+
+// One counted run of `command` in `dir` (emptied first): its standard output
+// must be `expected`, and it must say nothing on standard error. Valgrind's
+// own lines go to a log file of each process, not to standard error: there a
+// child's would reach its parent, and `rustc` turns what the linker says
+// there into a warning, which `nikaia run` places in the program again.
+fn count(dir: String, command: String, expected: String) -> Count throws {
+	must(f"rm -rf {dir} && mkdir -p {dir}", f"emptying {dir}")
+	let r = sh(
+		f"cd {dir} && echo $$ > root.pid && exec valgrind --tool=callgrind --branch-sim=yes --trace-children=yes --dump-before=execve --dump-before=execvp --log-file={dir}/valgrind.%p.log --callgrind-out-file={dir}/cg.%p {command} > {dir}/stdout 2> {dir}/stderr",
+	)
+	let errors = fs::read_to_string(f"{dir}/stderr", fs::Root::Anywhere)
+	if r.code != 0 || errors.len() > 0 {
+		println(f"callgrind of `{command}` failed (exit {r.code}) or said this on standard error:\n{errors}")
+		println(sh(f"tail -5 {dir}/valgrind.*.log").stdout)
+		process::exit(1)
+	}
+	let said = fs::read_to_string(f"{dir}/stdout", fs::Root::Anywhere)
+	if said != expected {
+		println(f"`{command}` printed {said.len()} bytes, not what Python printed:\n{said}")
+		process::exit(1)
+	}
+	return total(dir)
+}
+
+// Where `nikaia run` keeps `file` in the user cache:
+// `run/<stem>-<16 hex of the SHA-256 of the canonical path>`
+// (`project_drive_kept_root`). Removed, so that what a run left there before,
+// a record or a slot, does not count in this one.
+fn forget(file: String) throws {
+	let cache = must(
+		"if [ -n \"$NIKAIA_CACHE_DIR\" ]; then echo $NIKAIA_CACHE_DIR; elif [ -n \"$XDG_CACHE_HOME\" ]; then echo $XDG_CACHE_HOME/nikaia; else echo $HOME/.cache/nikaia; fi",
+		"the user cache",
+	)
+	let key = must(
+		f"printf %s $(realpath {file}) | sha256sum | cut -c1-16",
+		"the cache entry's name",
+	)
+	must(f"rm -rf {cache}/run/hello-{key}", f"removing the cache entry of {file}")
+}
+
+fn row(what: String, c: Count, python: Count) -> String {
+	let per = (c.instructions * 100 + python.instructions / 2) / python.instructions
+	return f"| {what} | {grouped(c.instructions)} | {grouped(c.mispredicted)} | {per / 100}.{f"{per % 100 + 100}".strip_prefix("1") ?? ""} | {c.by_program} |\n"
+}
+
+fn main() throws {
+	let repo = must("git rev-parse --show-toplevel", "the repository")
+	let nikaia = toolchain(repo.clone())
+	let work = f"{repo}/target/hello-bench"
+	let out = f"{work}/out"
+	must(f"command -v valgrind && mkdir -p {out}", "hello needs valgrind (callgrind):")
+	let source = fs::read_to_string(f"{repo}/benches/hello/hello.nika", fs::Root::Anywhere)
+	let nonce = must("date +%s%N", "a fresh number")
+
+	// Python, the yardstick and the output every row must print.
+	let python_bin = must("realpath $(command -v python3)", "python3")
+	let expected = must(f"{python_bin} {repo}/benches/hello/hello.py", "Python's Hello World")
+		+ "\n"
+	let python = count(f"{out}/python", f"{python_bin} {repo}/benches/hello/hello.py", expected)
+
+	// 1: the binary `nikaia build` wrote.
+	let project = f"{work}/project"
+	must(f"mkdir -p {project}/src", "the project")
+	fs::write(
+		f"{project}/nikaia.toml",
+		fs::Root::Anywhere,
+		"[package]\nname = \"hello\"\nversion = \"0.1.0\"\n",
+	)
+	fs::write(f"{project}/src/main.nika", fs::Root::Anywhere, source.clone())
+	must(f"{nikaia} build --project {project} 2>&1", "nikaia build")
+	let built = count(f"{out}/built", f"{project}/target/nikaia/bin/hello", expected)
+
+	// 2: `nikaia run` of a file run before and unchanged since.
+	let warm_file = f"{work}/warm/hello.nika"
+	must(f"mkdir -p {work}/warm", "the warm file's directory")
+	fs::write(warm_file, fs::Root::Anywhere, source.clone())
+	forget(warm_file)
+	must(f"{nikaia} run {warm_file} && {nikaia} run {warm_file}", "the warm-up runs")
+	let warm = count(f"{out}/warm", f"{nikaia} run {warm_file}", expected)
+
+	// 3: after an edit. A comment's text leaves the generated Rust as it was
+	// (a new line would move the places it holds); a new branch changes it,
+	// so `rustc` compiles it again. The branch is never taken, and `rustc`
+	// says nothing about it (a `let` it would warn of as unused).
+	let edit_file = f"{work}/edit/hello.nika"
+	must(f"mkdir -p {work}/edit", "the edited file's directory")
+	fs::write(edit_file, fs::Root::Anywhere, f"// edit 0\n{source}")
+	forget(edit_file)
+	must(f"{nikaia} run {edit_file}", "the edited file's first run")
+	fs::write(edit_file, fs::Root::Anywhere, f"// edit {nonce}\n{source}")
+	let comment = count(f"{out}/edit-comment", f"{nikaia} run {edit_file}", expected)
+	let changed = source.replace(
+		"\tprintln(",
+		f"\tif {nonce} < 0 {{ println(\"never\") }}\n\tprintln(",
+	)
+	if changed == source {
+		println("hello.nika has no `\tprintln(` line to edit")
+		process::exit(1)
+	}
+	fs::write(edit_file, fs::Root::Anywhere, changed)
+	let code = count(f"{out}/edit-code", f"{nikaia} run {edit_file}", expected)
+
+	// 4: a file never run: its entry in the user cache is removed first. The
+	// bundle `std` is linked against stays: it is built once per machine and
+	// compiler.
+	let new_file = f"{work}/new/hello.nika"
+	must(f"mkdir -p {work}/new", "the new file's directory")
+	fs::write(new_file, fs::Root::Anywhere, source)
+	forget(new_file)
+	let fresh = count(f"{out}/new", f"{nikaia} run {new_file}", expected)
+
+	let version = must(f"{nikaia} --version", "the compiler's version")
+	let rustc = must("rustc --version", "rustc's version")
+	let py = must(f"{python_bin} --version", "Python's version")
+	let cpu = must("grep -m1 'model name' /proc/cpuinfo | cut -d: -f2", "the CPU")
+	println(f"{version} ({nikaia}), {rustc}, {py}, {cpu}")
+	println(f"callgrind --branch-sim=yes --trace-children=yes; every row prints {expected.len()} bytes, as Python does")
+	println("")
+	println("| scenario | instructions | mispredicted | / Python | instructions by program |")
+	println("|---|---:|---:|---:|---|")
+	print(row("Python 3, `python3 hello.py`", python, python))
+	print(row("1 built binary (`nikaia build`, `dev`)", built, python))
+	print(row("2 `nikaia run`, warm", warm, python))
+	print(row("3a `nikaia run` after an edit, Rust unchanged", comment, python))
+	print(row("3b `nikaia run` after an edit, Rust changed", code, python))
+	print(row("4 `nikaia run` of a new file", fresh, python))
+}
