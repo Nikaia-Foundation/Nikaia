@@ -746,6 +746,12 @@ impl EmitState {
             for n in 0..kept_arity { names.push(format!("__nikaia_a{}", n)); }
             let joined = nikaia_std::block::Text::from(names.join(", "));
             if !out.buf.ends_with('&') && !out.buf.ends_with("&mut ") { out.push("&"); }
+            if host.overlaps_user_code() {
+                out.push("{ let __nikaia_kept = (");
+                self.emit_expr(world, walk, out, host, arg, depth, inside, scope)?;
+                out.push(&format!(").clone(); async move |{}| (*__nikaia_kept)({}).await }}", joined, joined));
+                return Ok(());
+            }
             out.push(&format!("async |{}| (*", joined));
             self.emit_expr(world, walk, out, host, arg, depth, inside, scope)?;
             out.push(&format!(")({}).await", joined));
@@ -763,11 +769,10 @@ impl EmitState {
         if never_fails >= 0 {
             let mut names: Vec<String> = vec![];
             for n in 0..never_fails { names.push(format!("__nikaia_a{}", n)); }
-            let joined = nikaia_std::block::Text::from(names.join(", "));
             let key: String = nikaia_std::block::Text::from(nikaia_std::index::or(emit_arg_function_key(world, arg), || "".into()).to_string());
             let pauses = key != "" && call_pauses(&self.own_contracts, &key);
             if arity >= 0 || pauses { out.push("async "); }
-            out.push(&format!("|{}| Ok(", joined));
+            out.push(&format!("|{}| Ok(", self.emit_arg_closure_params(world, walk, host, arg, &names)));
             self.emit_expr(world, walk, out, host, arg, depth, inside, scope)?;
             out.push(&format!("({})", emit_arg_passing(&names, &lent)));
             if pauses { out.push(".await"); }
@@ -778,11 +783,10 @@ impl EmitState {
         if boxed >= 0 {
             let mut names: Vec<String> = vec![];
             for n in 0..boxed { names.push(format!("__nikaia_a{}", n)); }
-            let joined = nikaia_std::block::Text::from(names.join(", "));
             let key: String = nikaia_std::block::Text::from(nikaia_std::index::or(emit_arg_function_key(world, arg), || "".into()).to_string());
             let pauses = key != "" && call_pauses(&self.own_contracts, &key);
             if arity >= 0 || pauses { out.push("async "); }
-            out.push(&format!("|{}| ", joined));
+            out.push(&format!("|{}| ", self.emit_arg_closure_params(world, walk, host, arg, &names)));
             self.emit_expr(world, walk, out, host, arg, depth, inside, scope)?;
             out.push(&format!("({})", emit_arg_passing(&names, &lent)));
             if pauses { out.push(".await"); }
@@ -792,8 +796,7 @@ impl EmitState {
         if arity < 0 && !lent.is_empty() {
             let mut names: Vec<String> = vec![];
             for n in 0..lent.len() as i64 { names.push(format!("__nikaia_a{}", n)); }
-            let joined = nikaia_std::block::Text::from(names.join(", "));
-            out.push(&format!("|{}| ", joined));
+            out.push(&format!("|{}| ", self.emit_arg_closure_params(world, walk, host, arg, &names)));
             self.emit_expr(world, walk, out, host, arg, depth, inside, scope)?;
             out.push(&format!("({})", emit_arg_passing(&names, &lent)));
             return Ok(());
@@ -804,8 +807,7 @@ impl EmitState {
         }
         let mut names: Vec<String> = vec![];
         for n in 0..arity { names.push(format!("__nikaia_a{}", n)); }
-        let joined = nikaia_std::block::Text::from(names.join(", "));
-        out.push(&format!("async |{}| ", joined));
+        out.push(&format!("async |{}| ", self.emit_arg_closure_params(world, walk, host, arg, &names)));
         self.emit_expr(world, walk, out, host, arg, depth, inside, scope)?;
         out.push(&format!("({})", emit_arg_passing(&names, &lent)));
         Ok(())
@@ -834,6 +836,40 @@ impl EmitState {
         }
         if !any { return vec![]; }
         lent
+    }
+    pub(crate) fn emit_arg_closure_params<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, host: &H, arg: &Expr, names: &[String]) -> String {
+        let joined = nikaia_std::block::Text::from(names.join(", "));
+        let wanted = match arg {
+            Expr::Variable(name, _) => { let name = *name; emit_text(world, name) },
+            _ => return joined,
+        };
+        if self.facts.kept_functions.contains_key(&node_key(arg)) { return joined; }
+        let viewed = match self.facts.named_fn_values.get(&node_key(arg)) { Some(__nikaia_value) => __nikaia_value, None => return joined };
+        let generic = match self.facts.generic_fn_slots.get(&node_key(arg)) { Some(__nikaia_value) => __nikaia_value, None => return joined };
+        for item in world.items.iter() {
+            match &item.node {
+                Item::Fn { name, receiver, generics, args, .. } => {
+                    let name = *name;
+                    let declared = match name { Some(__nikaia_value) => __nikaia_value, None => continue };
+                    if receiver.is_some() || !generics.is_empty() || emit_text(world, declared) != wanted || (args.len() as i64) != names.len() as i64 { continue; }
+                    let mut typed: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
+                    for at in 0..args.len() as i64 {
+                        if ((at) as usize) >= generic.len() || !*unsafe { nikaia_std::proven::read(&generic, (at) as usize) } {
+                            typed.push(nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&names, (at) as usize) }).to_string()));
+                            continue;
+                        }
+                        let mut ty = unsafe { nikaia_std::proven::read(&args, (at) as usize) }.ty.clone();
+                        ty.is_view = false;
+                        let written = self.emit_core_ty(world, walk, host.crossings_are_possible(), host.overlaps_user_code(), &ty, &EmitLifetimes::Elided);
+                        let lends = ((at) as usize) < viewed.len() && *unsafe { nikaia_std::proven::read(&viewed, (at) as usize) };
+                        typed.push(format!("{}: {}{}", *unsafe { nikaia_std::proven::read(&names, (at) as usize) }, if lends { "&" } else { "" }, written));
+                    }
+                    return nikaia_std::block::Text::from(typed.join(", "));
+                },
+                _ => { },
+            }
+        }
+        joined
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
