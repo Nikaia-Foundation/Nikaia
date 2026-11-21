@@ -1348,6 +1348,13 @@ fn field_slot(base: ref Expr, field: ref String, asked: ref Asked, mut walk: Sha
     return slot(FIELDS, key)
 }
 
+/// **An option of an `async` form** (`within:`, `limit:`, `admission:`, D15,
+/// D16, D18) is walked as any expression: a struct literal written there may
+/// hold a `Shared` its field's slot decides.
+fn sharing_option(expr: ref Expr?, asked: ref Asked, holes_of: fn(ref Expr) -> Vec[Expr] sync, ty_of: fn(ref Type) -> Ty sync, mut walk: SharingWalk) {
+    sharing_expression(expr ?? return, asked, holes_of, ty_of, walk)
+}
+
 fn sharing_expression(expr: ref Expr, asked: ref Asked, holes_of: fn(ref Expr) -> Vec[Expr] sync, ty_of: fn(ref Type) -> Ty sync, mut walk: SharingWalk) {
     match expr {
         // Part II 11.2: a task runs on a thread of its own, and a task that
@@ -1412,7 +1419,12 @@ fn sharing_expression(expr: ref Expr, asked: ref Asked, holes_of: fn(ref Expr) -
             sharing_block(body, asked, holes_of, ty_of, walk)
         }
         Expr::Block(block, _) => sharing_block(block, asked, holes_of, ty_of, walk),
-        Expr::AsyncGroup(block, _, _, _, _) => sharing_block(block, asked, holes_of, ty_of, walk),
+        Expr::AsyncGroup(block, _, within, limit, admission) => {
+            sharing_option(within, asked, holes_of, ty_of, walk)
+            sharing_option(limit, asked, holes_of, ty_of, walk)
+            sharing_option(admission, asked, holes_of, ty_of, walk)
+            sharing_block(block, asked, holes_of, ty_of, walk)
+        }
         Expr::Overlap(block, _) => sharing_block(block, asked, holes_of, ty_of, walk),
         Expr::If { cond, then_branch, else_branch, .. } => {
             sharing_expression(cond, asked, holes_of, ty_of, walk)
@@ -1431,7 +1443,11 @@ fn sharing_expression(expr: ref Expr, asked: ref Asked, holes_of: fn(ref Expr) -
         }
         Expr::Unary { expr, .. } => sharing_expression(expr, asked, holes_of, ty_of, walk),
         Expr::Try(inner, _) => sharing_expression(inner, asked, holes_of, ty_of, walk),
-        Expr::Async(inner, _, _, _) => sharing_expression(inner, asked, holes_of, ty_of, walk),
+        Expr::Async(inner, _, within, admission) => {
+            sharing_option(within, asked, holes_of, ty_of, walk)
+            sharing_option(admission, asked, holes_of, ty_of, walk)
+            sharing_expression(inner, asked, holes_of, ty_of, walk)
+        }
         Expr::Throw(inner, _) => sharing_expression(inner, asked, holes_of, ty_of, walk),
         Expr::Cast { expr, .. } => sharing_expression(expr, asked, holes_of, ty_of, walk),
         Expr::Field { base, .. } => sharing_expression(base, asked, holes_of, ty_of, walk),
