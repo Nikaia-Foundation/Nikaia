@@ -594,7 +594,7 @@ pub mod prelude {
     pub use crate::error::Full;
     pub use crate::seq::Join as _;
     // **The C boundary's one `std` type**
-    // ([ADR-302](../../../docs/specification/adr/adr-302.md) D8): a program
+    // ([ADR-c-boundary-v1](../../../docs/specification/adr/adr-c-boundary-v1.md) D8): a program
     // that declares `fn getenv(name: &[u8]) -> CStr` has to be able to name
     // it, and until [ADR-313](../../../docs/specification/adr/adr-313.md)
     // decides what the prelude is, this is how a name reaches a program.

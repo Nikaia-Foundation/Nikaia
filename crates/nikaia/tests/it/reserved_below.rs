@@ -41,7 +41,7 @@ const RESERVED_BELOW: &[&str] = &[
 /// fire for it. `trait` since
 /// [ADR-295](../../../docs/specification/adr/adr-295.md), and `extern` and
 /// `unsafe` with their constructs
-/// ([ADR-302](../../../docs/specification/adr/adr-302.md) D1) — the two words
+/// ([ADR-c-boundary-v1](../../../docs/specification/adr/adr-c-boundary-v1.md) D1) — the two words
 /// Part III 15.1 writes, reserved on a measurement that came to zero. All three
 /// are words Rust reserves *and* this language now does, which is why the escape
 /// can never fire for them.

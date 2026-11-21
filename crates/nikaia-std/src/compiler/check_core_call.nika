@@ -874,7 +874,7 @@ fn check_core_call_options_handed_over(mut state: CheckState, world: ref CheckWo
 
 /// The options of a call that move what they are handed (#1595): those the
 /// callee does not lend, nor takes `mut`; none across the C boundary
-/// (ADR-302 D5). Each one's name and the type it was handed.
+/// (ADR-c-boundary-v1 D5). Each one's name and the type it was handed.
 fn check_core_call_moving_options(state: ref CheckState, contract: ref FnContract, written: ref String, passed: ref Vec[(String, Ty)]) -> Vec[(String, Ty)] sync {
     let signature = contract.signature ?? return []
     if state.foreign_names.contains(written) {
@@ -1064,7 +1064,7 @@ fn check_core_call_named_call[H: CheckHost](mut state: CheckState, world: ref Ch
         let ty: String = variant ?? ""
         return check_core_call_named(ty)
     }
-    // **A handle is not constructed** (ADR-302 D7).
+    // **A handle is not constructed** (ADR-c-boundary-v1 D7).
     if state.opaque_handles.contains(name) {
         state.a_handle_is_not_made_here(name, span)
         return check_core_call_named(name)

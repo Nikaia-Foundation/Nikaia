@@ -187,7 +187,7 @@ impl EmitLifetimes {
     }
 }
 
-/// How a call makes the address an `extern` declaration takes (ADR-302 D5).
+/// How a call makes the address an `extern` declaration takes (ADR-c-boundary-v1 D5).
 pub enum EmitPointer {
     /// `&[T]` and `&mut [T]`: `.as_ptr()`, `.as_mut_ptr()`.
     Run { mutable: bool },
