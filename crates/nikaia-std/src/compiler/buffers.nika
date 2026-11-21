@@ -614,7 +614,7 @@ fn made_here(names: ref Vec[winnow_grammar::Symbol], value: ref Expr, ty: ref Ty
     match value {
         Expr::MethodCall { receiver, method, .. } => {
             let called = ask.names.resolve(method)
-            if called == "clone" && copies_text(receiver, ask, walk) {
+            if called == "clone" && (copies_text(receiver, ask, walk) || copies_an_element_of_text(receiver, ask, walk)) {
                 return Buffer::Named("String")
             }
             if called == "to_string" && formats(receiver, ask, walk) {
@@ -904,6 +904,42 @@ fn copies_text(receiver: ref Expr, ask: ref BufferAsk, walk: ref BufferWalk) -> 
         },
         else => false,
     }
+}
+
+// **Whether a `clone` here copies one text element of a list** (#2014):
+// `let next = xs[k].clone()` over `xs: ref Vec[String]` is a copy of text, a
+// buffer of this frame's own, as `let next: String = xs[k].clone()` is; a view
+// of it (`next.strip_prefix("a=")`) that leaves the function lives in the
+// caller's keep. A trimmed element, and a copy of one, too. Only for what a
+// `let` makes: the list's own text stays its answer (`copies_text`).
+fn copies_an_element_of_text(receiver: ref Expr, ask: ref BufferAsk, walk: ref BufferWalk) -> bool {
+    return match receiver {
+        Expr::Index { base, index, .. } => match index {
+            Expr::Range { .. } => false,
+            else => match base {
+                Expr::Variable(name, _) => lists_text(ask.names.resolve(name), ask, walk),
+                else => false,
+            },
+        },
+        Expr::MethodCall { receiver: inner, method, .. } => match buffers_a_trim(ask.names.resolve(method)) {
+            true => copies_an_element_of_text(inner, ask, walk),
+            false => false,
+        },
+        else => false,
+    }
+}
+
+// Whether a name's written type is a list of text: `Vec[String]`,
+// `Array[String]`, `ref` or not.
+fn lists_text(name: ref String, ask: ref BufferAsk, walk: ref BufferWalk) -> bool {
+    let local = local_of(name, walk) ?? return false
+    let ty = local.ty ?? return false
+    let list = ask.names.resolve(ty.name)
+    if (list != "Vec" && list != "Array") || ty.generics.len() != 1 {
+        return false
+    }
+    let element = ask.names.resolve(ty.generics[0].name)
+    return (element == "String" || element == "str") && ty.generics[0].generics.len() == 0
 }
 
 // A method that cuts a text at its ends or at a `text::Pos` (ADR-374 D3), or
@@ -1841,6 +1877,12 @@ fn call_origins(func: ref Expr, args: ref Vec[Expr], ask: ref BufferAsk, holes_o
     let mut out: collections::BTreeSet[(i64, String)] = collections::BTreeSet()
     let mut by_args: collections::BTreeSet[(i64, String)] = collections::BTreeSet()
     let borrowed = borrowed_positions(named, ask)
+    // **Code a parameter holds that hands back its own text** (#2014): a
+    // result typed `String`, not `ref String`, points into none of its
+    // arguments.
+    if callee != null && hands_back_owned_text(func, ask, walk) {
+        return out
+    }
     let mut position = 0
     for arg in args {
         let of = lent_origins(arg, ask, holes_of, unaliased, walk)
@@ -1874,6 +1916,20 @@ fn call_origins(func: ref Expr, args: ref Vec[Expr], ask: ref BufferAsk, holes_o
     }
     add_all(by_args, out)
     return out
+}
+
+// Whether a call goes to code a local holds (`long: fn(ref String) -> String?`)
+// whose written result is owned text, which holds no view.
+fn hands_back_owned_text(func: ref Expr, ask: ref BufferAsk, walk: ref BufferWalk) -> bool {
+    let name = match func {
+        Expr::Variable(name, _) => ask.names.resolve(name),
+        else => return false,
+    }
+    let local = local_of(name, walk) ?? return false
+    let ty = local.ty ?? return false
+    let code = ty.code ?? return false
+    let result = code.result ?? return false
+    return !result.is_view && result.generics.len() == 0 && ask.names.resolve(result.name) == "String"
 }
 
 // The positions of the parameters a callee's result borrows from, where its

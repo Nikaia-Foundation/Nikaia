@@ -1,0 +1,30 @@
+// A `let` bound to a copy of text, handed to code a parameter holds whose
+// result is owned text, and moved into a struct afterwards (#2014). The code's
+// result points into none of its arguments, so `key` is no buffer the
+// result views and moves as it is.
+struct Line {
+    key: String,
+    body: String,
+}
+
+fn read(text: String, long: fn(ref String) -> String? sync) -> Vec[Line] {
+    let mut out: Vec[Line] = []
+    for line in text.lines() {
+        let words: Vec[ref String] = line.split(" ").collect()
+        let key: String = words[0].clone()
+        let held = long(key) ?? continue
+        out.push(Line { key: key, body: held.trim().clone() })
+    }
+    return out
+}
+
+fn copied(key: String) -> String? {
+    return key.clone()
+}
+
+fn main() throws {
+    let lines = read("x y\nz w", copied)
+    for line in lines {
+        println(f"{line.key} {line.body}")
+    }
+}
