@@ -1,0 +1,42 @@
+// #2464: the rounds of the found returns (ADR-306 D23, D32) walk a body
+// again only where its callees' returns, the bounds asked or the rules held
+// changed. `step`'s interval is found only in the round after `level`'s,
+// and the round after that walks `step` again with it, so `main`'s
+// `ys[step(...)]` is proved. `position` calls nothing: its later rounds
+// take its first walk's entry, and `xs[at]` past `at >= 0` is proved as
+// before.
+pub fn level(n: i64) -> i64 {
+	if n < 0 {
+		return 0
+	}
+	if n > 2 {
+		return 2
+	}
+	return n
+}
+
+pub fn step(n: i64) -> i64 {
+	return level(n) + 1
+}
+
+pub fn position(xs: ref Vec[i64], v: i64) -> i64 {
+	let mut i = 0
+	while i < xs.len() {
+		if xs[i] == v {
+			return i
+		}
+		i += 1
+	}
+	return -1
+}
+
+fn main() throws {
+	let ys = [10, 20, 30, 40]
+	println(ys[step(7)])
+	println(ys[step(-3)])
+	let xs = [4, 5, 6]
+	let at = position(xs, 6)
+	if at >= 0 {
+		println(xs[at])
+	}
+}

@@ -620,6 +620,23 @@ fn bounds_rounds(
 ) -> BoundsProven {
 	let mut found_checked: collections::BTreeMap[String, RulesChecked] = collections::BTreeMap()
 	let found_held = rules_settle(walk, args, body, context, program, words, ask, found_checked)
+	return bounds_rounds_settled(walk, found_held, found_checked, args, body, context, program, words, ask)
+}
+
+/// **D7's rounds over one body whose rules `rules_settle` found**:
+/// `found_held` and `found_checked` are what it handed back, for the
+/// bodies after.
+fn bounds_rounds_settled(
+	mut walk: BoundsWalk,
+	found_held: ref collections::BTreeMap[String, Vec[BoundsRule]],
+	found_checked: ref collections::BTreeMap[String, RulesChecked],
+	args: ref Vec[FnArg],
+	body: ref Block,
+	context: ref BoundsContext,
+	program: ref Program,
+	words: ref winnow_grammar::InternerContext,
+	ask: fn(ref logic::TermArena, ref Vec[i64], i64) -> bool sync,
+) -> BoundsProven {
 	let mut settled = false
 	if !walk.shape.roots.is_empty() {
 		walk.collecting = true
@@ -698,8 +715,8 @@ fn bounds_rounds(
 	if !walk.return_params.is_empty() {
 		walk.proven.returned = bounding_returns_found(walk, body, words)
 	}
-	walk.proven.held = found_held
-	walk.proven.checked = found_checked
+	walk.proven.held = found_held.clone()
+	walk.proven.checked = found_checked.clone()
 	return walk.proven.clone()
 }
 
@@ -11387,8 +11404,12 @@ fn bounds_returns(
 	// first passes): every candidate's call adds nothing, so a recursive
 	// one's base cases are what its values start from; the rounds below
 	// assume them and keep those proved.
+	// **What each body's last walk found, with what it read** (#2464): a
+	// round walks a body again only where one of those changed.
+	let mut walked: collections::BTreeMap[String, ReturnsWalked] = collections::BTreeMap()
+	let mut measured: collections::BTreeMap[String, ReturnsMeasured] = collections::BTreeMap()
 	context.returns = assumed.clone()
-	let mut collected = bounding_returns_round(context, bodies, keys, assumed, program, words, ask)
+	let mut collected = bounding_returns_round(context, bodies, keys, assumed, program, words, ask, walked, measured)
 	// **A whole number's interval through a chain of calls** (D32): one
 	// found while its callees' were pending is found again with theirs
 	// known. A pending call has none, so what is collected needs no
@@ -11403,7 +11424,7 @@ fn bounds_returns(
 			}
 		}
 		context.returns = known.clone()
-		let again = bounding_returns_round(context, bodies, keys, known, program, words, ask)
+		let again = bounding_returns_round(context, bodies, keys, known, program, words, ask, walked, measured)
 		let before = bounding_returns_ranged(collected)
 		collected = again
 		if bounding_returns_ranged(collected) == before {
@@ -11423,7 +11444,7 @@ fn bounds_returns(
 	let rounds = bounding_returns_count(assumed) + 1
 	for _round in 0..<rounds {
 		context.returns = assumed.clone()
-		let found = bounding_returns_round(context, bodies, keys, assumed, program, words, ask)
+		let found = bounding_returns_round(context, bodies, keys, assumed, program, words, ask, walked, measured)
 		if bounding_returns_count(found) == bounding_returns_count(assumed) {
 			bounding_returns_settle(context, found)
 			return
@@ -11445,11 +11466,69 @@ fn bounding_returns_settle(mut context: BoundsContext, found: collections::BTree
 	context.returns = found
 }
 
+/// **What one body's walk in a round of [`bounds_returns`] found**
+/// (#2464), before what was assumed of it is held against it, with what it
+/// read that a round may change: the part of the bounds asked that the walk
+/// reads (`bounding_returns_asked`), the found returns of the callees it
+/// names (`rules_returns_read`) and the rules held at its start. `returned`
+/// is what `bounds_rounds` found every return below, `sized` those of them
+/// whose length is known, `range` the interval it found, and `related`
+/// whether D31's relations `at_least`, `within` and `under` hold.
+struct ReturnsWalked {
+	asked: BoundsReturns,
+	reads: collections::BTreeMap[String, BoundsReturns],
+	rules: Vec[BoundsRule],
+	returned: collections::BTreeSet[i64]?,
+	sized: collections::BTreeSet[i64],
+	range: Range?,
+	related: bool,
+	at_least: collections::BTreeSet[i64],
+	within: collections::BTreeSet[i64],
+	under: collections::BTreeSet[i64],
+}
+
+/// **What the walk that measures a body's lengths found** (#1756, #2464),
+/// with what it read: the lengths, likenesses and listed parameters asked,
+/// the callees' found returns and the rules held.
+struct ReturnsMeasured {
+	lengths_asked: collections::BTreeMap[String, collections::BTreeSet[i64]],
+	alike_asked: collections::BTreeSet[String],
+	listed: collections::BTreeSet[i64],
+	reads: collections::BTreeMap[String, BoundsReturns],
+	rules: Vec[BoundsRule],
+	lengths: collections::BTreeMap[String, collections::BTreeSet[i64]],
+	reaches: collections::BTreeMap[String, collections::BTreeSet[i64]],
+	alike: collections::BTreeSet[String],
+	guards: collections::BTreeSet[i64],
+}
+
+/// **The part of `wanted` a body's walk reads** (#2464): all but what is
+/// held against its findings after it (`pending`, `range`, `under`) and
+/// what the measuring walk alone reads or hands on.
+fn bounding_returns_asked(wanted: ref BoundsReturns) -> BoundsReturns {
+	let mut asked = wanted.clone()
+	asked.pending = false
+	asked.range = null
+	asked.under = collections::BTreeSet()
+	asked.sized = collections::BTreeSet()
+	asked.measures = []
+	asked.lengths = collections::BTreeMap()
+	asked.reaches = collections::BTreeMap()
+	asked.listed = collections::BTreeSet()
+	asked.alike = collections::BTreeSet()
+	asked.guards = collections::BTreeSet()
+	return asked
+}
+
 /// **One round of [`bounds_returns`]**: each body walked for the bounds
 /// `assumed` asks, with `context.returns` assumed of its calls; of each, the
 /// list parameters every return was proved below, and the range D7 found
 /// on the values of every list returned, held within the assumed one where
-/// one was assumed.
+/// one was assumed. A body whose bounds asked, callees' returns and rules
+/// held are those of its last walk (`walked`, `measured` for the walk that
+/// measures its lengths) is not walked again: that walk's findings are
+/// taken (#2464). Not under `--bounds-trace`, whose lines come from the
+/// walks (#1495).
 fn bounding_returns_round(
 	mut context: BoundsContext,
 	bodies: ref Vec[ref Spanned[Item]],
@@ -11458,6 +11537,8 @@ fn bounding_returns_round(
 	program: ref Program,
 	words: ref winnow_grammar::InternerContext,
 	ask: fn(ref logic::TermArena, ref Vec[i64], i64) -> bool sync,
+	mut walked: collections::BTreeMap[String, ReturnsWalked],
+	mut measured: collections::BTreeMap[String, ReturnsMeasured],
 ) -> collections::BTreeMap[String, BoundsReturns] {
 	let mut found: collections::BTreeMap[String, BoundsReturns] = collections::BTreeMap()
 	// **The rules that hold, found once a round** (#1581): its bodies all
@@ -11515,45 +11596,88 @@ fn bounding_returns_round(
 					walk.return_scalars.push("")
 					walk.return_lens.push(if wanted.within.contains(k) && !taken_mut { f"self.{field}" } else { "" })
 				}
-				let proven = bounds_rounds(walk, args, body, context, program, words, ask)
-				for (of, holding) in proven.held {
+				let mut found_checked: collections::BTreeMap[String, RulesChecked] = collections::BTreeMap()
+				let found_held = rules_settle(walk, args, body, context, program, words, ask, found_checked)
+				for (of, holding) in found_held {
 					context.around.held.insert(of.clone(), holding.clone())
 				}
-				rules_checked_keep(context, proven.checked)
+				rules_checked_keep(context, found_checked)
+				let reads = rules_returns_read(body, context, words)
+				let rules = walk.rules.clone()
+				let fresh = context.trace.is_empty()
+				// **The walk's own findings** (#2464), before what was assumed
+				// (`pending`, `range`, `under`) is held against them: taken
+				// from its last walk where what it read is the same.
+				let asked = bounding_returns_asked(wanted)
+				let mut seen: ReturnsWalked? = null
+				if fresh && walked.contains_key(key) {
+					let got = walked.get(key) ?? continue
+					if got.asked == asked && got.reads == reads && got.rules == rules {
+						seen = got.clone()
+					}
+				}
+				if seen == null {
+					let proven = bounds_rounds_settled(walk, found_held, found_checked, args, body, context, program, words, ask)
+					let returned = proven.returned != null
+					let mut sized_seen: collections::BTreeSet[i64] = collections::BTreeSet()
+					for k in proven.returned?.clone() ?? collections::BTreeSet() {
+						if wanted.below.contains(k) && walk.axioms.contains_key(length_of(walk.return_params[k])) {
+							sized_seen.insert(k)
+						}
+					}
+					let mut range_seen: Range? = null
+					if wanted.each && returned {
+						range_seen = bounding_returned_range(walk)
+					}
+					// **A whole number's interval** (D32): every value handed
+					// back, the body's last one among them, had one.
+					if !wanted.each && !walk.return_unranged && !walk.return_lost
+						&& !seek_block(body, Seek::Unvisited(walk.return_seen.clone()), words) {
+						range_seen = walk.return_range?.clone()
+					}
+					let related = !wanted.each && !walk.return_lost
+						&& !seek_block(body, Seek::Unvisited(walk.return_seen.clone()), words)
+					let made = ReturnsWalked {
+						asked: asked,
+						reads: reads.clone(),
+						rules: rules.clone(),
+						returned: proven.returned?.clone(),
+						sized: sized_seen,
+						range: range_seen,
+						related: related,
+						at_least: walk.return_at_least?.clone() ?? collections::BTreeSet(),
+						within: walk.return_within?.clone() ?? collections::BTreeSet(),
+						under: walk.return_under?.clone() ?? collections::BTreeSet(),
+					}
+					if fresh {
+						walked.insert(key.clone(), made.clone())
+					}
+					seen = made
+				}
+				let last = seen ?? continue
 				let mut held: collections::BTreeSet[i64] = collections::BTreeSet()
 				let mut sized: collections::BTreeSet[i64] = collections::BTreeSet()
-				let returned = proven.returned != null
-				for k in proven.returned ?? collections::BTreeSet() {
+				for k in last.returned ?? collections::BTreeSet() {
 					if wanted.below.contains(k) {
 						held.insert(k)
-						if walk.axioms.contains_key(length_of(walk.return_params[k])) {
+						if last.sized.contains(k) {
 							sized.insert(k)
 						}
 					}
 				}
-				let mut range: Range? = null
-				if wanted.each && returned {
-					range = bounding_returned_range(walk)
-				}
-				// **A whole number's interval** (D32): every value handed
-				// back, the body's last one among them, had one.
-				if !wanted.each && !walk.return_unranged && !walk.return_lost
-					&& !seek_block(body, Seek::Unvisited(walk.return_seen.clone()), words) {
-					range = walk.return_range?.clone()
-				}
+				let mut range = last.range?.clone()
 				let mut at_least: collections::BTreeSet[i64] = collections::BTreeSet()
 				let mut within: collections::BTreeSet[i64] = collections::BTreeSet()
 				let mut under: collections::BTreeSet[i64] = collections::BTreeSet()
-				if !wanted.each && !walk.return_lost
-					&& !seek_block(body, Seek::Unvisited(walk.return_seen.clone()), words) {
-					at_least = walk.return_at_least?.clone() ?? collections::BTreeSet()
-					within = walk.return_within?.clone() ?? collections::BTreeSet()
+				if last.related {
+					at_least = last.at_least.clone()
+					within = last.within.clone()
 					// Only below what was assumed below (#1757).
-					under = bounding_kept(wanted.under, walk.return_under?.clone() ?? collections::BTreeSet())
+					under = bounding_kept(wanted.under, last.under)
 				}
 				if range != null && !wanted.pending {
-					let seen = range ?? Range::open()
-					if !(wanted.range ?? Range::open()).holds(seen) || wanted.range == null {
+					let found_range = range ?? Range::open()
+					if !(wanted.range ?? Range::open()).holds(found_range) || wanted.range == null {
 						range = null
 					} else {
 						range = wanted.range?.clone()
@@ -11561,42 +11685,74 @@ fn bounding_returns_round(
 				}
 				// **The lengths every return was proved to hold** (#1756),
 				// in a walk of their own: it takes the whole-number
-				// parameters at zero or more.
+				// parameters at zero or more. Taken from its last walk where
+				// what it read is the same (#2464).
 				let mut lengths: collections::BTreeMap[String, collections::BTreeSet[i64]] = collections::BTreeMap()
 				let mut reaches: collections::BTreeMap[String, collections::BTreeSet[i64]] = collections::BTreeMap()
 				let mut alike: collections::BTreeSet[String] = collections::BTreeSet()
 				let mut guards: collections::BTreeSet[i64] = collections::BTreeSet()
 				if !wanted.lengths.is_empty() || !wanted.alike.is_empty() {
-					let mut measuring = bounding_new(args, body, bp_names(nonnegative_locals(body), words), context, program, words)
-					measuring.return_wanted = wanted.lengths.clone()
-					measuring.return_wanted_alike = wanted.alike.clone()
-					measuring.return_listed = wanted.listed.clone()
-					for k in 0..<args.len() {
-						let param = words.resolve(args[k].name).clone()
-						let mut stays = !seek_block(body, Seek::Rebound(param.clone()), words)
-						if wanted.listed.contains(k) {
-							// A list not written `mut` changes only where it
-							// is bound again (ADR-094 D3), as D31's above.
-							if args[k].mutable {
-								stays = length_stays(body, param, words)
-							}
-							stays = stays && measuring.lists.contains(param)
-						} else if stays && args[k].ty.generics.is_empty() && is_whole_number(words.resolve(args[k].ty.name)) {
-							guards.insert(k)
-							measuring.return_assumed.push(param.clone())
+					let mut kept: ReturnsMeasured? = null
+					if fresh && measured.contains_key(key) {
+						let got = measured.get(key) ?? continue
+						if got.lengths_asked == wanted.lengths && got.alike_asked == wanted.alike && got.listed == wanted.listed
+							&& got.reads == reads && got.rules == rules {
+							kept = got.clone()
 						}
-						measuring.return_sources.push(if stays { param } else { "" })
 					}
-					bounds_rounds(measuring, args, body, context, program, words, ask)
-					if !seek_block(body, Seek::Unvisited(measuring.return_measured.clone()), words) {
-						lengths = bounding_nonempty(measuring.return_lengths ?? collections::BTreeMap())
-						reaches = bounding_nonempty(measuring.return_reaches ?? collections::BTreeMap())
-						alike = measuring.return_alike?.clone() ?? collections::BTreeSet()
+					if kept == null {
+						let mut measuring = bounding_new(args, body, bp_names(nonnegative_locals(body), words), context, program, words)
+						measuring.return_wanted = wanted.lengths.clone()
+						measuring.return_wanted_alike = wanted.alike.clone()
+						measuring.return_listed = wanted.listed.clone()
+						let mut guards_seen: collections::BTreeSet[i64] = collections::BTreeSet()
+						for k in 0..<args.len() {
+							let param = words.resolve(args[k].name).clone()
+							let mut stays = !seek_block(body, Seek::Rebound(param.clone()), words)
+							if wanted.listed.contains(k) {
+								// A list not written `mut` changes only where it
+								// is bound again (ADR-094 D3), as D31's above.
+								if args[k].mutable {
+									stays = length_stays(body, param, words)
+								}
+								stays = stays && measuring.lists.contains(param)
+							} else if stays && args[k].ty.generics.is_empty() && is_whole_number(words.resolve(args[k].ty.name)) {
+								guards_seen.insert(k)
+								measuring.return_assumed.push(param.clone())
+							}
+							measuring.return_sources.push(if stays { param } else { "" })
+						}
+						bounds_rounds(measuring, args, body, context, program, words, ask)
+						let mut made = ReturnsMeasured {
+							lengths_asked: wanted.lengths.clone(),
+							alike_asked: wanted.alike.clone(),
+							listed: wanted.listed.clone(),
+							reads: reads.clone(),
+							rules: rules.clone(),
+							lengths: collections::BTreeMap(),
+							reaches: collections::BTreeMap(),
+							alike: collections::BTreeSet(),
+							guards: guards_seen,
+						}
+						if !seek_block(body, Seek::Unvisited(measuring.return_measured.clone()), words) {
+							made.lengths = bounding_nonempty(measuring.return_lengths ?? collections::BTreeMap())
+							made.reaches = bounding_nonempty(measuring.return_reaches ?? collections::BTreeMap())
+							made.alike = measuring.return_alike?.clone() ?? collections::BTreeSet()
+						}
+						if fresh {
+							measured.insert(key.clone(), made.clone())
+						}
+						kept = made
 					}
+					let got = kept ?? continue
+					lengths = got.lengths.clone()
+					reaches = got.reaches.clone()
+					alike = got.alike.clone()
+					guards = got.guards.clone()
 				}
 				if !held.is_empty() || range != null || !at_least.is_empty() || !within.is_empty()
 					|| !lengths.is_empty() || !reaches.is_empty() || !alike.is_empty() {
-					found.insert(key, BoundsReturns {
+					found.insert(key.clone(), BoundsReturns {
 						each: wanted.each,
 						below: held,
 						sized: sized,
