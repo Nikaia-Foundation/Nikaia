@@ -576,6 +576,52 @@ impl SvSimplex {
 		return sv_delta_scale(sum, inverse)
 	}
 
+	/// `row_value` where a product or a partial sum leaves `i64` though the
+	/// value fits (#2101: coefficients near `2^62` times values of `±1`): each
+	/// part of the values over the lcm of its denominators, `Σ aⱼ·βⱼ` in
+	/// double width, divided by `d` and the lcm once at the end, so `null`
+	/// only where the value itself does not fit (ADR-270 D11).
+	fn row_value_wide(ref self, r: i64) -> SvDelta? {
+		let c = self.row_part_wide(r, true) ?? return null
+		let k = self.row_part_wide(r, false) ?? return null
+		return SvDelta { c: c, k: k }
+	}
+
+	/// The real part (`real`) or the `δ` part of `row_value_wide`.
+	fn row_part_wide(ref self, r: i64, real: bool) -> SvRat? {
+		let b = self.basic[r]
+		let mut l: i64 = 1
+		let mut d: i64 = 0
+		let mut i = 0
+		while i < self.rows[r].cols.len() {
+			let v = self.rows[r].cols[i] as i64
+			let k = self.rows[r].ks[i]
+			i += 1
+			if v == b {
+				d = k.checked_neg() ?? return null
+				continue
+			}
+			let x = if real { self.values[v].c } else { self.values[v].k }
+			if x.num != 0 {
+				let g = sv_gcd(l, x.den) ?? return null
+				l = (l / g).checked_mul(x.den) ?? return null
+			}
+		}
+		let mut sum = Wide::of(0)
+		i = 0
+		while i < self.rows[r].cols.len() {
+			let v = self.rows[r].cols[i] as i64
+			let k = self.rows[r].ks[i]
+			i += 1
+			let x = if real { self.values[v].c } else { self.values[v].k }
+			if v != b && x.num != 0 {
+				let term = Wide::product(k, x.num).mul(l / x.den) ?? return null
+				sum = sum.add(term) ?? return null
+			}
+		}
+		return sv_wide_ratio(sum, l.checked_mul(d) ?? return null)
+	}
+
 	/// The basic values after non-basic variable `v` took a new value: each
 	/// row that holds `v` worked out again; false where a step leaves `i64`.
 	/// A basic variable stands in its own row only, so a row without `v`
@@ -604,7 +650,7 @@ impl SvSimplex {
 				if stepped != null {
 					self.values[b] = stepped ?? return false
 				} else {
-					self.values[b] = self.row_value(r) ?? return false
+					self.values[b] = self.row_value(r) ?? self.row_value_wide(r) ?? return false
 				}
 			}
 		}
@@ -616,7 +662,8 @@ impl SvSimplex {
 	/// `i64` or there is no move.
 	fn row_step(ref self, r: i64, b: i64, a: i64, moved: ref SvDelta?) -> SvDelta? {
 		let by = moved ?? return null
-		let d = sv_row_coef(self.rows[r], b.checked_u32() ?? return null).checked_neg() ?? return null
+		let d = sv_row_coef(self.rows[r], b.checked_u32() ?? return null).checked_neg()
+			?? return null
 		let factor = sv_rat(a, d) ?? return null
 		let change = sv_delta_scale(by, factor) ?? return null
 		return sv_delta_add(self.values[b], change)
@@ -841,7 +888,15 @@ impl SvSimplex {
 			if t != r && self.row_mark[t] != round && sv_row_coef(self.rows[t], col) != 0 {
 				self.row_mark[t] = round
 				let spare = self.spare.pop() ?? sv_row_constant(0)
-				let row = sv_row_eliminate_into(spare, self.rows[t], self.rows[r], col, exact, came, left)
+				let row = sv_row_eliminate_into(
+					spare,
+					self.rows[t],
+					self.rows[r],
+					col,
+					exact,
+					came,
+					left,
+				)
 				made.push(row ?? return false)
 				changed.push(t)
 				came_end.push(came.len())
@@ -966,6 +1021,59 @@ impl SvSimplex {
 		return best
 	}
 
+	/// Every basic variable outside its bounds, lowest variable first: the
+	/// rows `feasible` tries where the lowest one's pivots all leave `i64`.
+	fn violated_all(ref self) -> Vec[SvViolation] {
+		let mut out: Vec[SvViolation] = []
+		let mut r = 0
+		while r < self.rows.len() {
+			let b = self.basic[r]
+			r += 1
+			let below = self.lower[b].set && sv_delta_cmp(self.values[b], self.lower[b].value) < 0
+			let above = self.upper[b].set && sv_delta_cmp(self.values[b], self.upper[b].value) > 0
+			if below || above {
+				let mut at = out.len()
+				while at > 0 && out[at - 1].var > b {
+					at -= 1
+				}
+				out.insert(at, SvViolation { row: r - 1, var: b, below: below })
+			}
+		}
+		return out
+	}
+
+	/// Row `at.row` pivoted on one of its entering variables: every one in
+	/// `i64` first, since one whose rows leave it hands over to the next and
+	/// that keeps the coefficients small, then where all leave it in double
+	/// width (#2307). `Ended` where no variable can enter (the row's conflict),
+	/// `Left` where every pivot leaves `i64`, nothing changed.
+	fn pivot_row(ref mut self, at: SvViolation, bland: bool, mut book: SvBook) -> SvPivoted {
+		let r = at.row
+		let b = at.var
+		let candidates = self.entering(r, at.below, bland)
+		if candidates.len() == 0 {
+			// `d·x_b` cannot reach the violated side: the row's bound
+			// from the other side and that side add up to `c < 0`.
+			let mut parts = self.row_parts(r, at.below) ?? return SvPivoted::Ended(self.overflow())
+			let d = sv_row_coef(self.rows[r], b.checked_u32() ?? 0).checked_neg()
+				?? return SvPivoted::Ended(self.overflow())
+			let side = if at.below { self.lower[b] } else { self.upper[b] }
+			parts.push(sv_side_part(side, !at.below, d))
+			return SvPivoted::Ended(self.conflict(parts, book))
+		}
+		for j in candidates {
+			if self.pivot(r, j, false) {
+				return SvPivoted::Done
+			}
+		}
+		for j in candidates {
+			if self.pivot(r, j, true) {
+				return SvPivoted::Done
+			}
+		}
+		return SvPivoted::Left
+	}
+
 	/// The variables of row `r` that can move its basic variable up
 	/// (`below`) or down, in the order the rule tries them: smallest
 	/// coefficient first, then the one in fewest rows, or, under Bland's
@@ -999,9 +1107,10 @@ impl SvSimplex {
 			// tie keeps the lower variable first.
 			let mut at = out.len()
 			let score = size.saturating_mul(rows)
-			while at > 0 && (cost[at - 1].saturating_mul(length[at - 1]) > score || (cost[at - 1].saturating_mul(length[at - 1]) == score && cost[at - 1] > size)) {
-				at -= 1
-			}
+			while at > 0
+				&& (cost[at - 1].saturating_mul(length[at - 1]) > score || (cost[at - 1].saturating_mul(length[at - 1]) == score && cost[at - 1] > size)) {
+					at -= 1
+				}
 			out.insert(at, v)
 			cost.insert(at, size)
 			length.insert(at, rows)
@@ -1014,47 +1123,48 @@ impl SvSimplex {
 	fn feasible(ref mut self, mut book: SvBook) -> SvChecked {
 		let mut count = 0
 		while true {
-			let at = self.violated()
+			let mut at = self.violated()
 			if at.row < 0 {
 				return SvChecked::Consistent
 			}
 			if count >= self.pivot_limit {
 				return SvChecked::Unknown(LgUnknown::TooManyCases)
 			}
-			let r = at.row
-			let b = at.var
-			let candidates = self.entering(r, at.below, count >= self.bland_after)
-			if candidates.len() == 0 {
-				// `d·x_b` cannot reach the violated side: the row's bound
-				// from the other side and that side add up to `c < 0`.
-				let mut parts = self.row_parts(r, at.below) ?? return self.overflow()
-				let d = sv_row_coef(self.rows[r], b.checked_u32() ?? 0).checked_neg()
-					?? return self.overflow()
-				let side = if at.below { self.lower[b] } else { self.upper[b] }
-				parts.push(sv_side_part(side, !at.below, d))
-				return self.conflict(parts, book)
-			}
-			// Every candidate in `i64` first: one whose rows leave it hands
-			// over to the next, which keeps the coefficients small. Only
-			// where all leave it, in double width (#2307).
-			let mut pivoted = false
-			for j in candidates {
-				if self.pivot(r, j, false) {
-					pivoted = true
-					break
-				}
-			}
-			if !pivoted {
-				for j in candidates {
-					if self.pivot(r, j, true) {
-						pivoted = true
-						break
+			let bland = count >= self.bland_after
+			let mut pivoted = self.pivot_row(at, bland, book)
+			match pivoted {
+				SvPivoted::Done => {},
+				SvPivoted::Ended(end) => {
+					return end
+				},
+				SvPivoted::Left => {
+					// D11: a step that leaves `i64` is not taken while another
+					// pivot is left, so each other violated row is tried, in
+					// the order of its variable, before `overflow` (#2101).
+					for other in self.violated_all() {
+						if other.row != at.row {
+							pivoted = self.pivot_row(other, bland, book)
+							match pivoted {
+								SvPivoted::Left => {},
+								else => {
+									at = other
+									break
+								},
+							}
+						}
 					}
-				}
+				},
 			}
-			if !pivoted {
-				return self.overflow()
+			match pivoted {
+				SvPivoted::Done => {},
+				SvPivoted::Ended(end) => {
+					return end
+				},
+				SvPivoted::Left => {
+					return self.overflow()
+				},
 			}
+			let b = at.var
 			let target = if at.below { self.lower[b].value.clone() } else {
 				self.upper[b].value.clone()
 			}
@@ -1312,7 +1422,13 @@ impl SvSimplex {
 		// registers the atoms up front in Dutertre and de Moura: a
 		// new slack is basic, so its row bound can imply the atom.
 		let v = self.form_var(reading.form) ?? return null
-		return SvLitView { known: true, usable: true, var: v, upper: reading.upper, value: reading.value }
+		return SvLitView {
+			known: true,
+			usable: true,
+			var: v,
+			upper: reading.upper,
+			value: reading.value,
+		}
 	}
 }
 
@@ -1396,7 +1512,8 @@ impl SvTh for SvSimplex {
 		// `⌊value⌋` in the order with `δ`: `3 - δ` lies below 3; below
 		// `i64::MIN` the split leaves `i64` (#1632).
 		let floor = sv_rat_floor(value.c)
-		let k = if value.c.den == 1 && value.k.num < 0 { floor.checked_sub(1) ?? return self.overflow() } else { floor }
+		let k = if value.c.den == 1
+			&& value.k.num < 0 { floor.checked_sub(1) ?? return self.overflow() } else { floor }
 		let le = SvRow {
 			cols: [col.checked_u32() ?? return self.overflow()],
 			ks: [1],
@@ -2154,6 +2271,16 @@ impl SvSimplex {
 	}
 }
 
+/// What pivoting one violated row gave `feasible`.
+pub enum SvPivoted {
+	/// The row pivoted.
+	Done,
+	/// The check ends here: the row's conflict, or `overflow` forming it.
+	Ended(SvChecked),
+	/// Every pivot of the row leaves `i64`; nothing changed.
+	Left,
+}
+
 /// The basic variable `check` repairs next.
 pub struct SvViolation {
 	pub row: i64,
@@ -2221,7 +2348,12 @@ fn sv_simplex_test_model_text(m: ref collections::BTreeMap[String, i64]) -> Stri
 
 // Every atom asserted as it stands, one level, then a final check; a
 // conflict closed by one learned clause and the log replayed.
-fn sv_simplex_test_scenario(title: String, names: Vec[String], atoms: Vec[SvAtom], bland_after: i64) -> String {
+fn sv_simplex_test_scenario(
+	title: String,
+	names: Vec[String],
+	atoms: Vec[SvAtom],
+	bland_after: i64,
+) -> String {
 	let mut out: String = ""
 	let n = atoms.len()
 	let mut clauses: Vec[Vec[u32]] = []
@@ -2230,7 +2362,12 @@ fn sv_simplex_test_scenario(title: String, names: Vec[String], atoms: Vec[SvAtom
 		clauses.push([sv_lit(a, false)])
 		a += 1
 	}
-	let query = SvQuery { atoms: atoms, clauses: clauses, columns: names.len().checked_u32() ?? 0, reals: [] }
+	let query = SvQuery {
+		atoms: atoms,
+		clauses: clauses,
+		columns: names.len().checked_u32() ?? 0,
+		reals: [],
+	}
 	let mut book = sv_book(query) ?? return out + "no value"
 	let mut inputs: Vec[u32] = []
 	let mut i: u32 = 0
@@ -2271,10 +2408,12 @@ fn sv_simplex_test_scenario(title: String, names: Vec[String], atoms: Vec[SvAtom
 			book.learn([], hints)
 			let v = sv_check(query, book.log.steps)
 			let said = if v.ok { "checked" } else { f"rejected at {v.step}: {v.reason}" }
-			out = out + f"{title}: conflict {sv_simplex_test_lits_text(c.lits)}, {work}, log of {book.log.steps.len()} steps {said}\n"
+			out = out
+				+ f"{title}: conflict {sv_simplex_test_lits_text(c.lits)}, {work}, log of {book.log.steps.len()} steps {said}\n"
 		},
 		SvChecked::Consistent => {
-			out = out + f"{title}: consistent, {sv_simplex_test_model_text(theory.model())}, {work}\n"
+			out = out
+				+ f"{title}: consistent, {sv_simplex_test_model_text(theory.model())}, {work}\n"
 		},
 		else => {
 			out = out + f"{title}: {sv_simplex_test_said_by(got)}, {work}\n"
@@ -2285,7 +2424,11 @@ fn sv_simplex_test_scenario(title: String, names: Vec[String], atoms: Vec[SvAtom
 
 fn sv_simplex_test_calls() -> String {
 	let mut out: String = ""
-	let atoms = [sv_simplex_test_le([1], -2), sv_simplex_test_le([1], -5), sv_simplex_test_le([-1], 3)]
+	let atoms = [
+		sv_simplex_test_le([1], -2),
+		sv_simplex_test_le([1], -5),
+		sv_simplex_test_le([-1], 3),
+	]
 	let query = SvQuery { atoms: atoms, clauses: [[0], [4]], columns: 1, reals: [] }
 	let mut book = sv_book(query) ?? return out + "no value"
 	let c0 = book.input(0)
@@ -2299,13 +2442,15 @@ fn sv_simplex_test_calls() -> String {
 	let why = theory.explain(2, book) ?? return out + "no value"
 	out = out + f"explain x <= 5: {sv_simplex_test_lits_text(why.lits)}\n"
 	let first = theory.check(true, budget, book)
-	out = out + f"check: {sv_simplex_test_said_by(first)}, model {sv_simplex_test_model_text(theory.model())}\n"
+	out = out
+		+ f"check: {sv_simplex_test_said_by(first)}, model {sv_simplex_test_model_text(theory.model())}\n"
 	theory.push_level()
 	let conflict = theory.assert(4, book)
 	out = out + f"assert x >= 3 at level {theory.level()}: {sv_simplex_test_said_by(conflict)}\n"
 	theory.backtrack(1)
 	let again = theory.check(true, budget, book)
-	out = out + f"backtrack to 1, check: {sv_simplex_test_said_by(again)}, shared {sv_simplex_test_lits_text(theory.shared())}\n"
+	out = out
+		+ f"backtrack to 1, check: {sv_simplex_test_said_by(again)}, shared {sv_simplex_test_lits_text(theory.shared())}\n"
 	match conflict {
 		SvChecked::Conflict(c) => {
 			book.learn([], [c0, c1, c.id])
@@ -2323,7 +2468,11 @@ fn sv_simplex_test_calls() -> String {
 // against the negated atom is replayed.
 fn sv_simplex_test_through_a_row() -> String {
 	let mut out: String = ""
-	let atoms = [sv_simplex_test_le([1], -1), sv_simplex_test_le([0, 1], -1), sv_simplex_test_le([1, 1], -4)]
+	let atoms = [
+		sv_simplex_test_le([1], -1),
+		sv_simplex_test_le([0, 1], -1),
+		sv_simplex_test_le([1, 1], -4),
+	]
 	let query = SvQuery { atoms: atoms, clauses: [[0], [2], [5]], columns: 2, reals: [] }
 	let mut book = sv_book(query) ?? return out + "no value"
 	let c0 = book.input(0)
@@ -2360,12 +2509,65 @@ test "the simplex's interface calls one by one leave a log sv_check replays" {
 
 test "problems asserted whole are answered with a model or a checked conflict" {
 	let mut out: String = ""
-	out = out + sv_simplex_test_scenario("x + y >= 5, x <= 2, y <= 2", ["x", "y"], [sv_simplex_test_le([-1, -1], 5), sv_simplex_test_le([1], -2), sv_simplex_test_le([0, 1], -2)], 64)
-	out = out + sv_simplex_test_scenario("x + y < 3, x >= 1, y >= 2", ["x", "y"], [sv_simplex_test_lt([1, 1], -3), sv_simplex_test_le([-1], 1), sv_simplex_test_le([0, -1], 2)], 64)
-	out = out + sv_simplex_test_scenario("x + y <= 3, x >= 1, y >= 2", ["x", "y"], [sv_simplex_test_le([1, 1], -3), sv_simplex_test_le([-1], 1), sv_simplex_test_le([0, -1], 2)], 64)
+	out = out
+		+ sv_simplex_test_scenario(
+			"x + y >= 5, x <= 2, y <= 2",
+			["x", "y"],
+			[
+				sv_simplex_test_le([-1, -1], 5),
+				sv_simplex_test_le([1], -2),
+				sv_simplex_test_le([0, 1], -2),
+			],
+			64,
+		)
+	out = out
+		+ sv_simplex_test_scenario(
+			"x + y < 3, x >= 1, y >= 2",
+			["x", "y"],
+			[
+				sv_simplex_test_lt([1, 1], -3),
+				sv_simplex_test_le([-1], 1),
+				sv_simplex_test_le([0, -1], 2),
+			],
+			64,
+		)
+	out = out
+		+ sv_simplex_test_scenario(
+			"x + y <= 3, x >= 1, y >= 2",
+			["x", "y"],
+			[
+				sv_simplex_test_le([1, 1], -3),
+				sv_simplex_test_le([-1], 1),
+				sv_simplex_test_le([0, -1], 2),
+			],
+			64,
+		)
 	out = out + sv_simplex_test_scenario("2x = 1", ["x"], [sv_simplex_test_eq([2], -1)], 64)
-	out = out + sv_simplex_test_scenario("2x + 3y = 7, x >= 0, y >= 0", ["x", "y"], [sv_simplex_test_eq([2, 3], -7), sv_simplex_test_le([-1], 0), sv_simplex_test_le([0, -1], 0)], 64)
-	out = out + sv_simplex_test_scenario("1 <= 3x - 3y <= 2, 0 <= x, y <= 3", ["x", "y"], [sv_simplex_test_le([-3, 3], 1), sv_simplex_test_le([3, -3], -2), sv_simplex_test_le([-1], 0), sv_simplex_test_le([1], -3), sv_simplex_test_le([0, -1], 0), sv_simplex_test_le([0, 1], -3)], 64)
+	out = out
+		+ sv_simplex_test_scenario(
+			"2x + 3y = 7, x >= 0, y >= 0",
+			["x", "y"],
+			[
+				sv_simplex_test_eq([2, 3], -7),
+				sv_simplex_test_le([-1], 0),
+				sv_simplex_test_le([0, -1], 0),
+			],
+			64,
+		)
+	out = out
+		+ sv_simplex_test_scenario(
+			"1 <= 3x - 3y <= 2, 0 <= x, y <= 3",
+			["x", "y"],
+			[
+				sv_simplex_test_le([-3, 3], 1),
+				sv_simplex_test_le([3, -3], -2),
+				sv_simplex_test_le([-1], 0),
+				sv_simplex_test_le([1], -3),
+				sv_simplex_test_le([0, -1], 0),
+				sv_simplex_test_le([0, 1], -3),
+			],
+			64,
+		)
 	let expected = [
 		"x + y >= 5, x <= 2, y <= 2: conflict [1, 3, 5], 2 pivots, 0 splits, log of 5 steps checked",
 		"x + y < 3, x >= 1, y >= 2: conflict [1, 3, 5], 0 pivots, 0 splits, log of 5 steps checked",
@@ -2389,15 +2591,75 @@ test "a literal implied through a row is explained by a Farkas lemma" {
 
 test "both pivot rules answer alike and coefficients near 2^40 answer unknown" {
 	let mut out: String = ""
-	out = out + sv_simplex_test_scenario("the same, Bland's rule from the start", ["x", "y"], [sv_simplex_test_le([-3, 3], 1), sv_simplex_test_le([3, -3], -2), sv_simplex_test_le([-1], 0), sv_simplex_test_le([1], -3), sv_simplex_test_le([0, -1], 0), sv_simplex_test_le([0, 1], -3)], 0)
-	out = out + sv_simplex_test_scenario("the same, smallest coefficient only", ["x", "y"], [sv_simplex_test_le([-3, 3], 1), sv_simplex_test_le([3, -3], -2), sv_simplex_test_le([-1], 0), sv_simplex_test_le([1], -3), sv_simplex_test_le([0, -1], 0), sv_simplex_test_le([0, 1], -3)], 1000000)
-	out = out + sv_simplex_test_scenario("two equalities, coefficients near 2^40", ["x", "y", "z"], [sv_simplex_test_eq([1099511627689, 1099511627791, 1099511627773], -1), sv_simplex_test_eq([1099511627497, -1099511627543, 1099511627531], -3), sv_simplex_test_le([-1], 0), sv_simplex_test_le([0, -1], 0), sv_simplex_test_le([0, 0, -1], 0)], 64)
+	out = out
+		+ sv_simplex_test_scenario(
+			"the same, Bland's rule from the start",
+			["x", "y"],
+			[
+				sv_simplex_test_le([-3, 3], 1),
+				sv_simplex_test_le([3, -3], -2),
+				sv_simplex_test_le([-1], 0),
+				sv_simplex_test_le([1], -3),
+				sv_simplex_test_le([0, -1], 0),
+				sv_simplex_test_le([0, 1], -3),
+			],
+			0,
+		)
+	out = out
+		+ sv_simplex_test_scenario(
+			"the same, smallest coefficient only",
+			["x", "y"],
+			[
+				sv_simplex_test_le([-3, 3], 1),
+				sv_simplex_test_le([3, -3], -2),
+				sv_simplex_test_le([-1], 0),
+				sv_simplex_test_le([1], -3),
+				sv_simplex_test_le([0, -1], 0),
+				sv_simplex_test_le([0, 1], -3),
+			],
+			1000000,
+		)
+	out = out
+		+ sv_simplex_test_scenario(
+			"two equalities, coefficients near 2^40",
+			["x", "y", "z"],
+			[
+				sv_simplex_test_eq([1099511627689, 1099511627791, 1099511627773], -1),
+				sv_simplex_test_eq([1099511627497, -1099511627543, 1099511627531], -3),
+				sv_simplex_test_le([-1], 0),
+				sv_simplex_test_le([0, -1], 0),
+				sv_simplex_test_le([0, 0, -1], 0),
+			],
+			64,
+		)
 	let expected = [
 		"the same, Bland's rule from the start: conflict [1, 3], 1 pivots, 0 splits, log of 15 steps checked",
 		"the same, smallest coefficient only: conflict [1, 3], 1 pivots, 0 splits, log of 15 steps checked",
 		"two equalities, coefficients near 2^40: unknown (overflow), 0 pivots, 0 splits",
 	]
 	assert(out == expected.join("\n") + "\n")
+}
+
+// D11 (#2101): the lowest violated rows can pivot only out of `i64`, so
+// the step is not taken while another violated row is left; `u - v + 1 <= 0`
+// pivots and with `u + v <= 0` is proved.
+test "a pivot that leaves i64 waits for another violated row" {
+	let out = sv_simplex_test_scenario(
+		"two equalities near 2^40, then u - v + 1 <= 0 and u + v <= 0",
+		["x", "y", "z", "u", "v"],
+		[
+			sv_simplex_test_eq([1099511627689, 1099511627791, 1099511627773], -1),
+			sv_simplex_test_eq([1099511627497, -1099511627543, 1099511627531], -3),
+			sv_simplex_test_le([-1], 0),
+			sv_simplex_test_le([0, -1], 0),
+			sv_simplex_test_le([0, 0, -1], 0),
+			sv_simplex_test_le([0, 0, 0, -1], 0),
+			sv_simplex_test_le([0, 0, 0, 1, -1], 1),
+			sv_simplex_test_le([0, 0, 0, 1, 1], 0),
+		],
+		64,
+	)
+	assert(out == "two equalities near 2^40, then u - v + 1 <= 0 and u + v <= 0: conflict [11, 13, 15], 1 pivots, 0 splits, log of 10 steps checked\n")
 }
 
 // --- Tests: real variables (moved from `tests/compiler/tests/solver_real.nika`,
@@ -2428,7 +2690,9 @@ fn sv_real_test_answer(source: String) -> String {
 	return match run.driven {
 		SvDriven::Proved(query, steps) => {
 			let v = sv_check(query, steps)
-			if v.ok { f"proved, log of {steps.len()} steps checked" } else { f"log rejected: {v.reason}" }
+			if v.ok { f"proved, log of {steps.len()} steps checked" } else {
+				f"log rejected: {v.reason}"
+			}
 		},
 		SvDriven::RealModel(values) => {
 			let mut parts: Vec[String] = []
@@ -2482,7 +2746,10 @@ fn sv_real_test_units(atoms: Vec[SvAtom], columns: u32, reals: Vec[u32]) -> SvQu
 // 2x <= 1 and 2x >= 1.
 fn sv_real_test_half(reals: Vec[u32]) -> SvQuery {
 	return sv_real_test_units(
-		[SvAtom { row: sv_real_test_row([2], -1), rel: SvRel::Le }, SvAtom { row: sv_real_test_row([-2], 1), rel: SvRel::Le }],
+		[
+			SvAtom { row: sv_real_test_row([2], -1), rel: SvRel::Le },
+			SvAtom { row: sv_real_test_row([-2], 1), rel: SvRel::Le },
+		],
 		1,
 		reals,
 	)
@@ -2490,7 +2757,8 @@ fn sv_real_test_half(reals: Vec[u32]) -> SvQuery {
 
 // Refuted by the split x <= 0 or x >= 1, each side by a Farkas sum.
 fn sv_real_test_split_log(query: ref SvQuery) -> SvLog {
-	let mut log = sv_log(query) ?? SvLog { steps: [], entries: 0, atoms: 0, columns: 0, limit: 0, walk: sv_assumes() }
+	let mut log = sv_log(query)
+		?? SvLog { steps: [], entries: 0, atoms: 0, columns: 0, limit: 0, walk: sv_assumes() }
 	let a = log.input(0)
 	let b = log.input(1)
 	let s = log.split(sv_real_test_row([1], 0), sv_real_test_row([-1], 1))
@@ -2512,14 +2780,20 @@ fn sv_real_test_split_log(query: ref SvQuery) -> SvLog {
 
 // Refuted by rounding each bound: x <= 0 and x >= 1.
 fn sv_real_test_round_log(query: ref SvQuery) -> SvLog {
-	let mut log = sv_log(query) ?? SvLog { steps: [], entries: 0, atoms: 0, columns: 0, limit: 0, walk: sv_assumes() }
+	let mut log = sv_log(query)
+		?? SvLog { steps: [], entries: 0, atoms: 0, columns: 0, limit: 0, walk: sv_assumes() }
 	let a = log.input(0)
 	let b = log.input(1)
 	let up = log.combine([SvSrc::Lit(sv_lit(0, false))], [1])
 	let r1 = log.round(up, 2)
 	let down = log.combine([SvSrc::Lit(sv_lit(1, false))], [1])
 	let r2 = log.round(down, 2)
-	let f = log.farkas([sv_lit(0, true), sv_lit(1, true)], [SvSrc::Fact(r1), SvSrc::Fact(r2)], [1, 1], 1)
+	let f = log.farkas(
+		[sv_lit(0, true), sv_lit(1, true)],
+		[SvSrc::Fact(r1), SvSrc::Fact(r2)],
+		[1, 1],
+		1,
+	)
 	log.learn([], [a, b, f])
 	return log
 }
@@ -2527,14 +2801,18 @@ fn sv_real_test_round_log(query: ref SvQuery) -> SvLog {
 // x < 0 and x > 0 over the reals: their Farkas sum is 0 < 0.
 fn sv_real_test_empty() -> SvQuery {
 	return sv_real_test_units(
-		[SvAtom { row: sv_real_test_row([1], 0), rel: SvRel::Lt }, SvAtom { row: sv_real_test_row([-1], 0), rel: SvRel::Lt }],
+		[
+			SvAtom { row: sv_real_test_row([1], 0), rel: SvRel::Lt },
+			SvAtom { row: sv_real_test_row([-1], 0), rel: SvRel::Lt },
+		],
 		1,
 		[0],
 	)
 }
 
 fn sv_real_test_empty_log(query: ref SvQuery) -> SvLog {
-	let mut log = sv_log(query) ?? SvLog { steps: [], entries: 0, atoms: 0, columns: 0, limit: 0, walk: sv_assumes() }
+	let mut log = sv_log(query)
+		?? SvLog { steps: [], entries: 0, atoms: 0, columns: 0, limit: 0, walk: sv_assumes() }
 	let a = log.input(0)
 	let b = log.input(1)
 	let f = log.farkas(
@@ -2590,11 +2868,36 @@ test "real scripts are answered with rational models and checked proofs" {
 test "a split and a rounding are accepted on an integer row and refused on a real one" {
 	// The report is `sv_check_test_report` of `sv_check.nika`'s tests.
 	let mut out: String = ""
-	out = out + sv_check_test_report("2x = 1, x integer: split", sv_real_test_half([]), sv_real_test_split_log(sv_real_test_half([])))
-	out = out + sv_check_test_report("2x = 1, x real: split", sv_real_test_half([0]), sv_real_test_split_log(sv_real_test_half([0])))
-	out = out + sv_check_test_report("2x = 1, x integer: round", sv_real_test_half([]), sv_real_test_round_log(sv_real_test_half([])))
-	out = out + sv_check_test_report("2x = 1, x real: round", sv_real_test_half([0]), sv_real_test_round_log(sv_real_test_half([0])))
-	out = out + sv_check_test_report("x < 0 and x > 0, x real: farkas", sv_real_test_empty(), sv_real_test_empty_log(sv_real_test_empty()))
+	out = out
+		+ sv_check_test_report(
+			"2x = 1, x integer: split",
+			sv_real_test_half([]),
+			sv_real_test_split_log(sv_real_test_half([])),
+		)
+	out = out
+		+ sv_check_test_report(
+			"2x = 1, x real: split",
+			sv_real_test_half([0]),
+			sv_real_test_split_log(sv_real_test_half([0])),
+		)
+	out = out
+		+ sv_check_test_report(
+			"2x = 1, x integer: round",
+			sv_real_test_half([]),
+			sv_real_test_round_log(sv_real_test_half([])),
+		)
+	out = out
+		+ sv_check_test_report(
+			"2x = 1, x real: round",
+			sv_real_test_half([0]),
+			sv_real_test_round_log(sv_real_test_half([0])),
+		)
+	out = out
+		+ sv_check_test_report(
+			"x < 0 and x > 0, x real: farkas",
+			sv_real_test_empty(),
+			sv_real_test_empty_log(sv_real_test_empty()),
+		)
 	let expected = [
 		"2x = 1, x integer: split: accepted (6 steps)",
 		"2x = 1, x real: split: rejected at step 2: split: x0 is real, and an integer step may not touch it",
@@ -2688,7 +2991,13 @@ fn sv_cuts_test_broken(steps: ref Vec[SvStep], how: String) -> Vec[SvStep] {
 // (`gcd`: the GCD test alone; `cg`, `gmi`: the test and that cut;
 // `branch`: neither); a conflict closed by one learned clause, the log
 // replayed, broken as `how` says where it is not `""`.
-fn sv_cuts_test_run(title: String, names: Vec[String], atoms: Vec[SvAtom], kind: String, how: String) -> String {
+fn sv_cuts_test_run(
+	title: String,
+	names: Vec[String],
+	atoms: Vec[SvAtom],
+	kind: String,
+	how: String,
+) -> String {
 	let mut out: String = ""
 	let n = atoms.len()
 	let mut clauses: Vec[Vec[u32]] = []
@@ -2697,7 +3006,12 @@ fn sv_cuts_test_run(title: String, names: Vec[String], atoms: Vec[SvAtom], kind:
 		clauses.push([sv_lit(a, false)])
 		a += 1
 	}
-	let query = SvQuery { atoms: atoms, clauses: clauses, columns: names.len().checked_u32() ?? 0, reals: [] }
+	let query = SvQuery {
+		atoms: atoms,
+		clauses: clauses,
+		columns: names.len().checked_u32() ?? 0,
+		reals: [],
+	}
 	let mut book = sv_book(query) ?? return "no book"
 	let mut inputs: Vec[u32] = []
 	let mut i: u32 = 0
@@ -2737,7 +3051,8 @@ fn sv_cuts_test_run(title: String, names: Vec[String], atoms: Vec[SvAtom], kind:
 			}
 			hints.push(c.id)
 			book.learn([], hints)
-			let steps = if how == "" { book.log.steps.clone() } else { sv_cuts_test_broken(book.log.steps, how) }
+			let steps = if how
+				== "" { book.log.steps.clone() } else { sv_cuts_test_broken(book.log.steps, how) }
 			let v = sv_check(query, steps)
 			let said = if v.ok { "checked" } else { f"rejected at {v.step}: {v.reason}" }
 			let label = if how == "" { kind.clone() } else { f"{kind}, {how}" }
@@ -2770,7 +3085,11 @@ fn sv_cuts_test_every(title: String, names: Vec[String], atoms: Vec[SvAtom]) -> 
 }
 
 test "x = y, x + y - 2z = 1 is refuted by the GCD test, branching alone runs out of cases" {
-	let out = sv_cuts_test_every("x = y, x + y - 2z = 1", ["x", "y", "z"], [sv_cuts_test_eq([1, -1], 0), sv_cuts_test_eq([1, 1, -2], -1)])
+	let out = sv_cuts_test_every(
+		"x = y, x + y - 2z = 1",
+		["x", "y", "z"],
+		[sv_cuts_test_eq([1, -1], 0), sv_cuts_test_eq([1, 1, -2], -1)],
+	)
 	let expected = [
 		"x = y, x + y - 2z = 1",
 		"  gcd: conflict, 0 splits, 0 cuts, 1 gcd; 1 farkas, 2 combine, 2 round, 0 split, 1 learn; checked",
@@ -2782,7 +3101,18 @@ test "x = y, x + y - 2z = 1 is refuted by the GCD test, branching alone runs out
 }
 
 test "the band 1 <= 3x - 3y <= 2 is refuted by one mixed-integer cut where branching takes six splits" {
-	let out = sv_cuts_test_every("1 <= 3x - 3y <= 2, 0 <= x, y <= 3", ["x", "y"], [sv_cuts_test_le([-3, 3], 1), sv_cuts_test_le([3, -3], -2), sv_cuts_test_le([-1], 0), sv_cuts_test_le([1], -3), sv_cuts_test_le([0, -1], 0), sv_cuts_test_le([0, 1], -3)])
+	let out = sv_cuts_test_every(
+		"1 <= 3x - 3y <= 2, 0 <= x, y <= 3",
+		["x", "y"],
+		[
+			sv_cuts_test_le([-3, 3], 1),
+			sv_cuts_test_le([3, -3], -2),
+			sv_cuts_test_le([-1], 0),
+			sv_cuts_test_le([1], -3),
+			sv_cuts_test_le([0, -1], 0),
+			sv_cuts_test_le([0, 1], -3),
+		],
+	)
 	let expected = [
 		"1 <= 3x - 3y <= 2, 0 <= x, y <= 3",
 		"  gcd: conflict, 6 splits, 0 cuts, 0 gcd; 7 farkas, 0 combine, 0 round, 6 split, 7 learn; checked",
@@ -2794,7 +3124,18 @@ test "the band 1 <= 3x - 3y <= 2 is refuted by one mixed-integer cut where branc
 }
 
 test "the band 1 <= 3x + 5y <= 2 is refuted by one fractional or one mixed-integer cut" {
-	let out = sv_cuts_test_every("1 <= 3x + 5y <= 2, 0 <= x, y <= 1", ["x", "y"], [sv_cuts_test_le([-3, -5], 1), sv_cuts_test_le([3, 5], -2), sv_cuts_test_le([-1], 0), sv_cuts_test_le([1], -1), sv_cuts_test_le([0, -1], 0), sv_cuts_test_le([0, 1], -1)])
+	let out = sv_cuts_test_every(
+		"1 <= 3x + 5y <= 2, 0 <= x, y <= 1",
+		["x", "y"],
+		[
+			sv_cuts_test_le([-3, -5], 1),
+			sv_cuts_test_le([3, 5], -2),
+			sv_cuts_test_le([-1], 0),
+			sv_cuts_test_le([1], -1),
+			sv_cuts_test_le([0, -1], 0),
+			sv_cuts_test_le([0, 1], -1),
+		],
+	)
 	let expected = [
 		"1 <= 3x + 5y <= 2, 0 <= x, y <= 1",
 		"  gcd: conflict, 2 splits, 0 cuts, 0 gcd; 3 farkas, 0 combine, 0 round, 2 split, 3 learn; checked",
@@ -2806,7 +3147,11 @@ test "the band 1 <= 3x + 5y <= 2 is refuted by one fractional or one mixed-integ
 }
 
 test "the equation 2x + 3y = 7 is consistent under every kind of cut" {
-	let out = sv_cuts_test_every("2x + 3y = 7, x >= 0, y >= 0", ["x", "y"], [sv_cuts_test_eq([2, 3], -7), sv_cuts_test_le([-1], 0), sv_cuts_test_le([0, -1], 0)])
+	let out = sv_cuts_test_every(
+		"2x + 3y = 7, x >= 0, y >= 0",
+		["x", "y"],
+		[sv_cuts_test_eq([2, 3], -7), sv_cuts_test_le([-1], 0), sv_cuts_test_le([0, -1], 0)],
+	)
 	let expected = [
 		"2x + 3y = 7, x >= 0, y >= 0",
 		"  gcd: consistent, x = 2, y = 1, 2 splits, 0 cuts, 0 gcd",
@@ -2819,9 +3164,44 @@ test "the equation 2x + 3y = 7 is consistent under every kind of cut" {
 
 test "a cut's log with a rounding left out or the cut made too strong is rejected" {
 	let mut out: String = "broken: the first rounding by 1 (none), the mixed-integer cut one too strong\n"
-	out = out + sv_cuts_test_run("", ["x", "y", "z"], [sv_cuts_test_eq([1, -1], 0), sv_cuts_test_eq([1, 1, -2], -1)], "gcd", "round")
-	out = out + sv_cuts_test_run("", ["x", "y"], [sv_cuts_test_le([-3, -5], 1), sv_cuts_test_le([3, 5], -2), sv_cuts_test_le([-1], 0), sv_cuts_test_le([1], -1), sv_cuts_test_le([0, -1], 0), sv_cuts_test_le([0, 1], -1)], "cg", "round")
-	out = out + sv_cuts_test_run("", ["x", "y"], [sv_cuts_test_le([-3, -5], 1), sv_cuts_test_le([3, 5], -2), sv_cuts_test_le([-1], 0), sv_cuts_test_le([1], -1), sv_cuts_test_le([0, -1], 0), sv_cuts_test_le([0, 1], -1)], "gmi", "strong")
+	out = out
+		+ sv_cuts_test_run(
+			"",
+			["x", "y", "z"],
+			[sv_cuts_test_eq([1, -1], 0), sv_cuts_test_eq([1, 1, -2], -1)],
+			"gcd",
+			"round",
+		)
+	out = out
+		+ sv_cuts_test_run(
+			"",
+			["x", "y"],
+			[
+				sv_cuts_test_le([-3, -5], 1),
+				sv_cuts_test_le([3, 5], -2),
+				sv_cuts_test_le([-1], 0),
+				sv_cuts_test_le([1], -1),
+				sv_cuts_test_le([0, -1], 0),
+				sv_cuts_test_le([0, 1], -1),
+			],
+			"cg",
+			"round",
+		)
+	out = out
+		+ sv_cuts_test_run(
+			"",
+			["x", "y"],
+			[
+				sv_cuts_test_le([-3, -5], 1),
+				sv_cuts_test_le([3, 5], -2),
+				sv_cuts_test_le([-1], 0),
+				sv_cuts_test_le([1], -1),
+				sv_cuts_test_le([0, -1], 0),
+				sv_cuts_test_le([0, 1], -1),
+			],
+			"gmi",
+			"strong",
+		)
 	let expected = [
 		"broken: the first rounding by 1 (none), the mixed-integer cut one too strong",
 		"  gcd, round: conflict, 0 splits, 0 cuts, 1 gcd; 1 farkas, 2 combine, 2 round, 0 split, 1 learn; rejected at 6: farkas: x1 is left in the combination",

@@ -437,7 +437,7 @@ pub mod sv_sat {
 }
 pub mod sv_simplex {
     #[allow(unused_imports)]
-    pub use super::{SvSide, SvUndo, SvPart, SvImplied, SvLitView, SvReading, SvSimplex, SvMult, SvActive, SvGomory, SvGmi, SvViolation};
+    pub use super::{SvSide, SvUndo, SvPart, SvImplied, SvLitView, SvReading, SvSimplex, SvMult, SvActive, SvGomory, SvGmi, SvPivoted, SvViolation};
 }
 pub mod sv_smt {
     #[allow(unused_imports)]
@@ -522,4 +522,4 @@ pub fn nikaia_run_tests(filters: &[std::string::String], list: bool, more: std::
 /// **The digest of this lowered set** (#1610): every file `lower-std` wrote
 /// beside this index, and the index above this line. Compiled into the same
 /// crate as the code it names, it is the compiler's identity for its caches.
-pub const LOWERED_DIGEST: &str = "4846889ed663c6ae695c69daa77a37d0a84cc99c642146664cf22b74ce2812eb";
+pub const LOWERED_DIGEST: &str = "adeb2e5a61ff4d8e79eaa402ad8039fcd2cf7e6ff67404fdd769918ce9e1a1bc";

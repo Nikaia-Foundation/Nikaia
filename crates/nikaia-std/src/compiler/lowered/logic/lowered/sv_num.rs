@@ -213,6 +213,16 @@ pub(crate) fn sv_wide_reduced(ks: &[i128]) -> Option<Vec<i64>> {
     Some(out)
 }
 
+pub(crate) fn sv_wide_ratio(t: i128, d: i64) -> Option<SvRat> {
+    let small = { let __wide: i128 = t; i64::try_from(__wide).ok() };
+    if small.is_some() { return sv_rat(nikaia_std::index::or(small, || 0), d); }
+    let m = match d.checked_abs() { Some(__nikaia_value) => __nikaia_value, None => return None };
+    let rest = match sv_wide_rest(t, m) { Some(__nikaia_value) => __nikaia_value, None => return None };
+    let g = match sv_gcd(rest, m) { Some(__nikaia_value) => __nikaia_value, None => return None };
+    let (quotient, _) = match { let __wide: i128 = t; let __by = (g) as i128; match (__wide.checked_div(__by), __wide.checked_rem(__by)) { (Some(__q), Some(__r)) => Some((__q, __r as i64)), _ => None } } { Some(__nikaia_value) => __nikaia_value, None => return None };
+    sv_rat(match { let __wide: i128 = quotient; i64::try_from(__wide).ok() } { Some(__nikaia_value) => __nikaia_value, None => return None }, d / g)
+}
+
 pub(crate) fn sv_rat_neg(a: &SvRat) -> Option<SvRat> { Some(SvRat { num: match a.num.checked_neg() { Some(__nikaia_value) => __nikaia_value, None => return None }, den: a.den }) }
 
 pub(crate) fn sv_rat_sub(a: &SvRat, b: &SvRat) -> Option<SvRat> {
@@ -393,6 +403,13 @@ pub(crate) fn __nikaia_test_0() -> Result<(), std::boxed::Box<dyn std::error::Er
 }
 
 pub(crate) fn __nikaia_test_1() -> Result<(), std::boxed::Box<dyn std::error::Error>> {
+    let big = ((4611686018427387904i64) as i128 * (4) as i128);
+    let parts = nikaia_std::block::List::from_array_in([format!("6/-4 = {}", sv_num_test_show((sv_wide_ratio(((6) as i128), -4)).as_ref())), format!("2^64/16 = {}", sv_num_test_show((sv_wide_ratio(big, 16)).as_ref())), format!("3·2^63/-12 = {}", sv_num_test_show((sv_wide_ratio(((4611686018427387904i64) as i128 * (6) as i128), -12)).as_ref())), format!("2^64/3: {}", sv_num_test_show((sv_wide_ratio(big, 3)).as_ref())), format!("2^64/0: {}", sv_num_test_show((sv_wide_ratio(big, 0)).as_ref())), format!("2^64/i64::MIN: {}", sv_num_test_show((sv_wide_ratio(big, -9223372036854775807i64 - 1i64)).as_ref()))], nikaia_std::block::Place::Block);
+    if !(parts.join(", ") == "6/-4 = -3/2, 2^64/16 = 1152921504606846976, 3·2^63/-12 = -2305843009213693952, 2^64/3: refused, 2^64/0: refused, 2^64/i64::MIN: refused") { nikaia_std::abort::assertion_failed("assert(parts.join(\", \") == \"6/-4 = -3/2, 2^64/16 = 1152921504606846976, 3·2^63/-12 = -2305843009213693952, 2^64/3: refused, 2^64/0: refused, 2^64/i64::MIN: refused\")", None, &[("parts.join(\", \")", (&&nikaia_std::abort::Operand(&(nikaia_std::block::Text::from(parts.join(", "))))).shown()), ]) };
+    Ok(())
+}
+
+pub(crate) fn __nikaia_test_2() -> Result<(), std::boxed::Box<dyn std::error::Error>> {
     let mut out: String = String::from("");
     out = nikaia_std::block::Text::from(nikaia_std::concat::plus(out, "== item 2: rationals and delta\n"));
     out = nikaia_std::block::Text::from(nikaia_std::concat::plus(out, format!("6/-4 = {}, 0/-5 = {}, 1/0: {}\n", sv_num_test_show((sv_rat(6, -4)).as_ref()), sv_num_test_show((sv_rat(0, -5)).as_ref()), sv_num_test_show((sv_rat(1, 0)).as_ref()))));
@@ -436,6 +453,7 @@ pub(crate) fn __nikaia_test_1() -> Result<(), std::boxed::Box<dyn std::error::Er
 pub(crate) fn sv_num_nikaia_tests() -> Vec<(&'static str, fn() -> Result<(), std::boxed::Box<dyn std::error::Error>>)> {
     vec![
         ("sv_num::i64_coefficients_are_kept_small_and_never_wrapped", __nikaia_test_0),
-        ("sv_num::rationals_and_delta_are_normalised_ordered_and_refuse_overflow", __nikaia_test_1),
+        ("sv_num::a_double_width_numerator_over_an_i64_is_reduced_or_refused", __nikaia_test_1),
+        ("sv_num::rationals_and_delta_are_normalised_ordered_and_refuse_overflow", __nikaia_test_2),
     ]
 }

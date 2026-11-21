@@ -329,6 +329,21 @@ fn sv_wide_reduced(ks: ref Vec[Wide[i64]]) -> Vec[i64]? {
 	return out
 }
 
+/// The double-width `t` over `d` as a normalised rational (#2101): both
+/// divided by the gcd of `d` and `t`'s rest, so `null` only for `d = 0` or
+/// where the reduced numerator does not fit `i64`.
+fn sv_wide_ratio(t: Wide[i64], d: i64) -> SvRat? {
+	let small = t.narrow()
+	if small != null {
+		return sv_rat(small ?? 0, d)
+	}
+	let m = d.checked_abs() ?? return null
+	let rest = sv_wide_rest(t, m) ?? return null
+	let g = sv_gcd(rest, m) ?? return null
+	let (quotient, _) = t.div_rem(g) ?? return null
+	return sv_rat(quotient.narrow() ?? return null, d / g)
+}
+
 fn sv_rat_neg(a: ref SvRat) -> SvRat? {
 	return SvRat { num: a.num.checked_neg() ?? return null, den: a.den }
 }
@@ -582,6 +597,22 @@ test "i64 coefficients are kept small and never wrapped" {
 		"floor(-7/2) = -4, ceil(-7/2) = -3, floor by 0: refused",
 	]
 	assert(out == expected.join("\n") + "\n")
+}
+
+// `sv_wide_ratio` (#2101): a value that narrows, a double-width one the gcd
+// brings back, and the refusals: a zero or `i64::MIN` denominator, a
+// quotient past `i64`.
+test "a double-width numerator over an i64 is reduced or refused" {
+	let big = Wide::product(4611686018427387904, 4)
+	let parts = [
+		f"6/-4 = {sv_num_test_show(sv_wide_ratio(Wide::of(6), -4))}",
+		f"2^64/16 = {sv_num_test_show(sv_wide_ratio(big, 16))}",
+		f"3·2^63/-12 = {sv_num_test_show(sv_wide_ratio(Wide::product(4611686018427387904, 6), -12))}",
+		f"2^64/3: {sv_num_test_show(sv_wide_ratio(big, 3))}",
+		f"2^64/0: {sv_num_test_show(sv_wide_ratio(big, 0))}",
+		f"2^64/i64::MIN: {sv_num_test_show(sv_wide_ratio(big, -9223372036854775807 - 1))}",
+	]
+	assert(parts.join(", ") == "6/-4 = -3/2, 2^64/16 = 1152921504606846976, 3·2^63/-12 = -2305843009213693952, 2^64/3: refused, 2^64/0: refused, 2^64/i64::MIN: refused")
 }
 
 test "rationals and delta are normalised, ordered and refuse overflow" {
