@@ -8,6 +8,12 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1512] — 2026-11-21
+
+**Builders' changes (#2307, #2400, #2401)**
+- The QF_LRA clock_synchro files 3clocks and 8clocks, which overflowed, are proved since the simplex's double-width pivot (#2307); 8clocks joins the regression set, and QF_LRA stands at 512 of 519 with no wrong answer.
+- The solver answers the three QF_LIA c_inference files z3 solves within 10 s (30 of 31, level with z3): the simplex ranks the entering variable by its column's size times its rows, keeps a column index and a backtrack log, and reuses the rows a pivot frees.
+
 ## [0.0.1511] — 2026-11-21
 
 **Builders' changes (#2062, #2446, #2447, #2451)**

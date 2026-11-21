@@ -1,6 +1,6 @@
-sample/qflia/20180326-Bromberger: 1 files, solved 1 (proved 1, refuted 0), unknown 0 (overflow 0, unreadable 0), malformed 0, wrong 0, PAR-2 527.0, certificates checked 1, models evaluated 0
+sample/qflia/20180326-Bromberger: 1 files, solved 1 (proved 1, refuted 0), unknown 0 (overflow 0, unreadable 0), malformed 0, wrong 0, PAR-2 419.0, certificates checked 1, models evaluated 0
 sample/qflia/20220307-SMPT: 16 files, solved 16 (proved 3, refuted 13), unknown 0 (overflow 0, unreadable 0), malformed 0, wrong 0, PAR-2 26.7, certificates checked 3, models evaluated 13
-sample/qflia/seeds: 8 files, solved 7 (proved 4, refuted 3), unknown 1 (overflow 1, unreadable 0), malformed 0, wrong 0, PAR-2 5058.6, certificates checked 4, models evaluated 3
+sample/qflia/seeds: 8 files, solved 8 (proved 5, refuted 3), unknown 0 (overflow 0, unreadable 0), malformed 0, wrong 0, PAR-2 985.8, certificates checked 5, models evaluated 3
 sample/qflra/clock_synchro: 1 files, solved 1 (proved 1, refuted 0), unknown 0 (overflow 0, unreadable 0), malformed 0, wrong 0, PAR-2 39.0, certificates checked 1, models evaluated 0
 sample/qflra/seeds: 24 files, solved 24 (proved 8, refuted 16), unknown 0 (overflow 0, unreadable 0), malformed 0, wrong 0, PAR-2 7.0, certificates checked 8, models evaluated 16
-all: 50 files, solved 49 (proved 17, refuted 32), unknown 1 (overflow 1, unreadable 0), malformed 0, wrong 0, PAR-2 832.6, certificates checked 17, models evaluated 32
+all: 50 files, solved 50 (proved 18, refuted 32), unknown 0 (overflow 0, unreadable 0), malformed 0, wrong 0, PAR-2 178.8, certificates checked 18, models evaluated 32
