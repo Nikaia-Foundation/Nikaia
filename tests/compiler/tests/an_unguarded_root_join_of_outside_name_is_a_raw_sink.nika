@@ -1,0 +1,18 @@
+// An unguarded `Root::join` of a name from outside is a raw sink
+// (ADR-raw-sinks-1 D14, #2441): `fs::Root::Dir(cache).join(key)` with `key`
+// from outside gets NK1308, asking for `path::is_component` (or `is_below`)
+// where the name arrives. A guarded name, or a literal, does not.
+use std::fs
+
+fn main() throws {
+    let cache = "cache"
+    let key = fs::read_to_string("key.txt", fs::Root::Anywhere) ?? ""
+    // unguarded join
+    let content = fs::read_to_string("file.txt", fs::Root::Dir(cache).join(key))
+    println(content)
+    // guarded
+    if path::is_component(key) {
+        let safe = fs::read_to_string("file.txt", fs::Root::Dir(cache).join(key))
+        println(safe)
+    }
+}

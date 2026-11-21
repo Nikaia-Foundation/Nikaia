@@ -1,0 +1,11 @@
+// A lambda whose body is plain text, passed for a code parameter with a
+// nullable result, is wrapped in `Some` so it matches `String?` (Part I 2.3,
+// #2665). The same body in a named function works; this pins the argument
+// path.
+fn run(long: fn(ref String) -> String? sync) -> String {
+    return long("a") ?? "none"
+}
+
+fn main() throws {
+    println(run(fn(k) { k.clone() }))
+}
