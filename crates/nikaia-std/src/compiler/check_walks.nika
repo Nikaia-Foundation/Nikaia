@@ -222,6 +222,63 @@ fn check_walks_door_on(state: ref CheckState, value: ref Expr, receiver: ref Exp
     return CheckWalksDoor::Door(Operation { binds: null, mentions: mentions, reaches: reaches, callee: f"{lock}::{door}" })
 }
 
+/// **A `par_iter` lambda meets its own other runs** (ADR-async-5 D26, Part
+/// II 12.6): it runs once per element, beside its runs for the others, so
+/// what it reaches is asked of itself as two tasks are (`NK2104`), at the
+/// lambda. A lock is left out: a `SharedMut` changed through `update` is the
+/// way a parallel lambda combines (ADR-235 D2, which D24 left standing). A
+/// lambda that cannot be accounted for is not refused (Part III C.4), and
+/// `limit: 1` written as the literal on the walk exempts it (D15).
+fn check_walks_a_lambda_against_itself(mut state: CheckState, world: ref CheckWorld, walk: ref Expr, lambda: ref Expr, span: ref Span) sync {
+    match lambda {
+        Expr::Closure { .. } => {},
+        else => return,
+    }
+    if check_walks_one_at_a_time(world, walk) {
+        return
+    }
+    let walking = Walking { own: world.own, library: world.library, into: Going::Ours }
+    let operations = check_walks_task_operations(state, lambda, world.words, walking) ?? return
+    let mut reaches: Vec[Reached] = []
+    for operation in operations {
+        for reached in operation.reaches {
+            if reached.kind != "lock" {
+                reaches.push(reached.clone())
+            }
+        }
+    }
+    let own = Operation { binds: null, mentions: collections::BTreeSet(), reaches: reaches, callee: "" }
+    let found = verdict(own, own)
+    if found.is_overlap() {
+        return
+    }
+    let why = capitalised(found.why())
+    let start = world.here.spans.get(id_of(lambda))?.start ?? span.start
+    let end = world.here.spans.get(id_of(lambda))?.end ?? span.end
+    let at = Span { start: start, end: end }
+    state.findings.push(check_refusal("NK2104", at, "This lambda can't run beside its own other runs.", [f"{why}.", "`par_iter()` runs the lambda once for every element, and those runs happen at the same time."], "To run it one element at a time, write `par_iter(limit: 1)`, or walk with `iter()`."))
+}
+
+/// Whether the walk a lambda is handed to starts at `par_iter(limit: 1)`,
+/// the literal (ADR-async-5 D15): its elements then run one at a time.
+fn check_walks_one_at_a_time(world: ref CheckWorld, walk: ref Expr) -> bool {
+    return match walk {
+        Expr::MethodCall { receiver, method, config, .. } => {
+            if world.words.resolve(method) != "par_iter" {
+                return check_walks_one_at_a_time(world, receiver)
+            }
+            for option in config {
+                if world.words.resolve(option.name) == "limit" {
+                    let value: Expr? = option.value.clone()
+                    return check_core_async_one_at_a_time(value)
+                }
+            }
+            false
+        },
+        else => false,
+    }
+}
+
 /// Whether two tasks meet on a resource one of them writes, and the verdict
 /// that says so; `null` where either cannot be accounted for or they meet on
 /// nothing.

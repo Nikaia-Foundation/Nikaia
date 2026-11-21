@@ -297,6 +297,7 @@ pub(crate) fn check_core_value_of<H: CheckHost>(state: &mut CheckState, world: &
             state.flow.loops = loops;
             state.flow.barrier = barrier;
             check_core_async_crash(state, world, host, inner, span);
+            if state.flow.async_group.is_some() { state.a_task_takes_inner_names(world, inner, span); }
             let mut at = changed_from;
             while at < state.changed.len() as i64 {
                 let name = nikaia_std::block::Text::from((*nikaia_std::index::get(&state.changed, nikaia_std::index::at(at))).to_string());
@@ -337,7 +338,10 @@ pub(crate) fn check_core_value_of<H: CheckHost>(state: &mut CheckState, world: &
             state.flow.async_group = Some(id_of(expr) as i64);
             state.flow.async_started = 0;
             state.flow.async_group_block = Some(id_of(expr) as i64);
+            let frame = state.flow.async_group_frame;
+            state.flow.async_group_frame = state.scope.len() as i64;
             let ty = check_core_block(state, world, host, block);
+            state.flow.async_group_frame = frame;
             state.inside_a_door = held;
             if state.flow.async_started == 0 { state.a_group_with_no_task(span); }
             if a_child_handle(&ty) { state.a_child_handle_leaving_its_group(span, "it is the value of this `async { … }`, which ends its group"); }

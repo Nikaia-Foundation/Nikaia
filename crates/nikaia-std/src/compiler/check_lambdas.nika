@@ -169,6 +169,27 @@ impl CheckState {
         }
     }
 
+    /// **What a task of `async e` takes** (async-3 D2, ADR-async-5 D8, #986):
+    /// it borrows a name bound outside its group, which outlives it, and takes
+    /// one bound in a block inside the group, which ends before the task
+    /// does; a later mention is `NK2105`. Numbers, views and handles are
+    /// copied.
+    fn a_task_takes_inner_names(ref mut self, world: ref CheckWorld, body: ref Expr, span: ref Span) sync {
+        let mut named: collections::BTreeSet[String] = collections::BTreeSet()
+        names_in(body, world.words, named)
+        for name in named {
+            if self.frame_of(name) <= self.flow.async_group_frame {
+                continue
+            }
+            let local = self.binding(name) ?? continue
+            if is_a_handle(local.ty) || !self.takes_away(world, local.ty) {
+                continue
+            }
+            let taken = self.taken(name.clone(), local.ty.clone(), self.read_seq, "taken by a task, which runs on to its group's end, past the block that declared it", span)
+            self.handed.push(taken)
+        }
+    }
+
     /// **What a task takes** (ADR-312 D1, D2): the names its body reads, given
     /// in order. A handle is duplicated into the task, not moved - recorded
     /// rather than refused, because the emitter writes the step and has no
