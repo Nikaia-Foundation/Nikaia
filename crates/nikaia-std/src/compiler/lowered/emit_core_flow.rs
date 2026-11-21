@@ -1057,7 +1057,9 @@ impl EmitState {
             if host.overlaps_user_code() && scope.channel == "std::boxed::Box<dyn std::error::Error>" { kind = "BoxedTask"; }
         }
         if deferred { out.push("nikaia_std::task::Deferred::new(move || "); }
-        if host.overlaps_user_code() { out.push(&format!("nikaia_std::task::{}::start_on_pool(async move ", kind)); } else { out.push(&format!("nikaia_std::task::{}::start(async move ", kind)); }
+        let mut starter: &'static str = "async move ";
+        if failing { starter = "nikaia_std::error::started_paused(async move "; }
+        if host.overlaps_user_code() { out.push(&format!("nikaia_std::task::{}::start_on_pool({}", kind, starter)); } else { out.push(&format!("nikaia_std::task::{}::start({}", kind, starter)); }
         if failing {
             out.push(&format!("{{ {}let __nikaia_task = ", first));
             if bound_outside {
@@ -1065,7 +1067,7 @@ impl EmitState {
                 out.append(&inner);
                 out.push(&format!("; Ok::<_, {}>(__nikaia_value) }}).await?", scope.channel));
             } else { out.append(&inner); }
-            out.push(&format!("; Ok::<_, {}>(__nikaia_task) }}", scope.channel));
+            out.push(&format!("; Ok::<_, {}>(__nikaia_task) }}, &{})", scope.channel, rust_string(&scope.origin)));
             out.push(&format!(", |e: &{}| {{ #[allow(unused_imports)] use nikaia_std::task::{{ProbeEnding as _, ProbePlain as _}}; (&&nikaia_std::task::Probe(e)).report() }})", scope.channel));
         } else {
             let inside = EmitFlow { statement: flow.statement, ..EmitFlow::plain() };

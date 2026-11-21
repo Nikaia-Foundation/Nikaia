@@ -403,7 +403,7 @@ impl EmitState {
                 #[allow(unused_mut)] let mut lengths: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block); #[allow(unused_mut, clippy::redundant_locals)] let mut params = params;
                 let mut runs: Vec<bool> = vec![];
                 #[allow(unused_mut)] let mut open: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block); #[allow(unused_mut, clippy::redundant_locals)] let mut lengths = lengths;
-                let mut at: i64 = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut params = params; #[allow(unused_mut, clippy::redundant_locals)] let mut lengths = lengths; #[allow(unused_mut, clippy::redundant_locals)] let mut open = open;
+                let mut at: i64 = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut params = params; #[allow(clippy::redundant_locals)] let named = named; #[allow(unused_mut, clippy::redundant_locals)] let mut lengths = lengths; #[allow(unused_mut, clippy::redundant_locals)] let mut open = open;
                 runs.reserve(args.iter().size_hint().0); for each in args.iter() {
                     let any = !each.ty.is_view && !each.ty.is_slice && each.ty.count.is_none() && each.ty.generics.len() == 1 && emit_text(world, each.ty.name) == "Array";
                     let lent_run = any && (self.emit_fn_changes(&key, &emit_text(world, each.name)) || self.emit_fn_lends(world, &key, unsafe { nikaia_std::proven::add::<i64>(at, recv) }));
@@ -417,7 +417,7 @@ impl EmitState {
                 let on_a_cycle = code_on_a_cycle(&self.code_cycle_graph, &self.own_contracts, &key);
                 walk.dyn_code = on_a_cycle;
                 #[allow(unused_mut)] let mut either_first: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut params = params; #[allow(unused_mut, clippy::redundant_locals)] let mut lengths = lengths;
-                let mut k: i64 = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut params = params; #[allow(unused_mut, clippy::redundant_locals)] let mut lengths = lengths; #[allow(unused_mut, clippy::redundant_locals)] let mut either_first = either_first;
+                let mut k: i64 = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut params = params; #[allow(clippy::redundant_locals)] let named = named; #[allow(unused_mut, clippy::redundant_locals)] let mut lengths = lengths; #[allow(unused_mut, clippy::redundant_locals)] let mut either_first = either_first;
                 for each in args.iter() {
                     if emit_text(world, each.ty.name) == "meta::Field" {
                         k = unsafe { nikaia_std::proven::add::<i64>(k, 1) };
@@ -571,7 +571,7 @@ impl EmitState {
                     },
                     None => { returned = String::from("()"); },
                 }
-                let mut channel: String = String::from("std::boxed::Box<dyn std::error::Error>"); #[allow(unused_mut, clippy::redundant_locals)] let mut params = params;
+                let mut channel: String = String::from("std::boxed::Box<dyn std::error::Error>"); #[allow(unused_mut, clippy::redundant_locals)] let mut params = params; #[allow(clippy::redundant_locals)] let named = named;
                 if !has_declared_by {
                     let mut borrows_any = receiver.is_some();
                     for each in args.iter() { if self.carries_a_view(world, &each.ty) { borrows_any = true; } }
@@ -628,7 +628,7 @@ impl EmitState {
                         None => { },
                     }
                 }
-                let mut ret: String = String::from(""); #[allow(unused_mut, clippy::redundant_locals)] let mut params = params; #[allow(unused_mut, clippy::redundant_locals)] let mut declared = declared;
+                let mut ret: String = String::from(""); #[allow(unused_mut, clippy::redundant_locals)] let mut params = params; #[allow(clippy::redundant_locals)] let named = named; #[allow(unused_mut, clippy::redundant_locals)] let mut declared = declared;
                 if throws_ { ret = format!(" -> {}<{}, {}>", self.rust_result(), returned, channel); } else if ret_type.is_some() { ret = format!(" -> {}", returned); }
                 let a_copy = walk.specialising.is_some() && (walk.slotted || self.copy_substitutes(&nikaia_std::block::Text::from(nikaia_std::index::or(walk.specialising.as_ref().map(|__nikaia_it| __nikaia_it.second.as_str()), || "").to_string())));
                 let weighed = self.facts.weighed_of(&key);
@@ -661,7 +661,7 @@ impl EmitState {
                 if emitted == "__nikaia_main" { host.set_main_params(&params); }
                 let mut declared_pausing = false;
                 if has_declared_by && !is_bridged { declared_pausing = self.emit_fn_declared_pausing(&format!("{}::{}", declared_by, own_name)); }
-                let mut pausing: String = String::from(""); #[allow(unused_mut, clippy::redundant_locals)] let mut params = params; #[allow(unused_mut, clippy::redundant_locals)] let mut declared = declared;
+                let mut pausing: String = String::from(""); #[allow(unused_mut, clippy::redundant_locals)] let mut params = params; #[allow(clippy::redundant_locals)] let named = named; #[allow(unused_mut, clippy::redundant_locals)] let mut declared = declared;
                 if call_pauses(&self.own_contracts, &key) || declared_pausing || self.lambda_decides(&key) { pausing = String::from("async "); }
                 let only_in_tests = emit_fn_only_in_tests(world.words, &written.attributes);
                 if only_in_tests {
@@ -789,15 +789,23 @@ impl EmitState {
                             let name = emit_async_group_name(group);
                             let grouped = throws_ && self.emit_async_tasks_channel(&channel) == channel;
                             let raised = throws_ && !grouped;
+                            let named = nikaia_std::index::or(key.rsplit("::").next(), || "");
+                            let site = format!("&{}", rust_string(named));
+                            let mut arriving: &'static str = "";
+                            let mut arrived: String = String::from("");
+                            if grouped || raised {
+                                arriving = "nikaia_std::error::arrived(";
+                                arrived = format!(", {})", site);
+                            }
                             if pausing != "" {
-                                if grouped { out.push(&format!("{{ let {} = &nikaia_std::task::Scope::new(); nikaia_std::task::group_paused::<_, {}>({}, (async ||{} ", name, channel, name, ret)); } else if raised { out.push(&format!("{{ let {} = &nikaia_std::task::Scope::new(); nikaia_std::task::group_paused_raised({}, (async ||{} ", name, name, ret)); } else { out.push(&format!("{{ let {} = &nikaia_std::task::Scope::new(); nikaia_std::task::group_paused_plain({}, (async ||{} ", name, name, ret)); }
+                                if grouped { out.push(&format!("{{ let {} = &nikaia_std::task::Scope::new(); {}nikaia_std::task::group_paused::<_, {}>({}, (async ||{} ", name, arriving, channel, name, ret)); } else if raised { out.push(&format!("{{ let {} = &nikaia_std::task::Scope::new(); {}nikaia_std::task::group_paused_raised({}, (async ||{} ", name, arriving, name, ret)); } else { out.push(&format!("{{ let {} = &nikaia_std::task::Scope::new(); nikaia_std::task::group_paused_plain({}, (async ||{} ", name, name, ret)); }
                                 out.push(&format!("{{ let {}_gate = nikaia_std::task::Gate::new(usize::MAX, nikaia_std::task::admitted(nikaia_std::task::Adaptive())); let {}_waiting = nikaia_std::task::Waiting::new(&{}_gate); ", name, name, name));
                                 out.append(&inner);
-                                out.push(" })()).await }");
+                                out.push(&format!(" }})()).await{} }}", arrived));
                             } else {
-                                if grouped { out.push(&format!("{{ nikaia_std::task::group::<_, {}>(|{}|{} ", channel, name, ret)); } else if raised { out.push(&format!("{{ nikaia_std::task::group_raised(|{}|{} ", name, ret)); } else { out.push(&format!("{{ nikaia_std::task::group_plain(|{}|{} ", name, ret)); }
+                                if grouped { out.push(&format!("{{ {}nikaia_std::task::group::<_, {}>(|{}|{} ", arriving, channel, name, ret)); } else if raised { out.push(&format!("{{ {}nikaia_std::task::group_raised(|{}|{} ", arriving, name, ret)); } else { out.push(&format!("{{ nikaia_std::task::group_plain(|{}|{} ", name, ret)); }
                                 out.append(&inner);
-                                out.push(") }");
+                                out.push(&format!("){} }}", arrived));
                             }
                         }
                     },

@@ -1426,6 +1426,16 @@ impl crate::error::Joined for Boxed {
     }
 }
 
+impl crate::error::Crossed for Boxed {
+    fn started_at(&mut self, site: crate::error::Origin) {
+        self.0.started_at(site);
+    }
+
+    fn arrived_at(&mut self, site: crate::error::Origin) {
+        self.0.arrived_at(site);
+    }
+}
+
 impl Outcome<Boxed> for Result<(), Box<dyn std::error::Error>> {
     fn failed(self) -> Option<Boxed> {
         self.err().map(Boxed)
@@ -1468,6 +1478,30 @@ impl Crosses for OverBudget {
     fn back(sent: OverBudget) -> Self {
         sent
     }
+}
+
+/// A crash and a full block have no envelope to record a crossing in
+/// (ADR-async-5 D23): the crash's own message says what it was.
+impl crate::error::Crossed for Crashed {
+    fn started_at(&mut self, _site: crate::error::Origin) {}
+    fn arrived_at(&mut self, _site: crate::error::Origin) {}
+}
+
+impl crate::error::Crossed for OverBudget {
+    fn started_at(&mut self, _site: crate::error::Origin) {}
+    fn arrived_at(&mut self, _site: crate::error::Origin) {}
+}
+
+/// Nor has a detached handle's `join(within:)` failure: a crash or the time
+/// that ran out, neither raised by a `throw`.
+impl crate::error::Crossed for Late {
+    fn started_at(&mut self, _site: crate::error::Origin) {}
+    fn arrived_at(&mut self, _site: crate::error::Origin) {}
+}
+
+impl crate::error::Crossed for TimedOut {
+    fn started_at(&mut self, _site: crate::error::Origin) {}
+    fn arrived_at(&mut self, _site: crate::error::Origin) {}
 }
 
 /// Neither has a full block anything to join.
@@ -1984,6 +2018,22 @@ pub enum OrCrash<E> {
 impl<E> From<Crashed> for OrCrash<E> {
     fn from(crash: Crashed) -> Self {
         OrCrash::Crashed(crash)
+    }
+}
+
+/// A task's own failure records where it crossed (ADR-async-5 D23); a crash
+/// raised again keeps nothing.
+impl<E: crate::error::Crossed> crate::error::Crossed for OrCrash<E> {
+    fn started_at(&mut self, site: crate::error::Origin) {
+        if let OrCrash::Failed(error) = self {
+            error.started_at(site);
+        }
+    }
+
+    fn arrived_at(&mut self, site: crate::error::Origin) {
+        if let OrCrash::Failed(error) = self {
+            error.arrived_at(site);
+        }
     }
 }
 

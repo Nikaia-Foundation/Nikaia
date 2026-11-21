@@ -5,7 +5,11 @@ task 1 failed
   and then:
   task 7 failed
     raised at work
+    started at run
+    arrived at run
   and then:
   task 8 failed
     raised at work
+    started at run
+    arrived at run
 0
