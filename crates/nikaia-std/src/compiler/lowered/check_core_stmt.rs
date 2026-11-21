@@ -2989,16 +2989,26 @@ pub(crate) fn check_async_binding(state: &mut CheckState, world: &CheckWorld<'_,
         wanted.insert(nikaia_std::block::Text::from(world.words.resolve(name).to_string()));
     }
     let mut named = count;
+    let mut readers = 0;
     let mut index: i64 = 0;
     for stmt in block.stmts.iter() {
-        if index > at && named == count && !starts_a_task(&stmt.node) {
+        if index > at && named == count {
             let mut seen: collections::BTreeSet<String> = collections::BTreeSet::new();
             names_in_statement(&stmt.node, world.words, &mut seen);
-            for name in wanted.iter() { if seen.contains(name) { named = index; } }
+            for name in wanted.iter() {
+                if seen.contains(name) {
+                    if starts_a_task(&stmt.node) {
+                        readers += 1;
+                        break;
+                    }
+                    named = index;
+                }
+            }
         }
         index = unsafe { nikaia_std::proven::add::<i64>(index, 1) };
     }
     if named == count {
+        if readers > 1 { state.facts.async_shared.insert(id_of(task) as i64); }
         state.facts.async_waits.insert(id_of(task) as i64, CheckAsyncWait { at: CheckAsyncWaitAt::GroupEnd, group });
         if last && others == 0 { state.a_task_with_nothing_beside_it(span, "nothing names its binding, and it is the last statement of its group, which waits for it at once"); }
         return count;

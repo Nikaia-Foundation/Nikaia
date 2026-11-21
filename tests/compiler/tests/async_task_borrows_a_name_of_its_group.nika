@@ -1,0 +1,34 @@
+// A task borrows what lives as long as its group: a name bound outside the
+// group, or in the group's own block; a number from an inner block is copied
+// (async-3 D2, ADR-async-5 D8, #986).
+
+fn make() -> String {
+    let mut g = String()
+    g.push_str("hi")
+    return g
+}
+
+fn size(s: String) -> i64 {
+    return s.len() as i64
+}
+
+fn double(n: i64) -> i64 {
+    return n * 2
+}
+
+fn main() throws {
+    let o = make()
+    async {
+        let s = make()
+        let a = async size(s)
+        let b = async size(o)
+        if true {
+            let n = 21
+            let d = async double(n)
+            let e = n + 1
+            println(f"{e} {d}")
+        }
+        println(f"{s} {a} {b}")
+    }
+    println(o)
+}

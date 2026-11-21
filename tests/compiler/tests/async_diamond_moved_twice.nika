@@ -1,0 +1,26 @@
+// A diamond where a task moves the pending value: `a` is handed to `b`'s task
+// where it starts, so `c`'s mention is a use after the hand-over
+// (ADR-async-5 D8, #986).
+
+struct Name {
+    text: String,
+}
+
+fn store(keep text: String) -> Name {
+    let mut n = Name { text: text }
+    n.text.push_str("!")
+    return n
+}
+
+fn load() -> String {
+    let mut g = String()
+    g.push_str("hi")
+    return g
+}
+
+fn main() throws {
+    let a = async load()
+    let b = async store(a)
+    let c = async store(a)
+    println(f"{b.text} {c.text}")
+}

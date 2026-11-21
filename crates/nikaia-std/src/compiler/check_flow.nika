@@ -185,6 +185,10 @@ pub struct CheckFlow {
     pub async_group: i64?,
     /// The `async { }` whose own block the next `check_core_block` walks.
     pub async_group_block: i64?,
+    /// The frame of the innermost `async { }`'s own block: a name bound in a
+    /// frame above it lives in a block that ends before the group (async-3
+    /// D2, #986).
+    pub async_group_frame: i64,
     /// How many tasks the innermost `async { }` started so far (`NK2111`).
     pub async_started: i64,
     /// The groups written `limit: 1` with the literal (ADR-async-5 D15): their
@@ -551,6 +555,7 @@ impl CheckFlow {
             barrier: null,
             async_group: null,
             async_group_block: null,
+            async_group_frame: 0,
             async_started: 0,
             async_one_at_a_time: collections::BTreeSet(),
             async_depth: 0,

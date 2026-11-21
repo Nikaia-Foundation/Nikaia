@@ -1,0 +1,10 @@
+error[NK2105]: You're using `s` again, but it was taken by a task, which runs on to its group's end, past the block that declared it.
+   --> tests/async_task_takes_a_name_of_an_inner_block.nika:25:13
+    |
+ 25 |             let t = keep(s)
+    |             ^
+    |
+    = note: `s` is a `String`, so it's handed over itself, not a copy. Nikaia never copies behind your back, because a copy costs as much as the value is large.
+    = note: Numbers, `bool`s, `scalar`s and views would be fine: they're copied.
+    = help: If both need it, hand over a copy: `s.clone()`.
+
