@@ -95,6 +95,7 @@ pub fn check_walked_kept_call(func: &Expr, arity: i64, receiver: bool, intern: &
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
+#[inline(never)]
 pub(crate) fn check_walked_unsigned_slots(state: &mut CheckState, proven: &mut impl FnMut(&CheckFacts, &collections::BTreeSet<i64>) -> collections::BTreeSet<i64>) {
     let mut slots: Vec<CheckUnsignedSlot> = vec![];
     for (_, held) in state.flow.unsigned_slots.copy_owned() { slots.reserve(held.iter().size_hint().0); for slot in held.iter() { slots.push(slot.clone()); } }
@@ -248,6 +249,35 @@ pub trait CheckWalkedPasses {
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
+#[inline(never)]
+pub(crate) fn check_walked_outside<P: CheckWalkedPasses>(state: &mut CheckState, passes: &P) { state.facts.outside = passes.outside(&state.facts); }
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+#[inline(never)]
+pub(crate) fn check_walked_prove<P: CheckWalkedPasses>(state: &mut CheckState, passes: &P) {
+    let proved = passes.proved(&state.facts);
+    state.findings.extend(proved.findings);
+    check_walked_proved(state, proved.entries, proved.reaches, proved.published, &proved.std_claims, &proved.held, proved.outside);
+    state.facts.summaries = proved.summaries;
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+#[inline(never)]
+pub(crate) fn check_walked_views<P: CheckWalkedPasses>(state: &mut CheckState, passes: &P) {
+    state.findings.extend(passes.view_findings());
+    let coalesced = vc_coalesced(&state.facts);
+    let mut_viewed = vc_mut_viewed(&state.facts);
+    state.findings.extend(passes.view_change_findings(&state.facts.lent_lets, &coalesced, &mut_viewed, &state.facts.receiver_views, &state.facts.cut_gives));
+    let (plans, refused) = passes.tethered();
+    if plans.is_some() { state.facts.keep_plans = std::convert::identity(plans); }
+    state.findings.extend(refused);
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+#[inline(never)]
 pub fn check_walked_walk<H: CheckHost, P: CheckWalkedPasses>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, passes: &P, harvesting: bool, computes: bool) {
     check_walked_seed(state, world);
     let dsl_drivers: collections::BTreeSet<String> = drivers(world.here.words, world.here.items).into_iter().collect();
@@ -263,19 +293,10 @@ pub fn check_walked_walk<H: CheckHost, P: CheckWalkedPasses>(state: &mut CheckSt
     state.walls_a_refusal_explains();
     state.facts.walks_fields = state.walks_fields.copy_owned();
     state.findings.extend(passes.dsl_findings());
-    state.facts.outside = passes.outside(&state.facts);
+    check_walked_outside(state, passes);
     if computes {
-        let proved = passes.proved(&state.facts);
-        state.findings.extend(proved.findings);
-        check_walked_proved(state, proved.entries, proved.reaches, proved.published, &proved.std_claims, &proved.held, proved.outside);
-        state.facts.summaries = proved.summaries;
-        state.findings.extend(passes.view_findings());
-        let coalesced = vc_coalesced(&state.facts);
-        let mut_viewed = vc_mut_viewed(&state.facts);
-        state.findings.extend(passes.view_change_findings(&state.facts.lent_lets, &coalesced, &mut_viewed, &state.facts.receiver_views, &state.facts.cut_gives));
-        let (plans, refused) = passes.tethered();
-        if plans.is_some() { state.facts.keep_plans = std::convert::identity(plans); }
-        state.findings.extend(refused);
+        check_walked_prove(state, passes);
+        check_walked_views(state, passes);
     }
     state.findings.extend(passes.trait_findings());
     check_crossings_language_impls(state, world);

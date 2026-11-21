@@ -105,3 +105,22 @@ quotes a figure.
   the limit itself is checked once at the end with `compare`. A file within
   10 % of the limit is reported as at the limit, with the range of three
   runs, so the supervisor sees how close it is.
+* **Instructions per checker analysis** (#2187, item 3 of #1625).
+  `nikaia run scripts/analysis_cost.nika` runs `target/fast/nikaia lower-std
+  --findings` under callgrind, collecting only inside the check walk of each
+  file (`check_walked_walk`), and prints one row per analysis: handles
+  (ADR-312), outside data (ADR-396), bounds (ADR-385), proofs, views, lints,
+  then *rest of the walk* and *the walk*. It takes hours (valgrind runs the
+  whole command); `--read FILE` reads an output kept from an earlier run,
+  `--sysroot DIR` checks a cut of the package laid out as the checkout.
+  An analysis counts the calls into its functions (each `@inline(never)` in
+  the `.nika` source, listed in the script's `analyses()`) from a function
+  that is not its own, so nothing is counted twice. Handles and lints run
+  woven into the type walk: their rows hold the functions they call, and
+  what they record on the way (each read the `.clone()` lint notes) stays in
+  *rest of the walk*, with the type walk itself. So read a row as a floor of
+  that analysis's cost, and compare one row across two runs or two package
+  sizes, not rows against each other. *Per line* divides by the lines of
+  the package's `.nika` files (`--lines N` to say otherwise). A function
+  added to an analysis needs `@inline(never)` and its name in `analyses()`,
+  else its cost lands in *rest of the walk*.
