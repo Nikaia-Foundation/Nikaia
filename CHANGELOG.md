@@ -8,6 +8,13 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1523] — 2026-11-21
+
+**Builders' changes (#2619)**
+- Simplex: a pivot that leaves i64 waits for another violated row | ADR-270 D11: before answering overflow, the simplex tries every other violated row's pivots, and computes a row value in double width where only partial sums leave i64. (#2101)
+- Faster bound proofs: a type's rule check is not walked again when the callee returns it looked up changed only by a pending entry where pending reads as absent, or not at all (ADR-306 D23).
+- Integers have an exact double-width value: Wide[T] for u8, u32, i32, u64 and i64 (of, product, from_halves, add, sub, neg, mul, div_rem, rem, abs, sign, halves, narrow), lowered to the native type of twice the width; the solver holds its double-width sums in it
+
 ## [0.0.1522] — 2026-11-21
 
 **A B-tree map that is a mut parameter, drained, is taken as it is**

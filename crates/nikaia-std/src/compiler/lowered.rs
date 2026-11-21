@@ -668,6 +668,17 @@ mod check_core_stmt_lowered {
 pub use check_core_stmt_lowered::*;
 
 #[allow(unsafe_code)]
+mod check_core_wide_lowered {
+    #[allow(unused_imports)]
+    use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
+    include!("lowered/check_core_wide.rs");
+}
+#[allow(unused_imports)]
+pub use check_core_wide_lowered::*;
+
+#[allow(unsafe_code)]
 mod check_crossings_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -1667,6 +1678,17 @@ mod emit_core_types_lowered {
 }
 #[allow(unused_imports)]
 pub use emit_core_types_lowered::*;
+
+#[allow(unsafe_code)]
+mod emit_core_wide_lowered {
+    #[allow(unused_imports)]
+    use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
+    include!("lowered/emit_core_wide.rs");
+}
+#[allow(unused_imports)]
+pub use emit_core_wide_lowered::*;
 
 #[allow(unsafe_code)]
 mod emit_entry_lowered {
@@ -3187,6 +3209,10 @@ pub mod check_core_ops {
 pub mod check_core_pilot {}
 pub mod check_core_places {}
 pub mod check_core_stmt {}
+pub mod check_core_wide {
+    #[allow(unused_imports)]
+    pub use super::{wide_unsigned_of};
+}
 pub mod check_crossings {
     #[allow(unused_imports)]
     pub use super::{CheckCrossingsPath};
@@ -3407,6 +3433,10 @@ pub mod emit_core_match {}
 pub mod emit_core_places {}
 pub mod emit_core_reads {}
 pub mod emit_core_types {}
+pub mod emit_core_wide {
+    #[allow(unused_imports)]
+    pub use super::{emit_wide_native};
+}
 pub mod emit_entry {}
 pub mod emit_expr {}
 pub mod emit_exprs {}
@@ -3921,4 +3951,4 @@ pub fn nikaia_run_tests(filters: &[std::string::String], list: bool, more: std::
 /// **The digest of this lowered set** (#1610): every file `lower-std` wrote
 /// beside this index, and the index above this line. Compiled into the same
 /// crate as the code it names, it is the compiler's identity for its caches.
-pub const LOWERED_DIGEST: &str = "54492a0f76dc05dc6f1abd200cb7ffbe30b43dbc3f02f7b83ccd48e7329c5ec9";
+pub const LOWERED_DIGEST: &str = "cfc8903ba2e1f23ea2449777c121f18e89ecb43ded3e9768beb920103a3fed54";

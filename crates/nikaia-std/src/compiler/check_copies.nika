@@ -125,7 +125,9 @@ impl CheckState {
         }
         let mut copies: collections::BTreeSet[String] = collections::BTreeSet()
         for (name, contract) in world.library.types {
-            if contract.copies {
+            // A type the program declares hides `std`'s of the same name
+            // (a `Wide` of its own, #2619): its fields decide.
+            if contract.copies && !package.contains(name) {
                 copies.insert(name.clone())
             }
         }

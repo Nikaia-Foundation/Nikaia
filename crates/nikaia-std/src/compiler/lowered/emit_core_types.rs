@@ -219,6 +219,14 @@ impl EmitState {
             { use ::core::fmt::Write as _; let _ = out.write_fmt(format_args!("{}<{}<{}>>", shared, locked, held)); };
             return out;
         }
+        if name == "Wide" && ty.generics.len() == 1 && !self.structs.contains("Wide") && !self.structs_beside.contains("Wide") {
+            let element = nikaia_std::block::Text::from(world.words.resolve(unsafe { nikaia_std::proven::read(&ty.generics, (0) as usize) }.name).to_string());
+            let (wide, _, bits) = emit_wide_native(&*if element == "int" { nikaia_std::either_text::either(String::from("i64")) } else { nikaia_std::either_text::either(&element) });
+            if bits != 0 {
+                out.push_str(&wide);
+                return out;
+            }
+        }
         if name == "simd::Mask" && ty.generics.len() == 1 {
             let lane = self.emit_core_ty_counted(world, walk, crossings, overlaps, unsafe { nikaia_std::proven::read(&ty.generics, (0) as usize) }, &lifetimes, &count);
             { use ::core::fmt::Write as _; let _ = out.write_fmt(format_args!("simd::LanesMask<{}>", lane)); };

@@ -1,0 +1,8 @@
+// The low half of a `Wide[i64]` is a `u64`, as `widening_mul` hands it back
+// (Part I 2.2, #2619): `from_halves` refuses an `i64` there.
+fn main() throws {
+	let low: i64 = 1
+	let high: i64 = 2
+	let w = Wide::from_halves(low, high)
+	println(w.sign())
+}

@@ -80,7 +80,7 @@ impl CheckState {
         copies_dropped_in(&world.here, &mut dropped);
         for unit in world.beside.iter() { copies_dropped_in(unit, &mut dropped); }
         let mut copies: collections::BTreeSet<String> = collections::BTreeSet::new(); #[allow(unused_mut, clippy::redundant_locals)] let mut package = package;
-        for (name, contract) in world.library.types.iter() { if contract.copies { copies.insert(nikaia_std::block::Text::from(name.to_string())); } }
+        for (name, contract) in world.library.types.iter() { if contract.copies && !nikaia_std::list::contains(&package, &name) { copies.insert(nikaia_std::block::Text::from(name.to_string())); } }
         let mut cleaned: collections::BTreeSet<String> = collections::BTreeSet::new(); #[allow(unused_mut, clippy::redundant_locals)] let mut package = package;
         loop {
             let mut joining: Vec<String> = vec![];

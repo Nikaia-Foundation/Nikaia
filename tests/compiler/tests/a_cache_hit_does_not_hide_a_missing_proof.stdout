@@ -1,5 +1,5 @@
-built: 0, entries: 12
+built: 0, entries: 14
 --locked without one entry: 1, refused: true
 --locked again, warm cache: 1, refused: true
-build, warm cache: 0, entries: 12
+build, warm cache: 0, entries: 14
 --locked with the entry: 0

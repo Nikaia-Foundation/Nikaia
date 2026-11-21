@@ -1,0 +1,88 @@
+// `Wide[i64]`, std's exact value of twice the width of `i64` (Part I 2.2,
+// #2619): each method at the edges, the least value, `-1`, `0`,
+// the greatest product and a quotient that does not fit. A value is shown as
+// its halves (high, low) and its sign; `none` is a `null`.
+fn show(w: Wide[i64]) throws {
+	let (low, high) = w.halves()
+	println(f"{high} {low} {w.sign()}")
+}
+
+fn maybe(w: Wide[i64]?) throws {
+	if w == null {
+		println("none")
+		return
+	}
+	show(w ?? return)
+}
+
+fn shown(n: i64?) -> String {
+	return if n == null { "none" } else { f"{n ?? 0}" }
+}
+
+fn quotient(pair: (Wide[i64], i64)?) throws {
+	if pair == null {
+		println("none")
+		return
+	}
+	let (q, r) = pair ?? return
+	let (low, high) = q.halves()
+	println(f"{high} {low} {q.sign()} rest {r}")
+}
+
+fn show_abs(w: Wide[u64]) throws {
+	let (low, high) = w.halves()
+	println(f"{high} {low}")
+}
+
+fn main() throws {
+	let least: i64 = i64::MIN
+	let most: i64 = i64::MAX
+	let zero: i64 = 0
+	let one: i64 = 1
+	let ten: i64 = 10
+	let full: u64 = u64::MAX
+	let nothing: u64 = 0
+	let low_of_top: u64 = 0
+	let minus: i64 = -1
+	let two: i64 = 2
+	let lowest = Wide::from_halves(nothing, least)
+	let top = Wide::product(least, least)
+	show(top)
+	println(shown(top.narrow()))
+	show(Wide::of(least))
+	println(shown(Wide::of(least).narrow()))
+	println(Wide::of(zero).sign())
+	maybe(top.add(top))
+	maybe(Wide::of(least).add(Wide::of(most)))
+	maybe(Wide::of(zero).sub(Wide::of(one)))
+	show(Wide::from_halves(full, most))
+	maybe(Wide::from_halves(full, most).add(Wide::of(one)))
+	maybe(Wide::of(zero).neg())
+	maybe(Wide::of(one).neg())
+	maybe(top.mul(most))
+	maybe(Wide::of(most).mul(most))
+	quotient(top.div_rem(most))
+	quotient(top.div_rem(zero))
+	println(shown(top.rem(zero)))
+	println(shown(top.rem(ten)))
+	println(top == Wide::product(most, most))
+	println(Wide::of(zero) < top)
+	println(top < Wide::of(one))
+	println(top.halves().0 == low_of_top)
+	println(Wide::of(minus).sign())
+	show(Wide::of(minus))
+	println(Wide::from_halves(full, minus) == Wide::of(minus))
+	maybe(lowest.neg())
+	maybe(Wide::of(least).neg())
+	maybe(lowest.sub(Wide::of(one)))
+	maybe(top.mul(minus))
+	maybe(top.mul(least))
+	quotient(lowest.div_rem(minus))
+	quotient(Wide::of(minus).div_rem(two))
+	quotient(lowest.div_rem(most))
+	println(shown(lowest.rem(minus)))
+	println(shown(Wide::product(least, most).rem(ten)))
+	show_abs(lowest.abs())
+	show_abs(Wide::of(minus).abs())
+	println(lowest < Wide::of(least))
+}

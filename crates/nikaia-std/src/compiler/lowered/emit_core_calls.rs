@@ -402,6 +402,7 @@ impl EmitState {
             _ => { },
         }
         if self.emit_call_assert(world, walk, out, host, func, args, config, depth, flow, scope)? { return Ok(()); }
+        if self.emit_wide_call(world, walk, out, host, node_key(func), None, args, depth, flow, scope)? { return Ok(()); }
         if self.emit_call_kept(world, walk, out, host, func, args, depth, flow, scope)? { return Ok(()); }
         if self.emit_call_grammar(world, walk, out, host, func, args, config, depth, flow, scope)? { return Ok(()); }
         if self.emit_call_boxed_variant(world, walk, out, host, func, args, depth, flow, scope)? { return Ok(()); }
@@ -1466,6 +1467,7 @@ impl EmitState {
                 return Ok(());
             }
         }
+        if self.emit_wide_call(world, walk, out, host, node_key(node), Some(receiver), args, depth, flow, scope)? { return Ok(()); }
         if rotation == "widening_mul" && args.len() == 1 {
             let on_type = nikaia_std::index::or(*nikaia_std::index::get(&self.facts.std_receivers, &(node_key(node))), || "");
             let (wide, low, bits) = match on_type {
@@ -1544,8 +1546,8 @@ pub(crate) fn emit_tuple_part_copy(i: i64, word: &str) -> String {
 }
 
 pub(crate) fn emit_tuple_part_copies(parts: &[String]) -> String {
-    let copies: Vec<String> = parts.iter().enumerate().map(|(at, item)| (at as i64, item)).map(|__nikaia_tuple114572| {
-        let (i, word) = __nikaia_tuple114572;
+    let copies: Vec<String> = parts.iter().enumerate().map(|(at, item)| (at as i64, item)).map(|__nikaia_tuple114921| {
+        let (i, word) = __nikaia_tuple114921;
         emit_tuple_part_copy(i, word)
     }).collect::<Vec<_>>();
     if copies.len() == 1 { return format!("({},)", *unsafe { nikaia_std::proven::read(&copies, (0) as usize) }); }

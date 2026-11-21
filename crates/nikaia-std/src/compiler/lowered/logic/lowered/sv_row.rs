@@ -96,8 +96,7 @@ pub(crate) fn sv_row_combine_exact(a: i64, r: &SvRow, b: i64, s: &SvRow) -> Opti
 pub(crate) fn sv_row_combine_wide(a: i64, r: &SvRow, b: i64, s: &SvRow) -> Option<SvRow> {
     let room = unsafe { nikaia_std::proven::add::<i64>(nikaia_std::proven::add::<i64>(r.cols.len() as i64, s.cols.len() as i64), 1) };
     let mut cols: Vec<u32> = Vec::with_capacity(nikaia_std::count::of(room));
-    let mut lows: Vec<u64> = Vec::with_capacity(nikaia_std::count::of(room));
-    let mut highs: Vec<i64> = Vec::with_capacity(nikaia_std::count::of(room));
+    let mut wides: Vec<i128> = Vec::with_capacity(nikaia_std::count::of(room));
     let mut i: i64 = 0;
     let mut j: i64 = 0;
     while ((i) as usize) < r.cols.len() || ((j) as usize) < s.cols.len() {
@@ -119,17 +118,14 @@ pub(crate) fn sv_row_combine_wide(a: i64, r: &SvRow, b: i64, s: &SvRow) -> Optio
             i = unsafe { nikaia_std::proven::add::<i64>(i, 1) };
             j = unsafe { nikaia_std::proven::add::<i64>(j, 1) };
         }
-        let (low, high) = match sv_wide_mul_add(a, x, b, y) { Some(__nikaia_value) => __nikaia_value, None => return None };
-        if low != 0u64 || high != 0 {
+        let entry = match sv_wide_mul_add(a, x, b, y) { Some(__nikaia_value) => __nikaia_value, None => return None };
+        if { let __wide: i128 = entry; __wide.signum() as i64 } != 0 {
             cols.push(col);
-            lows.push(low);
-            highs.push(high);
+            wides.push(entry);
         }
     }
-    let (low, high) = match sv_wide_mul_add(a, r.constant, b, s.constant) { Some(__nikaia_value) => __nikaia_value, None => return None };
-    lows.push(low);
-    highs.push(high);
-    let mut ks = match sv_wide_reduced(&lows, &highs) { Some(__nikaia_value) => __nikaia_value, None => return None };
+    wides.push(match sv_wide_mul_add(a, r.constant, b, s.constant) { Some(__nikaia_value) => __nikaia_value, None => return None });
+    let mut ks = match sv_wide_reduced(&wides) { Some(__nikaia_value) => __nikaia_value, None => return None };
     let constant = match ks.pop() { Some(__nikaia_value) => __nikaia_value, None => return None };
     Some(SvRow { cols, ks, constant })
 }

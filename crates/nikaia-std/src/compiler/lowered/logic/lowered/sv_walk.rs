@@ -147,7 +147,7 @@ impl SvWalk {
         for c in self.touched.iter() {
             let c = nikaia_std::num::value(c);
             let before = *nikaia_std::index::get(&self.true_count, nikaia_std::index::at(c));
-            let after = before + *nikaia_std::index::get(&self.scratch, nikaia_std::index::at(c));
+            let after = before + *unsafe { nikaia_std::proven::read(&self.scratch, (c) as usize) };
             if before == 0 && after > 0 { change -= *nikaia_std::index::get(&self.weight, nikaia_std::index::at(c)); }
             if before > 0 && after == 0 { change += *nikaia_std::index::get(&self.weight, nikaia_std::index::at(c)); }
             { let __nikaia_stored = 0; unsafe { nikaia_std::proven::write(&mut self.scratch, (c) as usize, __nikaia_stored) }; }

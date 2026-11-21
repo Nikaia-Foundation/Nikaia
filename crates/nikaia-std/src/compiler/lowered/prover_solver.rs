@@ -25,6 +25,31 @@ pub(crate) fn refuting_values(arena: &mut logic::TermArena, facts: &[i64], claim
     Some(values_of(&names, &values))
 }
 
+pub(crate) fn forced_overflow_values(arena: &mut logic::TermArena, facts: &[i64], term: i64, names: &collections::BTreeSet<String>, ask: &mut impl FnMut(&logic::TermArena, &[i64], i64) -> SolverAnswer, model: &mut impl FnMut(&logic::TermArena, &[i64], i64) -> Option<collections::BTreeMap<String, i64>>) -> Option<collections::BTreeMap<String, i64>> {
+    if names.is_empty() { return None; }
+    let mut tied: collections::BTreeSet<String> = collections::BTreeSet::new();
+    for fact in facts.iter() {
+        let fact = nikaia_std::num::value(fact);
+        arena.variables(fact, &mut tied);
+    }
+    for name in names.iter() { if !tied.contains(name) { return None; } }
+    let falsum = arena.boolean(false);
+    let found = match model(&arena, facts, falsum) { Some(__nikaia_value) => __nikaia_value, None => return None };
+    let values = values_of(names, &found);
+    if (values.len() as i64) != names.len() as i64 || arena.int_value(term, &values).is_some() { return None; }
+    for (name, value) in values.iter() {
+        let value = nikaia_std::num::value(value);
+        let named = arena.var(name);
+        let pinned = arena.int(value);
+        let forced = arena.equal(named, pinned);
+        match ask(&arena, facts, forced) {
+            SolverAnswer::Proved => { },
+            _ => { return None; },
+        }
+    }
+    Some(values)
+}
+
 pub(crate) fn breaking_values(arena: &mut logic::TermArena, scope: &ProverScope, claim: i64, model: &mut impl FnMut(&logic::TermArena, &[i64], i64) -> Option<collections::BTreeMap<String, i64>>) -> Option<collections::BTreeMap<String, i64>> {
     let names = match scope.pinned_names(&arena, claim) { Some(__nikaia_value) => __nikaia_value, None => return None };
     let values = match model(&arena, &scope.facts, claim) { Some(__nikaia_value) => __nikaia_value, None => return None };
