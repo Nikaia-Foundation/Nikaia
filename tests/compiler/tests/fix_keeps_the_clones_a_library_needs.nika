@@ -1,0 +1,32 @@
+// **`nikaia fix` in a library deletes no clone the library needs** (#2009):
+// `std` is checked as a library. A `let` over a part of a `for`'s element,
+// of a `let` over an element, or a field of a `ref` parameter that is not
+// text takes the part (`NK2106`); a `let` of a part's clone and that name's
+// clone at its last use cannot both go (`NK1106`); of two copies, one of the
+// other's part, only the first goes. The copy of a number still goes, and the
+// file checks after.
+use std::env
+use std::fs
+use std::process
+
+fn toolchain() -> String throws {
+	let exe = env::current_exe()?.display() ?? ""
+	if exe.len() > 0 {
+		return exe
+	}
+	return "target/fast/nikaia"
+}
+
+fn main() throws {
+	let nikaia = toolchain()
+	let tmp = fs::scratch()
+	process::run("mkdir", ["-p", f"{tmp.path().to_text()}/src"])
+	fs::write("nikaia.toml", tmp, "[package]\nname = \"demo\"\nversion = \"0.1.0\"\n\n[build]\nartifact = \"rust-library\"\n")
+	fs::write("src/lib.nika", tmp, "pub struct Item {\n    pub name: String,\n    pub n: i64,\n    pub tags: Vec[String],\n}\n\npub struct Label {\n    pub word: String,\n}\n\npub fn names(rs: ref Vec[Item]) -> i64 {\n    let mut all: i64 = 0\n    for it in rs {\n        let name = it.name.clone()\n        let written = f\"x::{name}\"\n        all += written.len() as i64\n    }\n    let first = rs[0]\n    let word = first.name.clone()\n    let below = f\"{word}!\"\n    return all + below.len() as i64 + first.n.clone()\n}\n\npub fn labels(rs: ref Vec[Item]) -> Vec[Label] {\n    let mut out: Vec[Label] = []\n    let path = rs[0].name.clone()\n    out.push(Label { word: path.clone() })\n    return out\n}\n\npub fn tagged(it: ref Item) -> i64 {\n    let tags = it.tags.clone()\n    return tags.len() as i64\n}\n\npub fn chained(rs: ref Vec[Item]) -> String {\n    let first = rs[0].clone()\n    let word = first.name.clone()\n    return f\"{word} {first.n}\"\n}\n")
+	let dir = tmp.path().to_text()
+	let fixed = process::run(nikaia, ["fix", "src/lib.nika"]; dir: dir, env: [("RUST_BACKTRACE", "0")])
+	print(f"fix: {fixed.stdout}{fixed.stderr}".replace(dir, "TMP"))
+	let checked = process::run(nikaia, ["check", "src/lib.nika"]; dir: dir, env: [("RUST_BACKTRACE", "0")])
+	println(f"check: exit {checked.code}")
+	print(f"{checked.stdout}{checked.stderr}".replace(dir, "TMP"))
+}

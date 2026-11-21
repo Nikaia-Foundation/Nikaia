@@ -966,7 +966,7 @@ pub fn project_drive_not_the_entry(file: &std::path::Path, root: &std::path::Pat
     format!("{}\nIt is a test program: run it with `nikaia test --project {} --filter {}`, and add `--bless` to record its expected output.", told, nikaia_std::fs::path::display(&(root)), name)
 }
 
-pub async fn project_drive_kept_for_file<H: ProjectDriveKeptHost>(file: &std::path::Path, entry: &str, host: &H) -> Result<fs::Path, std::boxed::Box<dyn std::error::Error>> {
+pub fn project_drive_kept_root(file: &std::path::Path, user_cache: &std::path::Path) -> (fs::Path, String) {
     let canonical_file = project_members_canonical(file);
     let bytes: Vec<u8> = nikaia_std::fs::path::display(&(canonical_file)).bytes().collect::<Vec<_>>();
     let hex = hash::sha256_hex(&bytes);
@@ -978,7 +978,90 @@ pub async fn project_drive_kept_for_file<H: ProjectDriveKeptHost>(file: &std::pa
     let first = nikaia_std::index::or(stem.chars().next(), || ' '.into());
     let fits = first >= 'a' && first <= 'z' && stem.chars().all(|c| { c >= 'a' && c <= 'z' || c >= '0' && c <= '9' || c == '-' || c == '_' });
     let name = if fits { stem } else { String::from("program") };
-    let root = nikaia_std::fs::path::join(&(nikaia_std::fs::path::join(&(host.user_cache_dir()), std::path::Path::new(&("run")))), std::path::Path::new(&(format!("{}-{}", name, key))));
+    (nikaia_std::fs::path::join(&(nikaia_std::fs::path::join(&(user_cache), std::path::Path::new(&("run")))), std::path::Path::new(&(format!("{}-{}", name, key)))), name)
+}
+
+pub fn project_drive_ran_record(root: &std::path::Path, given: &str) -> fs::Path {
+    let hex = hash::sha256_hex(given.as_bytes());
+    let name: String = hex.chars().take(16).collect();
+    nikaia_std::fs::path::join(&(nikaia_std::fs::path::join(&(root), std::path::Path::new(&("ran")))), std::path::Path::new(&(name)))
+}
+
+pub async fn project_drive_ran_write(record: &std::path::Path, key: &str, binary: &std::path::Path, files: &[fs::Path], said: &str) {
+    match fs::remove(record, &fs::Root::Anywhere, false) {
+        Ok(_) => {},
+        Err(_error) => { },
+    };
+    let slot_dir = match nikaia_std::fs::path::parent(&(binary)) { Some(__nikaia_value) => __nikaia_value, None => return };
+    let slot = match fs::read_to_string(&nikaia_std::fs::path::join(&(slot_dir), std::path::Path::new(&("key"))), &fs::Root::Anywhere).await {
+        Ok(value) => value,
+        Err(_error) => { return; },
+    };
+    let named = nikaia_std::fs::path::display(&(binary));
+    if slot.contains("\n") || named.contains("\n") { return; }
+    let mut listed: String = String::from("");
+    for path in files.iter() {
+        let shown = nikaia_std::fs::path::display(&(path));
+        if shown.contains("\n") { return; }
+        let meta = match fs::metadata(path, &fs::Root::Anywhere) {
+            Ok(value) => value,
+            Err(_error) => { return; },
+        };
+        let digest = match project_drive_digest(path, false).await { Some(__nikaia_value) => __nikaia_value, None => return };
+        { use ::core::fmt::Write as _; let _ = listed.write_fmt(format_args!("file {}:{}:{}:{}\n", meta.len() as i64, meta.modified().in_nanos(), digest, shown)); };
+    }
+    let text = format!("{}\n{}\n{}\n{} {}\n{}said\n{}", hash::sha256_hex(key.as_bytes()), named, slot, files.len() as i64, said.len() as i64, listed, said);
+    let dir = match nikaia_std::fs::path::parent(&(record)) { Some(__nikaia_value) => __nikaia_value, None => return };
+    match fs::create_dir(&dir, &fs::Root::Anywhere, true) {
+        Ok(_) => {},
+        Err(_error) => { return; },
+    };
+    match fs::write(record, &fs::Root::Anywhere, text, false, true).await {
+        Ok(_) => {},
+        Err(_error) => { },
+    };
+}
+
+pub async fn project_drive_ran(record: &std::path::Path, key: &str) -> Option<(fs::Path, String)> {
+    let held = match fs::read_to_string(record, &fs::Root::Anywhere).await {
+        Ok(value) => value,
+        Err(_error) => { return None; },
+    };
+    let lines: Vec<String> = held.split("\n").map(|line| { nikaia_std::block::Text::from(line.to_string()) }).collect::<Vec<_>>();
+    if lines.len() < 5 || *unsafe { nikaia_std::proven::read(&lines, (0) as usize) } != hash::sha256_hex(key.as_bytes()) { return None; }
+    let binary: fs::Path = std::path::PathBuf::from(nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&lines, (1) as usize) }).to_string()));
+    let slot_dir = match nikaia_std::fs::path::parent(&(binary)) { Some(__nikaia_value) => __nikaia_value, None => return None };
+    if !(match fs::metadata(&binary, &fs::Root::Anywhere) {
+        Ok(value) => value,
+        Err(_error) => { return None; },
+    }).is_file() { return None; }
+    if match fs::read_to_string(&nikaia_std::fs::path::join(&(slot_dir), std::path::Path::new(&("key"))), &fs::Root::Anywhere).await {
+        Ok(value) => value,
+        Err(_error) => { return None; },
+    } != *unsafe { nikaia_std::proven::read(&lines, (2) as usize) } { return None; }
+    let mut at: i64 = 4;
+    while ((at) as usize) < lines.len() && (*unsafe { nikaia_std::proven::read(&lines, (at) as usize) }).starts_with("file ") {
+        let parts: Vec<String> = nikaia_std::index::or((*unsafe { nikaia_std::proven::read(&lines, (at) as usize) }).strip_prefix("file "), || "").splitn(4, ':').map(|part| { nikaia_std::block::Text::from(part.to_string()) }).collect::<Vec<_>>();
+        if parts.len() != 4 { return None; }
+        let path: fs::Path = std::path::PathBuf::from(nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&parts, (3) as usize) }).to_string()));
+        let meta = match fs::metadata(&path, &fs::Root::Anywhere) {
+            Ok(value) => value,
+            Err(_error) => { return None; },
+        };
+        at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
+        if format!("{}", meta.len() as i64) == *unsafe { nikaia_std::proven::read(&parts, (0) as usize) } && format!("{}", meta.modified().in_nanos()) == *unsafe { nikaia_std::proven::read(&parts, (1) as usize) } { continue; }
+        if (match project_drive_digest(&path, false).await { Some(__nikaia_value) => __nikaia_value, None => return None }) != *unsafe { nikaia_std::proven::read(&parts, (2) as usize) } { return None; }
+    }
+    if ((at) as usize) >= lines.len() || *unsafe { nikaia_std::proven::read(&lines, (at) as usize) } != "said" { return None; }
+    let rest: Vec<String> = lines.iter().skip(nikaia_std::count::of(unsafe { nikaia_std::proven::add::<i64>(at, 1) })).map(|line| { nikaia_std::block::Text::from(line.to_string()) }).collect::<Vec<_>>();
+    let said = nikaia_std::block::Text::from(rest.join("\n"));
+    if format!("{} {}", unsafe { nikaia_std::proven::sub::<i64>(at, 4) }, said.len() as i64) != *unsafe { nikaia_std::proven::read(&lines, (3) as usize) } { return None; }
+    Some((binary, said))
+}
+
+pub async fn project_drive_kept_for_file<H: ProjectDriveKeptHost>(file: &std::path::Path, entry: &str, host: &H) -> Result<fs::Path, std::boxed::Box<dyn std::error::Error>> {
+    let canonical_file = project_members_canonical(file);
+    let (root, name) = project_drive_kept_root(file, &host.user_cache_dir());
     host.use_entry(&root);
     host.write_if_changed(&nikaia_std::fs::path::join(&(root), std::path::Path::new(&("nikaia.toml"))), &format!("# Kept by `nikaia run` for {} (ADR-260 D4): a file outside any project\n# is built as one of its own. Rewritten from that file on every run.\n[package]\nname = \"{}\"\nversion = \"0.0.0\"\n", nikaia_std::fs::path::display(&(canonical_file)), name))?;
     let source = match fs::read_to_string(file, &fs::Root::Anywhere).await {
@@ -1033,8 +1116,8 @@ pub async fn project_drive_wrapper<H: ProjectDriveWrapperHost>(host: &H) -> Resu
     };
     let no_cache = env::var("NIKAIA_NO_CACHE").is_some();
     let args = host.args();
-    let a_program = args.iter().zip(args.iter().skip(1)).any(|__nikaia_tuple73897| {
-        let (a, b) = __nikaia_tuple73897;
+    let a_program = args.iter().zip(args.iter().skip(1)).any(|__nikaia_tuple78458| {
+        let (a, b) = __nikaia_tuple78458;
         AsRef::<str>::as_ref(&(a)) == AsRef::<str>::as_ref(&("--crate-type")) && AsRef::<str>::as_ref(&(b)) == AsRef::<str>::as_ref(&("bin"))
     });
     let batch: Option<String> = match a_program {
@@ -1309,8 +1392,8 @@ pub(crate) async fn project_drive_rustc_inputs(depends: &str, store: &ProjectDri
     for word in nikaia_std::block::Text::from(listed.replace("\\ ", "\u{1f}")).split(' ') {
         let path: fs::Path = std::path::PathBuf::from(nikaia_std::block::Text::from(word.replace("\u{1f}", " ")));
         if word.is_empty() || nikaia_std::fs::path::same(&(path), &(store.generated)) { continue; }
-        let __keep_89327 = nikaia_std::tether::Keep::new();
-        let below = match project_drive_rustc_below((&__keep_89327).put(nikaia_std::fs::path::display(&(path))), &store.within) { Some(__nikaia_value) => __nikaia_value, None => return None };
+        let __keep_93888 = nikaia_std::tether::Keep::new();
+        let below = match project_drive_rustc_below((&__keep_93888).put(nikaia_std::fs::path::display(&(path))), &store.within) { Some(__nikaia_value) => __nikaia_value, None => return None };
         let bytes = match fs::read(std::path::Path::new(&(below)), &store.sources).await {
             Ok(value) => value,
             Err(_error) => { return None; },
