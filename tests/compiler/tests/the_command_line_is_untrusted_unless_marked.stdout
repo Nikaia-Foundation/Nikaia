@@ -1,6 +1,6 @@
 -- an assert on cli::args
 error[NK1202]: `n > 0` is a claim about data from outside the program.
-   = help: Check it where it arrives, with a guard the program handles: `throw BadInput(n) if !(n > 0)`, or `return … if !(n > 0)`. After that line, this `assert` is proved. Or take the word as a parameter of `main`: an `assert` about it there is checked where the words arrive (ADR-360 D4). Or write `cli::args(trusted: true)` where the operator chooses the command line.
+   = help: Check it where it arrives, with a guard the program handles: `throw BadInput(n) if !(n > 0)`, or `return … if !(n > 0)`. After that line, this `assert` is proved. Or take the word as a parameter of `main`: an `assert` about it there is checked where the words arrive (ADR-cli-v1 D4). Or write `cli::args(trusted: true)` where the operator chooses the command line.
 -- after the guard
 Checked p.nika
 -- trusted: true, a claim as any other

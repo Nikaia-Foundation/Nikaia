@@ -2,9 +2,11 @@
 
 `hello.nika` prints one line and computes nothing, so every instruction
 counted is start-up. `bench.nika` counts it in the four ways a Nikaia
-program is started, against `hello.py`:
+program is started, against `hello.py`, with C's `puts` as the floor:
 
-1. the binary `nikaia build` wrote (`dev` profile);
+1. the binary `nikaia build` wrote, with the project's one profile left as
+   it is (`dev`) and set for release in `[build.<target>]` (`opt-level =
+   3`, fat LTO, one codegen unit, no debug information);
 2. `nikaia run` of a file run before and unchanged since (warm); 2' the
    same with its run record removed, the way every warm run went before the
    record (#2421, #2530): the file read again, its program found built;
@@ -45,17 +47,47 @@ unused `let` and the warning costs a lowering of its own. Not counted: the
 ## Figures
 
 2026-11-21, compiler `target/fast` (profile `fast`) built from `develop` at
-12d353d1c (`NIKAIA=target/bins/12d353d1ca57/nikaia`), rustc 1.97.0, Python 3.13.18, Intel Xeon @ 2.10GHz.
+fbdea3925 with the bundle linked `-Bsymbolic-functions` (#2532), rustc
+1.97.0, Python 3.13.18, Intel Xeon @ 2.10GHz.
 
 | scenario | instructions | mispredicted | / Python | instructions by program |
 |---|---:|---:|---:|---|
-| Python 3, `python3 hello.py` | 40,278,939 | 640,489 | 1.00 | python3.13 40,278,939 |
-| 1 built binary (`nikaia build`, `dev`) | 508,974 | 8,771 | 0.01 | hello 508,974 |
-| 2 `nikaia run`, warm | 50,258,454 | 215,456 | 1.25 | hello 40,930,250, nikaia 9,328,204 |
-| 2' `nikaia run`, warm, without its run record | 85,660,651 | 503,816 | 2.13 | hello 40,930,220, nikaia 44,730,431 |
-| 3a `nikaia run` after an edit, Rust unchanged | 309,688,549 | 2,247,424 | 7.69 | hello 40,930,250, nikaia 268,758,299 |
-| 3b `nikaia run` after an edit, Rust changed | 698,883,654 | 6,183,708 | 17.35 | hello 40,930,263, nikaia 270,674,999, rustc 329,468,276, cc 2,615,476, collect2 457,433, rust-lld 54,210,081, ld.lld 527,126 |
-| 4 `nikaia run` of a new file | 750,590,576 | 6,748,796 | 18.63 | hello 40,930,250, nikaia 268,757,067, rustc 383,084,125, cc 2,616,024, collect2 457,390, rust-lld 54,218,571, ld.lld 527,149 |
+| Python 3, `python3 hello.py` | 40,194,104 | 636,884 | 1.00 | python3.13 40,194,104 |
+| C `puts`, `cc -O2` (the floor) | 239,480 | 5,547 | 0.01 | hello-c 239,480 |
+| 1 built binary (`nikaia build`, `dev`) | 508,309 | 8,891 | 0.01 | hello 508,309 |
+| 1 built binary (`nikaia build`, release: `opt-level = 3`, fat LTO) | 440,659 | 8,019 | 0.01 | hello 440,659 |
+| 2 `nikaia run`, warm | 11,834,953 | 98,195 | 0.29 | hello 2,521,924, nikaia 9,313,029 |
+| 2' `nikaia run`, warm, without its run record | 47,222,002 | 384,695 | 1.17 | hello 2,521,911, nikaia 44,700,091 |
+| 3a `nikaia run` after an edit, Rust unchanged | 271,230,735 | 2,047,924 | 6.75 | hello 2,521,911, nikaia 268,708,824 |
+| 3b `nikaia run` after an edit, Rust changed | 659,905,317 | 6,077,206 | 16.42 | hello 2,521,924, nikaia 271,057,700, rustc 328,500,405, cc 2,616,124, collect2 454,709, rust-lld 54,227,929, ld.lld 526,526 |
+| 4 `nikaia run` of a new file | 712,068,010 | 6,542,879 | 17.72 | hello 2,521,924, nikaia 268,492,215, rustc 383,227,451, cc 2,617,824, collect2 454,776, rust-lld 54,227,320, ld.lld 526,500 |
+
+## Pass or not
+
+| scenario | against Python | verdict |
+|---|---:|---|
+| 1 built binary, `dev` and release | 0.01 | below; 1.8 to 2.1 times C's floor |
+| 2 `nikaia run`, warm | 0.29 | below |
+| 3a after an edit, Rust unchanged | 6.75 | above: the front end, below |
+| 3b after an edit, Rust changed | 16.42 | above: the front end, `rustc` and the link; floor above Python while `rustc` compiles the program |
+| 4 a new file | 17.72 | as 3b, `rustc` with no incremental state |
+
+## Scenario 1: the built binary
+
+The release binary's 0.44 M, from callgrind's inclusive counts:
+
+| part | instructions | share |
+|---|---:|---:|
+| the dynamic loader binding `libc` (C pays it too: 0.24 M is its whole start) | 0.31 M | 72 % |
+| Rust's `std::rt::lang_start`: the main thread's stack bounds, read from `/proc/self/maps` with `sscanf` (`pthread_getattr_np`) | 0.10 M | 22 % |
+| the program's `main`: `std`'s budget for `main`'s block, decided before `main` runs (ADR-327 D14), from `/proc/self/fd`, `/proc/self/limits`, the cgroup's memory limit and `/proc/meminfo` | 0.02 M | 5 % |
+| printing the line | under 0.01 M | |
+
+What the language adds over C is the second and third rows: Rust's start
+and ADR-327 D14's budget. A program that uses nothing still asks the
+budget, since D14 decides it before `main` runs, not at the block's first
+allocation; 5 % of the start, a decision of its own and no step here.
+`dev` costs 0.07 M more than release.
 
 ## Where the warm run goes (scenario 2)
 
@@ -64,8 +96,17 @@ No `rustc` child runs: the version comes from the answer held in a stamp
 nor checked again: its run record matches (about 0.15 M).
 Row 2' shows what the record saves: without it the same run reads the file
 again and takes it through the front end before it finds the program in its
-slot, nikaia 44.7 M instead of 9.3 M (35.4 M, 79 % of nikaia's share, the
-whole run 1.70 times fewer instructions).
+slot, nikaia 44.7 M instead of 9.3 M.
+
+The program's 2.5 M: 91 % is the dynamic loader. `nikaia run` links it
+`prefer-dynamic` against the debug `libnikaia_run_bundle.so` and
+`libstd-*.so`. A Rust `dylib` exports every function, and the bundle's
+calls of its own functions went through 25,691 `GLOB_DAT` slots the loader
+filled by symbol lookup at every start: 40.9 M, more than Python's whole
+start. The bundle is linked `-Wl,-Bsymbolic-functions` on Linux
+(`comptime_bundle_bundle_of`), which binds those calls when it is linked:
+470 `GLOB_DAT` slots are left, and the program starts in 2.5 M (its own
+`main` about 0.22 M).
 
 nikaia's 9.3 M, from callgrind's inclusive counts:
 
@@ -78,13 +119,33 @@ nikaia's 9.3 M, from callgrind's inclusive counts:
 | the held `rustc` version | 0.23 M | 2 % |
 | the run record's lookup | 0.15 M | 2 % |
 
-The program's 40.9 M: 98.9 % is the dynamic loader (`_dl_relocate_object`,
-`_dl_lookup_symbol_x`). `nikaia run` links it `prefer-dynamic` against the
-debug `libnikaia_run_bundle.so` and `libstd-*.so`, and binding their symbols
-costs as much as all of Python's start. Its own `main` is about 0.22 M. The
-binary `nikaia build` writes, linked statically, starts in 0.5 M. So the
-dynamic link, then the fingerprint walk, are what make the warm run 1.24
-times Python.
+## Scenarios 3 and 4: an edit and a new file
+
+**The front end, 269 M in each** (3a: the whole run but the program).
+nikaia's inclusive counts in 3a:
+
+| part | instructions | share |
+|---|---:|---:|
+| `bounds::proven_taken`, asked by the contracts of the emitter: 86 conditions, each parsed as a program (`prove::condition` to `parser::parse_to_ast`, whose `text_tiers::refine_with` is 100 M) | 116 M | 43 % |
+| `modules::Program::of`, inferring the package (`contracts::infer_package_with` 32 M) | 52 M | 19 % |
+| `project::check` | 43 M | 16 % |
+| `contracts::std_library`, the base library | 13 M | 5 % |
+| `comptime_run::run_bundle` | 12 M | 5 % |
+
+The first row is a step of its own: a condition parsed as an expression,
+not through the whole program's text tiers, or the proofs held across runs,
+since they are the same for the same source. 3a can go below Python only
+when the front end of a three-line file is under 38 M; it is 7 times that.
+
+**`rustc` and the link, 386 M in 3b and 441 M in 4**: `rustc` compiles the
+program at `opt-level=0` with its incremental state (328 M in 3b; 383 M in
+4, where no state is there yet), and `rust-lld` links it against the bundle
+(54 M). Their floor is a `rustc` run, which alone is 8 to 10 times Python's
+start, so 3b and 4 stay above Python while a changed program is compiled by
+`rustc`; what can come down is the front end above (40 % of 3b) and the
+link. A new file at a new path is compiled again although the same text ran
+elsewhere: the entry is keyed by the path (below), and the slot by a Rust
+that holds the path; reusing it would need the places table out of the key.
 
 ## What the run cache keys on
 

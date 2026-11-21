@@ -234,6 +234,7 @@ read the record in the right-hand column.
 | [views-3](adr-views-3.md) | A Parameter That Keeps Its Argument Says `keep`, `ref` Leaves the Language, and a Result's Source Is Inferred or Written `from` | [ADR-views-v4](../../specification/adr/adr-views-v4.md) | D1→D1 … D17→D17 |
 | [collections-1](adr-collections-1.md) | The Ordered Collections Offer What the Hashed Ones Offer, Apart from Hashing: Every Map Has `entry`, Every List and Set Has `extend` | [ADR-collections-v3](../../specification/adr/adr-collections-v3.md) | D1→D1, D2→D2, D3→D3, D4→D4, D5→D5, D6→D6 |
 | [collections-2](adr-collections-2.md) | An Array Is Read as a List Is: `Array[T, N]` and Its Run Have `iter()`, and the Sequence That Starts There; So Has Every Set | [ADR-collections-v3](../../specification/adr/adr-collections-v3.md) | D1→D7, D2→D8, D3→D9 |
+| [360](adr-360.md) | `main`'s Parameters Are the Command Line; Its Preconditions, Carried Back as Any Function's Are, Are Checked Where the Words Arrive, a Breach Ending the Program With Status 2 | [ADR-cli-v1](../../specification/adr/adr-cli-v1.md) | D1→D1, D2→D2, D3→D3, D4→D4, D5→D5, D6→D6, D7→D7 |
 
 ## What the archived records displaced in one another
 
@@ -245,6 +246,8 @@ record's reader.
 
 | Displaced or amended | By | What moved |
 | :--- | :--- | :--- |
+| [360](adr-360.md), whole | [cli-v1](../../specification/adr/adr-cli-v1.md) (consolidates) | **nothing decided differently**: 360's D1-D7 keep their numbers; D2 and D5 extended by D8-D12 (#449) |
+| [360](adr-360.md) (Related) | [399](../../specification/adr/adr-399.md) D1, D2 | `main`'s parameters are untrusted; their preconditions are still checked where they arrive |
 | [collections-1](adr-collections-1.md), [collections-2](adr-collections-2.md), whole | [collections-v3](../../specification/adr/adr-collections-v3.md) (consolidates) | **nothing decided differently**: collections-1's D1-D6 keep their numbers (D6, its amendment, as a decision like the others; its section 6's open `extend` on a map answered by D6), collections-2's D1-D3 are D7-D9; no two merged, none says the same |
 | [253](../../specification/adr/adr-253.md) D2 | [collections-1](adr-collections-1.md) D3 | `extend` takes a list, a set or a sequence of owned elements, on `Vec` and on both sets |
 | [views-1](adr-views-1.md), [views-2](adr-views-2.md), [views-3](adr-views-3.md), whole | [views-v4](../../specification/adr/adr-views-v4.md) (consolidates) | **nothing decided differently**: views-3's D1-D17 keep their numbers, views-1's D1-D6 are D18-D23, views-2's D1-D8 are D24-D31; views-1 D6's `ref mut self` is read as views-3 D4's `mut self`, views-3 D2's "returns it by value" is dropped as its D12 says, and views-1 D5 names ADR-400's measuring `std::mem` |

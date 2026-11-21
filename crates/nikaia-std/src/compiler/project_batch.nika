@@ -32,7 +32,7 @@ pub fn project_batch_var() -> String {
 /// (`lower_batch`, #1582): paths to the crate root name the module, `main` and
 /// the types its signature names are `pub`, and the allocator is the batch's.
 /// So it is only wrapped. A `main` the emitter wrote `pub` starts a line; a
-/// program whose own `main` it does not wrap (ADR-360 D1) has none, and is
+/// program whose own `main` it does not wrap (ADR-cli-v1 D1) has none, and is
 /// built alone.
 fn project_batch_module(k: i64, rust: ref String) -> String? {
     if !rust.starts_with("pub fn main(") && !rust.contains("\npub fn main(") {

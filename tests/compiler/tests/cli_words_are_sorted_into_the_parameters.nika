@@ -1,4 +1,4 @@
-// The command line's words are sorted into `main`'s parameters (ADR-360): a
+// The command line's words are sorted into `main`'s parameters (ADR-cli-v1): a
 // subject by its place, an option by its name with `=` or the next word, `--`
 // ends the options, a word is a value of its parameter's type in `std`'s
 // number shape that fits it, and a wrong word stops the program before its

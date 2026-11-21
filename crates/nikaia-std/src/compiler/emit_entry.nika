@@ -12,7 +12,7 @@ impl EmitState {
     /// The program's own `main`, if this file carries one the runtime can
     /// wrap: `Some(throws)` for `fn main(…)` or `fn main(…) throws` with no
     /// receiver and no returned value, whose parameters are the command line
-    /// (ADR-360 D1) - and `None` for anything else. A `main` this does not recognise is emitted as
+    /// (ADR-cli-v1 D1) - and `None` for anything else. A `main` this does not recognise is emitted as
     /// written and keeps its name.
     fn user_main(ref self, world: ref EmitWorld) -> bool? {
         if !self.entry {
@@ -83,7 +83,7 @@ impl EmitState {
         if !self.environment_untrusted {
             text = f"{text}    nikaia_std::env::stop_a_privileged_start();\n"
         }
-        // ADR-360 D4: the words are read and `main`'s preconditions checked
+        // ADR-cli-v1 D4: the words are read and `main`'s preconditions checked
         // before anything starts; a wrong word ends the program here.
         text = f"{text}{reads}"
         let mut body: String = "__nikaia_main"
@@ -112,7 +112,7 @@ impl EmitState {
         return text
     }
 
-    /// **`main`'s parameters are the command line** (ADR-360 D1-D5): the
+    /// **`main`'s parameters are the command line** (ADR-cli-v1 D1-D5): the
     /// lines that read the words into locals named as the parameters and
     /// check `main`'s preconditions, and the arguments the body is called
     /// with. Nothing for a `main` without parameters.
@@ -387,7 +387,7 @@ fn main_written_type(ty: ref Type, words: ref winnow_grammar::InternerContext) -
 }
 
 /// Whether a parameter of `main` takes every positional word left: the last
-/// subject, a `Vec[T]` (ADR-360 D2).
+/// subject, a `Vec[T]` (ADR-cli-v1 D2).
 fn words_vec(ty: ref Type, words: ref winnow_grammar::InternerContext) -> bool {
     return words.resolve(ty.name) == "Vec" && !ty.is_nullable
 }
