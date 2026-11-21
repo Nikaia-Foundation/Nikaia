@@ -43,7 +43,7 @@ pub(crate) fn sysroot_package_bodies(item: &Spanned<Item>, cut: &mut Vec<(i64, i
         _ => return,
     };
     if !block.stmts.is_empty() {
-        let first = nikaia_std::index::get(&block.stmts, 0).span.start as i64;
+        let first = unsafe { nikaia_std::proven::read(&block.stmts, (0) as usize) }.span.start as i64;
         let last = unsafe { nikaia_std::proven::read(&block.stmts, (nikaia_std::proven::sub::<i64>(block.stmts.len() as i64, 1)) as usize) }.span.end as i64;
         cut.push((first, last));
     }

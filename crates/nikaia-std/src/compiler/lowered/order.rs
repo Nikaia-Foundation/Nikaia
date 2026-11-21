@@ -597,49 +597,58 @@ pub(crate) fn tasks_of_function(key: &str, body: &Block, lines: &[&str], waits: 
     for (id, site) in walk.sites.iter() {
         let id = nikaia_std::num::value(id);let site = *site;
         number += 1;
-        let line = line_at(lines, site.start).0 + 1;
-        let written = (*nikaia_std::index::get(&lines, nikaia_std::index::at(line - 1))).trim();
+        let row = task_row(lines, site.start);
+        if row < 0 { continue; }
+        let line = unsafe { nikaia_std::proven::add::<i64>(row, 1) };
+        let written = (*unsafe { nikaia_std::proven::read(&lines, (row) as usize) }).trim();
         out.push_str(&format!("    task {}, line {}: `{}`\n", number, line, written));
-        let fields = task_fields(id, &site, line, lines, &walk, waits);
+        let (window, waited, ends) = task_fields(id, &site, line, lines, &walk, waits);
         let starts = if site.pauses { "first: it pauses (ADR-292 D6)" } else { "after the tasks before it that pause: it never pauses (ADR-292 D6)" };
-        out.push_str(&format!("        window      {}\n", *nikaia_std::index::get(&fields, 0)));
-        out.push_str(&format!("        waited for  {}\n", *nikaia_std::index::get(&fields, 1)));
-        out.push_str(&format!("        group ends  {}\n", *nikaia_std::index::get(&fields, 2)));
+        out.push_str(&format!("        window      {}\n", window));
+        out.push_str(&format!("        waited for  {}\n", waited));
+        out.push_str(&format!("        group ends  {}\n", ends));
         out.push_str(&format!("        starts      {}\n", starts));
     }
 }
 
-pub(crate) fn task_fields(id: i64, site: &TaskSite, line: i64, lines: &[&str], walk: &TaskWalk, waits: &collections::BTreeMap<i64, CheckAsyncWait>) -> Vec<String> {
-    if site.detached { return vec![format!("from line {}, past its group", line), String::from("where its handle is joined, if it is"), String::from("none: it may outlive its group (ADR-async-5 D13)")]; }
-    let wait = match waits.get(&id) { Some(__nikaia_value) => __nikaia_value, None => return vec![format!("from line {}", line), String::from("not recorded by the checker"), String::from("not recorded by the checker")] };
+pub(crate) fn task_fields(id: i64, site: &TaskSite, line: i64, lines: &[&str], walk: &TaskWalk, waits: &collections::BTreeMap<i64, CheckAsyncWait>) -> (String, String, String) {
+    if site.detached { return (format!("from line {}, past its group", line), String::from("where its handle is joined, if it is"), String::from("none: it may outlive its group (ADR-async-5 D13)")); }
+    let wait = match waits.get(&id) { Some(__nikaia_value) => __nikaia_value, None => return (format!("from line {}", line), String::from("not recorded by the checker"), String::from("not recorded by the checker")) };
     let group_end = task_last_line(lines, nikaia_std::index::or(walk.groups.get(&wait.group), || site.end.into()));
     let ends = format!("after line {}", group_end);
     match wait.at {
-        CheckAsyncWaitAt::Before(_) => vec![task_lines(line, task_last_line(lines, site.end)), format!("before the call or operation it is part of, line {}", line), ends],
+        CheckAsyncWaitAt::Before(_) => (task_lines(line, task_last_line(lines, site.end)), format!("before the call or operation it is part of, line {}", line), ends),
         CheckAsyncWaitAt::BeforeStatement(at) => {
             let mut last = site.end;
             for end in walk.ends.iter() {
                 let end = nikaia_std::num::value(end);
                 if end <= at && end > last { last = end; }
             }
-            vec![task_lines(line, task_last_line(lines, last)), format!("before line {}", task_line_of(lines, at)), ends]
+            (task_lines(line, task_last_line(lines, last)), format!("before line {}", task_line_of(lines, at)), ends)
         },
-        CheckAsyncWaitAt::GroupEnd => vec![task_lines(line, group_end), String::from("at its group's end"), ends],
-        CheckAsyncWaitAt::Handle => vec![format!("{} at most", task_lines(line, group_end)), String::from("where its handle is joined, else at its group's end"), ends],
+        CheckAsyncWaitAt::GroupEnd => (task_lines(line, group_end), String::from("at its group's end"), ends),
+        CheckAsyncWaitAt::Handle => (format!("{} at most", task_lines(line, group_end)), String::from("where its handle is joined, else at its group's end"), ends),
     }
 }
 
-pub(crate) fn task_line_of(lines: &[&str], at: i64) -> i64 { line_at(lines, at).0 + 1 }
+pub(crate) fn task_line_of(lines: &[&str], at: i64) -> i64 { unsafe { nikaia_std::proven::add::<i64>(task_row(lines, at), 1) } }
+
+pub(crate) fn task_row(lines: &[&str], at: i64) -> i64 {
+    let row = line_at(lines, at).0;
+    if row < 0 || row >= lines.len() as i64 { return -1; }
+    row
+}
 
 pub(crate) fn task_last_line(lines: &[&str], end: i64) -> i64 {
     let at = line_at(lines, end);
     let mut line = at.0;
-    let text = *nikaia_std::index::get(&lines, nikaia_std::index::at(line));
+    if line < 0 || line >= lines.len() as i64 { return 0; }
+    let text = *unsafe { nikaia_std::proven::read(&lines, (line) as usize) };
     if line > 0 && (text.len() as i64 - text.trim_start().len() as i64) >= end - at.1 {
-        line -= 1;
-        while line > 0 && (*nikaia_std::index::get(&lines, nikaia_std::index::at(line))).trim().is_empty() { line -= 1; }
+        line = unsafe { nikaia_std::proven::sub::<i64>(line, 1) };
+        while line > 0 && (*unsafe { nikaia_std::proven::read(&lines, (line) as usize) }).trim().is_empty() { line = unsafe { nikaia_std::proven::sub::<i64>(line, 1) }; }
     }
-    line + 1
+    unsafe { nikaia_std::proven::add::<i64>(line, 1) }
 }
 
 pub(crate) fn task_lines(first: i64, last: i64) -> String {
@@ -650,7 +659,7 @@ pub(crate) fn task_lines(first: i64, last: i64) -> String {
 pub(crate) fn tasks_in_block(block: &Block, walk: &mut TaskWalk, pauses: &mut dyn FnMut(&Expr) -> bool) {
     if block.stmts.is_empty() { return; }
     let last = unsafe { nikaia_std::proven::read(&block.stmts, (nikaia_std::proven::sub::<i64>(block.stmts.len() as i64, 1)) as usize) }.span.end as i64;
-    walk.groups.insert(-1 - unsafe { nikaia_std::proven::read(&block.stmts, (0) as usize) }.span.start as i64, last);
+    walk.groups.insert(unsafe { nikaia_std::proven::sub::<i64>(-1, nikaia_std::proven::read(&block.stmts, (0) as usize).span.start as i64) }, last);
     for stmt in block.stmts.iter() {
         let start = stmt.span.start as i64;
         let end = stmt.span.end as i64;

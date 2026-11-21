@@ -892,29 +892,33 @@ fn tasks_of_function(key: ref String, body: ref Block, lines: ref Vec[ref String
     let mut number = 0
     for (id, site) in walk.sites {
         number += 1
-        let line = line_at(lines, site.start).0 + 1
-        let written = lines[line - 1].trim()
+        let row = task_row(lines, site.start)
+        if row < 0 {
+            continue
+        }
+        let line = row + 1
+        let written = lines[row].trim()
         out.push_str(ref f"    task {number}, line {line}: `{written}`\n")
-        let fields = task_fields(id, site, line, lines, walk, waits)
+        let (window, waited, ends) = task_fields(id, site, line, lines, walk, waits)
         let starts = if site.pauses { "first: it pauses (ADR-292 D6)" } else { "after the tasks before it that pause: it never pauses (ADR-292 D6)" }
-        out.push_str(ref f"        window      {fields[0]}\n")
-        out.push_str(ref f"        waited for  {fields[1]}\n")
-        out.push_str(ref f"        group ends  {fields[2]}\n")
+        out.push_str(ref f"        window      {window}\n")
+        out.push_str(ref f"        waited for  {waited}\n")
+        out.push_str(ref f"        group ends  {ends}\n")
         out.push_str(ref f"        starts      {starts}\n")
     }
 }
 
 // A task's window, where it is waited for and its group's end, as the
 // report says them.
-fn task_fields(id: i64, site: ref TaskSite, line: i64, lines: ref Vec[ref String], walk: ref TaskWalk, waits: ref collections::BTreeMap[i64, CheckAsyncWait]) -> Vec[String] {
+fn task_fields(id: i64, site: ref TaskSite, line: i64, lines: ref Vec[ref String], walk: ref TaskWalk, waits: ref collections::BTreeMap[i64, CheckAsyncWait]) -> (String, String, String) {
     if site.detached {
-        return [f"from line {line}, past its group", "where its handle is joined, if it is", "none: it may outlive its group (ADR-async-5 D13)"]
+        return (f"from line {line}, past its group", "where its handle is joined, if it is", "none: it may outlive its group (ADR-async-5 D13)")
     }
-    let wait = waits.get(id) ?? return [f"from line {line}", "not recorded by the checker", "not recorded by the checker"]
+    let wait = waits.get(id) ?? return (f"from line {line}", "not recorded by the checker", "not recorded by the checker")
     let group_end = task_last_line(lines, walk.groups.get(wait.group) ?? site.end)
     let ends = f"after line {group_end}"
     return match wait.at {
-        CheckAsyncWaitAt::Before(_) => [task_lines(line, task_last_line(lines, site.end)), f"before the call or operation it is part of, line {line}", ends],
+        CheckAsyncWaitAt::Before(_) => (task_lines(line, task_last_line(lines, site.end)), f"before the call or operation it is part of, line {line}", ends),
         CheckAsyncWaitAt::BeforeStatement(at) => {
             let mut last = site.end
             for end in walk.ends {
@@ -922,16 +926,25 @@ fn task_fields(id: i64, site: ref TaskSite, line: i64, lines: ref Vec[ref String
                     last = end
                 }
             }
-            [task_lines(line, task_last_line(lines, last)), f"before line {task_line_of(lines, at)}", ends]
+            (task_lines(line, task_last_line(lines, last)), f"before line {task_line_of(lines, at)}", ends)
         },
-        CheckAsyncWaitAt::GroupEnd => [task_lines(line, group_end), "at its group's end", ends],
-        CheckAsyncWaitAt::Handle => [f"{task_lines(line, group_end)} at most", "where its handle is joined, else at its group's end", ends],
+        CheckAsyncWaitAt::GroupEnd => (task_lines(line, group_end), "at its group's end", ends),
+        CheckAsyncWaitAt::Handle => (f"{task_lines(line, group_end)} at most", "where its handle is joined, else at its group's end", ends),
     }
 }
 
 // The 1-based line the byte `at` stands on.
 fn task_line_of(lines: ref Vec[ref String], at: i64) -> i64 {
-    return line_at(lines, at).0 + 1
+    return task_row(lines, at) + 1
+}
+
+// The 0-based line the byte `at` stands on, -1 where `lines` holds none.
+fn task_row(lines: ref Vec[ref String], at: i64) -> i64 {
+    let row = line_at(lines, at).0
+    if row < 0 || row >= lines.len() {
+        return -1
+    }
+    return row
 }
 
 // The 1-based line a span ending at the byte `end` ends on: a statement's
@@ -940,6 +953,9 @@ fn task_line_of(lines: ref Vec[ref String], at: i64) -> i64 {
 fn task_last_line(lines: ref Vec[ref String], end: i64) -> i64 {
     let at = line_at(lines, end)
     let mut line = at.0
+    if line < 0 || line >= lines.len() {
+        return 0
+    }
     let text = lines[line]
     if line > 0 && text.len() - text.trim_start().len() >= end - at.1 {
         line -= 1

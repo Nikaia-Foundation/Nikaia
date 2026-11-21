@@ -917,7 +917,7 @@ pub(crate) fn prover_pin_divisors(walk: &mut ProverWalk, expr: &Expr, scope: &Pr
                             if alts.is_empty() { continue; }
                             let mut whys: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
                             whys.reserve(alts.iter().size_hint().0); for alt in alts.iter() { whys.push(nikaia_std::block::Text::from(alt.why.to_string())); }
-                            said.push(format!("`{}` is {}: {}.", nikaia_std::index::get(&alts, 0).call, nikaia_std::index::or(pinned, || 0), nikaia_std::block::Text::from(whys.join("; "))));
+                            said.push(format!("`{}` is {}: {}.", unsafe { nikaia_std::proven::read(&alts, (0) as usize) }.call, nikaia_std::index::or(pinned, || 0), nikaia_std::block::Text::from(whys.join("; "))));
                         }
                         notes.extend(said.iter().cloned());
                         walk.state.divisor_notes.insert(nikaia_std::block::Text::from(key.to_string()), said);
@@ -2068,7 +2068,7 @@ pub(crate) fn prover_raw_sink(walk: &mut ProverWalk, callee: &str, args: &[Expr]
         for part in parts.iter() { raw_sink_part(walk, &sink, &sink.sink, part, span, scope, at, program, words, library, &mut *holes_of, &mut *ask, &mut *written_of); }
     } else if callee == "process::run" && !args.is_empty() {
         let mut parts: Vec<Expr> = vec![];
-        raw_sink_parts(nikaia_std::index::get(&args, 0), &mut *holes_of, &mut parts);
+        raw_sink_parts(unsafe { nikaia_std::proven::read(&args, (0) as usize) }, &mut *holes_of, &mut parts);
         let mut guard = String::new();
         if raw_sink_clean_lead(unsafe { nikaia_std::proven::read(&args, (0) as usize) }, scope, words, library, &walk.state, &mut *holes_of) { guard.push_str("path"); }
         let sink = ParamSink { index: -1, kind: String::from("program"), sink: String::from("the program `process::run` runs"), operation: String::from(""), root_part: false, guard };

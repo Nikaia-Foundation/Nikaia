@@ -441,7 +441,7 @@ pub fn check_claims_report(claims: &collections::BTreeMap<(i64, i64), FactClaim>
         let mut start = key.0;
         if start > source.as_bytes().len() as i64 { start = source.as_bytes().len() as i64; }
         if start > at {
-            for c in nikaia_std::index::get(&source.as_bytes(), nikaia_std::index::at(at..start)).iter() {
+            for c in unsafe { nikaia_std::proven::cut(&source.as_bytes(), (at) as usize, (start) as usize) }.iter() {
                 let c = nikaia_std::num::value(c);
                 if c == b'\x0a' { line = line + 1; }
             }

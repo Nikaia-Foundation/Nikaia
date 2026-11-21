@@ -1048,7 +1048,7 @@ pub(crate) fn bounding_open_push(open: &mut Vec<i64>, key: i64) {
 }
 
 pub(crate) fn bounding_open_pop(open: &mut Vec<i64>) -> i64 {
-    let top = *nikaia_std::index::get(&open, 0);
+    let top = *unsafe { nikaia_std::proven::read(&open, (0) as usize) };
     let last = unsafe { nikaia_std::proven::sub::<i64>(open.len() as i64, 1) };
     let key = *unsafe { nikaia_std::proven::read(&open, (last) as usize) };
     open.truncate(nikaia_std::count::of(last));
@@ -1478,6 +1478,8 @@ pub(crate) fn bounding_fits(walk: &mut BoundsWalk, op: &BinaryOp, lhs: &Expr, rh
         let mut goal = walk.arena.and(vec![above, below]);
         if side > 0 { goal = below; } else if side < 0 { goal = above; }
         if bounding_proves(&walk, facts, goal, &mut *ask) { return true; }
+        let typed = bounding_typed_goal(walk, t, goal);
+        if typed.is_some() && bounding_proves(&walk, facts, nikaia_std::index::or(typed, || 0), &mut *ask) { return true; }
         if subtracting && widest_lo <= 0 - widest_hi && bounding_not_negative(walk, lhs, facts, context, program, words, &mut *ask) && bounding_not_negative(walk, rhs, facts, context, program, words, &mut *ask) { return true; }
         let mut relatives: Vec<i64> = vec![];
         if side != 0 { relatives = bounding_relatives(walk, t, side, &bounds, facts); }
@@ -1530,6 +1532,27 @@ pub(crate) fn bounding_relatives(walk: &mut BoundsWalk, t: i64, side: i64, bound
         }
     }
     out
+}
+
+pub(crate) fn bounding_typed_goal(walk: &mut BoundsWalk, t: i64, goal: i64) -> Option<i64> {
+    let mut read: collections::BTreeSet<String> = collections::BTreeSet::new();
+    walk.arena.variables(t, &mut read);
+    let mut parts: Vec<i64> = vec![];
+    for y in read.iter() {
+        let ty = match walk.typed.get(y) { Some(__nikaia_value) => __nikaia_value, None => continue };
+        let held = match Range::held_by_type(&ty) { Some(__nikaia_value) => __nikaia_value, None => continue };
+        let lo = match held.lo { Some(__nikaia_value) => __nikaia_value, None => continue };
+        let hi = match held.hi { Some(__nikaia_value) => __nikaia_value, None => continue };
+        if lo < unsafe { nikaia_std::proven::sub::<i64>(0, solvable()) } || hi > solvable() { continue; }
+        let v = walk.arena.var(y);
+        let low = walk.arena.int(lo);
+        let high = walk.arena.int(hi);
+        parts.push(walk.arena.lt(v, low));
+        parts.push(walk.arena.gt(v, high));
+    }
+    if parts.is_empty() { return None; }
+    parts.push(goal);
+    Some(walk.arena.or(parts))
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -2800,7 +2823,24 @@ pub(crate) fn bounding_claim(walk: &mut BoundsWalk, expr: &Expr, facts: &BoundsF
         },
         _ => { },
     }
+    let empty = bounding_emptiness(walk, expr, context, words, true);
+    if empty.is_some() { return std::convert::identity(empty); }
     bounding_comparison(walk, expr, facts, context, program, words)
+}
+
+pub(crate) fn bounding_emptiness(walk: &mut BoundsWalk, expr: &Expr, context: &BoundsContext, words: &winnow_grammar::InternerContext, empty: bool) -> Option<i64> {
+    match expr {
+        Expr::MethodCall { receiver, method, args, .. } => {
+            let receiver = nikaia_std::boxed::open(receiver); let method = *method;
+            if !args.is_empty() || words.resolve(method) != "is_empty" { return None; }
+            let path = match path_of(receiver, words) { Some(__nikaia_value) => __nikaia_value, None => return None };
+            let length = match bounding_length(walk, receiver, &path, context) { Some(__nikaia_value) => __nikaia_value, None => return None };
+            let zero = walk.arena.int(0);
+            if empty { return Some(walk.arena.le(length, zero)); }
+            return Some(walk.arena.gt(length, zero));
+        },
+        _ => return None,
+    }
 }
 
 pub(crate) fn bounding_denial(walk: &mut BoundsWalk, expr: &Expr, facts: &BoundsFacts, context: &BoundsContext, program: &Program, words: &winnow_grammar::InternerContext) -> Option<i64> {
@@ -2847,7 +2887,7 @@ pub(crate) fn bounding_denial(walk: &mut BoundsWalk, expr: &Expr, facts: &Bounds
         },
         _ => { },
     }
-    None
+    bounding_emptiness(walk, expr, context, words, false)
 }
 
 pub(crate) fn bounding_flag_term(walk: &mut BoundsWalk, facts: &BoundsFacts, name: &str, up: bool) -> Option<i64> {
@@ -3822,7 +3862,7 @@ pub(crate) fn bounding_while(walk: &mut BoundsWalk, cond: &Expr, body: &Block, c
     }
     let mut head_facts: Vec<i64> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     if !step.is_empty() {
-        let below = bounding_counter_below(walk, cond, &nikaia_std::index::get(&step, 0).0, changed, &facts, context, program, words, &mut &mut *ask);
+        let below = bounding_counter_below(walk, cond, &unsafe { nikaia_std::proven::read(&step, (0) as usize) }.0, changed, &facts, context, program, words, &mut &mut *ask);
         if below.is_some() { head_facts.push(nikaia_std::index::or(below, || 0)); }
     }
     let scales = bounding_turn_scales(&walk, body, &outside, changed, &facts, context, words);

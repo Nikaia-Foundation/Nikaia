@@ -1,7 +1,7 @@
-bounds in tests/a_found_rule_asks_again_where_a_field_bound_it_read_changed.nika: 3 indexes, 2 proved; 3 operations, 1 proved
+bounds in tests/a_found_rule_asks_again_where_a_field_bound_it_read_changed.nika: 3 indexes, 3 proved; 3 operations, 2 proved
     17  self.used += 1  proved
     26  self.steps[at]  proved
     52  self.used += 1  checked: a field no rule of its type bounds: the walk finds `a <= b` only of two private fields a method compares (ADR-369 D4, #1681), and a count of work done has none (#1531)
     61  self.marks[at]  proved
-    69  self.marks[0]   checked: no fact bounds what it reads - a counter, a loop, a length, or one list as long as another (#432, #383, #388)
-    70  last + 1        checked: a value read out of a list, of which the walk knows no fact (#797, #798): an element of a named list (ADR-306 D7, D21)
+    69  self.marks[0]   proved
+    70  last + 1        proved

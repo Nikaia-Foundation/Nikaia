@@ -1,0 +1,10 @@
+bounds in tests/a_tuple_part_bound_without_a_type_is_a_number_of_the_walk.nika: 3 indexes, 3 proved; 6 operations, 2 proved
+     7  line + 1                        checked: a parameter whose callers do not prove a bound (ADR-391 D1)
+     7  start + lines[line].len()       checked: a parameter whose callers do not prove a bound (ADR-391 D1)
+     7  lines[line]                     proved
+     8  start += lines[line].len() + 1  checked: a parameter whose callers do not prove a bound (ADR-391 D1)
+     8  lines[line].len() + 1           checked: a parameter whose callers do not prove a bound (ADR-391 D1)
+     8  lines[line]                     proved
+     9  line += 1                       proved
+    27  row + 1                         proved
+    27  lines[row]                      proved

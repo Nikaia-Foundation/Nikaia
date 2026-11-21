@@ -196,7 +196,7 @@ pub(crate) fn property_name(expr: &Expr, words: &winnow_grammar::InternerContext
                 Expr::Path(segments, _) => path_text(segments, words),
                 _ => return None,
             };
-            let on = match path_of(nikaia_std::index::get(&args, 0), words) { Some(__nikaia_value) => __nikaia_value, None => return None };
+            let on = match path_of(unsafe { nikaia_std::proven::read(&args, (0) as usize) }, words) { Some(__nikaia_value) => __nikaia_value, None => return None };
             let rest = match property_paths(args, 1, words) { Some(__nikaia_value) => __nikaia_value, None => return None };
             Some(format!("{}.{}{}({})", on, property_mark(), callee, rest))
         },

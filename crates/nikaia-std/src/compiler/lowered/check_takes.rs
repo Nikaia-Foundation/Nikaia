@@ -74,13 +74,13 @@ impl CheckState {
         if !exits { return; }
         let mut at = from.0;
         while at < self.walked.len() as i64 {
-            if nikaia_std::index::get(&self.walked, nikaia_std::index::at(at)).until.is_none() { self.walked[nikaia_std::index::at(at)].until = Some(span.end as i64); }
-            at = at + 1;
+            if nikaia_std::index::get(&self.walked, nikaia_std::index::at(at)).until.is_none() { (*unsafe { nikaia_std::proven::slot(&mut self.walked, (at) as usize) }).until = Some(span.end as i64); }
+            at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
         }
         at = from.1;
         while at < self.handed.len() as i64 {
-            if nikaia_std::index::get(&self.handed, nikaia_std::index::at(at)).until.is_none() { self.handed[nikaia_std::index::at(at)].until = Some(span.end as i64); }
-            at = at + 1;
+            if nikaia_std::index::get(&self.handed, nikaia_std::index::at(at)).until.is_none() { (*unsafe { nikaia_std::proven::slot(&mut self.handed, (at) as usize) }).until = Some(span.end as i64); }
+            at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
         }
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before

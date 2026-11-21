@@ -69,7 +69,7 @@ pub(crate) fn lowered_first(text: &str) -> String {
     let c: Vec<scalar> = nikaia_std::list::scalars(text.chars());
     if c.is_empty() { return String::from(""); }
     let mut head: String = String::from("");
-    head.push(*nikaia_std::index::get(&c, 0));
+    head.push(*unsafe { nikaia_std::proven::read(&c, (0) as usize) });
     let mut out = nikaia_std::block::Text::from(head.to_lowercase());
     for k in 1..c.len() as i64 { out.push(*unsafe { nikaia_std::proven::read(&c, (k) as usize) }); }
     out

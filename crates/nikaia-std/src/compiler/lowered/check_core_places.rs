@@ -245,7 +245,19 @@ pub(crate) fn check_core_field_walked<H: CheckHost>(state: &mut CheckState, worl
         return Ty::Unknown;
     }
     match on {
-        Ty::Tuple(ref parts) => { return stamped_if(seen_base, check_core_places_tuple_part(state, parts, &field, span)); },
+        Ty::Tuple(ref parts) => {
+            let part = check_core_places_tuple_part(state, parts, &field, span);
+            match part {
+                Ty::Named { ref name, ref args, .. } => {
+                    if args.is_empty() && is_whole_number(name) {
+                        state.facts.whole_fields.insert(id_of(expr) as i64);
+                        state.facts.whole_types.insert(id_of(expr) as i64, nikaia_std::block::Text::from(name.to_string()));
+                    }
+                },
+                _ => { },
+            }
+            return stamped_if(seen_base, part);
+        },
         _ => { },
     }
     let mut seen: Ty = on.clone();

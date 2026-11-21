@@ -348,7 +348,20 @@ fn check_core_field_walked[H: CheckHost](mut state: CheckState, world: ref Check
     }
     match on {
         Ty::Tuple(parts) => {
-            return stamped_if(seen_base, check_core_places_tuple_part(state, parts, field, span))
+            let part = check_core_places_tuple_part(state, parts, field, span)
+            // **A tuple's whole-number part is a number of the bounds walk**
+            // (#2629), as a field of a whole-number type is (ADR-306 D17):
+            // `let row = line_at(lines, at).0` is bounded by its guards.
+            match part {
+                Ty::Named { name, args, .. } => {
+                    if args.is_empty() && is_whole_number(name) {
+                        state.facts.whole_fields.insert(id_of(expr) as i64)
+                        state.facts.whole_types.insert(id_of(expr) as i64, name.clone())
+                    }
+                },
+                else => {}
+            }
+            return stamped_if(seen_base, part)
         },
         else => {}
     }
