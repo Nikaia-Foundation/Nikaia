@@ -2568,12 +2568,25 @@ impl project_check::ProjectCheckExplainHost for ExplainHost<'_> {
         let (program, settings, library) = (self.program, self.settings, self.library);
         let unit = &program.units[at as usize];
         match kind {
-            "overlaps" => crate::contracts::order::overlap_report(
-                &unit.parsed,
-                &program.contracts,
-                library,
-                &crate::emit::branch_starts_first(&unit.parsed, settings.build, &program.contracts),
-            ),
+            // The `overlap { … }` blocks, then the tasks `async` forms start
+            // (ADR-async-5 D32).
+            "overlaps" => {
+                crate::contracts::order::overlap_report(
+                    &unit.parsed,
+                    &program.contracts,
+                    library,
+                    &crate::emit::branch_starts_first(
+                        &unit.parsed,
+                        settings.build,
+                        &program.contracts,
+                    ),
+                ) + &crate::emit::task_report(
+                    &unit.parsed,
+                    &unit.source,
+                    settings.build,
+                    &program.contracts,
+                )
+            }
             "sharing" => crate::contracts::sharing::report(
                 &unit.parsed,
                 &program.contracts,

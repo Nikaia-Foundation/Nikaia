@@ -541,3 +541,149 @@ pub(crate) fn padded_right(text: &str, width: i64) -> String {
     out
 }
 
+pub fn task_report(items: &[Spanned<Item>], names: &winnow_grammar::InternerContext, source: &str, waits: &collections::BTreeMap<i64, CheckAsyncWait>, pauses: &mut impl FnMut(&Expr) -> bool) -> String {
+    let lines: Vec<&str> = source.split("\n").collect::<Vec<_>>();
+    let mut out: String = String::from(""); #[allow(clippy::redundant_locals)] let lines = lines;
+    for item in items.iter() {
+        match &item.node {
+            Item::Fn { name, body, .. } => { let name = *name; tasks_of_function(&function_name(names, name), body, &lines, waits, &mut *pauses, &mut out); },
+            Item::Impl { target, methods, .. } => {
+                let owner: Option<String> = Some(nikaia_std::block::Text::from(names.resolve(target.name).to_string()));
+                for method in methods.iter() {
+                    match &method.node {
+                        Item::Fn { name, body, .. } => { let name = *name; tasks_of_function(&keyed((owner).as_deref(), &function_name(names, name)), body, &lines, waits, &mut *pauses, &mut out); },
+                        _ => { },
+                    }
+                }
+            },
+            _ => { },
+        }
+    }
+    out
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub(crate) struct TaskSite {
+    pub(crate) start: i64,
+    pub(crate) end: i64,
+    pub(crate) detached: bool,
+    pub(crate) pauses: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub(crate) struct TaskWalk {
+    pub(crate) sites: collections::BTreeMap<i64, TaskSite>,
+    pub(crate) ends: Vec<i64>,
+    pub(crate) groups: collections::BTreeMap<i64, i64>,
+}
+
+pub(crate) fn tasks_of_function(key: &str, body: &Block, lines: &[&str], waits: &collections::BTreeMap<i64, CheckAsyncWait>, pauses: &mut impl FnMut(&Expr) -> bool, out: &mut String) {
+    let mut walk = TaskWalk { sites: collections::BTreeMap::new(), ends: vec![], groups: collections::BTreeMap::new() };
+    tasks_in_block(body, &mut walk, &mut *pauses);
+    if walk.sites.is_empty() { return; }
+    let first = walk.sites.values().filter(|&site| { site.pauses }).count() as i64;
+    let count = walk.sites.len() as i64;
+    let noun = if count == 1 { "task" } else { "tasks" };
+    out.push_str(&format!("{}: {} {} an `async` form starts, {} of them started first\n", key, count, noun, first));
+    let mut number = 0;
+    for (id, site) in walk.sites.iter() {
+        let id = nikaia_std::num::value(id);let site = *site;
+        number += 1;
+        let line = line_at(lines, site.start).0 + 1;
+        let written = (*nikaia_std::index::get(&lines, nikaia_std::index::at(line - 1))).trim();
+        out.push_str(&format!("    task {}, line {}: `{}`\n", number, line, written));
+        let fields = task_fields(id, &site, line, lines, &walk, waits);
+        let starts = if site.pauses { "first: it pauses (ADR-292 D6)" } else { "after the tasks before it that pause: it never pauses (ADR-292 D6)" };
+        out.push_str(&format!("        window      {}\n", *nikaia_std::index::get(&fields, 0)));
+        out.push_str(&format!("        waited for  {}\n", *nikaia_std::index::get(&fields, 1)));
+        out.push_str(&format!("        group ends  {}\n", *nikaia_std::index::get(&fields, 2)));
+        out.push_str(&format!("        starts      {}\n", starts));
+    }
+}
+
+pub(crate) fn task_fields(id: i64, site: &TaskSite, line: i64, lines: &[&str], walk: &TaskWalk, waits: &collections::BTreeMap<i64, CheckAsyncWait>) -> Vec<String> {
+    if site.detached { return vec![format!("from line {}, past its group", line), String::from("where its handle is joined, if it is"), String::from("none: it may outlive its group (ADR-async-5 D13)")]; }
+    let wait = match waits.get(&id) { Some(__nikaia_value) => __nikaia_value, None => return vec![format!("from line {}", line), String::from("not recorded by the checker"), String::from("not recorded by the checker")] };
+    let group_end = task_last_line(lines, nikaia_std::index::or(walk.groups.get(&wait.group), || site.end.into()));
+    let ends = format!("after line {}", group_end);
+    match wait.at {
+        CheckAsyncWaitAt::Before(_) => vec![task_lines(line, task_last_line(lines, site.end)), format!("before the call or operation it is part of, line {}", line), ends],
+        CheckAsyncWaitAt::BeforeStatement(at) => {
+            let mut last = site.end;
+            for end in walk.ends.iter() {
+                let end = nikaia_std::num::value(end);
+                if end <= at && end > last { last = end; }
+            }
+            vec![task_lines(line, task_last_line(lines, last)), format!("before line {}", task_line_of(lines, at)), ends]
+        },
+        CheckAsyncWaitAt::GroupEnd => vec![task_lines(line, group_end), String::from("at its group's end"), ends],
+        CheckAsyncWaitAt::Handle => vec![format!("{} at most", task_lines(line, group_end)), String::from("where its handle is joined, else at its group's end"), ends],
+    }
+}
+
+pub(crate) fn task_line_of(lines: &[&str], at: i64) -> i64 { line_at(lines, at).0 + 1 }
+
+pub(crate) fn task_last_line(lines: &[&str], end: i64) -> i64 {
+    let at = line_at(lines, end);
+    let mut line = at.0;
+    let text = *nikaia_std::index::get(&lines, nikaia_std::index::at(line));
+    if line > 0 && (text.len() as i64 - text.trim_start().len() as i64) >= end - at.1 {
+        line -= 1;
+        while line > 0 && (*nikaia_std::index::get(&lines, nikaia_std::index::at(line))).trim().is_empty() { line -= 1; }
+    }
+    line + 1
+}
+
+pub(crate) fn task_lines(first: i64, last: i64) -> String {
+    if last <= first { return format!("line {}", first); }
+    format!("lines {}-{}", first, last)
+}
+
+pub(crate) fn tasks_in_block(block: &Block, walk: &mut TaskWalk, pauses: &mut dyn FnMut(&Expr) -> bool) {
+    if block.stmts.is_empty() { return; }
+    let last = unsafe { nikaia_std::proven::read(&block.stmts, (nikaia_std::proven::sub::<i64>(block.stmts.len() as i64, 1)) as usize) }.span.end as i64;
+    walk.groups.insert(-1 - unsafe { nikaia_std::proven::read(&block.stmts, (0) as usize) }.span.start as i64, last);
+    for stmt in block.stmts.iter() {
+        let start = stmt.span.start as i64;
+        let end = stmt.span.end as i64;
+        walk.ends.push(end);
+        let exprs = visited_in_stmt(&stmt.node);
+        for each in exprs.iter() {
+            let each = *each;
+            match each {
+                Expr::Async(_, _, _, _) => { walk.sites.insert(id_of(each) as i64, TaskSite { start, end, detached: false, pauses: pauses(each) }); },
+                Expr::Spawn { written_async, child, .. } if { let child = *child; let written_async = *written_async; written_async || child } => {
+                    let child = *child;
+                    walk.sites.insert(id_of(each) as i64, TaskSite { start, end, detached: !child, pauses: pauses(each) });
+                },
+                _ => { },
+            }
+        }
+        for each in exprs.iter() {
+            let each = *each;
+            match each {
+                Expr::Block(inner, _) => { tasks_in_block(inner, walk, &mut &mut *pauses); },
+                Expr::AsyncGroup(inner, _, _, _, _) => {
+                    tasks_in_block(inner, walk, &mut &mut *pauses);
+                    if !inner.stmts.is_empty() { walk.groups.insert(id_of(each) as i64, unsafe { nikaia_std::proven::read(&inner.stmts, (nikaia_std::proven::sub::<i64>(inner.stmts.len() as i64, 1)) as usize) }.span.end as i64); }
+                },
+                Expr::Unsafe(inner, _) => { tasks_in_block(inner, walk, &mut &mut *pauses); },
+                Expr::Overlap(inner, _) => { tasks_in_block(inner, walk, &mut &mut *pauses); },
+                Expr::If { then_branch, else_branch, .. } => {
+                    tasks_in_block(then_branch, walk, &mut &mut *pauses);
+                    let other = match else_branch { Some(__nikaia_value) => __nikaia_value, None => continue };
+                    tasks_in_block(other, walk, &mut &mut *pauses);
+                },
+                Expr::Closure { body, .. } => { tasks_in_block(body, walk, &mut &mut *pauses); },
+                Expr::TryCatch { handler, .. } => { tasks_in_block(handler, walk, &mut &mut *pauses); },
+                _ => { },
+            }
+        } ::core::mem::drop(exprs);
+        match &stmt.node {
+            Stmt::For { body, .. } => { tasks_in_block(body, walk, &mut &mut *pauses); },
+            Stmt::While { body, .. } => { tasks_in_block(body, walk, &mut &mut *pauses); },
+            _ => { },
+        }
+    }
+}
+
