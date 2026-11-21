@@ -5,7 +5,9 @@ counted is start-up. `bench.nika` counts it in the four ways a Nikaia
 program is started, against `hello.py`:
 
 1. the binary `nikaia build` wrote (`dev` profile);
-2. `nikaia run` of a file run before and unchanged since (warm);
+2. `nikaia run` of a file run before and unchanged since (warm); 2' the
+   same with its run record removed, the way every warm run went before the
+   record (#2421, #2530): the file read again, its program found built;
 3. `nikaia run` after an edit: (a) a comment's text changed, which leaves the
    generated Rust as it was; (b) a branch added that is never taken, which
    changes the Rust, so `rustc` compiles it again;
@@ -43,22 +45,27 @@ unused `let` and the warning costs a lowering of its own. Not counted: the
 ## Figures
 
 2026-11-21, compiler `target/fast` (profile `fast`) built from `develop` at
-c5c2c38a5, rustc 1.97.0, Python 3.13.18, Intel Xeon @ 2.10GHz.
+12d353d1c (`NIKAIA=target/bins/12d353d1ca57/nikaia`), rustc 1.97.0, Python 3.13.18, Intel Xeon @ 2.10GHz.
 
 | scenario | instructions | mispredicted | / Python | instructions by program |
 |---|---:|---:|---:|---|
-| Python 3, `python3 hello.py` | 40,366,012 | 643,338 | 1.00 | python3.13 40,366,012 |
-| 1 built binary (`nikaia build`, `dev`) | 508,369 | 8,856 | 0.01 | hello 508,369 |
-| 2 `nikaia run`, warm | 50,246,733 | 216,594 | 1.24 | hello 40,929,633, nikaia 9,317,100 |
-| 3a `nikaia run` after an edit, Rust unchanged | 309,512,807 | 2,225,395 | 7.67 | hello 40,929,635, nikaia 268,583,172 |
-| 3b `nikaia run` after an edit, Rust changed | 698,199,040 | 6,131,265 | 17.30 | hello 40,929,646, nikaia 270,881,881, rustc 328,570,469, cc 2,613,403, collect2 457,434, rust-lld 54,219,951, ld.lld 526,256 |
-| 4 `nikaia run` of a new file | 638,300,146 | 5,898,342 | 15.81 | hello 40,929,633, nikaia 156,686,223, rustc 382,870,068, cc 2,613,749, collect2 457,633, rust-lld 54,216,454, ld.lld 526,386 |
+| Python 3, `python3 hello.py` | 40,278,939 | 640,489 | 1.00 | python3.13 40,278,939 |
+| 1 built binary (`nikaia build`, `dev`) | 508,974 | 8,771 | 0.01 | hello 508,974 |
+| 2 `nikaia run`, warm | 50,258,454 | 215,456 | 1.25 | hello 40,930,250, nikaia 9,328,204 |
+| 2' `nikaia run`, warm, without its run record | 85,660,651 | 503,816 | 2.13 | hello 40,930,220, nikaia 44,730,431 |
+| 3a `nikaia run` after an edit, Rust unchanged | 309,688,549 | 2,247,424 | 7.69 | hello 40,930,250, nikaia 268,758,299 |
+| 3b `nikaia run` after an edit, Rust changed | 698,883,654 | 6,183,708 | 17.35 | hello 40,930,263, nikaia 270,674,999, rustc 329,468,276, cc 2,615,476, collect2 457,433, rust-lld 54,210,081, ld.lld 527,126 |
+| 4 `nikaia run` of a new file | 750,590,576 | 6,748,796 | 18.63 | hello 40,930,250, nikaia 268,757,067, rustc 383,084,125, cc 2,616,024, collect2 457,390, rust-lld 54,218,571, ld.lld 527,149 |
 
 ## Where the warm run goes (scenario 2)
 
 No `rustc` child runs: the version comes from the answer held in a stamp
 (`comptime_run::rustc_version`, about 0.23 M), and the file is neither read
 nor checked again: its run record matches (about 0.15 M).
+Row 2' shows what the record saves: without it the same run reads the file
+again and takes it through the front end before it finds the program in its
+slot, nikaia 44.7 M instead of 9.3 M (35.4 M, 79 % of nikaia's share, the
+whole run 1.70 times fewer instructions).
 
 nikaia's 9.3 M, from callgrind's inclusive counts:
 

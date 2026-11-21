@@ -181,6 +181,19 @@ fn count(dir: String, command: String, expected: String) -> Count throws {
 // (`project_drive_kept_root`). Removed, so that what a run left there before,
 // a record or a slot, does not count in this one.
 fn forget(file: String) throws {
+	let entry = entry_of(file)
+	must(f"rm -rf {entry}", f"removing the cache entry of {file}")
+}
+
+// Only the entry's run records, `ran/` (#2421): the slot stays, so the next
+// run reads, checks and lowers the file and finds its program built, the
+// way every warm run went before the record (#2530).
+fn forget_record(file: String) throws {
+	let entry = entry_of(file)
+	must(f"rm -rf {entry}/ran", f"removing the run record of {file}")
+}
+
+fn entry_of(file: String) -> String throws {
 	let cache = must(
 		"if [ -n \"$NIKAIA_CACHE_DIR\" ]; then echo $NIKAIA_CACHE_DIR; elif [ -n \"$XDG_CACHE_HOME\" ]; then echo $XDG_CACHE_HOME/nikaia; else echo $HOME/.cache/nikaia; fi",
 		"the user cache",
@@ -189,7 +202,7 @@ fn forget(file: String) throws {
 		f"printf %s $(realpath {file}) | sha256sum | cut -c1-16",
 		"the cache entry's name",
 	)
-	must(f"rm -rf {cache}/run/hello-{key}", f"removing the cache entry of {file}")
+	return f"{cache}/run/hello-{key}"
 }
 
 fn row(what: String, c: Count, python: Count) -> String {
@@ -231,6 +244,8 @@ fn main() throws {
 	forget(warm_file)
 	must(f"{nikaia} run {warm_file} && {nikaia} run {warm_file}", "the warm-up runs")
 	let warm = count(f"{out}/warm", f"{nikaia} run {warm_file}", expected)
+	forget_record(warm_file)
+	let unrecorded = count(f"{out}/warm-unrecorded", f"{nikaia} run {warm_file}", expected)
 
 	// 3: after an edit. A comment's text leaves the generated Rust as it was
 	// (a new line would move the places it holds); a new branch changes it,
@@ -275,6 +290,7 @@ fn main() throws {
 	print(row("Python 3, `python3 hello.py`", python, python))
 	print(row("1 built binary (`nikaia build`, `dev`)", built, python))
 	print(row("2 `nikaia run`, warm", warm, python))
+	print(row("2' `nikaia run`, warm, without its run record", unrecorded, python))
 	print(row("3a `nikaia run` after an edit, Rust unchanged", comment, python))
 	print(row("3b `nikaia run` after an edit, Rust changed", code, python))
 	print(row("4 `nikaia run` of a new file", fresh, python))
