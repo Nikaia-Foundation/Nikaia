@@ -329,6 +329,11 @@ struct BoundsWalk {
 	/// pending entry adds what an absent one does, so a walk of
 	/// `rules_check` read the pending state only of these.
 	found_asked: collections::BTreeSet[String],
+	/// **The found returns any read asked for** (#2464), found or not, by
+	/// key, and `callee#` where every entry of a struct result's fields was
+	/// looked through: what a walk of `rules_check` read of
+	/// `context.returns`.
+	found_read: collections::BTreeSet[String],
 	/// The join of what this pass saw written, by key.
 	written: collections::BTreeMap[String, Range],
 	/// Keys a write this pass put something unbounded in.
@@ -880,6 +885,7 @@ fn bounding_new(
 		assumed_read: collections::BTreeSet(),
 		self_read: collections::BTreeMap(),
 		found_asked: collections::BTreeSet(),
+		found_read: collections::BTreeSet(),
 		written: collections::BTreeMap(),
 		poisoned: collections::BTreeSet(),
 		assumed_ends: collections::BTreeMap(),
@@ -1238,6 +1244,7 @@ fn bounding_relations_of(
 		return out
 	}
 	let callee = bounding_found_key(walk, value, context, words) ?? return out
+	walk.found_read.insert(callee.clone())
 	let found = context.returns.get(callee) ?? return out
 	if found.each || found.pending {
 		return out
@@ -1284,6 +1291,7 @@ fn bounding_relation_grows(
 		return false
 	}
 	let callee = bounding_found_key(walk, value, context, words) ?? return false
+	walk.found_read.insert(callee.clone())
 	let found = context.returns.get(callee) ?? return false
 	if found.each || found.pending {
 		return false
@@ -2267,6 +2275,7 @@ fn bounding_range_shaped(
 			// to** (ADR-306 D34), as a free function's below.
 			if !bounding_found_options(expr) {
 				let callee = bounding_found_key(walk, expr, context, words) ?? return null
+				walk.found_read.insert(callee.clone())
 				let found = context.returns.get(callee) ?? return null
 				if found.each || found.pending {
 					return null
@@ -2285,6 +2294,7 @@ fn bounding_range_shaped(
 				return null
 			}
 			let callee = bounding_found_key(walk, expr, context, words) ?? return null
+			walk.found_read.insert(callee.clone())
 			let found = context.returns.get(callee) ?? return null
 			if found.each || found.pending {
 				return null
@@ -5012,6 +5022,7 @@ fn bounding_name_call(
 		return
 	}
 	let callee = bounding_found_key(walk, side, context, words) ?? return
+	walk.found_read.insert(callee.clone())
 	let found = context.returns.get(callee) ?? return
 	if found.each || found.pending {
 		return
@@ -8490,6 +8501,7 @@ fn bounding_found_whole(
 	}
 	let callee = bounding_found_key(walk, value, context, words) ?? return false
 	walk.found_asked.insert(callee.clone())
+	walk.found_read.insert(callee.clone())
 	let found = context.returns.get(callee) ?? return false
 	return !found.each && found.plain
 }
@@ -12248,6 +12260,7 @@ fn bounding_measured(
 		return out
 	}
 	let callee = bounding_found_key(walk, value, context, words) ?? return out
+	walk.found_read.insert(callee.clone())
 	let found = context.returns.get(callee) ?? return out
 	if found.pending {
 		return out
@@ -12359,6 +12372,7 @@ fn bounding_returned_below(
 	let mut out: collections::BTreeMap[String, bool] = collections::BTreeMap()
 	let callee = bounding_found_key(walk, value, context, words) ?? return out
 	walk.found_asked.insert(callee.clone())
+	walk.found_read.insert(callee.clone())
 	let found = context.returns.get(callee) ?? return out
 	if found.each != each {
 		return out
@@ -12484,7 +12498,7 @@ fn bounding_found_term(
 /// D24), of a callee the walk does not bind again; nothing while the
 /// rounds collect or where none was found.
 fn bounding_returned_values(
-	walk: ref BoundsWalk,
+	mut walk: BoundsWalk,
 	value: ref Expr,
 	context: ref BoundsContext,
 	words: ref winnow_grammar::InternerContext,
@@ -12495,6 +12509,7 @@ fn bounding_returned_values(
 			if walk.shape.bound.contains(callee) {
 				return null
 			}
+			walk.found_read.insert(callee.clone())
 			let found = context.returns.get(callee) ?? return null
 			if !found.each || found.pending {
 				return null
@@ -12522,6 +12537,7 @@ fn bounding_call_root(
 	// **Only a call of a function found to return whole numbers** writes
 	// the root here: `collections::BTreeMap()` of an empty map is a call
 	// too, and its writes come later.
+	walk.found_read.insert(callee.clone())
 	let found = context.returns.get(callee)
 	if found == null || !(found?.each ?? false) || (found?.pending ?? false) {
 		return
@@ -12652,6 +12668,7 @@ fn bounding_fields_found(
 	}
 	let callee = bounding_found_key(walk, value, context, words) ?? return out
 	let prefix = f"{callee}#"
+	walk.found_read.insert(prefix.clone())
 	let mut projected: Vec[String] = []
 	for (key, found) in context.returns {
 		if key.starts_with(prefix) && !found.each && !found.pending {

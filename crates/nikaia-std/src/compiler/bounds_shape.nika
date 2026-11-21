@@ -66,6 +66,9 @@ pub struct RulesChecked {
 	/// than an absent one (`BoundsWalk.found_asked`, #2464): `reads` holds
 	/// a pending entry only of these, as elsewhere it reads as absent.
 	pub asked: collections::BTreeSet[String],
+	/// The found returns it asked for anywhere (`BoundsWalk.found_read`):
+	/// `reads` holds only these.
+	pub looked: collections::BTreeSet[String],
 	pub failed: collections::BTreeSet[i64],
 }
 
