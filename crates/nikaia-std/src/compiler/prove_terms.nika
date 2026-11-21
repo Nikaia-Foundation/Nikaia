@@ -293,7 +293,7 @@ fn property_name(expr: ref Expr, words: ref winnow_grammar::InternerContext) -> 
                 Expr::Path(segments, _) => path_text(segments, words),
                 else => return null,
             }
-            let on = path_of(args[0], words) ?? return null
+            let on = path_through_clone(args[0], words) ?? return null
             let rest = property_paths(args, 1, words) ?? return null
             f"{on}.{property_mark()}{callee}({rest})"
         },
@@ -306,6 +306,18 @@ fn property_name(expr: ref Expr, words: ref winnow_grammar::InternerContext) -> 
             f"{on}.{property_mark()}.{words.resolve(method)}({rest})"
         },
         else => null,
+    }
+}
+
+/// The path a property's first argument reads, through a `.clone()`
+/// (ADR-raw-sinks-1 D14): `key` of `key` and of `key.clone()`, which holds
+/// the same value, so `path::is_below(key.clone())` proves `key`.
+fn path_through_clone(arg: ref Expr, words: ref winnow_grammar::InternerContext) -> String? {
+    return match arg {
+        Expr::MethodCall { receiver, method, args, .. } => {
+            if words.resolve(method) == "clone" && args.is_empty() { path_of(receiver, words) } else { null }
+        },
+        else => path_of(arg, words),
     }
 }
 

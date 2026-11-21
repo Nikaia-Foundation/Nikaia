@@ -2322,15 +2322,7 @@ pub(crate) fn raw_sink_joined(arg: &Expr, scope: &ProverScope, words: &winnow_gr
     }
 }
 
-pub(crate) fn raw_sink_name(part: &Expr, words: &winnow_grammar::InternerContext) -> Option<String> {
-    match part {
-        Expr::MethodCall { receiver, method, args, .. } => {
-            let receiver = nikaia_std::boxed::open(receiver); let method = *method;
-            if words.resolve(method) == "clone" && args.is_empty() { path_of(receiver, words) } else { None }
-        },
-        _ => path_of(part, words),
-    }
-}
+pub(crate) fn raw_sink_name(part: &Expr, words: &winnow_grammar::InternerContext) -> Option<String> { path_through_clone(part, words) }
 
 pub(crate) fn raw_sink_joined_name(part: &Expr, scope: &ProverScope, words: &winnow_grammar::InternerContext) -> bool {
     let name = match raw_sink_name(part, words) { Some(__nikaia_value) => __nikaia_value, None => return false };
@@ -3037,7 +3029,7 @@ pub(crate) fn prover_properties_in(expr: &Expr, scope: &ProverScope, state: &Pro
             let func = nikaia_std::boxed::open(func);
             if !prover_a_property_callee(func, scope, state, program, words) { return; }
             let name = match property_name(expr, words) { Some(__nikaia_value) => __nikaia_value, None => return };
-            let on = match path_of(nikaia_std::index::get(&args, 0), words) { Some(__nikaia_value) => __nikaia_value, None => return };
+            let on = match path_through_clone(nikaia_std::index::get(&args, 0), words) { Some(__nikaia_value) => __nikaia_value, None => return };
             out.push((name, on));
         },
         Expr::MethodCall { receiver, method, .. } => {

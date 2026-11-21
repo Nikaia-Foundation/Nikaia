@@ -3197,12 +3197,7 @@ fn raw_sink_joined(arg: ref Expr, scope: ref ProverScope, words: ref winnow_gram
 /// The name or field path a sink part reads, through a `.clone()`
 /// (ADR-raw-sinks-1 D14): `key` of `key` and of `key.clone()`.
 fn raw_sink_name(part: ref Expr, words: ref winnow_grammar::InternerContext) -> String? {
-    return match part {
-        Expr::MethodCall { receiver, method, args, .. } => {
-            if words.resolve(method) == "clone" && args.is_empty() { path_of(receiver, words) } else { null }
-        },
-        else => path_of(part, words),
-    }
+    return path_through_clone(part, words)
 }
 
 /// Whether a sink part reads a name bound to a guarded name joined after a
@@ -4177,7 +4172,7 @@ fn prover_properties_in(expr: ref Expr, scope: ref ProverScope, state: ref Prove
                 return
             }
             let name = property_name(expr, words) ?? return
-            let on = path_of(args[0], words) ?? return
+            let on = path_through_clone(args[0], words) ?? return
             out.push((name, on))
         },
         Expr::MethodCall { receiver, method, .. } => {
