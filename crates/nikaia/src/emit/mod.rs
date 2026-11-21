@@ -620,7 +620,7 @@ struct Emitter<'p> {
     order_proofs: nikaia_std::compiler::emit_order::EmitOrderProofs,
     /// **The program's `main`'s parameters as its definition wrote them**,
     /// `name: type`, for the entry that reads the words into them
-    /// ([ADR-360](../../docs/specification/adr/adr-360.md) D1).
+    /// ([ADR-cli-v1](../../docs/specification/adr/adr-cli-v1.md) D1).
     main_params: std::cell::RefCell<Vec<String>>,
 }
 

@@ -332,7 +332,7 @@ commit 7e84ae5c523c8b9937bb4faacc6d029bf49d4f75
 **Specification:** [ADR-269](../docs/specification/adr/adr-269.md) (the rules),
 [ADR-270](../docs/specification/adr/adr-270.md) (the solver),
 [ADR-361](../docs/specification/adr/adr-361.md) (loops),
-[ADR-360](../docs/specification/adr/adr-360.md) (`main`'s parameters).
+[ADR-cli-v1](../docs/specification/adr/adr-cli-v1.md) (`main`'s parameters).
 
 ---
 

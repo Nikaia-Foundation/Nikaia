@@ -260,7 +260,7 @@ pub fn main_parameters_source() -> String {
     return "the command line, through `main`'s parameters,"
 }
 
-/// **Whether the file's free `main` takes parameters** (ADR-360 D1,
+/// **Whether the file's free `main` takes parameters** (ADR-cli-v1 D1,
 /// ADR-399 D1): they are read from the words of the command line, so they
 /// are an untrusted source with no call to see. No marker makes them
 /// trusted (owner, 2026-11-14): `cli::args(trusted: true)` is the way.
