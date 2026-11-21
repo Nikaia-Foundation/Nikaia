@@ -701,15 +701,16 @@ impl ProverOutside {
 /// rounds repeat until nothing is added. Bindings are followed in the order
 /// they are written, without branches told apart: a value that may come
 /// from outside is taken as coming from outside.
-fn prover_outside(program: ref Program, words: ref winnow_grammar::InternerContext, library: ref Ledger, state: ref ProverState, holes_of: fn(ref Expr) -> Vec[Expr] sync) -> ProverOutside {
+fn prover_outside(program: ref Program, words: ref winnow_grammar::InternerContext, own: ref Ledger, library: ref Ledger, state: ref ProverState, holes_of: fn(ref Expr) -> Vec[Expr] sync) -> ProverOutside {
     let mut found = ProverOutside { results: state.outside.results.clone(), fields: state.outside.fields.clone(), returning: collections::BTreeSet(), valued: collections::BTreeSet(), leads: collections::BTreeMap() }
+    let leaving = ProverLeaving::of(program, own, words)
     for item in program.items {
         match item.node {
-            Item::Fn { .. } => prover_outside_function(found, item, null, words, library, state, holes_of),
+            Item::Fn { .. } => prover_outside_function(found, item, null, leaving, words, library, state, holes_of),
             Item::Impl { methods, target, .. } => {
                 let owner = words.resolve(target.name).clone()
                 for method in methods {
-                    prover_outside_function(found, method, owner.clone(), words, library, state, holes_of)
+                    prover_outside_function(found, method, owner.clone(), leaving, words, library, state, holes_of)
                 }
             },
             else => {},
@@ -720,7 +721,7 @@ fn prover_outside(program: ref Program, words: ref winnow_grammar::InternerConte
 
 /// One function or method of `owner`: its body read twice, so a binding a
 /// loop taints later is seen where it is read before.
-fn prover_outside_function(mut found: ProverOutside, item: ref Spanned[Item], owner: String?, words: ref winnow_grammar::InternerContext, library: ref Ledger, state: ref ProverState, holes_of: fn(ref Expr) -> Vec[Expr] sync) {
+fn prover_outside_function(mut found: ProverOutside, item: ref Spanned[Item], owner: String?, leaving: ref ProverLeaving, words: ref winnow_grammar::InternerContext, library: ref Ledger, state: ref ProverState, holes_of: fn(ref Expr) -> Vec[Expr] sync) {
     match item.node {
         Item::Fn { name, body, ret_type, receiver, args, .. } => {
             let symbol = name ?? return
@@ -731,8 +732,9 @@ fn prover_outside_function(mut found: ProverOutside, item: ref Spanned[Item], ow
             if ret_type != null {
                 found.returning.insert(key.clone())
             }
+            let here = leaving.within(args, body, words)
             for _ in 0..<2 {
-                let mut proof = OutsideProof::of(args, receiver != null, words)
+                let mut proof = OutsideProof::of(args, receiver != null, here.clone(), words)
                 prover_outside_block(found, body, key, ret_type != null, tainted, sources, proof, words, library, state, holes_of)
             }
         },
@@ -921,11 +923,13 @@ struct OutsideProof {
     guarded: collections::BTreeSet[String],
     joined: collections::BTreeMap[String, collections::BTreeSet[i64]],
     clean: collections::BTreeSet[String],
+    /// The calls that never come back in this function (#2485).
+    leaving: ProverLeaving,
 }
 
 impl OutsideProof {
-    fn of(args: ref Vec[FnArg], method: bool, words: ref winnow_grammar::InternerContext) -> OutsideProof {
-        let mut proof = OutsideProof { params: collections::BTreeMap(), fixed: collections::BTreeSet(), guarded: collections::BTreeSet(), joined: collections::BTreeMap(), clean: collections::BTreeSet() }
+    fn of(args: ref Vec[FnArg], method: bool, leaving: ProverLeaving, words: ref winnow_grammar::InternerContext) -> OutsideProof {
+        let mut proof = OutsideProof { params: collections::BTreeMap(), fixed: collections::BTreeSet(), guarded: collections::BTreeSet(), joined: collections::BTreeMap(), clean: collections::BTreeSet(), leaving: leaving }
         for (at, arg) in args.iter().enumerate() {
             if arg.mutable {
                 continue
@@ -1020,7 +1024,7 @@ impl OutsideProof {
     }
 
     /// `if cond { return ... }` (`return ... if cond`, or a block ending in
-    /// `process::exit(…)`), whose block always leaves: a name `cond` is true for where `!path::is_component(name)`
+    /// `process::exit(…)` or `panic(…)`), whose block always leaves: a name `cond` is true for where `!path::is_component(name)`
     /// (or `path::is_below`) holds, by itself or as one side of an `||`, is
     /// guarded after it.
     fn guard(mut self, stmt: ref Stmt, words: ref winnow_grammar::InternerContext) {
@@ -1028,7 +1032,7 @@ impl OutsideProof {
             Stmt::Expr(inner) => {
                 match inner {
                     Expr::If { cond, then_branch, else_branch, .. } => {
-                        if else_branch == null && always_leaves(then_branch, words) {
+                        if else_branch == null && always_leaves(then_branch, self.leaving, words) {
                             self.guard_cond(cond, words)
                         }
                     },
@@ -1181,10 +1185,170 @@ impl OutsideProof {
     }
 }
 
+/// **Which calls never come back** (ADR-raw-sinks-1 D14, #2485): the
+/// prelude's `panic` and `std`'s `process::exit` (ADR-345), told by what a
+/// call resolves to, not by its spelling. A function of the program named
+/// `panic` or `exit`, or a package `process` with an `exit`, may come back,
+/// so a guard ending in one proves nothing.
+struct ProverLeaving {
+    /// `panic` alone is the prelude's: no function of the program has the name.
+    panic: bool,
+    /// The heads that name `std`'s `process`: `process` after `use
+    /// std::process`, `p` after `use std::process as p`.
+    exit_heads: collections::BTreeSet[String],
+    /// The names alone that are `std::process::exit`: `exit` after `use
+    /// std::process::exit`, where no function of the program has the name.
+    exit_names: collections::BTreeSet[String],
+}
+
+impl ProverLeaving {
+    /// What leaves in `program`, whose package's functions `own` describes
+    /// (those of its other files too).
+    fn of(program: ref Program, own: ref Ledger, words: ref winnow_grammar::InternerContext) -> ProverLeaving {
+        let mut functions: collections::BTreeSet[String] = collections::BTreeSet()
+        let mut imported: collections::BTreeSet[String] = collections::BTreeSet()
+        let mut heads: collections::BTreeSet[String] = collections::BTreeSet()
+        let mut names: collections::BTreeSet[String] = collections::BTreeSet()
+        for item in program.items {
+            match item.node {
+                Item::Fn { name, .. } => {
+                    let symbol = name ?? continue
+                    functions.insert(words.resolve(symbol).clone())
+                },
+                Item::Extern { declarations, .. } => {
+                    for declared in declarations {
+                        functions.insert(words.resolve(declared.node.name).clone())
+                    }
+                },
+                Item::Import { path, alias } => {
+                    let last = path.last() ?? continue
+                    let bound = words.resolve(alias ?? last).clone()
+                    let into_process = path.len() >= 2 && words.resolve(path[0]) == "std" && words.resolve(path[1]) == "process"
+                    if into_process && path.len() == 2 {
+                        heads.insert(bound)
+                    } else if into_process && path.len() == 3 && words.resolve(path[2]) == "exit" {
+                        names.insert(bound)
+                    } else {
+                        imported.insert(bound)
+                    }
+                },
+                else => {},
+            }
+        }
+        let mut leaving = ProverLeaving { panic: !functions.contains("panic") && !own.functions.contains_key("panic"), exit_heads: collections::BTreeSet(), exit_names: collections::BTreeSet() }
+        for head in heads {
+            if !imported.contains(head) {
+                leaving.exit_heads.insert(head.clone())
+            }
+        }
+        for name in names {
+            if !imported.contains(name) && !functions.contains(name) && !own.functions.contains_key(name) {
+                leaving.exit_names.insert(name.clone())
+            }
+        }
+        return leaving
+    }
+
+    /// Whether a call of `func` never comes back, where `locals` are the
+    /// names bound around it.
+    fn leaves(ref self, func: ref Expr, locals: ref collections::BTreeSet[String], words: ref winnow_grammar::InternerContext) -> bool {
+        return match func {
+            Expr::Variable(name, _) => {
+                let text = words.resolve(name)
+                if locals.contains(text) {
+                    return false
+                }
+                (text == "panic" && self.panic) || self.exit_names.contains(text)
+            },
+            Expr::Path(segments, _) => {
+                if segments.len() == 2 {
+                    self.exit_heads.contains(words.resolve(segments[0])) && words.resolve(segments[1]) == "exit"
+                } else {
+                    segments.len() == 3 && words.resolve(segments[0]) == "std" && words.resolve(segments[1]) == "process" && words.resolve(segments[2]) == "exit"
+                }
+            },
+            else => false,
+        }
+    }
+
+    /// The same inside a function that binds some of the names alone
+    /// itself: a parameter, a `let`, a `for`, a closure's parameter or a
+    /// `match` arm's pattern hides the function of that name.
+    fn within(ref self, args: ref Vec[FnArg], body: ref Block, words: ref winnow_grammar::InternerContext) -> ProverLeaving {
+        let mut here = self.clone()
+        let mut alone: Vec[String] = []
+        if self.panic {
+            alone.push("panic")
+        }
+        for name in self.exit_names {
+            alone.push(name.clone())
+        }
+        for name in alone {
+            let mut hidden = rebinds(body, name, words) || prover_binds_anywhere(body, name, words)
+            for arg in args {
+                if words.resolve(arg.name) == name {
+                    hidden = true
+                }
+            }
+            if hidden {
+                if name == "panic" {
+                    here.panic = false
+                }
+                here.exit_names.remove(name)
+            }
+        }
+        return here
+    }
+}
+
+/// Whether a call is spelled as one that may never come back, `panic(…)`,
+/// `exit(…)` or `….exit(…)`: the cheap test before `ProverLeaving` is asked.
+fn prover_leaving_spelled(func: ref Expr, words: ref winnow_grammar::InternerContext) -> bool {
+    return match func {
+        Expr::Variable(_, _) => true,
+        Expr::Path(segments, _) => {
+            let last = segments.last() ?? return false
+            words.resolve(last) == "exit"
+        },
+        else => false,
+    }
+}
+
+/// Whether a `match` arm's pattern in `block` binds `name`; `rebinds`
+/// answers for a `let`, a `for`, an assignment and a closure's parameter.
+/// Each expression and block is read once: `check_visit_stmt` hands the
+/// expressions of a statement outside its blocks, `check_visit_stmt_blocks`
+/// those blocks.
+fn prover_binds_anywhere(block: ref Block, name: ref String, words: ref winnow_grammar::InternerContext) -> bool {
+    for stmt in block.stmts {
+        for expr in check_visit_stmt(stmt.node) {
+            match expr {
+                Expr::Match { arms, .. } => {
+                    for arm in arms {
+                        let mut bound: collections::BTreeSet[String] = collections::BTreeSet()
+                        prover_pattern_names(arm.pattern, words, bound)
+                        if bound.contains(name) {
+                            return true
+                        }
+                    }
+                },
+                else => {},
+            }
+        }
+        for inner in check_visit_stmt_blocks(stmt.node) {
+            if prover_binds_anywhere(inner, name, words) {
+                return true
+            }
+        }
+    }
+    return false
+}
+
 /// Whether `block` always leaves where it ends: its last statement is a
-/// `return`, a `throw`, a `break`, a `continue` or a call of
-/// `process::exit`, which always throws `Exit` (ADR-345, #2469).
-fn always_leaves(block: ref Block, words: ref winnow_grammar::InternerContext) -> bool {
+/// `return`, a `throw`, a `break`, a `continue` or a call that never comes
+/// back (`ProverLeaving`: `panic`, `process::exit`, which always throws
+/// `Exit`, ADR-345, #2469, #2485).
+fn always_leaves(block: ref Block, leaving: ref ProverLeaving, words: ref winnow_grammar::InternerContext) -> bool {
     let last = block.stmts.last() ?? return false
     return match last.node {
         Stmt::Return(_) => true,
@@ -1195,19 +1359,9 @@ fn always_leaves(block: ref Block, words: ref winnow_grammar::InternerContext) -
             Expr::Return(_, _) => true,
             Expr::Break(_) => true,
             Expr::Continue(_) => true,
-            Expr::Call { func, .. } => match func {
-                Expr::Path(segments, _) => {
-                    let mut joined: String = ""
-                    for segment in segments {
-                        if !joined.is_empty() {
-                            joined.push_str("::")
-                        }
-                        joined.push_str(words.resolve(segment))
-                    }
-                    joined == "process::exit" || joined == "std::process::exit"
-                },
-                else => false,
-            },
+            // The names the function binds are out of `leaving` already
+            // (`ProverLeaving::within`).
+            Expr::Call { func, .. } => leaving.leaves(func, collections::BTreeSet(), words),
             else => false,
         },
         else => false,

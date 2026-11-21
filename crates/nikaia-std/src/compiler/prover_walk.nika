@@ -1794,15 +1794,13 @@ fn prover_expr_stmt(mut walk: ProverWalk, expr: ref Expr, span: Span, mut scope:
                 return false
             }
             // **`panic(…)` does not come back** (#776): a body that ends in
-            // one has no exit there.
-            let panics = match func {
-                Expr::Variable(name, _) => words.resolve(name) == "panic" && !scope.locals.contains("panic"),
-                else => false,
-            }
-            // **Nor does `process::exit(…)`**: it always throws `Exit`
-            // (ADR-345), so a guard whose branch ends in it refuses as one
-            // ending in `return` does (ADR-raw-sinks-1 D14, #2469).
-            if panics || (prover_called(func, words, unaliased) ?? "") == "process::exit" {
+            // one has no exit there. **Nor does `process::exit(…)`**: it
+            // always throws `Exit` (ADR-345), so a guard whose branch ends in
+            // it refuses as one ending in `return` does (ADR-raw-sinks-1 D14,
+            // #2469). Each by what the call resolves to, not by its spelling:
+            // a function of the program named `panic`, or a package's
+            // `process::exit`, may come back (#2485).
+            if prover_leaving_spelled(func, words) && ProverLeaving::of(program, own, words).leaves(func, scope.locals, words) {
                 prover_expr(walk, expr, span, scope, nested, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition)
                 return true
             }

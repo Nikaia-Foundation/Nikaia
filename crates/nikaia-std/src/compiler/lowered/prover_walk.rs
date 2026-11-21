@@ -1316,11 +1316,7 @@ pub(crate) fn prover_expr_stmt(walk: &mut ProverWalk, expr: &Expr, span: Span, s
                 for found in findings.iter() { walk.findings.push(found.clone()); }
                 return false;
             }
-            let panics = match func {
-                Expr::Variable(name, _) => { let name = *name; words.resolve(name) == "panic" && !scope.locals.contains("panic") },
-                _ => false,
-            };
-            if panics || nikaia_std::index::or(prover_called(func, words, &mut &mut *unaliased), || "".into()) == "process::exit" {
+            if prover_leaving_spelled(func, words) && ProverLeaving::of(program, own, words).leaves(func, &scope.locals, words) {
                 prover_expr(walk, expr, span, &scope, &nested, program, words, own, library, &mut &mut *ask, &mut &mut *model, &mut &mut *escape, &mut &mut *holes_of, &mut &mut *unaliased, &mut &mut *written_of, &mut &mut *condition);
                 return true;
             }

@@ -332,13 +332,13 @@ pub fn prove_outside(program: ref Program, words: ref winnow_grammar::InternerCo
     state.field_owners = field_owners.clone()
     // Which functions hand back proved values only does not depend on what is
     // outside, so a first read settles it before the rounds that add.
-    let first = prover_outside(program, words, library, state, holes_of)
+    let first = prover_outside(program, words, own, library, state, holes_of)
     state.outside.returning = first.returning
     state.outside.valued = first.valued
     state.outside.leads = first.leads
     let bound = program.items.len() + 2
     for _ in 0..<bound {
-        let found = prover_outside(program, words, library, state, holes_of)
+        let found = prover_outside(program, words, own, library, state, holes_of)
         let settled = found.results.len() == state.outside.results.len() && found.fields.len() == state.outside.fields.len()
         state.outside = found
         if settled {
