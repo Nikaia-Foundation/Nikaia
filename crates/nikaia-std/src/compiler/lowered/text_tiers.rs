@@ -672,7 +672,7 @@ pub(crate) fn flow_type(owner: &TextOwner, ty: &Type, path: &mut Vec<i64>, kinds
         let before = nikaia_std::index::or(match *nikaia_std::index::get(&walk.flows.positions, &word) {
             Some(__nikaia_it) => Some(__nikaia_it.clone()),
             None => None,
-        }, || no_kinds().into());
+        }, || no_kinds());
         walk.flows.positions.insert(word, kinds_joined(&before, kinds));
         return;
     }
@@ -873,7 +873,7 @@ pub(crate) fn flow_value(going: &TierGoing, value: Option<&Expr>, kinds: &Kinds,
         if plain && value.is_some() {
             let read = match value { Some(__nikaia_value) => __nikaia_value, None => return };
             let to = position_word(&owner, &path);
-            if reads_back(read, &to, ask, walk) { flowed = nikaia_std::index::or(coalesce_beside(read, &to, ask, walk), || flowed.into()); }
+            if reads_back(read, &to, ask, walk) { flowed = nikaia_std::index::or(coalesce_beside(read, &to, ask, walk), || flowed); }
         }
         if plain && flowed.view && value.is_some() {
             let given = match value { Some(__nikaia_value) => __nikaia_value, None => return };
@@ -1005,7 +1005,7 @@ pub(crate) fn flow_word(word: &str, kinds: &Kinds, walk: &mut TierWalk) {
     let before = nikaia_std::index::or(match *nikaia_std::index::get(&walk.flows.positions, word) {
         Some(__nikaia_it) => Some(__nikaia_it.clone()),
         None => None,
-    }, || no_kinds().into());
+    }, || no_kinds());
     walk.flows.positions.insert(nikaia_std::block::Text::from(word.to_string()), kinds_joined(&before, kinds));
 }
 
@@ -1772,7 +1772,7 @@ pub(crate) fn lent_back_in_part(going: &TierGoing, part: &Type, path: &[i64], it
     let before = nikaia_std::index::or(match *nikaia_std::index::get(&walk.flows.lent_kinds, &word) {
         Some(__nikaia_it) => Some(__nikaia_it.clone()),
         None => None,
-    }, || no_kinds().into());
+    }, || no_kinds());
     walk.flows.lent_kinds.insert(nikaia_std::block::Text::from(word.to_string()), kinds_joined(&before, &kinds));
     let lent_before = nikaia_std::index::or(*nikaia_std::index::get(&walk.flows.lent_uses, &word), || 0);
     walk.flows.lent_uses.insert(nikaia_std::block::Text::from(word.to_string()), lent_before + 1);
@@ -2353,7 +2353,7 @@ pub(crate) fn flow_result(value: &Expr, kinds: &Kinds, ask: &TierAsk<'_, '_, '_,
                 let before = nikaia_std::index::or(match *nikaia_std::index::get(&walk.flows.lent_kinds, word) {
                     Some(__nikaia_it) => Some(__nikaia_it.clone()),
                     None => None,
-                }, || no_kinds().into());
+                }, || no_kinds());
                 walk.flows.lent_kinds.insert(nikaia_std::block::Text::from(word.to_string()), kinds_joined(&before, &handed));
                 let lent_before = nikaia_std::index::or(*nikaia_std::index::get(&walk.flows.lent_uses, word), || 0);
                 walk.flows.lent_uses.insert(nikaia_std::block::Text::from(word.to_string()), lent_before + 1);
@@ -3186,7 +3186,7 @@ pub(crate) fn flow_args(key: &str, args: &[Expr], given: &[Kinds], ask: &TierAsk
                     let before = nikaia_std::index::or(match *nikaia_std::index::get(&walk.flows.lent_kinds, &word) {
                         Some(__nikaia_it) => Some(__nikaia_it.clone()),
                         None => None,
-                    }, || no_kinds().into());
+                    }, || no_kinds());
                     walk.flows.lent_kinds.insert(nikaia_std::block::Text::from(word.to_string()), kinds_joined(&before, &kinds));
                     let argued = nikaia_std::index::or(*nikaia_std::index::get(&walk.flows.arg_uses, &word), || 0);
                     walk.flows.arg_uses.insert(nikaia_std::block::Text::from(word.to_string()), argued + 1);
@@ -4423,7 +4423,7 @@ pub(crate) fn tier_struct_field(owner: &str, field: &FieldInit, back: bool, ask:
             let before = nikaia_std::index::or(match *nikaia_std::index::get(&walk.flows.lent_kinds, &word) {
                 Some(__nikaia_it) => Some(__nikaia_it.clone()),
                 None => None,
-            }, || no_kinds().into());
+            }, || no_kinds());
             walk.flows.lent_kinds.insert(nikaia_std::block::Text::from(word.to_string()), kinds_joined(&before, &kinds));
             let lent_before = nikaia_std::index::or(*nikaia_std::index::get(&walk.flows.lent_uses, &word), || 0);
             walk.flows.lent_uses.insert(nikaia_std::block::Text::from(word.to_string()), lent_before + 1);
@@ -5028,7 +5028,7 @@ pub(crate) fn merge_flows(into: &mut Flows, from: &Flows) {
         let before = nikaia_std::index::or(match *nikaia_std::index::get(&into.positions, word) {
             Some(__nikaia_it) => Some(__nikaia_it.clone()),
             None => None,
-        }, || no_kinds().into());
+        }, || no_kinds());
         into.positions.insert(nikaia_std::block::Text::from(word.to_string()), kinds_joined(&before, &kinds));
     }
     for (word, position) in from.known.iter() { if !into.known.contains_key(word) { into.known.insert(nikaia_std::block::Text::from(word.to_string()), position.clone()); } }
@@ -5063,7 +5063,7 @@ pub(crate) fn merge_flows(into: &mut Flows, from: &Flows) {
         let before = nikaia_std::index::or(match *nikaia_std::index::get(&into.lent_kinds, word) {
             Some(__nikaia_it) => Some(__nikaia_it.clone()),
             None => None,
-        }, || no_kinds().into());
+        }, || no_kinds());
         into.lent_kinds.insert(nikaia_std::block::Text::from(word.to_string()), kinds_joined(&before, &kinds));
     }
     for (word, count) in from.uses.iter() {
@@ -5414,7 +5414,7 @@ pub(crate) fn decide_tiers(flows: &Flows, declared: &TextDeclared, demoted: &mut
         let before = nikaia_std::index::or(match *nikaia_std::index::get(&positions, word) {
             Some(__nikaia_it) => Some(__nikaia_it.clone()),
             None => None,
-        }, || no_kinds().into());
+        }, || no_kinds());
         positions.insert(nikaia_std::block::Text::from(word.to_string()), kinds_joined(&before, &owned_kinds()));
     }
     let mut lent = lent_parameters(flows, declared, &unlent, &mut positions);
@@ -5429,12 +5429,12 @@ pub(crate) fn decide_tiers(flows: &Flows, declared: &TextDeclared, demoted: &mut
             let into = nikaia_std::index::or(match *nikaia_std::index::get(&positions, to) {
                 Some(__nikaia_it) => Some(__nikaia_it.clone()),
                 None => None,
-            }, || no_kinds().into());
+            }, || no_kinds());
             let kept = into.owned || fixed.contains(to) || never.contains(to) || a_published_parameter(to, flows, declared);
             if kept && !into.view && !into.either && joins_kinds(from, &kinds_joined(&nikaia_std::index::or(match *nikaia_std::index::get(&positions, from) {
                 Some(__nikaia_it) => Some(__nikaia_it.clone()),
                 None => None,
-            }, || no_kinds().into()), &owned_kinds()), &mut positions) {
+            }, || no_kinds()), &owned_kinds()), &mut positions) {
                 demoted.insert(nikaia_std::block::Text::from(from.to_string()));
                 changed = true;
             }
@@ -5446,7 +5446,7 @@ pub(crate) fn decide_tiers(flows: &Flows, declared: &TextDeclared, demoted: &mut
                 let tier = tier_of_kinds(&nikaia_std::index::or(match *nikaia_std::index::get(&positions, word) {
                     Some(__nikaia_it) => Some(__nikaia_it.clone()),
                     None => None,
-                }, || no_kinds().into()));
+                }, || no_kinds()));
                 let published = fixed.contains(word) || never.contains(word) || a_published_parameter(word, flows, declared);
                 if owned_tier(&tier) || lasting_tier(&tier) && published { owned = true; }
             }
@@ -5455,7 +5455,7 @@ pub(crate) fn decide_tiers(flows: &Flows, declared: &TextDeclared, demoted: &mut
                     let before = nikaia_std::index::or(match *nikaia_std::index::get(&positions, word) {
                         Some(__nikaia_it) => Some(__nikaia_it.clone()),
                         None => None,
-                    }, || no_kinds().into());
+                    }, || no_kinds());
                     if lasting_tier(&tier_of_kinds(&before)) && joins_kinds(word, &kinds_joined(&before, &owned_kinds()), &mut positions) {
                         demoted.insert(nikaia_std::block::Text::from(word.to_string()));
                         changed = true;
@@ -5467,11 +5467,11 @@ pub(crate) fn decide_tiers(flows: &Flows, declared: &TextDeclared, demoted: &mut
             let mut both = nikaia_std::index::or(match *nikaia_std::index::get(&positions, a) {
                 Some(__nikaia_it) => Some(__nikaia_it.clone()),
                 None => None,
-            }, || no_kinds().into());
+            }, || no_kinds());
             both = kinds_joined(&both, &nikaia_std::index::or(match *nikaia_std::index::get(&positions, b) {
                 Some(__nikaia_it) => Some(__nikaia_it.clone()),
                 None => None,
-            }, || no_kinds().into()));
+            }, || no_kinds()));
             if joins_kinds(a, &both, &mut positions) { changed = true; }
             if joins_kinds(b, &both, &mut positions) { changed = true; }
             if fixed.contains(a) != fixed.contains(b) {
@@ -5494,7 +5494,7 @@ pub(crate) fn decide_tiers(flows: &Flows, declared: &TextDeclared, demoted: &mut
             if fixed.contains(to) && !fixed.contains(from) && mixed(&tier_of_kinds(&nikaia_std::index::or(match *nikaia_std::index::get(&positions, from) {
                 Some(__nikaia_it) => Some(__nikaia_it.clone()),
                 None => None,
-            }, || no_kinds().into()))) {
+            }, || no_kinds()))) {
                 fixed.insert(nikaia_std::block::Text::from(from.to_string()));
                 changed = true;
             }
@@ -5593,7 +5593,7 @@ pub(crate) fn lent_parameters(flows: &Flows, declared: &TextDeclared, unlent: &c
         let given = nikaia_std::index::or(match *nikaia_std::index::get(&positions, from) {
             Some(__nikaia_it) => Some(__nikaia_it.clone()),
             None => None,
-        }, || no_kinds().into());
+        }, || no_kinds());
         let named = nikaia_std::index::or(*nikaia_std::index::get(&flows.uses, from), || 0);
         let handed = nikaia_std::index::or(*nikaia_std::index::get(&flows.lent_uses, from), || 0);
         let argued = nikaia_std::index::or(*nikaia_std::index::get(&flows.arg_uses, from), || 0);
@@ -5622,7 +5622,7 @@ pub(crate) fn lent_parameters(flows: &Flows, declared: &TextDeclared, unlent: &c
             let into = nikaia_std::index::or(match *nikaia_std::index::get(&positions, to) {
                 Some(__nikaia_it) => Some(__nikaia_it.clone()),
                 None => None,
-            }, || no_kinds().into());
+            }, || no_kinds());
             let mut kept = into.owned || into.either || into.still || flows.in_maps.contains(to) || flows.unwrappable.contains(to) || fixed_by_publishing_field(to, flows, declared);
             for (other, target) in flows.lent_into.iter() { if target == to && !lent.contains(other) { kept = true; } }
             if kept {
@@ -5635,24 +5635,24 @@ pub(crate) fn lent_parameters(flows: &Flows, declared: &TextDeclared, unlent: &c
         let mut kinds = nikaia_std::index::or(match *nikaia_std::index::get(&flows.lent_kinds, from) {
             Some(__nikaia_it) => Some(__nikaia_it.clone()),
             None => None,
-        }, || owned_kinds().into());
+        }, || owned_kinds());
         if lent.contains(from) { kinds = view_kinds(); }
         let before = nikaia_std::index::or(match *nikaia_std::index::get(&positions, to) {
             Some(__nikaia_it) => Some(__nikaia_it.clone()),
             None => None,
-        }, || no_kinds().into());
+        }, || no_kinds());
         positions.insert(nikaia_std::block::Text::from(to.to_string()), kinds_joined(&before, &kinds));
     }
     for (from, to) in flows.arg_into.iter() {
         let mut kinds = nikaia_std::index::or(match *nikaia_std::index::get(&flows.lent_kinds, from) {
             Some(__nikaia_it) => Some(__nikaia_it.clone()),
             None => None,
-        }, || owned_kinds().into());
+        }, || owned_kinds());
         if lent.contains(from) { kinds = view_kinds(); }
         let before = nikaia_std::index::or(match *nikaia_std::index::get(&positions, to) {
             Some(__nikaia_it) => Some(__nikaia_it.clone()),
             None => None,
-        }, || no_kinds().into());
+        }, || no_kinds());
         positions.insert(nikaia_std::block::Text::from(to.to_string()), kinds_joined(&before, &kinds));
     }
     lent
@@ -5851,7 +5851,7 @@ pub(crate) fn joins_kinds(word: &str, both: &Kinds, positions: &mut collections:
     let before = nikaia_std::index::or(match *nikaia_std::index::get(&positions, word) {
         Some(__nikaia_it) => Some(__nikaia_it.clone()),
         None => None,
-    }, || no_kinds().into());
+    }, || no_kinds());
     if positions.contains_key(word) && same_kinds(&before, both) { return false; }
     positions.insert(nikaia_std::block::Text::from(word.to_string()), both.clone());
     true

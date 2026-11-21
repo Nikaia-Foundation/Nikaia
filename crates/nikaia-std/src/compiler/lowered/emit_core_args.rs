@@ -1753,7 +1753,7 @@ impl EmitState {
         walk.hull_count = None;
         let made = made_slot(node_key(value));
         if given.is_none() && self.shared.contains_key(&format!("{}::{}", scope.function, made)) { return self.count_at(host.crossings_are_possible(), &scope.function, &made); }
-        nikaia_std::index::or(given, || self.count_at(host.crossings_are_possible(), &scope.function, &scope.bound).into())
+        nikaia_std::index::or(given, || self.count_at(host.crossings_are_possible(), &scope.function, &scope.bound))
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.

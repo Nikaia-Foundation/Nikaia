@@ -331,7 +331,8 @@ pub struct CheckFacts {
     /// The `??`s whose fallback is a name of the word the left side holds, a
     /// number, `bool`, `char` or `scalar` (#1841): the fallback is written as
     /// it is, never `.into()`, which left `Or`'s type open beside an
-    /// `Option<&f64>`.
+    /// `Option<&f64>`; and so is any fallback of the struct that copies the
+    /// left side holds (#1302), `m.get(k) ?? zero()`.
     pub word_fallbacks: collections::BTreeSet[i64],
     /// The `??`s whose left side holds a view of text and whose fallback is
     /// a name that is a view of text (#719): the fallback is read as `str`.

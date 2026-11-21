@@ -765,7 +765,7 @@ impl SvSimplex {
                 { let __nikaia_stored = call; unsafe { nikaia_std::proven::write(&mut self.rb_at, (at) as usize, __nikaia_stored) }; }
                 let found = self.row_bound(r, up);
                 { let __nikaia_stored = found.is_some(); nikaia_std::index::set(&mut self.rb_has, nikaia_std::index::at(at), __nikaia_stored); }
-                if found.is_some() { { let __nikaia_stored = nikaia_std::index::or(found, || sv_sx_zero().into()); nikaia_std::index::set(&mut self.rb_val, nikaia_std::index::at(at), __nikaia_stored); } }
+                if found.is_some() { { let __nikaia_stored = nikaia_std::index::or(found, || sv_sx_zero()); nikaia_std::index::set(&mut self.rb_val, nikaia_std::index::at(at), __nikaia_stored); } }
             }
             if !*nikaia_std::index::get(&self.rb_has, nikaia_std::index::at(at)) { continue; }
             let order = sv_delta_cmp(nikaia_std::index::get(&self.rb_val, nikaia_std::index::at(at)), &seen.value);
@@ -794,7 +794,7 @@ impl SvSimplex {
         let mut seen = sv_sx_view_unknown();
         seen.known = true;
         let got = self.view_of(l, book);
-        if got.is_some() { seen = nikaia_std::index::or(got, || seen.into()); }
+        if got.is_some() { seen = nikaia_std::index::or(got, || seen); }
         if seen.usable {
             let a = l / 2u32;
             let n = (*nikaia_std::index::get(&self.var_atoms, nikaia_std::index::at(seen.var))).len() as i64;

@@ -122,7 +122,7 @@ pub(crate) fn sv_nl_repair(arena: &TermArena, facts: &[i64], goal: i64, reals: &
                     names.push(nikaia_std::block::Text::from(t.a.to_string()));
                     moved.push(r.clone());
                     names.push(nikaia_std::block::Text::from(t.a.to_string()));
-                    moved.push(nikaia_std::index::or(sv_rat_neg(&r), || r.clone().into()));
+                    moved.push(nikaia_std::index::or(sv_rat_neg(&r), || r.clone()));
                 },
             }
         } else if t.op == "*" {

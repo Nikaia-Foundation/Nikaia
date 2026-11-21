@@ -4129,7 +4129,7 @@ pub(crate) fn bounding_steps_block(block: &Block, state: &mut BoundsSteps, ends:
                     let c = nikaia_std::index::or(back, || 0);
                     { let __nikaia_stored = 0; nikaia_std::index::set(&mut state.low, nikaia_std::index::at(k), __nikaia_stored); }
                     { let __nikaia_stored = 0; nikaia_std::index::set(&mut state.high, nikaia_std::index::at(k), __nikaia_stored); }
-                    let (least, most) = nikaia_std::index::or(resets.get(&place), || (c.into(), c.into()));
+                    let (least, most) = nikaia_std::index::or(resets.get(&place), || (c, c));
                     resets.insert(nikaia_std::block::Text::from(place.to_string()), (least.min(c), most.max(c)));
                 } else { bounding_steps_other(each, state, ends, bad, context, words); }
             },

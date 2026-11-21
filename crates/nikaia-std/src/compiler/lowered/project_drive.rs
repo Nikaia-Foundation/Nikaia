@@ -1027,7 +1027,7 @@ pub async fn project_drive_wrapper<H: ProjectDriveWrapperHost>(host: &H) -> Resu
     let shown: Option<String> = match env::var("NIKAIA_SHOWN_AS") {
         None => None,
         Some(ref value) => {
-            let (entry, written) = nikaia_std::index::or(value.split_once("\x1f"), || ("".into(), "".into()));
+            let (entry, written) = nikaia_std::index::or(value.split_once("\x1f"), || ("", ""));
             if AsRef::<str>::as_ref(&(nikaia_std::fs::path::display(&(project_members_canonical(&source))))) == AsRef::<str>::as_ref(&(entry)) { Some(nikaia_std::block::Text::from(written.to_string())) } else { None }
         },
     };
