@@ -1,0 +1,9 @@
+exit 1
+program "now" (tests/now.nika) ... FAILED (the settings disagree)
+the settings differ (- at user-parallelism = no, + at user-parallelism = yes):
+standard output:
+  the same at each setting
++ N
+- N
+
+test result: FAILED. N passed; N failed
