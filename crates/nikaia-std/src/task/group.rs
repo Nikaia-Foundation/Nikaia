@@ -662,6 +662,33 @@ impl<'g, T: 'g, E: 'g> ChildHandle<'g, T, E> {
         handle
     }
 
+    /// **A deferred handle to a bound pausing task** (D12, D37): `start()`
+    /// queues the task in `rest`, unstarted, and the main line goes on; the
+    /// gate around it, or the wait for it, starts it where the main line next
+    /// pauses or waits. Before `start()` the cell holds nothing, so neither
+    /// a gate nor the block's end waits for it.
+    pub(super) fn kept_deferred<'b, F>(
+        group: &'b dyn Receiver<E>,
+        rest: &'g Rest<'b>,
+        body: impl FnOnce() -> F + 'b,
+    ) -> Self
+    where
+        'b: 'g,
+        T: 'b,
+        E: 'b,
+        F: std::future::Future<Output = Result<T, E>> + 'b,
+    {
+        let mut handle = ChildHandle::new(group, empty_slot());
+        handle.kept = Some(rest);
+        let slot = handle.slot.clone();
+        handle.deferred = Some(Box::new(move || {
+            rest.held.queue(Box::pin(queued_task(group, slot, body)));
+            None
+        }));
+        handle.is_deferred = true;
+        handle
+    }
+
     /// **A handle to a task that never pauses**, which runs now, to its end
     /// (D20 at `user_parallelism = no`), unless a crash before it cancelled it.
     pub(super) fn now(
@@ -994,31 +1021,53 @@ impl<T, E> Drop for ChildHandle<'_, T, E> {
 /// the `TaskHandle[T]` that runs only from `h.start()`. A type of its own
 /// because Rust's [`super::TaskHandle::start`] is the call that starts a task.
 ///
-/// What #988 lowers onto it: `Deferred::new(async move { … })`, and
-/// `h.start()` as [`Deferred::start`] at `user_parallelism = no`,
-/// [`Deferred::start_on_pool`] at `yes`, as `spawn` picks
-/// [`super::TaskHandle::start`] or [`super::TaskHandle::start_on_pool`].
-pub struct Deferred<F: std::future::Future> {
-    body: Option<F>,
-    handle: Option<super::TaskHandle<F::Output>>,
+/// What #2512 lowers onto it: `Deferred::new(move || start)`, where `start`
+/// is the very call `spawn` writes ([`super::TaskHandle::start`] or
+/// `start_on_pool`, [`super::FailingTask`], [`super::BoxedTask`]), so the
+/// setting and the body's channel pick the handle as they do for `spawn`;
+/// `h.start()` is [`Deferred::start`], which makes that call. `join`,
+/// `join_within`, `cancel` and `detach` are the started handle's.
+pub struct Deferred<S, H> {
+    start: Option<S>,
+    handle: Option<H>,
 }
 
-impl<F: std::future::Future> Deferred<F> {
-    /// A handle that runs `body` only from `start()`.
-    pub fn new(body: F) -> Self {
+impl<S: FnOnce() -> H, H> Deferred<S, H> {
+    /// A handle whose task `start` starts, only from `start()`.
+    pub fn new(start: S) -> Self {
         Deferred {
-            body: Some(body),
+            start: Some(start),
             handle: None,
         }
     }
 
-    fn body(&mut self) -> F {
-        match self.body.take() {
-            Some(body) => body,
+    /// **`h.start()`**: start the task; the handle stays. A second `start()`
+    /// panics (`NK2121` at compile time).
+    pub fn start(&mut self) {
+        match self.start.take() {
+            Some(start) => self.handle = Some(start()),
             None => panic!("a deferred task was started twice"),
         }
     }
+}
 
+impl<S, H> Deferred<S, H> {
+    fn started(self) -> H {
+        match self.handle {
+            Some(handle) => handle,
+            None => panic!("a deferred task was joined before its start()"),
+        }
+    }
+
+    fn started_ref(&self) -> &H {
+        match &self.handle {
+            Some(handle) => handle,
+            None => panic!("a deferred task was joined before its start()"),
+        }
+    }
+}
+
+impl<S, T> Deferred<S, super::TaskHandle<T>> {
     /// Stop the task as [`super::TaskHandle::cancel`]; one not started never
     /// runs.
     pub fn cancel(self) {
@@ -1029,35 +1078,88 @@ impl<F: std::future::Future> Deferred<F> {
 
     /// Nobody waits for this task (ADR-346 D2); one not started never runs.
     pub fn detach(self) {}
-}
 
-impl<F: std::future::Future + 'static> Deferred<F>
-where
-    F::Output: 'static,
-{
-    /// **`h.start()`** at `user_parallelism = no`: start the task; the handle
-    /// stays. A second `start()` panics (`NK2121` at compile time).
-    pub fn start(&mut self) {
-        let body = self.body();
-        self.handle = Some(super::TaskHandle::start(body));
+    /// As [`super::TaskHandle::join_within`].
+    pub async fn join_within(
+        &self,
+        span: std::time::Duration,
+        on_timeout: super::OnTimeout,
+    ) -> Result<T, super::Late> {
+        self.started_ref().join_within(span, on_timeout).await
     }
 }
 
-impl<F: std::future::Future + Send + 'static> Deferred<F>
-where
-    F::Output: Send + 'static,
-{
-    /// **`h.start()`** at `user_parallelism = yes`, on the pool.
-    pub fn start_on_pool(&mut self) {
-        let body = self.body();
-        self.handle = Some(super::TaskHandle::start_on_pool(body));
-    }
-
+impl<S, T: Send + 'static> Deferred<S, super::TaskHandle<T>> {
     /// The task's value, as [`super::TaskHandle::join`].
-    pub async fn join(self) -> Result<F::Output, Crashed> {
-        match self.handle {
-            Some(handle) => handle.join().await,
-            None => panic!("a deferred task was joined before its start()"),
+    pub async fn join(self) -> Result<T, Crashed> {
+        self.started().join().await
+    }
+}
+
+impl<S, T, E> Deferred<S, super::FailingTask<T, E>> {
+    /// As [`super::FailingTask::cancel`].
+    pub fn cancel(self) {
+        if let Some(handle) = self.handle {
+            handle.cancel();
         }
+    }
+
+    /// As [`super::FailingTask::detach`]; one not started never runs.
+    pub fn detach(self) {
+        if let Some(handle) = self.handle {
+            handle.detach();
+        }
+    }
+}
+
+impl<S, T: 'static, E: 'static + From<Crashed>> Deferred<S, super::FailingTask<T, E>> {
+    /// As [`super::FailingTask::join`].
+    pub async fn join(self) -> Result<T, E> {
+        self.started().join().await
+    }
+}
+
+impl<S, T: 'static, E: 'static + From<Crashed> + From<super::TimedOut>>
+    Deferred<S, super::FailingTask<T, E>>
+{
+    /// As [`super::FailingTask::join_within`].
+    pub async fn join_within(
+        &self,
+        span: std::time::Duration,
+        on_timeout: super::OnTimeout,
+    ) -> Result<T, E> {
+        self.started_ref().join_within(span, on_timeout).await
+    }
+}
+
+impl<S, T> Deferred<S, super::BoxedTask<T>> {
+    /// As [`super::BoxedTask::cancel`].
+    pub fn cancel(self) {
+        if let Some(handle) = self.handle {
+            handle.cancel();
+        }
+    }
+
+    /// As [`super::BoxedTask::detach`]; one not started never runs.
+    pub fn detach(self) {
+        if let Some(handle) = self.handle {
+            handle.detach();
+        }
+    }
+}
+
+impl<S, T: Send + 'static> Deferred<S, super::BoxedTask<T>> {
+    /// As [`super::BoxedTask::join`].
+    pub async fn join(self) -> Result<T, Box<dyn std::error::Error>> {
+        self.started().join().await
+    }
+
+    /// As [`super::BoxedTask::join_within`].
+    pub async fn join_within(
+        &self,
+        span: std::time::Duration,
+        on_timeout: super::OnTimeout,
+    ) -> Result<T, Box<dyn std::error::Error>> {
+        self.started_ref().join_within(span, on_timeout).await
     }
 }

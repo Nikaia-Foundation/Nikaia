@@ -1,0 +1,22 @@
+// A child handle's window ends where it is joined, and a deferred one's
+// opens at its `start()` (ADR-async-5 D11, D12): a `println` before the
+// `start()` or after the `join()` runs alone (#2643).
+fn main() throws {
+	let h = async(handle) fn { println("x") }
+	let n = 1 + 2
+	h.join()
+	println(f"after join {n}")
+	let mut d = async(deferred) fn { println("deferred") }
+	println("before start")
+	d.start()
+	d.join()
+	println("after")
+	let mut e = async(deferred) fn { println("e") }
+	if n > 2 {
+		e.start()
+		e.join()
+	} else {
+		e.cancel()
+	}
+	println("end")
+}

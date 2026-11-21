@@ -1,6 +1,6 @@
 # Nikaia Language Specification
 **Part I: The Language Core**
-**Version:** 0.0.1523 (Draft)
+**Version:** 0.0.1524 (Draft)
 **Date:** 2026-11-21
 
 ---
@@ -3930,8 +3930,9 @@ the value.
   and its failure goes to the group as an unread failure does.
 * **`async(deferred) fn { … }`** hands back a child handle whose task does not
   run until `h.start()`. A deferred handle not started or cancelled on some
-  path, or started twice, is refused (`NK2121`). Its window begins at
-  `start()`.
+  path, or started twice, is refused (`NK2121`), as is `start()` on a handle
+  that is not deferred. `start()` changes the handle, so it is bound with
+  `let mut`; `cancel()` takes it. Its window begins at `start()`.
 * **`async(detached) fn { … }`** starts a free task and hands back a
   `TaskHandle[T]` (8.2). `detached` and `deferred` combine,
   `async(detached, deferred) fn { … }`.

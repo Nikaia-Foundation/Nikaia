@@ -810,10 +810,18 @@ pub(crate) fn check_core_method_deadline(state: &CheckState, world: &CheckWorld<
     } { Some(__nikaia_value) => __nikaia_value, None => return found };
     if key != "Vec::par_iter" { return found; }
     let mut within = false;
-    for option in config.iter() { if world.words.resolve(option.name) == "within" { within = true; } }
-    if !within { return found; }
+    let mut one = false;
+    for option in config.iter() {
+        let named = world.words.resolve(option.name);
+        if named == "within" { within = true; }
+        if named == "limit" {
+            let value: Option<Expr> = Some(option.value.clone());
+            one = check_core_async_one_at_a_time((value).as_ref());
+        }
+    }
+    if !within && !one { return found; }
     match found {
-        Ty::Seq { ref item, is_sync, pauses, can_throw, parallel, shape } => { let item = nikaia_std::boxed::open(item); Ty::Seq { item: nikaia_std::block::Boxed::new(item.clone()), is_sync, pauses, can_throw, parallel, shape: Shape { ends: shape.ends, sized: shape.sized, replays: shape.replays, timed: true } } },
+        Ty::Seq { ref item, is_sync, pauses, can_throw, parallel, shape } => { let item = nikaia_std::boxed::open(item); Ty::Seq { item: nikaia_std::block::Boxed::new(item.clone()), is_sync, pauses, can_throw, parallel, shape: Shape { ends: shape.ends, sized: shape.sized, replays: shape.replays, timed: shape.timed || within, one_at_a_time: shape.one_at_a_time || one } } },
         _ => found,
     }
 }
@@ -1011,7 +1019,7 @@ pub(crate) fn check_core_method_walked<H: CheckHost>(state: &mut CheckState, wor
     }
     if name == "chars" && args.is_empty() && config.is_empty() && check_core_method_text_receiver(&on) {
         state.a_chars_call(world, expr, receiver, span);
-        return Ty::Seq { item: nikaia_std::block::Boxed::new(check_core_method_named("scalar")), is_sync: true, pauses: false, can_throw: false, parallel: false, shape: Shape { ends: true, sized: false, replays: false, timed: false } };
+        return Ty::Seq { item: nikaia_std::block::Boxed::new(check_core_method_named("scalar")), is_sync: true, pauses: false, can_throw: false, parallel: false, shape: Shape { ends: true, sized: false, replays: false, timed: false, one_at_a_time: false } };
     }
     if state.check_core_method_on_a_text_slot(world, receiver, &on) { return check_core_method_called(state, world, host, expr, Ty::Named { name: nikaia_std::block::Text::from(TEXT.to_string()), args: vec![], view: true }, receiver, method, args, &name, span); }
     check_core_method_called(state, world, host, expr, on, receiver, method, args, &name, span)

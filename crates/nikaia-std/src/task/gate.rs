@@ -549,6 +549,14 @@ impl<'x> Waiting<'x> {
         queued
     }
 
+    /// **A deferred task's own strategy** (`admission:` on
+    /// `async(deferred)`, D12, D18): not asked now, the task not being
+    /// started; kept for its [`Waiting::keep`], and asked where the main line
+    /// pauses or waits once `start()` queued it.
+    pub fn admit_later(&self, admission: Box<dyn Admission>) {
+        *self.admitting.borrow_mut() = Some(admission);
+    }
+
     /// Whether the task's own strategy admits it, `waiting` wanting to start;
     /// `forced` where the main line waits and none of the group runs, so it
     /// starts whatever the strategy says, as a group's task does (D15).

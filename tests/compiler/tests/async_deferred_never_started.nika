@@ -1,0 +1,36 @@
+// A deferred handle neither started nor cancelled on some path is `NK2121`
+// (ADR-async-5 D12, #2512): never at all, only on one branch of an `if`, or
+// past a `return`; a deferred task nothing binds never starts either.
+fn never() throws {
+	let mut h = async(deferred) fn { 1 }
+	println("never started")
+}
+
+fn one_branch(go: bool) throws {
+	let mut h = async(detached, deferred) fn { 2 }
+	if go {
+		h.start()
+	}
+	println(f"{h.join()}")
+}
+
+fn returned(n: i64) throws {
+	let mut h = async(deferred) fn { n }
+	if n > 1 {
+		return
+	}
+	h.start()
+	println(f"{h.join()}")
+}
+
+fn unbound() throws {
+	async(deferred) fn { 3 }
+	println("unbound")
+}
+
+fn main() throws {
+	never()
+	one_branch(true)
+	returned(1)
+	unbound()
+}

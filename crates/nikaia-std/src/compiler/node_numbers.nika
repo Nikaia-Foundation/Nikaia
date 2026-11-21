@@ -524,10 +524,10 @@ fn numbers_expr(expr: Expr, mut st: NodeNumbersState) -> Expr {
             let config2 = numbers_config(config, st)
             return Expr::Call { func: func2, args: args2, config: config2, id: id2 }
         },
-        Expr::Spawn { body, written_async, child, within, admission, id } => {
+        Expr::Spawn { body, written_async, child, deferred, within, admission, id } => {
             let id2 = numbers_id(id, st)
             let within2 = numbers_maybe_expr(within, st)
-            return Expr::Spawn { body: numbers_expr(body, st), written_async: written_async, child: child, within: within2, admission: numbers_maybe_expr(admission, st), id: id2 }
+            return Expr::Spawn { body: numbers_expr(body, st), written_async: written_async, child: child, deferred: deferred, within: within2, admission: numbers_maybe_expr(admission, st), id: id2 }
         },
         Expr::Dsl { target, package, context, content, id } => {
             return Expr::Dsl { target: target, package: package, context: context, content: content, id: numbers_id(id, st) }

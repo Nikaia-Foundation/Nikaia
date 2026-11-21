@@ -1426,6 +1426,16 @@ impl crate::error::Joined for Boxed {
     }
 }
 
+impl crate::error::Crossed for Boxed {
+    fn started_at(&mut self, site: crate::error::Origin) {
+        self.0.started_at(site);
+    }
+
+    fn arrived_at(&mut self, site: crate::error::Origin) {
+        self.0.arrived_at(site);
+    }
+}
+
 impl Outcome<Boxed> for Result<(), Box<dyn std::error::Error>> {
     fn failed(self) -> Option<Boxed> {
         self.err().map(Boxed)
@@ -1468,6 +1478,30 @@ impl Crosses for OverBudget {
     fn back(sent: OverBudget) -> Self {
         sent
     }
+}
+
+/// A crash and a full block have no envelope to record a crossing in
+/// (ADR-async-5 D23): the crash's own message says what it was.
+impl crate::error::Crossed for Crashed {
+    fn started_at(&mut self, _site: crate::error::Origin) {}
+    fn arrived_at(&mut self, _site: crate::error::Origin) {}
+}
+
+impl crate::error::Crossed for OverBudget {
+    fn started_at(&mut self, _site: crate::error::Origin) {}
+    fn arrived_at(&mut self, _site: crate::error::Origin) {}
+}
+
+/// Nor has a detached handle's `join(within:)` failure: a crash or the time
+/// that ran out, neither raised by a `throw`.
+impl crate::error::Crossed for Late {
+    fn started_at(&mut self, _site: crate::error::Origin) {}
+    fn arrived_at(&mut self, _site: crate::error::Origin) {}
+}
+
+impl crate::error::Crossed for TimedOut {
+    fn started_at(&mut self, _site: crate::error::Origin) {}
+    fn arrived_at(&mut self, _site: crate::error::Origin) {}
 }
 
 /// Neither has a full block anything to join.
@@ -1763,6 +1797,58 @@ impl<'scope, E: From<Crashed>> Scope<'scope, '_, E> {
         ChildHandle::kept(self, rest, body).await
     }
 
+    /// **`async(deferred) fn { … }` bound to a handle named later**
+    /// (ADR-async-5 D12, #2512): as [`Scope::start_kept`], but nothing runs
+    /// here; the handle's `start()` queues the task in `rest`, and it starts
+    /// where the main line next pauses or waits.
+    pub fn deferred_kept<'g, 'b: 'g, T: 'b, F>(
+        &'b self,
+        rest: &'g Rest<'b>,
+        body: impl FnOnce() -> F + 'b,
+    ) -> ChildHandle<'g, T, E>
+    where
+        E: 'b,
+        F: std::future::Future<Output = Result<T, E>> + 'b,
+    {
+        ChildHandle::kept_deferred(self, rest, body)
+    }
+
+    /// [`Scope::deferred_kept`] under the gates of `line` (D12, D15, D37):
+    /// once started, the task waits for a place as a queued one does, and
+    /// holds its places from its start to its end.
+    pub fn deferred_kept_gated<'g, 'b: 'g, T: 'b, F>(
+        &'b self,
+        rest: &'g Rest<'b>,
+        line: &Waiting<'_>,
+        body: impl FnOnce() -> F + 'b,
+    ) -> ChildHandle<'g, T, E>
+    where
+        E: 'b,
+        F: std::future::Future<Output = Result<T, E>> + 'b,
+    {
+        let gates = line.gates();
+        let body = move || gate::placed(gates, body());
+        ChildHandle::kept_deferred(self, rest, body)
+    }
+
+    /// [`Scope::deferred_kept_gated`] with a strategy of its own (D18): it
+    /// is asked once the task is started, where the main line pauses or
+    /// waits, as a queued task's is.
+    pub fn deferred_kept_admitted<'g, 'b: 'g, T: 'b, F>(
+        &'b self,
+        rest: &'g Rest<'b>,
+        line: &Waiting<'_>,
+        admission: Box<dyn Admission>,
+        body: impl FnOnce() -> F + 'b,
+    ) -> ChildHandle<'g, T, E>
+    where
+        E: 'b,
+        F: std::future::Future<Output = Result<T, E>> + 'b,
+    {
+        line.admit_later(admission);
+        self.deferred_kept_gated(rest, line, body)
+    }
+
     /// **`async e` as a statement whose task pauses** (D9, D20, #1226): it
     /// runs here to its end, in sequence at both settings until the group
     /// polls its statement tasks; its value is dropped, its failure waits for
@@ -1932,6 +2018,22 @@ pub enum OrCrash<E> {
 impl<E> From<Crashed> for OrCrash<E> {
     fn from(crash: Crashed) -> Self {
         OrCrash::Crashed(crash)
+    }
+}
+
+/// A task's own failure records where it crossed (ADR-async-5 D23); a crash
+/// raised again keeps nothing.
+impl<E: crate::error::Crossed> crate::error::Crossed for OrCrash<E> {
+    fn started_at(&mut self, site: crate::error::Origin) {
+        if let OrCrash::Failed(error) = self {
+            error.started_at(site);
+        }
+    }
+
+    fn arrived_at(&mut self, site: crate::error::Origin) {
+        if let OrCrash::Failed(error) = self {
+            error.arrived_at(site);
+        }
     }
 }
 

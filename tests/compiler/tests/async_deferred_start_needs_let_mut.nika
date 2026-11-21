@@ -1,0 +1,12 @@
+// ADR-async-5 D12 before #2645: a deferred handle bound without `mut` is
+// `NK1139` at its `start()`, which changes it (`start(mut self)`, Part III
+// B.2), as for every `mut self` method.
+fn copy_all(src: i64, dst: i64) throws {
+	println(f"copied {src} to {dst}")
+}
+
+fn main() throws {
+	let backup = async(deferred) fn { copy_all(1, 2) }
+	backup.start()
+	backup.join()
+}

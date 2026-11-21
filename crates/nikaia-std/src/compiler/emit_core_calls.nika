@@ -1715,6 +1715,14 @@ impl EmitState {
         if timed {
             out.push("nikaia_std::par::ended(")
         }
+        // **A handle's `join` is where its task's failure arrives**
+        // (ADR-async-5 D23): `error::arrived` records it, on the failure's
+        // path alone.
+        let joined_key = self.facts.method_callees[on_node] ?? ""
+        let arriving = (joined_key.starts_with("TaskHandle::join") || joined_key.starts_with("task::ChildHandle::join")) && self.method_can_fail(on_node)
+        if arriving {
+            out.push("nikaia_std::error::arrived(")
+        }
         let (kind, entry) = emit_call_pausing_entry(self.facts, args)
         // **On the block types, Rust's `String` answer is made a block's
         // text** (#490): around the plain call, which is all these are.
@@ -1908,6 +1916,9 @@ impl EmitState {
                 throw EmitRefused { message: f"This lambda calls `{name}`, which can pause, but the compiler knows nothing about what the lambda is passed to, so it can't let it pause. Call `{name}` outside the lambda and pass in the value.", at: flow.statement }
             }
             out.push(emit_async_pause(walk))
+        }
+        if arriving {
+            out.push(f", &{rust_string(scope.origin)})")
         }
         if timed {
             if length {

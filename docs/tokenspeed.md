@@ -1539,6 +1539,7 @@ nothing else.
 | 2026-11-21 | 9c6520 | check | 70 | 4.5 | 0 | - | |
 | 2026-11-21 | 3cce88 | check | 6 | 0.2 | 0 | - | |
 | 2026-11-21 | 2a1d2f | check | 24 | 1.0 | 0 | - | |
+| 2026-11-21 | 71d4d7 | check | 122 | 18.6 | 0 | - | |
 | 2026-11-21 | 538517 | check | 91 | 6.2 | 0 | - | |
 | 2026-11-21 | 5a8a05 | check | 51 | 3.9 | 0 | - | |
 | 2026-11-21 | f49fc0 | check | 228 | 17.5 | 0 | - | |
@@ -1568,6 +1569,15 @@ nothing else.
 | 2026-11-21 | b6f177 | check | 98 | 5.4 | 0 | - | |
 | 2026-11-21 | 1c616f | check | 32 | 1.5 | 0 | - | |
 | 2026-11-21 | 3ebf82 | check | 101 | 6.5 | 0 | - | |
+| 2026-11-21 | 2f577a | check | 67 | 4.5 | 0 | - | |
+| 2026-11-21 | e5b960 | check | 22 | 1.0 | 0 | - | |
+| 2026-11-21 | dd0085 | check | 61 | 4.4 | 0 | - | |
+| 2026-11-21 | 97d1d9 | check | 97 | 11.8 | 0 | - | |
+| 2026-11-21 | 86087e | check | 37 | 2.2 | 0 | - | |
+| 2026-11-21 | 34945e | check | 46 | 3.1 | 0 | - | |
+| 2026-11-21 | 8b096d | check | 29 | 1.4 | 0 | - | |
+| 2026-11-21 | 23467c | check | 24 | 1.1 | 0 | - | |
+| 2026-11-21 | 7f37df | check | 8 | 0.3 | 0 | - | |
 
 Moved lines are attributed by `scripts/tokenspeed.nika`: commits in the agent's
 window that changed a file it edited (Edit/Write/`git add` in its transcript)

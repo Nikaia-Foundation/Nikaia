@@ -49,6 +49,24 @@ impl nikaia_std::error::Joined for __NikaiaThrows_ProjectMembersRefusal__io_IoEr
         }
     }
 }
+impl nikaia_std::error::Crossed for __NikaiaThrows_ProjectMembersRefusal__io_IoError {
+    fn started_at(&mut self, site: nikaia_std::error::Origin) {
+        #[allow(unreachable_patterns)]
+        match self {
+            __NikaiaThrows_ProjectMembersRefusal__io_IoError::ProjectMembersRefusal(e) => nikaia_std::error::Crossed::started_at(e, site),
+            __NikaiaThrows_ProjectMembersRefusal__io_IoError::io_IoError(e) => nikaia_std::error::Crossed::started_at(e, site),
+            _ => {}
+        }
+    }
+    fn arrived_at(&mut self, site: nikaia_std::error::Origin) {
+        #[allow(unreachable_patterns)]
+        match self {
+            __NikaiaThrows_ProjectMembersRefusal__io_IoError::ProjectMembersRefusal(e) => nikaia_std::error::Crossed::arrived_at(e, site),
+            __NikaiaThrows_ProjectMembersRefusal__io_IoError::io_IoError(e) => nikaia_std::error::Crossed::arrived_at(e, site),
+            _ => {}
+        }
+    }
+}
 impl __NikaiaThrows_ProjectMembersRefusal__io_IoError {
     #[allow(dead_code)]
     pub(crate) fn message(&self) -> String { self.to_string().into() }
