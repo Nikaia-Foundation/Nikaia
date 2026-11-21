@@ -1799,7 +1799,10 @@ fn prover_expr_stmt(mut walk: ProverWalk, expr: ref Expr, span: Span, mut scope:
                 Expr::Variable(name, _) => words.resolve(name) == "panic" && !scope.locals.contains("panic"),
                 else => false,
             }
-            if panics {
+            // **Nor does `process::exit(…)`**: it always throws `Exit`
+            // (ADR-345), so a guard whose branch ends in it refuses as one
+            // ending in `return` does (ADR-raw-sinks-1 D14, #2469).
+            if panics || (prover_called(func, words, unaliased) ?? "") == "process::exit" {
                 prover_expr(walk, expr, span, scope, nested, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition)
                 return true
             }

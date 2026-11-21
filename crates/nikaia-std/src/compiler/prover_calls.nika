@@ -963,8 +963,8 @@ impl OutsideProof {
         }
     }
 
-    /// `if cond { return ... }` (`return ... if cond`), whose block always
-    /// leaves: a name `cond` is true for where `!path::is_component(name)`
+    /// `if cond { return ... }` (`return ... if cond`, or a block ending in
+    /// `process::exit(…)`), whose block always leaves: a name `cond` is true for where `!path::is_component(name)`
     /// (or `path::is_below`) holds, by itself or as one side of an `||`, is
     /// guarded after it.
     fn guard(mut self, stmt: ref Stmt, words: ref winnow_grammar::InternerContext) {
@@ -972,7 +972,7 @@ impl OutsideProof {
             Stmt::Expr(inner) => {
                 match inner {
                     Expr::If { cond, then_branch, else_branch, .. } => {
-                        if else_branch == null && always_leaves(then_branch) {
+                        if else_branch == null && always_leaves(then_branch, words) {
                             self.guard_cond(cond, words)
                         }
                     },
@@ -1123,8 +1123,9 @@ impl OutsideProof {
 }
 
 /// Whether `block` always leaves where it ends: its last statement is a
-/// `return`, a `throw`, a `break` or a `continue`.
-fn always_leaves(block: ref Block) -> bool {
+/// `return`, a `throw`, a `break`, a `continue` or a call of
+/// `process::exit`, which always throws `Exit` (ADR-345, #2469).
+fn always_leaves(block: ref Block, words: ref winnow_grammar::InternerContext) -> bool {
     let last = block.stmts.last() ?? return false
     return match last.node {
         Stmt::Return(_) => true,
@@ -1135,6 +1136,19 @@ fn always_leaves(block: ref Block) -> bool {
             Expr::Return(_, _) => true,
             Expr::Break(_) => true,
             Expr::Continue(_) => true,
+            Expr::Call { func, .. } => match func {
+                Expr::Path(segments, _) => {
+                    let mut joined: String = ""
+                    for segment in segments {
+                        if !joined.is_empty() {
+                            joined.push_str("::")
+                        }
+                        joined.push_str(words.resolve(segment))
+                    }
+                    joined == "process::exit" || joined == "std::process::exit"
+                },
+                else => false,
+            },
             else => false,
         },
         else => false,

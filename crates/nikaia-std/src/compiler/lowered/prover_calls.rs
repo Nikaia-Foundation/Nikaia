@@ -746,7 +746,7 @@ impl OutsideProof {
                 match inner {
                     Expr::If { cond, then_branch, else_branch, .. } => {
                         let cond = nikaia_std::boxed::open(cond);
-                        if else_branch.is_none() && always_leaves(then_branch) { self.guard_cond(cond, words); }
+                        if else_branch.is_none() && always_leaves(then_branch, words) { self.guard_cond(cond, words); }
                     },
                     _ => { },
                 }
@@ -854,13 +854,31 @@ impl OutsideProof {
     }
 }
 
-pub(crate) fn always_leaves(block: &Block) -> bool {
+pub(crate) fn always_leaves(block: &Block, words: &winnow_grammar::InternerContext) -> bool {
     let last = match block.stmts.last() { Some(__nikaia_value) => __nikaia_value, None => return false };
     match last.node {
         Stmt::Return(_) => true,
         Stmt::Break => true,
         Stmt::Continue => true,
-        Stmt::Expr(ref inner) => matches!(*inner, Expr::Throw(_, _) | Expr::Return(_, _) | Expr::Break(_) | Expr::Continue(_)),
+        Stmt::Expr(ref inner) => match *inner {
+            Expr::Throw(_, _) => true,
+            Expr::Return(_, _) => true,
+            Expr::Break(_) => true,
+            Expr::Continue(_) => true,
+            Expr::Call { ref func, .. } => { let func = nikaia_std::boxed::open(func); match *func {
+                Expr::Path(ref segments, _) => {
+                    let mut joined: String = String::from("");
+                    for segment in segments.iter() {
+                        let segment = *segment;
+                        if !joined.is_empty() { joined.push_str("::"); }
+                        joined.push_str(words.resolve(segment));
+                    }
+                    joined == "process::exit" || joined == "std::process::exit"
+                },
+                _ => false,
+            } },
+            _ => false,
+        },
         _ => false,
     }
 }

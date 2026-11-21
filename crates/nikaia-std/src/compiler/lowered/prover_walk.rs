@@ -1320,7 +1320,7 @@ pub(crate) fn prover_expr_stmt(walk: &mut ProverWalk, expr: &Expr, span: Span, s
                 Expr::Variable(name, _) => { let name = *name; words.resolve(name) == "panic" && !scope.locals.contains("panic") },
                 _ => false,
             };
-            if panics {
+            if panics || nikaia_std::index::or(prover_called(func, words, &mut &mut *unaliased), || "".into()) == "process::exit" {
                 prover_expr(walk, expr, span, &scope, &nested, program, words, own, library, &mut &mut *ask, &mut &mut *model, &mut &mut *escape, &mut &mut *holes_of, &mut &mut *unaliased, &mut &mut *written_of, &mut &mut *condition);
                 return true;
             }
