@@ -1,0 +1,128 @@
+// **No `NK1350` where deleting the clone does not check** (#2009): a view of
+// a type that copies assigned where a value of its own is kept (`NK1105`), a
+// part of a borrowed value handed back (`NK1131`), a part of an owned value
+// read whole later (`NK2105`), and a part of a `mut` parameter or of
+// `mut self` held across a change of it, or a part of a list the loop
+// around it grows (`NK2105`, `NK2305`).
+use std::collections
+
+struct Range {
+	lo: i64,
+	hi: i64,
+}
+
+enum Mode {
+	Keep,
+	Drop,
+}
+
+struct Sig {
+	kept: Mode,
+	r: Range,
+}
+
+impl Sig {
+	fn kept_of(ref self) -> Mode {
+		return self.kept.clone()
+	}
+}
+
+struct Reach {
+	reached: Vec[String],
+	count: i64,
+}
+
+struct Walk {
+	written: Vec[i64],
+}
+
+impl Walk {
+	fn class_of(mut self, one: i64) -> i64 {
+		self.written.push(one)
+		return self.written.len() as i64
+	}
+
+	fn forced(mut self) -> i64 {
+		let w = self.written.clone()
+		let mut sum: i64 = 0
+		for one in w {
+			sum += self.class_of(one)
+		}
+		return sum
+	}
+}
+
+fn bound_of(m: ref collections::BTreeMap[String, Range], name: String) -> Range? {
+	let mut out: Range? = null
+	let bound = m.get(name) ?? return null
+	if bound.lo > 0 {
+		out = bound.clone()
+	}
+	return out
+}
+
+fn kept_of(sig: ref Sig) -> Mode {
+	return sig.kept.clone()
+}
+
+fn sent(reach: Reach) -> i64 {
+	return reach.count + reach.reached.len() as i64
+}
+
+fn reached_of(count: i64) -> i64 {
+	let reach = Reach { reached: ["a", "b"], count: count }
+	let reached = reach.reached.clone()
+	let all = sent(reach)
+	return all + reached.len() as i64
+}
+
+fn step(mut walk: Walk) {
+	walk.written.push(7)
+}
+
+fn written_of(mut walk: Walk) -> i64 {
+	let written = walk.written.clone()
+	step(walk)
+	return written.len() as i64
+}
+
+fn said(mode: Mode) -> String {
+	return match mode {
+		Mode::Keep => "keep",
+		Mode::Drop => "drop",
+	}
+}
+
+fn path_to(from: String, calls: ref collections::BTreeMap[String, Vec[String]]) -> Vec[String]? {
+	let mut queue: Vec[String] = [from.clone()]
+	let mut next = 0
+	while next < queue.len() {
+		let at = queue[next].clone()
+		next += 1
+		for call in calls[at]?.clone() ?? [] {
+			if call == "z" {
+				return queue
+			}
+			queue.push(call.clone())
+		}
+	}
+	return null
+}
+
+fn main() throws {
+	let mut m: collections::BTreeMap[String, Range] = collections::BTreeMap()
+	m.insert("a", Range { lo: 1, hi: 2 })
+	let r = bound_of(m, "a") ?? Range { lo: 0, hi: 0 }
+	println(f"{r.lo} {r.hi}")
+	let sig = Sig { kept: Mode::Drop, r: Range { lo: 3, hi: 4 } }
+	println(said(Mode::Keep))
+	println(f"{said(kept_of(sig))} {said(sig.kept_of())} {sig.r.lo}")
+	println(reached_of(3))
+	let mut walk = Walk { written: [1, 2] }
+	println(written_of(walk))
+	println(walk.forced())
+	let mut calls: collections::BTreeMap[String, Vec[String]] = collections::BTreeMap()
+	calls.insert("a", ["b"])
+	calls.insert("b", ["z"])
+	println((path_to("a", calls) ?? []).join(" "))
+}
