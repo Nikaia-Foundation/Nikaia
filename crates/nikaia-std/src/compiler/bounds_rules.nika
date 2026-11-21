@@ -1734,14 +1734,14 @@ fn rules_check_once(key: ref String?, shared: bool, held: ref Vec[BoundsRule], o
     let reads = rules_returns_read(body, context, words)
     if shared && context.around.checked.contains_key(known) {
         let got = context.around.checked.get(known) ?? return
-        if got.reads == reads && rules_checked_fresh(got, context) {
+        if rules_reads_kept(reads, got.asked) == got.reads && rules_checked_fresh(got, context) {
             failed.extend(got.failed.clone())
             return
         }
     }
     if checked.contains_key(known) {
         let got = checked.get(known) ?? return
-        if got.reads == reads && rules_checked_fresh(got, context) {
+        if rules_reads_kept(reads, got.asked) == got.reads && rules_checked_fresh(got, context) {
             failed.extend(got.failed.clone())
             return
         }
@@ -1758,7 +1758,20 @@ fn rules_check_once(key: ref String?, shared: bool, held: ref Vec[BoundsRule], o
         }
         fields.insert(key.clone(), bound.clone())
     }
-    checked.insert(known.clone(), RulesChecked { reads: reads, fields: fields, absent: absent, selves: read.1.clone(), failed: own })
+    checked.insert(known.clone(), RulesChecked { reads: rules_reads_kept(reads, read.2), fields: fields, absent: absent, selves: read.1.clone(), asked: read.2.clone(), failed: own })
+}
+
+/// **The found returns a walk read, as it read them** (#2464): a pending
+/// entry adds what an absent one does except where it was `asked` for
+/// (`BoundsWalk.found_asked`), so elsewhere it is left out, as absent.
+fn rules_reads_kept(reads: ref collections::BTreeMap[String, BoundsReturns], asked: ref collections::BTreeSet[String]) -> collections::BTreeMap[String, BoundsReturns] {
+    let mut out: collections::BTreeMap[String, BoundsReturns] = collections::BTreeMap()
+    for (key, found) in reads {
+        if !found.pending || asked.contains(key) {
+            out.insert(key.clone(), found.clone())
+        }
+    }
+    return out
 }
 
 /// **The found returns a walk of `body` could read** (ADR-306 D23): those
@@ -1797,8 +1810,9 @@ fn rules_returns_read(body: ref Block, context: ref BoundsContext, words: ref wi
 /// that its key leaves out (#2396): the field keys of
 /// `context.around.field_bounds` it asked for, and the calls `self.m(…)`
 /// with the summary each found under `context.owner`
-/// (`BoundsWalk.self_read`).
-fn rules_check(held: ref Vec[BoundsRule], owner: ref String, method: ref String, built: ref String, args: ref Vec[FnArg], body: ref Block, locals: ref collections::BTreeMap[String, String], context: ref BoundsContext, program: ref Program, words: ref winnow_grammar::InternerContext, ask: fn(ref logic::TermArena, ref Vec[i64], i64) -> bool sync, mut failed: collections::BTreeSet[i64]) -> (collections::BTreeSet[String], collections::BTreeMap[String, String]) {
+/// (`BoundsWalk.self_read`), and the found returns it asked for where a
+/// pending one reads otherwise than an absent one (`BoundsWalk.found_asked`).
+fn rules_check(held: ref Vec[BoundsRule], owner: ref String, method: ref String, built: ref String, args: ref Vec[FnArg], body: ref Block, locals: ref collections::BTreeMap[String, String], context: ref BoundsContext, program: ref Program, words: ref winnow_grammar::InternerContext, ask: fn(ref logic::TermArena, ref Vec[i64], i64) -> bool sync, mut failed: collections::BTreeSet[i64]) -> (collections::BTreeSet[String], collections::BTreeMap[String, String], collections::BTreeSet[String]) {
     let mut walk = bounding_new(args, body, collections::BTreeSet(), context, program, words)
     let self_owner = if method.is_empty() { "" } else { owner }
     walk.rule_roots = rules_roots(self_owner, args, walk.shape, held, words)
@@ -1820,7 +1834,7 @@ fn rules_check(held: ref Vec[BoundsRule], owner: ref String, method: ref String,
     for at in walk.rule_failed {
         failed.insert(at)
     }
-    return (walk.assumed_read.clone(), walk.self_read.clone())
+    return (walk.assumed_read.clone(), walk.self_read.clone(), walk.found_asked.clone())
 }
 
 /// The `node_key` of the literal a builder binds `built` to (`rules_builder`:

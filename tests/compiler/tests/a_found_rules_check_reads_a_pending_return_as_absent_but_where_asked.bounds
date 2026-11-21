@@ -1,0 +1,7 @@
+bounds in tests/a_found_rules_check_reads_a_pending_return_as_absent_but_where_asked.nika: 3 indexes, 3 proved; 3 operations, 3 proved
+     9  xs[i]                    proved
+    12  i += 1                   proved
+    20  xs[i]                    proved
+    23  i += 1                   proved
+    56  self.items[self.at - 1]  proved
+    56  self.at - 1              proved

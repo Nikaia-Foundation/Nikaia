@@ -19,6 +19,7 @@ pub struct RulesChecked {
     pub fields: collections::BTreeMap<String, Range>,
     pub absent: collections::BTreeSet<String>,
     pub selves: collections::BTreeMap<String, String>,
+    pub asked: collections::BTreeSet<String>,
     pub failed: collections::BTreeSet<i64>,
 }
 

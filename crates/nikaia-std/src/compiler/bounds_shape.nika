@@ -62,6 +62,10 @@ pub struct RulesChecked {
 	/// key of `context.ensured` found under `context.owner` ("" for none,
 	/// `BoundsWalk.self_read`): it serves only an owner that finds the same.
 	pub selves: collections::BTreeMap[String, String],
+	/// The found returns it asked for where a pending entry reads otherwise
+	/// than an absent one (`BoundsWalk.found_asked`, #2464): `reads` holds
+	/// a pending entry only of these, as elsewhere it reads as absent.
+	pub asked: collections::BTreeSet[String],
 	pub failed: collections::BTreeSet[i64],
 }
 
