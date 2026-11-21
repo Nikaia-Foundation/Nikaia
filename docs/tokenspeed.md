@@ -1493,6 +1493,10 @@ nothing else.
 | 2026-11-21 | 2514e3 | check | 46 | 2.6 | 0 | - | |
 | 2026-11-21 | 0fb13a | check | 57 | 4.2 | 0 | - | |
 | 2026-11-21 | 80ae48 | check | 9 | 0.3 | 0 | - | |
+| 2026-11-21 | 625ab6 | check | 34 | 1.5 | 0 | - | |
+| 2026-11-21 | f2b3d3 | check | 44 | 2.3 | 0 | - | |
+| 2026-11-21 | f1865a | check | 92 | 5.5 | 0 | - | |
+| 2026-11-21 | 85b61e | check | 17 | 0.7 | 0 | - | |
 
 Moved lines are attributed by `scripts/tokenspeed.nika`: commits in the agent's
 window that changed a file it edited (Edit/Write/`git add` in its transcript)
