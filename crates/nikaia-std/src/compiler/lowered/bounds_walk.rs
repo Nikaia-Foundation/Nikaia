@@ -884,11 +884,12 @@ pub(crate) fn bounding_missed(walk: &mut BoundsWalk, facts: &BoundsFacts, goal: 
                 if names.len() != 2 { continue; }
                 let mut touches = false;
                 for name in names.iter() { if nikaia_std::list::contains(&from, &name) { touches = true; } }
+                let equal = matches!(walk.arena.at(fact), logic::SolverTerm::Eq(_, _));
                 if touches {
                     for name in names.iter() {
                         if !read.contains(name) && !nikaia_std::list::contains(&tied, &name) {
                             tied.push(nikaia_std::block::Text::from(name.to_string()));
-                            if name.contains('#') || name.contains('@') { next.push(nikaia_std::block::Text::from(name.to_string())); }
+                            if equal || name.contains('#') || name.contains('@') { next.push(nikaia_std::block::Text::from(name.to_string())); }
                         }
                     }
                 }
