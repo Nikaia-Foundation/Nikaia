@@ -2992,7 +2992,7 @@ fn raw_sink_finding(mut walk: ProverWalk, sink: ref ParamSink, shown: ref String
         help = f"Check it where it arrives: `throw BadInput({first}) if !html::is_plain({first})`, after which it is proved; or write it as text, which `html` escapes. If the program means to write markup from outside, `untrusted-markup = true` under `[allow]` in the manifest builds it."
     } else {
         notes.push("No check makes a stranger's choice of program safe: a name is looked up on `PATH`, a path runs that file.")
-        help = "Name the program with a literal, or choose it with a `match` whose arms are literals. If the program means to run a program from outside, `untrusted-program = true` under `[allow]` in the manifest builds it."
+        help = "Name the program with a literal, or choose it with a `match` whose arms are literals: `let editor = match env::var(\"EDITOR\") ?? \"\" { \"vim\" => \"vim\", \"nano\" => \"nano\", else => \"vi\", }`. If the program means to run a program from outside, `untrusted-program = true` under `[allow]` in the manifest builds it."
     }
     walk.findings.push(Finding { code: "NK1308", span: span, message: f"`{first}` reaches {shown}, and it comes from outside the program.", notes: notes, help: help, warning: false, labels: [] })
 }

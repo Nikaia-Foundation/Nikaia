@@ -19,7 +19,7 @@ fn check(nikaia: String, manifest: String) throws {
     let tmp = f"{root.path().display()}"
     fs::create_dir("src", root)
     fs::write("nikaia.toml", root, f"[package]\nname = \"p\"\nversion = \"0.1.0\"\n{manifest}")
-    let main = "use std::cli\nuse std::fs\nuse std::io\n\nfn main() throws {\n    let args = cli::args()\n    if args.len() > 1 {\n        let p = args.nth(1) ?? \"\"\n        println(fs::read_to_string(p, fs::Root::Anywhere))\n        fs::write(p, fs::Root::Anywhere, \"x\")\n    }\n    let line = io::read_line() ?? \"\"\n    println(fs::read_to_string(line, fs::Root::Anywhere))\n}\n"
+    let main = "use std::cli\nuse std::fs\nuse std::io\n\nfn main() throws {\n    let mut args = cli::args()\n    if args.len() > 1 {\n        let p = args.nth(1) ?? \"\"\n        println(fs::read_to_string(p, fs::Root::Anywhere))\n        fs::write(p, fs::Root::Anywhere, \"x\")\n    }\n    let line = io::read_line() ?? \"\"\n    println(fs::read_to_string(line, fs::Root::Anywhere))\n}\n"
     fs::write("src/main.nika", root, main)
     let out = process::run(nikaia.clone(), ["check", "src/main.nika"]; dir: tmp.clone(), env: [("RUST_BACKTRACE", "0")])
     println(f"--- {manifest.trim()}")

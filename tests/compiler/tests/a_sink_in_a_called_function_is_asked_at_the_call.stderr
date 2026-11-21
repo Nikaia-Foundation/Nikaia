@@ -7,7 +7,7 @@ warning[NK1308]: `name` reaches the program `process::run` runs, through `run_it
     = note: `name` comes from `cli::args`: whoever sends it chooses the value, so nothing the compiler can see says what it holds.
     = note: No check makes a stranger's choice of program safe: a name is looked up on `PATH`, a path runs that file.
     = note: `raw-sinks = "warn"` lets this build through.
-    = help: Name the program with a literal, or choose it with a `match` whose arms are literals. If the program means to run a program from outside, `untrusted-program = true` under `[allow]` in the manifest builds it.
+    = help: Name the program with a literal, or choose it with a `match` whose arms are literals: `let editor = match env::var("EDITOR") ?? "" { "vim" => "vim", "nano" => "nano", else => "vi", }`. If the program means to run a program from outside, `untrusted-program = true` under `[allow]` in the manifest builds it.
 warning[NK1308]: `name` reaches the path `fs::exists` opens under `fs::Root::Anywhere`, which may name any file, through `opened`, and it comes from outside the program.
    --> tests/a_sink_in_a_called_function_is_asked_at_the_call.nika:41:5
     |

@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1515] — 2026-11-21
+
+**NK1308's help at process::run shows the literal match; --trust lists the raw sinks the build allows; D10's example writes else (ADR-raw-sinks-1 D10) (#2217)**
+- NK1308 at `process::run` shows the literal `match` to choose a program, and `--trust` lists the raw sinks `[allow]` and `--allow` let through (ADR-raw-sinks-1 D10).
+
 ## [0.0.1514] — 2026-11-21
 
 **drive: child drivers run with the compiler of HEAD, the CI waiter is watched (#2458)**

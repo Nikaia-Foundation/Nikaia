@@ -298,15 +298,25 @@ pub(crate) fn check_core_method_changes(state: &mut CheckState, world: &CheckWor
     let root: String = match state.rooted_at(world, receiver) { Some(__nikaia_value) => __nikaia_value, None => return };
     let mut count = 0;
     let mut all = true;
-    for key in ledger_candidates(world.own, world.own_methods, name) {
-        count += 1;
-        let contract = match *nikaia_std::index::get(&world.own.functions, &key) { Some(__nikaia_value) => __nikaia_value, None => continue };
-        if !contract.mutates { all = false; }
-    }
-    for key in ledger_candidates(world.library, world.library_methods, name) {
-        count += 1;
-        let contract = match *nikaia_std::index::get(&world.library.functions, &key) { Some(__nikaia_value) => __nikaia_value, None => continue };
-        if !contract.mutates { all = false; }
+    let typed: Option<CheckResolved<'_>> = match on {
+        Ty::Named { name: owner, .. } => resolve_method(world, &format!("{}::{}", owner, name)),
+        _ => None,
+    };
+    if typed.is_some() {
+        let resolved: CheckResolved<'_> = match typed { Some(__nikaia_value) => __nikaia_value, None => return };
+        count = 1;
+        all = resolved.contract.mutates;
+    } else {
+        for key in ledger_candidates(world.own, world.own_methods, name) {
+            count += 1;
+            let contract = match *nikaia_std::index::get(&world.own.functions, &key) { Some(__nikaia_value) => __nikaia_value, None => continue };
+            if !contract.mutates { all = false; }
+        }
+        for key in ledger_candidates(world.library, world.library_methods, name) {
+            count += 1;
+            let contract = match *nikaia_std::index::get(&world.library.functions, &key) { Some(__nikaia_value) => __nikaia_value, None => continue };
+            if !contract.mutates { all = false; }
+        }
     }
     if count == 0 || !all { return; }
     state.a_changed_binding_says_mut(&root, &format!("changed here, by `{}`", name), span.clone());

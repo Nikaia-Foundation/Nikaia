@@ -418,18 +418,31 @@ fn check_core_method_changes(mut state: CheckState, world: ref CheckWorld, on: r
     let root: String = state.rooted_at(world, receiver) ?? return
     let mut count = 0
     let mut all = true
-    for key in ledger_candidates(world.own, world.own_methods, name) {
-        count += 1
-        let contract = world.own.functions[key] ?? continue
-        if !contract.mutates {
-            all = false
-        }
+    // **A receiver of a known type asks its own method** (Part II, method
+    // calls; #1298): a user trait's `push` is no candidate for `Vec::push`.
+    // Only a receiver whose method is not found asks every candidate.
+    let typed: CheckResolved? = match on {
+        Ty::Named { name: owner, .. } => resolve_method(world, f"{owner}::{name}"),
+        else => null,
     }
-    for key in ledger_candidates(world.library, world.library_methods, name) {
-        count += 1
-        let contract = world.library.functions[key] ?? continue
-        if !contract.mutates {
-            all = false
+    if typed != null {
+        let resolved: CheckResolved = typed ?? return
+        count = 1
+        all = resolved.contract.mutates
+    } else {
+        for key in ledger_candidates(world.own, world.own_methods, name) {
+            count += 1
+            let contract = world.own.functions[key] ?? continue
+            if !contract.mutates {
+                all = false
+            }
+        }
+        for key in ledger_candidates(world.library, world.library_methods, name) {
+            count += 1
+            let contract = world.library.functions[key] ?? continue
+            if !contract.mutates {
+                all = false
+            }
         }
     }
     if count == 0 || !all {
