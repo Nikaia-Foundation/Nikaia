@@ -766,7 +766,7 @@ impl EmitState {
                 out.push("            -> { ");
                 for i in 0..fields.len() as i64 { out.push(&format!("let mut f{}: {} = None; ", i, *unsafe { nikaia_std::proven::read(&slots, (i) as usize) })); }
                 out.push("for piece in pieces { ");
-                for i in 0..fields.len() as i64 { out.push(&format!("if let Some(v) = piece.{} {{ if f{}.is_some() {{ {}::nikaia_std::grammar::member_error({}, \"is given twice\")))); }} f{} = Some(v); }} ", i, i, fail, *unsafe { nikaia_std::proven::read(&names, (i) as usize) }, i)); }
+                for i in 0..fields.len() as i64 { out.push(&format!("if let Some(v) = piece.{} {{ if f{}.is_some() {{ {}::nikaia_std::grammar::member_error({}, \"is given twice\")))); }} f{} = Some(v); }}; ", i, i, fail, *unsafe { nikaia_std::proven::read(&names, (i) as usize) }, i)); }
                 out.push("} ");
                 let defaults = self.field_defaults(world, &owner); #[allow(unused_mut, clippy::redundant_locals)] let mut names = names;
                 let mut built_fields: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block); #[allow(unused_mut, clippy::redundant_locals)] let mut names = names;

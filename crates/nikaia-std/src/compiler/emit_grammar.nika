@@ -1121,11 +1121,6 @@ impl EmitState {
         return false
     }
 
-    /// **An action that can fail** (Part II 10.8, #557): its body runs as a
-    /// `throws` function's does, and its failure is the alternative's, with
-    /// the error's message in the `ParseError` (the backend's `external`).
-    /// Past a commit point it is the parse's error: no enclosing alternative
-    /// is tried; before one, the next alternative is.
     /// **A member's value into its field** (ADR-grammar-typed-read-v1 D3,
     /// #2602): a value rule hands text back as a view of the input, and the
     /// field owns it. Text goes in by `IntoMember`, a list of text item by
@@ -1144,6 +1139,11 @@ impl EmitState {
         return f"{value}.into_iter().map(|x| -> {host.ty_named(walk, item)} {{ {self.member_into(world, walk, host, item, "x")} }}).collect::<{host.ty_named(walk, ty)}>()"
     }
 
+    /// **An action that can fail** (Part II 10.8, #557): its body runs as a
+    /// `throws` function's does, and its failure is the alternative's, with
+    /// the error's message in the `ParseError` (the backend's `external`).
+    /// Past a commit point it is the parse's error: no enclosing alternative
+    /// is tried; before one, the next alternative is.
     /// **The rules `members[S](key, value, sep; null:, unknown:)` lowers
     /// to** (ADR-grammar-typed-read-v1 D3, D5; Part II 10.8). The members, `key value`
     /// apart by `sep`, each read into a piece that holds one field, the
@@ -1177,8 +1177,10 @@ impl EmitState {
                     out.push(f"let mut f{i}: {slots[i]} = None; ")
                 }
                 out.push("for piece in pieces { ")
+                // Each field's check ends in `;`: two `if`s on one line with
+                // nothing between read to clippy as a lost `else` (#2602).
                 for i in 0..<fields.len() {
-                    out.push(f"if let Some(v) = piece.{i} {{ if f{i}.is_some() {{ {fail}::nikaia_std::grammar::member_error({names[i]}, \"is given twice\")))); }} f{i} = Some(v); }} ")
+                    out.push(f"if let Some(v) = piece.{i} {{ if f{i}.is_some() {{ {fail}::nikaia_std::grammar::member_error({names[i]}, \"is given twice\")))); }} f{i} = Some(v); }}; ")
                 }
                 out.push("} ")
                 let defaults = self.field_defaults(world, owner)
