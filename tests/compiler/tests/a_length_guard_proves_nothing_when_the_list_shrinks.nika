@@ -1,0 +1,91 @@
+/// An implication between two lengths does not cross a loop that breaks
+/// it (ADR-361 D15, #2617): `args` popped, cleared or given a new value in
+/// the loop, or a guard that says nothing of `args`, leaves `args.len() >= 1`
+/// unproved past the loop, so each precondition below is refused. The
+/// accepted forms are in `a_length_guard_carries_past_the_loop_only_while_the_list_holds`.
+fn need_popped(n: i64) -> i64 {
+	assert(n >= 1)
+	return n
+}
+
+fn need_cleared(n: i64) -> i64 {
+	assert(n >= 1)
+	return n
+}
+
+fn need_rebound(n: i64) -> i64 {
+	assert(n >= 1)
+	return n
+}
+
+fn need_unrelated(n: i64) -> i64 {
+	assert(n >= 1)
+	return n
+}
+
+pub fn popped(mut args: Vec[i64], m: i64) -> i64 {
+	let mut at: Vec[i64] = []
+	let mut i = 0
+	while i < m {
+		if i < args.len() as i64 {
+			at.push(i)
+		}
+		args.pop()
+		i += 1
+	}
+	if at.len() == 0 {
+		return 0
+	}
+	return need_popped(args.len() as i64)
+}
+
+pub fn cleared(mut args: Vec[i64], m: i64) -> i64 {
+	let mut at: Vec[i64] = []
+	let mut i = 0
+	while i < m {
+		if i < args.len() as i64 {
+			at.push(i)
+		}
+		args.clear()
+		i += 1
+	}
+	if at.len() == 0 {
+		return 0
+	}
+	return need_cleared(args.len() as i64)
+}
+
+pub fn rebound(mut args: Vec[i64], m: i64) -> i64 {
+	let mut at: Vec[i64] = []
+	let mut i = 0
+	while i < m {
+		if i < args.len() as i64 {
+			at.push(i)
+		}
+		args = []
+		i += 1
+	}
+	if at.len() == 0 {
+		return 0
+	}
+	return need_rebound(args.len() as i64)
+}
+
+pub fn unrelated(args: ref Vec[i64], m: i64) -> i64 {
+	let mut at: Vec[i64] = []
+	let mut i = 0
+	while i < m {
+		if i < m {
+			at.push(i)
+		}
+		i += 1
+	}
+	if at.len() == 0 {
+		return 0
+	}
+	return need_unrelated(args.len() as i64)
+}
+
+fn main() throws {
+	println(f"{popped([1], 2)} {cleared([1], 2)} {rebound([1], 2)} {unrelated([1], 2)}")
+}
