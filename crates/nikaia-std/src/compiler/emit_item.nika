@@ -683,6 +683,7 @@ impl EmitState {
             }
         }
         let mut shares_a_lifetime = false
+        let mut awaits_code = false
         let mut params: Vec[String] = []
         let mut at = 0
         if method.receiver != null {
@@ -733,6 +734,9 @@ impl EmitState {
                 if walk_runs && !arg.ty.is_nullable && host.overlaps_user_code() && self.emit_fn_code_at_once(key, emit_text(world, arg.name)) {
                     written = emit_fn_code_that_crosses(written)
                 }
+                if written.contains("AsyncFn") {
+                    awaits_code = true
+                }
             } else if !arg.mutable && !arg.keep && !arg.ty.is_view && self.emit_fn_lends(world, key, at) {
                 // **A by-value data parameter the column runs is lent**
                 // (ADR-277 D17, #1498), as the impl's and the call's are:
@@ -773,10 +777,14 @@ impl EmitState {
             outcome = f"{self.rust_result()}<{returned}, std::boxed::Box<dyn std::error::Error>>"
         }
         // **A method that may pause is declared in the return-position form**
-        // (ADR-288 D26); `+ Send` follows the executor, not the type.
+        // (ADR-288 D26); `+ Send` follows the executor, not the type. A
+        // method that awaits code it is handed (`impl AsyncFn..`) has no
+        // `+ Send`: stable Rust cannot bound that code's future, so no impl
+        // could keep the promise (#2054); a call on a known type still leaks
+        // the impl's own `Send`.
         let mut ret: String = ""
         if !is_sync {
-            let send = if host.user_parallelism() { " + Send" } else { "" }
+            let send = if host.user_parallelism() && !awaits_code { " + Send" } else { "" }
             ret = f" -> impl std::future::Future<Output = {outcome}>{send}"
         } else if method.ret_type != null || method.can_throw {
             ret = f" -> {outcome}"
