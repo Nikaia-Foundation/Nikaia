@@ -403,8 +403,11 @@ impl nikaia_std::compiler::grammar_run::GrammarDriverHost for Driver<'_> {
 /// variant from the *same* position, so the variant came back empty and the
 /// payload loop met an `O`. A separator between two words has to be skipped by
 /// whoever reads the second one.
-pub fn decode(text: &str) -> Result<crate::build_time::Value, Wall> {
-    match nikaia_std::compiler::grammar_decode::gr_decode(text, &mut crate::build_time::char_of) {
+pub fn decode(text: &str) -> Result<nikaia_std::compiler::build_values::BuildValue, Wall> {
+    match nikaia_std::compiler::grammar_decode::gr_decode(
+        text,
+        &mut crate::build_eval_host::char_of,
+    ) {
         nikaia_std::compiler::grammar_decode::GrDecoded::Value(value) => Ok(value),
         nikaia_std::compiler::grammar_decode::GrDecoded::Unreadable(detail) => {
             Err(Wall::Unreadable { detail })

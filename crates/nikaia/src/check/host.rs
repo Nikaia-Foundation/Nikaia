@@ -4,11 +4,14 @@
 //! it holds borrows and nothing else - and hands it to the Nikaia method.
 
 use super::*;
+use crate::build_eval_host::char_of;
 #[allow(unused_imports)]
 use nikaia_std::block::names::{String, ToText, Vec, format, vec};
-use nikaia_std::compiler::build_eval::BtRead;
+use nikaia_std::compiler::build_eval::{BtRead, BtRefusal};
+use nikaia_std::compiler::build_values::BuildValue;
 use nikaia_std::compiler::check_host::{CheckBuilt, CheckComputed, CheckHost};
 use nikaia_std::compiler::check_walked::{CheckWalkedPasses, CheckWalkedProved};
+use nikaia_std::compiler::escapes::decoded;
 
 pub(super) struct Host<'a> {
     pub(super) parsed: &'a Parsed,
@@ -66,7 +69,7 @@ impl Host<'_> {
         let Some(contract) = self.own.functions.get(callee) else {
             return not_run("It is not a function of this package.");
         };
-        if let Some(because) = build_time::may_not_run(contract) {
+        if let Some(because) = nikaia_std::compiler::build_eval::bt_may_not_run(contract) {
             return not_run(&because);
         }
         if !contract.touches.is_empty() {
@@ -102,14 +105,9 @@ impl Host<'_> {
             config: Vec::new(),
             id: crate::ast::NodeId::fresh(),
         };
-        let known: BTreeMap<String, build_time::Value> = comptimes
+        let known: BTreeMap<String, BuildValue> = comptimes
             .iter()
-            .map(|(name, value)| {
-                (
-                    name.clone(),
-                    build_time::Value::Int(integer_of_count(*value)),
-                )
-            })
+            .map(|(name, value)| (name.clone(), BuildValue::Int(integer_of_count(*value))))
             .collect();
         match self.compute_comptime(
             &value,
@@ -120,7 +118,7 @@ impl Host<'_> {
             None,
             None,
         ) {
-            CheckComputed::Value(build_time::Value::Int(n)) => match integer_as_count(&n) {
+            CheckComputed::Value(BuildValue::Int(n)) => match integer_as_count(&n) {
                 Some(value) => ClaimRun::Value(value),
                 None => not_run("Its value is more than a whole number of the proof holds."),
             },
@@ -202,25 +200,21 @@ impl CheckHost for Host<'_> {
         )
     }
 
-    fn evaluate(&self, value: &Expr, held: &BTreeMap<String, build_time::Value>) -> CheckBuilt {
-        let known = |name: &str| -> Option<build_time::Value> { held.get(name).cloned() };
-        let outcome = build_time::BuildTime::new(self.parsed, self.beside, self.reads, &known)
-            .evaluate(value);
+    fn evaluate(&self, value: &Expr, held: &BTreeMap<String, BuildValue>) -> CheckBuilt {
+        let known = |name: &str| -> Option<BuildValue> { held.get(name).cloned() };
+        let outcome =
+            crate::build_eval_host::evaluate(value, self.parsed, self.beside, self.reads, &known);
         match outcome {
             Ok(value) => CheckBuilt::Value(value),
-            Err(build_time::Refusal::Unevaluable) => CheckBuilt::Unevaluable,
-            Err(build_time::Refusal::OutOfBounds { at, len }) => {
-                CheckBuilt::OutOfBounds { at, len }
-            }
-            Err(build_time::Refusal::Circular { ring }) => CheckBuilt::Circular { ring },
-            Err(build_time::Refusal::NotHere { what, why, way_out }) => {
+            Err(BtRefusal::Unevaluable) => CheckBuilt::Unevaluable,
+            Err(BtRefusal::OutOfBounds { at, len }) => CheckBuilt::OutOfBounds { at, len },
+            Err(BtRefusal::Circular { ring }) => CheckBuilt::Circular { ring },
+            Err(BtRefusal::NotHere { what, why, way_out }) => {
                 CheckBuilt::NotHere { what, why, way_out }
             }
-            Err(build_time::Refusal::MayNotRead { path, why }) => {
-                CheckBuilt::MayNotRead { path, why }
-            }
-            Err(build_time::Refusal::PathIsComputed) => CheckBuilt::PathIsComputed,
-            Err(build_time::Refusal::GrammarWall { owner, rule, why }) => {
+            Err(BtRefusal::MayNotRead { path, why }) => CheckBuilt::MayNotRead { path, why },
+            Err(BtRefusal::PathIsComputed) => CheckBuilt::PathIsComputed,
+            Err(BtRefusal::GrammarWall { owner, rule, why }) => {
                 CheckBuilt::GrammarWall { owner, rule, why }
             }
         }
@@ -231,7 +225,7 @@ impl CheckHost for Host<'_> {
         value: &Expr,
         found: &Ty,
         bound: &str,
-        known: &BTreeMap<String, build_time::Value>,
+        known: &BTreeMap<String, BuildValue>,
         typed: &BTreeMap<String, Ty>,
         steps: Option<u64>,
         bytes: Option<u64>,
@@ -277,7 +271,7 @@ impl CheckHost for Host<'_> {
     }
 
     fn decoded(&self, literal: &str) -> Option<String> {
-        build_time::decoded(literal)
+        decoded(literal, &mut char_of)
     }
 
     fn composed(&self, text: &str) -> String {
@@ -309,10 +303,10 @@ impl CheckHost for Host<'_> {
                             if parsed.text(*name) == crate::assets::ASSET)
                         && let [Expr::LitStr { text, .. }] = args.as_slice()
                         && let Some(content) =
-                            build_time::decoded(text).and_then(|path| read.get(&path))
+                            decoded(text, &mut char_of).and_then(|path| read.get(&path))
                     {
                         *expr = Expr::LitStr {
-                            text: build_time::written(content),
+                            text: nikaia_std::compiler::escapes::as_a_literal(content),
                             id: crate::ast::NodeId::fresh(),
                         };
                     }
@@ -398,7 +392,7 @@ impl CheckHost for Host<'_> {
         &self,
         text: &str,
     ) -> Option<nikaia_std::compiler::escapes::NotAnEscape> {
-        crate::build_time::an_escape_nothing_names(text)
+        nikaia_std::compiler::escapes::an_escape_nothing_names(text, &mut char_of)
     }
 }
 
