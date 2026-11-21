@@ -286,14 +286,14 @@ fn accounted_value(binds: String?, value: ref Expr, names: ref winnow_grammar::I
             names_in(expr, names, mentions)
             // **The handler counts too** for a data dependency.
             names_in_block(handler, names, mentions)
-            accounted_reduced(binds, mentions, reduced, true, walking)
+            accounted_reduced(binds, mentions, reduced, true, beside, walking)
         }
         else => {
             let mut reduced = Reduced { calls: [], performs: false, methods: [], refused: null }
             reduce(value, names, reduced)
             let mut mentions: collections::BTreeSet[String] = collections::BTreeSet()
             names_in(value, names, mentions)
-            accounted_reduced(binds, mentions, reduced, beside, walking)
+            accounted_reduced(binds, mentions, reduced, beside, beside, walking)
         }
     }
 }
@@ -301,8 +301,12 @@ fn accounted_value(binds: String?, value: ref Expr, names: ref winnow_grammar::I
 // What the walk found, made an answer. The ledger is consulted **before** the
 // walk's own refusal is reported: "nothing says what `x` reaches" is a gap a
 // reader can close, where "it holds a method call" is this compiler's own
-// limit (D9).
-fn accounted_reduced(binds: String?, mentions: collections::BTreeSet[String], reduced: ref Reduced, caught: bool, walking: ref Walking) -> Accounted {
+// limit (D9). **What runs `beside`** (a task, a statement in its window, a
+// `par_iter` lambda's run) is not carried into a closure of its own, so a
+// value read from somewhere else (a name, a field, a `??`'s fallback, all of
+// whose calls the walk did read) leaves nothing unaccounted there; a node the
+// walk stopped at still does (ADR-async-5 D7, D26).
+fn accounted_reduced(binds: String?, mentions: collections::BTreeSet[String], reduced: ref Reduced, caught: bool, beside: bool, walking: ref Walking) -> Accounted {
     if reduced.calls.len() == 0 && !reduced.performs {
         // Nothing here reaches the world at all.
         return Accounted::NotAnOperation
@@ -322,7 +326,7 @@ fn accounted_reduced(binds: String?, mentions: collections::BTreeSet[String], re
             return Accounted::NoTouches(method.clone())
         }
     }
-    if reduced.refused != null {
+    if reduced.refused != null && (!beside || reduced.performs) {
         return reduced.refused?.clone() ?? Accounted::NotAnOperation
     }
     return Accounted::Operation(Operation { binds: binds, mentions: mentions, reaches: reaches, callee: named_by.join(" + ") })
@@ -584,7 +588,16 @@ fn reduce(node: ref Expr, names: ref winnow_grammar::InternerContext, mut reduce
             reduce(value, names, reduced)
             reduce(fallback, names, reduced)
         }
-        Expr::LitInterpolated { .. } => stopped(reduced, Accounted::Opaque("text with code in it, whose holes this has not parsed")),
+        // **A hole is an expression of the tree** (ADR-309): each is read as
+        // any other value, the text between them is nothing to read.
+        Expr::LitInterpolated { parts, .. } => {
+            for part in parts {
+                match part {
+                    FPart::Hole { expr, .. } => reduce(expr, names, reduced),
+                    else => {},
+                }
+            }
+        }
         // *Which* entry `xs.len()` is needs the type checker (ADR-288); the
         // name is recorded and `accounted` asks whether every entry of it
         // reaches nothing. A `?.m()` is accounted for exactly as a `.m()`.

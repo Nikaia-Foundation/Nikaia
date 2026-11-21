@@ -159,19 +159,19 @@ pub(crate) fn accounted_value(binds: Option<String>, value: &Expr, names: &winno
             let mut mentions: collections::BTreeSet<String> = collections::BTreeSet::new(); #[allow(unused_mut, clippy::redundant_locals)] let mut reduced = reduced;
             names_in(expr, names, &mut mentions);
             names_in_block(handler, names, &mut mentions);
-            accounted_reduced(binds, mentions, &reduced, true, walking)
+            accounted_reduced(binds, mentions, &reduced, true, beside, walking)
         },
         _ => {
             #[allow(unused_mut)] let mut reduced = Reduced { calls: vec![], performs: false, methods: vec![], refused: None };
             reduce(value, names, &mut reduced);
             let mut mentions: collections::BTreeSet<String> = collections::BTreeSet::new(); #[allow(unused_mut, clippy::redundant_locals)] let mut reduced = reduced;
             names_in(value, names, &mut mentions);
-            accounted_reduced(binds, mentions, &reduced, beside, walking)
+            accounted_reduced(binds, mentions, &reduced, beside, beside, walking)
         },
     }
 }
 
-pub(crate) fn accounted_reduced(binds: Option<String>, mentions: collections::BTreeSet<String>, reduced: &Reduced, caught: bool, walking: &Walking<'_, '_>) -> Accounted {
+pub(crate) fn accounted_reduced(binds: Option<String>, mentions: collections::BTreeSet<String>, reduced: &Reduced, caught: bool, beside: bool, walking: &Walking<'_, '_>) -> Accounted {
     if reduced.calls.is_empty() && !reduced.performs { return Accounted::NotAnOperation; }
     let mut reaches: Vec<Reached> = vec![];
     let mut named_by: Vec<String> = vec![];
@@ -180,7 +180,7 @@ pub(crate) fn accounted_reduced(binds: Option<String>, mentions: collections::BT
         if refused.is_some() { return nikaia_std::index::or(refused, || Accounted::NotAnOperation); }
     }
     for method in reduced.methods.iter() { if !reaches_nothing(method, walking) { return Accounted::NoTouches(nikaia_std::block::Text::from(method.to_string())); } }
-    if reduced.refused.is_some() {
+    if reduced.refused.is_some() && (!beside || reduced.performs) {
         return nikaia_std::index::or(match reduced.refused.as_ref() {
             Some(__nikaia_it) => Some(__nikaia_it.clone()),
             None => None,
@@ -376,7 +376,14 @@ pub(crate) fn reduce(node: &Expr, names: &winnow_grammar::InternerContext, reduc
             reduce(value, names, reduced);
             reduce(fallback, names, reduced);
         },
-        Expr::LitInterpolated { .. } => { stopped(reduced, Accounted::Opaque(String::from("text with code in it, whose holes this has not parsed"))); },
+        Expr::LitInterpolated { parts, .. } => {
+            for part in parts.iter() {
+                match part {
+                    FPart::Hole { expr, .. } => { reduce(expr, names, reduced); },
+                    _ => { },
+                }
+            }
+        },
         Expr::MethodCall { receiver, method, args, config, .. } => { let receiver = nikaia_std::boxed::open(receiver); let method = *method; reduce_method(receiver, method, args, config, names, reduced); },
         Expr::SafeMethod { receiver, method, args, config, .. } => { let receiver = nikaia_std::boxed::open(receiver); let method = *method; reduce_method(receiver, method, args, config, names, reduced); },
         Expr::Closure { .. } => { stopped(reduced, Accounted::Opaque(String::from("a lambda, whose body this analysis does not read"))); },
