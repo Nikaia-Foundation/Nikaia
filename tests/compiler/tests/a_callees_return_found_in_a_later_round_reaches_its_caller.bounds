@@ -1,0 +1,7 @@
+bounds in tests/a_callees_return_found_in_a_later_round_reaches_its_caller.nika: 4 indexes, 4 proved; 2 operations, 2 proved
+    19  level(n) + 1  proved
+    25  xs[i]         proved
+    28  i += 1        proved
+    35  ys[step(7)]   proved
+    36  ys[step(-3)]  proved
+    40  xs[at]        proved

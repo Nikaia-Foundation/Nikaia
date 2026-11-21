@@ -5,6 +5,11 @@
 // keeps one of a live process (pid 1) and what is not a sandbox. The free
 // figure is faked, so the CLEANUP line reads the same on every machine; with
 // it faked low, a dry run shows the cleanup and the stop before an agent.
+// `--cleanup DIR` (#2459) in a git repository: of target/bins/<sha>, HEAD's,
+// the 2 newest of its history and one a running process names stay; of DIR's
+// briefs, those of a closed issue go with their run files and claude session
+// dir, unless their debrief is not reviewed yet; an open issue's and an
+// unposted brief stay.
 use std::env
 use std::fs
 use std::process
@@ -83,6 +88,35 @@ fn main() throws {
         ("plain", "-9 hours"),
     ]
     for (name, age) in files { process::run("touch", ["-d", f"{age}", f"{deps.path().to_text()}/{name}"]) }
+    let git = tmp.join("git")
+    let g = git.path().to_text()
+    process::run("mkdir", ["-p", g.clone()])
+    process::run("sh", ["-c", "git init -q . && git config user.email t@t && git config user.name t && for i in 1 2 3 4 5; do git commit -q --allow-empty -m c$i; done"]; dir: g.clone())
+    let shas: Vec[String] = process::run("git", ["log", "--format=%h", "--abbrev=12"]; dir: g.clone()).stdout.trim().split("\n").collect()
+    for sha in shas { process::run("mkdir", ["-p", f"{g}/target/bins/{sha}"]) }
+    process::run("mkdir", ["-p", f"{g}/target/bins/0123456789ab"])
+    let user = process::run("sh", ["-c", f"sh -c 'sleep 60; :' {g}/target/bins/{shas[4]}/nikaia >/dev/null 2>&1 & echo $!"]).stdout.trim().clone()
+    process::run("mkdir", ["-p", f"{g}/gh", f"{g}/docs/briefs/lane", f"{g}/tmp"])
+    fs::write("gh/gh", git, "#!/bin/sh\ncase \"$2\" in */issues/1|*/issues/4) echo closed;; *) echo open;; esac\n")
+    process::run("chmod", ["+x", f"{g}/gh/gh"])
+    fs::write("docs/briefs/facts-reviewed.txt", git, "docs/briefs/lane/issue-1.debrief.md")
+    let base = process::run("sh", ["-c", f"echo \"tmp/claude-$(id -u)/$(cd {g} && pwd -P | sed 's/[^a-zA-Z0-9]/-/g')\""]).stdout.trim().clone()
+    let lane_files = [
+        "issue-1.md", "issue-1.md.posted", "issue-1.md.run.json", "issue-1.md.report.md", "issue-1.md.run2.report.md", "issue-1.debrief.md",
+        "issue-2.md", "issue-2.md.posted", "issue-3.md", "issue-4.md", "issue-4.md.posted", "issue-4.debrief.md", "cost.txt",
+    ]
+    for name in lane_files { fs::write(f"docs/briefs/lane/{name}", git, "x\n") }
+    fs::write("docs/briefs/lane/issue-1.md.run.json", git, "{\"session_id\":\"ab-12\",\"x\":1}\n")
+    process::run("mkdir", ["-p", f"{g}/{base}/ab-12", f"{g}/{base}/cd-34"])
+    let path = env::var("PATH") ?? "/usr/local/bin:/usr/bin:/bin"
+    let genv: Vec[(String, String)] = [("TMPDIR", f"{g}/tmp"), ("HOME", g.clone()), ("NIKAIA_DRIVE_FREE_MB", "9000"), ("PATH", f"{g}/gh:{path}")]
+    let lane = process::run(nikaia.clone(), ["run", f"{repo}/scripts/drive.nika", "--", "--cleanup", "docs/briefs/lane"]; dir: g.clone(), env: genv)
+    process::run("kill", [user])
+    println(lane.stdout.trim().split("\n").collect()[0])
+    for i in 0..<shas.len() { println(f"bins of HEAD~{i}: {fs::exists(f"target/bins/{shas[i]}", git)}") }
+    println(f"bins of another commit: {fs::exists("target/bins/0123456789ab", git)}")
+    for name in lane_files { println(f"{name}: {fs::exists(f"docs/briefs/lane/{name}", git)}") }
+    println(f"session of issue 1: {fs::exists(f"{base}/ab-12", git)}, another: {fs::exists(f"{base}/cd-34", git)}")
     let old = process::run(nikaia, ["run", f"{repo}/scripts/drive.nika", "--", "--old-deps", deps.path().to_text(), f"{tmp.path().to_text()}/missing"]; dir: tmp.path().to_text())
     println(old.stdout.trim())
     for (name, _age) in files { println(f"{name}: {fs::exists(f"{name}", deps)}") }
