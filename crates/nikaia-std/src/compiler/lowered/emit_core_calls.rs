@@ -983,7 +983,11 @@ impl EmitState {
             let on = match receiver { Some(__nikaia_value) => __nikaia_value, None => return Ok(()) };
             if self.stays_the_callers(world, &scope.function, on) || self.facts.kept_drains.contains(&node_key(on)) {
                 if self.facts.take_drains.contains(&node_key(on)) {
-                    out.push("std::mem::take(&mut ");
+                    let lent = match on {
+                        Expr::Variable(name, _) => { let name = *name; self.changes_in_place(&scope.function, &emit_text(world, name)) },
+                        _ => false,
+                    };
+                    out.push(if lent { "std::mem::take(" } else { "std::mem::take(&mut " });
                     self.emit_core_postfix_base(world, walk, out, host, on, depth, flow, scope)?;
                     out.push(").into_iter()");
                     return Ok(());
@@ -1536,8 +1540,8 @@ pub(crate) fn emit_tuple_part_copy(i: i64, word: &str) -> String {
 }
 
 pub(crate) fn emit_tuple_part_copies(parts: &[String]) -> String {
-    let copies: Vec<String> = parts.iter().enumerate().map(|(at, item)| (at as i64, item)).map(|__nikaia_tuple113608| {
-        let (i, word) = __nikaia_tuple113608;
+    let copies: Vec<String> = parts.iter().enumerate().map(|(at, item)| (at as i64, item)).map(|__nikaia_tuple114011| {
+        let (i, word) = __nikaia_tuple114011;
         emit_tuple_part_copy(i, word)
     }).collect::<Vec<_>>();
     if copies.len() == 1 { return format!("({},)", *unsafe { nikaia_std::proven::read(&copies, (0) as usize) }); }

@@ -857,7 +857,7 @@ impl CheckState {
     pub(crate) fn a_clone_seen(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, expr: &Expr, receiver: &Expr, copy: &Ty, span: &Span) {
         if self.reading_only || !self.task_bindings.is_empty() { return; }
         let at = check_span_at(world, expr, span);
-        if self.a_clone_that_copies(world, copy) {
+        if self.a_clone_that_copies(world, copy) && !self.a_copy_through_a_loan(world, receiver, copy) {
             let what: String = nikaia_std::index::or(dotted_path(world, receiver), || "the value".into());
             self.a_needless_clone(&at, format!("`{}` is a `{}`, which copies by itself: `.clone()` makes nothing new.", what, copy.shown()), vec![String::from("A number, a `bool`, a `char` and a type whose every part copies are copied wherever they are read (ADR-294 D9.1).")], String::from("Delete `.clone()`."), clone_deleted(world, expr, receiver));
             return;
@@ -927,6 +927,14 @@ impl CheckState {
         }
         if clone_of_the_unknown(copy) { return false; }
         !self.takes_away(world, copy)
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub(crate) fn a_copy_through_a_loan(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, receiver: &Expr, copy: &Ty) -> bool {
+        if copies_plainly(copy) { return false; }
+        let root: String = match place_clone_root(world, receiver) { Some(__nikaia_value) => __nikaia_value, None => return false };
+        if root == "self" { return self.borrowing_self || self.changing_self; }
+        self.lent_here(&root) || self.a_mut_parameter(world, &root)
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
@@ -1001,8 +1009,20 @@ impl CheckState {
         if !check_core_stmt_a_place(self, &receiver) { return; }
         let root: String = match place_clone_root(world, &receiver) { Some(__nikaia_value) => __nikaia_value, None => return };
         if bound.is_a_view() || clone_holds_a_view(bound) || clone_of_the_unknown(bound) || !self.takes_away(world, bound) { return; }
+        if root == "self" && self.changing_self { return; }
+        let text_or_element = *bound == a_string_type() || matches!(receiver, Expr::Index { .. });
+        if root == "self" && self.borrowing_self && !text_or_element { return; }
+        let mut whole: Option<i64> = None;
+        if root != "self" {
+            let held = match self.binding(&root) { Some(__nikaia_value) => __nikaia_value, None => return };
+            if held.changing || self.a_changing_view(&root) || self.a_mut_parameter(world, &root) { return; }
+            if self.lent_here(&root) && !clone_of_a_parameter(&held) { return; }
+            if self.lent_here(&root) && !text_or_element { return; }
+            for other in self.flow.place_clones.iter() { if nikaia_std::index::or(other.binding, || -2) == held.id { return; } }
+            if !self.lent_here(&root) { whole = Some(held.id); }
+        }
         let binding: Option<i64> = Some(id);
-        self.flow.place_clones.push(CheckPlaceClone { name: nikaia_std::block::Text::from(name.to_string()), binding, root, seq: self.read_seq, reads: self.reads_on_paths.len() as i64, repeats: self.repeats.len() as i64, escaped: false, span: check_span_at(world, value, span), edit: clone_deleted(world, value, &receiver) });
+        self.flow.place_clones.push(CheckPlaceClone { name: nikaia_std::block::Text::from(name.to_string()), binding, root, whole, seq: self.read_seq, reads: self.reads_on_paths.len() as i64, repeats: self.repeats.len() as i64, escaped: false, span: check_span_at(world, value, span), edit: clone_deleted(world, value, &receiver) });
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
@@ -1032,7 +1052,7 @@ impl CheckState {
     // this was written - see `contracts::sync`.
     pub(crate) fn a_change_noted(&mut self, name: &str) {
         self.changed.push(nikaia_std::block::Text::from(name.to_string()));
-        self.flow.changes_seen.push((nikaia_std::block::Text::from(name.to_string()), self.reads_on_paths.len() as i64));
+        self.flow.changes_seen.push((nikaia_std::block::Text::from(name.to_string()), self.reads_on_paths.len() as i64, self.repeats.len() as i64));
         let bound = nikaia_std::index::or(self.binding(name).as_ref().map(|__nikaia_it| __nikaia_it.id), || -1);
         self.flow.changes_bound.push((nikaia_std::block::Text::from(name.to_string()), bound));
     }
@@ -1054,9 +1074,19 @@ impl CheckState {
             if last < 0 { continue; }
             let last_seq = nikaia_std::index::get(&self.reads_on_paths, nikaia_std::index::at(last)).seq;
             let mut needed = false;
+            for held in self.flow.clones.iter() { if held.binding == one.binding { needed = true; } }
+            let owner: i64 = nikaia_std::index::or(one.whole, || -1);
+            if owner >= 0 {
+                let mut each = one.reads;
+                while each < self.reads_on_paths.len() as i64 {
+                    if nikaia_std::index::or(nikaia_std::index::get(&self.reads_on_paths, nikaia_std::index::at(each)).binding, || -2) == owner && unsafe { nikaia_std::proven::read(&self.reads_on_paths, (each) as usize) }.path == one.root { needed = true; }
+                    each = unsafe { nikaia_std::proven::add::<i64>(each, 1) };
+                }
+            }
             for change in changes.iter() {
                 if change.0 == one.name && change.1 >= one.reads { needed = true; }
                 if change.0 == one.root && change.1 >= one.reads && change.1 <= last { needed = true; }
+                if change.0 == one.root && change.1 >= one.reads && change.2 > one.repeats { needed = true; }
             }
             for taken in self.handed.iter() {
                 if taken.binding == one.binding { needed = true; }
@@ -1180,6 +1210,13 @@ pub(crate) fn place_clone_root(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, p
         Expr::Field { base, .. } => { let base = nikaia_std::boxed::open(base); place_clone_root(world, base) },
         Expr::Index { base, .. } => { let base = nikaia_std::boxed::open(base); place_clone_root(world, base) },
         _ => None,
+    }
+}
+
+pub(crate) fn clone_of_a_parameter(local: &CheckLocal) -> bool {
+    match &local.without_mut {
+        None => local.changing,
+        Some(kept) => kept.kind == CheckKind::Parameter,
     }
 }
 

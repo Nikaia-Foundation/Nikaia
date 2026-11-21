@@ -3667,7 +3667,7 @@ pub mod project_check {
 }
 pub mod project_drive {
     #[allow(unused_imports)]
-    pub use super::{ProjectDriveLowered, ProjectDriveFast, ProjectDriveHost, ProjectDriveRefusal, project_drive_drive_to, project_drive_fresh, project_drive_record, project_drive_no_std_for, project_drive_publishable, project_drive_spliced, project_drive_hand_modules, project_drive_backend_said, ProjectDriveKeptHost, project_drive_not_the_entry, project_drive_kept_for_file, ProjectDriveWrapperHost, project_drive_wrapper};
+    pub use super::{ProjectDriveLowered, ProjectDriveFast, ProjectDriveHost, ProjectDriveRefusal, project_drive_drive_to, project_drive_fresh, project_drive_record, project_drive_no_std_for, project_drive_publishable, project_drive_spliced, project_drive_hand_modules, project_drive_backend_said, ProjectDriveKeptHost, project_drive_not_the_entry, project_drive_kept_root, project_drive_ran_record, project_drive_ran_write, project_drive_ran, project_drive_kept_for_file, ProjectDriveWrapperHost, project_drive_wrapper};
 }
 pub mod project_features {
     #[allow(unused_imports)]
@@ -3920,4 +3920,4 @@ pub fn nikaia_run_tests(filters: &[std::string::String], list: bool, more: std::
 /// **The digest of this lowered set** (#1610): every file `lower-std` wrote
 /// beside this index, and the index above this line. Compiled into the same
 /// crate as the code it names, it is the compiler's identity for its caches.
-pub const LOWERED_DIGEST: &str = "646073df6b6f71abae13ec67db6c79611120189138c8f95090d115f63085d673";
+pub const LOWERED_DIGEST: &str = "49db468f6ca318abf652f721e6d25d3893251c98e42316b0b4817d335663f5a0";

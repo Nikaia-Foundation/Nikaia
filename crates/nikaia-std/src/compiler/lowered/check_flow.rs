@@ -189,7 +189,7 @@ pub struct CheckFlow {
     pub lone_texts: collections::BTreeSet<String>,
     pub clone_owners: collections::BTreeSet<i64>,
     pub place_clones: Vec<CheckPlaceClone>,
-    pub changes_seen: Vec<(String, i64)>,
+    pub changes_seen: Vec<(String, i64, i64)>,
     pub changes_bound: Vec<(String, i64)>,
     pub lambda_outer_changes: collections::BTreeMap<i64, String>,
 }
@@ -199,6 +199,7 @@ pub struct CheckPlaceClone {
     pub name: String,
     pub binding: Option<i64>,
     pub root: String,
+    pub whole: Option<i64>,
     pub seq: i64,
     pub reads: i64,
     pub repeats: i64,
