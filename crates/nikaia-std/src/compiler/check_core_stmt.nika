@@ -74,6 +74,14 @@ fn check_core_stmt_an_index(read: ref Expr) -> bool sync {
     }
 }
 
+/// An index into a map, whose base the index typing recorded (#1296).
+fn check_core_stmt_a_map_index(state: ref CheckState, read: ref Expr) -> bool sync {
+    return match read {
+        Expr::Index { base, .. } => state.facts.map_indices.contains(id_of(base) as i64),
+        else => false,
+    }
+}
+
 /// **A value `get` hands back past a jump** (D30), or one of a chain of
 /// `get`s the last of which jumps: `a.get(k) ?? b.get(k) ?? return` binds
 /// the reference either hands back, as one `get` does.
@@ -1985,7 +1993,9 @@ fn check_core_stmt_assign[H: CheckHost](mut state: CheckState, world: ref CheckW
         }
     }
     check_narrow_written_through(state, target)
-    if check_core_stmt_an_index(target) {
+    // **A map's slot holds its `V`**, though its index reads a `V?` (D1);
+    // an element of a `Vec[T?]` holds the `T?` it reads (#1296).
+    if check_core_stmt_a_map_index(state, target) {
         let slot: Ty = match into {
             Ty::Nullable(inner) => inner.clone(),
             else => into.clone(),

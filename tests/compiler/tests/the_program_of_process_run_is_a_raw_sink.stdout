@@ -1,0 +1,24 @@
+-- stdin names the program
+exit 0
+warning[NK1308]: `name` reaches the program `process::run` runs, and it comes from outside the program.
+--> src/main.nika:6:5
+= help: Name the program with a literal, or choose it with a `match` whose arms are literals: `let editor = match env::var("EDITOR") ?? "" { "vim" => "vim", "nano" => "nano", else => "vi", }`. If the program means to run a program from outside, `untrusted-program = true` under `[allow]` in the manifest builds it.
+-- a literal program
+exit 0
+-- a match whose arms are literals
+exit 0
+-- a match with an arm that is no literal
+exit 0
+warning[NK1308]: `p` reaches the program `process::run` runs, and it comes from outside the program.
+--> src/main.nika:7:5
+= help: Name the program with a literal, or choose it with a `match` whose arms are literals: `let editor = match env::var("EDITOR") ?? "" { "vim" => "vim", "nano" => "nano", else => "vi", }`. If the program means to run a program from outside, `untrusted-program = true` under `[allow]` in the manifest builds it.
+-- [allow] untrusted-program
+exit 0
+-- --trust lists the key
+exit 0
+raw sinks allowed data from outside unproved ([allow] and --allow):
+untrusted-program
+-- --trust with nothing allowed
+exit 0
+raw sinks allowed data from outside unproved ([allow] and --allow):
+none - every raw sink asks for a proof

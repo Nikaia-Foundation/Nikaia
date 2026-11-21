@@ -1,0 +1,9 @@
+error[NK2305]: `self` is read here, but `use_it` changes it in the same call.
+   --> tests/lend_field_view_to_mut_self_method.nika:24:12
+    |
+ 24 | 				return self.use_it(f)
+    |            ^^^^ `use_it` changes `self` and is handed a view into it
+    |
+    = note: `use_it` changes `self`, which it is called on, for the whole call, so no argument it borrows reads `self`.
+    = help: Hand `use_it` a copy: `f.clone()`.
+1 change to data a view still to be used may point into
