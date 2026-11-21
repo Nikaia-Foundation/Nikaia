@@ -732,6 +732,18 @@ impl EmitState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
+    pub(crate) fn member_into<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, host: &H, ty: &Type, value: &str) -> Result<String, std::boxed::Box<dyn std::error::Error>> {
+        if !member_lists_text(world, ty) { return Ok(format!("::nikaia_std::grammar::IntoMember::into_member({})", value)); }
+        if ty.is_nullable {
+            let mut inner = ty.clone();
+            inner.is_nullable = false;
+            return Ok(format!("{}.map(|x| -> {} {{ {} }})", value, host.ty_named(walk, &inner)?, self.member_into(world, walk, host, &inner, "x")?));
+        }
+        let item = nikaia_std::index::get(&ty.generics, 0);
+        Ok(format!("{}.into_iter().map(|x| -> {} {{ {} }}).collect::<{}>()", value, host.ty_named(walk, item)?, self.member_into(world, walk, host, item, "x")?, host.ty_named(walk, ty)?))
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
     pub(crate) fn emit_members_rules<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, at: i64, pattern: &Spanned<Pattern>) -> Result<(), std::boxed::Box<dyn std::error::Error>> {
         match &pattern.node {
             Pattern::Members { ty, key, value, sep, on_null, on_unknown, fields } => {
@@ -801,7 +813,7 @@ impl EmitState {
                         None => { },
                     }
                     let mut one = nothing.copy_owned();
-                    { let __nikaia_stored = String::from("Some(Some(::nikaia_std::grammar::IntoMember::into_member(v)))"); unsafe { nikaia_std::proven::write(&mut one, (i) as usize, __nikaia_stored) }; }
+                    { let __nikaia_stored = format!("Some(Some({}))", self.member_into(world, walk, host, &unsafe { nikaia_std::proven::read(&fields, (i) as usize) }.ty, "v")?); unsafe { nikaia_std::proven::write(&mut one, (i) as usize, __nikaia_stored) }; }
                     out.push(&format!("        {}if(i == {}) v:{}\n", separator, i, emit_text(world, unsafe { nikaia_std::proven::read(&fields, (i) as usize) }.value)));
                     out.push(&format!("            -> {{ Some({}) }}\n", emit_members_tuple(&one)));
                     separator = "| ";
@@ -854,5 +866,13 @@ impl EmitState {
 pub(crate) fn emit_named_option(world: &EmitWorld<'_, '_, '_, '_>, spec: &FoldSpec, wanted: &str) -> i64 {
     for i in 0..spec.config.len() as i64 { if emit_text(world, unsafe { nikaia_std::proven::read(&spec.config, (i) as usize) }.name) == wanted { return i; } }
     -1
+}
+
+pub(crate) fn member_lists_text(world: &EmitWorld<'_, '_, '_, '_>, ty: &Type) -> bool { emit_text(world, ty.name) == "Vec" && ty.generics.len() == 1 && !ty.is_view && member_text_inside(world, unsafe { nikaia_std::proven::read(&ty.generics, (0) as usize) }) }
+
+pub(crate) fn member_text_inside(world: &EmitWorld<'_, '_, '_, '_>, ty: &Type) -> bool {
+    if ty.is_view || ty.is_tuple || (*ty.code).is_some() { return false; }
+    if emit_text(world, ty.name) == "String" && ty.generics.is_empty() { return true; }
+    member_lists_text(world, ty)
 }
 
