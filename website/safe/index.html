@@ -165,9 +165,10 @@ assert(n == 41)</code></pre></div><div class="home-code markdown-body"><pre clas
       <div class="safe-tile safe-tile-b" id="raw-sinks">
         <span class="safe-chip safe-chip-run">Specified, not built yet</span>
         <h3>Raw markup, SQL, paths and programs</h3>
-        <p>Every boundary escapes by default: SQL takes its values as parameters, a process its arguments as a list, a path its root, a template escapes what it inserts. What reaches past that is a raw sink: <code>html::Raw</code>, <code>db::raw</code>, a path under <code>fs::Root::Anywhere</code>, the program of <code>process::run</code>. Data from outside goes there only when it is proved to meet the sink's precondition, or when the manifest allows the sink's key under <code>[allow]</code>; else the program is refused, <code>NK1308</code>. Today that check only warns (<a href="https://github.com/Nikaia-Foundation/Nikaia/issues/1253">#1253</a>).</p>
-<div class="home-code markdown-body"><pre><code class="language-nika">let out = process::run("git", ["config", "core.editor"])
-process::run(out.stdout, ["notes.txt"])</code></pre></div><div class="home-code markdown-body"><pre><code class="language-toml">[allow]
+        <p>Every boundary escapes by default: SQL takes its values as parameters, a process its arguments as a list, a path its root, a template escapes what it inserts. What reaches past that is a raw sink: <code>html::Raw</code>, <code>db::raw</code>, a path under <code>fs::Root::Anywhere</code>, the program of <code>process::run</code>. Data from outside goes there only when it is proved to meet the sink's precondition, or when the manifest allows the sink's key under <code>[allow]</code>; else the program is refused, <code>NK1308</code>. Today that check only warns by default (<a href="https://github.com/Nikaia-Foundation/Nikaia/issues/2332">#2332</a> makes it a refusal).</p>
+<div class="home-code markdown-body"><pre><code class="language-nika">let column = form.get("sort") ?? "name"
+throw BadInput(column) if !db::is_identifier(column)
+db::raw(f"ORDER BY {column}")</code></pre></div><p>The guard where the value arrives is the proof; past it, the call builds. Where no proof can hold, as for a program named by another program's output, only the manifest's key lets it through:</p><div class="home-code markdown-body"><pre><code class="language-toml">[allow]
 untrusted-program = true</code></pre></div>
         <a class="safe-more" href="{{ "/docs/specification/adr/adr-raw-sinks-1.html" | relative_url }}">ADR-raw-sinks-1 →</a>
       </div>
