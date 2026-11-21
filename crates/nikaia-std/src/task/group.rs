@@ -777,26 +777,26 @@ impl<T, E: From<Crashed>> ChildHandle<'_, T, E> {
             self.deferred.is_none(),
             "a deferred task was joined before its start()"
         );
-        let slot = self.slot.clone();
-        let end = std::future::poll_fn(|cx| {
-            // A pausing task of `async e` is polled here, where it is waited
-            // for (#1226); one waiting for a place, once its gate started it
-            // (D37).
-            self.held.poll_in_place(cx);
-            if let Some(kept) = self.kept {
-                kept.poll_rest(cx);
-            }
-            let mut held = locked(&slot);
-            match held.ended.take() {
-                Some(end) => std::task::Poll::Ready(end),
-                None => {
-                    held.joiner = Some(cx.waker().clone());
-                    std::task::Poll::Pending
-                }
-            }
-        })
-        .await;
+        let end = std::future::poll_fn(|cx| self.poll_end(cx)).await;
         joined_end(end)
+    }
+
+    /// One poll of the task's end, where it is waited for: a pausing task of
+    /// `async e` is polled here (#1226); one waiting for a place, once its
+    /// gate started it (D37).
+    fn poll_end(&self, cx: &mut std::task::Context<'_>) -> std::task::Poll<Ended<T, E>> {
+        self.held.poll_in_place(cx);
+        if let Some(kept) = self.kept {
+            kept.poll_rest(cx);
+        }
+        let mut held = locked(&self.slot);
+        match held.ended.take() {
+            Some(end) => std::task::Poll::Ready(end),
+            None => {
+                held.joiner = Some(cx.waker().clone());
+                std::task::Poll::Pending
+            }
+        }
     }
 
     /// **`h.join(within: d, on_timeout: o)`** (ADR-async-5 D17): the task's
@@ -863,6 +863,97 @@ impl<T, E: From<Crashed>> ChildHandle<'_, T, E> {
         self.claimed.set(true);
         let end = locked(&self.slot).ended.take();
         joined_end(end.expect("a task that pauses was joined where the main line cannot wait"))
+    }
+}
+
+/// **A pending binding several tasks read** (ADR-async-5 D8, #986): `let b =
+/// async f(a)` and `let c = async g(a)` both wait for `a` and read the one
+/// value. The first to wait joins `a`'s task and keeps its value here; every
+/// other reads it. Where `a` failed, the first receives the error and every
+/// other waiter is cancelled ([`Crashed`] in the group's channel, as a task a
+/// crash before it cancelled is).
+///
+/// What #986 lowers onto it: `let __task_N = Read::new(group.start_here(…))`,
+/// and a mention of `a` in another task as `(*__task_N.join_now()?)`, or
+/// `.join().await` for a task that pauses.
+pub struct Read<'g, T, E> {
+    handle: std::cell::RefCell<Option<ChildHandle<'g, T, E>>>,
+    value: std::cell::OnceCell<T>,
+    /// The task failed and its first waiter received it.
+    failed: std::cell::Cell<bool>,
+    /// The tasks waiting for a pausing one besides the one polling it.
+    waiting: std::cell::RefCell<Vec<std::task::Waker>>,
+}
+
+impl<'g, T: 'g, E: From<Crashed> + 'g> Read<'g, T, E> {
+    pub fn new(handle: ChildHandle<'g, T, E>) -> Self {
+        Read {
+            handle: std::cell::RefCell::new(Some(handle)),
+            value: std::cell::OnceCell::new(),
+            failed: std::cell::Cell::new(false),
+            waiting: std::cell::RefCell::new(Vec::new()),
+        }
+    }
+
+    /// The value of a task that never pauses: it has ended where it started.
+    pub fn join_now(&self) -> Result<&T, E> {
+        if let Some(value) = self.value.get() {
+            return Ok(value);
+        }
+        let handle = self.handle.borrow_mut().take();
+        match handle {
+            Some(handle) => self.kept(handle.join_now()),
+            None => joined_end(Ended::Cancelled),
+        }
+    }
+
+    /// The value of a task that pauses: whoever waits polls it.
+    pub async fn join(&self) -> Result<&T, E> {
+        std::future::poll_fn(|cx| {
+            if self.value.get().is_some() || self.failed.get() {
+                return std::task::Poll::Ready(self.read());
+            }
+            let end = match self.handle.borrow().as_ref() {
+                Some(handle) => {
+                    handle.claimed.set(true);
+                    handle.poll_end(cx)
+                }
+                None => return std::task::Poll::Ready(self.read()),
+            };
+            match end {
+                std::task::Poll::Ready(end) => {
+                    drop(self.handle.borrow_mut().take());
+                    for waker in self.waiting.borrow_mut().drain(..) {
+                        waker.wake();
+                    }
+                    std::task::Poll::Ready(self.kept(joined_end(end)))
+                }
+                std::task::Poll::Pending => {
+                    self.waiting.borrow_mut().push(cx.waker().clone());
+                    std::task::Poll::Pending
+                }
+            }
+        })
+        .await
+    }
+
+    /// The task's end, kept: its value for every waiter, its failure for the
+    /// first only.
+    fn kept(&self, end: Result<T, E>) -> Result<&T, E> {
+        match end {
+            Ok(value) => Ok(self.value.get_or_init(|| value)),
+            Err(error) => {
+                self.failed.set(true);
+                Err(error)
+            }
+        }
+    }
+
+    fn read(&self) -> Result<&T, E> {
+        match self.value.get() {
+            Some(value) => Ok(value),
+            None => joined_end(Ended::Cancelled),
+        }
     }
 }
 

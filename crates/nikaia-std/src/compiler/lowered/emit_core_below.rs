@@ -327,6 +327,10 @@ impl EmitState {
             _ => return false,
         }
     }
+    pub fn task_pauses(&self, world: &EmitWorld<'_, '_, '_, '_>, task: &Expr) -> bool {
+        for each in visited_in_expr(task) { if self.expr_pauses(world, each) { return true; } }
+        false
+    }
     pub(crate) fn block_pauses(&self, world: &EmitWorld<'_, '_, '_, '_>, block: &Block) -> bool {
         for each in visited_in_block(block) { if self.expr_pauses(world, each) { return true; } }
         false

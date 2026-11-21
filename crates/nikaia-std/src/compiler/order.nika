@@ -286,14 +286,14 @@ fn accounted_value(binds: String?, value: ref Expr, names: ref winnow_grammar::I
             names_in(expr, names, mentions)
             // **The handler counts too** for a data dependency.
             names_in_block(handler, names, mentions)
-            accounted_reduced(binds, mentions, reduced, true, walking)
+            accounted_reduced(binds, mentions, reduced, true, beside, walking)
         }
         else => {
             let mut reduced = Reduced { calls: [], performs: false, methods: [], refused: null }
             reduce(value, names, reduced)
             let mut mentions: collections::BTreeSet[String] = collections::BTreeSet()
             names_in(value, names, mentions)
-            accounted_reduced(binds, mentions, reduced, beside, walking)
+            accounted_reduced(binds, mentions, reduced, beside, beside, walking)
         }
     }
 }
@@ -301,8 +301,12 @@ fn accounted_value(binds: String?, value: ref Expr, names: ref winnow_grammar::I
 // What the walk found, made an answer. The ledger is consulted **before** the
 // walk's own refusal is reported: "nothing says what `x` reaches" is a gap a
 // reader can close, where "it holds a method call" is this compiler's own
-// limit (D9).
-fn accounted_reduced(binds: String?, mentions: collections::BTreeSet[String], reduced: ref Reduced, caught: bool, walking: ref Walking) -> Accounted {
+// limit (D9). **What runs `beside`** (a task, a statement in its window, a
+// `par_iter` lambda's run) is not carried into a closure of its own, so a
+// value read from somewhere else (a name, a field, a `??`'s fallback, all of
+// whose calls the walk did read) leaves nothing unaccounted there; a node the
+// walk stopped at still does (ADR-async-5 D7, D26).
+fn accounted_reduced(binds: String?, mentions: collections::BTreeSet[String], reduced: ref Reduced, caught: bool, beside: bool, walking: ref Walking) -> Accounted {
     if reduced.calls.len() == 0 && !reduced.performs {
         // Nothing here reaches the world at all.
         return Accounted::NotAnOperation
@@ -322,7 +326,7 @@ fn accounted_reduced(binds: String?, mentions: collections::BTreeSet[String], re
             return Accounted::NoTouches(method.clone())
         }
     }
-    if reduced.refused != null {
+    if reduced.refused != null && (!beside || reduced.performs) {
         return reduced.refused?.clone() ?? Accounted::NotAnOperation
     }
     return Accounted::Operation(Operation { binds: binds, mentions: mentions, reaches: reaches, callee: named_by.join(" + ") })
@@ -584,7 +588,16 @@ fn reduce(node: ref Expr, names: ref winnow_grammar::InternerContext, mut reduce
             reduce(value, names, reduced)
             reduce(fallback, names, reduced)
         }
-        Expr::LitInterpolated { .. } => stopped(reduced, Accounted::Opaque("text with code in it, whose holes this has not parsed")),
+        // **A hole is an expression of the tree** (ADR-309): each is read as
+        // any other value, the text between them is nothing to read.
+        Expr::LitInterpolated { parts, .. } => {
+            for part in parts {
+                match part {
+                    FPart::Hole { expr, .. } => reduce(expr, names, reduced),
+                    else => {},
+                }
+            }
+        }
         // *Which* entry `xs.len()` is needs the type checker (ADR-288); the
         // name is recorded and `accounted` asks whether every entry of it
         // reaches nothing. A `?.m()` is accounted for exactly as a `.m()`.
@@ -810,4 +823,185 @@ fn padded_right(text: ref String, width: i64) -> String {
         have += 1
     }
     return out
+}
+
+/// **Every task an `async` form starts, by function** (ADR-async-5 D32): for
+/// each, in written order, its window (the first and the last line of what
+/// runs beside it), where it is waited for, its group's end, and whether it
+/// is started first (ADR-292 D6, D20: a task that may pause is started before
+/// the main line runs on). `waits` is the checker's record of each task's
+/// wait point and group (`CheckFacts::async_waits`), `pauses` whether a
+/// task's expression can pause, which is the emitter's answer (ADR-292b).
+/// `""` where the program starts no task.
+pub fn task_report(items: ref Vec[Spanned[Item]], names: ref winnow_grammar::InternerContext, source: ref String, waits: ref collections::BTreeMap[i64, CheckAsyncWait], pauses: fn(ref Expr) -> bool sync) -> String {
+    let lines: Vec[ref String] = source.split("\n").collect()
+    let mut out: String = ""
+    for item in items {
+        match item.node {
+            Item::Fn { name, body, .. } => tasks_of_function(function_name(names, name), body, lines, waits, pauses, out),
+            Item::Impl { target, methods, .. } => {
+                let owner: String? = names.resolve(target.name).clone()
+                for method in methods {
+                    match method.node {
+                        Item::Fn { name, body, .. } => tasks_of_function(keyed(owner, function_name(names, name)), body, lines, waits, pauses, out),
+                        else => {}
+                    }
+                }
+            }
+            else => {}
+        }
+    }
+    return out
+}
+
+/// One task as the walk met it: the statement it stands in, innermost, by
+/// its span, and whether it is `async(detached)`, which no group waits for.
+struct TaskSite {
+    start: i64,
+    end: i64,
+    detached: bool,
+    pauses: bool,
+}
+
+/// What the walk over one function's body gathers: each task by its node,
+/// the end of every statement, and each group's last statement's end, by the
+/// group's key as the checker writes it (an `async { }`'s node, or `-1 -` a
+/// block's first statement's start).
+struct TaskWalk {
+    sites: collections::BTreeMap[i64, TaskSite],
+    ends: Vec[i64],
+    groups: collections::BTreeMap[i64, i64],
+}
+
+fn tasks_of_function(key: ref String, body: ref Block, lines: ref Vec[ref String], waits: ref collections::BTreeMap[i64, CheckAsyncWait], pauses: fn(ref Expr) -> bool sync, mut out: String) {
+    let mut walk = TaskWalk { sites: collections::BTreeMap(), ends: [], groups: collections::BTreeMap() }
+    tasks_in_block(body, walk, pauses)
+    if walk.sites.len() == 0 {
+        return
+    }
+    let first = walk.sites.values().filter(fn(site) { site.pauses }).count()
+    let count = walk.sites.len()
+    let noun = if count == 1 { "task" } else { "tasks" }
+    out.push_str(ref f"{key}: {count} {noun} an `async` form starts, {first} of them started first\n")
+    let mut number = 0
+    for (id, site) in walk.sites {
+        number += 1
+        let line = line_at(lines, site.start).0 + 1
+        let written = lines[line - 1].trim()
+        out.push_str(ref f"    task {number}, line {line}: `{written}`\n")
+        let fields = task_fields(id, site, line, lines, walk, waits)
+        let starts = if site.pauses { "first: it pauses (ADR-292 D6)" } else { "after the tasks before it that pause: it never pauses (ADR-292 D6)" }
+        out.push_str(ref f"        window      {fields[0]}\n")
+        out.push_str(ref f"        waited for  {fields[1]}\n")
+        out.push_str(ref f"        group ends  {fields[2]}\n")
+        out.push_str(ref f"        starts      {starts}\n")
+    }
+}
+
+// A task's window, where it is waited for and its group's end, as the
+// report says them.
+fn task_fields(id: i64, site: ref TaskSite, line: i64, lines: ref Vec[ref String], walk: ref TaskWalk, waits: ref collections::BTreeMap[i64, CheckAsyncWait]) -> Vec[String] {
+    if site.detached {
+        return [f"from line {line}, past its group", "where its handle is joined, if it is", "none: it may outlive its group (ADR-async-5 D13)"]
+    }
+    let wait = waits.get(id) ?? return [f"from line {line}", "not recorded by the checker", "not recorded by the checker"]
+    let group_end = task_last_line(lines, walk.groups.get(wait.group) ?? site.end)
+    let ends = f"after line {group_end}"
+    return match wait.at {
+        CheckAsyncWaitAt::Before(_) => [task_lines(line, task_last_line(lines, site.end)), f"before the call or operation it is part of, line {line}", ends],
+        CheckAsyncWaitAt::BeforeStatement(at) => {
+            let mut last = site.end
+            for end in walk.ends {
+                if end <= at && end > last {
+                    last = end
+                }
+            }
+            [task_lines(line, task_last_line(lines, last)), f"before line {task_line_of(lines, at)}", ends]
+        },
+        CheckAsyncWaitAt::GroupEnd => [task_lines(line, group_end), "at its group's end", ends],
+        CheckAsyncWaitAt::Handle => [f"{task_lines(line, group_end)} at most", "where its handle is joined, else at its group's end", ends],
+    }
+}
+
+// The 1-based line the byte `at` stands on.
+fn task_line_of(lines: ref Vec[ref String], at: i64) -> i64 {
+    return line_at(lines, at).0 + 1
+}
+
+// The 1-based line a span ending at the byte `end` ends on: a statement's
+// span runs on to the next one's start, so the blank space before `end`,
+// lines included, is left out.
+fn task_last_line(lines: ref Vec[ref String], end: i64) -> i64 {
+    let at = line_at(lines, end)
+    let mut line = at.0
+    let text = lines[line]
+    if line > 0 && text.len() - text.trim_start().len() >= end - at.1 {
+        line -= 1
+        while line > 0 && lines[line].trim().len() == 0 {
+            line -= 1
+        }
+    }
+    return line + 1
+}
+
+// `line 3`, or `lines 3-5`.
+fn task_lines(first: i64, last: i64) -> String {
+    if last <= first {
+        return f"line {first}"
+    }
+    return f"lines {first}-{last}"
+}
+
+// Each task of a block's statements, by the innermost statement it stands
+// in: a statement's tasks are noted with its span first, and the blocks
+// inside it, walked after, note theirs again with their own.
+fn tasks_in_block(block: ref Block, mut walk: TaskWalk, pauses: fn(ref Expr) -> bool sync) {
+    if block.stmts.len() == 0 {
+        return
+    }
+    let last = block.stmts[block.stmts.len() - 1].span.end as i64
+    walk.groups.insert(-1 - block.stmts[0].span.start as i64, last)
+    for stmt in block.stmts {
+        let start = stmt.span.start as i64
+        let end = stmt.span.end as i64
+        walk.ends.push(end)
+        let exprs = visited_in_stmt(stmt.node)
+        for each in exprs {
+            match each {
+                Expr::Async(_, _, _, _) => {
+                    walk.sites.insert(id_of(each) as i64, TaskSite { start: start, end: end, detached: false, pauses: pauses(each) })
+                },
+                Expr::Spawn { written_async, child, .. } if written_async || child => {
+                    walk.sites.insert(id_of(each) as i64, TaskSite { start: start, end: end, detached: !child, pauses: pauses(each) })
+                },
+                else => {}
+            }
+        }
+        for each in exprs {
+            match each {
+                Expr::Block(inner, _) => tasks_in_block(inner, walk, pauses),
+                Expr::AsyncGroup(inner, _, _, _, _) => {
+                    tasks_in_block(inner, walk, pauses)
+                    if inner.stmts.len() > 0 {
+                        walk.groups.insert(id_of(each) as i64, inner.stmts[inner.stmts.len() - 1].span.end as i64)
+                    }
+                },
+                Expr::Unsafe(inner, _) => tasks_in_block(inner, walk, pauses),
+                Expr::Overlap(inner, _) => tasks_in_block(inner, walk, pauses),
+                Expr::If { then_branch, else_branch, .. } => {
+                    tasks_in_block(then_branch, walk, pauses)
+                    let other = else_branch ?? continue
+                    tasks_in_block(other, walk, pauses)
+                },
+                Expr::Closure { body, .. } => tasks_in_block(body, walk, pauses),
+                Expr::TryCatch { handler, .. } => tasks_in_block(handler, walk, pauses),
+                else => {}
+            }
+        }
+        match stmt.node {
+            Stmt::For { body, .. } => tasks_in_block(body, walk, pauses),
+            Stmt::While { body, .. } => tasks_in_block(body, walk, pauses),
+            else => {}
+        }
+    }
 }

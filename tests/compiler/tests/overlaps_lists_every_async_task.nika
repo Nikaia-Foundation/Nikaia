@@ -1,0 +1,23 @@
+// #2497: `check --overlaps` lists every task an `async` form starts
+// (ADR-async-5 D32): its window (first and last line), where it is waited
+// for, its group's end, and whether it is started first (ADR-292 D6). Two
+// bindings, an operand, an `async { }` group of two statements, a child
+// handle and a detached task.
+use std::env
+use std::fs
+use std::process
+
+fn toolchain() -> String throws {
+    let exe = env::current_exe()?.display() ?? ""
+    if exe.len() > 0 { return exe }
+    return "target/fast/nikaia"
+}
+
+fn main() throws {
+    let tmp = fs::scratch()
+    let nikaia = toolchain()
+    let program = "use std::time\n\nfn double(n: i64) -> i64 {\n    return n * 2\n}\n\nfn slow(n: i64) -> i64 throws {\n    time::sleep(1.millis())\n    return n\n}\n\nfn main() throws {\n    let a = async slow(1)\n    let b = async double(2)\n    let c = double(3)\n    println(a + b + c)\n    let d = async double(4) + double(5)\n    println(d)\n    async {\n        async double(6)\n        async slow(7)\n        println(c)\n    }\n    let h = async(handle) fn { slow(8) }\n    let k = double(9)\n    println(h.join() + k)\n    let f = async(detached) fn { double(10) }\n    println(f.join())\n}\n"
+    fs::write("main.nika", tmp, program)
+    let ran = process::run(nikaia, ["check", "--overlaps", "main.nika"]; dir: tmp.path().to_text())
+    print(ran.stdout)
+}

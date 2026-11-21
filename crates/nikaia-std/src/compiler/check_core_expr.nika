@@ -360,6 +360,11 @@ fn check_core_value_of[H: CheckHost](mut state: CheckState, world: ref CheckWorl
             state.flow.loops = loops
             state.flow.barrier = barrier
             check_core_async_crash(state, world, host, inner, span)
+            // **A name of a block that ends before the group does** (async-3
+            // D2, #986): the task runs on past that block, so it takes it.
+            if state.flow.async_group != null {
+                state.a_task_takes_inner_names(world, inner, span)
+            }
             // **A task changes no name bound outside it** (D7, #1229): it
             // runs beside everything after its start, whatever else does.
             let mut at = changed_from
@@ -411,7 +416,10 @@ fn check_core_value_of[H: CheckHost](mut state: CheckState, world: ref CheckWorl
             state.flow.async_group = id_of(expr) as i64
             state.flow.async_started = 0
             state.flow.async_group_block = id_of(expr) as i64
+            let frame = state.flow.async_group_frame
+            state.flow.async_group_frame = state.scope.len() as i64
             let ty = check_core_block(state, world, host, block)
+            state.flow.async_group_frame = frame
             state.inside_a_door = held
             if state.flow.async_started == 0 {
                 state.a_group_with_no_task(span)

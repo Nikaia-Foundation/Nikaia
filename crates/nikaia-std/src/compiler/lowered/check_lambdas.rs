@@ -138,6 +138,19 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
+    pub(crate) fn a_task_takes_inner_names(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, body: &Expr, span: &Span) {
+        let mut named: collections::BTreeSet<String> = collections::BTreeSet::new();
+        names_in(body, world.words, &mut named);
+        for name in named.iter() {
+            if self.frame_of(name) <= self.flow.async_group_frame { continue; }
+            let local = match self.binding(name) { Some(__nikaia_value) => __nikaia_value, None => continue };
+            if is_a_handle(&local.ty) || !self.takes_away(world, &local.ty) { continue; }
+            let taken = self.taken(nikaia_std::block::Text::from(name.to_string()), local.ty.clone(), self.read_seq, "taken by a task, which runs on to its group's end, past the block that declared it", span);
+            self.handed.push(taken);
+        }
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
     pub(crate) fn a_task_takes_these(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, body: &Expr, task: i64, who: &str, span: &Span) {
         let mut named: collections::BTreeSet<String> = collections::BTreeSet::new();
         names_in(body, world.words, &mut named);

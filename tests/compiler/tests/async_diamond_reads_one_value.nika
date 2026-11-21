@@ -1,0 +1,35 @@
+// A diamond: `b`'s and `c`'s tasks both wait for `a` and read the one value
+// (ADR-async-5 D8, #986), a number and a text alike.
+
+fn load(n: i64) -> i64 {
+    return n * 2
+}
+
+fn f(n: i64) -> i64 {
+    return n + 1
+}
+
+fn g(n: i64) -> i64 {
+    return n + 2
+}
+
+fn text() -> String {
+    let mut s = String()
+    s.push_str("hi")
+    return s
+}
+
+fn size(s: String) -> i64 {
+    return s.len() as i64
+}
+
+fn main() throws {
+    let a = async load(1)
+    let b = async f(a)
+    let c = async g(a)
+    println(f"{b} {c}")
+    let t = async text()
+    let x = async size(t)
+    let y = async size(t)
+    println(f"{x} {y}")
+}
