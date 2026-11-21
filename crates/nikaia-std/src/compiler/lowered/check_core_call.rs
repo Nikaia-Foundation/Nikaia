@@ -916,6 +916,11 @@ pub(crate) fn check_core_free_call<H: CheckHost>(state: &mut CheckState, world: 
             let base = nikaia_std::boxed::open(base); let index = nikaia_std::boxed::open(index);
             let given: Option<Ty> = check_core_call_filled(state, world, host, base, index, args, config, span);
             if given.is_some() { return nikaia_std::index::or(given, || Ty::Unknown); }
+            if check_core_call_a_typed_constructor(&state, world, base) {
+                state.a_constructor_with_generics(world, base, index, span);
+                for arg in args.iter() { check_core_expr(state, world, host, arg, span); }
+                return Ty::Unknown;
+            }
             check_core_expr(state, world, host, func, span);
             state.facts.kept_fn_copies.remove(&(id_of(func) as i64));
             return Ty::Unknown;
@@ -931,11 +936,6 @@ pub(crate) fn check_core_free_call<H: CheckHost>(state: &mut CheckState, world: 
         let mut looked: Ty = nikaia_std::index::or(state.lookup(&name), || Ty::Unknown);
         match looked {
             Ty::Nullable(ref inner) => { let inner = nikaia_std::boxed::open(inner); match *inner {
-            if check_core_call_a_typed_constructor(&state, world, base) {
-                state.a_constructor_with_generics(world, base, index, span);
-                for arg in args.iter() { check_core_expr(state, world, host, arg, span); }
-                return Ty::Unknown;
-            }
                 Ty::Fn { .. } => {
                     let read = check_narrow_read_as_proved(state, func, &name, &looked, span);
                     match read {
@@ -967,6 +967,19 @@ pub(crate) fn check_core_free_call<H: CheckHost>(state: &mut CheckState, world: 
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
+pub(crate) fn check_core_call_a_typed_constructor(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, base: &Expr) -> bool {
+    let name: String = match base {
+        Expr::Variable(word, _) => { let word = *word; format!("{}", world.words.resolve(word)) },
+        Expr::Path(segments, _) => world.here.unaliased(&check_core_call_joined(world, segments)),
+        _ => return false,
+    };
+    let pathed = matches!(base, Expr::Path(_, _));
+    if !pathed && state.lookup(&name).is_some() { return false; }
+    state.declares_a_type(world, &name) || check_core_call_on_built_in(&name)
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn check_core_call_filled<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, base: &Expr, index: &Expr, args: &[Expr], config: &[ConfigArg], span: &Span) -> Option<Ty> {
     let pathed = matches!(base, Expr::Path(_, _));
@@ -980,19 +993,6 @@ pub(crate) fn check_core_call_filled<H: CheckHost>(state: &mut CheckState, world
     if pathed && resolved.key != name { return None; }
     let signature: Signature = match match resolved.contract.signature.as_ref() {
         Some(__nikaia_it) => Some(__nikaia_it.clone()),
-// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
-// this was written - see `contracts::sync`.
-pub(crate) fn check_core_call_a_typed_constructor(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, base: &Expr) -> bool {
-    let name: String = match base {
-        Expr::Variable(word, _) => { let word = *word; format!("{}", world.words.resolve(word)) },
-        Expr::Path(segments, _) => world.here.unaliased(&check_core_call_joined(world, segments)),
-        _ => return false,
-    };
-    let pathed = matches!(base, Expr::Path(_, _));
-    if !pathed && state.lookup(&name).is_some() { return false; }
-    state.declares_a_type(world, &name) || check_core_call_on_built_in(&name)
-}
-
         None => None,
     } { Some(__nikaia_value) => __nikaia_value, None => return None };
     #[allow(unused_mut)] let mut parameters: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);

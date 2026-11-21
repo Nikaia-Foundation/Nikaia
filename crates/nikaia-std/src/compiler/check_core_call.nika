@@ -1193,6 +1193,16 @@ fn check_core_free_call[H: CheckHost](mut state: CheckState, world: ref CheckWor
             if given != null {
                 return given ?? Ty::Unknown
             }
+            // **A type written with its generics, then called**, is refused
+            // at the checker, not lowered as an index into the constructor
+            // (#2635): which it means is not decided yet.
+            if check_core_call_a_typed_constructor(state, world, base) {
+                state.a_constructor_with_generics(world, base, index, span)
+                for arg in args {
+                    check_core_expr(state, world, host, arg, span)
+                }
+                return Ty::Unknown
+            }
             check_core_expr(state, world, host, func, span)
             state.facts.kept_fn_copies.remove(id_of(func) as i64)
             return Ty::Unknown
@@ -1207,16 +1217,6 @@ fn check_core_free_call[H: CheckHost](mut state: CheckState, world: ref CheckWor
     state.declared_callee(world, func, name)
     // **A kept function value called by name.**
     if check_core_call_is_variable(func) && !state.run_code.contains(name) {
-            // **A type written with its generics, then called**, is refused
-            // at the checker, not lowered as an index into the constructor
-            // (#2635): which it means is not decided yet.
-            if check_core_call_a_typed_constructor(state, world, base) {
-                state.a_constructor_with_generics(world, base, index, span)
-                for arg in args {
-                    check_core_expr(state, world, host, arg, span)
-                }
-                return Ty::Unknown
-            }
         let mut looked: Ty = state.lookup(name) ?? Ty::Unknown
         // **Optional code a test proved not `null` is called as the code**
         // (#1117, ADR-382): the read is the narrowed one, unwrapped below.
@@ -1253,20 +1253,6 @@ fn check_core_free_call[H: CheckHost](mut state: CheckState, world: ref CheckWor
 /// where `f` is no generic function this program can call, and the brackets
 /// are an index. `NK1233` is said only where a value argument's type could
 /// have said every type written (ADR-grammar-typed-read-v1 D11).
-fn check_core_call_filled[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, base: ref Expr, index: ref Expr, args: ref Vec[Expr], config: ref Vec[ConfigArg], span: ref Span) -> Ty? sync {
-    // **A path to a generic function is the same form as its bare name**
-    // (ADR-grammar-typed-read-v1 D11, `json::read[Contact](bytes)`): another package's,
-    // `std`'s, under the name the ledger keys it by.
-    let pathed = match base {
-        Expr::Path(_, _) => true,
-        else => false,
-    }
-    let name: String = match base {
-        Expr::Variable(word, _) => f"{world.words.resolve(word)}",
-        Expr::Path(segments, _) => world.here.unaliased(check_core_call_joined(world, segments)),
-        else => return null,
-    }
-    if !pathed && state.lookup(name) != null {
 /// Whether `base`, the part before the brackets of `Name[…](…)`, names a
 /// type rather than a value: a declared type no binding in scope hides.
 fn check_core_call_a_typed_constructor(state: ref CheckState, world: ref CheckWorld, base: ref Expr) -> bool sync {
@@ -1285,6 +1271,20 @@ fn check_core_call_a_typed_constructor(state: ref CheckState, world: ref CheckWo
     return state.declares_a_type(world, name) || check_core_call_on_built_in(name)
 }
 
+fn check_core_call_filled[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, base: ref Expr, index: ref Expr, args: ref Vec[Expr], config: ref Vec[ConfigArg], span: ref Span) -> Ty? sync {
+    // **A path to a generic function is the same form as its bare name**
+    // (ADR-grammar-typed-read-v1 D11, `json::read[Contact](bytes)`): another package's,
+    // `std`'s, under the name the ledger keys it by.
+    let pathed = match base {
+        Expr::Path(_, _) => true,
+        else => false,
+    }
+    let name: String = match base {
+        Expr::Variable(word, _) => f"{world.words.resolve(word)}",
+        Expr::Path(segments, _) => world.here.unaliased(check_core_call_joined(world, segments)),
+        else => return null,
+    }
+    if !pathed && state.lookup(name) != null {
         return null
     }
     let resolved: CheckResolved = resolve_call(world, name) ?? return null
