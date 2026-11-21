@@ -48,8 +48,21 @@ fn drive_in(repo: String, nikaia: String, args: Vec[String], text: String) throw
     println(out.stdout.trim())
 }
 
+// A lane of this test's own under the checkout's target/drive-test/ (#2577):
+// drive opens every name under fs::Root::Dir("."), the checkout it runs in, so
+// it gets the lane's names relative to it. The scratch directory's name keeps
+// the two runs of `--both-settings` apart.
+fn test_lane(repo: String, name: String) -> String throws {
+    let id = fs::scratch().path().file_name()?.to_text() ?? "run"
+    let lane = f"target/drive-test/{name}/{id}"
+    fs::create_dir(lane, fs::Root::Dir(repo); recursive: true)
+    return lane
+}
+
 fn main() throws {
     let repo = root()
+    let lane = test_lane(repo.clone(), "drive_wip")
+    let batch = fs::Root::Dir(f"{repo}/{lane}")
     let nikaia = toolchain()
     drive(repo.clone(), nikaia.clone(), ["--wip-after", "done", "#1267", "1267"])
     drive(repo.clone(), nikaia.clone(), ["--wip-after", "done", "#1260, #1267", "1267"])
@@ -85,10 +98,10 @@ fn main() throws {
     drive_in(repo.clone(), nikaia.clone(), ["--improve-issue", "issue-1820", "1820"], fs::read_to_string("built.md", reports))
     fs::write("built.md", reports, "Result: blocked\nFound: none\nNeeds: supervisor decision: ADR-306 has no rule for a struct result's fields\nFriction: none\n")
     drive_in(repo.clone(), nikaia.clone(), ["--improve-issue", "issue-1557", "1557"], fs::read_to_string("built.md", reports))
-    let batch = fs::scratch()
     fs::write("found.txt", batch, "issue-1700: filed #9\nissue-1749: filed #1801\nissue-1749: filed #1802\n")
     fs::write("built.md", reports, "Result: done\nFound: `xs.sort_by(f)` on an untyped list is NK1171\nFound: none\nFound: a stale guide example\nIssue: rules-gap: the second defect, see Found\nFriction: none\n")
-    drive_in(repo.clone(), nikaia.clone(), ["--improve-issue", "issue-1749", "1749", batch.path().to_text()], fs::read_to_string("built.md", reports))
+    drive_in(repo.clone(), nikaia.clone(), ["--improve-issue", "issue-1749", "1749", lane.clone()], fs::read_to_string("built.md", reports))
     fs::write("found.txt", batch, "issue-1749: filed #1801\n")
-    drive_in(repo, nikaia, ["--improve-issue", "issue-1749", "1749", batch.path().to_text()], fs::read_to_string("built.md", reports))
+    drive_in(repo.clone(), nikaia, ["--improve-issue", "issue-1749", "1749", lane.clone()], fs::read_to_string("built.md", reports))
+    fs::remove(lane, fs::Root::Dir(repo); recursive: true)
 }

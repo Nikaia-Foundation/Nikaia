@@ -563,7 +563,7 @@ fn drive_run_minutes(dir: String) -> i64 throws {
 fn drive_run_record(dir: String, brief: String) throws {
 	let abs = process::run("realpath", [brief]).stdout.trim().clone()
 	let json = f"{abs}.run.json"
-	if !fs::exists(json.clone(), fs::Root::Anywhere) { return }
+	if !fs::exists(json.clone(), drive_here()) { return }
 	let seconds = drive_run_seconds(json)
 	let today = process::run("date", ["+%F"]).stdout.trim().clone()
 	drive_append(f"{dir}/runs.txt", f"{today} {drive_stem(abs)} {seconds}")
@@ -1358,7 +1358,7 @@ fn drive_proved_lines(dir: String, version: String, sha: String, summary: String
 // (drive_proved), a `PROVED FELL` line through drive_wake.
 fn drive_proved_report(dir: String) throws {
 	let out = f"{dir}/proved.out"
-	if !fs::exists(out, fs::Root::Anywhere) { return }
+	if !fs::exists(out, drive_here()) { return }
 	let taken = f"{out}.taken"
 	if !process::run("mv", [out, taken.clone()]).ok { return }
 	for l in drive_read(taken).split("\n") {
@@ -2078,7 +2078,7 @@ fn drive_append(path: String, line: String) throws {
 	let old = drive_read(path)
 	let mut text = old
 	if text != "" && !text.ends_with("\n") { text = text + "\n" }
-	fs::write(path, fs::Root::Anywhere, text + line + "\n")
+	fs::write(path, drive_here(), text + line + "\n")
 }
 
 // The last `n` lines of a text.
@@ -2483,11 +2483,11 @@ fn drive_waiter_start(dir: String, sha: String) -> String throws {
 // pid file, or the process ended without writing the exit file).
 fn drive_waiter_state(sha: String) -> String throws {
 	let exit = f"{drive_lock_dir()}/exit-{sha}"
-	if fs::exists(exit.clone(), fs::Root::Anywhere) { return "done" }
+	if fs::exists(exit.clone(), drive_here()) { return "done" }
 	let pid = drive_read(drive_waiter_file(sha.clone(), "pid")).trim().clone()
 	if pid != "" && process::run("kill", ["-0", pid]).ok { return "alive" }
 	// It may have written the exit file just before it ended.
-	if fs::exists(exit, fs::Root::Anywhere) { return "done" }
+	if fs::exists(exit, drive_here()) { return "done" }
 	return "gone"
 }
 
@@ -2501,9 +2501,9 @@ fn drive_waiter_state(sha: String) -> String throws {
 // status (0 green, 1 red) to EXIT, through EXIT.tmp.
 fn drive_ci_wait(sha: String, log: String, exit: String) throws {
 	let (body, green) = drive_ci_poll(sha)
-	fs::write(log, fs::Root::Anywhere, body)
+	fs::write(log, drive_here(), body)
 	let code = if green { "0" } else { "1" }
-	fs::write(exit.clone() + ".tmp", fs::Root::Anywhere, code + "\n")
+	fs::write(exit.clone() + ".tmp", drive_here(), code + "\n")
 	process::run("mv", [exit.clone() + ".tmp", exit])
 }
 
@@ -3325,9 +3325,15 @@ fn drive_stdin() -> String throws {
 	return io::read_to_string()
 }
 
+// A file of the checkout's lanes, "" where there is none (#2577, supervisor's
+// decision): every name drive reads, a test hook's directory or second file
+// among them, is opened under drive_here(). A test makes its files in a lane
+// of its own under target/drive-test/ and passes the relative names; the
+// driver's lanes are docs/briefs/<lane> and target/... A name that leaves
+// the checkout throws at the root, which is the proof (ADR-raw-sinks-1 D11).
 fn drive_read(path: String) -> String throws {
-	if !fs::exists(path, fs::Root::Anywhere) { return "" }
-	return fs::read_to_string(path, fs::Root::Anywhere)
+	if !fs::exists(path, drive_here()) { return "" }
+	return fs::read_to_string(path, drive_here())
 }
 
 fn drive_cycle(exe: String, dir: String, lines_file: String) -> String throws {
@@ -3474,7 +3480,7 @@ fn drive_briefs_gone(dir: String) throws {
 	let base = process::run("sh", ["-c", "echo \"${TMPDIR:-/tmp}/claude-$(id -u)/$(pwd -P | sed 's/[^a-zA-Z0-9]/-/g')\""]).stdout.trim().clone()
 	let mut briefs: i64 = 0
 	let mut paths: Vec[String] = []
-	for entry in fs::read_dir(dir.clone(), fs::Root::Anywhere) {
+	for entry in fs::read_dir(".", drive_here().join(dir.clone())) {
 		let names: Vec[String] = entry.to_text().split("/").collect()
 		let name = names[names.len() - 1].clone()
 		let n = (name.strip_prefix("issue-") ?? "").strip_suffix(".md") ?? ""
@@ -3483,9 +3489,9 @@ fn drive_briefs_gone(dir: String) throws {
 		if !digits { continue }
 		let brief = f"{dir}/{name}"
 		let stem = f"{dir}/issue-{n}"
-		if !fs::exists(f"{brief}.posted", fs::Root::Anywhere) { continue }
-		let debrief = if fs::exists(f"{stem}.debrief.md", fs::Root::Anywhere) { f"issue-{n}.debrief.md" } else { f"{name}.debrief.md" }
-		if fs::exists(f"{dir}/{debrief}", fs::Root::Anywhere) && !reviewed.contains(f"{lane}/{debrief}\n") { continue }
+		if !fs::exists(f"{brief}.posted", drive_here()) { continue }
+		let debrief = if fs::exists(f"{stem}.debrief.md", drive_here()) { f"issue-{n}.debrief.md" } else { f"{name}.debrief.md" }
+		if fs::exists(f"{dir}/{debrief}", drive_here()) && !reviewed.contains(f"{lane}/{debrief}\n") { continue }
 		let state = process::run("gh", ["api", f"repos/{drive_repo()}/issues/{n}", "--jq", ".state"])
 		if !state.ok || state.stdout.trim() != "closed" { continue }
 		let mut id = drive_read(f"{brief}.session").trim().split(" ").collect()[0].clone()
@@ -3604,7 +3610,7 @@ fn drive_builder_after(dry: bool, dir: String, brief: String) throws {
 // without a report is left: that brief has not run to its end, the cycle
 // runs it again (agent.nika resumes its session) and writes the marker anew.
 fn drive_pickup(dir: String) throws {
-	if !fs::exists(dir, fs::Root::Anywhere) { return }
+	if !fs::exists(dir, drive_here()) { return }
 	let mut briefs: Vec[String] = []
 	for entry in fs::read_dir(".", drive_here().join(dir.clone())) {
 		let name = entry.to_text()
@@ -4618,10 +4624,10 @@ fn drive_focus_line(
 // The report of a brief that exists (`BRIEF.report.md`, else the stem's), or "".
 fn drive_report_of(brief: String) -> String throws {
 	let report = f"{brief}.report.md"
-	if fs::exists(report, fs::Root::Anywhere) { return report }
+	if fs::exists(report, drive_here()) { return report }
 	let stem = (brief.strip_suffix(".md") ?? "")
 	if stem != ""
-		&& fs::exists(f"{stem}.report.md", fs::Root::Anywhere) { return f"{stem}.report.md" }
+		&& fs::exists(f"{stem}.report.md", drive_here()) { return f"{stem}.report.md" }
 	return ""
 }
 
@@ -4633,7 +4639,7 @@ fn drive_unrun(dir: String) -> Vec[String] throws {
 		let name = raw.trim()
 		if name == "" { continue }
 		let brief = f"{dir}/{name}"
-		if fs::exists(brief, fs::Root::Anywhere) && drive_report_of(brief) == "" { out.push(brief) }
+		if fs::exists(brief, drive_here()) && drive_report_of(brief) == "" { out.push(brief) }
 	}
 	return out
 }
@@ -4812,7 +4818,7 @@ fn drive_queue_add(batch: String, numbers: Vec[String]) -> String {
 // a renamed report holds by (drive_blocked_on, #1881).
 fn drive_report_aside(dir: String, name: String, held: Vec[String]) throws {
 	let mut k = 1
-	while fs::exists(f"{dir}/{name}.run{k}.report.md", fs::Root::Anywhere) { k += 1 }
+	while fs::exists(f"{dir}/{name}.run{k}.report.md", drive_here()) { k += 1 }
 	let from = f"{dir}/{name}.report.md"
 	let to = f"{dir}/{name}.run{k}.report.md"
 	process::run("mv", [from, to.clone()])
@@ -4823,7 +4829,7 @@ fn drive_report_aside(dir: String, name: String, held: Vec[String]) throws {
 	let mut text = drive_read(to.clone())
 	if text != "" && !text.ends_with("\n") { text.push_str("\n") }
 	text.push_str(f"Needs: {list}\n")
-	fs::write(to, fs::Root::Anywhere, text)
+	fs::write(to, drive_here(), text)
 }
 
 // BATCH without the `#N` lines whose N is in CLOSED (the first word of a
@@ -5168,10 +5174,10 @@ fn drive_blocked_on(report: String, handled: bool) -> Vec[String] {
 // again, docs/supervisor.md), else "".
 fn drive_last_report(dir: String, name: String) -> String throws {
 	let now = f"{dir}/{name}.report.md"
-	if fs::exists(now.clone(), fs::Root::Anywhere) { return now }
+	if fs::exists(now.clone(), drive_here()) { return now }
 	let mut last = ""
 	let mut k = 1
-	while fs::exists(f"{dir}/{name}.run{k}.report.md", fs::Root::Anywhere) {
+	while fs::exists(f"{dir}/{name}.run{k}.report.md", drive_here()) {
 		last = f"{dir}/{name}.run{k}.report.md"
 		k += 1
 	}

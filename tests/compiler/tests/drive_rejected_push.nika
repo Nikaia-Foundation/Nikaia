@@ -14,21 +14,34 @@ fn root() -> String throws {
     return env::current_main()?.parent()?.parent()?.parent()?.parent()?.display() ?? "../.."
 }
 
-fn case(nikaia: String, repo: String, tmp: ref fs::Root, name: String, report: String) throws {
+fn case(nikaia: String, repo: String, tmp: ref fs::Root, lane: String, name: String, report: String) throws {
     fs::write("r.md", tmp, report)
-    let out = process::run(nikaia, ["run", "scripts/drive.nika", "--", "--rewrite", f"{tmp.path().to_text()}/r.md", f"{tmp.path().to_text()}/log"]; dir: repo)
+    let out = process::run(nikaia, ["run", "scripts/drive.nika", "--", "--rewrite", f"{lane}/r.md", f"{lane}/log"]; dir: repo)
     println(f"== {name}")
     println(out.stdout.trim())
 }
 
+// A lane of this test's own under the checkout's target/drive-test/ (#2577):
+// drive opens every name under fs::Root::Dir("."), the checkout it runs in, so
+// it gets the lane's names relative to it. The scratch directory's name keeps
+// the two runs of `--both-settings` apart.
+fn test_lane(repo: String, name: String) -> String throws {
+    let id = fs::scratch().path().file_name()?.to_text() ?? "run"
+    let lane = f"target/drive-test/{name}/{id}"
+    fs::create_dir(lane, fs::Root::Dir(repo); recursive: true)
+    return lane
+}
+
 fn main() throws {
-    let tmp = fs::scratch()
     let repo = root()
+    let lane = test_lane(repo.clone(), "drive_rejected_push")
+    let tmp = fs::Root::Dir(f"{repo}/{lane}")
     let nikaia = toolchain()
     fs::write("log", tmp, "abc1234\tother subject\ndef5678\tdrive: the subject\n")
-    case(nikaia.clone(), repo.clone(), tmp, "found", "Result: done\nCommit: drive: the subject\nPushed: rejected\nTests: ok\n")
-    case(nikaia.clone(), repo.clone(), tmp, "none found", "Result: done\nCommit: drive: the subject\nPushed: none\nTests: ok\n")
-    case(nikaia.clone(), repo.clone(), tmp, "not found", "Result: done\nCommit: another subject\nPushed: rejected\nTests: ok\n")
-    case(nikaia.clone(), repo.clone(), tmp, "pushed", "Result: done\nCommit: drive: the subject\nPushed: 9999999\nTests: ok\n")
-    case(nikaia.clone(), repo.clone(), tmp, "partial", "Result: partial\nCommit: drive: the subject\nPushed: rejected\nTests: ok\n")
+    case(nikaia.clone(), repo.clone(), tmp, lane.clone(), "found", "Result: done\nCommit: drive: the subject\nPushed: rejected\nTests: ok\n")
+    case(nikaia.clone(), repo.clone(), tmp, lane.clone(), "none found", "Result: done\nCommit: drive: the subject\nPushed: none\nTests: ok\n")
+    case(nikaia.clone(), repo.clone(), tmp, lane.clone(), "not found", "Result: done\nCommit: another subject\nPushed: rejected\nTests: ok\n")
+    case(nikaia.clone(), repo.clone(), tmp, lane.clone(), "pushed", "Result: done\nCommit: drive: the subject\nPushed: 9999999\nTests: ok\n")
+    case(nikaia.clone(), repo.clone(), tmp, lane.clone(), "partial", "Result: partial\nCommit: drive: the subject\nPushed: rejected\nTests: ok\n")
+    fs::remove(lane, fs::Root::Dir(repo); recursive: true)
 }
