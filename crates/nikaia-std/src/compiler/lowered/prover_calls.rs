@@ -574,7 +574,9 @@ pub(crate) fn prover_outside_block(found: &mut ProverOutside, block: &Block, key
             Stmt::Let { names, value, mutable, .. } => {
                 let mutable = *mutable;
                 proof.bind(names, mutable, value, words, &mut &mut *holes_of);
-                if from_outside(value, &tainted, words, library, state, &mut &mut *holes_of) {
+                let outside = from_outside(value, &tainted, words, library, state, &mut &mut *holes_of);
+                if names.len() == 1 && !mutable && !outside && proof.reads_clean(value, &state.outside.returning, words, &mut &mut *holes_of) { proof.clean.insert(nikaia_std::block::Text::from(words.resolve(*unsafe { nikaia_std::proven::read(&names, (0) as usize) }).to_string())); }
+                if outside {
                     let source: String = nikaia_std::index::or(outside_source(value, &tainted, &sources, words, library, state, &mut &mut *holes_of), || "".into());
                     for name in names.iter() {
                         let name = *name;
@@ -704,11 +706,12 @@ pub(crate) struct OutsideProof {
     pub(crate) fixed: collections::BTreeSet<String>,
     pub(crate) guarded: collections::BTreeSet<String>,
     pub(crate) joined: collections::BTreeMap<String, collections::BTreeSet<i64>>,
+    pub(crate) clean: collections::BTreeSet<String>,
 }
 
 impl OutsideProof {
     pub(crate) fn of(args: &[FnArg], method: bool, words: &winnow_grammar::InternerContext) -> OutsideProof {
-        let mut proof = OutsideProof { params: collections::BTreeMap::new(), fixed: collections::BTreeSet::new(), guarded: collections::BTreeSet::new(), joined: collections::BTreeMap::new() };
+        let mut proof = OutsideProof { params: collections::BTreeMap::new(), fixed: collections::BTreeSet::new(), guarded: collections::BTreeSet::new(), joined: collections::BTreeMap::new(), clean: collections::BTreeSet::new() };
         for (at, arg) in args.iter().enumerate().map(|(at, item)| (at as i64, item)) {
             if arg.mutable { continue; }
             let n = nikaia_std::block::Text::from(words.resolve(arg.name).to_string());
@@ -722,12 +725,42 @@ impl OutsideProof {
         self.fixed = before.fixed;
         self.guarded = before.guarded;
         self.joined = before.joined;
+        self.clean = before.clean;
     }
     pub(crate) fn forget(&mut self, name: &str) {
         self.params.remove(name);
         self.fixed.remove(name);
         self.guarded.remove(name);
         self.joined.remove(name);
+        self.clean.remove(name);
+    }
+    pub(crate) fn reads_clean(&self, value: &Expr, functions: &collections::BTreeSet<String>, words: &winnow_grammar::InternerContext, holes_of: &mut dyn FnMut(&Expr) -> Vec<Expr>) -> bool {
+        if literal_only(value) { return true; }
+        match value {
+            Expr::Variable(name, _) => { let name = *name; self.clean.contains(words.resolve(name)) },
+            Expr::LitInterpolated { .. } => {
+                for hole in holes_of(value) { if !self.reads_clean(&hole, functions, words, &mut &mut *holes_of) { return false; } }
+                true
+            },
+            Expr::Binary { lhs, rhs, .. } => { let lhs = nikaia_std::boxed::open(lhs); let rhs = nikaia_std::boxed::open(rhs); self.reads_clean(lhs, functions, words, &mut &mut *holes_of) && self.reads_clean(rhs, functions, words, &mut &mut *holes_of) },
+            Expr::Coalesce { value, fallback, .. } => { let value = nikaia_std::boxed::open(value); let fallback = nikaia_std::boxed::open(fallback); self.reads_clean(value, functions, words, &mut &mut *holes_of) && self.reads_clean(fallback, functions, words, &mut &mut *holes_of) },
+            Expr::Call { func, args, config, .. } => {
+                let func = nikaia_std::boxed::open(func);
+                match func {
+                    Expr::Path(_, _) => { },
+                    Expr::Variable(name, _) => {
+                        let name = *name;
+                        let n = words.resolve(name);
+                        if !functions.contains(n) || self.fixed.contains(n) || self.params.contains_key(n) { return false; }
+                    },
+                    _ => { return false; },
+                }
+                if !config.is_empty() { return false; }
+                for arg in args.iter() { if !self.reads_clean(arg, functions, words, &mut &mut *holes_of) { return false; } }
+                true
+            },
+            _ => false,
+        }
     }
     pub(crate) fn bind(&mut self, names: &[winnow_grammar::Symbol], mutable: bool, value: &Expr, words: &winnow_grammar::InternerContext, holes_of: &mut impl FnMut(&Expr) -> Vec<Expr>) {
         let mut leads: collections::BTreeSet<i64> = collections::BTreeSet::new();
@@ -796,6 +829,7 @@ impl OutsideProof {
             Expr::Binary { op, .. } => { if *op != BinaryOp::Add { return false; } },
             _ => {
                 let name = match raw_sink_name(value, words) { Some(__nikaia_value) => __nikaia_value, None => return false };
+                if self.clean.contains(&name) { return true; }
                 let carried = match self.joined.get(&name) { Some(__nikaia_value) => __nikaia_value, None => return false };
                 for at in carried.iter() {
                     let at = nikaia_std::num::value(at);
@@ -811,7 +845,7 @@ impl OutsideProof {
         for part in parts.iter() {
             if literal_only(part) { continue; }
             let name = match raw_sink_name(part, words) { Some(__nikaia_value) => __nikaia_value, None => return false };
-            if self.guarded.contains(&name) { continue; }
+            if self.guarded.contains(&name) || self.clean.contains(&name) { continue; }
             match self.joined.get(&name) {
                 None => { },
                 Some(carried) => {
@@ -847,7 +881,7 @@ impl OutsideProof {
             Expr::Binary { op, lhs, .. } => { let lhs = nikaia_std::boxed::open(lhs); return if *op == BinaryOp::Add { self.lead_of(lhs, words) } else { None } },
             _ => {
                 let name = match raw_sink_name(value, words) { Some(__nikaia_value) => __nikaia_value, None => return None };
-                if self.joined.contains_key(&name) { return Some(-1); }
+                if self.joined.contains_key(&name) || self.clean.contains(&name) { return Some(-1); }
                 return self.params.get(&name).copied();
             },
         }
