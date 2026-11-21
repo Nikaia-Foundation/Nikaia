@@ -123,6 +123,16 @@ Before filing, run `nikaia run scripts/issue-check.nika -- --body FILE` (or
     shrinking writes), names the form excluding them or says none exists (I6),
     and writes its induction step out (any allowed state, each `mut self`
     method, the rule after); a relation the prover cannot say is a gap.
+* **I9a. One run per issue, split when filed** (owner, 2026-11-21: the open
+  count must show where we stand, so no large issue is split later). An issue
+  holds what one builder run finishes and the driver pushes: one *Done when*,
+  at most five *To build* items, one pass, one lane's files. Larger work is
+  filed at once as its run-sized issues, each naming the one before with
+  `After #N`; the goal they reach is an ADR or a `note` issue listing them,
+  never a parent with a *To build* of its own (I4). A `decision` issue is
+  filed with the build issues its recommended option needs, `blocked` on it.
+  A run that finds its issue larger than one run builds the first part and
+  reports `Issue: broke I9a`; the supervisor files the rest.
 * **I9. A numbered *To build* list** in build order; each item one change a
   builder commits alone, naming its test (a `.nika` with `.stdout` / `.stderr`
   in `tests/compiler/tests/` or the package's tests) and the rows it shows;
