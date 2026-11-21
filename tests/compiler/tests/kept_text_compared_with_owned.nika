@@ -1,0 +1,42 @@
+// A copy of text that is handed back through a tuple, so it lives in a keep,
+// compared with owned text (#2014): in a lambda and outside one.
+fn package_of(unit: ref String) -> String {
+    let mut s = String()
+    s.push_str(unit)
+    return s
+}
+
+fn split_any(units: ref Vec[String], package: ref String, name: ref String) -> (String, Vec[String]) {
+    let parts: Vec[String] = name.split("::").collect()
+    if parts.len() >= 2 {
+        let head: String = parts[0].clone()
+        if units.iter().any(fn(unit) { package_of(unit) == head }) {
+            let rest: Vec[String] = parts.iter().skip(1).map(fn(part) { part.clone() }).collect()
+            return (head, rest)
+        }
+    }
+    return (package.clone(), parts)
+}
+
+fn split_first(units: ref Vec[String], package: ref String, name: ref String) -> (String, Vec[String]) {
+    let parts: Vec[String] = name.split("::").collect()
+    if parts.len() >= 2 {
+        let head: String = parts[0].clone()
+        if package_of(units[0]) != head {
+            return (package.clone(), parts)
+        }
+        let rest: Vec[String] = parts.iter().skip(1).map(fn(part) { part.clone() }).collect()
+        return (head, rest)
+    }
+    return (package.clone(), parts)
+}
+
+fn main() throws {
+    let units = [package_of("a")]
+    let (h, r) = split_any(units, "p", "a::b")
+    println(f"{h} {r.len()}")
+    let (g, s) = split_first(units, "p", "a::b::c")
+    println(f"{g} {s.len()}")
+    let (f, t) = split_first(units, "p", "q::b")
+    println(f"{f} {t.len()}")
+}

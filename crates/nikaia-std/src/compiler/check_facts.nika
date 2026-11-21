@@ -714,6 +714,10 @@ pub struct CheckFacts {
     /// compared with text (#688), by the operator's span: both sides are
     /// read as `str`, owned or viewed.
     pub ordered_texts: collections::BTreeSet[i64],
+    /// **Text compared with text for equality** (#2014), by the operator's
+    /// span: a side that lowers to a kept buffer is a reference, so the
+    /// emitter reads both sides as `str` there.
+    pub text_equalities: collections::BTreeSet[i64],
     pub claims: collections::BTreeMap[(i64, i64), FactClaim],
     pub entries: collections::BTreeMap[String, Vec[PreconditionCheck]],
     pub reaches: collections::BTreeMap[(String, String), CallReach],
@@ -1112,6 +1116,7 @@ impl CheckFacts {
             plain_bracket_calls: collections::BTreeSet(),
             compared_numbers: collections::BTreeSet(),
             ordered_texts: collections::BTreeSet(),
+            text_equalities: collections::BTreeSet(),
             claims: collections::BTreeMap(),
             entries: collections::BTreeMap(),
             reaches: collections::BTreeMap(),
