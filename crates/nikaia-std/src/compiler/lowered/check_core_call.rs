@@ -905,6 +905,21 @@ pub(crate) fn check_core_free_call<H: CheckHost>(state: &mut CheckState, world: 
             return Ty::Unknown;
         }
     }
+    match func {
+        Expr::Variable(word, _) => {
+            let word = *word;
+            let called = format!("{}", world.words.resolve(word));
+            if args.is_empty() && config.is_empty() && state.walks_fields.contains_key(&format!("$new {}", called)) && state.lookup(&called).is_none() {
+                state.facts.kind_constructors.insert(id_of(func) as i64);
+                state.facts.constructs_by_kind.insert((nikaia_std::index::or(match state.current.as_ref() {
+                    Some(__nikaia_it) => Some(__nikaia_it.clone()),
+                    None => None,
+                }, || "".into()), nikaia_std::block::Text::from(called.to_string())));
+                return Ty::Named { name: called, args: vec![], view: false };
+            }
+        },
+        _ => { },
+    }
     let mut name: String = String::from("");
     match func {
         Expr::Variable(word, _) => {

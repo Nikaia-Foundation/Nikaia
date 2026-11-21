@@ -690,6 +690,15 @@ pub(crate) fn check_reflect_kind_subject(state: &mut CheckState, world: &CheckWo
 pub(crate) fn check_reflect_match<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, expr: &Expr, value: &Expr, arms: &[MatchArm], span: &Span) -> Option<Ty> {
     if !check_reflect_kind_subject(state, world, value) { return None; }
     state.facts.kind_matches.insert(id_of(value) as i64);
+    let subject: String = match value {
+        Expr::Path(segments, _) => format!("{}", world.words.resolve(*nikaia_std::index::get(&segments, 0))),
+        _ => String::from(""),
+    };
+    let made = format!("$new {}", subject);
+    let made_before: Option<String> = match state.walks_fields.get(&made) {
+        Some(__nikaia_it) => Some(__nikaia_it.clone()),
+        None => None,
+    };
     let mut answered: Vec<CheckArm<'_>> = vec![];
     let mut seen: Ty = Ty::Unknown;
     let mut any = false;
@@ -715,7 +724,12 @@ pub(crate) fn check_reflect_match<H: CheckHost>(state: &mut CheckState, world: &
             state.type_parameters.insert(nikaia_std::block::Text::from(name.to_string()), bounds.copy_owned());
             state.walks_fields.insert(format!("$kind {}", name), nikaia_std::block::Text::from(name.to_string()));
         }
+        if (case == "Map" || case == "List") && state.type_parameters.contains_key(&subject) { state.walks_fields.insert(nikaia_std::block::Text::from(made.to_string()), nikaia_std::block::Text::from(subject.to_string())); } else { state.walks_fields.remove(&made); }
         let got = check_core_expr(state, world, host, &arm.body, span);
+        match made_before {
+            None => { state.walks_fields.remove(&made); },
+            Some(ref before) => { state.walks_fields.insert(nikaia_std::block::Text::from(made.to_string()), nikaia_std::block::Text::from(before.to_string())); },
+        }
         for one in held.iter() {
             state.walks_fields.remove(&format!("$kind {}", one.0));
             match &one.1 {

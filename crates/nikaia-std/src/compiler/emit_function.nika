@@ -889,7 +889,17 @@ impl EmitState {
                     }
                 } else {
                     for each in generics {
-                        declared.push(emit_bounded(world, each))
+                        let mut bounded = emit_bounded(world, each)
+                        // A copy that makes `T()` asks for `T`'s empty value
+                        // (ADR-grammar-typed-read-v1 D14).
+                        if walk.specialising != null && self.facts.constructs_by_kind.contains((key.clone(), emit_text(world, each.name))) {
+                            if bounded.contains(": ") {
+                                bounded = f"{bounded} + ::core::default::Default"
+                            } else {
+                                bounded = f"{bounded}: ::core::default::Default"
+                            }
+                        }
+                        declared.push(bounded)
                     }
                     if has_dsl {
                         declared.push("NikaiaDsl")

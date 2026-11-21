@@ -1182,6 +1182,20 @@ fn check_core_free_call[H: CheckHost](mut state: CheckState, world: ref CheckWor
             return Ty::Unknown
         }
     }
+    // **`T()` in a `Map` or `List` arm of a `match` on a kind is the empty
+    // collection of the type `T` is** (ADR-grammar-typed-read-v1 D14), which
+    // each copy writes for its own type.
+    match func {
+        Expr::Variable(word, _) => {
+            let called = f"{world.words.resolve(word)}"
+            if args.len() == 0 && config.len() == 0 && state.walks_fields.contains_key(f"$new {called}") && state.lookup(called) == null {
+                state.facts.kind_constructors.insert(id_of(func) as i64)
+                state.facts.constructs_by_kind.insert((state.current?.clone() ?? "", called.clone()))
+                return Ty::Named { name: called, args: [], view: false }
+            }
+        },
+        else => {}
+    }
     // **The callee is named and resolved before the arguments are walked**
     // (ADR-288).
     let mut name: String = ""

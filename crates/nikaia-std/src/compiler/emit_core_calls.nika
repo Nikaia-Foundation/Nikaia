@@ -206,6 +206,19 @@ impl EmitState {
     /// no such thing, so the declaration decides: a name that is a struct is a
     /// call to the `new` its `impl` provides.
     fn emit_core_call[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, func: ref Expr, args: ref Vec[Expr], config: ref Vec[ConfigArg], depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
+        // **`T()` in a `Map` or `List` arm** (ADR-grammar-typed-read-v1 D14):
+        // the empty value of the type `T` is in this copy, which the copy's
+        // parameter, or the type written in its place, has as `Default`.
+        if self.facts.kind_constructors.contains(node_key(func)) {
+            match func {
+                Expr::Variable(word, _) => {
+                    let written = self.emit_core_ty(world, walk, false, false, grammar_types_named(word, []), EmitLifetimes::Named)
+                    out.push(f"<{written} as ::core::default::Default>::default()")
+                    return
+                },
+                else => {},
+            }
+        }
         // **An argument that uses what an earlier one lends to a `mut`
         // parameter is bound before the call**: Rust holds that
         // `&mut` from the first argument to the call, so `f(w, g(w))` is

@@ -146,6 +146,17 @@ impl EmitState {
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn emit_core_call<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, func: &Expr, args: &[Expr], config: &[ConfigArg], depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
+        if self.facts.kind_constructors.contains(&node_key(func)) {
+            match func {
+                Expr::Variable(word, _) => {
+                    let word = *word;
+                    let written = self.emit_core_ty(world, walk, false, false, &grammar_types_named(word, vec![]), &EmitLifetimes::Named);
+                    out.push(&format!("<{} as ::core::default::Default>::default()", written));
+                    return Ok(());
+                },
+                _ => { },
+            }
+        }
         let hoisted = self.emit_call_hoisted(world, &walk.keep_function, func, args);
         if hoisted.is_empty() {
             walk.hoisted_args = None;
@@ -1540,8 +1551,8 @@ pub(crate) fn emit_tuple_part_copy(i: i64, word: &str) -> String {
 }
 
 pub(crate) fn emit_tuple_part_copies(parts: &[String]) -> String {
-    let copies: Vec<String> = parts.iter().enumerate().map(|(at, item)| (at as i64, item)).map(|__nikaia_tuple114011| {
-        let (i, word) = __nikaia_tuple114011;
+    let copies: Vec<String> = parts.iter().enumerate().map(|(at, item)| (at as i64, item)).map(|__nikaia_tuple114692| {
+        let (i, word) = __nikaia_tuple114692;
         emit_tuple_part_copy(i, word)
     }).collect::<Vec<_>>();
     if copies.len() == 1 { return format!("({},)", *unsafe { nikaia_std::proven::read(&copies, (0) as usize) }); }
