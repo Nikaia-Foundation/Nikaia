@@ -25,7 +25,7 @@ fn made() -> String {
 }
 
 fn main() throws {
-    for n in 0..1 {
+    for n in 0..<2 {
         let (a, i) = by_match(n, made())
         let (b, j) = by_if(n, made())
         let (c, k) = by_tail(n, made())
