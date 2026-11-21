@@ -872,15 +872,28 @@ pub(crate) fn bounding_missed(walk: &mut BoundsWalk, facts: &BoundsFacts, goal: 
         walk.open += 1;
         let mut read: collections::BTreeSet<String> = collections::BTreeSet::new();
         walk.arena.variables(goal, &mut read);
-        let mut tied: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-        for fact in facts.facts.iter() {
-            let fact = nikaia_std::num::value(fact);
-            let mut names: collections::BTreeSet<String> = collections::BTreeSet::new();
-            walk.arena.variables(fact, &mut names);
-            if names.len() != 2 { continue; }
-            let mut touches = false;
-            for name in names.iter() { if read.contains(name) { touches = true; } }
-            if touches { for name in names.iter() { if !read.contains(name) { tied.push(nikaia_std::block::Text::from(name.to_string())); } } }
+        #[allow(unused_mut)] let mut tied: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
+        let mut from: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block); #[allow(unused_mut, clippy::redundant_locals)] let mut tied = tied;
+        from.reserve(read.iter().size_hint().0); for name in read.iter() { from.push(nikaia_std::block::Text::from(name.to_string())); }
+        while !from.is_empty() {
+            let mut next: Vec<String> = vec![];
+            for fact in facts.facts.iter() {
+                let fact = nikaia_std::num::value(fact);
+                let mut names: collections::BTreeSet<String> = collections::BTreeSet::new();
+                walk.arena.variables(fact, &mut names);
+                if names.len() != 2 { continue; }
+                let mut touches = false;
+                for name in names.iter() { if nikaia_std::list::contains(&from, &name) { touches = true; } }
+                if touches {
+                    for name in names.iter() {
+                        if !read.contains(name) && !nikaia_std::list::contains(&tied, &name) {
+                            tied.push(nikaia_std::block::Text::from(name.to_string()));
+                            if name.contains('#') || name.contains('@') { next.push(nikaia_std::block::Text::from(name.to_string())); }
+                        }
+                    }
+                }
+            }
+            from = next;
         }
         for name in read.iter() { walk.missed.insert(nikaia_std::block::Text::from(name.to_string()), walk.open); }
         for name in tied.iter() { walk.missed.insert(nikaia_std::block::Text::from(name.to_string()), walk.open); }

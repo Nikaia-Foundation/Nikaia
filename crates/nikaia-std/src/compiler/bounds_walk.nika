@@ -1710,26 +1710,40 @@ fn bounding_missed(mut walk: BoundsWalk, facts: ref BoundsFacts, goal: i64) {
 		walk.arena.variables(goal, read)
 		// **A name a fact ties to the goal's names by itself** (#1634):
 		// `was[k]` under `k < a` asks the loop that changes `a` before it.
+		// A snapshot it ties to (`j >= j#4`) ties on in turn (#2455): `j#4 ==
+		// i` asks the outer loop that changes `i`, where `let mut j = i`
+		// started an inner scan.
 		let mut tied: Vec[String] = []
-		for fact in facts.facts {
-			let mut names: collections::BTreeSet[String] = collections::BTreeSet()
-			walk.arena.variables(fact, names)
-			if names.len() != 2 {
-				continue
-			}
-			let mut touches = false
-			for name in names {
-				if read.contains(name) {
-					touches = true
+		let mut from: Vec[String] = []
+		for name in read {
+			from.push(name.clone())
+		}
+		while !from.is_empty() {
+			let mut next: Vec[String] = []
+			for fact in facts.facts {
+				let mut names: collections::BTreeSet[String] = collections::BTreeSet()
+				walk.arena.variables(fact, names)
+				if names.len() != 2 {
+					continue
 				}
-			}
-			if touches {
+				let mut touches = false
 				for name in names {
-					if !read.contains(name) {
-						tied.push(name.clone())
+					if from.contains(name) {
+						touches = true
+					}
+				}
+				if touches {
+					for name in names {
+						if !read.contains(name) && !tied.contains(name) {
+							tied.push(name.clone())
+							if name.contains("#") || name.contains("@") {
+								next.push(name.clone())
+							}
+						}
 					}
 				}
 			}
+			from = next
 		}
 		for name in read {
 			walk.missed.insert(name.clone(), walk.open)
