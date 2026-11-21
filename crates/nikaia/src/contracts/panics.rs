@@ -117,17 +117,13 @@ pub fn infer(
             .collect();
         let empty = crate::check::CheckFacts::empty();
         let facts = checked.get(at).map(|c| &c.facts).unwrap_or(&empty);
+        // **Through loops, with the unit's published contracts, as its
+        // lowering asks** (ADR-361 D16): the lowering takes this proof
+        // rather than proving the unit a second time.
+        let published =
+            nikaia_std::compiler::prove_run::prove_with_published(own, &facts.published);
         crate::proofs::in_unit(at, || {
-            crate::bounds::proven(
-                units[at],
-                &beside,
-                facts,
-                &[own, library],
-                &BTreeSet::new(),
-                // What the ledger says does not depend on an optimization
-                // (ADR-361 D10).
-                false,
-            )
+            crate::bounds::proven_for_lowering(units[at], &beside, facts, &[&published, library])
         })
     };
     // The largest first, so no core is left with a long file at the end; the
