@@ -12,7 +12,7 @@ Each program below was run with today's compiler, and the output is pasted as it
 try one, save it as a file and run `nikaia run file.nika -- words…` (see [Passing the
 words](#passing-the-words) below). The rules are in the specification, [Part I
 5.5](../docs/specification/10-nikaia-light.md#55-mains-parameters-are-the-command-line),
-and the reasons in [ADR-360](../docs/specification/adr/adr-360.md).
+and the reasons in [ADR-cli-v1](../docs/specification/adr/adr-cli-v1.md).
 
 ## A first example
 
