@@ -1,0 +1,46 @@
+// #1994, ADR-views-v4 D18, D20, D23: a `let` over a field of `mut self`, or of
+// a `mut` parameter, whose name is kept (returned here) takes the field out,
+// and assigning the field gives it back. A `let` whose name is only read
+// views the field and takes nothing.
+struct TakenBuffer { out: String, rows: Vec[i64] }
+
+impl TakenBuffer {
+    fn done(mut self) -> String sync {
+        let text = self.out
+        self.out = String()
+        return text
+    }
+
+    fn rows_done(mut self) -> Vec[i64] sync {
+        let rows = self.rows
+        self.rows = []
+        return rows
+    }
+
+    fn rows_seen(mut self) -> i64 sync {
+        let rows = self.rows
+        return rows.len()
+    }
+}
+
+fn taken_buffer_done(mut w: TakenBuffer) -> String sync {
+    let text = w.out
+    w.out = String()
+    return text
+}
+
+fn taken_buffer_text(t: ref String) -> String {
+    let mut s = String()
+    s.push_str(t)
+    return s
+}
+
+fn main() throws {
+    let mut w = TakenBuffer { out: taken_buffer_text("first"), rows: [1, 2, 3] }
+    let a = w.done()
+    w.out.push_str("second")
+    let b = taken_buffer_done(w)
+    let seen = w.rows_seen()
+    let rows = w.rows_done()
+    println(f"{a} {b} [{w.out}] {seen} {rows.len()} {w.rows.len()}")
+}

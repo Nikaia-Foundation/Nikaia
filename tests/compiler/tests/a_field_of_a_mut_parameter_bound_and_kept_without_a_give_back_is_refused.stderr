@@ -1,0 +1,11 @@
+error[NK2108]: This `return` leaves `w` without `w.out`.
+  --> tests/a_field_of_a_mut_parameter_bound_and_kept_without_a_give_back_is_refused.nika:8:5
+   |
+ 7 |     let rows = w.out
+   |                ----- taken out of `w` here
+ 8 |     return rows
+   |     ^^^^^^ leaves the function with the part still out
+   |
+   = note: `w` is a `mut` parameter, so it is the caller's and is whole whenever the caller can see it. `w.out` was bound to `rows` by a `let`, and nothing has put it back.
+   = help: Assign `w` (or the part) before the function is left, or build the value by value with `fn f(w: T) -> T`.
+
