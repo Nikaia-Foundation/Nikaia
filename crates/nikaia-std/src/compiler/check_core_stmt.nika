@@ -2492,7 +2492,11 @@ fn check_core_stmt_for[H: CheckHost](mut state: CheckState, world: ref CheckWorl
         let name_mut = mutable && (mut_names.len() == 0 || mut_names[at])
         let mut_view = mut_view && (!value_only || name_mut)
         at += 1
-        let copied = lent && !mut_view && name != "_" && a_copy_by_value(element)
+        // **A call that hands back a view lends its elements too** (#2062):
+        // `for v in arena.variable_ids(id)` over a `ref Vec[i64]` reads each
+        // number out of the view, as a walk over the place would.
+        let lent_by_a_call = !is_a_place(iter) && over.is_a_view() && !mutable
+        let copied = (lent || lent_by_a_call) && !mut_view && name != "_" && a_copy_by_value(element)
         if copied {
             state.facts.copied_loop_bindings.insert((span.start as i64, name.clone()))
         }

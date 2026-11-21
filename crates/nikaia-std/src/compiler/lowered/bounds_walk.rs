@@ -913,80 +913,175 @@ pub(crate) struct BoundsMissed {
 pub(crate) fn bounding_proves(walk: &BoundsWalk, facts: &BoundsFacts, goal: i64, ask: &mut impl FnMut(&logic::TermArena, &[i64], i64) -> bool) -> bool { ask(&walk.arena, &bounding_known(walk, facts, goal), goal) }
 
 pub(crate) fn bounding_nearest(walk: &BoundsWalk, facts: &BoundsFacts, asked: i64, most: i64) -> Vec<bool> {
-    let mut ways: Vec<collections::BTreeSet<String>> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-    ways.reserve(facts.facts.iter().size_hint().0); for fact in facts.facts.iter() {
+    let mut names: Vec<i64> = nikaia_std::block::list(nikaia_std::block::Place::Block);
+    let mut starts: Vec<i64> = nikaia_std::block::list(nikaia_std::block::Place::Block);
+    starts.reserve(facts.facts.iter().size_hint().0); for fact in facts.facts.iter() {
         let fact = nikaia_std::num::value(fact);
-        let mut own: collections::BTreeSet<String> = collections::BTreeSet::new();
-        walk.arena.variables(fact, &mut own);
-        ways.push(own);
+        starts.push(names.len() as i64);
+        for v in walk.arena.variable_ids(fact) {
+            let v = nikaia_std::num::value(v);
+            names.push(v);
+        }
     }
-    let held = ways.len() as i64;
+    let held = starts.len() as i64;
     for (_, axiom) in walk.axioms.iter() {
-        let mut own: collections::BTreeSet<String> = collections::BTreeSet::new();
+        let mut own: Vec<i64> = vec![];
         for fact in axiom.iter() {
             let fact = nikaia_std::num::value(fact);
-            walk.arena.variables(fact, &mut own);
+            own = bounding_merged_ids(&own, walk.arena.variable_ids(fact));
         }
-        if own.len() > 1 { ways.push(own); }
+        if own.len() > 1 {
+            starts.push(names.len() as i64);
+            names.reserve(own.iter().size_hint().0); for v in own.iter() {
+                let v = nikaia_std::num::value(v);
+                names.push(v);
+            }
+        }
     }
+    let mut count_names = walk.arena.variable_count();
+    let mut unread: collections::BTreeMap<String, i64> = collections::BTreeMap::new();
     for (each, fact) in walk.rule_facts.iter() {
         let fact = nikaia_std::num::value(fact);
-        let mut own: collections::BTreeSet<String> = collections::BTreeSet::new();
-        own.insert(nikaia_std::block::Text::from(each.to_string()));
-        walk.arena.variables(fact, &mut own);
-        if own.len() > 1 { ways.push(own); }
-    }
-    let mut ids: collections::BTreeMap<String, i64> = collections::BTreeMap::new();
-    let mut readers: Vec<Vec<i64>> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-    for k in 0..ways.len() as i64 {
-        for name in (*unsafe { nikaia_std::proven::read(&ways, (k) as usize) }).iter() {
-            let id = nikaia_std::index::or(ids.get(name), || (readers.len() as i64).into());
-            if id == readers.len() as i64 {
-                ids.insert(nikaia_std::block::Text::from(name.to_string()), id);
-                readers.push(vec![]);
+        let read = walk.arena.variable_ids(fact);
+        let mut id = nikaia_std::index::or(walk.arena.variable_id(each), || -1);
+        if id < 0 {
+            id = nikaia_std::index::or(unread.get(each), || count_names);
+            if id == count_names {
+                unread.insert(nikaia_std::block::Text::from(each.to_string()), id);
+                count_names += 1;
             }
-            readers[nikaia_std::index::at(id)].push(k);
+        }
+        let mut size = read.len() as i64;
+        if !read.contains(&id) { size = unsafe { nikaia_std::proven::add::<i64>(size, 1) }; }
+        if size > 1 {
+            starts.push(names.len() as i64);
+            names.push(id);
+            for v in read.iter() {
+                let v = nikaia_std::num::value(v);
+                if v != id { names.push(v); }
+            }
         }
     }
+    let ways = starts.len() as i64;
+    starts.push(names.len() as i64);
+    let mut readers: Vec<Vec<i64>> = nikaia_std::block::list(nikaia_std::block::Place::Block);
+    let mut reached: Vec<bool> = nikaia_std::block::list(nikaia_std::block::Place::Block);
+    for _ in 0..count_names {
+        readers.push(vec![]);
+        reached.push(false);
+    }
+    for k in 0..ways { for j in *unsafe { nikaia_std::proven::read(&starts, (k) as usize) }..*unsafe { nikaia_std::proven::read(&starts, (nikaia_std::proven::add::<i64>(k, 1)) as usize) } { readers[nikaia_std::index::at(names[nikaia_std::index::at(j)])].push(k); } }
     let mut near: Vec<i64> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     let mut taken: Vec<bool> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-    for own in ways.iter() {
-        near.push(if own.is_empty() { 0 } else { -1 });
+    let mut open: Vec<i64> = vec![];
+    for k in 0..ways {
+        if *unsafe { nikaia_std::proven::read(&starts, (k) as usize) } == *unsafe { nikaia_std::proven::read(&starts, (nikaia_std::proven::add::<i64>(k, 1)) as usize) } {
+            near.push(0);
+            bounding_open_push(&mut open, bounding_open_key(0, k));
+        } else { near.push(-1); }
         taken.push(false);
     }
-    let mut reached: Vec<bool> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-    reached.reserve(readers.iter().size_hint().0); for _ in readers.iter() { reached.push(false); }
-    let mut goal: collections::BTreeSet<String> = collections::BTreeSet::new();
-    walk.arena.variables(asked, &mut goal);
-    for name in goal.iter() {
-        let id = match ids.get(name) { Some(__nikaia_value) => nikaia_std::num::value(__nikaia_value), None => continue };
-        { let __nikaia_stored = true; nikaia_std::index::set(&mut reached, nikaia_std::index::at(id), __nikaia_stored); }
-        let through = (*nikaia_std::index::get(&readers, nikaia_std::index::at(id))).len() as i64;
-        for k in (*unsafe { nikaia_std::proven::read(&readers, (id) as usize) }).iter() {
+    for v in walk.arena.variable_ids(asked) {
+        let v = nikaia_std::num::value(v);
+        if v >= count_names || *nikaia_std::index::get(&reached, nikaia_std::index::at(v)) { continue; }
+        { let __nikaia_stored = true; nikaia_std::index::set(&mut reached, nikaia_std::index::at(v), __nikaia_stored); }
+        let through = (*nikaia_std::index::get(&readers, nikaia_std::index::at(v))).len() as i64;
+        for k in (*unsafe { nikaia_std::proven::read(&readers, (v) as usize) }).iter() {
             let k = nikaia_std::num::value(k);
-            if *nikaia_std::index::get(&near, nikaia_std::index::at(k)) < 0 || through < *unsafe { nikaia_std::proven::read(&near, (k) as usize) } { { let __nikaia_stored = through; unsafe { nikaia_std::proven::write(&mut near, (k) as usize, __nikaia_stored) }; } }
+            if *nikaia_std::index::get(&near, nikaia_std::index::at(k)) < 0 || through < *unsafe { nikaia_std::proven::read(&near, (k) as usize) } {
+                { let __nikaia_stored = through; unsafe { nikaia_std::proven::write(&mut near, (k) as usize, __nikaia_stored) }; }
+                bounding_open_push(&mut open, bounding_open_key(through, k));
+            }
         }
     }
     let mut count: i64 = 0;
-    while count < most {
-        let mut best: i64 = -1;
-        for k in 0..ways.len() as i64 { if !*unsafe { nikaia_std::proven::read(&taken, (k) as usize) } && *unsafe { nikaia_std::proven::read(&near, (k) as usize) } >= 0 && (best < 0 || *unsafe { nikaia_std::proven::read(&near, (k) as usize) } <= *unsafe { nikaia_std::proven::read(&near, (best) as usize) }) { best = k; } }
-        if best < 0 { break; }
+    while count < most && !open.is_empty() {
+        let key = bounding_open_pop(&mut open);
+        let best = unsafe { nikaia_std::proven::sub::<i64>(2147483647, key % 4294967296i64) };
+        if *nikaia_std::index::get(&taken, nikaia_std::index::at(best)) || *unsafe { nikaia_std::proven::read(&near, (best) as usize) } != key / 4294967296i64 { continue; }
         { let __nikaia_stored = true; unsafe { nikaia_std::proven::write(&mut taken, (best) as usize, __nikaia_stored) }; }
         if best < held { count = unsafe { nikaia_std::proven::add::<i64>(count, 1) }; }
-        for name in (*unsafe { nikaia_std::proven::read(&ways, (best) as usize) }).iter() {
-            let id = match ids.get(name) { Some(__nikaia_value) => nikaia_std::num::value(__nikaia_value), None => continue };
-            if *nikaia_std::index::get(&reached, nikaia_std::index::at(id)) { continue; }
-            { let __nikaia_stored = true; unsafe { nikaia_std::proven::write(&mut reached, (id) as usize, __nikaia_stored) }; }
-            let through = *unsafe { nikaia_std::proven::read(&near, (best) as usize) } + (*unsafe { nikaia_std::proven::read(&readers, (id) as usize) }).len() as i64;
-            for k in (*unsafe { nikaia_std::proven::read(&readers, (id) as usize) }).iter() {
+        for j in *unsafe { nikaia_std::proven::read(&starts, (best) as usize) }..*unsafe { nikaia_std::proven::read(&starts, (nikaia_std::proven::add::<i64>(best, 1)) as usize) } {
+            let v = *nikaia_std::index::get(&names, nikaia_std::index::at(j));
+            if *nikaia_std::index::get(&reached, nikaia_std::index::at(v)) { continue; }
+            { let __nikaia_stored = true; unsafe { nikaia_std::proven::write(&mut reached, (v) as usize, __nikaia_stored) }; }
+            let through = *unsafe { nikaia_std::proven::read(&near, (best) as usize) } + (*unsafe { nikaia_std::proven::read(&readers, (v) as usize) }).len() as i64;
+            for k in (*unsafe { nikaia_std::proven::read(&readers, (v) as usize) }).iter() {
                 let k = nikaia_std::num::value(k);
-                if *nikaia_std::index::get(&near, nikaia_std::index::at(k)) < 0 || through < *unsafe { nikaia_std::proven::read(&near, (k) as usize) } { { let __nikaia_stored = through; unsafe { nikaia_std::proven::write(&mut near, (k) as usize, __nikaia_stored) }; } }
+                if *nikaia_std::index::get(&taken, nikaia_std::index::at(k)) { continue; }
+                if *unsafe { nikaia_std::proven::read(&near, (k) as usize) } < 0 || through < *unsafe { nikaia_std::proven::read(&near, (k) as usize) } {
+                    { let __nikaia_stored = through; unsafe { nikaia_std::proven::write(&mut near, (k) as usize, __nikaia_stored) }; }
+                    bounding_open_push(&mut open, bounding_open_key(through, k));
+                }
             }
         }
     }
     let mut out: Vec<bool> = vec![];
     for k in 0..held { out.push(*unsafe { nikaia_std::proven::read(&taken, (k) as usize) }); }
+    out
+}
+
+pub(crate) fn bounding_open_key(near: i64, k: i64) -> i64 { near * 4294967296i64 + (2147483647 - k) }
+
+pub(crate) fn bounding_open_push(open: &mut Vec<i64>, key: i64) {
+    let mut i = open.len() as i64;
+    open.push(key);
+    while i > 0 {
+        let parent = (unsafe { nikaia_std::proven::sub::<i64>(i, 1) }) / 2;
+        if *unsafe { nikaia_std::proven::read(&open, (parent) as usize) } <= key { break; }
+        { let __nikaia_stored = *unsafe { nikaia_std::proven::read(&open, (parent) as usize) }; unsafe { nikaia_std::proven::write(&mut *open, (i) as usize, __nikaia_stored) }; }
+        i = parent;
+    }
+    { let __nikaia_stored = key; nikaia_std::index::set(&mut *open, nikaia_std::index::at(i), __nikaia_stored); }
+}
+
+pub(crate) fn bounding_open_pop(open: &mut Vec<i64>) -> i64 {
+    let top = *nikaia_std::index::get(&open, 0);
+    let last = unsafe { nikaia_std::proven::sub::<i64>(open.len() as i64, 1) };
+    let key = *unsafe { nikaia_std::proven::read(&open, (last) as usize) };
+    open.truncate(nikaia_std::count::of(last));
+    let n = last;
+    if n > 0 {
+        let mut i: i64 = 0;
+        loop {
+            let left: i64 = 2 * i + 1;
+            if left >= n { break; }
+            let right: i64 = unsafe { nikaia_std::proven::add::<i64>(left, 1) };
+            let child: i64 = if right < n && *unsafe { nikaia_std::proven::read(&open, (right) as usize) } < *unsafe { nikaia_std::proven::read(&open, (left) as usize) } { right } else { left };
+            if key <= *unsafe { nikaia_std::proven::read(&open, (child) as usize) } { break; }
+            { let __nikaia_stored = *unsafe { nikaia_std::proven::read(&open, (child) as usize) }; unsafe { nikaia_std::proven::write(&mut *open, (i) as usize, __nikaia_stored) }; }
+            i = child;
+        }
+        { let __nikaia_stored = key; nikaia_std::index::set(&mut *open, nikaia_std::index::at(i), __nikaia_stored); }
+    }
+    top
+}
+
+pub(crate) fn bounding_merged_ids(a: &[i64], b: &[i64]) -> Vec<i64> {
+    let mut out: Vec<i64> = vec![];
+    let mut i: i64 = 0;
+    let mut j: i64 = 0;
+    while ((i) as usize) < a.len() && ((j) as usize) < b.len() {
+        if *unsafe { nikaia_std::proven::read(&a, (i) as usize) } < *unsafe { nikaia_std::proven::read(&b, (j) as usize) } {
+            out.push(*unsafe { nikaia_std::proven::read(&a, (i) as usize) });
+            i = unsafe { nikaia_std::proven::add::<i64>(i, 1) };
+        } else if *unsafe { nikaia_std::proven::read(&b, (j) as usize) } < *unsafe { nikaia_std::proven::read(&a, (i) as usize) } {
+            out.push(*unsafe { nikaia_std::proven::read(&b, (j) as usize) });
+            j = unsafe { nikaia_std::proven::add::<i64>(j, 1) };
+        } else {
+            out.push(*unsafe { nikaia_std::proven::read(&a, (i) as usize) });
+            i = unsafe { nikaia_std::proven::add::<i64>(i, 1) };
+            j = unsafe { nikaia_std::proven::add::<i64>(j, 1) };
+        }
+    }
+    while ((i) as usize) < a.len() {
+        out.push(*unsafe { nikaia_std::proven::read(&a, (i) as usize) });
+        i = unsafe { nikaia_std::proven::add::<i64>(i, 1) };
+    }
+    while ((j) as usize) < b.len() {
+        out.push(*unsafe { nikaia_std::proven::read(&b, (j) as usize) });
+        j = unsafe { nikaia_std::proven::add::<i64>(j, 1) };
+    }
     out
 }
 
@@ -997,15 +1092,23 @@ pub(crate) fn bounding_known(walk: &BoundsWalk, facts: &BoundsFacts, asked: i64)
         for k in 0..facts.facts.len() as i64 { if *nikaia_std::index::get(&asking, (k) as usize) { all.push(*unsafe { nikaia_std::proven::read(&facts.facts, (k) as usize) }); } }
     }
     if !walk.rule_facts.is_empty() {
-        let mut read: collections::BTreeSet<String> = collections::BTreeSet::new();
-        walk.arena.variables(asked, &mut read);
+        let mut read: Vec<bool> = nikaia_std::block::list(nikaia_std::block::Place::Block);
+        for _ in 0..walk.arena.variable_count() { read.push(false); }
+        for v in walk.arena.variable_ids(asked) {
+            let v = nikaia_std::num::value(v);
+            { let __nikaia_stored = true; nikaia_std::index::set(&mut read, nikaia_std::index::at(v), __nikaia_stored); }
+        }
         for fact in all.iter() {
             let fact = nikaia_std::num::value(fact);
-            walk.arena.variables(fact, &mut read);
+            for v in walk.arena.variable_ids(fact) {
+                let v = nikaia_std::num::value(v);
+                { let __nikaia_stored = true; nikaia_std::index::set(&mut read, nikaia_std::index::at(v), __nikaia_stored); }
+            }
         }
         for (each, fact) in walk.rule_facts.iter() {
             let fact = nikaia_std::num::value(fact);
-            if read.contains(each) && rules_standing(walk, facts, fact) { all.push(fact); }
+            let id = nikaia_std::index::or(walk.arena.variable_id(each), || -1);
+            if id >= 0 && *nikaia_std::index::get(&read, nikaia_std::index::at(id)) && rules_standing(walk, facts, fact) { all.push(fact); }
         }
     }
     for (name, axiom) in walk.axioms.iter() {
@@ -1629,10 +1732,12 @@ pub(crate) fn bounding_forget_parts(walk: &BoundsWalk, facts: &mut BoundsFacts, 
     let mut kept: Vec<i64> = vec![];
     for fact in facts.facts.iter() {
         let fact = nikaia_std::num::value(fact);
-        let mut read: collections::BTreeSet<String> = collections::BTreeSet::new();
-        walk.arena.variables(fact, &mut read);
         let mut touched = false;
-        for v in read.iter() { if (v.starts_with(&*under) || ::core::convert::identity(match (AsRef::<str>::as_ref(&(v)), AsRef::<str>::as_ref(&(name)), ) { (__nikaia_t, __nikaia_f0, ) => __nikaia_t.strip_prefix(__nikaia_f0).and_then(|__nikaia_r| __nikaia_r.strip_prefix("[")).is_some() })) && *v != length && !v.contains('@') { touched = true; } }
+        for n in walk.arena.variable_ids(fact) {
+            let n = nikaia_std::num::value(n);
+            let v = walk.arena.variable_name(n);
+            if (v.starts_with(&*under) || ::core::convert::identity(match (AsRef::<str>::as_ref(&(v)), AsRef::<str>::as_ref(&(name)), ) { (__nikaia_t, __nikaia_f0, ) => __nikaia_t.strip_prefix(__nikaia_f0).and_then(|__nikaia_r| __nikaia_r.strip_prefix("[")).is_some() })) && v != length && !v.contains('@') { touched = true; }
+        }
         if !touched { kept.push(fact); }
     }
     facts.facts = kept;

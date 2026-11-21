@@ -1766,7 +1766,8 @@ pub(crate) fn check_core_stmt_for<H: CheckHost>(state: &mut CheckState, world: &
         let name_mut = mutable && (mut_names.is_empty() || *nikaia_std::index::get(&mut_names, nikaia_std::index::at(at)));
         let mut_view = mut_view && (!value_only || name_mut);
         at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
-        let copied = lent && !mut_view && name != "_" && a_copy_by_value(&element);
+        let lent_by_a_call = !is_a_place(iter) && over.is_a_view() && !mutable;
+        let copied = (lent || lent_by_a_call) && !mut_view && name != "_" && a_copy_by_value(&element);
         if copied { state.facts.copied_loop_bindings.insert((span.start as i64, nikaia_std::block::Text::from(name.to_string()))); }
         let declared_copy = lent && !mut_view && name != "_" && !copied && !element.is_a_view() && state.a_view_that_copies(world, &view_of_type(&element));
         let an_option_that_copies = match element {

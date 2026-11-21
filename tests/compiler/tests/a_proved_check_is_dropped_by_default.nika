@@ -1,8 +1,9 @@
 // #1474, ADR-306 D26: a build that names neither `remove-bounds-checks` nor
 // `remove-overflow-checks` drops the index and overflow checks a proof shows
-// unneeded, as `on` does; the two `off` words keep them. An index and an
-// addition the walk cannot prove keep their checks at every level, and the
-// program prints the same.
+// unneeded, as `on` does; the two `off` words keep them. `pick`'s index is
+// proved by the claim derived from its one call (ADR-391 D1; kept until
+// #2447, which read the file beside itself), an addition the walk cannot
+// prove keeps its check at every level, and the program prints the same.
 use std::env
 use std::fs
 use std::process

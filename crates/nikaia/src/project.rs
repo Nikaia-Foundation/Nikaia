@@ -424,6 +424,10 @@ pub struct Lowered {
     /// [`write_proofs`]: `None` on a cache hit, where nothing was asked, and
     /// outside a project, where there is no file.
     pub proofs: Option<crate::proofs::Book>,
+    /// **The cache entry this lowering made, held until [`write_proofs`]
+    /// has written the file its key names** (#2446): `None` where the
+    /// entry was recorded at once, or the cache answered.
+    pub pending: Option<PendingRecord>,
     /// **`<package>.h`**, where this build makes a library and the package
     /// exports entry points (ADR-284 D12).
     pub header: Option<String>,
@@ -839,7 +843,7 @@ pub fn lower_reading(
     allowlist: Option<&Path>,
 ) -> Result<Lowered> {
     let open = modules::Open::new();
-    let (out, proofs, exported) = with_lower_host(
+    let (out, proofs, exported, pending) = with_lower_host(
         input,
         settings,
         no_cache,
@@ -850,7 +854,12 @@ pub fn lower_reading(
         |host, in_project| match project_lower::project_lower_reading(host, in_project) {
             Ok(out) => {
                 host.bound(&out.rust)?;
-                Ok((out, host.proofs.take(), host.exported.take()))
+                Ok((
+                    out,
+                    host.proofs.take(),
+                    host.exported.take(),
+                    host.pending.take(),
+                ))
             }
             Err(error) => Err(host.failed.take().unwrap_or_else(|| anyhow!("{error}"))),
         },
@@ -900,6 +909,7 @@ pub fn lower_reading(
         reused: out.reused,
         notes: out.notes,
         proofs,
+        pending,
         header,
         python,
         node,
@@ -1119,6 +1129,7 @@ fn with_lower_host<R>(
         unit_facts: RefCell::new(BTreeMap::new()),
         published: RefCell::new(BTreeMap::new()),
         proofs: RefCell::new(None),
+        pending: RefCell::new(None),
         failed: RefCell::new(None),
     };
     Ok(run(&host, layout.in_project))
@@ -1162,7 +1173,73 @@ struct LowerHost<'a> {
     published: RefCell<BTreeMap<String, crate::prove::Published>>,
     /// The book as the lowering left it, in a project.
     proofs: RefCell<Option<crate::proofs::Book>>,
+    /// The entry `record_once_proofs_written` holds (#2446).
+    pending: RefCell<Option<PendingRecord>>,
     failed: RefCell<Option<anyhow::Error>>,
+}
+
+/// **A cache entry held until the `nikaia.proofs` its key names is
+/// written** (ADR-270 D4, D22, #2446). The committed proofs are in the key,
+/// so a lowering that leaves the file to be written cannot be recorded under
+/// the key it was looked up with: the next lookup, the build's own `rustc`
+/// wrapper's, reads the file as written. Recorded after [`write_proofs`],
+/// under that file's digest, and only where the file then holds exactly what
+/// the lowering asked.
+pub struct PendingRecord {
+    lock: PathBuf,
+    store: PathBuf,
+    root: PathBuf,
+    unit: String,
+    source: String,
+    reads: BTreeMap<std::string::String, std::string::String>,
+    choices: Choices,
+    artifacts: Artifacts,
+    /// Whether the warnings stored say something, and the committed
+    /// `nikaia.contracts` they were said against: a warning that narrates a
+    /// change to that ledger (`NK2403`) is not repeated once the build has
+    /// written it (ADR-297 D12), so an entry holding one is not recorded
+    /// when the file changed.
+    warned: bool,
+    committed: Option<std::string::String>,
+}
+
+impl PendingRecord {
+    /// Records the entry against the `nikaia.proofs` `book` was written to;
+    /// a failure is a warning, as [`project_lower::ProjectLowerHost::record`]'s.
+    fn record(self, book: &crate::proofs::Book) {
+        if !book.as_recorded(&self.root) {
+            return;
+        }
+        let now = std::fs::read_to_string(self.root.join("nikaia.contracts")).ok();
+        if self.warned && now != self.committed {
+            return;
+        }
+        let choices =
+            self.choices
+                .proving(block_on(project_members::project_members_proofs_digest(
+                    &self.root,
+                    &ForeignHost,
+                )));
+        let stored = Cache::open(
+            &self.lock,
+            &self.store,
+            env!("NIKAIA_RUSTC_VERSION"),
+            crate::compiler_identity(),
+        )
+        .and_then(|mut cache| {
+            cache.record(
+                &self.unit,
+                &self.source,
+                self.reads,
+                &choices,
+                &self.artifacts,
+            )?;
+            cache.save()
+        });
+        if let Err(error) = stored {
+            eprintln!("warning: the build cache could not be updated: {error:#}");
+        }
+    }
 }
 
 /// **What the check of a program's units reads once** (`check_open`), for
@@ -1181,6 +1258,46 @@ struct Checking {
 type HostResult<T> = std::result::Result<T, Box<dyn std::error::Error>>;
 
 impl LowerHost<'_> {
+    /// The artifacts `made` is stored as in the cache.
+    fn artifacts_of(&self, made: &project_lower::ProjectLowerArtifacts) -> Artifacts {
+        let lost: Vec<&str> = made
+            .lost
+            .iter()
+            .flat_map(|lost| [lost.key.as_str(), lost.said.as_str()])
+            .collect();
+        let theirs: Vec<&str> = made.theirs.iter().map(String::as_str).collect();
+        // An empty map is correct and usual: with no list in effect nothing
+        // can be read at all.
+        let mut artifacts = Artifacts::new()
+            .with(RUST, &made.rust)
+            .with(CONTRACTS, &made.ledger)
+            .with(DERIVED, &made.derived)
+            .with(WARNINGS, &made.warnings)
+            .with(PROMISE, &made.promise)
+            .with(LOST, entry_text(&lost))
+            .with(KEEPERS, keepers_entry(&made.keepers))
+            .with(THEIRS, entry_text(&theirs));
+        if self.settings.library() {
+            let said = self.export_said();
+            let exported = self.exported.borrow();
+            let fields: Vec<&str> = match exported.as_ref() {
+                None => vec![&said],
+                Some(e) => vec![&said, &e.rust, &e.header, &e.python, &e.node, &e.java],
+            };
+            artifacts = artifacts.with(EXPORTED, entry_text(&fields));
+        }
+        artifacts
+    }
+
+    /// What the build read, as the cache records it.
+    fn reads_taken(&self) -> BTreeMap<std::string::String, std::string::String> {
+        self.reads
+            .taken()
+            .into_iter()
+            .map(|(read, digest)| (read.into(), digest.into()))
+            .collect()
+    }
+
     /// **The binding of `nikaia bind` narrowed to its features** (ADR-393
     /// D5): with `[features]`, the bindings are written again over the entry
     /// points the core and the chosen features reach in the lowered `rust`
@@ -1495,45 +1612,16 @@ impl project_lower::ProjectLowerHost for LowerHost<'_> {
     }
 
     fn record(&self, made: &project_lower::ProjectLowerArtifacts) {
+        let artifacts = self.artifacts_of(made);
         let mut cache = self.cache.borrow_mut();
         let Some(cache) = cache.as_mut() else {
             return;
         };
-        let lost: Vec<&str> = made
-            .lost
-            .iter()
-            .flat_map(|lost| [lost.key.as_str(), lost.said.as_str()])
-            .collect();
-        let theirs: Vec<&str> = made.theirs.iter().map(String::as_str).collect();
-        // An empty map is correct and usual: with no list in effect nothing
-        // can be read at all.
-        let mut artifacts = Artifacts::new()
-            .with(RUST, &made.rust)
-            .with(CONTRACTS, &made.ledger)
-            .with(DERIVED, &made.derived)
-            .with(WARNINGS, &made.warnings)
-            .with(PROMISE, &made.promise)
-            .with(LOST, entry_text(&lost))
-            .with(KEEPERS, keepers_entry(&made.keepers))
-            .with(THEIRS, entry_text(&theirs));
-        if self.settings.library() {
-            let said = self.export_said();
-            let exported = self.exported.borrow();
-            let fields: Vec<&str> = match exported.as_ref() {
-                None => vec![&said],
-                Some(e) => vec![&said, &e.rust, &e.header, &e.python, &e.node, &e.java],
-            };
-            artifacts = artifacts.with(EXPORTED, entry_text(&fields));
-        }
         let stored = cache
             .record(
                 &self.unit,
                 &self.key_source.borrow(),
-                self.reads
-                    .taken()
-                    .into_iter()
-                    .map(|(read, digest)| (read.into(), digest.into()))
-                    .collect(),
+                self.reads_taken(),
                 &self.choices(),
                 &artifacts,
             )
@@ -1542,6 +1630,25 @@ impl project_lower::ProjectLowerHost for LowerHost<'_> {
             // The outputs are in hand; only the next build is slower.
             eprintln!("warning: the build cache could not be updated: {error:#}");
         }
+    }
+
+    fn record_once_proofs_written(&self, made: &project_lower::ProjectLowerArtifacts) {
+        // Without a cache there is nothing to record, now or later.
+        if self.cache.borrow().is_none() {
+            return;
+        }
+        *self.pending.borrow_mut() = Some(PendingRecord {
+            lock: self.layout.lock.clone(),
+            store: self.layout.store.clone(),
+            root: self.layout.root.clone(),
+            unit: self.unit.clone(),
+            source: self.key_source.borrow().clone(),
+            reads: self.reads_taken(),
+            choices: self.choices().clone(),
+            artifacts: self.artifacts_of(made),
+            warned: !made.warnings.is_empty(),
+            committed: std::fs::read_to_string(self.layout.root.join("nikaia.contracts")).ok(),
+        });
     }
 
     fn proofs_settled(&self) -> bool {
@@ -4112,12 +4219,17 @@ impl project_drive::ProjectDriveHost for DriveHost<'_> {
     fn write_ledgers(&self, at: i64, locked: bool) -> HostResult<()> {
         let members = self.members.borrow();
         let root = &members[at as usize].root;
-        let kept = self.kept.borrow();
-        let lowered = &kept[&at];
+        let mut kept = self.kept.borrow_mut();
+        let lowered = kept.get_mut(&at).expect("the member is lowered first");
         self.held((|| {
             write_ledger(&root.join("nikaia.contracts"), &lowered.ledger, locked)?;
             write_ledger(&root.join("nikaia.derived"), &lowered.derived, locked)?;
-            write_proofs(root, lowered.proofs.as_ref(), locked)
+            write_proofs(root, lowered.proofs.as_ref(), locked)?;
+            // **Now the entry its key names exists** (#2446).
+            if let (Some(pending), Some(book)) = (lowered.pending.take(), lowered.proofs.as_ref()) {
+                pending.record(book);
+            }
+            Ok(())
         })())
     }
 

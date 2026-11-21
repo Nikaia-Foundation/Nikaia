@@ -46,7 +46,7 @@ pub use nikaia_std::compiler::emit_build::{BoundsChecks, OverflowChecks};
 /// What the walk proved: index nodes ([`crate::check::value_node`] of the
 /// indexed `base`) and arithmetic operators (by the byte their operator
 /// starts at).
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct Proven {
     pub indices: HashSet<i64>,
     pub arithmetic: HashSet<i64>,
@@ -97,6 +97,153 @@ pub fn proven(
     )
 }
 
+/// **A unit's proof, made once for its ledger and taken by its lowering**
+/// ([ADR-361](../../docs/specification/adr/adr-361.md) D16): the ledger's
+/// panics inference proves a unit through loops ([`proven_for_lowering`]),
+/// and the lowering takes that proof ([`proven_taken`]) where it would ask
+/// the same question, by the same parsed file, the same files beside it, the
+/// same checker facts the walks read and the same contracts. Where any of
+/// them differs (a build that leaves values, a ledger without the unit, a
+/// published `ensures` the ledger did not hold) the lowering asks again.
+static LEDGER_PROOFS: std::sync::Mutex<Option<HashMap<usize, Kept>>> = std::sync::Mutex::new(None);
+
+/// A kept proof: the question it answered ([`question_of`]) and its answer.
+type Kept = (Vec<u64>, Proven);
+
+/// [`proven`] through loops, with the answer kept for the unit's lowering.
+pub fn proven_for_lowering(
+    parsed: &Parsed,
+    beside: &[&Parsed],
+    facts: &crate::check::CheckFacts,
+    ledgers: &[&crate::contracts::Ledger],
+) -> Proven {
+    let out = proven(parsed, beside, facts, ledgers, &BTreeSet::new(), true);
+    let question = question_of(parsed, beside, facts, ledgers);
+    if let Ok(mut kept) = LEDGER_PROOFS.lock() {
+        kept.get_or_insert_with(HashMap::new)
+            .insert(unit_of(parsed), (question, out.clone()));
+    }
+    out
+}
+
+/// [`proven`] through loops, or the ledger's answer to the same question.
+pub fn proven_taken(
+    parsed: &Parsed,
+    beside: &[&Parsed],
+    facts: &crate::check::CheckFacts,
+    ledgers: &[&crate::contracts::Ledger],
+) -> Proven {
+    let held = LEDGER_PROOFS
+        .lock()
+        .ok()
+        .and_then(|mut kept| kept.as_mut()?.remove(&unit_of(parsed)));
+    if let Some((question, proven)) = held
+        && question == question_of(parsed, beside, facts, ledgers)
+    {
+        return proven;
+    }
+    proven(parsed, beside, facts, ledgers, &BTreeSet::new(), true)
+}
+
+/// A unit by its items, whose addresses the proof's counters are keyed by.
+fn unit_of(parsed: &Parsed) -> usize {
+    parsed.program.items.as_ptr() as usize
+}
+
+/// **What a proof of `parsed` reads**, as one number: the unit and the files
+/// beside it by address, the facts `tools/bounds_proven.nika` reads, and of
+/// each ledger, in order, what `tools/bounds_matched.nika` reads of a
+/// function (its signature, `ensures`, `ensures_each`, `requires`, `from`).
+fn question_of(
+    parsed: &Parsed,
+    beside: &[&Parsed],
+    facts: &crate::check::CheckFacts,
+    ledgers: &[&crate::contracts::Ledger],
+) -> Vec<u64> {
+    use std::fmt::Write as _;
+    use std::hash::Hasher as _;
+    let mut files = Digest(std::hash::DefaultHasher::new());
+    let _ = write!(files, "{} {}", unit_of(parsed), parsed.program.items.len());
+    for other in beside.iter().filter(|p| !std::ptr::eq(**p, parsed)) {
+        let _ = write!(files, " {}", unit_of(other));
+    }
+    let mut read = Digest(std::hash::DefaultHasher::new());
+    let _ = write!(
+        read,
+        "{:?}",
+        (
+            (
+                &facts.std_lengths,
+                &facts.sized_lengths,
+                &facts.char_codes,
+                &facts.std_receivers,
+                &facts.simd_loads,
+                &facts.shifts,
+                &facts.divisions,
+                &facts.arithmetic,
+                &facts.negations,
+                &facts.whole_fields,
+            ),
+            (
+                &facts.whole_types,
+                &facts.whole_loops,
+                &facts.whole_parts,
+                &facts.array_lengths,
+                &facts.comptime_values,
+                &facts.list_indices,
+                &facts.text_bytes,
+                &facts.text_scalars,
+                &facts.summaries,
+            ),
+        )
+    );
+    [files.0.finish(), read.0.finish()]
+        .into_iter()
+        .chain(ledgers.iter().map(|ledger| ledger_digest(ledger)))
+        .collect()
+}
+
+/// What [`question_of`] reads of one ledger; `std`'s, the same in every
+/// question, worked out once.
+fn ledger_digest(ledger: &crate::contracts::Ledger) -> u64 {
+    static STD: std::sync::OnceLock<u64> = std::sync::OnceLock::new();
+    let digest = || {
+        use std::fmt::Write as _;
+        use std::hash::Hasher as _;
+        let mut out = Digest(std::hash::DefaultHasher::new());
+        for (key, c) in &ledger.functions {
+            let _ = write!(
+                out,
+                "{key:?}{:?}",
+                (
+                    &c.signature,
+                    &c.ensures,
+                    &c.ensures_each,
+                    &c.requires,
+                    &c.from
+                )
+            );
+        }
+        out.0.finish()
+    };
+    if std::ptr::eq(ledger, crate::contracts::std_ledger()) {
+        *STD.get_or_init(digest)
+    } else {
+        digest()
+    }
+}
+
+/// A hasher written to as text, so a `Debug` form is hashed without being
+/// built.
+struct Digest(std::hash::DefaultHasher);
+
+impl std::fmt::Write for Digest {
+    fn write_str(&mut self, s: &str) -> std::fmt::Result {
+        std::hash::Hasher::write(&mut self.0, s.as_bytes());
+        Ok(())
+    }
+}
+
 /// [`proven`], with the goals of the bytes `trace` (`[from, to]` of the
 /// line `--bounds-trace` asks about, #1495) written into `Proven::trace`.
 pub fn proven_traced(
@@ -112,7 +259,15 @@ pub fn proven_traced(
     let all = nikaia_std::compiler::bounds_proven::bounds_proven(
         &parsed.program,
         &parsed.interner,
-        &beside.iter().map(|p| p.bounds_beside()).collect::<Vec<_>>(),
+        // **Only the other files** (ADR-391 D1): a caller that hands the
+        // whole package (`modules.rs`, the emitter's `ContractsHost`) names
+        // this file among them, and read beside itself each field it declares
+        // is "declared in a file beside", no rule's candidate (#2447).
+        &beside
+            .iter()
+            .filter(|p| !std::ptr::eq(**p, parsed))
+            .map(|p| p.bounds_beside())
+            .collect::<Vec<_>>(),
         facts,
         ledgers,
         nonnegative,

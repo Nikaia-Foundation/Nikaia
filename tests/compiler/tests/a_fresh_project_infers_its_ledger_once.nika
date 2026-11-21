@@ -1,0 +1,74 @@
+// #2446: a program built in a fresh project, with no `nikaia.proofs` yet,
+// had its ledger inferred twice in one build. The committed proofs are in
+// the cache key (ADR-270 D4, D22), and the driver's lowering left the file
+// to be written, so it recorded no entry (#1569) and the build's `rustc`
+// wrapper missed and inferred the ledger again. The entry is now recorded
+// once the file is written, under the key that names it: the build's trace
+// (`NIKAIA_WRAPPER_TRACE`) says `ledger inferred` once, as #2395 asks of
+// every build, and a second build infers nothing.
+use std::env
+use std::fs
+use std::process
+
+fn toolchain() -> String throws {
+	let exe = env::current_exe()?.display() ?? ""
+	if exe.len() == 0 {
+		eprintln("no running nikaia among this program's ancestors: run it with `nikaia test` (#1305)")
+		process::exit(2)
+	}
+	return exe
+}
+
+// The ledgers inferred since the last call, and the trace emptied.
+fn inferred(trace: ref fs::Root) -> String throws {
+	let said = process::run(
+		"sh",
+		["-c", f"grep ' ledger inferred' {trace.path().to_text()} | sort; rm -f {trace.path().to_text()}"],
+	).stdout.trim().clone()
+	if said.len() == 0 { return "none inferred" }
+	return said.replace("\n", ", ")
+}
+
+fn build(nikaia: String, p: String, cache: ref fs::Root, trace: ref fs::Root) -> i64 throws {
+	let built = process::run(
+		nikaia,
+		["build"]; dir: p.clone(),
+		env: [
+			("RUST_BACKTRACE", "0"),
+			("CARGO_TERM_COLOR", "never"),
+			("NIKAIA_CACHE_DIR", cache.path().to_text()),
+			("NIKAIA_WRAPPER_TRACE", trace.path().to_text()),
+		],
+	)
+	if built.code != 0 {
+		eprintln(built.stderr)
+	}
+	return built.code
+}
+
+fn main() throws {
+	let tmp = fs::scratch()
+	let nikaia = toolchain()
+	let cache = tmp.join("cache")
+	let trace = tmp.join("trace")
+	process::run("mkdir", ["-p", f"{tmp.path().to_text()}/app/src"])
+	fs::write(
+		"app/nikaia.toml",
+		tmp,
+		"[package]\nname = \"app\"\nversion = \"0.1.0\"\n",
+	)
+	fs::write(
+		"app/src/main.nika",
+		tmp,
+		"fn main() throws {\n\tprintln(\"one\")\n}\n",
+	)
+	let app = tmp.join("app")
+	let first = build(nikaia, app.path().to_text(), cache, trace)
+	let proofs = fs::exists("app/nikaia.proofs", tmp)
+	println(f"fresh: built {first}, nikaia.proofs written {proofs}: {inferred(trace)}")
+	// Cargo's record of a fresh crate dropped: the wrapper lowers the crate
+	// again, and the cache answers.
+	process::run("sh", ["-c", "find target -name cargo-fresh -delete"]; dir: app.path().to_text())
+	let again = build(nikaia, app.path().to_text(), cache, trace)
+	println(f"wrapper again: built {again}: {inferred(trace)}")
+}

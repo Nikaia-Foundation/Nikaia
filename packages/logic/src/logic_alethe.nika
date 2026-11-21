@@ -606,7 +606,7 @@ fn lg_below(mut search: LgSearch, depth: i64, mut chosen: Vec[LgPart]) -> LgBelo
 /// structure is one Alethe can take apart, and it has no more than a fixed
 /// number of choices. Nothing otherwise.
 pub fn lg_alethe_write(source: ref TermArena, facts: ref Vec[i64], goal: i64) -> String? sync {
-    let mut arena = TermArena { nodes: source.nodes.clone() }
+    let mut arena = source.clone()
     let mut proof = LgProof { text: "", count: 0 }
     // 1. The assumptions, exactly as the script asserts them, and the clauses of
     //    literals they come to.
