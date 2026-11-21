@@ -82,6 +82,11 @@ fn sv_fits32(k: i64) -> bool {
 fn sv_content(ks: ref Vec[i64]) -> i64? {
 	let mut g: i64 = 0
 	for k in ks {
+		// One division where `g` divides `k`, which leaves it as it is
+		// (#2401: a pivot reduces every row it changes).
+		if g > 0 && k % g == 0 {
+			continue
+		}
 		g = sv_gcd(g, k) ?? return null
 		if g == 1 {
 			return 1
