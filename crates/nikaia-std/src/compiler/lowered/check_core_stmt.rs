@@ -40,6 +40,15 @@ pub(crate) fn check_core_stmt_an_index(read: &Expr) -> bool { matches!(read, Exp
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
+pub(crate) fn check_core_stmt_a_map_index(state: &CheckState, read: &Expr) -> bool {
+    match read {
+        Expr::Index { base, .. } => { let base = nikaia_std::boxed::open(base); state.facts.map_indices.contains(&(id_of(base) as i64)) },
+        _ => false,
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
 pub(crate) fn check_core_stmt_got(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, value: &Expr) -> bool {
     match value {
         Expr::Coalesce { value: read, fallback, .. } => { let read = nikaia_std::boxed::open(read); let fallback = nikaia_std::boxed::open(fallback); check_core_stmt_a_get(world, read) && (state.jumps(world, fallback) || check_core_stmt_got(state, world, fallback)) },
@@ -1442,7 +1451,7 @@ pub(crate) fn check_core_stmt_assign<H: CheckHost>(state: &mut CheckState, world
         if state.a_text_slot_name(world, target) { into = Ty::Named { name: nikaia_std::block::Text::from(TEXT.to_string()), args: vec![], view: false }; } else if !of_text { into = unviewed_type(&into); }
     }
     check_narrow_written_through(state, target);
-    if check_core_stmt_an_index(target) {
+    if check_core_stmt_a_map_index(&state, target) {
         let slot: Ty = match into {
             Ty::Nullable(ref inner) => { let inner = nikaia_std::boxed::open(inner); inner.clone() },
             _ => into.clone(),

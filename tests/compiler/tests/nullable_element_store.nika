@@ -1,0 +1,44 @@
+// An element of a `Vec[T?]` holds a `T?`: `null` and a `T?` are stored
+// into it through an index, on a local and on a field (#1296).
+use std::collections
+
+struct A {
+	x: i64
+}
+
+struct B {
+	sides: Vec[A?]
+}
+
+struct C {
+	near: i64?
+}
+
+fn main() throws {
+	let mut w: Vec[i64?] = [1, 2]
+	w[0] = null
+	let n: i64? = null
+	w[1] = n
+	println(f"{w[0] == null} {w[1] == null}")
+	let some: i64? = 7
+	w[1] = some
+	println(f"{w[1] ?? 0}")
+	let mut b = B { sides: [A { x: 1 }, A { x: 2 }] }
+	b.sides[1] = null
+	let a: A? = null
+	b.sides[0] = a
+	println(f"{b.sides[1] == null} {b.sides[0] == null}")
+	b.sides[0] = A { x: 5 }
+	let first: A? = b.sides[0]
+	println(f"{(first ?? A { x: 0 }).x}")
+	let mut cs: Vec[C] = [C { near: 3 }]
+	cs[0].near = null
+	println(f"{cs[0].near == null}")
+	let mut m: collections::HashMap[String, i64?] = collections::HashMap()
+	m["a"] = null
+	m["b"] = 4
+	println(f"{m.len()}")
+	let mut k: collections::HashMap[String, i64] = collections::HashMap()
+	k["a"] = 1
+	println(f"{k["a"] ?? 0}")
+}
