@@ -1,0 +1,41 @@
+// An inner scan that starts at a name the outer counter was copied to
+// (#2453): `let start = i` and `let mut j = start` tie `j` to `i >= 0` by
+// two equalities, so `bs[j]`, the scan back to `start` and the run of
+// spaces after a break are proved, as packages/yaml's `fold` needs
+// (ADR-361 D2, D13).
+fn fold(raw: String) -> i64 sync {
+	let bs = raw.bytes
+	let n = bs.len() as i64
+	let mut kept = 0
+	let mut i = 0
+	while i < n {
+		let start = i
+		let mut j = start
+		while j < n && bs[j] != 10 && bs[j] != 39 {
+			j += 1
+		}
+		if j >= n {
+			kept = j
+			break
+		}
+		if bs[j] == 39 {
+			kept = j
+			i = j + 2
+			continue
+		}
+		let mut e = j
+		while e > start && bs[e - 1] == 32 {
+			e -= 1
+		}
+		kept = e
+		i = j + 1
+		while i < n && (bs[i] == 32 || bs[i] == 10) {
+			i += 1
+		}
+	}
+	return kept
+}
+
+fn main() throws {
+	println(fold("ab  \n  c''d\n\ne"))
+}

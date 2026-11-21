@@ -8,6 +8,13 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1510] — 2026-11-21
+
+**Builders' changes (#2453, #2455)**
+- yaml flow scalars that fold over lines copy their runs at text positions instead of checking each run as UTF-8 again; the bounds prover follows an equality to the loop that changes a name (`let start = i; let mut j = start`)
+- Bounds: an inner scan that starts at a name the outer counter was copied to (`let start = i; let mut j = start`) keeps its indexes proved (ADR-361 D2, #2453)
+- Bounds: an index of an inner scan whose counter starts at the outer `while` counter (`let mut j = i ... i = j + 1`) is proved; a goal left open asks each loop a chain of snapshot facts ties it to (ADR-361 D2, #2455)
+
 ## [0.0.1509] — 2026-11-21
 
 **A position moves only in a unit it names: forward/back(scalars:|graphemes:|bytes:), handed the text the compiler follows it to (ADR-374 D4, D5)**

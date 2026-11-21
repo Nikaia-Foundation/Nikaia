@@ -412,7 +412,7 @@ signature = "(k: TagKind, v: ref Node) -> bool"
 
 [fn."fold"]
 sync = true
-panics = false
+panics = true
 touches = []
 views = ["raw: borrowed"]
 signature = "(raw: ref String, single: bool) -> String"

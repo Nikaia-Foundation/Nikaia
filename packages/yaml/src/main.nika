@@ -2855,7 +2855,10 @@ fn block(raw: String, indent: i64, chomp: Chomp, folded: bool) -> String sync {
 // The bytes `a..<b` of `t` onto `out`. The caller ends both at an ASCII byte
 // it tested or at an end of `t`, so each is a scalar boundary: the cut moves
 // by bytes (ADR-374 D4) and copies the text without checking it as UTF-8
-// again, as a cut of the bytes back into text would (#2453).
+// again, as a cut of the bytes back into text would (#2453). Inlined into
+// its two callers, `block` and `fold`: out of line, the call costs more than
+// the check it saves (callgrind, events.off, ADR-370).
+@inline(always)
 fn push_between(mut out: String, t: String, a: i64, b: i64) sync {
 	let p = t.start().forward(bytes: a) ?? return
 	let q = t.start().forward(bytes: b) ?? return
@@ -2865,8 +2868,9 @@ fn push_between(mut out: String, t: String, a: i64, b: i64) sync {
 // Folds the lines of a flow scalar: the spaces around a line break go, one
 // break is a space, each further (empty) line a line break; in a
 // single-quoted one `''` is `'`. Every byte it decides on is ASCII, so it
-// walks the bytes in place (ADR-320 D6) and copies the runs between them as
-// slices; a scalar with nothing to fold is its raw text, copied in one.
+// walks the bytes in place (ADR-320 D6) and copies the runs between them at
+// text positions (`push_between`); a scalar with nothing to fold is its raw
+// text, copied in one.
 fn fold(raw: String, single: bool) -> String sync {
 	let bs = raw.bytes
 	let n = bs.len() as i64
@@ -2884,12 +2888,12 @@ fn fold(raw: String, single: bool) -> String sync {
 				// Nothing to fold: the raw text, valid already.
 				return raw.clone()
 			}
-			out.push_str(bs[start..<j].text() catch { "" })
+			push_between(out, raw, start, j)
 			break
 		}
 		if bs[j] == 39 {
 			// `''` is `'`.
-			out.push_str(bs[start..<j].text() catch { "" })
+			push_between(out, raw, start, j)
 			out.push('\'')
 			i = j + 2
 			continue
@@ -2899,7 +2903,7 @@ fn fold(raw: String, single: bool) -> String sync {
 		while e > start && (bs[e - 1] == 32 || bs[e - 1] == 9) {
 			e -= 1
 		}
-		out.push_str(bs[start..<e].text() catch { "" })
+		push_between(out, raw, start, e)
 		// One break is a space, each further one (an empty line) a break.
 		i = j + 1
 		let mut breaks = 0
