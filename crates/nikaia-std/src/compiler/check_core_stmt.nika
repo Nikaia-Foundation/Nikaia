@@ -4079,13 +4079,19 @@ fn check_async_binding(mut state: CheckState, world: ref CheckWorld, block: ref 
         wanted.insert(world.words.resolve(name).clone())
     }
     let mut named = count
+    // The tasks that name it, each waiting for it in itself (D8).
+    let mut readers = 0
     let mut index = 0
     for stmt in block.stmts {
-        if index > at && named == count && !starts_a_task(stmt.node) {
+        if index > at && named == count {
             let mut seen: collections::BTreeSet[String] = collections::BTreeSet()
             names_in_statement(stmt.node, world.words, seen)
             for name in wanted {
                 if seen.contains(name) {
+                    if starts_a_task(stmt.node) {
+                        readers += 1
+                        break
+                    }
                     named = index
                 }
             }
@@ -4093,6 +4099,9 @@ fn check_async_binding(mut state: CheckState, world: ref CheckWorld, block: ref 
         index += 1
     }
     if named == count {
+        if readers > 1 {
+            state.facts.async_shared.insert(id_of(task) as i64)
+        }
         state.facts.async_waits.insert(id_of(task) as i64, CheckAsyncWait { at: CheckAsyncWaitAt::GroupEnd, group: group })
         if last && others == 0 {
             state.a_task_with_nothing_beside_it(span, "nothing names its binding, and it is the last statement of its group, which waits for it at once")
