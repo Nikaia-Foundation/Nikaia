@@ -254,7 +254,7 @@ pub fn check_core_flow_meet(mut state: CheckState, world: ref CheckWorld, expr: 
     return Ty::Unknown
 }
 
-/// **`unsafe { … }`** (ADR-302 D3): a block whose calls may name an `extern`.
+/// **`unsafe { … }`** (ADR-c-boundary-v1 D3): a block whose calls may name an `extern`.
 pub fn check_core_flow_unsafe[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, block: ref Block) -> Ty sync {
     let outer = state.inside_unsafe
     state.inside_unsafe = true

@@ -1,8 +1,8 @@
 //! What the C boundary lends: a view, and no raw pointer
-//! ([ADR-302](../../../docs/specification/adr/adr-302.md) D5).
+//! ([ADR-c-boundary-v1](../../../docs/specification/adr/adr-c-boundary-v1.md) D5).
 //!
 //! `extern { fn malloc(size: usize) -> Pointer[u8] }` was refused with
-//! `NK1135`, and [ADR-302](../../../docs/specification/adr/adr-302.md) left
+//! `NK1135`, and [ADR-c-boundary-v1](../../../docs/specification/adr/adr-c-boundary-v1.md) left
 //! it that way on purpose — *a pointer that outlives what it points at wants a
 //! record with a lifetime story, not a name.* What that cost was most of C:
 //! every function whose signature has a pointer in it was unwritable, so
@@ -162,7 +162,7 @@ fn the_shapes_do_not_fit_each_other() {
 /// **`ref mut` is the C boundary's and nowhere else's** (`NK1158`), and since
 /// 0.0.127 that is the whole of the rule
 /// ([ADR-179](../../../docs/specification/adr/adr-179.md) D1, which supersedes
-/// [ADR-302](../../../docs/specification/adr/adr-302.md) D5 in part).
+/// [ADR-c-boundary-v1](../../../docs/specification/adr/adr-c-boundary-v1.md) D5 in part).
 ///
 /// A parameter this language may change is written `mut name: T`
 /// ([ADR-094](../../../docs/specification/adr/adr-094.md) D3) — the word goes
@@ -450,7 +450,7 @@ fn an_opaque_handle_is_an_address_and_a_cleanup() {
     // a handle **is** the address, so what C is handed is the pointer.
     assert!(rust.contains("#[repr(transparent)]"), "{rust}");
     // The hull is **non-null**, which is
-    // [ADR-302](../../../docs/specification/adr/adr-302.md) D11: a handle holds
+    // [ADR-c-boundary-v1](../../../docs/specification/adr/adr-c-boundary-v1.md) D11: a handle holds
     // an address and `T?` is the absence of one, so `Option<T>` is the same
     // machine word and `ref mut T?` is `T **`.
     assert!(
@@ -626,7 +626,7 @@ fn returned_text_is_copied_by_std() {
     let rust = lowered(source);
     // The declaration hands back the **address**, and the hull goes on at the
     // call, where the claim it made can be checked
-    // ([ADR-302](../../../docs/specification/adr/adr-302.md) D12). The copy is a
+    // ([ADR-c-boundary-v1](../../../docs/specification/adr/adr-c-boundary-v1.md) D12). The copy is a
     // `std` call with no `unsafe` of the program's own around it.
     assert!(
         rust.contains("fn getenv(name: *const u8) -> Option<nikaia_std::foreign::CText>;"),
@@ -710,7 +710,7 @@ fn main() throws {
 }
 
 /// **A handle that may be absent is a `T?`**
-/// ([ADR-302](../../../docs/specification/adr/adr-302.md) D10), meaning what it
+/// ([ADR-c-boundary-v1](../../../docs/specification/adr/adr-c-boundary-v1.md) D10), meaning what it
 /// means everywhere else: `??` and `?.` are how a program gets past it.
 #[test]
 fn a_handle_may_be_absent() {
@@ -888,14 +888,14 @@ fn main() throws {
 }
 
 /// **`sqlite3` from end to end**
-/// ([ADR-302](../../../docs/specification/adr/adr-302.md) step 5), which is
+/// ([ADR-c-boundary-v1](../../../docs/specification/adr/adr-c-boundary-v1.md) step 5), which is
 /// that record's own check that its four decisions are enough — for a **real
 /// library's** surface rather than for four libc calls.
 ///
 /// Everything the boundary offers is in `examples/sqlite/src/main.nika` and nothing
 /// else is: a buffer lent for the call, an opaque handle with its `cleanup`, a
 /// handle that may be absent filled through an out-parameter
-/// ([ADR-302](../../../docs/specification/adr/adr-302.md) D10), and text the
+/// ([ADR-c-boundary-v1](../../../docs/specification/adr/adr-c-boundary-v1.md) D10), and text the
 /// library owns copied once by `std`. What closes the database and the
 /// statement is written **nowhere**.
 ///
@@ -920,7 +920,7 @@ fn sqlite3_from_end_to_end() {
         // D3: a handle, its cleanup, and the lending.
         "impl Drop for sqlite3",
         "sqlite3_step(stmt.lent())",
-        // ADR-302 D10 and D11: the out-parameter, one pointer to one pointer.
+        // ADR-c-boundary-v1 D10 and D11: the out-parameter, one pointer to one pointer.
         "out: *mut Option<sqlite3>",
         "let mut slot: Option<sqlite3> = None;",
         // D4: text the library owns, copied by `std`.
