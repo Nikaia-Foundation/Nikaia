@@ -318,6 +318,11 @@ struct BoundsWalk {
 	/// not, never taken back by `bounding_back`: what a walk of
 	/// `rules_check` read of `context.around.field_bounds` (#2396).
 	assumed_read: collections::BTreeSet[String],
+	/// **The methods a call `self.m(…)` asked a result summary of**, each
+	/// with the key of `context.ensured` it found under `context.owner`,
+	/// or "" where none: what a walk of `rules_check` read of the owner
+	/// (#2396).
+	self_read: collections::BTreeMap[String, String],
 	/// The join of what this pass saw written, by key.
 	written: collections::BTreeMap[String, Range],
 	/// Keys a write this pass put something unbounded in.
@@ -850,6 +855,7 @@ fn bounding_new(
 		shape: shape,
 		assumed: context.around.field_bounds.clone(),
 		assumed_read: collections::BTreeSet(),
+		self_read: collections::BTreeMap(),
 		written: collections::BTreeMap(),
 		poisoned: collections::BTreeSet(),
 		assumed_ends: collections::BTreeMap(),
@@ -3504,10 +3510,16 @@ fn bounding_lin(
 			}
 			// **A call `self.m(…)` to the type's own method has its result
 			// summary** (ADR-359 D14, #1904), as the prover reads it.
-			if !context.owner.is_empty() && bounding_on_self(receiver, words) {
-				let summed = context.ensured[f"{context.owner}::{words.resolve(method)}"]
-				if summed != null {
-					return bounding_ensured(walk, summed ?? return null, args, facts, context, program, words)
+			if bounding_on_self(receiver, words) {
+				let called = words.resolve(method)
+				let asked = f"{context.owner}::{called}"
+				let found = !context.owner.is_empty() && context.ensured.contains_key(asked)
+				walk.self_read.insert(called.clone(), if found { asked.clone() } else { "" })
+				if found {
+					let summed = context.ensured[asked]
+					if summed != null {
+						return bounding_ensured(walk, summed ?? return null, args, facts, context, program, words)
+					}
 				}
 			}
 			// **What `std`'s ledger ensures of a method's result** (ADR-314

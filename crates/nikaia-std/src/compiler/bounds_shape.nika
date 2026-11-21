@@ -58,6 +58,10 @@ pub struct RulesChecked {
 	pub reads: collections::BTreeMap[String, BoundsReturns],
 	pub fields: collections::BTreeMap[String, Range],
 	pub absent: collections::BTreeSet[String],
+	/// The calls `self.m(…)` it read a summary of, by method, each with the
+	/// key of `context.ensured` found under `context.owner` ("" for none,
+	/// `BoundsWalk.self_read`): it serves only an owner that finds the same.
+	pub selves: collections::BTreeMap[String, String],
 	pub failed: collections::BTreeSet[i64],
 }
 
