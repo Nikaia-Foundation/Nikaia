@@ -854,7 +854,7 @@ pub(crate) fn check_core_stmt_let<H: CheckHost>(state: &mut CheckState, world: &
     let bytes_view = !mutable && names.len() == 1 && shape.is_empty() && state.a_text_bytes_view(world, value);
     let mut moved_out = false;
     let mut handing_refused = false;
-    if seen_through || element_view == 1 { check_core_stmt_lent_let(state, world, names, span); } else if any_named && !bytes_view && !(ty.is_none() && !mutable && names.len() == 1 && shape.is_empty() && state.a_lent_text_place(world, value, &found)) {
+    if seen_through || element_view == 1 { check_core_stmt_lent_let(state, world, names, span); } else if any_named && !bytes_view && !(ty.is_none() && !mutable && names.len() == 1 && shape.is_empty() && (state.a_lent_text_place(world, value, &found) || found == a_string_type() && state.a_place_of_a_lent_let(world, value))) {
         let to = format!("bound to `{}` by a `let`", nikaia_std::block::Text::from(bound_names.join("`, `")));
         let before = state.findings.len() as i64;
         state.hands_over(world, value, &found, &to, span);

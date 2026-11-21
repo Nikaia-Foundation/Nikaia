@@ -1107,9 +1107,10 @@ fn check_core_stmt_let[H: CheckHost](mut state: CheckState, world: ref CheckWorl
     let mut handing_refused = false
     if seen_through || element_view == 1 {
         check_core_stmt_lent_let(state, world, names, span)
-    } else if any_named && !bytes_view && !(ty == null && !mutable && names.len() == 1 && shape.len() == 0 && state.a_lent_text_place(world, value, found)) {
+    } else if any_named && !bytes_view && !(ty == null && !mutable && names.len() == 1 && shape.len() == 0 && (state.a_lent_text_place(world, value, found) || (found == a_string_type() && state.a_place_of_a_lent_let(world, value)))) {
         // A plain `let` over a `String` read through a `ref` parameter is a
-        // view of it (Part I 6.5, #839), bound so below.
+        // view of it (Part I 6.5, #839), bound so below; so is one read off a
+        // `let` over a place or a `for`'s element (#1991).
         let to = f"bound to `{bound_names.join("`, `")}` by a `let`"
         let before = state.findings.len()
         state.hands_over(world, value, found, to, span)

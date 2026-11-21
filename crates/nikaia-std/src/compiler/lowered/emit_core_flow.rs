@@ -912,6 +912,7 @@ impl EmitState {
             if either { out.push("nikaia_std::either_text::either("); }
             self.emit_expr(world, walk, out, host, held, depth, flow, scope)?;
             if either { out.push(")"); }
+            if !self.facts.wrapped.contains_key(&node_key(held)) && !self.facts.some_tails.contains(&node_key(held)) && self.either_into_owned(world, held, &scope.function, -1) { out.push(".into()"); }
             if flow.can_throw { out.push(")"); }
         } else if flow.can_throw { out.push("return Ok(())"); } else { out.push("return"); }
         Ok(())
