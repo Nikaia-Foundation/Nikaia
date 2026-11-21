@@ -48,11 +48,98 @@ pub(crate) fn check_walks_tasks_in<'a>(state: &CheckState, block: &'a Block, gro
                     let wait = match state.facts.async_waits.get(&(id_of(each) as i64)) { Some(__nikaia_value) => __nikaia_value, None => continue };
                     if wait.group == group { out.push(each); }
                 },
+                Expr::Spawn { child, .. } if { let child = *child; child } => {
+                    let wait = match state.facts.async_waits.get(&(id_of(each) as i64)) { Some(__nikaia_value) => __nikaia_value, None => continue };
+                    if wait.group == group { out.push(each); }
+                },
                 _ => { },
             }
         }
         if group >= 0 { for nested in check_visit_stmt_blocks(&stmt.node) { check_walks_tasks_in(state, nested, group, out); } }
     }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub(crate) struct CheckWalksWindow {
+    pub(crate) span: Span,
+    pub(crate) until: i64,
+}
+
+pub(crate) fn check_walks_the_child(expr: &Expr, id: u32) -> Option<bool> {
+    match expr {
+        Expr::Spawn { child, deferred, .. } if { let child = *child; child && id_of(expr) == id } => { let deferred = *deferred; Some(deferred) },
+        Expr::TryCatch { expr: guarded, .. } => { let guarded = nikaia_std::boxed::open(guarded); check_walks_the_child(guarded, id) },
+        _ => None,
+    }
+}
+
+pub(crate) fn check_walks_named_after(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, block: &Block, at: i64, names: &[String]) -> i64 {
+    let count = block.stmts.len() as i64;
+    let mut index: i64 = 0;
+    for stmt in block.stmts.iter() {
+        if index > at {
+            let mut seen: collections::BTreeSet<String> = collections::BTreeSet::new();
+            names_in_statement(&stmt.node, world.words, &mut seen);
+            for name in names.iter() { if seen.contains(name) { return index; } }
+        }
+        index = unsafe { nikaia_std::proven::add::<i64>(index, 1) };
+    }
+    count
+}
+
+pub(crate) fn check_walks_starts_the_handle(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, stmt: &Stmt, names: &[String]) -> bool {
+    if names.len() != 1 { return false; }
+    match stmt {
+        Stmt::Expr(value) => match value {
+            Expr::MethodCall { receiver, method, args, .. } if { let method = *method; args.is_empty() && ::core::convert::identity(match (AsRef::<str>::as_ref(&(world.words.resolve(method))), AsRef::<str>::as_ref(&("start")), ) { (__nikaia_f0, __nikaia_t, ) => __nikaia_t.len() == __nikaia_f0.len() && __nikaia_t.strip_prefix(__nikaia_f0).is_some() }) } => { let receiver = nikaia_std::boxed::open(receiver); match receiver {
+                Expr::Variable(word, _) => { let word = *word; ::core::convert::identity(match (AsRef::<str>::as_ref(&(world.words.resolve(word))), AsRef::<str>::as_ref(&(*unsafe { nikaia_std::proven::read(&names, (0) as usize) })), ) { (__nikaia_f0, __nikaia_t, ) => __nikaia_t.len() == __nikaia_f0.len() && __nikaia_t.strip_prefix(__nikaia_f0).is_some() }) },
+                _ => false,
+            } },
+            _ => false,
+        },
+        _ => false,
+    }
+}
+
+pub(crate) fn check_walks_child_window(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, block: &Block, id: u32) -> Option<CheckWalksWindow> {
+    let count = block.stmts.len() as i64;
+    let mut at: i64 = 0;
+    for stmt in block.stmts.iter() {
+        let mut names: Vec<String> = vec![];
+        let mut deferred: Option<bool> = None;
+        match &stmt.node {
+            Stmt::Let { names: bound, value, .. } => {
+                deferred = check_walks_the_child(value, id);
+                names.reserve(bound.iter().size_hint().0); for name in bound.iter() {
+                    let name = *name;
+                    names.push(nikaia_std::block::Text::from(world.words.resolve(name).to_string()));
+                }
+            },
+            Stmt::Expr(value) => { deferred = check_walks_the_child(value, id); },
+            _ => { },
+        }
+        if deferred.is_none() {
+            for nested in check_visit_stmt_blocks(&stmt.node) {
+                let found = check_walks_child_window(world, nested, id);
+                if found.is_some() { return std::convert::identity(found); }
+            }
+            at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
+            continue;
+        }
+        let late = check_walks_named_after(world, block, at, &names);
+        if !nikaia_std::index::or(deferred, || false) {
+            let here = match world.here.spans.get(&id) { Some(__nikaia_value) => __nikaia_value, None => return None };
+            let mut until: i64 = 4611686018427387904i64;
+            if late < count { until = unsafe { nikaia_std::proven::read(&block.stmts, (late) as usize) }.span.start as i64; }
+            return Some(CheckWalksWindow { span: Span { start: here.start, end: here.end }, until });
+        }
+        if late >= count || !check_walks_starts_the_handle(world, &unsafe { nikaia_std::proven::read(&block.stmts, (late) as usize) }.node, &names) { return None; }
+        let after = check_walks_named_after(world, block, late, &names);
+        let mut until: i64 = 4611686018427387904i64;
+        if after < count { until = unsafe { nikaia_std::proven::read(&block.stmts, (after) as usize) }.span.start as i64; }
+        return Some(CheckWalksWindow { span: unsafe { nikaia_std::proven::read(&block.stmts, (late) as usize) }.span.clone(), until });
+    }
+    None
 }
 
 pub(crate) fn check_walks_task(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, walking: &Walking<'_, '_>, id: u32, inner: &Expr) -> Option<CheckWalksTask> {
@@ -306,6 +393,11 @@ impl CheckState {
                     let inner = nikaia_std::boxed::open(inner);
                     let task = match check_walks_task(self, world, &walking, id_of(each), inner) { Some(__nikaia_value) => __nikaia_value, None => continue };
                     tasks.push(task);
+                },
+                Expr::Spawn { body, .. } => {
+                    let body = nikaia_std::boxed::open(body);
+                    let window = match check_walks_child_window(world, block, id_of(each)) { Some(__nikaia_value) => __nikaia_value, None => continue };
+                    tasks.push(CheckWalksTask { span: window.span, until: window.until, operations: check_walks_task_operations(self, body, world.words, &walking) });
                 },
                 _ => { },
             }

@@ -1,0 +1,10 @@
+// A deferred handle's window begins at its `start()` (ADR-async-5 D12): a
+// `println` before it runs alone, one after it meets the task's on stdout,
+// NK2104 (#2643).
+fn main() throws {
+	let mut h = async(deferred) fn { println("x") }
+	println("before")
+	h.start()
+	println("y")
+	h.join()
+}
