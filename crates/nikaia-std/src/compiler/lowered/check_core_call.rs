@@ -835,6 +835,7 @@ pub(crate) fn check_core_call_named_call<H: CheckHost>(state: &mut CheckState, w
         return Ty::Unknown;
     }
     let described = check_core_call_described(state, world, host, name, &key, &contract, args, &found, config, &passed, span);
+    let widened: Option<Ty> = if key.starts_with("Wide::") { state.wide_made(world, &key, args, &found, func, span) } else { None };
     if lanes && name == "simd::Fixed::from" && args.len() == 1 {
         state.facts.array_literals.insert(id_of(unsafe { nikaia_std::proven::read(&args, (0) as usize) }) as i64);
         let lanes_wanted = check_simd_count_of(&nikaia_std::index::or(match wanted.as_ref() {
@@ -844,7 +845,7 @@ pub(crate) fn check_core_call_named_call<H: CheckHost>(state: &mut CheckState, w
         let lanes_written = check_simd_count_of(&check_simd_made(None, name, args));
         if lanes_wanted > 0 && lanes_written > 0 && lanes_wanted != lanes_written { state.findings.push(a_list_the_wrong_length_for_its_array(lanes_written, lanes_wanted, span, false)); }
     }
-    let made = if lanes && described.is_unknown() { check_simd_made((wanted).as_ref(), name, args) } else { described };
+    let made = if widened.is_some() { nikaia_std::index::or(widened, || Ty::Unknown) } else if lanes && described.is_unknown() { check_simd_made((wanted).as_ref(), name, args) } else { described };
     if lanes && name == "simd::splat" && args.len() == 1 && !check_simd_kind(&made).is_empty() {
         let lane = match made {
             Ty::Named { args: ref lane_args, .. } => if !lane_args.is_empty() { (*unsafe { nikaia_std::proven::read(&lane_args, (0) as usize) }).clone() } else { Ty::Unknown },

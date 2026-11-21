@@ -1,0 +1,9 @@
+error[NK1102]: `Wide::of` expects `value` to be an integer of a fixed width, but you're passing `f64`.
+  --> tests/wide_takes_only_a_fixed_width_integer.nika:5:2
+   |
+ 5 | 	let w = Wide::of(x)
+   |  ^^^^^^^^^^^^^^^^^^^
+   |
+   = note: A `Wide[T]` is the exact value of twice the width of `T`, for `u8`, `u32`, `i32`, `u64` and `i64` (Part I 2.2).
+   = help: Pass one of those five types; an `int` is written `i64` here.
+1 type error

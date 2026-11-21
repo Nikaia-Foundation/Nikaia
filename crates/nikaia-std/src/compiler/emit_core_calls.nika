@@ -569,6 +569,9 @@ impl EmitState {
         if self.emit_call_assert(world, walk, out, host, func, args, config, depth, flow, scope) {
             return
         }
+        if self.emit_wide_call(world, walk, out, host, node_key(func), null, args, depth, flow, scope) {
+            return
+        }
         // **A kept function value called by name** is the closure it holds,
         // awaited where its type may pause and propagated where it may fail.
         if self.emit_call_kept(world, walk, out, host, func, args, depth, flow, scope) {
@@ -2180,6 +2183,10 @@ impl EmitState {
                 out.push(") as i64 as u32)")
                 return
             }
+        }
+        // **A method of `std`'s `Wide[T]`** (#2619, `emit_core_wide.nika`).
+        if self.emit_wide_call(world, walk, out, host, node_key(node), receiver, args, depth, flow, scope) {
+            return
         }
         // **`a.widening_mul(b)` is the product in the type of twice the
         // width, cut in two** (#1555): the low half as the unsigned type of

@@ -1,0 +1,110 @@
+// crates/nikaia-std/src/compiler/emit_core_wide.nika
+//
+// **`std`'s `Wide[T]` is the native type of twice the width** (Part I 2.2,
+// ADR-270 D11 as amended 2026-11-21, #2619): `i128` for an `i64`, `u128`
+// for a `u64`, `i64` for an `i32`, `u64` for a `u32` and `u16` for a `u8`,
+// as `widening_mul` already computes in it. No Rust type stands behind it,
+// so a `Wide` costs what the operation costs: `add` is the type's checked
+// add, `product` one multiply, `narrow` a `try_from`. The wider type is the
+// lowering's, not the program's (ADR-294 keeps `i128` out of the language).
+// The checker records each call's operation and `T`
+// (`CheckFacts.wide_calls`, `check_core_wide.nika`).
+
+/// **The native type of twice `T`'s width, the unsigned type of `T`'s
+/// width and `T`'s bits**: `("", "", 0)` for a `T` that has no `Wide`.
+pub fn emit_wide_native(element: ref String) -> (String, String, i64) sync {
+    return match element {
+        "u8" => ("u16", "u8", 8),
+        "u32" => ("u64", "u32", 32),
+        "i32" => ("i64", "u32", 32),
+        "u64" => ("u128", "u64", 64),
+        "i64" => ("i128", "u64", 64),
+        else => ("", "", 0),
+    }
+}
+
+impl EmitState {
+    /// **A call of `std`'s `Wide[T]`, written in the native type**: the
+    /// method call (`receiver` given) or the maker (`Wide::of`, `product`,
+    /// `from_halves`) whose node is `at`. False where the checker recorded
+    /// no such call there.
+    fn emit_wide_call[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, at: i64, receiver: ref Expr?, args: ref Vec[Expr], depth: i64, flow: EmitFlow, scope: ref EmitScope) -> bool sync throws {
+        let recorded: String = self.facts.wide_calls[at]?.clone() ?? return false
+        let (entry, element) = recorded.split_once(" ") ?? return false
+        let (wide, low, bits) = emit_wide_native(element)
+        if bits == 0 {
+            return false
+        }
+        let signed = element.starts_with("i")
+        let on: Expr? = receiver?.clone()
+        if on == null {
+            if entry == "of" && args.len() == 1 {
+                out.push("((")
+                self.emit_core_nested(world, walk, out, host, args[0], 0, depth, flow, scope)
+                out.push(f") as {wide})")
+                return true
+            }
+            if entry == "product" && args.len() == 2 {
+                out.push("((")
+                self.emit_core_nested(world, walk, out, host, args[0], 0, depth, flow, scope)
+                out.push(f") as {wide} * (")
+                self.emit_core_nested(world, walk, out, host, args[1], 0, depth, flow, scope)
+                out.push(f") as {wide})")
+                return true
+            }
+            if entry == "from_halves" && args.len() == 2 {
+                out.push("((((")
+                self.emit_core_nested(world, walk, out, host, args[1], 0, depth, flow, scope)
+                out.push(f") as {wide}) << {bits}) | ((")
+                self.emit_core_nested(world, walk, out, host, args[0], 0, depth, flow, scope)
+                out.push(f") as {low} as {wide}))")
+                return true
+            }
+            return false
+        }
+        let value: Expr = on ?? return false
+        // The receiver, bound once: each operation reads it once or twice.
+        out.push(f"{{ let __wide: {wide} = ")
+        self.emit_core_nested(world, walk, out, host, value, 0, depth, flow, scope)
+        out.push("; ")
+        if args.len() == 1 && (entry == "add" || entry == "sub") {
+            out.push(f"__wide.checked_{entry}(")
+            self.emit_core_nested(world, walk, out, host, args[0], 0, depth, flow, scope)
+            out.push(") }")
+            return true
+        }
+        if args.len() == 1 && entry == "mul" {
+            out.push("__wide.checked_mul((")
+            self.emit_core_nested(world, walk, out, host, args[0], 0, depth, flow, scope)
+            out.push(f") as {wide}) }}")
+            return true
+        }
+        if args.len() == 1 && (entry == "div_rem" || entry == "rem") {
+            out.push("let __by = (")
+            self.emit_core_nested(world, walk, out, host, args[0], 0, depth, flow, scope)
+            out.push(f") as {wide}; ")
+            if entry == "rem" {
+                // The rest of the least value by `-1` is `0`, though its
+                // quotient leaves the width: only `0` gives no rest.
+                out.push(f"if __by == 0 {{ None }} else {{ Some(__wide.wrapping_rem(__by) as {element}) }} }}")
+            } else {
+                out.push(f"match (__wide.checked_div(__by), __wide.checked_rem(__by)) {{ (Some(__q), Some(__r)) => Some((__q, __r as {element})), _ => None }} }}")
+            }
+            return true
+        }
+        if args.len() > 0 {
+            out.push("__wide }")
+            return true
+        }
+        let done = match entry {
+            "halves" => f"(__wide as {low}, (__wide >> {bits}) as {element}) }}",
+            "narrow" => f"{element}::try_from(__wide).ok() }}",
+            "sign" => if signed { "__wide.signum() as i64 }" } else { "(__wide != 0) as i64 }" },
+            "neg" => "__wide.checked_neg() }",
+            "abs" => "__wide.unsigned_abs() }",
+            else => "__wide }",
+        }
+        out.push(done)
+        return true
+    }
+}

@@ -140,8 +140,7 @@ fn sv_row_combine_exact(a: i64, r: ref SvRow, b: i64, s: ref SvRow) -> SvRow? {
 fn sv_row_combine_wide(a: i64, r: ref SvRow, b: i64, s: ref SvRow) -> SvRow? {
 	let room = r.cols.len() + s.cols.len() + 1
 	let mut cols: Vec[u32] = Vec(capacity: room)
-	let mut lows: Vec[u64] = Vec(capacity: room)
-	let mut highs: Vec[i64] = Vec(capacity: room)
+	let mut wides: Vec[Wide[i64]] = Vec(capacity: room)
 	let mut i = 0
 	let mut j = 0
 	while i < r.cols.len() || j < s.cols.len() {
@@ -163,18 +162,15 @@ fn sv_row_combine_wide(a: i64, r: ref SvRow, b: i64, s: ref SvRow) -> SvRow? {
 			i += 1
 			j += 1
 		}
-		let (low, high) = sv_wide_mul_add(a, x, b, y) ?? return null
-		if low != 0 || high != 0 {
+		let entry = sv_wide_mul_add(a, x, b, y) ?? return null
+		if entry.sign() != 0 {
 			cols.push(col)
-			lows.push(low)
-			highs.push(high)
+			wides.push(entry)
 		}
 	}
 	// The constant last, so it is the last entry of the reduced row.
-	let (low, high) = sv_wide_mul_add(a, r.constant, b, s.constant) ?? return null
-	lows.push(low)
-	highs.push(high)
-	let mut ks = sv_wide_reduced(lows, highs) ?? return null
+	wides.push(sv_wide_mul_add(a, r.constant, b, s.constant) ?? return null)
+	let mut ks = sv_wide_reduced(wides) ?? return null
 	let constant = ks.pop() ?? return null
 	return SvRow { cols: cols, ks: ks, constant: constant }
 }

@@ -1136,6 +1136,7 @@ impl EmitState {
             out.push(")");
         }
         if either { out.push(")"); }
+        if is_return && !self.facts.wrapped.contains_key(&node_key(expr)) && !self.facts.some_tails.contains(&node_key(expr)) && self.either_into_owned(world, expr, &scope.function, at) { out.push(".into()"); }
         let block_shaped = matches!(expr, Expr::If { .. } | Expr::Block(_, _) | Expr::Unsafe(_, _) | Expr::Overlap(_, _));
         if !tail.is_value() && !block_shaped { out.push(";"); }
         Ok(())

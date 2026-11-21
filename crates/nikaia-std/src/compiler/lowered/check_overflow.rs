@@ -130,6 +130,12 @@ pub(crate) fn check_wrap_for(found: &Ty, want: &Ty, literal: bool) -> Option<Fac
         _ => String::from(""),
     };
     if !inner_into.is_empty() { return Some(FactWrap::WidenSome(nikaia_std::block::Text::from(inner_into.to_string()))); }
+    let inner_path = match want {
+        Ty::Nullable(inner) => { let inner = nikaia_std::boxed::open(inner); text_as_a_path(found, inner) },
+        _ => -1,
+    };
+    if inner_path == 1 { return Some(FactWrap::PathViewSome); }
+    if inner_path == 0 { return Some(FactWrap::PathSome); }
     if !found.is_unknown() || literal { return Some(FactWrap::Constructor); }
     None
 }

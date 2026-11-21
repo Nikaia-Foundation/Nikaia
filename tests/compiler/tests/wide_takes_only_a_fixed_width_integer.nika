@@ -1,0 +1,7 @@
+// `Wide[T]` is the exact value of twice the width of `u8`, `u32`, `i32`,
+// `u64` and `i64` (Part I 2.2, #2619): a `T` of another type is refused.
+fn main() throws {
+	let x: f64 = 1.5
+	let w = Wide::of(x)
+	println(w.sign())
+}

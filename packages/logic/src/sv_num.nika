@@ -257,98 +257,91 @@ fn sv_rat_add(a: ref SvRat, b: ref SvRat) -> SvRat? {
 
 /// **The sum whose unreduced numerator or denominator leaves `i64`**
 /// (#2013), by Knuth's rule (TAOCP vol. 2, 4.5.1): `t = a.num·db + b.num·da`
-/// in two halves, `g2 = gcd(t, g)`, the numerator `t / g2` and the
+/// in double width, `g2 = gcd(t, g)`, the numerator `t / g2` and the
 /// denominator `da·(b.den / g2)`. The result is reduced by construction, so
 /// `null` only where it does not fit `i64` itself.
 fn sv_rat_add_wide(a: ref SvRat, b: ref SvRat, g: i64, da: i64, db: i64) -> SvRat? {
-	let (low, high) = sv_wide_mul_add(a.num, db, b.num, da) ?? return null
-	let rest = sv_wide_rest(low, high, g) ?? return null
+	let t = sv_wide_mul_add(a.num, db, b.num, da) ?? return null
+	let rest = sv_wide_rest(t, g) ?? return null
 	let g2 = sv_gcd(rest, g) ?? return null
-	let (num, _) = high.narrowing_div_rem(low, g2) ?? return null
+	let (quotient, _) = t.div_rem(g2) ?? return null
+	let num = quotient.narrow() ?? return null
 	let den = da.checked_mul(b.den / g2) ?? return null
 	return SvRat { num: num, den: den }
 }
 
-/// `a·x + b·y` in double width (#2307), the halves as `widening_mul` gives
-/// them: `(low, high)` of `high·2^64 + low`. `null` only where the sum
+/// `a·x + b·y` in double width (#2307, #2619). `null` only where the sum
 /// leaves 128 bits, which two products of `i64` never do.
-fn sv_wide_mul_add(a: i64, x: i64, b: i64, y: i64) -> (u64, i64)? {
-	let (l1, h1) = a.widening_mul(x)
-	let (l2, h2) = b.widening_mul(y)
-	let (low, carry) = l1.overflowing_add(l2)
-	// Each high half lies within `±2^62`, so their sum and the carry fit.
-	let (top, over) = h1.overflowing_add(h2)
-	let (high, past) = top.overflowing_add(if carry { 1 } else { 0 })
-	if over || past {
-		return null
-	}
-	return (low, high)
+fn sv_wide_mul_add(a: i64, x: i64, b: i64, y: i64) -> Wide[i64]? {
+	return Wide::product(a, x).add(Wide::product(b, y))
 }
 
-/// `|t| mod g` of the double-width `t = high·2^64 + low` for `g > 0`, through
-/// `|t|` unsigned: its high half reduced first, so the quotient of the
-/// 128-by-64 division fits and the rest is there. `null` for `g <= 0`.
-fn sv_wide_rest(low: u64, high: i64, g: i64) -> i64? {
-	let zero: u64 = 0
-	let mut size_low = low
-	let mut size_high = high
-	if high < 0 {
-		size_low = zero.wrapping_sub(low)
-		size_high = if low == 0 { 0 - high } else { 0 - high - 1 }
-	}
-	let by = g.checked_u64() ?? return null
-	let up = size_high.checked_u64() ?? return null
-	if by == 0 {
+/// `|t| mod g` of the double-width `t` for `g > 0`: the rest of `t / g`
+/// rounded as `%` rounds has the sign of `t` and is smaller than `g`, so its
+/// magnitude fits. `null` for `g <= 0`.
+fn sv_wide_rest(t: Wide[i64], g: i64) -> i64? {
+	if g <= 0 {
 		return null
 	}
-	let (_, rest) = (up % by).narrowing_div_rem(size_low, by) ?? return null
-	return rest.checked_i64()
+	let rest = t.rem(g) ?? return null
+	return if rest < 0 { 0 - rest } else { rest }
 }
 
 /// **Double-width entries divided by their gcd** (#2307, D11): the values
-/// `highs[i]·2^64 + lows[i]`, each divided by the gcd of all, as `i64`.
-/// The gcd is begun on the entries that fit `i64` and taken on through the
-/// others' rests (`sv_wide_rest`), so no 128-bit division is needed; `null`
-/// where a quotient does not fit `i64`, or where no non-zero entry fits.
-fn sv_wide_reduced(lows: ref Vec[u64], highs: ref Vec[i64]) -> Vec[i64]? {
-	if lows.len() != highs.len() {
-		return null
-	}
+/// `ks`, each divided by the gcd of all, as `i64`. The gcd is begun on the
+/// entries that fit `i64` and taken on through the others' rests
+/// (`sv_wide_rest`); `null` where a quotient does not fit `i64`, or where no
+/// non-zero entry fits.
+fn sv_wide_reduced(ks: ref Vec[Wide[i64]]) -> Vec[i64]? {
 	let mut g: i64 = 0
 	let mut wide = false
 	let mut i = 0
-	while i < lows.len() {
-		let small = highs[i].narrowing_div_rem(lows[i], 1)
+	while i < ks.len() {
+		let small = ks[i].narrow()
 		if small == null {
 			wide = true
 		} else {
-			let (k, _) = small ?? (0, 0)
-			g = sv_gcd(g, k) ?? return null
+			g = sv_gcd(g, small ?? 0) ?? return null
 		}
 		i += 1
 	}
 	if wide {
 		i = 0
-		while i < lows.len() {
+		while i < ks.len() {
 			if g <= 1 {
 				return null
 			}
-			if highs[i].narrowing_div_rem(lows[i], 1) == null {
-				let rest = sv_wide_rest(lows[i], highs[i], g) ?? return null
+			if ks[i].narrow() == null {
+				let rest = sv_wide_rest(ks[i], g) ?? return null
 				g = sv_gcd(rest, g) ?? return null
 			}
 			i += 1
 		}
 	}
 	let by = if g <= 0 { 1 } else { g }
-	let mut out: Vec[i64] = Vec(capacity: lows.len())
+	let mut out: Vec[i64] = Vec(capacity: ks.len())
 	i = 0
-	while i < lows.len() {
-		let (q, _) = highs[i].narrowing_div_rem(lows[i], by) ?? return null
-		out.push(q)
+	while i < ks.len() {
+		let (q, _) = ks[i].div_rem(by) ?? return null
+		out.push(q.narrow() ?? return null)
 		i += 1
 	}
 	return out
+}
+
+/// The double-width `t` over `d` as a normalised rational (#2101): both
+/// divided by the gcd of `d` and `t`'s rest, so `null` only for `d = 0` or
+/// where the reduced numerator does not fit `i64`.
+fn sv_wide_ratio(t: Wide[i64], d: i64) -> SvRat? {
+	let small = t.narrow()
+	if small != null {
+		return sv_rat(small ?? 0, d)
+	}
+	let m = d.checked_abs() ?? return null
+	let rest = sv_wide_rest(t, m) ?? return null
+	let g = sv_gcd(rest, m) ?? return null
+	let (quotient, _) = t.div_rem(g) ?? return null
+	return sv_rat(quotient.narrow() ?? return null, d / g)
 }
 
 fn sv_rat_neg(a: ref SvRat) -> SvRat? {
@@ -604,6 +597,22 @@ test "i64 coefficients are kept small and never wrapped" {
 		"floor(-7/2) = -4, ceil(-7/2) = -3, floor by 0: refused",
 	]
 	assert(out == expected.join("\n") + "\n")
+}
+
+// `sv_wide_ratio` (#2101): a value that narrows, a double-width one the gcd
+// brings back, and the refusals: a zero or `i64::MIN` denominator, a
+// quotient past `i64`.
+test "a double-width numerator over an i64 is reduced or refused" {
+	let big = Wide::product(4611686018427387904, 4)
+	let parts = [
+		f"6/-4 = {sv_num_test_show(sv_wide_ratio(Wide::of(6), -4))}",
+		f"2^64/16 = {sv_num_test_show(sv_wide_ratio(big, 16))}",
+		f"3·2^63/-12 = {sv_num_test_show(sv_wide_ratio(Wide::product(4611686018427387904, 6), -12))}",
+		f"2^64/3: {sv_num_test_show(sv_wide_ratio(big, 3))}",
+		f"2^64/0: {sv_num_test_show(sv_wide_ratio(big, 0))}",
+		f"2^64/i64::MIN: {sv_num_test_show(sv_wide_ratio(big, -9223372036854775807 - 1))}",
+	]
+	assert(parts.join(", ") == "6/-4 = -3/2, 2^64/16 = 1152921504606846976, 3·2^63/-12 = -2305843009213693952, 2^64/3: refused, 2^64/0: refused, 2^64/i64::MIN: refused")
 }
 
 test "rationals and delta are normalised, ordered and refuse overflow" {

@@ -1,0 +1,35 @@
+// A `let` over a `String` field of a name that is itself a view (a `let`
+// over a list's element, a `for`'s element) is a view of that field, as one
+// read through a `ref` parameter is (Part I 6.5, ADR-views-v4 D5, #1991).
+// `takes` also gets text of its own, so its `x` takes either kind.
+
+struct Nl {
+    name: String,
+    a: String,
+}
+
+fn takes(x: String) -> i64 {
+    x.len()
+}
+
+fn by_index(defs: ref Vec[Nl], i: i64) -> i64 {
+    let t = defs[i]
+    let m = t.name
+    let x = t.a
+    takes(m) + takes(x)
+}
+
+fn by_loop(defs: ref Vec[Nl]) -> i64 {
+    let mut n = 0
+    for t in defs {
+        let m = t.name
+        n += takes(m)
+    }
+    n
+}
+
+fn main() throws {
+    let defs = [Nl { name: "ab", a: "c" }, Nl { name: "def", a: "" }]
+    println(f"{by_index(defs, 0)} {by_loop(defs)} {takes(String())}")
+    println(defs[1].name)
+}
