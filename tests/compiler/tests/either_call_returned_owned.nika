@@ -1,0 +1,96 @@
+// #1993: a call whose text result is of both kinds (`decoded`), handed
+// back by a function whose own result is owned text (`resolved`, which the
+// package's ledger publishes without `returns`), was not made owned, so the
+// program that computes `tagged`'s build-time default did not compile, and
+// the package drew NK1127 "this compiler's fault". The shape of the yaml
+// package's `resolved` and `uri_decoded`; one file alone did not show it.
+use std::env
+use std::fs
+use std::process
+
+fn toolchain() -> String throws {
+	let exe = env::current_exe()?.display() ?? ""
+	if exe.len() > 0 { return exe }
+	return "target/fast/nikaia"
+}
+
+fn main() throws {
+	let source = [
+		"pub struct Dir {",
+		"\thandle: String,",
+		"\tprefix: String,",
+		"}",
+		"",
+		"pub struct Tag {",
+		"\ttext: String?,",
+		"}",
+		"",
+		"pub struct Limits {",
+		"\tdepth: i64,",
+		"}",
+		"",
+		"fn default_limits() -> Limits sync {",
+		"\treturn Limits { depth: 3 }",
+		"}",
+		"",
+		"fn resolved(ds: ref Vec[Dir], t: String?) -> String? sync {",
+		"\tlet s = match t {",
+		"\t\tnull => return null",
+		"\t\tx => x",
+		"\t}",
+		"\tif s == \"!\" {",
+		"\t\treturn \"!\"",
+		"\t}",
+		"\tlet rest = s.strip_prefix(\"!\") ?? \"\"",
+		"\tlet inner = rest.strip_prefix(\"<\") ?? \"\"",
+		"\tlet verbatim = inner.strip_suffix(\">\")",
+		"\tif verbatim != null {",
+		"\t\treturn decoded(verbatim ?? \"\")",
+		"\t}",
+		"\tlet mut handle = \"!\"",
+		"\tif rest.starts_with(\"!\") {",
+		"\t\thandle = \"!!\"",
+		"\t} else if rest.contains('!') {",
+		"\t\tlet name = rest.split('!').next() ?? \"\"",
+		"\t\thandle = f\"!{name}!\"",
+		"\t}",
+		"\tlet suffix = decoded(s.strip_prefix(handle) ?? \"\")",
+		"\tfor d in ds {",
+		"\t\tif d.handle == handle {",
+		"\t\t\treturn f\"{d.prefix}{suffix}\"",
+		"\t\t}",
+		"\t}",
+		"\treturn f\"{handle}{suffix}\"",
+		"}",
+		"",
+		"fn decoded(s: String) -> String sync {",
+		"\tif !s.contains('%') {",
+		"\t\treturn s",
+		"\t}",
+		"\treturn s.replace(\"%\", \"\")",
+		"}",
+		"",
+		"pub fn tagged(ds: ref Vec[Dir], n: ref Tag; limits: Limits = default_limits()) -> String? sync {",
+		"\tif limits.depth < 0 {",
+		"\t\treturn null",
+		"\t}",
+		"\treturn resolved(ds, n.text)",
+		"}",
+		"",
+	]
+	let tmp = fs::scratch()
+	process::run("mkdir", ["-p", f"{tmp.path().to_text()}/lib/src"])
+	fs::write(
+		"lib/nikaia.toml",
+		tmp,
+		"[package]\nname = \"lib\"\nversion = \"0.1.0\"\n\n[build]\nartifact = \"rust-library\"\n",
+	)
+	fs::write("lib/src/main.nika", tmp, source.join("\n"))
+	let out = process::run(toolchain(), ["build"]; dir: f"{tmp.path().to_text()}/lib")
+	for line in f"{out.stdout}{out.stderr}".replace(tmp.path().to_text(), "TMP").lines() {
+		if line.contains("NK") || line.contains("type error") {
+			println(line)
+		}
+	}
+	println(f"exit {out.code}")
+}

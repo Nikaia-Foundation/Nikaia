@@ -177,6 +177,7 @@ impl EmitState {
         if self.facts.lent_returns.contains(&at) { out.push("&"); }
         self.emit_expr(world, walk, out, host, value, depth, flow, scope)?;
         if either { out.push(")"); }
+        if self.either_into_owned(world, value, &scope.function, at) { out.push(".into()"); }
         out.push(&after);
         Ok(())
     }
