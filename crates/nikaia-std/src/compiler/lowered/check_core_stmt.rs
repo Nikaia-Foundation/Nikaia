@@ -1900,6 +1900,7 @@ pub(crate) fn check_core_stmt_return<H: CheckHost>(state: &mut CheckState, world
         let returned = match value { Some(__nikaia_value) => __nikaia_value, None => return Ty::Unknown };
         state.narrowed_reads_given_back(returned);
         state.place_clones_handed_back(world, returned);
+        state.a_pausing_cleanup_returned(world, returned);
     }
     state.a_way_out("return", "", span);
     Ty::Unknown
@@ -2081,6 +2082,12 @@ pub(crate) fn check_core_block<H: CheckHost>(state: &mut CheckState, world: &Che
         at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
     }
     check_crossings_a_bound_handle_is_taken(state, world, block);
+    if count > 0 {
+        match &nikaia_std::index::get(&block.stmts, nikaia_std::index::at(unsafe { nikaia_std::proven::sub::<i64>(count, 1) })).node {
+            Stmt::Expr(value) => { state.a_pausing_cleanup_returned(world, value); },
+            _ => { },
+        }
+    }
     state.failing_cleanups_settled();
     if count > 0 { state.views_end(unsafe { nikaia_std::proven::sub::<i64>(state.scope.len() as i64, 1) }, nikaia_std::index::get(&block.stmts, nikaia_std::index::at(unsafe { nikaia_std::proven::sub::<i64>(count, 1) })).span.end as i64); }
     if ends_group.is_some() { state.tasks_meet_on_nothing(world, block, nikaia_std::index::or(ends_group, || 0)); }

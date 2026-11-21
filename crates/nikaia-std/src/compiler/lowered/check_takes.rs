@@ -24,7 +24,18 @@ impl CheckState {
         let binding = self.binding_id(&root);
         CheckTaken { path, ty, from: span.start as i64, at: span.end as i64, seq, choices: self.branch.copy_owned(), until: None, to: nikaia_std::block::Text::from(to.to_string()), binding }
     }
-    pub(crate) fn a_failing_cleanup_held(&mut self, name: &str, finding: CheckFinding, span: &Span) { self.cleanups_pending.push(CheckPendingCleanup { name: nikaia_std::block::Text::from(name.to_string()), binding: None, depth: self.scope.len() as i64, choices: self.branch.copy_owned(), loops: self.flow.loops, from: span.end as i64, leaves: vec![], finding }); }
+    pub(crate) fn a_failing_cleanup_held(&mut self, name: &str, finding: CheckFinding, span: &Span) { self.cleanups_pending.push(CheckPendingCleanup { name: nikaia_std::block::Text::from(name.to_string()), binding: None, depth: self.scope.len() as i64, choices: self.branch.copy_owned(), loops: self.flow.loops, from: span.end as i64, leaves: vec![], finding, handed_on: false }); }
+    pub(crate) fn a_pausing_cleanup_held(&mut self, name: &str, finding: CheckFinding, span: &Span) { self.cleanups_pending.push(CheckPendingCleanup { name: nikaia_std::block::Text::from(name.to_string()), binding: None, depth: self.scope.len() as i64, choices: self.branch.copy_owned(), loops: self.flow.loops, from: span.end as i64, leaves: vec![], finding, handed_on: true }); }
+    pub(crate) fn a_pausing_cleanup_returned(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, value: &Expr) {
+        let name = match value {
+            Expr::Variable(name, _) => { let name = *name; nikaia_std::block::Text::from(world.words.resolve(name).to_string()) },
+            _ => return,
+        };
+        let binding = self.binding_id(&name);
+        let mut kept: Vec<CheckPendingCleanup> = vec![];
+        for held in self.cleanups_pending.iter() { if !held.handed_on || held.name != name || held.binding != binding || held.choices != self.branch || !held.leaves.is_empty() { kept.push(held.clone()); } }
+        self.cleanups_pending = kept;
+    }
     pub(crate) fn failing_cleanups_bound(&mut self) {
         let depth = self.scope.len() as i64;
         for at in 0..self.cleanups_pending.len() as i64 {
@@ -48,7 +59,7 @@ impl CheckState {
     }
     pub(crate) fn closed_by_hand(&self, held: &CheckPendingCleanup) -> bool {
         for taken in self.handed.iter() {
-            if taken.path != held.name || taken.to != "closed by `close`" || taken.binding != held.binding || taken.from < held.from || taken.until.is_some() || taken.choices != held.choices { continue; }
+            if taken.path != held.name || !held.handed_on && taken.to != "closed by `close`" || taken.binding != held.binding || taken.from < held.from || taken.until.is_some() || taken.choices != held.choices { continue; }
             let left = held.leaves.iter().copied().any(|at| { at < taken.from }) || self.ways_out.iter().any(|way| { way.how == "return" && way.at > held.from && way.at < taken.from });
             if !left { return true; }
         }

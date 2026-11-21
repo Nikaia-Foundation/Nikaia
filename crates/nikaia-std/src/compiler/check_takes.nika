@@ -38,7 +38,33 @@ impl CheckState {
     /// **`NK2605` waits for the block's end** (#934): `name`'s cleanup can
     /// fail, but a `close()` later in the block may leave nothing to clean up.
     fn a_failing_cleanup_held(ref mut self, name: ref String, finding: CheckFinding, span: ref Span) {
-        self.cleanups_pending.push(CheckPendingCleanup { name: name.clone(), binding: null, depth: self.scope.len(), choices: self.branch.clone(), loops: self.flow.loops, from: span.end as i64, leaves: [], finding: finding })
+        self.cleanups_pending.push(CheckPendingCleanup { name: name.clone(), binding: null, depth: self.scope.len(), choices: self.branch.clone(), loops: self.flow.loops, from: span.end as i64, leaves: [], finding: finding, handed_on: false })
+    }
+
+    /// **A `sync` function's `NK2202` for a cleanup that may pause waits for
+    /// the block's end too** (#1323): a value returned or handed on before it
+    /// dies elsewhere, and its settle is not this function's.
+    fn a_pausing_cleanup_held(ref mut self, name: ref String, finding: CheckFinding, span: ref Span) {
+        self.cleanups_pending.push(CheckPendingCleanup { name: name.clone(), binding: null, depth: self.scope.len(), choices: self.branch.clone(), loops: self.flow.loops, from: span.end as i64, leaves: [], finding: finding, handed_on: true })
+    }
+
+    /// **`return r`, or `r` as its block's value, hands a held `NK2202`'s
+    /// value on** (#1323): on the path the `let` stands on, it dies there,
+    /// not here. A `return` takes
+    /// nothing in `handed`, since nothing after it reads.
+    fn a_pausing_cleanup_returned(ref mut self, world: ref CheckWorld, value: ref Expr) {
+        let name = match value {
+            Expr::Variable(name, _) => world.words.resolve(name).clone(),
+            else => return,
+        }
+        let binding = self.binding_id(name)
+        let mut kept: Vec[CheckPendingCleanup] = []
+        for held in self.cleanups_pending {
+            if !held.handed_on || held.name != name || held.binding != binding || held.choices != self.branch || held.leaves.len() > 0 {
+                kept.push(held.clone())
+            }
+        }
+        self.cleanups_pending = kept
     }
 
     /// After a statement of a block: the `let` of a held value has bound its
@@ -87,12 +113,13 @@ impl CheckState {
         self.cleanups_pending = []
     }
 
-    /// **Closed on every path**: by a `close()` in the block itself - not in
+    /// **Closed on every path**: by a `close()` (or, for a held `NK2202`, any
+    /// taking that hands the value on) in the block itself - not in
     /// one arm of a choice (a loop or a lambda is `NK2105`'s) - with no
     /// `return`, `break` or `continue` between the `let` and it.
     fn closed_by_hand(ref self, held: ref CheckPendingCleanup) -> bool {
         for taken in self.handed {
-            if taken.path != held.name || taken.to != "closed by `close`" || taken.binding != held.binding || taken.from < held.from || taken.until != null || taken.choices != held.choices {
+            if taken.path != held.name || (!held.handed_on && taken.to != "closed by `close`") || taken.binding != held.binding || taken.from < held.from || taken.until != null || taken.choices != held.choices {
                 continue
             }
             let left = held.leaves.iter().any(fn(at) { at < taken.from }) || self.ways_out.iter().any(fn(way) { way.how == "return" && way.at > held.from && way.at < taken.from })
