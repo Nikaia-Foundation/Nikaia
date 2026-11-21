@@ -1,0 +1,14 @@
+// #1994, ADR-views-v4 D19, D23: a `let` over a field of a `mut` parameter
+// whose name is kept takes the field out; nothing gives it back, so the
+// function would leave the caller's value without it (`NK2108`).
+struct LeftParam { out: Vec[i64] }
+
+fn left_param_done(mut w: LeftParam) -> Vec[i64] sync {
+    let rows = w.out
+    return rows
+}
+
+fn main() throws {
+    let mut w = LeftParam { out: [1] }
+    println(f"{left_param_done(w).len()}")
+}

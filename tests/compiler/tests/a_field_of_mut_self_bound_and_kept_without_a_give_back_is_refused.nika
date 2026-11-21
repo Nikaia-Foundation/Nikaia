@@ -1,0 +1,16 @@
+// #1994, ADR-views-v4 D19, D23: a `let` over a field of `mut self` whose name
+// is kept takes the field out; nothing gives it back, so the method would
+// leave `self` without it (`NK2108`).
+struct LeftBuffer { out: Vec[i64] }
+
+impl LeftBuffer {
+    fn done(mut self) -> Vec[i64] sync {
+        let rows = self.out
+        return rows
+    }
+}
+
+fn main() throws {
+    let mut w = LeftBuffer { out: [1] }
+    println(f"{w.done().len()}")
+}

@@ -441,6 +441,10 @@ pub struct CheckFlow {
     pub reached: String?,
     /// The names this function's body gives text of its own later on.
     pub grown_text: collections::BTreeSet[String],
+    /// **The names this body keeps** (ADR-views-v4 D23, #1994): returned,
+    /// stored into a place that is not a local, or put into a container. A
+    /// `let` over a part of a `mut` place that binds one takes the part.
+    pub kept_names: collections::BTreeSet[String],
     /// **The names of those that are also assigned a field read** (ADR-282
     /// D13, #840): views and text of their own flow into them, so a name that
     /// started as a literal holds `EitherText`.
@@ -653,6 +657,7 @@ impl CheckFlow {
             reaching: null,
             reached: null,
             grown_text: collections::BTreeSet(),
+            kept_names: collections::BTreeSet(),
             mixed_text: collections::BTreeSet(),
             widening_casts: collections::BTreeSet(),
             unsigned_slots: collections::BTreeMap(),

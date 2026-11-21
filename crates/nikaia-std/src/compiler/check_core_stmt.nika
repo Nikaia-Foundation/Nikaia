@@ -400,6 +400,42 @@ fn check_core_stmt_a_part_of_an_owned_parameter(state: ref CheckState, world: re
     }
 }
 
+/// **A `let` over a field of a `mut` place** (ADR-views-v4 D23, #1994): of
+/// `mut self`, of a `mut` parameter or of a `let mut` view, bound to one name
+/// without a type. 1 where the name is only read (a view), 2 where the body
+/// keeps it (a taking: `flow.kept_names`), 0 where it is no such `let`. Not
+/// inside a lambda, which is a function of its own.
+fn check_core_stmt_over_a_changing_part(state: ref CheckState, world: ref CheckWorld, names: ref Vec[winnow_grammar::Symbol], shape: ref Vec[i64], mutable: bool, ty: ref Type?, value: ref Expr) -> i64 sync {
+    if mutable || ty != null || names.len() != 1 || shape.len() != 0 {
+        return 0
+    }
+    match value {
+        Expr::Field { .. } => {},
+        else => return 0,
+    }
+    let path = dotted_path(world, value) ?? return 0
+    for around in state.repeats {
+        if around.what == "lambda" {
+            return 0
+        }
+    }
+    let root = a_root_segment(path)
+    if root == "self" {
+        if !state.changing_self {
+            return 0
+        }
+    } else {
+        let local = state.binding(root) ?? return 0
+        if !local.changing && !state.a_changing_view(root) {
+            return 0
+        }
+    }
+    if state.flow.kept_names.contains(world.words.resolve(names[0])) {
+        return 2
+    }
+    return 1
+}
+
 /// A field path whose root is a `let` without `mut` that owns what it holds
 /// (#1142), or the binding of a `for` over elements the loop owns (`drain()`,
 /// a produced sequence; ADR-views-v4 D26): not a view of a place, not a `for`
@@ -921,7 +957,12 @@ fn check_core_stmt_let[H: CheckHost](mut state: CheckState, world: ref CheckWorl
     let by_use: Ty? = state.flow.let_lambda_use?.clone()
     state.flow.let_lambda_use = null
     let typed_by_use = ty == null && by_use != null
-    check_core_a_field_of_a_borrowed_subject(state, world, host, value, span, "bound")
+    // **A `let` over a part of a `mut` place views it, or takes it where the
+    // name is kept** (ADR-views-v4 D23, #1994): neither gives `self.part` away.
+    let over_part = check_core_stmt_over_a_changing_part(state, world, names, shape, mutable, ty, value)
+    if over_part == 0 {
+        check_core_a_field_of_a_borrowed_subject(state, world, host, value, span, "bound")
+    }
     check_core_a_mut_parameter_given_away(state, world, host, value, span, "bound")
     let outer_read = state.flow.read_a_map
     state.flow.read_a_map = false
@@ -1107,6 +1148,24 @@ fn check_core_stmt_let[H: CheckHost](mut state: CheckState, world: ref CheckWorl
     let mut handing_refused = false
     if seen_through || element_view == 1 {
         check_core_stmt_lent_let(state, world, names, span)
+    } else if over_part == 1 && state.takes_away(world, found) {
+        // **Only read, it is a view of the part** (ADR-views-v4 D23): lent
+        // below as a `let` over a place, and nothing is taken out.
+    } else if over_part == 2 && state.takes_away(world, found) {
+        // **Kept, it takes the part** (ADR-views-v4 D18, D20, D23): the
+        // place holds its empty value or a stand-in until an assignment
+        // gives the part back (`NK2108` asks that one does). The name owns
+        // what it holds, so it is no view of the place.
+        let to = f"bound to `{bound_names.join("`, `")}` by a `let`"
+        let before = state.findings.len()
+        state.hands_over(world, value, found, to, span)
+        moved_out = state.facts.taken_parts.contains_key(node_key(value))
+        handing_refused = state.findings.len() > before
+        // A part with no empty value and no stand-in cannot be taken out: it
+        // is given away, as before.
+        if !moved_out && !handing_refused {
+            check_core_a_field_of_a_borrowed_subject(state, world, host, value, span, "bound")
+        }
     } else if any_named && !bytes_view && !(ty == null && !mutable && names.len() == 1 && shape.len() == 0 && (state.a_lent_text_place(world, value, found) || (found == a_string_type() && state.a_place_of_a_lent_let(world, value)))) {
         // A plain `let` over a `String` read through a `ref` parameter is a
         // view of it (Part I 6.5, #839), bound so below; so is one read off a
@@ -1224,7 +1283,9 @@ fn check_core_stmt_let[H: CheckHost](mut state: CheckState, world: ref CheckWorl
             let met = state.views_meet_owned_text(world, value)
             bound = met ?? found.clone()
         } else if found == a_string_type() {
-            let lent = state.lent_arms_bound(world, value)
+            // **Taken out, the text is the name's own** (ADR-views-v4 D23,
+            // #1994): no view of the place it came from.
+            let lent: Ty? = if moved_out { null } else { state.lent_arms_bound(world, value) }
             let none_lent = lent == null
             bound = lent ?? found.clone()
             // **A plain `let` over a `String` place of a local is a view of
