@@ -62,6 +62,21 @@ impl nikaia_std::error::Full for __NikaiaThrows_ProjectTestsRefusal__io_IoError 
     }
 }
 
+impl nikaia_std::error::Members for __NikaiaThrows_ProjectTestsRefusal__io_IoError {
+    fn member(&self) -> &(dyn std::error::Error + 'static) {
+        match self {
+            __NikaiaThrows_ProjectTestsRefusal__io_IoError::ProjectTestsRefusal(e) => e.held() as &(dyn std::error::Error + 'static),
+            __NikaiaThrows_ProjectTestsRefusal__io_IoError::io_IoError(e) => e.held() as &(dyn std::error::Error + 'static),
+        }
+    }
+    fn into_member(self: std::boxed::Box<Self>) -> std::boxed::Box<dyn std::error::Error> {
+        match *self {
+            __NikaiaThrows_ProjectTestsRefusal__io_IoError::ProjectTestsRefusal(e) => std::boxed::Box::new(e.split().0) as std::boxed::Box<dyn std::error::Error>,
+            __NikaiaThrows_ProjectTestsRefusal__io_IoError::io_IoError(e) => std::boxed::Box::new(e.split().0) as std::boxed::Box<dyn std::error::Error>,
+        }
+    }
+}
+
 
 
 
