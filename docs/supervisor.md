@@ -383,7 +383,8 @@ Moved from the former `docs/architect.md` (2026-10-31). `nikaia` here means
         && { [ "$(git rev-parse --is-shallow-repository)" = false ] || git fetch -q --unshallow origin; } \
         && git fetch -q origin develop \
         && cargo build -q --profile fast -p nikaia \
-        && PATH=$PWD/target/fast:$PATH setsid nohup sh -c \
+        && PATH=$PWD/target/fast:$PATH NIKAIA_DRIVE_TASK_MIN=1440 NIKAIA_DRIVE_LIMIT_MIN=1440 \
+          setsid nohup sh -c \
           'nikaia run scripts/drive.nika -- docs/briefs/LANE; echo "DRIVER EXIT $?"' \
           >> SCRATCHPAD/drive-LANE.log 2>&1 < /dev/null & disown
 
@@ -393,7 +394,9 @@ Moved from the former `docs/architect.md` (2026-10-31). `nikaia` here means
   Then a `Monitor` (timeout 30 minutes, re-armed when it expires) on that
   log greps `^WAKE ` and `DRIVER EXIT`, and once a minute checks with
   `ps -ef | grep "drive.nika -- docs/briefs/LANE"` that the driver still
-  runs (`DRIVER GONE` when not). `DRIVER EXIT 4` is the time limit: start it
+  runs (`DRIVER GONE` when not). The two limits are the 2 h a `run_in_background` task lives; a detached
+  driver is not ended then, so they are raised, and it stops only for what
+  needs the supervisor. `DRIVER EXIT 4` is the time limit: start it
   again. A heartbeat every 45 minutes (`send_later`) checks the driver and
   re-arms the monitor. Re-arming an expired monitor and a heartbeat that
   finds the driver running are not reported to the owner (owner,
