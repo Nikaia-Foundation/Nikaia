@@ -173,7 +173,7 @@ pub(crate) fn compile(
             true => messages.push_str(&format!(
                 "{{\"reason\":\"compiler-message\",\"message\":{line}}}\n"
             )),
-            false => eprintln!("{line}"),
+            false => crate::project::say(&format!("{line}\n")),
         }
     }
     if !compiled.status.success() {
