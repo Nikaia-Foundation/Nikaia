@@ -821,10 +821,24 @@ pub(crate) fn flow_tuple_parts(going: &TierGoing, value: &Expr, kinds: &Kinds, a
         },
         _ => { },
     }
-    let from = match source_of(value, ask, walk) { Some(__nikaia_value) => __nikaia_value, None => return false };
+    let from = match tuple_read(value, ask, walk) { Some(__nikaia_value) => __nikaia_value, None => return false };
     if !a_followed_tuple(ask.names, &from.ty) || (from.ty.generics.len() as i64) != ty.generics.len() as i64 { return false; }
-    link(&from, &mut vec![], &Declaring { owner: going.owner.clone(), ty: ty.clone() }, &mut going.path.copy_owned(), ask, walk);
+    link(&Declaring { owner: from.owner.clone(), ty: from.ty.clone() }, &mut from.path.copy_owned(), &Declaring { owner: going.owner.clone(), ty: ty.clone() }, &mut going.path.copy_owned(), ask, walk);
     true
+}
+
+pub(crate) fn tuple_read(value: &Expr, ask: &TierAsk<'_, '_, '_, '_, '_, '_, '_>, walk: &mut TierWalk) -> Option<TierGoing> {
+    match value {
+        Expr::MethodCall { receiver, method, args, .. } => {
+            let receiver = nikaia_std::boxed::open(receiver); let method = *method;
+            if args.is_empty() && ask.names.resolve(method) == "clone" { return tuple_read(receiver, ask, walk); }
+        },
+        Expr::Index { .. } => { return part_root(value, ask, walk); },
+        Expr::Field { .. } => { return part_root(value, ask, walk); },
+        _ => { },
+    }
+    let from = match source_of(value, ask, walk) { Some(__nikaia_value) => __nikaia_value, None => return None };
+    Some(going_into(&from.owner, &from.ty, vec![], true))
 }
 
 pub(crate) fn flow_value(going: &TierGoing, value: Option<&Expr>, kinds: &Kinds, ask: &TierAsk<'_, '_, '_, '_, '_, '_, '_>, walk: &mut TierWalk) {
@@ -2211,6 +2225,22 @@ pub(crate) fn tier_let(names: &[winnow_grammar::Symbol], value: &Expr, ty: Optio
         for name in names.iter() {
             let name = *name;
             bind_tier_local(nikaia_std::block::Text::from(ask.names.resolve(name).to_string()), plain_local(bound.clone()), walk);
+        }
+        return;
+    }
+    if !written {
+        let whole = match tuple_read(value, ask, walk) { Some(__nikaia_value) => __nikaia_value, None => return };
+        if !a_followed_tuple(ask.names, &whole.ty) || (whole.ty.generics.len() as i64) != names.len() as i64 { return; }
+        let mut part: i64 = 0;
+        for name in names.iter() {
+            let name = *name;
+            if plain_string(ask.names, unsafe { nikaia_std::proven::read(&whole.ty.generics, (part) as usize) }) {
+                let mut path = whole.path.copy_owned();
+                path.push(part);
+                let held = kinds_of(&whole.owner, unsafe { nikaia_std::proven::read(&whole.ty.generics, (part) as usize) }, &mut path, ask, walk);
+                bind_tier_local(nikaia_std::block::Text::from(ask.names.resolve(name).to_string()), plain_local(held), walk);
+            }
+            part = unsafe { nikaia_std::proven::add::<i64>(part, 1) };
         }
     }
 }
