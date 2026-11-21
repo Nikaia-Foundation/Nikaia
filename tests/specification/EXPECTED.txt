@@ -162,30 +162,31 @@
 30-nikaia-tooling.md #8 lowered (as written)  extern {
 30-nikaia-tooling.md #9 lowered (as written)  extern {
 30-nikaia-tooling.md #10 lowered (as written)  use std::foreign
-30-nikaia-tooling.md #11 lowered (as written)  // In code
-30-nikaia-tooling.md #12 refused (as written) [NK1109,NK1171]  // main.nika
-30-nikaia-tooling.md #13 refused (as written)  use std::backend::x86
-30-nikaia-tooling.md #14 fragment (as written)  pub fn read_to_string() -> String throws   // all of it…
-30-nikaia-tooling.md #15 lowered (as written) [about-a-refusal]  use std::io
-30-nikaia-tooling.md #16 refused (a body) [NK1117]  print(f"{name}: ")
-30-nikaia-tooling.md #17 lowered (as written)  use std::time
-30-nikaia-tooling.md #18 lowered (as written)  use http
-30-nikaia-tooling.md #19 fragment (as written)  comptime ROUTES = http::Routes()
-30-nikaia-tooling.md #20 fragment (as written) [sketch]  impl http::Extract for Session {
-30-nikaia-tooling.md #21 fragment (as written) [sketch]  pub comptime ROUTES = http::Routes()
-30-nikaia-tooling.md #22 refused (as written) [NK1127,NK1135]  use std::fs
-30-nikaia-tooling.md #23 refused (a body) [NK1117,NK1181]  // The request chose this name; the call says which dir…
-30-nikaia-tooling.md #24 fragment (as written)  pub fn escape(text: String) -> String            // for…
-30-nikaia-tooling.md #25 lowered (as written)  fn row(name: String, shade: String) -> String {
-30-nikaia-tooling.md #26 fragment (as written)  <table>
-30-nikaia-tooling.md #27 fragment (as written)  // Subject: the path, and the root it may not leave ; C…
-30-nikaia-tooling.md #28 fragment (as written)  pub fn is_component(p: String) -> bool sync   // one co…
-30-nikaia-tooling.md #29 fragment (as written) [sketch]  let data = fs::map(path, fs::Root::Anywhere)
-30-nikaia-tooling.md #30 fragment (as written)  pub fn open(path: Path, root: Root; write: bool = false…
-30-nikaia-tooling.md #31 fragment (as written)  impl File {
-30-nikaia-tooling.md #32 fragment (as written)  pub fn map(path: Path, root: Root) -> Mapped throws    …
-30-nikaia-tooling.md #33 fragment (as written)  pub fn exists(path: Path, root: Root) -> bool throws
-30-nikaia-tooling.md #34 refused (a body) [NK1117]  // A benchmark reading a file it generated itself.
-30-nikaia-tooling.md #35 fragment (as written) [about-a-refusal]  use sqlite                                    // a driv…
-30-nikaia-tooling.md #36 refused (items, then a body) [NK1175,NK1181,NK1230]  comptime SCHEMA = asset("contact.schema.json")
-30-nikaia-tooling.md #37 fragment (as written)  // std::collections::List
+30-nikaia-tooling.md #11 refused (as written) [NK1186]  use std::raw
+30-nikaia-tooling.md #12 lowered (as written)  // In code
+30-nikaia-tooling.md #13 refused (as written) [NK1109,NK1171]  // main.nika
+30-nikaia-tooling.md #14 refused (as written)  use std::backend::x86
+30-nikaia-tooling.md #15 fragment (as written)  pub fn read_to_string() -> String throws   // all of it…
+30-nikaia-tooling.md #16 lowered (as written) [about-a-refusal]  use std::io
+30-nikaia-tooling.md #17 refused (a body) [NK1117]  print(f"{name}: ")
+30-nikaia-tooling.md #18 lowered (as written)  use std::time
+30-nikaia-tooling.md #19 lowered (as written)  use http
+30-nikaia-tooling.md #20 fragment (as written)  comptime ROUTES = http::Routes()
+30-nikaia-tooling.md #21 fragment (as written) [sketch]  impl http::Extract for Session {
+30-nikaia-tooling.md #22 fragment (as written) [sketch]  pub comptime ROUTES = http::Routes()
+30-nikaia-tooling.md #23 refused (as written) [NK1127,NK1135]  use std::fs
+30-nikaia-tooling.md #24 refused (a body) [NK1117,NK1181]  // The request chose this name; the call says which dir…
+30-nikaia-tooling.md #25 fragment (as written)  pub fn escape(text: String) -> String            // for…
+30-nikaia-tooling.md #26 lowered (as written)  fn row(name: String, shade: String) -> String {
+30-nikaia-tooling.md #27 fragment (as written)  <table>
+30-nikaia-tooling.md #28 fragment (as written)  // Subject: the path, and the root it may not leave ; C…
+30-nikaia-tooling.md #29 fragment (as written)  pub fn is_component(p: String) -> bool sync   // one co…
+30-nikaia-tooling.md #30 fragment (as written) [sketch]  let data = fs::map(path, fs::Root::Anywhere)
+30-nikaia-tooling.md #31 fragment (as written)  pub fn open(path: Path, root: Root; write: bool = false…
+30-nikaia-tooling.md #32 fragment (as written)  impl File {
+30-nikaia-tooling.md #33 fragment (as written)  pub fn map(path: Path, root: Root) -> Mapped throws    …
+30-nikaia-tooling.md #34 fragment (as written)  pub fn exists(path: Path, root: Root) -> bool throws
+30-nikaia-tooling.md #35 refused (a body) [NK1117]  // A benchmark reading a file it generated itself.
+30-nikaia-tooling.md #36 fragment (as written) [about-a-refusal]  use sqlite                                    // a driv…
+30-nikaia-tooling.md #37 refused (items, then a body) [NK1175,NK1181,NK1230]  comptime SCHEMA = asset("contact.schema.json")
+30-nikaia-tooling.md #38 fragment (as written)  // std::collections::List
