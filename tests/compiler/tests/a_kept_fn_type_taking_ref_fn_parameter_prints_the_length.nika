@@ -1,0 +1,15 @@
+// Test for #2670: a kept fn type that takes a function with a ref parameter
+// should work and print 2.
+
+fn high(h: fn(ref String) -> i64) -> i64 {
+    return h("ab")
+}
+
+fn len(s: ref String) -> i64 {
+    return s.len()
+}
+
+fn main() throws {
+    let hi: fn(fn(ref String) -> i64) -> i64 = high
+    println(hi(len))
+}
