@@ -426,6 +426,8 @@ impl EmitState {
         }
         out.push(&result_open);
         if settled { out.push("nikaia_std::rt::exec::settled("); }
+        let sends = (pausing.is_some() || awaits_a_parameter) && self.emit_call_sends_a_kept_value(host, args);
+        if sends { out.push("(std::boxed::Box::pin("); }
         let boxed = pausing.is_some() && self.closes_a_pausing_cycle(&scope.function, nikaia_std::index::or(pausing.as_deref(), || ""));
         if boxed { out.push("std::boxed::Box::pin("); }
         let handle = nikaia_std::index::or(self.handle_from(world, func), || "".into());
@@ -434,6 +436,7 @@ impl EmitState {
         self.emit_core_called(world, walk, out, host, func, args, config, unchecked, depth, flow, scope)?;
         if hull { out.push(")"); }
         if boxed { out.push(")"); }
+        if sends { out.push(&format!(") as {}<'_, _>)", emit_boxed_future_in(true))); }
         if pausing.is_some() || awaits_a_parameter || decided && !settled { out.push(&emit_async_pause(&walk)); }
         if settled { out.push(")"); }
         let code_fails = self.facts.run_code_fails.contains(&node_key(func));
@@ -453,6 +456,11 @@ impl EmitState {
         let signature = match contract.signature.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return None };
         let result = match signature.result.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return None };
         emit_rust_crossing(result, false, 0)
+    }
+    pub(crate) fn emit_call_sends_a_kept_value<H: EmitHost>(&self, host: &H, args: &[Expr]) -> bool {
+        if !host.overlaps_user_code() { return false; }
+        for arg in args.iter() { if self.facts.kept_args_run_async.contains_key(&node_key(arg)) { return true; } }
+        false
     }
     pub(crate) fn emit_call_awaits_a_parameter(&self, func: &Expr, scope: &EmitScope) -> bool {
         match func {
@@ -1074,6 +1082,8 @@ impl EmitState {
             let on = match receiver { Some(__nikaia_value) => __nikaia_value, None => return Ok(()) };
             length = self.is_counted(on, &name, args);
         }
+        let sends = self.method_pauses(on_node) && self.emit_call_sends_a_kept_value(host, args);
+        if sends { out.push("(std::boxed::Box::pin("); }
         let boxed = self.method_closes_a_pausing_cycle(&scope.function, &name);
         if boxed { out.push("std::boxed::Box::pin("); }
         if name == "par_iter" && args.is_empty() && emit_candidates(&self.own_contracts, "par_iter").is_empty() {
@@ -1257,6 +1267,7 @@ impl EmitState {
             if self.facts.counted.contains(&node_key(on)) { out.push(".map(|(at, item)| (at as i64, item))"); }
         }
         if boxed { out.push(")"); }
+        if sends { out.push(&format!(") as {}<'_, _>)", emit_boxed_future_in(true))); }
         if self.facts.pausing_walks.contains(&on_node) { return Err(nikaia_std::error::throwing(EmitRefused { message: format!("`{}` can't be used on a sequence whose steps pause. Write a `for x in … {{ … }}` loop instead, and do the work inside it.", name), at: Some(flow.statement) }, &"emit_core_method_call_body")); }
         if self.method_pauses(on_node) {
             if flow.in_lambda { return Err(nikaia_std::error::throwing(EmitRefused { message: format!("This lambda calls `{}`, which can pause, but the compiler knows nothing about what the lambda is passed to, so it can't let it pause. Call `{}` outside the lambda and pass in the value.", name, name), at: Some(flow.statement) }, &"emit_core_method_call_body")); }
@@ -1542,8 +1553,8 @@ pub(crate) fn emit_tuple_part_copy(i: i64, word: &str) -> String {
 }
 
 pub(crate) fn emit_tuple_part_copies(parts: &[String]) -> String {
-    let copies: Vec<String> = parts.iter().enumerate().map(|(at, item)| (at as i64, item)).map(|__nikaia_tuple114360| {
-        let (i, word) = __nikaia_tuple114360;
+    let copies: Vec<String> = parts.iter().enumerate().map(|(at, item)| (at as i64, item)).map(|__nikaia_tuple115858| {
+        let (i, word) = __nikaia_tuple115858;
         emit_tuple_part_copy(i, word)
     }).collect::<Vec<_>>();
     if copies.len() == 1 { return format!("({},)", *unsafe { nikaia_std::proven::read(&copies, (0) as usize) }); }

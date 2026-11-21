@@ -613,6 +613,10 @@ impl EmitState {
         if settled {
             out.push("nikaia_std::rt::exec::settled(")
         }
+        let sends = (pausing != null || awaits_a_parameter) && self.emit_call_sends_a_kept_value(host, args)
+        if sends {
+            out.push("(std::boxed::Box::pin(")
+        }
         let boxed = pausing != null && self.closes_a_pausing_cycle(scope.function, pausing ?? "")
         if boxed {
             out.push("std::boxed::Box::pin(")
@@ -636,6 +640,9 @@ impl EmitState {
         }
         if boxed {
             out.push(")")
+        }
+        if sends {
+            out.push(f") as {emit_boxed_future_in(true)}<'_, _>)")
         }
         // **ADR-055 D2: the `.await` goes before the `?`**, and the order is not a
         // choice: the future is what can fail, so it has to be driven before
@@ -675,6 +682,25 @@ impl EmitState {
         let signature = contract.signature ?? return null
         let result = signature.result ?? return null
         return emit_rust_crossing(result, false, 0)
+    }
+
+    /// **A call that pauses, handed a kept value it runs as an `async`
+    /// closure, where tasks run on threads** (#2017): its future is boxed as
+    /// `SendBoxedIn` before it is awaited. Left in the future around it, the
+    /// closure's call future makes rustc's `Send` of that future "not general
+    /// enough" (a kept value that pauses is a `SendBoxed`, so it must be
+    /// `Send`); behind the box rustc checks it where the closure's type is
+    /// known.
+    fn emit_call_sends_a_kept_value[H: EmitHost](ref self, host: ref H, args: ref Vec[Expr]) -> bool {
+        if !host.overlaps_user_code() {
+            return false
+        }
+        for arg in args {
+            if self.facts.kept_args_run_async.contains_key(node_key(arg)) {
+                return true
+            }
+        }
+        return false
     }
 
     fn emit_call_awaits_a_parameter(ref self, func: ref Expr, scope: ref EmitScope) -> bool {
@@ -1564,6 +1590,12 @@ impl EmitState {
         // sized future, and a call that closes a cycle of pausing functions puts
         // it behind a pointer. `pausing_reach` draws an edge to **every** pausing
         // method of that name, so the same widening answers the question here.
+        // **A kept value run as an `async` closure** (#2017): the future
+        // boxed as at a function's call.
+        let sends = self.method_pauses(on_node) && self.emit_call_sends_a_kept_value(host, args)
+        if sends {
+            out.push("(std::boxed::Box::pin(")
+        }
         let boxed = self.method_closes_a_pausing_cycle(scope.function, name)
         if boxed {
             out.push("std::boxed::Box::pin(")
@@ -1883,6 +1915,9 @@ impl EmitState {
         // what awaiting it comes to.
         if boxed {
             out.push(")")
+        }
+        if sends {
+            out.push(f") as {emit_boxed_future_in(true)}<'_, _>)")
         }
         // **A walk of a pausing sequence that has no pausing form** (ADR-172 D5,
         // ADR-234). Every walk `Seq` has today has one; an entry added without one

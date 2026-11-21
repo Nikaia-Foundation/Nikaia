@@ -746,6 +746,12 @@ impl EmitState {
             for n in 0..kept_arity { names.push(format!("__nikaia_a{}", n)); }
             let joined = nikaia_std::block::Text::from(names.join(", "));
             if !out.buf.ends_with('&') && !out.buf.ends_with("&mut ") { out.push("&"); }
+            if host.overlaps_user_code() {
+                out.push("{ let __nikaia_kept = (");
+                self.emit_expr(world, walk, out, host, arg, depth, inside, scope)?;
+                out.push(&format!(").clone(); async move |{}| (*__nikaia_kept)({}).await }}", joined, joined));
+                return Ok(());
+            }
             out.push(&format!("async |{}| (*", joined));
             self.emit_expr(world, walk, out, host, arg, depth, inside, scope)?;
             out.push(&format!(")({}).await", joined));
