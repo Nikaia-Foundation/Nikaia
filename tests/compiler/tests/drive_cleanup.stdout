@@ -15,6 +15,27 @@ DRY-RUN NEXT b1
 DISK 2000 MB free, under 6 GB: cleanup
 would run: rm -rf target/debug (unless a cargo in this checkout builds into it) target/nikaia-example-tests target/gate-tests-* target/pre-push-*; rm -rf each $TMPDIR/nikaia-test-<pid>-<n> whose pid is gone; NIKAIA_CACHE_DIR=target/nikaia-project-tests NIKAIA_CACHE_LIMIT=2G target/fast/nikaia cache prune; under 6 GB after it and no cargo or rustc building into target/fast or target/release, rm -rf target/fast/incremental target/release/incremental target/ledger-target/fast/incremental, and in target/fast/deps target/release/deps target/ledger-target/fast/deps rm each <name>-<16 hex><rest> last changed over 3 h ago whose <name> has a newer file of another hash; print CLEANUP freed <N> MB, <M> MB free
 ESCALATE drive: less than 3 GB free after the cleanup (2000 MB) (drive.nika SHA)
+CLEANUP removed 1 briefs, 1 MB
+bins of HEAD~0: true
+bins of HEAD~1: true
+bins of HEAD~2: true
+bins of HEAD~3: false
+bins of HEAD~4: true
+bins of another commit: false
+issue-1.md: false
+issue-1.md.posted: false
+issue-1.md.run.json: false
+issue-1.md.report.md: false
+issue-1.md.run2.report.md: false
+issue-1.debrief.md: false
+issue-2.md: true
+issue-2.md.posted: true
+issue-3.md: true
+issue-4.md: true
+issue-4.md.posted: true
+issue-4.debrief.md: true
+cost.txt: true
+session of issue 1: false, another: true
 4 old deps variants
 nikaia-0000000000000001: false
 nikaia-0000000000000001.d: false

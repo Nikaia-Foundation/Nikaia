@@ -1,0 +1,5 @@
+bounds in tests/a_found_rules_check_keeps_what_a_call_on_self_read_of_the_owner.nika: 0 indexes, 0 proved; 4 operations, 4 proved
+    28  self.used += 1  proved
+    36  self.used + 1   proved
+    49  m.used + 1      proved
+    57  m.used + 1      proved

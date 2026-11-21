@@ -1,0 +1,70 @@
+/// A method's check of the found rules is kept by the found returns it
+/// read (#2464): a callee's entry pending in the first round of the found
+/// returns (ADR-306 D23) reads as an absent one, except where the walk asks
+/// whether a call's whole-number result is found (`match` on it, #1758) or
+/// which lists a call's result lies below.
+pub fn find(xs: ref Vec[i64], v: i64) -> i64 {
+	let mut i = 0
+	while i < xs.len() {
+		if xs[i] == v {
+			return i
+		}
+		i += 1
+	}
+	return -1
+}
+
+pub fn pick(xs: ref Vec[i64], v: i64) -> i64? {
+	let mut i = 0
+	while i < xs.len() {
+		if xs[i] == v {
+			return i
+		}
+		i += 1
+	}
+	return null
+}
+
+struct Cursor {
+	items: Vec[i64],
+	at: i64,
+}
+
+impl Cursor {
+	fn seek(mut self, v: i64) {
+		let p = find(self.items, v)
+		if p >= 0 {
+			self.at = p
+		}
+	}
+
+	fn seek_some(mut self, v: i64) {
+		match pick(self.items, v) {
+			null => {},
+			p => {
+				if p >= 0 {
+					self.at = p
+				}
+			},
+		}
+	}
+
+	fn seen(ref self) -> i64 {
+		if self.at == 0 {
+			return 0
+		}
+		return self.items[self.at - 1]
+	}
+}
+
+fn cursor() -> Cursor {
+	return Cursor { items: [3, 5, 8], at: 0 }
+}
+
+fn main() throws {
+	let mut c = cursor()
+	c.seek(8)
+	println(c.seen())
+	c.seek_some(5)
+	println(c.seen())
+}

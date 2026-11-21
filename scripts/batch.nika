@@ -51,10 +51,10 @@ fn batch_field(text: String, key: String) -> String {
 }
 
 // `agent model turns budget effort` of a brief, from `agent.nika --info`.
-fn batch_info(abs: String) -> String throws {
+fn batch_info(brief: String) -> String throws {
     for exe in ["target/fast/nikaia", "target/release/nikaia"] {
         if fs::exists(exe, fs::Root::Anywhere) {
-            let out = process::run(exe, ["run", "scripts/agent.nika", "--", "--info", abs.clone()])
+            let out = process::run(exe, ["run", "scripts/agent.nika", "--", "--info", brief.clone()])
             let line = out.stdout.trim().clone()
             if out.ok && line.split(" ").count() == 5 { return line }
             return "builder sonnet 120 20 medium"
@@ -153,7 +153,9 @@ fn batch_run(dir: String) -> String throws {
             if !fs::exists(f"{dir}/{brief}", fs::Root::Dir(".")) { return f"CUT {brief}: brief missing" }
             let abs = process::run("realpath", [f"{dir}/{brief}"])
             let path_abs = abs.stdout.trim().clone()
-            return f"NEXT {path_abs} {batch_info(path_abs)}"
+            // The brief as a relative path: agent.nika refuses one outside the working directory.
+            let info = batch_info(f"{dir}/{brief}")
+            return f"NEXT {path_abs} {info}"
         }
         let mut text = fs::read_to_string(path.clone(), fs::Root::Dir("."))
         if batch_auto(text.clone()) {
