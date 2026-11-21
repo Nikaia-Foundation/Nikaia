@@ -8,6 +8,15 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1511] — 2026-11-21
+
+**Builders' changes (#2062, #2446, #2447, #2451)**
+- check --bounds about a third cheaper: the prover arena numbers its variables and keeps each term's sorted variable numbers, and the nearest-facts choice works on them.
+- A `for` over a method call returning `ref Vec[i64]` binds each number instead of handing rustc a reference (NK1343).
+- A program built in a project with no nikaia.proofs yet has its ledger inferred once per build: the lowering's cache entry is recorded once the file is written, so the build's rustc wrapper hits instead of inferring again (#2446).
+- The lowering now writes without their check the indices and operations `--bounds` reports proved by a field rule or a derived claim: it proved each file with that file read beside itself, which made every field and private function look written elsewhere.
+- The lowering takes the ledger's proof of a unit: the ledger's panics inference proves through loops (ADR-361 D16), and nikaia check on packages/logic runs the bounds proof once, in parallel, instead of a second time on one thread.
+
 ## [0.0.1510] — 2026-11-21
 
 **Builders' changes (#2453, #2455)**

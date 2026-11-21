@@ -466,7 +466,7 @@ pub(crate) fn lg_below(search: &mut LgSearch, depth: i64, chosen: &mut Vec<LgPar
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 pub fn lg_alethe_write(source: &TermArena, facts: &[i64], goal: i64) -> Option<String> {
-    let mut arena = TermArena { nodes: source.nodes.copy_owned() };
+    let mut arena = source.clone();
     let mut proof = LgProof { text: String::from(""), count: 0 };
     let mut pending: Vec<LgClause> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     pending.reserve(facts.iter().size_hint().0); for fact in facts.iter() {

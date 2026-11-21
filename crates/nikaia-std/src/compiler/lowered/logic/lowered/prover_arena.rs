@@ -4,16 +4,80 @@
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct TermArena {
     pub nodes: Vec<SolverTerm>,
+    pub(crate) var_ids: collections::BTreeMap<String, i64>,
+    pub(crate) var_nodes: Vec<i64>,
+    pub(crate) var_names: Vec<String>,
+    pub(crate) reads: Vec<Vec<i64>>,
 }
 
 impl TermArena {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn empty() -> TermArena { TermArena { nodes: vec![] } }
+    pub fn empty() -> TermArena { TermArena { nodes: vec![], var_ids: collections::BTreeMap::new(), var_nodes: vec![], var_names: vec![], reads: vec![] } }
     pub(crate) fn push(&mut self, node: SolverTerm) -> i64 {
+        self.read_all();
+        let read = self.read_by(&node, self.nodes.len() as i64);
         self.nodes.push(node);
+        self.reads.push(read);
         unsafe { nikaia_std::proven::sub::<i64>(self.nodes.len() as i64, 1) }
     }
+    pub(crate) fn read_all(&mut self) {
+        while (self.reads.len() as i64) < self.nodes.len() as i64 {
+            let at = self.reads.len() as i64;
+            let node = (*unsafe { nikaia_std::proven::read(&self.nodes, (at) as usize) }).clone();
+            let read = self.read_by(&node, at);
+            self.reads.push(read);
+        }
+    }
+    pub(crate) fn read_by(&mut self, node: &SolverTerm, at: i64) -> Vec<i64> {
+        match node {
+            SolverTerm::Var(name) => vec![self.numbered(name, at)],
+            SolverTerm::Neg(a) => { let a = *a; (*nikaia_std::index::get(&self.reads, nikaia_std::index::at(a))).copy_owned() },
+            SolverTerm::Not(a) => { let a = *a; (*nikaia_std::index::get(&self.reads, nikaia_std::index::at(a))).copy_owned() },
+            SolverTerm::Quot(a, _) => { let a = *a; (*nikaia_std::index::get(&self.reads, nikaia_std::index::at(a))).copy_owned() },
+            SolverTerm::Add(a, b) => { let a = *a; let b = *b; merged_ids(nikaia_std::index::get(&self.reads, nikaia_std::index::at(a)), nikaia_std::index::get(&self.reads, nikaia_std::index::at(b))) },
+            SolverTerm::Sub(a, b) => { let a = *a; let b = *b; merged_ids(nikaia_std::index::get(&self.reads, nikaia_std::index::at(a)), nikaia_std::index::get(&self.reads, nikaia_std::index::at(b))) },
+            SolverTerm::Mul(a, b) => { let a = *a; let b = *b; merged_ids(nikaia_std::index::get(&self.reads, nikaia_std::index::at(a)), nikaia_std::index::get(&self.reads, nikaia_std::index::at(b))) },
+            SolverTerm::Le(a, b) => { let a = *a; let b = *b; merged_ids(nikaia_std::index::get(&self.reads, nikaia_std::index::at(a)), nikaia_std::index::get(&self.reads, nikaia_std::index::at(b))) },
+            SolverTerm::Lt(a, b) => { let a = *a; let b = *b; merged_ids(nikaia_std::index::get(&self.reads, nikaia_std::index::at(a)), nikaia_std::index::get(&self.reads, nikaia_std::index::at(b))) },
+            SolverTerm::Ge(a, b) => { let a = *a; let b = *b; merged_ids(nikaia_std::index::get(&self.reads, nikaia_std::index::at(a)), nikaia_std::index::get(&self.reads, nikaia_std::index::at(b))) },
+            SolverTerm::Gt(a, b) => { let a = *a; let b = *b; merged_ids(nikaia_std::index::get(&self.reads, nikaia_std::index::at(a)), nikaia_std::index::get(&self.reads, nikaia_std::index::at(b))) },
+            SolverTerm::Eq(a, b) => { let a = *a; let b = *b; merged_ids(nikaia_std::index::get(&self.reads, nikaia_std::index::at(a)), nikaia_std::index::get(&self.reads, nikaia_std::index::at(b))) },
+            SolverTerm::Ne(a, b) => { let a = *a; let b = *b; merged_ids(nikaia_std::index::get(&self.reads, nikaia_std::index::at(a)), nikaia_std::index::get(&self.reads, nikaia_std::index::at(b))) },
+            SolverTerm::And(parts) => self.parts_read(parts),
+            SolverTerm::Or(parts) => self.parts_read(parts),
+            _ => vec![],
+        }
+    }
+    pub(crate) fn parts_read(&self, parts: &[i64]) -> Vec<i64> {
+        let mut out: Vec<i64> = vec![];
+        for part in parts.iter() {
+            let part = nikaia_std::num::value(part);
+            out = merged_ids(&out, nikaia_std::index::get(&self.reads, nikaia_std::index::at(part)));
+        }
+        out
+    }
+    pub(crate) fn numbered(&mut self, name: &str, at: i64) -> i64 {
+        let known = self.var_ids.get(name);
+        if known.is_some() { return nikaia_std::index::or(known, || 0); }
+        let number = self.var_nodes.len() as i64;
+        self.var_ids.insert(nikaia_std::block::Text::from(name.to_string()), number);
+        self.var_nodes.push(at);
+        self.var_names.push(nikaia_std::block::Text::from(name.to_string()));
+        number
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn variable_ids(&self, id: i64) -> &[i64] { nikaia_std::index::get(&self.reads, nikaia_std::index::at(id)) }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn variable_name(&self, n: i64) -> &str { nikaia_std::index::get(&self.var_names, nikaia_std::index::at(n)) }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn variable_id(&self, name: &str) -> Option<i64> { self.var_ids.get(name).copied() }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn variable_count(&self) -> i64 { self.var_nodes.len() as i64 }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     pub fn at(&self, id: i64) -> SolverTerm { (*nikaia_std::index::get(&self.nodes, nikaia_std::index::at(id))).clone() }
@@ -25,7 +89,12 @@ impl TermArena {
     pub fn int(&mut self, value: i64) -> i64 { self.push(SolverTerm::Int(value)) }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn var(&mut self, name: &str) -> i64 { self.push(SolverTerm::Var(nikaia_std::block::Text::from(name.to_string()))) }
+    pub fn var(&mut self, name: &str) -> i64 {
+        self.read_all();
+        let known = self.var_ids.get(name);
+        if known.is_some() { return *nikaia_std::index::get(&self.var_nodes, nikaia_std::index::at(nikaia_std::index::or(known, || 0))); }
+        self.push(SolverTerm::Var(nikaia_std::block::Text::from(name.to_string())))
+    }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     pub fn add(&mut self, a: i64, b: i64) -> i64 { self.push(SolverTerm::Add(a, b)) }
@@ -68,6 +137,12 @@ impl TermArena {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     pub fn not(&mut self, a: i64) -> i64 { self.push(SolverTerm::Not(a)) }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn mentions_numbered(&self, id: i64, n: i64, name: &str) -> bool {
+        if id < self.reads.len() as i64 { return n >= 0 && (*nikaia_std::index::get(&self.reads, nikaia_std::index::at(id))).contains(&n); }
+        self.mentions(id, name)
+    }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     pub fn mentions(&self, id: i64, name: &str) -> bool {
@@ -349,6 +424,7 @@ impl TermArena {
             };
             self.nodes.push(moved);
         }
+        self.read_all();
         unsafe { nikaia_std::proven::sub::<i64>(self.nodes.len() as i64, 1) }
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -445,6 +521,36 @@ impl TermArena {
             _ => false,
         }
     }
+}
+
+pub(crate) fn merged_ids(a: &[i64], b: &[i64]) -> Vec<i64> {
+    if b.is_empty() { return a.copy_owned(); }
+    if a.is_empty() { return b.copy_owned(); }
+    let mut out: Vec<i64> = vec![];
+    let mut i: i64 = 0;
+    let mut j: i64 = 0;
+    while ((i) as usize) < a.len() && ((j) as usize) < b.len() {
+        if *unsafe { nikaia_std::proven::read(&a, (i) as usize) } < *unsafe { nikaia_std::proven::read(&b, (j) as usize) } {
+            out.push(*unsafe { nikaia_std::proven::read(&a, (i) as usize) });
+            i = unsafe { nikaia_std::proven::add::<i64>(i, 1) };
+        } else if *unsafe { nikaia_std::proven::read(&b, (j) as usize) } < *unsafe { nikaia_std::proven::read(&a, (i) as usize) } {
+            out.push(*unsafe { nikaia_std::proven::read(&b, (j) as usize) });
+            j = unsafe { nikaia_std::proven::add::<i64>(j, 1) };
+        } else {
+            out.push(*unsafe { nikaia_std::proven::read(&a, (i) as usize) });
+            i = unsafe { nikaia_std::proven::add::<i64>(i, 1) };
+            j = unsafe { nikaia_std::proven::add::<i64>(j, 1) };
+        }
+    }
+    while ((i) as usize) < a.len() {
+        out.push(*unsafe { nikaia_std::proven::read(&a, (i) as usize) });
+        i = unsafe { nikaia_std::proven::add::<i64>(i, 1) };
+    }
+    while ((j) as usize) < b.len() {
+        out.push(*unsafe { nikaia_std::proven::read(&b, (j) as usize) });
+        j = unsafe { nikaia_std::proven::add::<i64>(j, 1) };
+    }
+    out
 }
 
 pub(crate) fn moved_by(parts: &[i64], base: i64) -> Vec<i64> {

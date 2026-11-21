@@ -1171,7 +1171,7 @@ signature = "(ref mut self, c: i64, a: i64, b: i64) -> i64"
 
 [fn."SvSmtReader::choice_new"]
 sync = "inferred"
-panics = false
+panics = true
 touches = []
 signature = "(ref mut self, c: i64, a: i64, b: i64) -> i64"
 
@@ -1198,7 +1198,7 @@ signature = "(ref mut self, rel: String, d: ref SvLin) -> SvGot"
 
 [fn."SvSmtReader::declare"]
 sync = "inferred"
-panics = false
+panics = true
 touches = []
 views = ["name: borrowed", "sort: borrowed"]
 signature = "(ref mut self, name: String, sort: String) -> SvReadWhy?"
@@ -1252,7 +1252,7 @@ signature = "(ref mut self, kind: String) -> String"
 
 [fn."SvSmtReader::iff"]
 sync = "inferred"
-panics = false
+panics = true
 touches = []
 signature = "(ref mut self, a: i64, b: i64) -> i64"
 
@@ -1343,7 +1343,7 @@ signature = "(ref self, id: i64) -> i64"
 
 [fn."SvSmtReader::truth_node"]
 sync = "inferred"
-panics = false
+panics = true
 touches = []
 signature = "(ref mut self, value: bool) -> i64"
 
@@ -1628,7 +1628,7 @@ signature = "(ref mut self, m: ref SvMove) -> i64?"
 [fn."TermArena::add"]
 pub = true
 sync = true
-panics = false
+panics = true
 touches = []
 signature = "(ref mut self, a: i64, b: i64) -> i64"
 
@@ -1644,7 +1644,7 @@ signature = "(ref mut self, nodes: ref Vec[SolverTerm]) -> i64"
 pub = true
 sync = true
 keeps = ["parts"]
-panics = false
+panics = true
 touches = []
 signature = "(ref mut self, parts: Vec[i64]) -> i64"
 
@@ -1665,7 +1665,7 @@ signature = "(ref self, id: i64) -> SolverTerm"
 [fn."TermArena::boolean"]
 pub = true
 sync = true
-panics = false
+panics = true
 touches = []
 signature = "(ref mut self, value: bool) -> i64"
 
@@ -1698,28 +1698,28 @@ signature = "() -> TermArena"
 [fn."TermArena::equal"]
 pub = true
 sync = true
-panics = false
+panics = true
 touches = []
 signature = "(ref mut self, a: i64, b: i64) -> i64"
 
 [fn."TermArena::ge"]
 pub = true
 sync = true
-panics = false
+panics = true
 touches = []
 signature = "(ref mut self, a: i64, b: i64) -> i64"
 
 [fn."TermArena::gt"]
 pub = true
 sync = true
-panics = false
+panics = true
 touches = []
 signature = "(ref mut self, a: i64, b: i64) -> i64"
 
 [fn."TermArena::int"]
 pub = true
 sync = true
-panics = false
+panics = true
 touches = []
 signature = "(ref mut self, value: i64) -> i64"
 
@@ -1742,14 +1742,14 @@ signature = "(ref self, id: i64, name: ref String) -> bool"
 [fn."TermArena::le"]
 pub = true
 sync = true
-panics = false
+panics = true
 touches = []
 signature = "(ref mut self, a: i64, b: i64) -> i64"
 
 [fn."TermArena::lt"]
 pub = true
 sync = true
-panics = false
+panics = true
 touches = []
 signature = "(ref mut self, a: i64, b: i64) -> i64"
 
@@ -1761,17 +1761,25 @@ touches = []
 views = ["name: borrowed"]
 signature = "(ref self, id: i64, name: ref String) -> bool"
 
+[fn."TermArena::mentions_numbered"]
+pub = true
+sync = true
+panics = true
+touches = []
+views = ["name: borrowed"]
+signature = "(ref self, id: i64, n: i64, name: ref String) -> bool"
+
 [fn."TermArena::mul"]
 pub = true
 sync = true
-panics = false
+panics = true
 touches = []
 signature = "(ref mut self, a: i64, b: i64) -> i64"
 
 [fn."TermArena::neg"]
 pub = true
 sync = true
-panics = false
+panics = true
 touches = []
 signature = "(ref mut self, a: i64) -> i64"
 
@@ -1785,17 +1793,31 @@ signature = "(ref self, id: i64) -> Vec[SolverTerm]"
 [fn."TermArena::not"]
 pub = true
 sync = true
-panics = false
+panics = true
 touches = []
 signature = "(ref mut self, a: i64) -> i64"
+
+[fn."TermArena::numbered"]
+sync = "inferred"
+panics = false
+touches = []
+views = ["name: borrowed"]
+signature = "(ref mut self, name: ref String, at: i64) -> i64"
 
 [fn."TermArena::or"]
 pub = true
 sync = true
 keeps = ["parts"]
-panics = false
+panics = true
 touches = []
 signature = "(ref mut self, parts: Vec[i64]) -> i64"
+
+[fn."TermArena::parts_read"]
+sync = "inferred"
+panics = true
+touches = []
+views = ["parts: borrowed"]
+signature = "(ref self, parts: ref Vec[i64]) -> Vec[i64]"
 
 [fn."TermArena::parts_size"]
 sync = "inferred"
@@ -1807,16 +1829,29 @@ signature = "(ref self, parts: ref Vec[i64]) -> i64"
 [fn."TermArena::push"]
 sync = "inferred"
 keeps = ["node"]
-panics = false
+panics = true
 touches = []
 signature = "(ref mut self, node: SolverTerm) -> i64"
 
 [fn."TermArena::quot"]
 pub = true
 sync = true
-panics = false
+panics = true
 touches = []
 signature = "(ref mut self, a: i64, k: i64) -> i64"
+
+[fn."TermArena::read_all"]
+sync = "inferred"
+panics = true
+touches = []
+signature = "(ref mut self)"
+
+[fn."TermArena::read_by"]
+sync = "inferred"
+panics = true
+touches = []
+views = ["node: borrowed"]
+signature = "(ref mut self, node: ref SolverTerm, at: i64) -> Vec[i64]"
 
 [fn."TermArena::size"]
 pub = true
@@ -1828,7 +1863,7 @@ signature = "(ref self, id: i64) -> i64"
 [fn."TermArena::sub"]
 pub = true
 sync = true
-panics = false
+panics = true
 touches = []
 signature = "(ref mut self, a: i64, b: i64) -> i64"
 
@@ -1851,17 +1886,48 @@ signature = "(ref self, id: i64) -> String"
 [fn."TermArena::unequal"]
 pub = true
 sync = true
-panics = false
+panics = true
 touches = []
 signature = "(ref mut self, a: i64, b: i64) -> i64"
 
 [fn."TermArena::var"]
 pub = true
 sync = true
-panics = false
+panics = true
 touches = []
 views = ["name: borrowed"]
 signature = "(ref mut self, name: ref String) -> i64"
+
+[fn."TermArena::variable_count"]
+pub = true
+sync = true
+panics = false
+touches = []
+signature = "(ref self) -> i64"
+
+[fn."TermArena::variable_id"]
+pub = true
+sync = true
+panics = false
+touches = []
+views = ["name: borrowed"]
+signature = "(ref self, name: ref String) -> i64?"
+
+[fn."TermArena::variable_ids"]
+pub = true
+sync = true
+panics = true
+touches = []
+views = ["<result>: borrowed"]
+signature = "(ref self, id: i64) -> ref(self) Vec[i64]"
+
+[fn."TermArena::variable_name"]
+pub = true
+sync = true
+panics = true
+touches = []
+views = ["<result>: borrowed"]
+signature = "(ref self, n: i64) -> ref(self) String"
 
 [fn."TermArena::variables"]
 pub = true
@@ -1938,7 +2004,7 @@ signature = "(arena: ref TermArena, id: i64, values: ref collections::BTreeMap[S
 
 [fn."lg_bound_term"]
 sync = "inferred"
-panics = false
+panics = true
 touches = []
 views = ["lin: borrowed"]
 signature = "(mut arena: TermArena, lin: ref LgLin) -> i64"
@@ -2627,6 +2693,13 @@ panics = true
 touches = []
 views = ["arena: borrowed"]
 signature = "(arena: ref TermArena, id: i64, shape: bool, turn: bool) -> String"
+
+[fn."merged_ids"]
+sync = "inferred"
+panics = false
+touches = []
+views = ["a: borrowed", "b: borrowed"]
+signature = "(a: ref Vec[i64], b: ref Vec[i64]) -> Vec[i64]"
 
 [fn."moved_by"]
 sync = "inferred"
@@ -6107,7 +6180,7 @@ hashes = true
 
 [type."TermArena"]
 pub = true
-fields = ["pub nodes: Vec[SolverTerm]"]
+fields = ["pub nodes: Vec[SolverTerm]", "var_ids: collections::BTreeMap[String, i64]", "var_nodes: Vec[i64]", "var_names: Vec[String]", "reads: Vec[Vec[i64]]"]
 compares = true
 equates = true
 hashes = true

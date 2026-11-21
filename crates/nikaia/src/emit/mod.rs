@@ -925,13 +925,13 @@ impl nikaia_std::compiler::emit_contracts::EmitContractsHost for ContractsHost<'
         facts: &crate::check::CheckFacts,
         published: &crate::contracts::Ledger,
     ) -> nikaia_std::compiler::emit_contracts::EmitContractsProven {
-        let proven = crate::bounds::proven(
+        // **The ledger's proof of the unit, where it asked the same**
+        // (ADR-361 D16), else proved here.
+        let proven = crate::bounds::proven_taken(
             self.parsed,
             self.beside,
             facts,
             &[published, std_ledger()],
-            &std::collections::BTreeSet::new(),
-            self.build.prove_through_loops,
         );
         *self.nonnegative_locals.borrow_mut() = proven.nonnegative_locals;
         nikaia_std::compiler::emit_contracts::EmitContractsProven {

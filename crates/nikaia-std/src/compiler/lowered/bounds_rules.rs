@@ -1426,19 +1426,26 @@ pub(crate) fn rules_standing(walk: &BoundsWalk, facts: &BoundsFacts, fact: i64) 
     !marked
 }
 
-pub(crate) fn rules_marker_stands(walk: &BoundsWalk, facts: &BoundsFacts, marker: &str, length: &str) -> bool { facts.facts.iter().copied().any(|f| { walk.arena.mentions(f, marker) && walk.arena.mentions(f, length) }) }
+pub(crate) fn rules_marker_stands(walk: &BoundsWalk, facts: &BoundsFacts, marker: &str, length: &str) -> bool {
+    let m = nikaia_std::index::or(walk.arena.variable_id(marker), || -1);
+    let l = nikaia_std::index::or(walk.arena.variable_id(length), || -1);
+    facts.facts.iter().copied().any(|f| { walk.arena.mentions_numbered(f, m, marker) && walk.arena.mentions_numbered(f, l, length) })
+}
 
 pub(crate) fn rules_capped_grown(walk: &mut BoundsWalk, facts: &BoundsFacts, name: &str, changed: &BoundsChanged) -> Vec<i64> {
     let mut out: Vec<i64> = vec![];
     if changed.bare_falls.contains(name) || changed.values.contains(name) { return out; }
     let length = length_of(name);
-    let mut names = vec![nikaia_std::block::Text::from(length.to_string())];
+    let l = nikaia_std::index::or(walk.arena.variable_id(&length), || -1);
+    let mut names: Vec<(String, i64)> = vec![(nikaia_std::block::Text::from(length.to_string()), l)];
     for k in 0..walk.entries {
         let entry = format!("#{}:{}", k, length);
-        if facts.facts.iter().copied().any(|f| { walk.arena.mentions(f, &entry) && walk.arena.mentions(f, &length) }) { names.push(entry); }
+        let e = nikaia_std::index::or(walk.arena.variable_id(&entry), || -1);
+        if facts.facts.iter().copied().any(|f| { walk.arena.mentions_numbered(f, e, &entry) && walk.arena.mentions_numbered(f, l, &length) }) { names.push((entry, e)); }
     }
     for (marker, of, _, _) in walk.capped.copy_owned() {
-        if of != length || !facts.facts.iter().copied().any(|f| { walk.arena.mentions(f, &marker) && names.iter().any(|n| { walk.arena.mentions(f, n) }) }) { continue; }
+        let numbered = nikaia_std::index::or(walk.arena.variable_id(&marker), || -1);
+        if of != length || !facts.facts.iter().copied().any(|f| { walk.arena.mentions_numbered(f, numbered, &marker) && names.iter().any(|n| { walk.arena.mentions_numbered(f, n.1, &n.0) }) }) { continue; }
         let m = walk.arena.var(&marker);
         let len = walk.arena.var(&length);
         out.push(walk.arena.le(m, len));

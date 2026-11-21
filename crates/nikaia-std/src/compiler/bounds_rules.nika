@@ -1985,7 +1985,10 @@ fn rules_standing(walk: ref BoundsWalk, facts: ref BoundsFacts, fact: i64) -> bo
 /// Whether the marker `cap#k` of a `capped` bound stands among `facts`
 /// beside the length it names (`rules_capped_stand`).
 fn rules_marker_stands(walk: ref BoundsWalk, facts: ref BoundsFacts, marker: ref String, length: ref String) -> bool {
-    return facts.facts.iter().any(fn(f) { walk.arena.mentions(f, marker) && walk.arena.mentions(f, length) })
+    // Numbered once, each fact asked by its numbers (#2062).
+    let m = walk.arena.variable_id(marker) ?? -1
+    let l = walk.arena.variable_id(length) ?? -1
+    return facts.facts.iter().any(fn(f) { walk.arena.mentions_numbered(f, m, marker) && walk.arena.mentions_numbered(f, l, length) })
 }
 
 /// **The markers of `capped` bounds against `name`'s length that a loop or
@@ -2003,15 +2006,20 @@ fn rules_capped_grown(mut walk: BoundsWalk, facts: ref BoundsFacts, name: ref St
     // The names a counted loop gave the length it was reached with
     // (`#k:` of `bounding_turn_bounds`), each still tied to the length: one
     // a shrink since forgot the tie of names no length.
-    let mut names = [length.clone()]
+    // Each name beside its arena number, so a fact is asked by numbers
+    // (`mentions_numbered`, #2062).
+    let l = walk.arena.variable_id(length) ?? -1
+    let mut names: Vec[(String, i64)] = [(length.clone(), l)]
     for k in 0..<walk.entries {
         let entry = f"#{k}:{length}"
-        if facts.facts.iter().any(fn(f) { walk.arena.mentions(f, entry) && walk.arena.mentions(f, length) }) {
-            names.push(entry)
+        let e = walk.arena.variable_id(entry) ?? -1
+        if facts.facts.iter().any(fn(f) { walk.arena.mentions_numbered(f, e, entry) && walk.arena.mentions_numbered(f, l, length) }) {
+            names.push((entry, e))
         }
     }
     for (marker, of, _, _) in walk.capped.clone() {
-        if of != length || !facts.facts.iter().any(fn(f) { walk.arena.mentions(f, marker) && names.iter().any(fn(n) { walk.arena.mentions(f, n) }) }) {
+        let numbered = walk.arena.variable_id(marker) ?? -1
+        if of != length || !facts.facts.iter().any(fn(f) { walk.arena.mentions_numbered(f, numbered, marker) && names.iter().any(fn(n) { walk.arena.mentions_numbered(f, n.1, n.0) }) }) {
             continue
         }
         let m = walk.arena.var(marker)

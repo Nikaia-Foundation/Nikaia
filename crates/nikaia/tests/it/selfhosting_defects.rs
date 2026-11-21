@@ -389,6 +389,7 @@ fn a_list_element_past_a_jump_is_a_view_in_a_typed_let_and_an_argument() {
     let (said, lowered) = printed_and_lowered(
         "list-element-view-typed-and-argument",
         r#"
+use std::cli
 struct Entry { n: i64, s: String }
 struct Pt { x: i64 }
 fn by_ref(e: ref Entry) -> i64 { e.n }
@@ -426,10 +427,19 @@ fn main() throws {
     let mut ts: Vec[String?] = []
     ts.push("abc")
     println(f"{typed_ref(v)} {chain_ref(w, v)} {typed_copy(v)} {pt(ps)} {arg_ref(v)} {arg_val(v)} {arg_ref(w)} {arg_text(ts)}")
+    let mut z: Vec[Entry?] = []
+    let mut pz: Vec[Pt?] = []
+    let mut tz: Vec[String?] = []
+    for a in cli::args() {
+        z.push(Entry { n: 1, s: "b" })
+        pz.push(Pt { x: 1 })
+        tz.push("c")
+    }
+    println(f"{typed_ref(z)} {chain_ref(z, z)} {typed_copy(z)} {pt(pz)} {arg_ref(z)} {arg_val(z)} {arg_text(tz)}")
 }
 "#,
     );
-    assert_eq!(said, "3 3 3 5 3 3 0 3\n");
+    assert_eq!(said, "3 3 3 5 3 3 0 3\n1 1 1 1 1 1 1\n");
     assert!(!lowered.contains("*nikaia_std::index::get(&a"), "{lowered}");
     assert!(
         lowered.contains("by_ref(match nikaia_std::index::get(&v, 0).as_ref()"),
