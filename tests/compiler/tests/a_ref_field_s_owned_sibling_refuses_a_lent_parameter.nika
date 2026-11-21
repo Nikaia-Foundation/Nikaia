@@ -1,0 +1,16 @@
+// The counter-case of #1637: an owned field of a struct with a `ref` field
+// given a lent parameter is refused, since the field owns its value
+// (ADR-views-v4 D5).
+struct Plain { items: Vec[i64] }
+struct Holder { name: ref Plain, items: Vec[i64] }
+
+fn make(name: ref Plain, items: ref Vec[i64]) -> Holder {
+    return Holder { name: name, items: items }
+}
+
+fn main() throws {
+    let n = Plain { items: [9] }
+    let v = [1, 2, 3]
+    let h = make(n, v)
+    println(f"{h.name.items.len()} {h.items.len()}")
+}
