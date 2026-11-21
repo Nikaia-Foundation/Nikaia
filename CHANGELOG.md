@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1509] — 2026-11-21
+
+**A position moves only in a unit it names: forward/back(scalars:|graphemes:|bytes:), handed the text the compiler follows it to (ADR-374 D4, D5)**
+- A text position moves only in a unit it names: p.forward(scalars: n), forward(graphemes: n), forward(bytes: n) and back, each a text::Pos? (null past an end, and for bytes: inside a scalar); exactly one unit or NK1285 (ADR-374 D4). The compiler follows which text a position belongs to: a move, cut or search with a position of another text, or of a text chosen at run time, is NK1214 (ADR-374 D5).
+
 ## [0.0.1508] — 2026-11-20
 
 **Builders' changes (#2440, #2441, #2450)**
