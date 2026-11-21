@@ -1,7 +1,7 @@
 # ADR-views-v4: A Parameter That Keeps Its Argument Says `keep`, `ref` Leaves the Language, a Result's Source Is Inferred or Written `from`, and a `let mut` or `for mut` View of a Place Writes Through and Gives Back What It Takes
 
 **Status:** Accepted
-**Date:** November 20, 2026 (the consolidation, #904; the decisions themselves October 29 to November 18, 2026)
+**Date:** November 20, 2026 (the consolidation, #904; the decisions themselves October 29 to November 18, 2026); D32 November 21, 2026 (owner, #2425)
 **Answers:** whether a signature says that a parameter keeps its argument, and
 with which word; how a view is written once that is said; how a result that
 points into a parameter is written (#1213, which absorbed #1211); how a program
@@ -600,6 +600,38 @@ array its help writes `for mut x in xs` and says that the change reaches `xs`;
 for a change meant for this turn only, `let mut y = x.clone()` (or
 `let mut y = x` for a value that copies).
 
+### D32 — What a `mut` parameter receives may view another parameter; that source is inferred, and is written `from` only where there is no body.
+
+A function may put into a `mut` parameter - an element pushed onto a list, a
+field set, a value inserted into a map - a view of another lent parameter, as
+it may hand one back as its result (D8):
+
+```nika
+fn walk(n: Node, mut out: Vec[Event]) {
+    out.push(Event { value: n.raw })   // `out`'s elements view `n`
+}
+```
+
+The source is inferred from the body by D8's walk, kept per view, exactly as
+for a result: here `out`'s elements point into `n`. Nothing is written: not at
+the parameter, not at the call. The caller treats the argument passed for `n`
+as D9 treats an argument a result views, for as long as what it passed for
+`out` lives: it may give the argument up (its buffer moves into the anchor of
+the list), and may neither change it nor hand it over. A parameter that only
+receives views of itself, or of values the body made, needs no rule here.
+
+It must be written where there is no body to infer it from - a trait's method,
+a function type and a foreign or Rust function, D14's places - after the
+parameter: `fn(n: Node, mut out: Vec[Event] from n)`. Without it, such a
+parameter receives nothing that views another parameter. Elsewhere it may be
+written, and the body is then checked against it, as D8 checks a written
+result. A `mut` parameter is never inferred to be `keep` (D2) because the body
+stores a view of another parameter into it; that inference (`NK1102` on yaml's
+`walk`, #2425) was the gap this closes.
+
+The code below is Rust's `&mut` with a shared lifetime: `fn walk<'a>(n: &'a
+Node, out: &mut Vec<Event<'a>>)`; Rust writes the lifetime, Nikaia infers it.
+
 ## 5. Consequences
 
 A signature tells a reader what a function does with each argument: kept
@@ -619,6 +651,11 @@ and replaced, are written without `.clone()`; an index loop that only touches
 `v[i]` is a `for mut`. A map's values are written in place by
 `for (k, mut v) in m` (#1133). The cost accepted is the
 reverse trap of section 3: a scratch copy is written `.clone()`.
+
+A function that fills a `mut` list with views of another parameter (D32) is
+written without a copy and without a mark, as one that returns them is; the
+cost accepted is that a caller's freedom with that argument follows from the
+callee's body, as it already does for results (D8).
 
 ## 6. What this does not decide
 
