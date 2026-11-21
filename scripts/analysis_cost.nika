@@ -195,7 +195,7 @@ fn sample_ranks(n: i64, want: i64) -> Vec[i64] {
     ranks.push(0)
     // The ranks 1 .. n - largest - 1, `between` of them, evenly spaced.
     let span = n - largest - 1
-    for k in 1..between {
+    for k in 1..<between + 1 {
         ranks.push(k * span / (between + 1))
     }
     for r in (n - largest)..<n { ranks.push(r) }
