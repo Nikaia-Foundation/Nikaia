@@ -1146,9 +1146,10 @@ fn drive_proved(dir: String, sha: String) throws {
 		drive_proved_clean(base)
 		return
 	}
-	let summed = process::run("sh", ["-c", f"cd '{tree}' && {cache} '{exe}' run scripts/proved.nika -- '{report}' 2>&1"])
+	// The compiler's warnings on the script go to stderr, not into the figures.
+	let summed = process::run("sh", ["-c", f"cd '{tree}' && {cache} '{exe}' run scripts/proved.nika -- '{report}' 2> '{base}/proved.err'"])
 	if !summed.ok || !summed.stdout.starts_with("proved: ") {
-		drive_append(out, f"PROVED {short} not measured: scripts/proved.nika failed: {drive_tail(summed.stdout, 1)}")
+		drive_append(out, f"PROVED {short} not measured: scripts/proved.nika failed: {drive_tail(drive_read(f"{base}/proved.err"), 1)}")
 		drive_proved_clean(base)
 		return
 	}
