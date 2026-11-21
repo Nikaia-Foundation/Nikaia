@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1521] — 2026-11-21
+
+**Hello World below Python: the run bundle linked -Bsymbolic-functions, release and C rows, the pass table (#2532)**
+- Hello World starts below Python: a warm `nikaia run` costs 0.29 of Python's start (it was 1.24), since the run bundle binds its own calls at link time (-Bsymbolic-functions) instead of 25,691 loader lookups per start; a built binary costs 0.01 of it; benches/hello adds a release row, a C floor and a pass table, and its README explains what an edit (6.75 to 16.42 of Python) and a new file (17.72) cost
+
 ## [0.0.1520] — 2026-11-21
 
 **Builders' changes (#1879, #2530, #860)**
