@@ -1,0 +1,29 @@
+error[NK1106]: The option `on` of `f` takes `bool`, but you're passing `i64`.
+   --> tests/an_integer_literal_to_an_option_of_no_integer.nika:19:5
+    |
+ 19 |     println(f(1; on: 3))
+    |     ^^^^^^^^^^^^^^^^^^^^
+    |
+    = help: Make it a `bool`, or change the declaration to `i64`.
+error[NK1106]: The option `label` of `f` takes `String`, but you're passing `i64`.
+   --> tests/an_integer_literal_to_an_option_of_no_integer.nika:20:5
+    |
+ 20 |     println(f(1; label: 3))
+    |     ^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = help: Make it a `String`, or change the declaration to `i64`.
+error[NK1106]: The option `on` of `P::g` takes `bool`, but you're passing `i64`.
+   --> tests/an_integer_literal_to_an_option_of_no_integer.nika:22:5
+    |
+ 22 |     println(p.g(on: 3))
+    |     ^^^^^^^^^^^^^^^^^^^
+    |
+    = help: Make it a `bool`, or change the declaration to `i64`.
+error[NK1106]: The option `from` of `str::find` takes `text::Pos`, but you're passing `i64`.
+   --> tests/an_integer_literal_to_an_option_of_no_integer.nika:23:5
+    |
+ 23 |     println("abcb".find("b"; from: 3) != null)
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = help: Make it a `text::Pos`, or change the declaration to `i64`.
+4 type errors

@@ -271,6 +271,9 @@ fn accounted_as(stmt: ref Stmt, words: ref winnow_grammar::InternerContext, walk
 // The value of a statement, looked through a `catch` whose handler cannot
 // divert: a handler that leaves makes the *next* statement conditional on
 // this one (ADR-292), which a statement that runs `beside` does not care for.
+// **The handler's own calls are not guarded by it** (Part I 7.1, #1370): a
+// failure inside a handler leaves the statement, so only the calls before
+// `catch` count as caught.
 fn accounted_value(binds: String?, value: ref Expr, names: ref winnow_grammar::InternerContext, walking: ref Walking, beside: bool) -> Accounted {
     return match value {
         Expr::TryCatch { expr, handler, .. } => {
@@ -279,6 +282,7 @@ fn accounted_value(binds: String?, value: ref Expr, names: ref winnow_grammar::I
             }
             let mut reduced = Reduced { calls: [], performs: false, methods: [], refused: null }
             reduce(expr, names, reduced)
+            let guarded = reduced.calls.len()
             // **And the handler's own effects**: it is part of the statement,
             // so what it reaches is part of what the statement touches.
             reduce_handler(handler, names, reduced)
@@ -286,14 +290,14 @@ fn accounted_value(binds: String?, value: ref Expr, names: ref winnow_grammar::I
             names_in(expr, names, mentions)
             // **The handler counts too** for a data dependency.
             names_in_block(handler, names, mentions)
-            accounted_reduced(binds, mentions, reduced, true, beside, walking)
+            accounted_reduced(binds, mentions, reduced, guarded, beside, walking)
         }
         else => {
             let mut reduced = Reduced { calls: [], performs: false, methods: [], refused: null }
             reduce(value, names, reduced)
             let mut mentions: collections::BTreeSet[String] = collections::BTreeSet()
             names_in(value, names, mentions)
-            accounted_reduced(binds, mentions, reduced, beside, beside, walking)
+            accounted_reduced(binds, mentions, reduced, 0, beside, walking)
         }
     }
 }
@@ -301,20 +305,22 @@ fn accounted_value(binds: String?, value: ref Expr, names: ref winnow_grammar::I
 // What the walk found, made an answer. The ledger is consulted **before** the
 // walk's own refusal is reported: "nothing says what `x` reaches" is a gap a
 // reader can close, where "it holds a method call" is this compiler's own
-// limit (D9). **What runs `beside`** (a task, a statement in its window, a
-// `par_iter` lambda's run) is not carried into a closure of its own, so a
+// limit (D9). The first `guarded` calls are the ones a `catch` guards; a
+// failure of any other leaves the statement, which matters only where it does
+// not run `beside`. **What runs `beside`** (a task, a statement in its window,
+// a `par_iter` lambda's run) is not carried into a closure of its own, so a
 // value read from somewhere else (a name, a field, a `??`'s fallback, all of
 // whose calls the walk did read) leaves nothing unaccounted there; a node the
 // walk stopped at still does (ADR-async-5 D7, D26).
-fn accounted_reduced(binds: String?, mentions: collections::BTreeSet[String], reduced: ref Reduced, caught: bool, beside: bool, walking: ref Walking) -> Accounted {
+fn accounted_reduced(binds: String?, mentions: collections::BTreeSet[String], reduced: ref Reduced, guarded: i64, beside: bool, walking: ref Walking) -> Accounted {
     if reduced.calls.len() == 0 && !reduced.performs {
         // Nothing here reaches the world at all.
         return Accounted::NotAnOperation
     }
     let mut reaches: Vec[Reached] = []
     let mut named_by: Vec[String] = []
-    for call in reduced.calls {
-        let refused = a_call_reaches(call, caught, walking, reaches, named_by)
+    for (at, call) in reduced.calls.iter().enumerate() {
+        let refused = a_call_reaches(call, beside || at < guarded, walking, reaches, named_by)
         if refused != null {
             return refused ?? Accounted::NotAnOperation
         }

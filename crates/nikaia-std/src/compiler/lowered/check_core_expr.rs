@@ -365,6 +365,11 @@ pub(crate) fn check_core_value_of<H: CheckHost>(state: &mut CheckState, world: &
         Expr::Index { base, index, .. } => {
             let base = nikaia_std::boxed::open(base); let index = nikaia_std::boxed::open(index);
             let read = check_core_index(state, world, host, expr, base, index, span);
+            let holder: String = match dotted_path(world, base) {
+                None => String::from("its container"),
+                Some(ref path) => format!("`{}`", path),
+            };
+            state.a_lent_sequence_is_taken("This element", &nikaia_std::block::Text::from(holder.to_string()), &holder, &read, &check_span_at(world, expr, span));
             if world.here.given_pushes.contains(&node_key(expr)) && read.is_a_view() && check_core_expr_pushed_cut(state, world, expr, span) { return a_string_type(); }
             if state.an_element_of_a_made_list(world, expr) { state.flow.made_element_reads.insert(node_key(expr)); }
             match read {

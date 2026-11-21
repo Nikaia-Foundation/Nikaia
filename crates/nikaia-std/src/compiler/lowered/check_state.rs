@@ -120,6 +120,7 @@ pub struct CheckPendingCleanup {
     pub from: i64,
     pub leaves: Vec<i64>,
     pub finding: CheckFinding,
+    pub handed_on: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]

@@ -362,11 +362,7 @@ impl CheckState {
     // this was written - see `contracts::sync`.
     pub(crate) fn a_pattern_naming_nothing(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, on: &Ty, value: &Expr, arms: &[MatchArm], span: &Span) -> bool {
         let nullable = matches!(on, Ty::Nullable(_));
-        let certain = nullable || match on {
-            Ty::Tuple(_) => true,
-            _ => self.kind_of_the_matched(on).is_some(),
-        };
-        if !certain { return false; }
+        if !self.kind_a_certain_subject(on) { return false; }
         for arm in arms.iter() {
             let name = match self.kind_an_undeclared_call(world, &arm.pattern) { Some(__nikaia_value) => __nikaia_value, None => continue };
             let written = written_expression(world.words, value);
@@ -376,6 +372,17 @@ impl CheckState {
             return true;
         }
         false
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub(crate) fn kind_a_certain_subject(&self, on: &Ty) -> bool {
+        match on {
+            Ty::Nullable(_) => { return true; },
+            Ty::Tuple(_) => { return true; },
+            Ty::Named { name, args, .. } => { if (name == "Vec" || name == "Array" || name == "List") && !args.is_empty() { return self.kind_a_certain_subject(unsafe { nikaia_std::proven::read(&args, (0) as usize) }); } },
+            _ => { },
+        }
+        self.kind_of_the_matched(on).is_some()
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
@@ -394,6 +401,12 @@ impl CheckState {
             MatchPattern::Named { fields, .. } => {
                 for field in fields.iter() {
                     let found = self.kind_an_undeclared_call(world, &field.pat);
+                    if found.is_some() { return std::convert::identity(found); }
+                }
+            },
+            MatchPattern::List(parts) => {
+                for part in parts.iter() {
+                    let found = self.kind_an_undeclared_call(world, part);
                     if found.is_some() { return std::convert::identity(found); }
                 }
             },

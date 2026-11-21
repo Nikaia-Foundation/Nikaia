@@ -1112,7 +1112,9 @@ pub(crate) fn check_core_index<H: CheckHost>(state: &mut CheckState, world: &Che
     let writing = state.flow.writing_index;
     state.flow.writing_index = false;
     let first = check_core_expr(state, world, host, base, span);
+    let said = state.flow.unknown_said;
     let key = check_core_expr(state, world, host, index, span);
+    if state.number_shaped(world, index) { state.flow.unknown_said = said; }
     state.io_inside_a_door(world, &first, "this index", span);
     let stamped = match first {
         Ty::Named { ref name, ref args, .. } => name == SEEN && args.len() == 1,

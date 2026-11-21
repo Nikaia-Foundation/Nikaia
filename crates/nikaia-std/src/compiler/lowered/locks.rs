@@ -265,3 +265,38 @@ pub(crate) fn published(own: &Ledger, field: &str) -> bool {
     false
 }
 
+pub(crate) fn locks_test_node(graph: &mut collections::BTreeMap<String, Reaches>, name: String, itself: Lock, callee: Option<String>) {
+    let mut reaches = Reaches { itself, callees: collections::BTreeSet::new() };
+    if callee.is_some() { reaches.callees.insert(nikaia_std::index::or(callee, || "".into())); }
+    graph.insert(name, reaches);
+}
+
+pub(crate) fn __nikaia_test_0() -> Result<(), std::boxed::Box<dyn std::error::Error>> {
+    let mut graph: collections::BTreeMap<String, Reaches> = collections::BTreeMap::new();
+    locks_test_node(&mut graph, String::from("a"), Lock::No, Some(String::from("b")));
+    locks_test_node(&mut graph, String::from("b"), Lock::No, Some(String::from("c")));
+    locks_test_node(&mut graph, String::from("c"), Lock::Holds, None);
+    locks_test_node(&mut graph, String::from("p"), Lock::No, Some(String::from("q")));
+    locks_test_node(&mut graph, String::from("q"), Lock::No, Some(String::from("p")));
+    locks_test_node(&mut graph, String::from("r"), Lock::No, Some(String::from("mystery")));
+    let mut own = Ledger::blank();
+    for name in ["a", "b", "c", "p", "q", "r"] { own.functions.insert(with_owner("", name), FnContract::empty()); }
+    let answer = locking_of(&graph, &collections::BTreeSet::new(), &Ledger::blank(), &own);
+    if !(answer.functions.len() == 6) { nikaia_std::abort::assertion_failed("assert(answer.functions.len() == 6)", None, &[("answer.functions.len()", (&&nikaia_std::abort::Operand(&(answer.functions.len() as i64))).shown()), ]) };
+    if !(nikaia_std::index::or((*nikaia_std::index::get(&answer.functions, "a")).copied(), || Lock::No) == Lock::Holds) { nikaia_std::abort::assertion_failed("assert((answer.functions[\"a\"] ?? Lock::No) == Lock::Holds)", None, &[("answer.functions[\"a\"] ?? Lock::No", (&&nikaia_std::abort::Operand(&(nikaia_std::index::or((*nikaia_std::index::get(&answer.functions, "a")).copied(), || Lock::No)))).shown()), ("Lock::Holds", (&&nikaia_std::abort::Operand(&(Lock::Holds))).shown()), ]) };
+    if !(nikaia_std::index::or((*nikaia_std::index::get(&answer.functions, "b")).copied(), || Lock::No) == Lock::Holds) { nikaia_std::abort::assertion_failed("assert((answer.functions[\"b\"] ?? Lock::No) == Lock::Holds)", None, &[("answer.functions[\"b\"] ?? Lock::No", (&&nikaia_std::abort::Operand(&(nikaia_std::index::or((*nikaia_std::index::get(&answer.functions, "b")).copied(), || Lock::No)))).shown()), ("Lock::Holds", (&&nikaia_std::abort::Operand(&(Lock::Holds))).shown()), ]) };
+    if !(nikaia_std::index::or((*nikaia_std::index::get(&answer.functions, "c")).copied(), || Lock::No) == Lock::Holds) { nikaia_std::abort::assertion_failed("assert((answer.functions[\"c\"] ?? Lock::No) == Lock::Holds)", None, &[("answer.functions[\"c\"] ?? Lock::No", (&&nikaia_std::abort::Operand(&(nikaia_std::index::or((*nikaia_std::index::get(&answer.functions, "c")).copied(), || Lock::No)))).shown()), ("Lock::Holds", (&&nikaia_std::abort::Operand(&(Lock::Holds))).shown()), ]) };
+    if !(nikaia_std::index::or((*nikaia_std::index::get(&answer.functions, "p")).copied(), || Lock::Holds) == Lock::No) { nikaia_std::abort::assertion_failed("assert((answer.functions[\"p\"] ?? Lock::Holds) == Lock::No)", None, &[("answer.functions[\"p\"] ?? Lock::Holds", (&&nikaia_std::abort::Operand(&(nikaia_std::index::or((*nikaia_std::index::get(&answer.functions, "p")).copied(), || Lock::Holds)))).shown()), ("Lock::No", (&&nikaia_std::abort::Operand(&(Lock::No))).shown()), ]) };
+    if !(nikaia_std::index::or((*nikaia_std::index::get(&answer.functions, "q")).copied(), || Lock::Holds) == Lock::No) { nikaia_std::abort::assertion_failed("assert((answer.functions[\"q\"] ?? Lock::Holds) == Lock::No)", None, &[("answer.functions[\"q\"] ?? Lock::Holds", (&&nikaia_std::abort::Operand(&(nikaia_std::index::or((*nikaia_std::index::get(&answer.functions, "q")).copied(), || Lock::Holds)))).shown()), ("Lock::No", (&&nikaia_std::abort::Operand(&(Lock::No))).shown()), ]) };
+    if !(nikaia_std::index::or((*nikaia_std::index::get(&answer.functions, "r")).copied(), || Lock::No) == Lock::Undecided) { nikaia_std::abort::assertion_failed("assert((answer.functions[\"r\"] ?? Lock::No) == Lock::Undecided)", None, &[("answer.functions[\"r\"] ?? Lock::No", (&&nikaia_std::abort::Operand(&(nikaia_std::index::or((*nikaia_std::index::get(&answer.functions, "r")).copied(), || Lock::No)))).shown()), ("Lock::Undecided", (&&nikaia_std::abort::Operand(&(Lock::Undecided))).shown()), ]) };
+    if !(with_owner("Config", "set") == "Config::set") { nikaia_std::abort::assertion_failed("assert(with_owner(\"Config\", \"set\") == \"Config::set\")", None, &[("with_owner(\"Config\", \"set\")", (&&nikaia_std::abort::Operand(&(with_owner("Config", "set")))).shown()), ]) };
+    Ok(())
+}
+
+
+/// The `test` blocks of this file (#2082), as `nikaia test --std` runs them.
+pub(crate) fn locks_nikaia_tests() -> Vec<(&'static str, fn() -> Result<(), std::boxed::Box<dyn std::error::Error>>)> {
+    vec![
+        ("locks::the_locks_entry_answers_a_call_chain_a_recursive_pair_and_an_unknown_call", __nikaia_test_0),
+    ]
+}

@@ -226,6 +226,12 @@ impl EmitState {
             out.push(after)
             return
         }
+        // **A door's view handed back out of its block is the value** (#1454).
+        if self.facts.door_copies.contains(at) {
+            out.push("*")
+            self.emit_expr_after_the_copy(world, walk, out, host, node, depth, flow, scope)
+            return
+        }
         // **A map's read copied out where a `T?` of its own is kept** (ADR-293
         // D15). A read through the brackets is `*get(…)`, whose `*` would take
         // the whole chain, so it is held in parentheses.

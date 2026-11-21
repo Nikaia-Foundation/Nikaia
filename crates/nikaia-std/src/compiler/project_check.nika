@@ -136,6 +136,12 @@ pub fn project_check_summary(findings: ref Vec[CheckFinding], violations: i64) -
     // land in the line below: the way out is a `collect()` and not a `throws`,
     // which is the same reason the two `NK21xx` rules have lines of their own.
     let walked = project_check_count(findings, "NK2702")
+    // **A sequence a list lends, used up** (#1424): the way out is `drain()`.
+    let lent_out = findings.iter().filter(fn(f) { f.severity == CheckSeverity::Error && f.code == "NK2702" && f.message.contains("would take it out of") }).count()
+    if lent_out > 0 {
+        refused.push(f"{lent_out} sequence{project_check_plural(lent_out)} used up out of a list")
+    }
+    let walked = walked - lent_out
     if walked > 0 {
         refused.push(f"{walked} sequence{project_check_plural(walked)} walked a second time")
     }
@@ -202,6 +208,7 @@ pub fn project_check_summary(findings: ref Vec[CheckFinding], violations: i64) -
         untethered -
         tasks -
         walked -
+        lent_out -
         pausing -
         paused_in_a_door -
         pauses_forbidden -

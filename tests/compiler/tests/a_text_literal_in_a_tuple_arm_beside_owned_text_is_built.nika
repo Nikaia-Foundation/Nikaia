@@ -1,0 +1,35 @@
+// A text literal in a tuple arm beside an arm of owned text is built where it
+// is kept (ADR-282 D4, #1950), as `return ("a", 1)` alone is.
+
+fn by_match(n: i64, x: String) -> (String, i64) {
+    return match n { 0 => ("a", 1), else => (f"b{x}", 2) }
+}
+
+fn by_if(n: i64, x: String) -> (String, i64) {
+    return if n == 0 { (f"c{x}", 3) } else { ("d", 4) }
+}
+
+fn by_tail(n: i64, x: String) -> (String, i64) {
+    match n { 0 => ("e", 5 as i64), else => (f"f{x}", 6 as i64) }
+}
+
+fn by_let(n: i64, x: String) -> (String, i64) {
+    let t: (String, i64) = match n { 0 => ("g", 7), else => (f"h{x}", 8) }
+    return t
+}
+
+fn made() -> String {
+    let mut s = String()
+    s.push_str("!")
+    return s
+}
+
+fn main() throws {
+    for n in 0..<2 {
+        let (a, i) = by_match(n, made())
+        let (b, j) = by_if(n, made())
+        let (c, k) = by_tail(n, made())
+        let (d, l) = by_let(n, made())
+        println(f"{a} {i} {b} {j} {c} {k} {d} {l}")
+    }
+}

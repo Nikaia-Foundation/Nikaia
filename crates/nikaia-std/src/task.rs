@@ -829,7 +829,8 @@ impl<T> CrossNot for Cross<T> {
     fn register(&self) {}
 }
 
-/// The error under a `Raised` envelope as its own box, if a registered type.
+/// The error under a `Raised` envelope as its own box, if a registered type,
+/// or the member of a registered sum that is one.
 pub(crate) fn crossed(
     error: Box<dyn std::error::Error>,
 ) -> Option<Box<dyn std::error::Error + Send>> {
@@ -838,13 +839,18 @@ pub(crate) fn crossed(
         Err(error) => error,
     };
     let crossers = CROSSING.lock().unwrap_or_else(|e| e.into_inner()).clone();
-    for crosser in crossers {
-        match crosser(error) {
-            Ok(found) => return Some(found),
-            Err(back) => error = back,
+    loop {
+        for crosser in &crossers {
+            match crosser(error) {
+                Ok(found) => return Some(found),
+                Err(back) => error = back,
+            }
         }
+        // **A sum crosses as its member** (#1372): a child that throws its
+        // fatal error and prints fails in a sum, and the joiner's `catch`
+        // names the member.
+        error = crate::error::member_into(error).ok()?;
     }
-    None
 }
 
 impl crate::process::Ending for Carried {

@@ -1,0 +1,9 @@
+error[NK1131]: You can't give away `c` here: `c` is only borrowed.
+   --> tests/access_hands_back_its_text_is_refused.nika:11:30
+    |
+ 11 |     let m = n.access fn(c) { c }
+    |                              ^
+    |
+    = note: `c` is a view of what the lock holds, open only while the block runs, and it is a `String`. Handing it out of the block would take it out of the lock.
+    = help: Write `c.clone()` for a copy: a lambda hands back a value of its own.
+1 type error

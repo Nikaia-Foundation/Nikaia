@@ -528,7 +528,7 @@ pub(crate) fn sv_real_value(arena: &TermArena, id: i64, values: &collections::BT
     let node = arena.at(id);
     match node {
         SolverTerm::Int(n) => Some(sv_int(n)),
-        SolverTerm::Var(ref name) => Some(nikaia_std::index::or(*nikaia_std::index::get(&values, name), || sv_int(0).into())),
+        SolverTerm::Var(ref name) => Some(nikaia_std::index::or(*nikaia_std::index::get(&values, name), || sv_int(0))),
         SolverTerm::Add(a, b) => {
             let x = match sv_real_value(arena, a, values) { Some(__nikaia_value) => __nikaia_value, None => return None };
             let y = match sv_real_value(arena, b, values) { Some(__nikaia_value) => __nikaia_value, None => return None };
@@ -557,7 +557,7 @@ pub(crate) fn sv_real_value(arena: &TermArena, id: i64, values: &collections::BT
     }
 }
 
-pub(crate) fn sv_real_named(values: &collections::BTreeMap<String, SvRat>, name: &str) -> SvRat { nikaia_std::index::or(*nikaia_std::index::get(&values, name), || sv_int(0).into()) }
+pub(crate) fn sv_real_named(values: &collections::BTreeMap<String, SvRat>, name: &str) -> SvRat { nikaia_std::index::or(*nikaia_std::index::get(&values, name), || sv_int(0)) }
 
 pub(crate) fn sv_real_truth(arena: &TermArena, id: i64, values: &collections::BTreeMap<String, SvRat>) -> Option<bool> {
     let node = arena.at(id);

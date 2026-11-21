@@ -772,6 +772,14 @@ fn check_core_args_door_block[H: CheckHost](mut state: CheckState, world: ref Ch
     if writing && count == 2 && a_copy_by_value(held[0]) && a_copy_by_value(held[1]) {
         state.facts.copied_doors.insert(id_of(args[0]) as i64)
     }
+    // **What the block hands back of a value that copies is a copy** (#1454).
+    if !writing {
+        for at in 0..<params.len() {
+            if at < held.len() {
+                door_views_handed_back(state, world, body, params[at], unviewed_type(held[at]), span)
+            }
+        }
+    }
     // D6 is D1 widened, so the same two questions are asked of this block.
     if writing {
         state.an_update_block_returns_nothing(body, span)
@@ -793,6 +801,85 @@ fn check_core_args_door_block[H: CheckHost](mut state: CheckState, world: ref Ch
     // What a lambda hands back is not written down (ADR-288 D13), but that it
     // came out of a lock is (ADR-281 D22): `Seen[?]`.
     return Ty::Named { name: SEEN.clone(), args: [Ty::Unknown], view: false }
+}
+
+/// **A door's view handed back out of its block** (#1454): the block sees a
+/// reference into the lock, open only while the block runs. A number, a
+/// `bool` or a `char` that leaves it is the value, so each end of the block
+/// that is the parameter itself is marked for the emitter's `*`; so is one
+/// over an open number, which the hull types as nothing yet. Any other held
+/// value handed out whole is given away from what the block is only lent
+/// (`NK1131`, ADR-282 D7: the copy is written where it happens). A `let` of
+/// the same name ends the search.
+fn door_views_handed_back(mut state: CheckState, world: ref CheckWorld, body: ref Block, param: winnow_grammar::Symbol, content: ref Ty, span: ref Span) sync {
+    for stmt in body.stmts {
+        match stmt.node {
+            Stmt::Let { names, .. } => {
+                for name in names {
+                    if world.words.resolve(name) == world.words.resolve(param) {
+                        return
+                    }
+                }
+            },
+            else => {}
+        }
+    }
+    for value in block_tail(body) {
+        door_view_handed_back(state, world, value, param, content, span)
+    }
+}
+
+fn door_view_handed_back(mut state: CheckState, world: ref CheckWorld, value: ref Expr, param: winnow_grammar::Symbol, content: ref Ty, span: ref Span) sync {
+    match value {
+        Expr::Variable(symbol, _) => {
+            let name = world.words.resolve(symbol)
+            if name != world.words.resolve(param) {
+                return
+            }
+            if content.is_unknown() || door_copies_out(content) {
+                let added = state.facts.door_copies.insert(id_of(value) as i64)
+                return
+            }
+            let given_away = match content {
+                Ty::Named { view, .. } => !view,
+                Ty::Tuple(_) => true,
+                else => false,
+            }
+            if given_away {
+                let notes: Vec[String] = [f"`{name}` is a view of what the lock holds, open only while the block runs, and it is a `{content.shown()}`. Handing it out of the block would take it out of the lock."]
+                state.findings.push(check_refusal("NK1131", check_span_at(world, value, span), f"You can't give away `{name}` here: `{name}` is only borrowed.", notes, f"Write `{name}.clone()` for a copy: a lambda hands back a value of its own."))
+            }
+        },
+        Expr::Block(block, _) => door_views_handed_back(state, world, block, param, content, span),
+        Expr::If { then_branch, else_branch, .. } => {
+            door_views_handed_back(state, world, then_branch, param, content, span)
+            if else_branch != null {
+                door_views_handed_back(state, world, else_branch ?? return, param, content, span)
+            }
+        },
+        Expr::Match { arms, .. } => {
+            for arm in arms {
+                door_view_handed_back(state, world, arm.body, param, content, span)
+            }
+        },
+        else => {}
+    }
+}
+
+/// A held value the door's `*` copies out: a number, a `bool`, a `char`, or
+/// a tuple of them.
+fn door_copies_out(content: ref Ty) -> bool sync {
+    return match content {
+        Ty::Tuple(parts) => {
+            for part in parts {
+                if !a_copy_by_value(part) {
+                    return false
+                }
+            }
+            parts.len() > 0
+        },
+        else => a_copy_by_value(content),
+    }
 }
 
 /// **`access_all` and `update_all`** (ADR-281 D17): `access_all` hands each

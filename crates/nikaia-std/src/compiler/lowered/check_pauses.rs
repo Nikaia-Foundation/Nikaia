@@ -25,6 +25,17 @@ impl CheckState {
         let pause = CheckPause { what: format!("the cleanup of `{}`", name), unpromised: None, before_walk: format!("Create `{}` outside the walk and pass it in, or walk with `iter()`, whose lambda may pause.", name), before_door: format!("Create `{}` before taking the lock, so it's cleaned up after the lock is released, or close it there yourself.", name) };
         self.a_pause(&pause, span);
     }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub(crate) fn a_pausing_cleanup_in_a_sync_body(&mut self, name: &str, owner: &str, span: &Span, waits: bool) {
+        let caller = match match self.inside_a_sync_function.as_ref() {
+            Some(__nikaia_it) => Some(__nikaia_it.clone()),
+            None => None,
+        } { Some(__nikaia_value) => __nikaia_value, None => return };
+        let notes: Vec<String> = vec![String::from("A `sync` function promises never to pause or do I/O."), format!("`{}` is cleaned up where it dies in `{}`, and `{}::cleanup` doesn't say `sync`.", name, caller, owner)];
+        let finding = check_refusal("NK2202", span, format!("`{}` is `sync`, but the cleanup of `{}`, `{}::cleanup`, can pause.", caller, name, owner), notes, Some(format!("Remove `sync` from `{}`, write `sync` after the signature of `{}::cleanup` if it never pauses, or create `{}` outside `{}` and pass it in.", caller, owner, name, caller)));
+        if waits { self.a_pausing_cleanup_held(name, finding, span); } else { self.findings.push(finding); }
+    }
     pub(crate) fn a_pause(&mut self, pause: &CheckPause, span: &Span) {
         let mut pauses: &'static str = "can pause";
         #[allow(unused_mut)] let mut notes: Vec<String> = vec![];

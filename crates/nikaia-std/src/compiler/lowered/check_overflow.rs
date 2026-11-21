@@ -28,7 +28,7 @@ impl CheckState {
         if folded.is_none() && division { return; }
         let beyond = folded.is_none();
         let fallback = integer(18446744073709551615u64, heading);
-        let value = CheckConstant { value: nikaia_std::index::or(folded, || fallback.into()), beyond, pinned: None };
+        let value = CheckConstant { value: nikaia_std::index::or(folded, || fallback), beyond, pinned: None };
         let mut open = self.open_numbers_in(world, lhs);
         for number in self.open_numbers_in(world, rhs) { open.push(number); }
         if !open.is_empty() {
