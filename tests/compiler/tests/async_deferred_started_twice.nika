@@ -1,0 +1,38 @@
+// A second `start()` of a deferred handle on a path is `NK2121` (ADR-async-5
+// D12, #2512): one after the other, after a branch that started it, or in a
+// loop, whose body runs again; the refusal stands at the second `start()`.
+fn twice() throws {
+	let mut h = async(deferred) fn { 1 }
+	h.start()
+	h.start()
+	println(f"{h.join()}")
+}
+
+fn after_a_branch(go: bool) throws {
+	let mut h = async(detached, deferred) fn { 2 }
+	if go {
+		h.start()
+	} else {
+		h.cancel()
+		return
+	}
+	h.start()
+	println(f"{h.join()}")
+}
+
+fn in_a_loop() throws {
+	let mut h = async(deferred) fn { 3 }
+	h.start()
+	let mut i = 0
+	while i < 2 {
+		h.start()
+		i += 1
+	}
+	println(f"{h.join()}")
+}
+
+fn main() throws {
+	twice()
+	after_a_branch(true)
+	in_a_loop()
+}

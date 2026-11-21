@@ -1011,6 +1011,8 @@ impl EmitState {
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn emit_flow_task<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, task: i64, body: &Block, depth: i64, flow: &EmitFlow, scope: &EmitScope) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
         let handles = self.emit_task_handles(task);
+        let deferred = walk.async_deferred;
+        walk.async_deferred = false;
         let deadline = nikaia_std::block::Text::from(walk.async_within.to_string()); #[allow(clippy::redundant_locals)] let handles = handles;
         walk.async_within = String::from("");
         let admission = nikaia_std::block::Text::from(walk.async_admission.to_string()); #[allow(clippy::redundant_locals)] let handles = handles;
@@ -1054,6 +1056,7 @@ impl EmitState {
             kind = "FailingTask";
             if host.overlaps_user_code() && scope.channel == "std::boxed::Box<dyn std::error::Error>" { kind = "BoxedTask"; }
         }
+        if deferred { out.push("nikaia_std::task::Deferred::new(move || "); }
         if host.overlaps_user_code() { out.push(&format!("nikaia_std::task::{}::start_on_pool(async move ", kind)); } else { out.push(&format!("nikaia_std::task::{}::start(async move ", kind)); }
         if failing {
             out.push(&format!("{{ {}let __nikaia_task = ", first));
@@ -1074,6 +1077,7 @@ impl EmitState {
             walk.async_bound = String::from("");
             out.push(")");
         }
+        if deferred { out.push(")"); }
         if opened { out.push(" }"); }
         Ok(())
     }

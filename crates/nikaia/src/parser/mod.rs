@@ -4061,8 +4061,10 @@ grammar! {
         // `Expr::TryCatch` around the form, which the checker and the
         // lowering read as the fallback. `async(handle) fn { … }` is `Expr::Spawn`
         // with `child` set (D11): the checker binds it to its group. `within: d`
-        // (D16) is the deadline each of the three forms carries. The deferred
-        // form, the options not built yet and a `catch` after `async { }` are refused here, by name - the
+        // (D16) is the deadline each of the three forms carries. `deferred`
+        // (D12) sets `deferred` beside either: alone it is a child handle,
+        // with `detached`, in either order, a free one. A misplaced
+        // `deferred` and a `catch` after `async { }` are refused here, by name - the
         // way `immutable_item` refuses (ADR-389 D4): a reader gets the
         // sentence, not a parse error at the word.
         //
@@ -4072,13 +4074,25 @@ grammar! {
         // A list of several options not built yet names the first. The task of
         // `async e` is a unary operand, so `async a() + async b()` is two tasks.
         rule async_expr -> Expr =
-            KW_ASYNC "(" h:async_task_head* OPT_DETACHED t:async_task_tail* ")" body:trailing_lambda -> {
+            KW_ASYNC "(" h:async_task_head* OPT_DETACHED "," m:async_task_head* OPT_DEFERRED t:async_task_tail* ")" body:trailing_lambda -> {
+                let [within, admission] = async_task_options(h.into_iter().chain(m).collect(), t);
+                Expr::Spawn { body: nikaia_std::block::Boxed::new(body), written_async: true, child: false, deferred: true, within: nikaia_std::block::Boxed::new(within), admission: nikaia_std::block::Boxed::new(admission), id: NodeId::parsed() }
+            }
+          | KW_ASYNC "(" h:async_task_head* OPT_DEFERRED "," m:async_task_head* OPT_DETACHED t:async_task_tail* ")" body:trailing_lambda -> {
+                let [within, admission] = async_task_options(h.into_iter().chain(m).collect(), t);
+                Expr::Spawn { body: nikaia_std::block::Boxed::new(body), written_async: true, child: false, deferred: true, within: nikaia_std::block::Boxed::new(within), admission: nikaia_std::block::Boxed::new(admission), id: NodeId::parsed() }
+            }
+          | KW_ASYNC "(" h:async_task_head* OPT_DEFERRED t:async_task_tail* ")" body:trailing_lambda -> {
                 let [within, admission] = async_task_options(h, t);
-                Expr::Spawn { body: nikaia_std::block::Boxed::new(body), written_async: true, child: false, within: nikaia_std::block::Boxed::new(within), admission: nikaia_std::block::Boxed::new(admission), id: NodeId::parsed() }
+                Expr::Spawn { body: nikaia_std::block::Boxed::new(body), written_async: true, child: true, deferred: true, within: nikaia_std::block::Boxed::new(within), admission: nikaia_std::block::Boxed::new(admission), id: NodeId::parsed() }
+            }
+          | KW_ASYNC "(" h:async_task_head* OPT_DETACHED t:async_task_tail* ")" body:trailing_lambda -> {
+                let [within, admission] = async_task_options(h, t);
+                Expr::Spawn { body: nikaia_std::block::Boxed::new(body), written_async: true, child: false, deferred: false, within: nikaia_std::block::Boxed::new(within), admission: nikaia_std::block::Boxed::new(admission), id: NodeId::parsed() }
             }
           | KW_ASYNC "(" h:async_task_head* OPT_HANDLE t:async_task_tail* ")" body:trailing_lambda -> {
                 let [within, admission] = async_task_options(h, t);
-                Expr::Spawn { body: nikaia_std::block::Boxed::new(body), written_async: true, child: true, within: nikaia_std::block::Boxed::new(within), admission: nikaia_std::block::Boxed::new(admission), id: NodeId::parsed() }
+                Expr::Spawn { body: nikaia_std::block::Boxed::new(body), written_async: true, child: true, deferred: false, within: nikaia_std::block::Boxed::new(within), admission: nikaia_std::block::Boxed::new(admission), id: NodeId::parsed() }
             }
           | KW_ASYNC "(" head:async_group_option tail:async_group_option_tail* ")" peek("{") b:block not(KW_CATCH) -> {
                 let mut options: [Option<Expr>; 3] = [None, None, None];
@@ -4173,8 +4187,8 @@ grammar! {
 
         rule async_unbuilt_option -> Expr =
             peek(OPT_DEFERRED) fail(
-                "`async(deferred) fn { … }` isn't built yet (#986). Start the task where it \
-                 should run, with `async(detached) fn { … }`."
+                "`deferred` takes a lambda and implies `handle`, beside `detached` and the task's \
+                 options. Write `async(deferred) fn { … }` or `async(detached, deferred) fn { … }`."
             ) -> { Expr::ListLit { items: Vec::new(), id: NodeId::parsed() } }
 
         rule OPT_HANDLE = "handle" not(ident)
@@ -4197,7 +4211,7 @@ grammar! {
         // rather than *"expected `fn`"*.
         rule spawn_expr -> Expr =
             KW_SPAWN body:trailing_lambda -> {
-                Expr::Spawn { body: nikaia_std::block::Boxed::new(body), written_async: false, child: false, within: nikaia_std::block::Boxed::new(None), admission: nikaia_std::block::Boxed::new(None), id: NodeId::parsed() }
+                Expr::Spawn { body: nikaia_std::block::Boxed::new(body), written_async: false, child: false, deferred: false, within: nikaia_std::block::Boxed::new(None), admission: nikaia_std::block::Boxed::new(None), id: NodeId::parsed() }
             }
           | KW_SPAWN "(" fail("`spawn` takes a lambda. Write `spawn fn { … }`.") -> {
                 Expr::Spawn {
@@ -4206,7 +4220,7 @@ grammar! {
                         mutable: Vec::new(),
                         body: Block { stmts: Vec::new() }, id: NodeId::parsed()
                     }),
-                    written_async: false, child: false, within: nikaia_std::block::Boxed::new(None), admission: nikaia_std::block::Boxed::new(None), id: NodeId::parsed()
+                    written_async: false, child: false, deferred: false, within: nikaia_std::block::Boxed::new(None), admission: nikaia_std::block::Boxed::new(None), id: NodeId::parsed()
                 }
             }
 

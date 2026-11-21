@@ -1173,6 +1173,8 @@ impl EmitState {
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn emit_async_task<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, task: &Expr, id: i64, kind: &str, depth: i64, flow: &EmitFlow, scope: &EmitScope) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
         let group = self.emit_async_group_of(id);
+        let deferred = walk.async_deferred;
+        walk.async_deferred = false;
         if !walk.async_groups.contains(&group) { return Err(nikaia_std::error::throwing(EmitRefused { message: String::from("The compiler can't translate `async e` yet where its group is a block inside the function (#988): put it in `async { … }` or in the function's own body."), at: emit_async_at(flow.statement) }, &"emit_async_task")); }
         let outer = emit_call_tasks_channel(&flow, scope);
         let channel = self.emit_async_tasks_channel(&outer);
@@ -1245,6 +1247,20 @@ impl EmitState {
         let name = emit_async_group_name(group);
         let line = emit_async_line(&gates);
         let gated = line != "" && walk.async_pausing;
+        let paused = body.buf.contains(".await") || gated;
+        if deferred && (kind != "handle" || paused && !walk.async_keeps) { return Err(nikaia_std::error::throwing(EmitRefused { message: String::from("The compiler can't translate `async(deferred)` here yet: bind its handle with a `let`, and start it at a later statement."), at: emit_async_at(flow.statement) }, &"emit_async_task")); }
+        if paused && deferred {
+            let cell = format!("__rest_{}", id);
+            let mut made = format!("deferred_kept(&{}, ", cell);
+            if line != "" {
+                made = format!("deferred_kept_gated(&{}, &{}, ", cell, line);
+                if admission != "" { made = format!("deferred_kept_admitted(&{}, &{}, nikaia_std::task::admitted({}), ", cell, line, admission); }
+            } else if admission != "" { return Err(nikaia_std::error::throwing(EmitRefused { message: String::from("The compiler can't translate `async(deferred, admission: s)` outside a group's gate yet."), at: emit_async_at(flow.statement) }, &"emit_async_task")); }
+            walk.async_kept.push(cell);
+            let made_text = format!("{}.{}async || -> {}<_, {}> {{ let __value = {}; Ok(__value) }})", name, made, self.rust_result(), channel, body.buf);
+            if line != "" { out.push(&format!("{}.keep({})", line, made_text)); } else { out.push(&made_text); }
+            return Ok(());
+        }
         if body.buf.contains(".await") || gated {
             if kind == "spawn" && gated {
                 let cell = format!("__rest_{}", id);
@@ -1286,6 +1302,11 @@ impl EmitState {
         if kind == "spawn" {
             let spawned = format!("{}.spawn_here(|| -> {}<(), {}> {{ let _ = {}; Ok(()) }})", name, self.rust_result(), channel, body.buf);
             if enter != "" { out.push(&format!("{{ {}{} }}", enter, spawned)); } else { out.push(&spawned); }
+            return Ok(());
+        }
+        if deferred {
+            if enter != "" { return Err(nikaia_std::error::throwing(EmitRefused { message: String::from("The compiler can't translate `async(deferred)` under `limit:` or `admission:` in a function that never pauses yet."), at: emit_async_at(flow.statement) }, &"emit_async_task")); }
+            out.push(&format!("{}.deferred(|| -> {}<_, {}> {{ let __value = {}; Ok(__value) }})", name, self.rust_result(), channel, body.buf));
             return Ok(());
         }
         let mut started = format!("{}.start_here(|| -> {}<_, {}> {{ let __value = {}; Ok(__value) }})", name, self.rust_result(), channel, body.buf);

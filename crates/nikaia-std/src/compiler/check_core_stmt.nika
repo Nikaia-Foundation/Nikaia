@@ -2912,6 +2912,7 @@ fn check_core_block[H: CheckHost](mut state: CheckState, world: ref CheckWorld, 
         at += 1
     }
     check_crossings_a_bound_handle_is_taken(state, world, block)
+    check_crossings_a_deferred_handle_starts(state, world, block)
     state.failing_cleanups_settled()
     if count > 0 {
         state.views_end(state.scope.len() as i64 - 1, block.stmts[count - 1].span.end as i64)

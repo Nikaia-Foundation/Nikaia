@@ -593,6 +593,11 @@ pub enum Expr {
         // whose value is a `task::ChildHandle` (Part I 8.1.2, ADR-async-5
         // D11): it takes nothing, may borrow, and its group waits for it.
         child: bool,
+        // Written with `deferred` (ADR-async-5 D12): the task starts only at
+        // the handle's `start()`, a `task::ChildHandle` beside `child`, a
+        // `TaskHandle` beside `detached`; one not started, or started twice,
+        // on a path is `NK2121`.
+        deferred: bool,
         // `within: d` in its options: the task's deadline (ADR-async-5 D16).
         within: Expr?,
         // `admission: s` in its options: the strategy that admits the task

@@ -28,6 +28,13 @@ pub(crate) fn check_crossings_returned(world: &CheckWorld<'_, '_, '_, '_, '_, '_
     CheckCrossingsPath::Left
 }
 
+pub(crate) fn check_crossings_is_name(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, name: &str, expr: &Expr) -> bool {
+    match expr {
+        Expr::Variable(word, _) => { let word = *word; ::core::convert::identity(match (AsRef::<str>::as_ref(&(world.words.resolve(word))), AsRef::<str>::as_ref(&(name)), ) { (__nikaia_f0, __nikaia_t, ) => __nikaia_t.len() == __nikaia_f0.len() && __nikaia_t.strip_prefix(__nikaia_f0).is_some() }) },
+        _ => false,
+    }
+}
+
 pub(crate) fn check_crossings_mentioned(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, name: &str, expr: &Expr) -> CheckCrossingsPath {
     if check_crossings_named_in(world, name, expr) { return CheckCrossingsPath::Taken; }
     CheckCrossingsPath::Falls
@@ -37,10 +44,29 @@ pub(crate) fn check_crossings_path(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_
     let mut at = from;
     while at < stmts.len() as i64 {
         let flow = check_crossings_step(world, name, &unsafe { nikaia_std::proven::read(&stmts, (at) as usize) }.node, in_loop);
+        if flow == CheckCrossingsPath::Taken && check_crossings_leaves_after(stmts, unsafe { nikaia_std::proven::add::<i64>(at, 1) }, in_loop) { return CheckCrossingsPath::Gone; }
         if flow != CheckCrossingsPath::Falls { return flow; }
         at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
     }
     CheckCrossingsPath::Falls
+}
+
+pub(crate) fn check_crossings_leaves_after(stmts: &[Spanned<Stmt>], from: i64, in_loop: bool) -> bool {
+    let mut at = from;
+    while at < stmts.len() as i64 {
+        match &unsafe { nikaia_std::proven::read(&stmts, (at) as usize) }.node {
+            Stmt::Return(_) => { return true; },
+            Stmt::Break | Stmt::Continue if !in_loop => { return true; },
+            Stmt::Expr(e) => { match e {
+                Expr::Return(_, _) | Expr::Throw(_, _) => { return true; },
+                Expr::Break(_) | Expr::Continue(_) if !in_loop => { return true; },
+                _ => { },
+            }; },
+            _ => { },
+        }
+        at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
+    }
+    false
 }
 
 pub(crate) fn check_crossings_keeping_join(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, name: &str, expr: &Expr) -> bool {
@@ -221,6 +247,7 @@ pub(crate) fn check_crossings_expr_path(world: &CheckWorld<'_, '_, '_, '_, '_, '
             if check_crossings_named_in(world, name, value) { return CheckCrossingsPath::Taken; }
             branches.reserve(arms.iter().size_hint().0); for arm in arms.iter() { branches.push(check_crossings_arm(world, name, arm, in_loop)); }
         },
+        Expr::MethodCall { receiver, method, args, .. } if { let method = *method; { let receiver = nikaia_std::boxed::peek(&receiver); args.is_empty() && ::core::convert::identity(match (AsRef::<str>::as_ref(&(world.words.resolve(method))), AsRef::<str>::as_ref(&("start")), ) { (__nikaia_f0, __nikaia_t, ) => __nikaia_t.len() == __nikaia_f0.len() && __nikaia_t.strip_prefix(__nikaia_f0).is_some() }) && check_crossings_is_name(world, name, receiver) } } => { let receiver = nikaia_std::boxed::open(receiver); return CheckCrossingsPath::Falls; },
         _ => { return check_crossings_mentioned(world, name, expr); },
     }
     check_crossings_joined(&branches, false)
@@ -482,5 +509,213 @@ pub(crate) fn check_crossings_arguments<H: CheckHost>(state: &mut CheckState, wo
     let none: Vec<(String, bool, String)> = vec![];
     let keeps = match world.newly_keeps.get(key) { Some(__nikaia_value) => __nikaia_value, None => return check_arguments(state, world, host, key, written, contract, given, found, passed, &none, span) };
     check_arguments(state, world, host, key, written, contract, given, found, passed, &keeps, span)
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub(crate) struct CheckDeferredPaths {
+    pub(crate) fresh: bool,
+    pub(crate) started: bool,
+    pub(crate) twice: bool,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub(crate) struct CheckDeferredFound {
+    pub(crate) unstarted: bool,
+    pub(crate) twice: Option<Span>,
+}
+
+pub(crate) fn check_deferred_none() -> CheckDeferredPaths { CheckDeferredPaths { fresh: false, started: false, twice: false } }
+
+pub(crate) fn check_deferred_union(a: &CheckDeferredPaths, b: &CheckDeferredPaths) -> CheckDeferredPaths { CheckDeferredPaths { fresh: a.fresh || b.fresh, started: a.started || b.started, twice: a.twice || b.twice } }
+
+pub(crate) fn check_deferred_leave(paths: &CheckDeferredPaths, found: &mut CheckDeferredFound) { if paths.fresh { found.unstarted = true; } }
+
+pub(crate) fn check_deferred_expr(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, name: &str, expr: &Expr, paths: CheckDeferredPaths, found: &mut CheckDeferredFound, jumps: &mut CheckDeferredPaths, at: &Span) -> CheckDeferredPaths {
+    match expr {
+        Expr::Variable(_, _) => {
+            if check_crossings_named_in(world, name, expr) { return check_deferred_none(); }
+            return paths;
+        },
+        Expr::MethodCall { receiver, method, args, .. } => {
+            let receiver = nikaia_std::boxed::open(receiver); let method = *method;
+            let on: bool = match receiver {
+                Expr::Variable(word, _) => { let word = *word; ::core::convert::identity(match (AsRef::<str>::as_ref(&(world.words.resolve(word))), AsRef::<str>::as_ref(&(name)), ) { (__nikaia_f0, __nikaia_t, ) => __nikaia_t.len() == __nikaia_f0.len() && __nikaia_t.strip_prefix(__nikaia_f0).is_some() }) },
+                _ => false,
+            };
+            if !on {
+                let mut now = check_deferred_expr(world, name, receiver, paths, found, jumps, at);
+                for arg in args.iter() { now = check_deferred_expr(world, name, arg, now, found, jumps, at); }
+                return now;
+            }
+            let mut now = paths;
+            for arg in args.iter() { now = check_deferred_expr(world, name, arg, now, found, jumps, at); }
+            let called: String = format!("{}", world.words.resolve(method));
+            if called == "start" {
+                if (now.started || now.twice) && found.twice.is_none() { found.twice = Some(at.clone()); }
+                return CheckDeferredPaths { fresh: false, started: now.fresh, twice: now.started || now.twice };
+            }
+            if called == "cancel" { return CheckDeferredPaths { fresh: false, started: now.fresh || now.started, twice: now.twice }; }
+            if called == "join" || called == "detach" { return now; }
+            return check_deferred_none();
+        },
+        Expr::Block(b, _) => return check_deferred_path(world, name, &b.stmts, 0, paths, found, jumps, false),
+        Expr::AsyncGroup(b, _, _, _, _) => return check_deferred_path(world, name, &b.stmts, 0, paths, found, jumps, false),
+        Expr::If { cond, then_branch, else_branch, .. } => {
+            let cond = nikaia_std::boxed::open(cond);
+            let tested = check_deferred_expr(world, name, cond, paths, found, jumps, at);
+            let then = check_deferred_path(world, name, &then_branch.stmts, 0, tested.clone(), found, jumps, false);
+            let otherwise: &Block = match else_branch { Some(__nikaia_value) => __nikaia_value, None => return check_deferred_union(&then, &tested) };
+            let other = check_deferred_path(world, name, &otherwise.stmts, 0, tested, found, jumps, false);
+            return check_deferred_union(&then, &other);
+        },
+        Expr::Match { value, arms, .. } => {
+            let value = nikaia_std::boxed::open(value);
+            let matched = check_deferred_expr(world, name, value, paths, found, jumps, at);
+            let mut out = check_deferred_none();
+            for arm in arms.iter() {
+                let left = check_deferred_arm(world, name, arm, matched.clone(), found, jumps, at);
+                out = check_deferred_union(&out, &left);
+            }
+            return out;
+        },
+        Expr::TryCatch { expr: tried, handler, .. } => {
+            let tried = nikaia_std::boxed::open(tried);
+            let done = check_deferred_expr(world, name, tried, paths.clone(), found, jumps, at);
+            let caught = check_deferred_path(world, name, &handler.stmts, 0, check_deferred_union(&paths, &done), found, jumps, false);
+            return check_deferred_union(&done, &caught);
+        },
+        Expr::Return(value, _) => { let value = nikaia_std::boxed::open(value); return check_deferred_returned(world, name, (value).as_ref(), &paths, found) },
+        Expr::Throw(inner, _) => {
+            let inner = nikaia_std::boxed::open(inner);
+            if !check_crossings_named_in(world, name, inner) { check_deferred_leave(&paths, found); }
+            return check_deferred_none();
+        },
+        Expr::Closure { .. } | Expr::Spawn { .. } | Expr::Async(_, _, _, _) => {
+            if check_crossings_named_in(world, name, expr) { return check_deferred_none(); }
+            return paths;
+        },
+        _ => {
+            let mut now = paths;
+            for child in child_exprs_of(expr) { now = check_deferred_expr(world, name, child, now, found, jumps, at); }
+            for block in blocks_of_expr(expr) { if check_crossings_named_in_block(world, name, block) { return check_deferred_none(); } }
+            return now;
+        },
+    }
+}
+
+pub(crate) fn check_deferred_returned(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, name: &str, value: Option<&Expr>, paths: &CheckDeferredPaths, found: &mut CheckDeferredFound) -> CheckDeferredPaths {
+    if value.is_none() {
+        check_deferred_leave(paths, found);
+        return check_deferred_none();
+    }
+    let given: &Expr = match value { Some(__nikaia_value) => __nikaia_value, None => return check_deferred_none() };
+    if !check_crossings_named_in(world, name, given) { check_deferred_leave(paths, found); }
+    check_deferred_none()
+}
+
+pub(crate) fn check_deferred_arm(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, name: &str, arm: &MatchArm, paths: CheckDeferredPaths, found: &mut CheckDeferredFound, jumps: &mut CheckDeferredPaths, at: &Span) -> CheckDeferredPaths {
+    let guard: &Expr = match arm.guard.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return check_deferred_expr(world, name, &arm.body, paths, found, jumps, at) };
+    let tested = check_deferred_expr(world, name, guard, paths, found, jumps, at);
+    check_deferred_expr(world, name, &arm.body, tested, found, jumps, at)
+}
+
+pub(crate) fn check_crossings_named_in_block(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, name: &str, block: &Block) -> bool {
+    for stmt in block.stmts.iter() { if check_crossings_named(world, name, &stmt.node) { return true; } }
+    false
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn check_deferred_path(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, name: &str, stmts: &[Spanned<Stmt>], from: i64, paths: CheckDeferredPaths, found: &mut CheckDeferredFound, jumps: &mut CheckDeferredPaths, in_loop: bool) -> CheckDeferredPaths {
+    let mut now = paths;
+    let mut at = from;
+    while at < stmts.len() as i64 {
+        let span = Span { start: unsafe { nikaia_std::proven::read(&stmts, (at) as usize) }.span.start, end: unsafe { nikaia_std::proven::read(&stmts, (at) as usize) }.span.end };
+        match &unsafe { nikaia_std::proven::read(&stmts, (at) as usize) }.node {
+            Stmt::Return(value) => { return check_deferred_returned(world, name, (value).as_ref(), &now, found); },
+            Stmt::Break | Stmt::Continue => {
+                if in_loop { *jumps = check_deferred_union(&jumps, &now); } else { check_deferred_leave(&now, found); }
+                return check_deferred_none();
+            },
+            Stmt::Expr(e) => { now = check_deferred_jump(world, name, e, now, found, jumps, &span, in_loop); },
+            Stmt::Let { value, .. } => { now = check_deferred_expr(world, name, value, now, found, jumps, &span); },
+            Stmt::Assign { target, value, .. } => {
+                now = check_deferred_expr(world, name, value, now, found, jumps, &span);
+                now = check_deferred_expr(world, name, target, now, found, jumps, &span);
+            },
+            Stmt::For { iter, body, .. } => {
+                now = check_deferred_expr(world, name, iter, now, found, jumps, &span);
+                now = check_deferred_loop(world, name, body, &now, found);
+            },
+            Stmt::While { cond, body } => {
+                now = check_deferred_expr(world, name, cond, now, found, jumps, &span);
+                now = check_deferred_loop(world, name, body, &now, found);
+            },
+            _ => { if check_crossings_named(world, name, &unsafe { nikaia_std::proven::read(&stmts, (at) as usize) }.node) { return check_deferred_none(); } },
+        }
+        if !now.fresh && !now.started && !now.twice { return now; }
+        at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
+    }
+    now
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn check_deferred_jump(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, name: &str, expr: &Expr, paths: CheckDeferredPaths, found: &mut CheckDeferredFound, jumps: &mut CheckDeferredPaths, at: &Span, in_loop: bool) -> CheckDeferredPaths {
+    match expr {
+        Expr::Break(_) | Expr::Continue(_) => {
+            if in_loop { *jumps = check_deferred_union(&jumps, &paths); } else { check_deferred_leave(&paths, found); }
+            return check_deferred_none();
+        },
+        _ => return check_deferred_expr(world, name, expr, paths, found, jumps, at),
+    }
+}
+
+pub(crate) fn check_deferred_loop(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, name: &str, body: &Block, paths: &CheckDeferredPaths, found: &mut CheckDeferredFound) -> CheckDeferredPaths {
+    let mut jumps = check_deferred_none();
+    let once = check_deferred_path(world, name, &body.stmts, 0, paths.clone(), found, &mut jumps, true);
+    let again = check_deferred_path(world, name, &body.stmts, 0, check_deferred_union(&once, &jumps), found, &mut jumps, true);
+    check_deferred_union(&check_deferred_union(&paths, &once), &check_deferred_union(&again, &jumps))
+}
+
+pub(crate) fn check_deferred_task(expr: &Expr) -> bool {
+    match expr {
+        Expr::Spawn { deferred, .. } => { let deferred = *deferred; deferred },
+        Expr::TryCatch { expr: guarded, .. } => { let guarded = nikaia_std::boxed::open(guarded); match guarded {
+            Expr::Spawn { deferred, .. } => { let deferred = *deferred; deferred },
+            _ => false,
+        } },
+        _ => false,
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn check_crossings_a_deferred_handle_starts(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, block: &Block) {
+    let mut at: i64 = 0;
+    for stmt in block.stmts.iter() {
+        at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
+        let span = Span { start: stmt.span.start, end: stmt.span.end };
+        match &stmt.node {
+            Stmt::Expr(value) => { if check_deferred_task(value) { state.findings.push(check_refusal("NK2121", &span, String::from("This deferred task is never started: nothing holds its handle."), vec![String::from("A deferred task runs only from its handle's `start()`, so one whose handle is dropped never runs.")], Some(String::from("Bind it, `let mut h = async(deferred) fn { … }`, and write `h.start()` where it should run; or write `async fn { … }` to start it at once.")))); } },
+            Stmt::Let { names, value, .. } => {
+                if check_deferred_task(value) && names.len() == 1 {
+                    let name: String = format!("{}", world.words.resolve(*unsafe { nikaia_std::proven::read(&names, (0) as usize) }));
+                    let mut found = CheckDeferredFound { unstarted: false, twice: None };
+                    if name == "_" { found.unstarted = true; } else {
+                        let mut jumps = check_deferred_none();
+                        let start = CheckDeferredPaths { fresh: true, started: false, twice: false };
+                        let left = check_deferred_path(world, &name, &block.stmts, at, start, &mut found, &mut jumps, false);
+                        check_deferred_leave(&left, &mut found);
+                    }
+                    if found.unstarted { state.findings.push(check_refusal("NK2121", &span, format!("The deferred task handle `{}` is neither started nor cancelled on some path.", name), vec![String::from("A deferred task runs only from its handle's `start()`: on a path that leaves without it, the task never runs, and nothing says so.")], Some(format!("Write `{}.start()` where the task should run, and `{}.cancel()` on the path where it should not.", name, name)))); }
+                    let twice: Option<Span> = match found.twice.as_ref() {
+                        Some(__nikaia_it) => Some(__nikaia_it.clone()),
+                        None => None,
+                    };
+                    if twice.is_some() { state.findings.push(check_refusal("NK2121", nikaia_std::index::or(twice.as_ref(), || &span), format!("The deferred task handle `{}` is started a second time here, on some path.", name), vec![String::from("`start()` starts the task, and a task runs once.")], Some(format!("Start `{}` once on every path: in each branch, or once after them.", name)))); }
+                }
+            },
+            _ => { },
+        }
+    }
 }
 

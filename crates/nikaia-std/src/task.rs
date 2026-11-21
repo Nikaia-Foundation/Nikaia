@@ -1757,6 +1757,58 @@ impl<'scope, E: From<Crashed>> Scope<'scope, '_, E> {
         ChildHandle::kept(self, rest, body).await
     }
 
+    /// **`async(deferred) fn { … }` bound to a handle named later**
+    /// (ADR-async-5 D12, #2512): as [`Scope::start_kept`], but nothing runs
+    /// here; the handle's `start()` queues the task in `rest`, and it starts
+    /// where the main line next pauses or waits.
+    pub fn deferred_kept<'g, 'b: 'g, T: 'b, F>(
+        &'b self,
+        rest: &'g Rest<'b>,
+        body: impl FnOnce() -> F + 'b,
+    ) -> ChildHandle<'g, T, E>
+    where
+        E: 'b,
+        F: std::future::Future<Output = Result<T, E>> + 'b,
+    {
+        ChildHandle::kept_deferred(self, rest, body)
+    }
+
+    /// [`Scope::deferred_kept`] under the gates of `line` (D12, D15, D37):
+    /// once started, the task waits for a place as a queued one does, and
+    /// holds its places from its start to its end.
+    pub fn deferred_kept_gated<'g, 'b: 'g, T: 'b, F>(
+        &'b self,
+        rest: &'g Rest<'b>,
+        line: &Waiting<'_>,
+        body: impl FnOnce() -> F + 'b,
+    ) -> ChildHandle<'g, T, E>
+    where
+        E: 'b,
+        F: std::future::Future<Output = Result<T, E>> + 'b,
+    {
+        let gates = line.gates();
+        let body = move || gate::placed(gates, body());
+        ChildHandle::kept_deferred(self, rest, body)
+    }
+
+    /// [`Scope::deferred_kept_gated`] with a strategy of its own (D18): it
+    /// is asked once the task is started, where the main line pauses or
+    /// waits, as a queued task's is.
+    pub fn deferred_kept_admitted<'g, 'b: 'g, T: 'b, F>(
+        &'b self,
+        rest: &'g Rest<'b>,
+        line: &Waiting<'_>,
+        admission: Box<dyn Admission>,
+        body: impl FnOnce() -> F + 'b,
+    ) -> ChildHandle<'g, T, E>
+    where
+        E: 'b,
+        F: std::future::Future<Output = Result<T, E>> + 'b,
+    {
+        line.admit_later(admission);
+        self.deferred_kept_gated(rest, line, body)
+    }
+
     /// **`async e` as a statement whose task pauses** (D9, D20, #1226): it
     /// runs here to its end, in sequence at both settings until the group
     /// polls its statement tasks; its value is dropped, its failure waits for

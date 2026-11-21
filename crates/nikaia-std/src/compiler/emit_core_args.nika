@@ -1872,6 +1872,10 @@ impl EmitState {
     /// binding's, waited for later) or `spawn` (a statement, its value dropped).
     fn emit_async_task[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, task: ref Expr, id: i64, kind: ref String, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
         let group = self.emit_async_group_of(id)
+        // **A deferred task** (`async(deferred)`, ADR-async-5 D12): its
+        // handle is made here, and its `start()` starts it.
+        let deferred = walk.async_deferred
+        walk.async_deferred = false
         if !walk.async_groups.contains(group) {
             throw EmitRefused { message: "The compiler can't translate `async e` yet where its group is a block inside the function (#988): put it in `async { … }` or in the function's own body.", at: emit_async_at(flow.statement) }
         }
@@ -1992,6 +1996,34 @@ impl EmitState {
         // pauses or not.
         let line = emit_async_line(gates)
         let gated = line != "" && walk.async_pausing
+        let paused = body.buf.contains(".await") || gated
+        if deferred && (kind != "handle" || (paused && !walk.async_keeps)) {
+            throw EmitRefused { message: "The compiler can't translate `async(deferred)` here yet: bind its handle with a `let`, and start it at a later statement.", at: emit_async_at(flow.statement) }
+        }
+        if paused && deferred {
+            // **A deferred task's rest lives in a cell of its block** (D12,
+            // D37): nothing runs here; `start()` queues the task there, and
+            // the gate, or the wait for it, starts it where the main line
+            // next pauses or waits. Its own strategy is asked then.
+            let cell = f"__rest_{id}"
+            let mut made = f"deferred_kept(&{cell}, "
+            if line != "" {
+                made = f"deferred_kept_gated(&{cell}, &{line}, "
+                if admission != "" {
+                    made = f"deferred_kept_admitted(&{cell}, &{line}, nikaia_std::task::admitted({admission}), "
+                }
+            } else if admission != "" {
+                throw EmitRefused { message: "The compiler can't translate `async(deferred, admission: s)` outside a group's gate yet.", at: emit_async_at(flow.statement) }
+            }
+            walk.async_kept.push(cell)
+            let made_text = f"{name}.{made}async || -> {self.rust_result()}<_, {channel}> {{ let __value = {body.buf}; Ok(__value) }})"
+            if line != "" {
+                out.push(f"{line}.keep({made_text})")
+            } else {
+                out.push(made_text)
+            }
+            return
+        }
         if body.buf.contains(".await") || gated {
             // **A statement task under a gate queues as any task does**
             // (D9, D37): its rest lives in a cell of its block, which waits
@@ -2078,6 +2110,15 @@ impl EmitState {
             } else {
                 out.push(spawned)
             }
+            return
+        }
+        if deferred {
+            // A deferred task that never pauses runs at its `start()`, to
+            // its end there (D12).
+            if enter != "" {
+                throw EmitRefused { message: "The compiler can't translate `async(deferred)` under `limit:` or `admission:` in a function that never pauses yet.", at: emit_async_at(flow.statement) }
+            }
+            out.push(f"{name}.deferred(|| -> {self.rust_result()}<_, {channel}> {{ let __value = {body.buf}; Ok(__value) }})")
             return
         }
         let mut started = f"{name}.start_here(|| -> {self.rust_result()}<_, {channel}> {{ let __value = {body.buf}; Ok(__value) }})"

@@ -1,0 +1,25 @@
+error[NK2121]: The deferred task handle `h` is started a second time here, on some path.
+  --> tests/async_deferred_started_twice.nika:7:2
+   |
+ 7 | 	h.start()
+   |  ^^^^^^^^^
+   |
+   = note: `start()` starts the task, and a task runs once.
+   = help: Start `h` once on every path: in each branch, or once after them.
+error[NK2121]: The deferred task handle `h` is started a second time here, on some path.
+   --> tests/async_deferred_started_twice.nika:19:2
+    |
+ 19 | 	h.start()
+    |  ^^^^^^^^^
+    |
+    = note: `start()` starts the task, and a task runs once.
+    = help: Start `h` once on every path: in each branch, or once after them.
+error[NK2121]: The deferred task handle `h` is started a second time here, on some path.
+   --> tests/async_deferred_started_twice.nika:28:3
+    |
+ 28 | 		h.start()
+    |   ^^^^^^^^^
+    |
+    = note: `start()` starts the task, and a task runs once.
+    = help: Start `h` once on every path: in each branch, or once after them.
+

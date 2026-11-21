@@ -1598,6 +1598,11 @@ impl EmitState {
         // the body moves is the new handle and the caller's own survives the
         // `spawn`.
         let handles = self.emit_task_handles(task)
+        // **A deferred task** (`async(detached, deferred)`, ADR-async-5 D12):
+        // the start below is a closure its handle's `start()` calls, so the
+        // setting and the body's channel pick the handle as for `spawn`.
+        let deferred = walk.async_deferred
+        walk.async_deferred = false
         // **A deadline** (ADR-async-5 D16, #986) counts from here, outside
         // the future; a fallback inside the task binds its guarded block by
         // it, so `task::TimedOut` reaches the fallback.
@@ -1669,6 +1674,9 @@ impl EmitState {
                 kind = "BoxedTask"
             }
         }
+        if deferred {
+            out.push("nikaia_std::task::Deferred::new(move || ")
+        }
         if host.overlaps_user_code() {
             out.push(f"nikaia_std::task::{kind}::start_on_pool(async move ")
         } else {
@@ -1707,6 +1715,9 @@ impl EmitState {
             }
             self.emit_stmt_block_opening_with(world, walk, out, host, body, depth, inside, inside_scope, EmitTail::Return, opening)
             walk.async_bound = ""
+            out.push(")")
+        }
+        if deferred {
             out.push(")")
         }
         if opened {
