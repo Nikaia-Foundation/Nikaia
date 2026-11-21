@@ -1472,13 +1472,17 @@ pub fn project_drive_wrapper[H: ProjectDriveWrapperHost](host: ref H) -> i32 thr
 
 /// **One `rustc` invocation as the second store sees it** (ADR-021 D14):
 /// its entry, named by the key, the directory `rustc` writes into and the
-/// names of what it writes there.
+/// names of what it writes there; and the generated sources, `within`
+/// (`NIKAIA_GEN_DIR` and a `/`) and a root on them, `sources`, below which
+/// every input it records is read (ADR-raw-sinks-1 D17.1).
 struct ProjectDriveRustcStore {
     entry: fs::Path,
     at: fs::Root,
     out_dir: fs::Path,
     outputs: Vec[String],
     generated: fs::Path,
+    within: String,
+    sources: fs::Root,
 }
 
 /// **The store's view of an invocation, where it has one** (ADR-021 D14):
@@ -1495,8 +1499,16 @@ fn project_drive_rustc_store[H: ProjectDriveWrapperHost](host: ref H, rust: ref 
     if !path::is_component(key) {
         return null
     }
+    // The inputs are read below the generated sources the outer build named
+    // (ADR-raw-sinks-1 D17.1); without them, no store.
+    let gen_dir = env::var("NIKAIA_GEN_DIR") ?? return null
+    if gen_dir == "" {
+        return null
+    }
+    let bare = gen_dir.strip_suffix("/")?.clone() ?? gen_dir.clone()
+    let within = f"{bare}/"
     let entry = host.user_cache_dir().join("rustc").join(key)
-    return ProjectDriveRustcStore { entry: entry.clone(), at: fs::Root::Dir(entry), out_dir: out_dir, outputs: outputs, generated: generated.clone() }
+    return ProjectDriveRustcStore { entry: entry.clone(), at: fs::Root::Dir(entry), out_dir: out_dir, outputs: outputs, generated: generated.clone(), within: within, sources: fs::Root::Dir(gen_dir) }
 }
 
 /// **What `rustc` writes for `args`**: the `--out-dir` and the names of
@@ -1640,8 +1652,8 @@ fn project_drive_rustc_reused[H: ProjectDriveWrapperHost](host: ref H, store: re
             return false
         }
         if parts[0] == "file" {
-            let path: fs::Path = parts[2].clone()
-            let bytes = fs::read(path, fs::Root::Anywhere) catch { return false }
+            let path = project_drive_rustc_below(parts[2], store.within) ?? return false
+            let bytes = fs::read(path, store.sources) catch { return false }
             if hash::sha256_hex(bytes.iter().collect()) != parts[1] {
                 return false
             }
@@ -1682,7 +1694,7 @@ fn project_drive_rustc_record(store: ref ProjectDriveRustcStore, staging: ref fs
         fs::copy(store.out_dir.join(name), store.entry.join(staging).join("out").join(name), fs::Root::Anywhere) catch { return }
         if name.ends_with(".d") {
             let depends = fs::read_to_string(store.out_dir.join(name), fs::Root::Anywhere) catch { return }
-            inputs = project_drive_rustc_inputs(depends, store.generated) ?? return
+            inputs = project_drive_rustc_inputs(depends, store) ?? return
         }
     }
     fs::write(staging.join("inputs"), store.at, inputs) catch { return }
@@ -1691,19 +1703,34 @@ fn project_drive_rustc_record(store: ref ProjectDriveRustcStore, staging: ref fs
     fs::rename(staging, "kept", store.at) catch {}
 }
 
-/// **The inputs a dependency file names beside `generated`**, one line
-/// each: `file`, the digest and the path; `env`, the variable and its value
-/// (`\u{0}` for unset). Null where a named file cannot be read.
-fn project_drive_rustc_inputs(depends: ref String, generated: ref fs::Path) -> String? {
+/// **A path the store records, as its part below the generated sources**
+/// (ADR-raw-sinks-1 D17.1): `path` with `within` taken off, where what is
+/// left stays below it (`path::is_below`, D14). Null for a path outside: the
+/// store then records or reuses nothing and `rustc` runs (D17.3).
+fn project_drive_rustc_below(path: ref String, within: ref String) -> String? {
+    let below = path.strip_prefix(within) ?? return null
+    if !path::is_below(below) {
+        return null
+    }
+    return below
+}
+
+/// **The inputs a dependency file names beside the store's generated
+/// Rust**, one line each: `file`, the digest and the path; `env`, the
+/// variable and its value (`\u{0}` for unset). Each file is read through a
+/// root on the generated sources (ADR-raw-sinks-1 D17.1). Null where a named
+/// file lies outside them or cannot be read.
+fn project_drive_rustc_inputs(depends: ref String, store: ref ProjectDriveRustcStore) -> String? {
     let mut text: String = ""
     let first = depends.lines().next() ?? return ""
     let (_, listed) = first.split_once(": ") ?? return ""
     for word in listed.replace("\\ ", "\u{1f}").split(" ") {
         let path: fs::Path = word.replace("\u{1f}", " ")
-        if word.len() == 0 || path == generated {
+        if word.len() == 0 || path == store.generated {
             continue
         }
-        let bytes = fs::read(path, fs::Root::Anywhere) catch { return null }
+        let below = project_drive_rustc_below(path.display(), store.within) ?? return null
+        let bytes = fs::read(below, store.sources) catch { return null }
         text.push_str(f"file\t{hash::sha256_hex(bytes.iter().collect())}\t{path.display()}\n")
     }
     for line in depends.lines() {

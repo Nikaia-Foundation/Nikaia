@@ -1,0 +1,83 @@
+// ADR-raw-sinks-1 D17.1, D17.3: the second store (ADR-021 D14) reads the
+// inputs its record names only below the generated sources
+// (`NIKAIA_GEN_DIR`), through a root on them. An entry whose record names a
+// file outside them, here one beside the store with its digest right, is
+// not reused: `rustc` runs, the build succeeds, and the entry it records
+// again is reused by the next build.
+use std::env
+use std::fs
+use std::process
+
+fn toolchain() -> String throws {
+	let exe = env::current_exe()?.display() ?? ""
+	if exe.len() == 0 {
+		eprintln("no running nikaia among this program's ancestors: run it with `nikaia test` (#1305)")
+		process::exit(2)
+	}
+	return exe
+}
+
+// What the store said since the last call, the crate's tag left out.
+fn verdicts(trace: ref fs::Root) -> String throws {
+	let said = process::run(
+		"sh",
+		["-c", f"grep ' rustc ' {trace.path().to_text()} | sed -E 's/_[0-9a-f]{{16,}} / /'; rm -f {trace.path().to_text()}"],
+	).stdout.trim().clone()
+	return said.replace("\n", ", ")
+}
+
+// Another compiler, as far as the build can tell: the same Rust, the
+// Cargo-fresh record gone.
+fn another_compiler(p: ref fs::Root) throws {
+	process::run(
+		"sh",
+		[
+			"-c",
+			"sed -i '$ s/.*/another-compiler/' target/nikaia/gen/switches; find target -name cargo-fresh -delete",
+		]; dir: p.path().to_text(),
+	)
+}
+
+fn build(nikaia: String, p: ref fs::Root, cache: ref fs::Root, trace: ref fs::Root) -> String throws {
+	let built = process::run(
+		nikaia,
+		["build"]; dir: p.path().to_text(),
+		env: [
+			("RUST_BACKTRACE", "0"),
+			("NIKAIA_CACHE_DIR", cache.path().to_text()),
+			("NIKAIA_WRAPPER_TRACE", trace.path().to_text()),
+		],
+	)
+	if built.code != 0 {
+		eprintln(built.stderr)
+	}
+	return f"built {built.code}"
+}
+
+fn ran(p: ref fs::Root) -> String throws {
+	return process::run(f"{p.path().to_text()}/target/nikaia/bin/outside", []).stdout.trim().clone()
+}
+
+fn main() throws {
+	let tmp = fs::scratch()
+	let nikaia = toolchain()
+	let cache = tmp.join("cache")
+	let trace = tmp.join("trace")
+	let p = tmp.join("outside")
+	process::run("mkdir", ["-p", f"{p.path().to_text()}/src"])
+	fs::write("nikaia.toml", p, "[package]\nname = \"outside\"\nversion = \"0.1.0\"\n")
+	fs::write("src/main.nika", p, "fn main() throws {\n\tprintln(\"hi\")\n}\n")
+	println(f"first: {build(nikaia, p, cache, trace)}; {verdicts(trace)}; says {ran(p)}")
+	// The entry's record names a file outside the generated sources, its
+	// digest as it is now.
+	fs::write("planted", tmp, "outside the generated sources\n")
+	let planted = f"{tmp.path().to_text()}/planted"
+	process::run(
+		"sh",
+		["-c", f"sum=$(sha256sum {planted} | cut -c1-64); for d in {cache.path().to_text()}/rustc/*/kept; do printf 'file\\t%s\\t%s\\n' $sum {planted} >> $d/inputs; done"],
+	)
+	another_compiler(p)
+	println(f"an input outside: {build(nikaia, p, cache, trace)}; {verdicts(trace)}; says {ran(p)}")
+	another_compiler(p)
+	println(f"recorded again: {build(nikaia, p, cache, trace)}; {verdicts(trace)}; says {ran(p)}")
+}
