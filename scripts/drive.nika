@@ -1124,7 +1124,9 @@ fn drive_proved(dir: String, sha: String) throws {
 		}
 		exe = f"{base}/target/fast/nikaia"
 	}
-	let report = f"{base}/report.txt"
+	// In the worktree, where proved.nika runs: it opens the report below its
+	// working directory (ADR-raw-sinks-1 D11).
+	let report = f"{tree}/bounds-report.txt"
 	process::run(
 		"sh",
 		["-c", f"cd '{tree}' && {cache} '{exe}' lower-std --bounds --asserts --sysroot '{tree}/crates' > '{report}' 2> '{base}/lower.err'"],
@@ -1134,7 +1136,7 @@ fn drive_proved(dir: String, sha: String) throws {
 		drive_proved_clean(base)
 		return
 	}
-	let summed = process::run("sh", ["-c", f"cd '{tree}' && {cache} '{exe}' run scripts/proved.nika -- '{report}' 2>&1"])
+	let summed = process::run("sh", ["-c", f"cd '{tree}' && {cache} '{exe}' run scripts/proved.nika -- bounds-report.txt 2>&1"])
 	if !summed.ok || !summed.stdout.starts_with("proved: ") {
 		drive_append(out, f"PROVED {short} not measured: scripts/proved.nika failed: {drive_tail(summed.stdout, 1)}")
 		drive_proved_clean(base)
