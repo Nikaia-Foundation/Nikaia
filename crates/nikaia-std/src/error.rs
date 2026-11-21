@@ -603,10 +603,10 @@ fn trace_part(
             out.push_str(&format!("\n{t}"));
             for crossing in crossings {
                 out.push_str(&format!("\n── started at {} ──", crossing.started));
-                if let Some(waited) = &crossing.trace {
-                    if waited.status() == BacktraceStatus::Captured {
-                        out.push_str(&format!("\n{waited}"));
-                    }
+                if let Some(waited) = &crossing.trace
+                    && waited.status() == BacktraceStatus::Captured
+                {
+                    out.push_str(&format!("\n{waited}"));
                 }
             }
         }
