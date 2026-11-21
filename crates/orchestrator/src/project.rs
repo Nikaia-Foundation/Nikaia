@@ -379,7 +379,14 @@ pub struct Cargo {
 /// would refuse a correct toolchain, which is the worse of the two mistakes
 /// (C.4).
 pub fn toolchain_is_new_enough(floor: &str) -> Result<()> {
-    let Some(found) = installed_rustc() else {
+    toolchain_is_new_enough_as(rustc_version(), floor)
+}
+
+/// [`toolchain_is_new_enough`], of the toolchain whose `rustc --version` is
+/// `version`: a caller that holds the answer already (the compiler keeps it
+/// under the user cache, #2151) starts no `rustc` for it (#2421).
+pub fn toolchain_is_new_enough_as(version: &str, floor: &str) -> Result<()> {
+    let Some(found) = installed_rustc(version) else {
         return Ok(());
     };
     let Some(floor_parts) = version_parts(floor) else {
@@ -432,9 +439,9 @@ pub fn toolchain_can_build_for(triple: &str) -> bool {
 }
 
 /// `rustc --version`'s major and minor, where both can be read.
-fn installed_rustc() -> Option<(u32, u32)> {
+fn installed_rustc(version: &str) -> Option<(u32, u32)> {
     // `rustc 1.86.0 (05f9846f8 2025-03-31)`
-    version_parts(rustc_version().split_whitespace().nth(1)?)
+    version_parts(version.split_whitespace().nth(1)?)
 }
 
 /// `rustc --version`, asked once per process: each question costs a start of

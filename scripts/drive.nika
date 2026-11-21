@@ -19,7 +19,7 @@
 // DIR/batch.txt as `#N` (`QUEUED #N <area>`, drive_queue; one a commit on
 // develop already `Fixes`: `SKIPPED #N fixed on develop`). A run on issue N
 // sets `wip` on it first and, by its report, keeps it (done, `Fixes:` names
-// #N; promote closes the issue), swaps `ready` for `blocked` (blocked), or
+// #N; the driver closes the issue once it is pushed, drive_close_pushed), swaps `ready` for `blocked` (blocked), or
 // removes it (anything else), drive_wip_after; an escalation mid-run leaves
 // `wip` for the supervisor to clear. A `#N` line stays in batch.txt after its
 // run, and batch.nika counts a brief with a report as run, so an issue left
@@ -31,7 +31,7 @@
 // `--focus-next FILE [SKIPPED...]`, `--focus-log DIR AREA BRIEF...` (the
 // block's comment), `--focus-issue FILE NAME|DIR...`, `--blocks DIR`,
 // `--found DIR BRIEF` (drive_found), `--queue-add BATCH N...` (drive_queue_add),
-// `--fixed-in LOG N...` (drive_fixed_in), `--queue-plan LIST [OPEN...]`
+// `--fixed-in LOG N...` (drive_fixed_in), `--closes-in LOG` (drive_closes_in), `--queue-plan LIST [OPEN...]`
 // (drive_queue_plan: LIST in drive_queue's `=== #N ===` record form, OPEN the
 // dependencies taken as open), `--queue-check LIST [OPEN...]` (the same with
 // the form check, scripts/issue-check.nika, OPEN the issues taken as open,
@@ -914,6 +914,7 @@ fn drive_say(dry: bool, line: String) throws {
 // merge would push HEAD's untested commits; "none", and the next suite, on
 // HEAD, pushes them all.
 fn drive_push(dir: String, sha: String) -> String throws {
+	let before = process::run("git", ["rev-parse", "-q", "--verify", "origin/develop"]).stdout.trim().clone()
 	let first = process::run("git", ["push", "origin", f"{sha}:develop"])
 	let mut pushed = sha.clone()
 	let mut head = "sha"
@@ -931,11 +932,80 @@ fn drive_push(dir: String, sha: String) -> String throws {
 		let now = process::run("git", ["rev-parse", "HEAD"]).stdout.trim().clone()
 		head = if now == merge { "head" } else { "sha" }
 	}
+	drive_close_pushed(before, pushed.clone())
 	let note = drive_release(dir, pushed.clone())
 	drive_wake(dir, f"PUSHED {drive_short(pushed)}, {note}")
 	if note.contains("PUSH REJECTED") { drive_escalate("the release's push was rejected") }
 	drive_proved_start(dir, pushed)
 	return head
+}
+
+// After a push (owner, 2026-11-21): an issue closes once the commit that
+// finishes it is on `develop`, not when `promote` brings it to `main`. The
+// commits from BEFORE (`origin/develop` before the push; "" closes nothing)
+// to PUSHED are read by drive_closes_in: each issue it closes that is open is
+// closed as completed with a comment naming PUSHED, and loses `wip`
+// (`CLOSED #N on develop`); each it reopens that is closed is reopened with
+// `ready` (`REOPENED #N on develop`, #2152). A failed call is logged and
+// stops nothing; promote still closes what the driver missed.
+fn drive_close_pushed(before: String, pushed: String) throws {
+	if before == "" { return }
+	let got = process::run("git", ["log", "--format=%B", "--grep=^Fixes ", "--grep=^Reopens ", f"{before}..{pushed}"])
+	if !got.ok { return }
+	let repo = drive_repo()
+	let short = drive_short(pushed)
+	for line in drive_closes_in(got.stdout) {
+		let words: Vec[String] = line.split(" ").collect()
+		let n = words[1].clone()
+		let state = process::run("gh", ["api", f"repos/{repo}/issues/{n}", "--jq", ".state"]).stdout.trim().clone()
+		if words[0] == "close" && state == "open" {
+			drive_comment(n.clone(), f"Driver: closed, its `Fixes` commit is on `develop` in {short} (owner, 2026-11-21: issues close on `develop`, not at `promote`).{drive_footer()}")
+			let done = process::run("gh", ["api", "-X", "PATCH", f"repos/{repo}/issues/{n}", "-f", "state=closed", "-f", "state_reason=completed"])
+			if done.ok {
+				drive_label_remove(n.clone(), "wip")
+				println(f"CLOSED #{n} on develop")
+			} else {
+				println(f"CLOSE FAILED #{n}: {done.stderr.trim()}")
+			}
+		}
+		if words[0] == "reopen" && state == "closed" {
+			let done = process::run("gh", ["api", "-X", "PATCH", f"repos/{repo}/issues/{n}", "-f", "state=open"])
+			if done.ok {
+				drive_label_add(n.clone(), "ready")
+				drive_comment(n.clone(), f"Driver: reopened, a `Reopens` line in {short} on `develop` takes its `Fixes` back (#2152).{drive_footer()}")
+				println(f"REOPENED #{n} on develop")
+			} else {
+				println(f"REOPEN FAILED #{n}: {done.stderr.trim()}")
+			}
+		}
+	}
+}
+
+// What the commit messages LOG (newest first) do to the issues they name on a
+// `Fixes #N[, #M]` or `Reopens #N[, #M]` line: `close N` where the newest of
+// the two lines is `Fixes`, `reopen N` where it is `Reopens` (drive_fixed_in).
+fn drive_closes_in(log: String) -> Vec[String] {
+	let mut named: Vec[String] = []
+	let mut reopens: Vec[String] = []
+	for l in log.split("\n") {
+		let line = l.trim().clone()
+		let fixes = line.starts_with("Fixes ")
+		if !fixes && !line.starts_with("Reopens ") { continue }
+		for n in drive_hash_numbers(line.clone()) {
+			if !named.contains(n.clone()) { named.push(n.clone()) }
+			if !fixes && !reopens.contains(n.clone()) { reopens.push(n) }
+		}
+	}
+	let fixed = drive_fixed_in(log, named.clone())
+	let mut out: Vec[String] = []
+	for n in named {
+		if fixed.contains(n.clone()) {
+			out.push(f"close {n}")
+		} else if reopens.contains(n.clone()) {
+			out.push(f"reopen {n}")
+		}
+	}
+	return out
 }
 
 // The merge rounds of a rejected push of SHA (#2008): at most this many.
@@ -1136,9 +1206,10 @@ fn drive_proved(dir: String, sha: String) throws {
 		drive_proved_clean(base)
 		return
 	}
-	let summed = process::run("sh", ["-c", f"cd '{tree}' && {cache} '{exe}' run scripts/proved.nika -- bounds-report.txt 2>&1"])
+	let summed = process::run("sh", ["-c", f"cd '{tree}' && {cache} '{exe}' run scripts/proved.nika -- bounds-report.txt"])
+	// stderr apart: the compiler's warnings on proved.nika are not the figures.
 	if !summed.ok || !summed.stdout.starts_with("proved: ") {
-		drive_append(out, f"PROVED {short} not measured: scripts/proved.nika failed: {drive_tail(summed.stdout, 1)}")
+		drive_append(out, f"PROVED {short} not measured: scripts/proved.nika failed: {drive_tail(summed.stderr, 1)}")
 		drive_proved_clean(base)
 		return
 	}
@@ -1669,9 +1740,10 @@ fn drive_lowered_print(dir: String) -> String throws {
 // A merge that conflicted only in the generated lowered files (#1430): they
 // are output of `lower-std`, so the conflict has one mechanical resolution.
 // Takes their side of each conflicted file, then drive_merge_regenerate
-// lowers (from our side when theirs fails, #2253), regenerates the badges and
-// commits. Prints `MERGE <sha8> re-lowered [from ours ]<paths>`. Any other
-// failure, or both sides failing, aborts the merge and escalates
+// lowers (from our side when theirs fails, #2253, with the compiler of their
+// commit when ours fails too, #2432), regenerates the badges and commits.
+// Prints `MERGE <sha8> re-lowered [from ours |with their emitter ]<paths>`.
+// Any other failure, or all three failing, aborts the merge and escalates
 // (drive_merge_abort_paths): a partly resolved merge is never left behind.
 fn drive_merge_relower(cause: String, unmerged: String, lower: String, build: String, badges: String) throws {
 	for p in unmerged.split(" ") {
@@ -1694,7 +1766,13 @@ fn drive_merge_relower(cause: String, unmerged: String, lower: String, build: St
 // files). When that fails for a conflict, the conflicted lowered paths take
 // our side instead and it all runs again (#2253: their lowered emitter lacked
 // our unpushed emitter change and lowered our `.nika` into code rustc
-// refused); only both sides failing aborts, each side's tail printed. BUILD and LOWER run in the tree worktree moved to the merged index
+// refused). When our side fails too, the conflicted paths take their side
+// again and the compiler of their commit (MERGE_HEAD) is built in the tree
+// target with drive_tree_exe, where LOWER finds it; the merged index is
+// lowered with it first, then BUILD and LOWER run until settled (#2432: their
+// emitter wrote `Boxed` where the binary from before the merge wrote `Box`,
+// which the merged hand-written Rust refused on both sides). Only all three
+// failing aborts, each one's tail printed. BUILD and LOWER run in the tree worktree moved to the merged index
 // (drive_tree_move, #1916), never on the shared checkout's working tree, which
 // holds the other agents' modified sources. The lowered paths they changed
 // there are copied into the checkout and staged, nothing else, and runs BADGES
@@ -1703,7 +1781,7 @@ fn drive_merge_relower(cause: String, unmerged: String, lower: String, build: St
 // tree (drive_ledgers_refresh, #1591), staging the changed ledger files. Then
 // commits the merge, with the
 // regenerated files in it (the autostash is applied after that commit), and
-// prints `MERGE <sha8> re-lowered [from ours ]<paths>` for a conflict, `MERGE <sha8>
+// prints `MERGE <sha8> re-lowered [from ours |with their emitter ]<paths>` for a conflict, `MERGE <sha8>
 // regenerated <paths>` (or `nothing changed`) for a clean merge; a merge of
 // documentation only is committed as it is. Any failure aborts the merge and
 // escalates.
@@ -1736,6 +1814,7 @@ fn drive_merge_regenerate(cause: String, unmerged: String, lower: String, build:
 	// merged `.nika` into code that does not compile).
 	let mut side = "theirs"
 	let mut failed_theirs: String = ""
+	let mut failed_ours: String = ""
 	let mut wt: String = ""
 	while true {
 		let merged = process::run("git", ["write-tree"])
@@ -1749,15 +1828,26 @@ fn drive_merge_regenerate(cause: String, unmerged: String, lower: String, build:
 		// The binary there is about to be rebuilt from other sources than its stamp names.
 		process::run("rm", ["-f", process::run("realpath", ["-m", drive_tree_target()]).stdout.trim() + "/fast/nikaia.crates"])
 		at = drive_now()
-		let first = process::run("sh", ["-c", f"cd '{wt}' && {build} 2>&1"])
-		times.push(f"build {drive_now() - at}s")
-		if !first.ok {
+		// With their emitter (#2432) the merged index is lowered first: both
+		// sides already showed that it does not build as it stands.
+		let mut needs_lower = side == "emitter"
+		let mut said: String = ""
+		if !needs_lower {
+			let first = process::run("sh", ["-c", f"cd '{wt}' && {build} 2>&1"])
+			times.push(f"build {drive_now() - at}s")
+			if !first.ok {
+				needs_lower = true
+				said = first.stdout.clone()
+			}
+		}
+		if needs_lower {
 			at = drive_now()
 			let old_lowered = process::run("sh", ["-c", f"cd '{wt}' && {lower} 2>&1"])
-			times.push(f"old lower-std {drive_now() - at}s")
+			let which = if side == "emitter" { "their lower-std" } else { "old lower-std" }
+			times.push(f"{which} {drive_now() - at}s")
 			if !old_lowered.ok {
 				failed = "lower-std before the build"
-				println(drive_tail(first.stdout + old_lowered.stdout, 30))
+				println(drive_tail(said + old_lowered.stdout, 30))
 			}
 		}
 		let mut rounds = 0
@@ -1787,7 +1877,38 @@ fn drive_merge_regenerate(cause: String, unmerged: String, lower: String, build:
 			}
 			settled = drive_lowered_print(wt.clone()) == old
 		}
-		if failed == "" || unmerged == "" || side == "ours" { break }
+		if failed == "" || unmerged == "" || side == "emitter" { break }
+		if side == "ours" {
+			// Our side failed too (#2432: their side changed the emitter, Box to
+			// Boxed, and the binary from before the merge writes the old form,
+			// which the merged hand-written Rust refuses either way): the
+			// conflicted lowered paths take their side again, the compiler of
+			// their commit is built in the tree target, where LOWER finds it, and
+			// the regeneration starts again with it.
+			println(f"MERGE re-lowering from ours failed ({failed}), trying their emitter")
+			failed_ours = failed
+			failed = ""
+			side = "emitter"
+			times.push("their emitter")
+			for p in unmerged.split(" ") {
+				let theirs_has = process::run("git", ["cat-file", "-e", f"MERGE_HEAD:{p}"]).ok
+				let took = if theirs_has {
+					process::run("git", ["checkout", "MERGE_HEAD", "--", p.clone()])
+				} else {
+					process::run("git", ["rm", "-q", "-f", "--ignore-unmatch", "--", p.clone()])
+				}
+				if !took.ok { drive_merge_abort_paths(cause, unmerged, f"re-lowering failed ({failed_theirs} from theirs, {failed_ours} from ours), and taking their side of {p} again failed") }
+			}
+			let their_tree = process::run("git", ["rev-parse", f"MERGE_HEAD^{{tree}}"]).stdout.trim().clone()
+			at = drive_now()
+			let exe = if their_tree == "" { "" } else { drive_tree_exe(their_tree) }
+			times.push(f"their build {drive_now() - at}s")
+			if exe == "" {
+				println(f"MERGE timing {times.join(", ")}, total {drive_now() - began}s")
+				drive_merge_abort_paths(cause, unmerged, f"re-lowering failed ({failed_theirs} from theirs, {failed_ours} from ours, and the compiler of theirs did not build)")
+			}
+			continue
+		}
 		// Their side failed: the conflicted lowered paths take our side (HEAD's
 		// copy, or none where HEAD has none) into the index and the checkout,
 		// and the regeneration starts again from that tree.
@@ -1808,7 +1929,13 @@ fn drive_merge_regenerate(cause: String, unmerged: String, lower: String, build:
 	}
 	if failed != "" {
 		println(f"MERGE timing {times.join(", ")}, total {drive_now() - began}s")
-		let why = if failed_theirs == "" { failed } else { f"{failed_theirs} from theirs, {failed} from ours" }
+		let why = if failed_theirs == "" {
+			failed
+		} else if failed_ours == "" {
+			f"{failed_theirs} from theirs, {failed} from ours"
+		} else {
+			f"{failed_theirs} from theirs, {failed_ours} from ours, {failed} with their emitter"
+		}
 		drive_merge_abort_paths(cause, unmerged, f"re-lowering failed ({why})")
 	}
 	// The lowered paths the regeneration rewrote, wrote new or removed in the
@@ -1886,7 +2013,7 @@ fn drive_merge_regenerate(cause: String, unmerged: String, lower: String, build:
 	println(f"MERGE timing {times.join(", ")}, total {drive_now() - began}s")
 	let merge = process::run("git", ["rev-parse", "HEAD"]).stdout.trim().clone()
 	if unmerged != "" {
-		let from = if side == "ours" { "from ours " } else { "" }
+		let from = if side == "ours" { "from ours " } else if side == "emitter" { "with their emitter " } else { "" }
 		println(f"MERGE {drive_short(merge)} re-lowered {from}{unmerged}")
 		return
 	}
@@ -3405,7 +3532,7 @@ fn drive_wip_start(dry: bool, brief: String) throws {
 
 // What a run's end does to the labels of its issue N, by the report's
 // `Result:` and `Fixes:`: `keep` (done and `Fixes:` names #N: `wip` stays
-// until promote closes the issue, so it is not queued again), `block`
+// until the push closes the issue, drive_close_pushed, so it is not queued again), `block`
 // (blocked: `wip` goes, `blocked` comes, the supervisor decides),
 // `remove` (anything else, partial or no report: `wip` goes, `ready` comes back;
 // the `#N` line stays in batch.txt, so drive_queue_add does not queue it again
@@ -4684,7 +4811,7 @@ fn drive_queue_prune(dir: String) throws {
 }
 
 // NUMBERS without those a commit on `develop` finishes (drive_fixed_on_develop):
-// such an issue stays open until `promote`, but what waits for it can run now
+// such an issue stays open until its commit is pushed, but what waits for it can run now
 // (#2020 was dropped waiting for #2031 after 17fb5b58 said `Fixes #2031`).
 fn drive_not_fixed_on_develop(numbers: Vec[String]) -> Vec[String] throws {
 	let fixed = drive_fixed_on_develop(numbers.clone())
@@ -4697,8 +4824,8 @@ fn drive_not_fixed_on_develop(numbers: Vec[String]) -> Vec[String] throws {
 
 // The numbers among NUMBERS that a commit message in LOG (the bodies of
 // `git log`, newest first) finishes: named on a line `Fixes #N[, #M]`
-// (CLAUDE.md). Such an issue stays open until `promote` brings the commit to
-// `main`, so it is no work for a builder (#1678: #1662 was briefed after
+// (CLAUDE.md). Such an issue stays open until the driver pushes the commit to
+// `develop` (drive_close_pushed), so it is no work for a builder (#1678: #1662 was briefed after
 // eaed1a6f fixed it). A line `Reopens #N[, #M]` in a newer commit takes that
 // back: the newest of the two lines decides (#2152: its `Fixes` commit
 // 31989371 was reverted by 99ab826a and the redo was skipped as fixed).
@@ -5417,6 +5544,10 @@ fn main() throws {
 			i += 1
 		}
 		print(drive_queue_add(drive_read(args[2]), numbers))
+		return
+	}
+	if args.len() == 3 && args[1] == "--closes-in" {
+		for line in drive_closes_in(drive_read(args[2])) { println(line) }
 		return
 	}
 	if args.len() >= 3 && args[1] == "--fixed-in" {

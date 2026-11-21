@@ -1270,14 +1270,11 @@ pub fn project_drive_not_the_entry(file: ref fs::Path, root: ref fs::Path, entry
     return f"{told}\nIt is a test program: run it with `nikaia test --project {root.display()} --filter {name}`, and add `--bless` to record its expected output."
 }
 
-/// **The project `nikaia run <file>` keeps for a file outside any project**
-/// ([ADR-260](../../docs/specification/adr/adr-260.md) D4), in the user's
-/// cache and keyed on the file's path, built through the same Cargo workspace
-/// `nikaia build` makes: its root, with the manifest and the copy of the file
-/// as `entry` written there. Each is rewritten only when its bytes changed,
-/// so Cargo's freshness keeps working. Moved from `project.rs`'s
-/// `project_for_file` (ADR-294, #125).
-pub fn project_drive_kept_for_file[H: ProjectDriveKeptHost](file: ref fs::Path, entry: String, host: ref H) -> fs::Path throws {
+/// **Where `nikaia run` keeps a file outside any project**, and the name of
+/// its package: `run/<stem>-<16 hex of the canonical path>` under
+/// `user_cache`. Read without writing anything, so a run that finds its
+/// program built (`project_drive_ran`, #2421) asks it too.
+pub fn project_drive_kept_root(file: ref fs::Path, user_cache: ref fs::Path) -> (fs::Path, String) {
     let canonical_file = project_members_canonical(file)
     let bytes: Vec[u8] = canonical_file.display().bytes().collect()
     let hex = hash::sha256_hex(bytes)
@@ -1289,7 +1286,105 @@ pub fn project_drive_kept_for_file[H: ProjectDriveKeptHost](file: ref fs::Path, 
     let first = stem.scalars.next() ?? ' '
     let fits = first >= 'a' && first <= 'z' && stem.scalars.all(fn(c) { (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '-' || c == '_' })
     let name = if fits { stem } else { "program" }
-    let root = host.user_cache_dir().join("run").join(f"{name}-{key}")
+    return (user_cache.join("run").join(f"{name}-{key}"), name)
+}
+
+/// **The record a run of `given` leaves in the kept project at `root`**
+/// (#2421): one for each way the file was named, since a diagnostic names
+/// the file as the run was given it (ADR-300 D9).
+pub fn project_drive_ran_record(root: ref fs::Path, given: String) -> fs::Path {
+    let hex = hash::sha256_hex(given.bytes().collect())
+    let name: String = hex.scalars.take(16).collect()
+    return root.join("ran").join(name)
+}
+
+/// **What a run that built its program leaves for the next** (#2421): the
+/// digest of `key` (the compiler, the toolchain, `std`'s bundle, the
+/// settings and the environment), the program in its slot and the slot's
+/// key, each file the program was made from with its length, time and
+/// digest, and what the build said (`said`). The counts head it, so a
+/// record cut short reads as none. None where a file cannot be read.
+pub fn project_drive_ran_write(record: ref fs::Path, key: String, binary: ref fs::Path, files: ref Vec[fs::Path], said: String) {
+    fs::remove(record, fs::Root::Anywhere) catch {}
+    let slot_dir = binary.parent() ?? return
+    let slot = fs::read_to_string(slot_dir.join("key"), fs::Root::Anywhere) catch { return }
+    let named = binary.display()
+    if slot.contains("\n") || named.contains("\n") {
+        return
+    }
+    let mut listed = ""
+    for path in files {
+        let shown = path.display()
+        if shown.contains("\n") {
+            return
+        }
+        let meta = fs::metadata(path, fs::Root::Anywhere) catch { return }
+        let digest = project_drive_digest(path, false) ?? return
+        listed.push_str(f"file {meta.len()}:{meta.modified().in_nanos()}:{digest}:{shown}\n")
+    }
+    let text = f"{hash::sha256_hex(key.bytes().collect())}\n{named}\n{slot}\n{files.len()} {said.len()}\n{listed}said\n{said}"
+    let dir = record.parent() ?? return
+    fs::create_dir(dir, fs::Root::Anywhere; recursive: true) catch { return }
+    fs::write(record, fs::Root::Anywhere, text) catch {}
+}
+
+/// **The program a run built before, and what its build said, where
+/// nothing it was made from changed** (#2421): the record
+/// `project_drive_ran_write` left holds `key`, its program is still in the
+/// slot it names under the same key, and each file it lists is as it was. A
+/// file whose length or time moved is read, and counts as changed only
+/// where its digest did. Null where anything differs or is gone.
+pub fn project_drive_ran(record: ref fs::Path, key: String) -> (fs::Path, String)? {
+    let held = fs::read_to_string(record, fs::Root::Anywhere) catch { return null }
+    let lines: Vec[String] = held.split("\n").map(fn(line) { line.clone() }).collect()
+    if lines.len() < 5 || lines[0] != hash::sha256_hex(key.bytes().collect()) {
+        return null
+    }
+    let binary: fs::Path = lines[1].clone()
+    let slot_dir = binary.parent() ?? return null
+    if !(fs::metadata(binary, fs::Root::Anywhere) catch { return null }).is_file() {
+        return null
+    }
+    if (fs::read_to_string(slot_dir.join("key"), fs::Root::Anywhere) catch { return null }) != lines[2] {
+        return null
+    }
+    let mut at = 4
+    while at < lines.len() && lines[at].starts_with("file ") {
+        let parts: Vec[String] = (lines[at].strip_prefix("file ") ?? "").splitn(4, ":").map(fn(part) { part.clone() }).collect()
+        if parts.len() != 4 {
+            return null
+        }
+        let path: fs::Path = parts[3].clone()
+        let meta = fs::metadata(path, fs::Root::Anywhere) catch { return null }
+        at += 1
+        if f"{meta.len()}" == parts[0] && f"{meta.modified().in_nanos()}" == parts[1] {
+            continue
+        }
+        if (project_drive_digest(path, false) ?? return null) != parts[2] {
+            return null
+        }
+    }
+    if at >= lines.len() || lines[at] != "said" {
+        return null
+    }
+    let rest: Vec[String] = lines.iter().skip(at + 1).map(fn(line) { line.clone() }).collect()
+    let said = rest.join("\n")
+    if f"{at - 4} {said.len()}" != lines[3] {
+        return null
+    }
+    return (binary, said)
+}
+
+/// **The project `nikaia run <file>` keeps for a file outside any project**
+/// ([ADR-260](../../docs/specification/adr/adr-260.md) D4), in the user's
+/// cache and keyed on the file's path, built through the same Cargo workspace
+/// `nikaia build` makes: its root, with the manifest and the copy of the file
+/// as `entry` written there. Each is rewritten only when its bytes changed,
+/// so Cargo's freshness keeps working. Moved from `project.rs`'s
+/// `project_for_file` (ADR-294, #125).
+pub fn project_drive_kept_for_file[H: ProjectDriveKeptHost](file: ref fs::Path, entry: String, host: ref H) -> fs::Path throws {
+    let canonical_file = project_members_canonical(file)
+    let (root, name) = project_drive_kept_root(file, host.user_cache_dir())
     // An entry of the user cache like any other: pruned when it was used
     // longest ago (#724).
     host.use_entry(root)

@@ -8,6 +8,13 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1517] — 2026-11-21
+
+**Builders' changes (#2421, #2432)**
+- nikaia run of an unchanged file starts its built program at once from a run record, with no parse, check or rustc --version; its warnings are said once per run
+- nikaia run of an unchanged file outside a project starts its built program at once from a run record (key, binary, every input's digest, the warnings said), replaying its warnings once
+- Driver: a merge whose lowered-file conflict neither side can re-lower with the old compiler is re-lowered with the compiler built from the incoming commit (an emitter change such as Box to Boxed), instead of escalating.
+
 ## [0.0.1516] — 2026-11-21
 
 **check: a field of self whose type copies by std's ledger is given as a copy, not refused by NK1131 (#2468)**

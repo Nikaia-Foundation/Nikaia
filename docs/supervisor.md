@@ -87,7 +87,7 @@ reports under *Briefs and reports*.
   lane's `batch.txt`), or a revert. A revert of a commit that said `Fixes #N`
   says `Reopens #N` on a line of its own: the driver skips an issue a `Fixes`
   on `develop` names until a newer `Reopens` takes it back (#2152), and the
-  issue is reopened by hand if `promote` closed it.
+  driver reopens the issue with `ready` when it pushes that `Reopens` line.
 
 ## Trunk, CI and issues
 
@@ -147,9 +147,12 @@ Moved from `CLAUDE.md` (2026-11-01); there each rule has its short form.
   tests and, green, pushes without a `ci/` run (`SUITE <sha8> scripts-only`,
   `drive_scripts_only` in `scripts/drive.nika`); a script without a named
   test gets the suite.
-* **How issues close.** `promote` closes an issue only when a commit it brings
-  to `main` names it with `Fixes`, `Closes` or `Resolves`
-  (`scripts/fixed-issues.py`); `(#N)` and `Part of #N` close nothing. Any tense
+* **How issues close** (owner, 2026-11-21). The driver closes an issue when it
+  pushes to `develop` a commit with a line `Fixes #N` (`drive_close_pushed` in
+  `scripts/drive.nika`): as completed, with a comment naming the commit, and
+  without `wip`. `promote` still closes what reaches `main` named with
+  `Fixes`, `Closes` or `Resolves` (`scripts/fixed-issues.py`), so a push by
+  hand is caught there; `(#N)` and `Part of #N` close nothing. Any tense
   counts, in prose too (5d7be91e's "the compiler fix #1000" closed #1000
   unbuilt). The commit that builds the last step of a *To build* list writes
   `Fixes #N`, and also names every issue that list absorbed (`Fixes #439,
@@ -470,7 +473,10 @@ Moved from the former `docs/architect.md` (2026-10-31). `nikaia` here means
   after each run; the supervisor watches the driver's log for `builder done`,
   reads the debrief at once and, before the next brief is written, turns each
   point into one of three things: a line in `docs/builder-facts-lookup.md` (a trap, a
-  location, a recipe), a fix to the brief template or a wrong fact in a
+  location, a recipe, or a work area's file, measure or figure in its topic
+  section; owner, 2026-11-21: topic facts in place of a resumed agent; a newer
+  figure replaces the older, what no longer holds is deleted, and an `UNPLACED`
+  topic gets its section with a `Paths:` line), a fix to the brief template or a wrong fact in a
   waiting brief, or a `ready` issue when the toolchain lacks what the builder
   needed. A point two builders reported is never left for a third.
 * **Cost watch.** A builder past about 120 turns or 200k context is told to push what is verified and end; the

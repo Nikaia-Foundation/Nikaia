@@ -29,7 +29,7 @@ The rules every session and agent needs. What only the main session does
   names in its report what the change decided, and takes a new `NK` code only
   from the block the supervisor reserved for it.
 * **The commit that finishes an issue says `Fixes #N`**; that word closes it
-  when `promote` brings it to `main`. Never write `fix #N`, `fixed #N` or
+  when the driver pushes it to `develop` (owner, 2026-11-21). Never write `fix #N`, `fixed #N` or
   `closes #N` (any tense, in prose too) for an issue the commit does not
   finish; write `the fix for #N`. `(#N)` and `Part of #N` close nothing.
 * **Every open issue carries exactly one status label**: `ready`, `decision`,

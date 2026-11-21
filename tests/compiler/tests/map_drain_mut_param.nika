@@ -1,0 +1,42 @@
+// A B-tree map that is a `mut` parameter, drained into a local and back, stays
+// the caller's and empties in place (ADR-386 D2, ADR-094 D3): the lowering
+// takes the parameter as it is, not lent `&mut` once more.
+use std::collections
+
+struct W {
+	m: collections::BTreeMap[String, Vec[i64]],
+	n: i64,
+}
+
+fn use_w(mut w: W) {
+	w.n += 1
+}
+
+fn round(mut kept: collections::BTreeMap[String, Vec[i64]]) {
+	let mut w = W { m: collections::BTreeMap(), n: 0 }
+	for (k, v) in kept.drain() {
+		w.m.insert(k, v)
+	}
+	w.m.insert(f"a{w.m.len()}", [1])
+	use_w(w)
+	for (k, v) in w.m.drain() {
+		kept.insert(k, v)
+	}
+	use_w(w)
+}
+
+fn refill(mut kept: collections::BTreeMap[String, Vec[i64]]) throws {
+	let mut w = W { m: collections::BTreeMap(), n: 0 }
+	w.m.extend(kept.drain())
+	println(f"taken {w.m.len()}, left {kept.len()}")
+	kept.extend(w.m.drain())
+}
+
+fn main() throws {
+	let mut kept: collections::BTreeMap[String, Vec[i64]] = collections::BTreeMap()
+	round(kept)
+	round(kept)
+	println(f"{kept.len()}")
+	refill(kept)
+	println(f"{kept.len()}")
+}

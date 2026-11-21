@@ -1,6 +1,6 @@
 # Nikaia Language Specification
 **Part I: The Language Core**
-**Version:** 0.0.1516 (Draft)
+**Version:** 0.0.1517 (Draft)
 **Date:** 2026-11-21
 
 ---

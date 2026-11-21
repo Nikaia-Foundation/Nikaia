@@ -1,0 +1,8 @@
+ran 0; warnings: 1 --> warned.nika:5:5
+ran 0; warnings: 1 --> TMP/warned.nika:5:5
+ran 0; warnings: 1 --> warned.nika:5:5
+ran 0; warnings: 1 --> TMP/warned.nika:5:5
+read again: false
+ran 0; warnings: 1 --> warned.nika:5:5
+ran 0; warnings: 1 --> TMP/warned.nika:5:5
+read again once changed: true
