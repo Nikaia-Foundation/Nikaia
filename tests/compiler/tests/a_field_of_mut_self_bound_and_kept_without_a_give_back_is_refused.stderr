@@ -1,0 +1,11 @@
+error[NK2108]: This `return` leaves `self` without `self.out`.
+  --> tests/a_field_of_mut_self_bound_and_kept_without_a_give_back_is_refused.nika:9:9
+   |
+ 8 |         let rows = self.out
+   |                    -------- taken out of `self` here
+ 9 |         return rows
+   |         ^^^^^^ leaves the function with the part still out
+   |
+   = note: The method takes `mut self`, so `self` is the caller's and is whole whenever the caller can see it. `self.out` was bound to `rows` by a `let`, and nothing has put it back.
+   = help: Assign `self.out` before the method is left, or take `keep self` and hand the value back.
+
