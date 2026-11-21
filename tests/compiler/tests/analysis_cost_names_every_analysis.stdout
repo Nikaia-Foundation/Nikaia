@@ -1,0 +1,13 @@
+exit 0
+Instructions per checker analysis, in the check walk (`check_walked_walk`) of 1,000 lines
+
+| Analysis | Instructions | Share of the walk | Per line |
+| :--- | ---: | ---: | ---: |
+| handles (ADR-312) | 300 | 3.0 % | 0 |
+| outside data (ADR-396) | 300 | 3.0 % | 0 |
+| bounds (ADR-385) | 400 | 4.0 % | 0 |
+| proofs (ADR-269 D4, ADR-396 D5) | 500 | 5.0 % | 0 |
+| views (NK2302, NK2305, NK2303) | 600 | 6.0 % | 0 |
+| lints (NK1261, NK1350) | 1,500 | 15.0 % | 1 |
+| rest of the walk | 6,400 | 64.0 % | 6 |
+| the walk | 10,000 | 100.0 % | 10 |

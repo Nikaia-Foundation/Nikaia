@@ -455,6 +455,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
+    #[inline(never)]
     pub(crate) fn a_handle_handed_on(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, value: &Expr, ty: &Ty, whole: &Span) {
         let name = match value {
             Expr::Variable(symbol, _) => { let symbol = *symbol; nikaia_std::block::Text::from(world.words.resolve(symbol).to_string()) },
@@ -854,6 +855,7 @@ impl CheckState {
 impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
+    #[inline(never)]
     pub(crate) fn a_clone_seen(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, expr: &Expr, receiver: &Expr, copy: &Ty, span: &Span) {
         if self.reading_only || !self.task_bindings.is_empty() { return; }
         let at = check_span_at(world, expr, span);
@@ -953,6 +955,7 @@ impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
+    #[inline(never)]
     pub(crate) fn a_loop_over_a_needless_clone(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, iter: &Expr, over: &Ty, body: &Block, items: &[CheckLocal], handed_before: i64, mutable: bool, span: &Span) {
         if mutable || self.reading_only || !self.task_bindings.is_empty() { return; }
         let receiver = match iter {
@@ -1058,6 +1061,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
+    #[inline(never)]
     pub(crate) fn needless_place_clones_said(&mut self) {
         let places = self.flow.place_clones.copy_owned();
         let changes = self.flow.changes_seen.copy_owned();
@@ -1101,6 +1105,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
+    #[inline(never)]
     pub(crate) fn needless_clones_said(&mut self) {
         let clones = self.flow.clones.copy_owned();
         let loans = self.flow.clone_loans.copy_owned();
