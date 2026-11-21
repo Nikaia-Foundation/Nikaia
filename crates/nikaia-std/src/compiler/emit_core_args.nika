@@ -800,7 +800,7 @@ impl EmitState {
         // the checker found it by the entry the call resolved to (`str::repeat`,
         // never a function of the program's own that is called `repeat`), not
         // where the argument is written only in literals, and a `usize` a C
-        // declaration names is one too (ADR-302 D6).
+        // declaration names is one too (ADR-c-boundary-v1 D6).
         let wants_a_size = self.takes_a_size(world, callee, i) || self.facts.count_args.contains(node)
         let count = wants_a_size && !only_literals(arg)
         // **The caller writes no `&`** (ADR-094 D1): where the callee reads this
@@ -834,7 +834,7 @@ impl EmitState {
         let duplicate = shares_a_handle || hands_on_kept || self.facts.stored_handles.contains(node)
         // **A lambda handed to a parameter whose type may pause** (ADR-277 D11).
         let future = emit_arg_is_closure(arg) && self.facts.future_lambdas.contains(node) && !self.facts.kept_lambdas.contains_key(node)
-        // **The pointer a C declaration takes** (ADR-302 D5).
+        // **The pointer a C declaration takes** (ADR-c-boundary-v1 D5).
         let mut pointer = 0
         if self.foreign_params.contains_key(callee) {
             let params = self.foreign_params.get(callee) ?? return

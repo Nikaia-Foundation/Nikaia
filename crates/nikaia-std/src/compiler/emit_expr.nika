@@ -443,7 +443,7 @@ impl EmitState {
             // A block in *expression* position: its last statement is its own
             // value, and a `return` inside it leaves the function around it.
             Expr::Block(block, _) => self.emit_core_block(world, walk, out, host, block, depth, flow, scope, EmitTail::Value),
-            // **Rust's own `unsafe`** (ADR-302 D3); **a block of nothing but
+            // **Rust's own `unsafe`** (ADR-c-boundary-v1 D3); **a block of nothing but
             // `assume`s, checked** (ADR-376 D2), holds nothing Rust calls
             // unsafe, so it is written as a plain block.
             Expr::Unsafe(block, _) => {

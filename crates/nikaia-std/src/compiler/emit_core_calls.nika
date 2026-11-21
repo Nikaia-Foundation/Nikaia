@@ -614,7 +614,7 @@ impl EmitState {
         if boxed {
             out.push("std::boxed::Box::pin(")
         }
-        // **A handle is made at the call and nowhere else** (ADR-302 D11, D12).
+        // **A handle is made at the call and nowhere else** (ADR-c-boundary-v1 D11, D12).
         // The declaration hands back the address C returned; the hull goes on
         // here, where the claim the declaration made can be checked - or, where
         // it said `?`, where `None` is C's own `NULL`.

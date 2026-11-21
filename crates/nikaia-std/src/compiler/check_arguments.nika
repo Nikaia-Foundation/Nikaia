@@ -277,7 +277,7 @@ fn check_arguments[H: CheckHost](mut state: CheckState, world: ref CheckWorld, h
         return signature.result_or_unit()
     }
 
-    // **A length beside a view is checked at the call** (ADR-302 D6), before
+    // **A length beside a view is checked at the call** (ADR-c-boundary-v1 D6), before
     // the arguments are measured one at a time: the question is about a
     // *pair* of them, and a `usize` that is measured on its own has already
     // passed.
@@ -534,7 +534,7 @@ fn check_arguments[H: CheckHost](mut state: CheckState, world: ref CheckWorld, h
         }
         // **What the callee keeps, it is given** (ADR-293 D29): no `&` is
         // written for this position, so a name here moves. **Not across the C
-        // boundary** (ADR-302 D5).
+        // boundary** (ADR-c-boundary-v1 D5).
         if kept && !want.is_a_view() && !signature.mutable.contains(name) && !state.foreign_names.contains(written) && given_here != null {
             let value = given_here ?? continue
             state.hands_over(world, value, found_here, f"passed to `{written}`, which keeps it", span)
@@ -673,7 +673,7 @@ fn check_arguments[H: CheckHost](mut state: CheckState, world: ref CheckWorld, h
             continue
         }
         // **A `usize` at the C boundary takes this language's own integer**
-        // (ADR-302 D6, ADR-285 D1): this *is* the fit.
+        // (ADR-c-boundary-v1 D6, ADR-285 D1): this *is* the fit.
         if state.a_count_at_the_boundary(written, want, found_here) {
             continue
         }

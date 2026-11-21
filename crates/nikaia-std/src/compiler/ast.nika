@@ -213,7 +213,7 @@ pub enum Item {
         library: String?,
         declarations: Vec[Spanned[TraitMethod]],
         /// **The handles the block declares**
-        /// ([ADR-302](../../../docs/specification/adr/adr-302.md) D7):
+        /// ([ADR-c-boundary-v1](../../../docs/specification/adr/adr-c-boundary-v1.md) D7):
         /// `opaque type sqlite3 released by sqlite3_close`.
         ///
         /// A list beside the declarations rather than a kind of declaration,
@@ -836,7 +836,7 @@ pub enum Expr {
     },
 
     /// Part III 15.1: `unsafe { … }`
-    /// ([ADR-302](../../../docs/specification/adr/adr-302.md) D3).
+    /// ([ADR-c-boundary-v1](../../../docs/specification/adr/adr-c-boundary-v1.md) D3).
     ///
     /// **A block with a value, and no other rule.** What is inside is checked
     /// exactly as anything else is; what the word buys is that the boundary is
@@ -973,7 +973,7 @@ pub struct Type {
     /// `name` holds the digits as they were written, so a message that prints
     /// a type prints the number the source wrote.
     pub count: i64?,
-    /// **`&mut T`** ([ADR-302](../../../docs/specification/adr/adr-302.md) D5):
+    /// **`&mut T`** ([ADR-c-boundary-v1](../../../docs/specification/adr/adr-c-boundary-v1.md) D5):
     /// a view the callee may write through.
     ///
     /// Beside `is_view` rather than inside it, because the two are independent
@@ -988,7 +988,7 @@ pub struct Type {
     /// Without `is_view` it is that `mut` of a signature, kept by a function
     /// type's parameter (`fn(mut S)`, #1134), the one place it stands.
     pub is_mut: bool,
-    /// **`[T]`** ([ADR-302](../../../docs/specification/adr/adr-302.md) D5): a
+    /// **`[T]`** ([ADR-c-boundary-v1](../../../docs/specification/adr/adr-c-boundary-v1.md) D5): a
     /// run of `T` whose length the caller knows and the type does not.
     ///
     /// The element goes in `generics`, where a tuple's parts and a function
@@ -1016,7 +1016,7 @@ pub struct Type {
 }
 
 /// One line of an `extern` block, before the two shapes are taken apart
-/// ([ADR-302](../../../docs/specification/adr/adr-302.md) D7).
+/// ([ADR-c-boundary-v1](../../../docs/specification/adr/adr-c-boundary-v1.md) D7).
 ///
 /// The grammar's own type and nothing else's: a block may interleave the two
 /// freely and `Item::Extern` holds them in two lists, so this exists for the
@@ -1027,7 +1027,7 @@ pub enum ExternMember {
 }
 
 /// **An address this language never dereferences**
-/// ([ADR-302](../../../docs/specification/adr/adr-302.md) D7).
+/// ([ADR-c-boundary-v1](../../../docs/specification/adr/adr-c-boundary-v1.md) D7).
 ///
 /// `opaque type sqlite3 released by sqlite3_close`. It is moved and stored like
 /// any value, it has no fields and no indexing, and its release is a `cleanup`
