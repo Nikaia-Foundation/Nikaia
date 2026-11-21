@@ -1,0 +1,59 @@
+// #2592: a test program whose two settings printed differently failed as
+// `FAILED (the settings disagree)`, and the report showed each setting's
+// whole output, so a long one (`drive_wip`, 27 runs of a script) did not say
+// from a CI log where the two parted. The report now ends with the settings'
+// difference, each setting against the first. The program here prints the
+// clock, which no two runs share; its digits are written `N`, so the test's
+// own output is the same at every run.
+use std::env
+use std::fs
+use std::process
+
+fn toolchain() -> String throws {
+    let exe = env::current_exe()?.display() ?? ""
+    if exe.len() == 0 {
+        eprintln("no running nikaia among this program's ancestors: run it with `nikaia test` (#1305)")
+        process::exit(2)
+    }
+    return exe
+}
+
+/// `text` with each run of digits written `N`.
+fn without_digits(text: String) -> String {
+    let mut out = String()
+    let mut digits = false
+    for c in text.scalars {
+        if c >= '0' && c <= '9' {
+            if !digits {
+                out.push('N')
+            }
+            digits = true
+        } else {
+            out.push(c)
+            digits = false
+        }
+    }
+    return out
+}
+
+fn main() throws {
+    let tmp = fs::scratch()
+    let nikaia = toolchain()
+    process::run("mkdir", ["-p", f"{tmp.path().to_text()}/clock/src", f"{tmp.path().to_text()}/clock/tests"])
+    let clock = tmp.join("clock")
+    fs::write("nikaia.toml", clock, "[package]\nname = \"clock\"\nversion = \"0.1.0\"\n")
+    fs::write("src/main.nika", clock, "// The entry of the package.\n")
+    fs::write("tests/now.nika", clock, "use std::time\n\nfn main() throws {\n    println(\"the same at each setting\")\n    println(f\"{time::since_epoch().in_nanos()}\")\n}\n")
+    fs::write("tests/now.stdout", clock, "the same at each setting\n")
+    let ran = process::run(nikaia, ["test", "--both-settings"]; dir: clock.path().to_text(), env: [("CARGO_TERM_COLOR", "never")])
+    println(f"exit {ran.code}")
+    let mut shown = false
+    for line in ran.stdout.lines() {
+        if line.starts_with("the settings differ") {
+            shown = true
+        }
+        if shown || line.starts_with("program") || line.starts_with("test result") {
+            println(without_digits(line))
+        }
+    }
+}

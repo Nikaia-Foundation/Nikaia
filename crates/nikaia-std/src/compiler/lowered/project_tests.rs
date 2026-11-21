@@ -1035,8 +1035,67 @@ pub fn project_tests_report_failures(failed: &[ProjectTestsFailed]) -> Result<()
             }
             for line in outcome.stderr.lines() { nikaia_std::io::eprintln(format_args!("{}", text::escape_control(&nikaia_std::block::Text::from(line.to_string()))))?; }
         }
+        if !agree { project_tests_explain_settings(&one.outcomes)?; }
     }
     Ok(())
+}
+
+pub(crate) fn project_tests_explain_settings(outcomes: &[(String, ProjectTestsOutcome)]) -> Result<(), nikaia_std::error::Thrown<nikaia_std::io::IoError>> {
+    let base = &nikaia_std::index::get(&outcomes, 0).1;
+    let named = &unsafe { nikaia_std::proven::read(&outcomes, (0) as usize) }.0;
+    for (setting, outcome) in nikaia_std::index::get(&outcomes, 1..).iter() {
+        if outcome == base { continue; }
+        nikaia_std::io::println(format_args!("the settings differ (- at user-parallelism = {}, + at user-parallelism = {}):", named, setting))?;
+        if outcome.ended_well != base.ended_well || outcome.stopped != base.stopped {
+            nikaia_std::io::println(format_args!("  - {}", project_tests_ending(base)))?;
+            nikaia_std::io::println(format_args!("  + {}", project_tests_ending(outcome)))?;
+        }
+        if outcome.passed != base.passed {
+            nikaia_std::io::println(format_args!("  - {}", project_tests_passing(base)))?;
+            nikaia_std::io::println(format_args!("  + {}", project_tests_passing(outcome)))?;
+        }
+        if outcome.stdout != base.stdout {
+            nikaia_std::io::println(format_args!("standard output:"))?;
+            nikaia_std::io::print(format_args!("{}", project_tests_difference(&base.stdout, &outcome.stdout)))?;
+        }
+        if outcome.stderr != base.stderr {
+            nikaia_std::io::println(format_args!("standard error:"))?;
+            for line in differing_lines(&base.stderr, &outcome.stderr).lines() { nikaia_std::io::println(format_args!("{}", text::escape_control(&nikaia_std::block::Text::from(line.to_string()))))?; }
+        }
+        for (want, got) in base.files.iter().zip(outcome.files.iter()) {
+            if want.1 != got.1 {
+                nikaia_std::io::println(format_args!("{}:", want.0))?;
+                nikaia_std::io::print(format_args!("{}", project_tests_difference(&project_tests_or_none((want.1).as_deref()), &project_tests_or_none((got.1).as_deref()))))?;
+            }
+        }
+        for (want, got) in base.bounds.iter().zip(outcome.bounds.iter()) {
+            if want.2 != got.2 {
+                nikaia_std::io::println(format_args!("tests/{}:", want.0))?;
+                nikaia_std::io::print(format_args!("{}", project_tests_difference(&want.2, &got.2)))?;
+            }
+        }
+    }
+    Ok(())
+}
+
+pub(crate) fn project_tests_or_none(written: Option<&[u8]>) -> Bytes {
+    match written {
+        None => Bytes(vec![]),
+        Some(bytes) => bytes.copy_of(),
+    }
+}
+
+pub(crate) fn project_tests_ending(outcome: &ProjectTestsOutcome) -> &'static str {
+    if outcome.ended_well { return "ended successfully"; }
+    if outcome.stopped { return "stopped (exit 101)"; }
+    "ended unsuccessfully"
+}
+
+pub(crate) fn project_tests_passing(outcome: &ProjectTestsOutcome) -> &'static str {
+    match outcome.passed {
+        true => "passed",
+        false => "failed",
+    }
 }
 
 #[allow(clippy::too_many_arguments)]
