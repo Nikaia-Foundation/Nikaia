@@ -49,6 +49,14 @@ fn check_crossings_returned(world: ref CheckWorld, name: ref String, value: ref 
     return CheckCrossingsPath::Left
 }
 
+/// Whether `expr` is the name `name` itself.
+fn check_crossings_is_name(world: ref CheckWorld, name: ref String, expr: ref Expr) -> bool {
+    return match expr {
+        Expr::Variable(word, _) => f"{world.words.resolve(word)}" == name,
+        else => false,
+    }
+}
+
 /// A mention takes the handle; no mention goes on.
 fn check_crossings_mentioned(world: ref CheckWorld, name: ref String, expr: ref Expr) -> CheckCrossingsPath {
     if check_crossings_named_in(world, name, expr) {
@@ -65,12 +73,40 @@ fn check_crossings_path(world: ref CheckWorld, name: ref String, stmts: ref Vec[
     let mut at = from
     while at < stmts.len() as i64 {
         let flow = check_crossings_step(world, name, stmts[at].node, in_loop)
+        // **A path that takes the handle and then leaves** goes on nowhere,
+        // as one that left with it: `h.cancel()` then `return` in one branch
+        // and `h.start()` in the other (ADR-async-5 D12) join as the one
+        // that goes on.
+        if flow == CheckCrossingsPath::Taken && check_crossings_leaves_after(stmts, at + 1, in_loop) {
+            return CheckCrossingsPath::Gone
+        }
         if flow != CheckCrossingsPath::Falls {
             return flow
         }
         at += 1
     }
     return CheckCrossingsPath::Falls
+}
+
+/// Whether a statement of `stmts` from `from` on leaves the scope whatever
+/// comes before it: a `return`, a `throw`, or a `break` or `continue` outside
+/// a loop of the walk.
+fn check_crossings_leaves_after(stmts: ref Vec[Spanned[Stmt]], from: i64, in_loop: bool) -> bool {
+    let mut at = from
+    while at < stmts.len() as i64 {
+        match stmts[at].node {
+            Stmt::Return(_) => return true,
+            Stmt::Break | Stmt::Continue if !in_loop => return true,
+            Stmt::Expr(e) => match e {
+                Expr::Return(_, _) | Expr::Throw(_, _) => return true,
+                Expr::Break(_) | Expr::Continue(_) if !in_loop => return true,
+                else => {},
+            },
+            else => {},
+        }
+        at += 1
+    }
+    return false
 }
 
 /// **`name.join(within: d)` that keeps the task on time-out**
@@ -322,6 +358,9 @@ fn check_crossings_expr_path(world: ref CheckWorld, name: ref String, expr: ref 
                 branches.push(check_crossings_arm(world, name, arm, in_loop))
             }
         }
+        // `h.start()` of a deferred handle starts the task and keeps the
+        // handle (ADR-async-5 D12): it takes nothing.
+        Expr::MethodCall { receiver, method, args, .. } if args.len() == 0 && f"{world.words.resolve(method)}" == "start" && check_crossings_is_name(world, name, receiver) => return CheckCrossingsPath::Falls,
         else => return check_crossings_mentioned(world, name, expr),
     }
     return check_crossings_joined(branches, false)
@@ -692,4 +731,350 @@ fn check_crossings_arguments[H: CheckHost](mut state: CheckState, world: ref Che
     let none: Vec[(String, bool, String)] = []
     let keeps = world.newly_keeps.get(key) ?? return check_arguments(state, world, host, key, written, contract, given, found, passed, none, span)
     return check_arguments(state, world, host, key, written, contract, given, found, passed, keeps, span)
+}
+
+/// **Where the paths after a `let h = async(deferred) …` may hold the
+/// handle** (`NK2121`, ADR-async-5 D12): not started yet, started (or
+/// cancelled) once, started a second time. A path that hands the handle on
+/// holds none of these, and is no longer asked.
+struct CheckDeferredPaths {
+    fresh: bool,
+    started: bool,
+    twice: bool,
+}
+
+/// What the walk of one deferred handle found: a path that leaves it
+/// unstarted, and the first `start()` that started it again.
+struct CheckDeferredFound {
+    unstarted: bool,
+    twice: Span?,
+}
+
+/// No path, as after a `return` or a hand-over.
+fn check_deferred_none() -> CheckDeferredPaths {
+    return CheckDeferredPaths { fresh: false, started: false, twice: false }
+}
+
+/// The paths of either.
+fn check_deferred_union(a: ref CheckDeferredPaths, b: ref CheckDeferredPaths) -> CheckDeferredPaths {
+    return CheckDeferredPaths { fresh: a.fresh || b.fresh, started: a.started || b.started, twice: a.twice || b.twice }
+}
+
+/// A path leaves the handle's scope here: one that has not started it, nor
+/// cancelled it, leaves the task unstarted.
+fn check_deferred_leave(paths: ref CheckDeferredPaths, mut found: CheckDeferredFound) {
+    if paths.fresh {
+        found.unstarted = true
+    }
+}
+
+/// **`h.start()`, `h.cancel()`, or another use of `name` in `expr`**, in the
+/// order they run: `start()` starts a fresh handle and starts a started one
+/// twice; `cancel()` settles a fresh one; `join`, `join(within:)` and
+/// `detach` leave the paths as they are; any other mention hands the handle
+/// on, and the paths that do so are no longer asked. An `if`, a `match` and
+/// a block are paths of their own; a lambda or a task that names the handle
+/// hands it on.
+fn check_deferred_expr(world: ref CheckWorld, name: ref String, expr: ref Expr, paths: CheckDeferredPaths, mut found: CheckDeferredFound, mut jumps: CheckDeferredPaths, at: ref Span) -> CheckDeferredPaths {
+    match expr {
+        Expr::Variable(_, _) => {
+            if check_crossings_named_in(world, name, expr) {
+                return check_deferred_none()
+            }
+            return paths
+        },
+        Expr::MethodCall { receiver, method, args, .. } => {
+            let on: bool = match receiver {
+                Expr::Variable(word, _) => f"{world.words.resolve(word)}" == name,
+                else => false,
+            }
+            if !on {
+                let mut now = check_deferred_expr(world, name, receiver, paths, found, jumps, at)
+                for arg in args {
+                    now = check_deferred_expr(world, name, arg, now, found, jumps, at)
+                }
+                return now
+            }
+            let mut now = paths
+            for arg in args {
+                now = check_deferred_expr(world, name, arg, now, found, jumps, at)
+            }
+            let called: String = f"{world.words.resolve(method)}"
+            if called == "start" {
+                if (now.started || now.twice) && found.twice == null {
+                    found.twice = at.clone()
+                }
+                return CheckDeferredPaths { fresh: false, started: now.fresh, twice: now.started || now.twice }
+            }
+            if called == "cancel" {
+                return CheckDeferredPaths { fresh: false, started: now.fresh || now.started, twice: now.twice }
+            }
+            if called == "join" || called == "detach" {
+                return now
+            }
+            return check_deferred_none()
+        },
+        Expr::Block(b, _) => return check_deferred_path(world, name, b.stmts, 0, paths, found, jumps, false),
+        Expr::AsyncGroup(b, _, _, _, _) => return check_deferred_path(world, name, b.stmts, 0, paths, found, jumps, false),
+        Expr::If { cond, then_branch, else_branch, .. } => {
+            let tested = check_deferred_expr(world, name, cond, paths, found, jumps, at)
+            let then = check_deferred_path(world, name, then_branch.stmts, 0, tested.clone(), found, jumps, false)
+            let otherwise: ref Block = else_branch ?? return check_deferred_union(then, tested)
+            let other = check_deferred_path(world, name, otherwise.stmts, 0, tested, found, jumps, false)
+            return check_deferred_union(then, other)
+        },
+        Expr::Match { value, arms, .. } => {
+            let matched = check_deferred_expr(world, name, value, paths, found, jumps, at)
+            let mut out = check_deferred_none()
+            for arm in arms {
+                let left = check_deferred_arm(world, name, arm, matched.clone(), found, jumps, at)
+                out = check_deferred_union(out, left)
+            }
+            return out
+        },
+        Expr::TryCatch { expr: tried, handler, .. } => {
+            let done = check_deferred_expr(world, name, tried, paths.clone(), found, jumps, at)
+            let caught = check_deferred_path(world, name, handler.stmts, 0, check_deferred_union(paths, done), found, jumps, false)
+            return check_deferred_union(done, caught)
+        },
+        Expr::Return(value, _) => return check_deferred_returned(world, name, value, paths, found),
+        Expr::Throw(inner, _) => {
+            if !check_crossings_named_in(world, name, inner) {
+                check_deferred_leave(paths, found)
+            }
+            return check_deferred_none()
+        },
+        // A lambda or a task that names the handle hands it on; one that
+        // does not leaves the paths as they are, a `return` in it being its own.
+        Expr::Closure { .. } | Expr::Spawn { .. } | Expr::Async(_, _, _, _) => {
+            if check_crossings_named_in(world, name, expr) {
+                return check_deferred_none()
+            }
+            return paths
+        },
+        else => {
+            let mut now = paths
+            for child in child_exprs_of(expr) {
+                now = check_deferred_expr(world, name, child, now, found, jumps, at)
+            }
+            for block in blocks_of_expr(expr) {
+                if check_crossings_named_in_block(world, name, block) {
+                    return check_deferred_none()
+                }
+            }
+            return now
+        },
+    }
+}
+
+/// A `return`: one that hands the handle out takes it with it; any other
+/// leaves the scope.
+fn check_deferred_returned(world: ref CheckWorld, name: ref String, value: ref Expr?, paths: ref CheckDeferredPaths, mut found: CheckDeferredFound) -> CheckDeferredPaths {
+    if value == null {
+        check_deferred_leave(paths, found)
+        return check_deferred_none()
+    }
+    let given: ref Expr = value ?? return check_deferred_none()
+    if !check_crossings_named_in(world, name, given) {
+        check_deferred_leave(paths, found)
+    }
+    return check_deferred_none()
+}
+
+/// One arm of a `match`: its guard runs before its body.
+fn check_deferred_arm(world: ref CheckWorld, name: ref String, arm: ref MatchArm, paths: CheckDeferredPaths, mut found: CheckDeferredFound, mut jumps: CheckDeferredPaths, at: ref Span) -> CheckDeferredPaths {
+    let guard: ref Expr = arm.guard ?? return check_deferred_expr(world, name, arm.body, paths, found, jumps, at)
+    let tested = check_deferred_expr(world, name, guard, paths, found, jumps, at)
+    return check_deferred_expr(world, name, arm.body, tested, found, jumps, at)
+}
+
+/// Whether `name` is mentioned in a block.
+fn check_crossings_named_in_block(world: ref CheckWorld, name: ref String, block: ref Block) -> bool {
+    for stmt in block.stmts {
+        if check_crossings_named(world, name, stmt.node) {
+            return true
+        }
+    }
+    return false
+}
+
+/// **The paths through `stmts` from `from` on** (`NK2121`): what each
+/// statement does to them, in order; a `return`, a `throw`, and a `break`
+/// or `continue` outside a loop of the walk leave the scope, and inside one
+/// end the path at that loop (`jumps`). What falls off the end is returned.
+fn check_deferred_path(world: ref CheckWorld, name: ref String, stmts: ref Vec[Spanned[Stmt]], from: i64, paths: CheckDeferredPaths, mut found: CheckDeferredFound, mut jumps: CheckDeferredPaths, in_loop: bool) -> CheckDeferredPaths {
+    let mut now = paths
+    let mut at = from
+    while at < stmts.len() as i64 {
+        let span = Span { start: stmts[at].span.start, end: stmts[at].span.end }
+        match stmts[at].node {
+            Stmt::Return(value) => return check_deferred_returned(world, name, value, now, found),
+            Stmt::Break | Stmt::Continue => {
+                if in_loop {
+                    jumps = check_deferred_union(jumps, now)
+                } else {
+                    check_deferred_leave(now, found)
+                }
+                return check_deferred_none()
+            },
+            Stmt::Expr(e) => {
+                now = check_deferred_jump(world, name, e, now, found, jumps, span, in_loop)
+            },
+            Stmt::Let { value, .. } => {
+                now = check_deferred_expr(world, name, value, now, found, jumps, span)
+            },
+            Stmt::Assign { target, value, .. } => {
+                now = check_deferred_expr(world, name, value, now, found, jumps, span)
+                now = check_deferred_expr(world, name, target, now, found, jumps, span)
+            },
+            Stmt::For { iter, body, .. } => {
+                now = check_deferred_expr(world, name, iter, now, found, jumps, span)
+                now = check_deferred_loop(world, name, body, now, found)
+            },
+            Stmt::While { cond, body } => {
+                now = check_deferred_expr(world, name, cond, now, found, jumps, span)
+                now = check_deferred_loop(world, name, body, now, found)
+            },
+            else => {
+                if check_crossings_named(world, name, stmts[at].node) {
+                    return check_deferred_none()
+                }
+            },
+        }
+        if !now.fresh && !now.started && !now.twice {
+            return now
+        }
+        at += 1
+    }
+    return now
+}
+
+/// An expression statement: `break` and `continue` written as expressions
+/// jump as the statements do.
+fn check_deferred_jump(world: ref CheckWorld, name: ref String, expr: ref Expr, paths: CheckDeferredPaths, mut found: CheckDeferredFound, mut jumps: CheckDeferredPaths, at: ref Span, in_loop: bool) -> CheckDeferredPaths {
+    match expr {
+        Expr::Break(_) | Expr::Continue(_) => {
+            if in_loop {
+                jumps = check_deferred_union(jumps, paths)
+            } else {
+                check_deferred_leave(paths, found)
+            }
+            return check_deferred_none()
+        },
+        else => return check_deferred_expr(world, name, expr, paths, found, jumps, at),
+    }
+}
+
+/// **A loop of the walk**: it may run its body no times, once, or again,
+/// so what reaches its end is any of these, and a `start()` its body makes
+/// on every run starts the handle twice.
+fn check_deferred_loop(world: ref CheckWorld, name: ref String, body: ref Block, paths: CheckDeferredPaths, mut found: CheckDeferredFound) -> CheckDeferredPaths {
+    let mut jumps = check_deferred_none()
+    let once = check_deferred_path(world, name, body.stmts, 0, paths.clone(), found, jumps, true)
+    let again = check_deferred_path(world, name, body.stmts, 0, check_deferred_union(once, jumps), found, jumps, true)
+    return check_deferred_union(check_deferred_union(paths, once), check_deferred_union(again, jumps))
+}
+
+/// Whether `expr` is a deferred task, `async(deferred) fn { … }` or
+/// `async(detached, deferred) fn { … }`, with or without its fallback.
+fn check_deferred_task(expr: ref Expr) -> bool {
+    return match expr {
+        Expr::Spawn { deferred, .. } => deferred,
+        Expr::TryCatch { expr: guarded, .. } => match guarded {
+            Expr::Spawn { deferred, .. } => deferred,
+            else => false,
+        },
+        else => false,
+    }
+}
+
+/// Whether `expr` is a task that starts at once and hands back a handle
+/// (`async(handle)`, `async(detached)`, `spawn`, none `deferred`): its
+/// handle's `start()` is `NK2121` (ADR-async-5 D12).
+fn check_started_task(expr: ref Expr) -> bool {
+    return match expr {
+        Expr::Spawn { deferred, .. } => !deferred,
+        Expr::TryCatch { expr: guarded, .. } => match guarded {
+            Expr::Spawn { deferred, .. } => !deferred,
+            else => false,
+        },
+        else => false,
+    }
+}
+
+/// The options that make the task `expr` deferred and keep its kind: a
+/// child task's `deferred`, a detached one's `detached, deferred`.
+fn check_started_options(expr: ref Expr) -> String {
+    let child: bool = match expr {
+        Expr::Spawn { child, .. } => child,
+        Expr::TryCatch { expr: guarded, .. } => match guarded {
+            Expr::Spawn { child, .. } => child,
+            else => false,
+        },
+        else => false,
+    }
+    if child {
+        return "deferred"
+    }
+    return "detached, deferred"
+}
+
+/// **`NK2121`: a deferred handle is started, or cancelled, once on every
+/// path** (ADR-async-5 D12). For each `let h = async(deferred) …` of the
+/// block, the paths through the statements after it: one that leaves the
+/// scope, or ends the block, with the task neither started nor cancelled is
+/// refused at the `let`, and a second `start()` on a path at that `start()`.
+/// A deferred task nothing binds is never started, and a task that started
+/// at once is not started again by its handle's `start()`.
+fn check_crossings_a_deferred_handle_starts(mut state: CheckState, world: ref CheckWorld, block: ref Block) sync {
+    let mut at = 0
+    for stmt in block.stmts {
+        at += 1
+        let span = Span { start: stmt.span.start, end: stmt.span.end }
+        match stmt.node {
+            Stmt::Expr(value) => {
+                if check_deferred_task(value) {
+                    state.findings.push(check_refusal("NK2121", span, "This deferred task is never started: nothing holds its handle.", ["A deferred task runs only from its handle's `start()`, so one whose handle is dropped never runs."], "Bind it, `let mut h = async(deferred) fn { … }`, and write `h.start()` where it should run; or write `async fn { … }` to start it at once."))
+                }
+            },
+            Stmt::Let { names, value, .. } => {
+                if check_deferred_task(value) && names.len() == 1 {
+                    let name: String = f"{world.words.resolve(names[0])}"
+                    let mut found = CheckDeferredFound { unstarted: false, twice: null }
+                    if name == "_" {
+                        found.unstarted = true
+                    } else {
+                        let mut jumps = check_deferred_none()
+                        let start = CheckDeferredPaths { fresh: true, started: false, twice: false }
+                        let left = check_deferred_path(world, name, block.stmts, at, start, found, jumps, false)
+                        check_deferred_leave(left, found)
+                    }
+                    if found.unstarted {
+                        state.findings.push(check_refusal("NK2121", span, f"The deferred task handle `{name}` is neither started nor cancelled on some path.", ["A deferred task runs only from its handle's `start()`: on a path that leaves without it, the task never runs, and nothing says so."], f"Write `{name}.start()` where the task should run, and `{name}.cancel()` on the path where it should not."))
+                    }
+                    let twice: Span? = found.twice?.clone()
+                    if twice != null {
+                        state.findings.push(check_refusal("NK2121", twice ?? span, f"The deferred task handle `{name}` is started a second time here, on some path.", ["`start()` starts the task, and a task runs once."], f"Start `{name}` once on every path: in each branch, or once after them."))
+                    }
+                }
+                if check_started_task(value) && names.len() == 1 {
+                    let name: String = f"{world.words.resolve(names[0])}"
+                    if name != "_" {
+                        // The task started at once: the walk begins with
+                        // the handle started, so its first `start()` is
+                        // a second one.
+                        let mut found = CheckDeferredFound { unstarted: false, twice: null }
+                        let mut jumps = check_deferred_none()
+                        let start = CheckDeferredPaths { fresh: false, started: true, twice: false }
+                        check_deferred_path(world, name, block.stmts, at, start, found, jumps, false)
+                        let started: Span? = found.twice?.clone()
+                        if started != null {
+                            state.findings.push(check_refusal("NK2121", started ?? span, f"`{name}.start()` starts a task that started at once.", ["Only a deferred task waits for its handle's `start()`: this one started when it was made."], f"Write `let mut {name} = async({check_started_options(value)}) fn {{ … }}` to start it here, or drop the `start()`."))
+                        }
+                    }
+                }
+            },
+            else => {},
+        }
+    }
 }

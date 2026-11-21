@@ -441,11 +441,11 @@ pub(crate) fn numbers_expr(expr: Expr, st: &mut NodeNumbersState) -> Expr {
             let config2 = numbers_config(config, st);
             return Expr::Call { func: nikaia_std::block::Boxed::new(func2), args: args2, config: config2, id: id2 };
         },
-        Expr::Spawn { body, written_async, child, within, admission, id } => {
+        Expr::Spawn { body, written_async, child, deferred, within, admission, id } => {
             let body = nikaia_std::boxed::open(body); let within = nikaia_std::boxed::open(within); let admission = nikaia_std::boxed::open(admission);
             let id2 = numbers_id(id, st);
             let within2 = numbers_maybe_expr(within, st);
-            return Expr::Spawn { body: nikaia_std::block::Boxed::new(numbers_expr(body, st)), written_async, child, within: nikaia_std::block::Boxed::new(within2), admission: nikaia_std::block::Boxed::new(numbers_maybe_expr(admission, st)), id: id2 };
+            return Expr::Spawn { body: nikaia_std::block::Boxed::new(numbers_expr(body, st)), written_async, child, deferred, within: nikaia_std::block::Boxed::new(within2), admission: nikaia_std::block::Boxed::new(numbers_maybe_expr(admission, st)), id: id2 };
         },
         Expr::Dsl { target, package, context, content, id } => { return Expr::Dsl { target, package, context, content, id: numbers_id(id, st) }; },
         Expr::Path(segments, id) => { return Expr::Path(segments, numbers_id(id, st)); },

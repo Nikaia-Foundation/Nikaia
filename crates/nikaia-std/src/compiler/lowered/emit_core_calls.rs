@@ -1166,6 +1166,9 @@ impl EmitState {
         }
         let timed = self.facts.timed_ends.contains(&on_node);
         if timed { out.push("nikaia_std::par::ended("); }
+        let joined_key = nikaia_std::index::or(*nikaia_std::index::get(&self.facts.method_callees, &on_node), || "");
+        let arriving = (joined_key.starts_with("TaskHandle::join") || joined_key.starts_with("task::ChildHandle::join")) && self.method_can_fail(on_node);
+        if arriving { out.push("nikaia_std::error::arrived("); }
         let (kind, entry) = emit_call_pausing_entry(&self.facts, args);
         let rust_text = kind == 0 && !timed && !boxed && answers_rust_text(&written, args.len() as i64) && emit_callee_is_std_text((*nikaia_std::index::get(&self.facts.method_callees, &on_node)).map(std::ops::Deref::deref)) && self.on_block_types() && !self.method_pauses(on_node) && !self.method_can_fail(on_node) && walk.compared_receiver != on_node;
         if rust_text { out.push(&block_text_open(self.on_block_types())); }
@@ -1273,6 +1276,7 @@ impl EmitState {
             if flow.in_lambda { return Err(nikaia_std::error::throwing(EmitRefused { message: format!("This lambda calls `{}`, which can pause, but the compiler knows nothing about what the lambda is passed to, so it can't let it pause. Call `{}` outside the lambda and pass in the value.", name, name), at: Some(flow.statement) }, &"emit_core_method_call_body")); }
             out.push(&emit_async_pause(&walk));
         }
+        if arriving { out.push(&format!(", &{})", rust_string(&scope.origin))); }
         if timed {
             if length { out.push(" as i64"); }
             out.push(")");
@@ -1553,8 +1557,8 @@ pub(crate) fn emit_tuple_part_copy(i: i64, word: &str) -> String {
 }
 
 pub(crate) fn emit_tuple_part_copies(parts: &[String]) -> String {
-    let copies: Vec<String> = parts.iter().enumerate().map(|(at, item)| (at as i64, item)).map(|__nikaia_tuple115858| {
-        let (i, word) = __nikaia_tuple115858;
+    let copies: Vec<String> = parts.iter().enumerate().map(|(at, item)| (at as i64, item)).map(|__nikaia_tuple116419| {
+        let (i, word) = __nikaia_tuple116419;
         emit_tuple_part_copy(i, word)
     }).collect::<Vec<_>>();
     if copies.len() == 1 { return format!("({},)", *unsafe { nikaia_std::proven::read(&copies, (0) as usize) }); }

@@ -1,0 +1,33 @@
+// ADR-async-5 D12's example as the ADR writes it (#2645): a deferred handle
+// is bound with `let mut`, since `start(mut self)` changes it (Part III B.2);
+// one path starts and joins it, the other cancels it, which takes it.
+struct Disk {
+	room: i64
+}
+
+impl Disk {
+	fn free(ref self) -> i64 {
+		return self.room
+	}
+}
+
+fn copy_all(src: i64, dst: i64) throws {
+	println(f"copied {src} to {dst}")
+}
+
+fn save(dst: Disk, need: i64) throws {
+	let src = 1
+	let mut backup = async(deferred) fn { copy_all(src, dst.room) }
+	if dst.free() > need {
+		backup.start()
+		backup.join()
+	} else {
+		backup.cancel()
+		println(f"no room on {dst.room}")
+	}
+}
+
+fn main() throws {
+	save(Disk { room: 10 }, 5)
+	save(Disk { room: 2 }, 5)
+}

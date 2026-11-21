@@ -1,0 +1,29 @@
+// `start()` on a handle that is not deferred is `NK2121` (ADR-async-5 D12,
+// Part III B.2 "a deferred handle only", #2644): the task started when it was
+// made, so the refusal stands at the `start()`, also in a branch and on a
+// detached handle.
+fn child() throws {
+	let mut h = async(handle) fn { 1 }
+	h.start()
+	println(f"{h.join()}")
+}
+
+fn in_a_branch(go: bool) throws {
+	let mut h = async(handle) fn { 2 }
+	if go {
+		h.start()
+	}
+	println(f"{h.join()}")
+}
+
+fn detached() throws {
+	let mut h = async(detached) fn { 3 }
+	h.start()
+	println(f"{h.join()}")
+}
+
+fn main() throws {
+	child()
+	in_a_branch(true)
+	detached()
+}

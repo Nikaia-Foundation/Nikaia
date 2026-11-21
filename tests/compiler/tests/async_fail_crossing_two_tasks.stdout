@@ -1,0 +1,11 @@
+task 7 failed
+  raised at work
+  started at middle
+  arrived at middle
+  started at outer
+  arrived at outer
+  (no trace; set NIKAIA_TRACE=1 to capture one)
+task 9 failed
+  raised at work
+  (no trace; set NIKAIA_TRACE=1 to capture one)
+0 11 0

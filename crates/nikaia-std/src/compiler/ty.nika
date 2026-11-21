@@ -146,13 +146,18 @@ pub struct Shape {
     /// the step that ends it throws `task::TimedOut` once the deadline ran
     /// out. Not a word a program writes.
     pub timed: bool,
+    /// **A walk whose elements run one at a time** (`par_iter(limit: 1)`,
+    /// the literal, ADR-async-5 D15): a lambda handed to it never meets its
+    /// own other runs (D26), wherever the walk was bound. Not a word a
+    /// program writes.
+    pub one_at_a_time: bool,
 }
 
 impl Shape {
     /// None of the three: what a sequence is when nobody said. Named rather
     /// than a `Default`, for ADR-294 D9.4's reason.
     pub fn none() -> Shape {
-        return Shape { ends: false, sized: false, replays: false, timed: false }
+        return Shape { ends: false, sized: false, replays: false, timed: false, one_at_a_time: false }
     }
 
     /// Whether a sequence of this shape can go where `wanted` is demanded.
@@ -1093,7 +1098,7 @@ fn a_sequence(written: ref String, word: ref String, parallel: bool) -> Ty? {
         return null
     }
     let item = parse(between(c, 1, close))
-    let shape = Shape { ends: ends, sized: sized, replays: replays, timed: false }
+    let shape = Shape { ends: ends, sized: sized, replays: replays, timed: false, one_at_a_time: false }
     return Ty::Seq { item: item, is_sync: is_sync, pauses: pauses, can_throw: can_throw, parallel: parallel, shape: shape }
 }
 

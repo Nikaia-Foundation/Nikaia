@@ -1,0 +1,14 @@
+// A walk made by `par_iter(limit: 1)` and bound to a name still runs its
+// elements one at a time, so a lambda that prints, handed to it later, does
+// not meet its own other runs (ADR-async-5 D15, D26, #2610): the walk's type
+// carries the limit, as it carries `within:`.
+fn main() throws {
+	let xs: Vec[i64] = [1, 2, 3]
+	let walk = xs.par_iter(limit: 1)
+	walk.for_each(fn(x) { println(f"{x}") catch {} })
+	let tens = xs.par_iter(limit: 1).map(fn(x) { x * 10 })
+	tens.for_each(fn(x) { println(f"{x}") catch {} })
+	let bound = xs.par_iter(limit: 1)
+	let hundreds = bound.map(fn(x) { x * 100 })
+	hundreds.for_each(fn(x) { println(f"{x}") catch {} })
+}
