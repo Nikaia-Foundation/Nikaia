@@ -395,6 +395,7 @@ fn types_word_by_ref_maybe(names: ref winnow_grammar::InternerContext, ty: ref T
 // a result, a variant's payload or a `let` outside the C boundary is the
 // warning `NK1261`. The program means what it means with `String`, and is
 // still held to the view.
+@inline(never)
 fn types_text_by_ref(names: ref winnow_grammar::InternerContext, ty: ref Type, position: String, views: ref collections::BTreeSet[String], key: String, span: ref Span, mut out: Vec[Finding]) {
     // A position `text_tiers` made a view was written `String`.
     if views.contains(key) {

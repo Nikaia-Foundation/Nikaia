@@ -28,6 +28,7 @@ impl CheckState {
     /// **`NK2501`: everything a task takes has to be able to cross a thread.**
     /// Over-approximate in the direction that costs nothing: every name the
     /// body mentions is asked, and one that is not in scope says nothing.
+    @inline(never)
     fn crosses_into_a_task(ref mut self, world: ref CheckWorld, body: ref Expr, span: ref Span) sync {
         let mut named: collections::BTreeSet[String] = collections::BTreeSet()
         names_in(body, world.words, named)
@@ -49,6 +50,7 @@ impl CheckState {
     /// **`NK2502`, or `NK2503` where the refusal is a lock**: a value handed to
     /// a call this compiler cannot see the end of may reach a thread that call
     /// owns (ADR-303 D7). Positional arguments first, then the named ones.
+    @inline(never)
     pub fn crosses_into_an_unseen_call(ref mut self, world: ref CheckWorld, callee: ref String, args: ref Vec[Expr], found: ref Vec[Ty], config: ref Vec[ConfigArg], passed: ref Vec[(String, Ty)], span: ref Span, why: ref String) sync {
         let mut at = 0
         while at < args.len() && at < found.len() {

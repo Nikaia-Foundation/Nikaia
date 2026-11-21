@@ -137,7 +137,9 @@ pub fn check_walked_kept_call(func: ref Expr, arity: i64, receiver: bool, intern
 /// one `proven` says is `>= 0` where it stands is taken as it is; one that is
 /// not is the slot's refusal, with the two ways to say it. `proven` answers
 /// for a set of nodes which of them are proved non-negative, given the facts
-/// (`bounds::proven`, until `bounds` moves).
+/// (`bounds::proven`, until `bounds` moves). Never inlined: it is the
+/// `bounds` row of `scripts/analysis_cost.nika` (#2187).
+@inline(never)
 fn check_walked_unsigned_slots(mut state: CheckState, proven: fn(ref CheckFacts, ref collections::BTreeSet[i64]) -> collections::BTreeSet[i64] sync) sync {
     let mut slots: Vec[CheckUnsignedSlot] = []
     for (_, held) in state.flow.unsigned_slots.clone() {
@@ -399,10 +401,47 @@ pub trait CheckWalkedPasses {
     fn type_findings(ref self) -> Vec[CheckFinding] sync
 }
 
+/// **What carries outside data** (ADR-396 D1, #1573). Never inlined, like
+/// the two below: each is a row of `scripts/analysis_cost.nika`, which
+/// counts an analysis by the function it runs in (#2187).
+@inline(never)
+fn check_walked_outside[P: CheckWalkedPasses](mut state: CheckState, passes: ref P) sync {
+    state.facts.outside = passes.outside(state.facts)
+}
+
+/// **Every `assert` outside a test is proved where it can be** (ADR-269 D4),
+/// after the walk, because the checker is what decided which calls are the
+/// prelude's; so is each index data from outside reaches (ADR-396 D5).
+@inline(never)
+fn check_walked_prove[P: CheckWalkedPasses](mut state: CheckState, passes: ref P) sync {
+    let proved = passes.proved(state.facts)
+    state.findings.extend(proved.findings)
+    check_walked_proved(state, proved.entries, proved.reaches, proved.published, proved.std_claims, proved.held, proved.outside)
+    state.facts.summaries = proved.summaries
+}
+
+/// **Where values and views go** (`NK2302`, `NK2305`, `NK2303`).
+@inline(never)
+fn check_walked_views[P: CheckWalkedPasses](mut state: CheckState, passes: ref P) sync {
+    // Where a value goes, not what a type is (`NK2302`).
+    state.findings.extend(passes.view_findings())
+    // Where a view points and when it is used (`NK2305`).
+    let coalesced = vc_coalesced(state.facts)
+    let mut_viewed = vc_mut_viewed(state.facts)
+    state.findings.extend(passes.view_change_findings(state.facts.lent_lets, coalesced, mut_viewed, state.facts.receiver_views, state.facts.cut_gives))
+    // A view handed back that points into a buffer the body owns (`NK2303`).
+    let (plans, refused) = passes.tethered()
+    if plans != null {
+        state.facts.keep_plans = plans
+    }
+    state.findings.extend(refused)
+}
+
 /// **The checker's walk of one file, from the seed to the settled findings**
 /// (`check::walked`, ADR-294, #125, M10). `harvesting` stops it once the calls
 /// have been typed (ADR-304 D6); `computes` runs the walks that answer only
 /// with findings and proofs, which the ledger's pass does not (#727).
+@inline(never)
 pub fn check_walked_walk[H: CheckHost, P: CheckWalkedPasses](mut state: CheckState, world: ref CheckWorld, host: ref H, passes: ref P, harvesting: bool, computes: bool) sync {
     check_walked_seed(state, world)
     let dsl_drivers: collections::BTreeSet[String] = drivers(world.here.words, world.here.items).drain().collect()
@@ -434,30 +473,13 @@ pub fn check_walked_walk[H: CheckHost, P: CheckWalkedPasses](mut state: CheckSta
     // **What carries outside data** (ADR-396 D1, #1573), in the ledger's pass
     // too: a function whose result comes from outside is a source its
     // ledger names, which a package that calls it reads.
-    state.facts.outside = passes.outside(state.facts)
+    check_walked_outside(state, passes)
     // **The ledger's pass reports nothing** (#727): what its caller reads is
     // which calls resolve where and what each body stores, never a finding or
     // a proof.
     if computes {
-        // **Every `assert` outside a test is proved where it can be**
-        // (ADR-269 D4), after the walk, because the checker is what decided
-        // which calls are the prelude's.
-        let proved = passes.proved(state.facts)
-        state.findings.extend(proved.findings)
-        check_walked_proved(state, proved.entries, proved.reaches, proved.published, proved.std_claims, proved.held, proved.outside)
-        state.facts.summaries = proved.summaries
-        // Where a value goes, not what a type is (`NK2302`).
-        state.findings.extend(passes.view_findings())
-        // Where a view points and when it is used (`NK2305`).
-        let coalesced = vc_coalesced(state.facts)
-        let mut_viewed = vc_mut_viewed(state.facts)
-        state.findings.extend(passes.view_change_findings(state.facts.lent_lets, coalesced, mut_viewed, state.facts.receiver_views, state.facts.cut_gives))
-        // A view handed back that points into a buffer the body owns (`NK2303`).
-        let (plans, refused) = passes.tethered()
-        if plans != null {
-            state.facts.keep_plans = plans
-        }
-        state.findings.extend(refused)
+        check_walked_prove(state, passes)
+        check_walked_views(state, passes)
     }
     // Part I 4.7: it reads the ledger's **finished** `sync` column (ADR-080).
     state.findings.extend(passes.trait_findings())
