@@ -87,7 +87,7 @@ reports under *Briefs and reports*.
   lane's `batch.txt`), or a revert. A revert of a commit that said `Fixes #N`
   says `Reopens #N` on a line of its own: the driver skips an issue a `Fixes`
   on `develop` names until a newer `Reopens` takes it back (#2152), and the
-  issue is reopened by hand if `promote` closed it.
+  driver reopens the issue with `ready` when it pushes that `Reopens` line.
 
 ## Trunk, CI and issues
 
@@ -147,9 +147,12 @@ Moved from `CLAUDE.md` (2026-11-01); there each rule has its short form.
   tests and, green, pushes without a `ci/` run (`SUITE <sha8> scripts-only`,
   `drive_scripts_only` in `scripts/drive.nika`); a script without a named
   test gets the suite.
-* **How issues close.** `promote` closes an issue only when a commit it brings
-  to `main` names it with `Fixes`, `Closes` or `Resolves`
-  (`scripts/fixed-issues.py`); `(#N)` and `Part of #N` close nothing. Any tense
+* **How issues close** (owner, 2026-11-21). The driver closes an issue when it
+  pushes to `develop` a commit with a line `Fixes #N` (`drive_close_pushed` in
+  `scripts/drive.nika`): as completed, with a comment naming the commit, and
+  without `wip`. `promote` still closes what reaches `main` named with
+  `Fixes`, `Closes` or `Resolves` (`scripts/fixed-issues.py`), so a push by
+  hand is caught there; `(#N)` and `Part of #N` close nothing. Any tense
   counts, in prose too (5d7be91e's "the compiler fix #1000" closed #1000
   unbuilt). The commit that builds the last step of a *To build* list writes
   `Fixes #N`, and also names every issue that list absorbed (`Fixes #439,
