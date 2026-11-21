@@ -27,18 +27,19 @@
 // `#N SUFFIX` (brief `issue-N-SUFFIX.md`) or the old line and report removed.
 // At a block's end the debriefs' `Fact:` lines go into the facts files
 // (`facts-collect.nika -- --apply`, committed as docs, `FACTS <n> entered`). Before a block, the first unrun
-// docs/briefs/bugs brief with a `Blocks:` line runs first. Test flags:
+// docs/briefs/bugs brief with a `Blocks:` line runs first. Test flags (a
+// file a flag reads comes on standard input, drive_stdin, #2577):
 // `--focus-next FILE [SKIPPED...]`, `--focus-log DIR AREA BRIEF...` (the
 // block's comment), `--focus-issue FILE NAME|DIR...`, `--blocks DIR`,
-// `--found DIR BRIEF` (drive_found), `--queue-add BATCH N...` (drive_queue_add),
-// `--fixed-in LOG N...` (drive_fixed_in), `--closes-in LOG` (drive_closes_in), `--queue-plan LIST [OPEN...]`
+// `--found DIR BRIEF` (drive_found), `--queue-add N...` (drive_queue_add, BATCH on stdin),
+// `--fixed-in N...` (drive_fixed_in) and `--closes-in` (drive_closes_in), LOG on stdin, `--queue-plan LIST [OPEN...]`
 // (drive_queue_plan: LIST in drive_queue's `=== #N ===` record form, OPEN the
 // dependencies taken as open), `--queue-check LIST [OPEN...]` (the same with
 // the form check, scripts/issue-check.nika, OPEN the issues taken as open,
 // each skipped issue's comment after its line), `--report-aside DIR NAME [HELD...]`
 // (drive_report_aside),
 // `--wip-after RESULT FIXES N`, `--found-issue NAME N FOUND NEEDS`,
-// `--improve-issue NAME N REPORT [DIR]`, `--improve-plan NAME N REPORT EXISTING`, `--time-up` (drive_time_up: `up` or `not up`), `--time-up DIR` (drive_time_check: `up`, `starts` or why not), `--pickup DIR` (drive_pickup).
+// `--improve-issue NAME N [DIR]` (REPORT on stdin), `--improve-plan NAME N REPORT EXISTING`, `--time-up` (drive_time_up: `up` or `not up`), `--time-up DIR` (drive_time_check: `up`, `starts` or why not), `--pickup DIR` (drive_pickup).
 //
 // Loops on `cycle.nika -- DIR` and acts on its lines, one agent at a time;
 // before each cycle the area's ready issues (the area being DIR's last name)
@@ -136,8 +137,8 @@
 // is documentation by the rule of scripts/ci-changes.sh (`drive_docs_path`: CI
 // skips its build and test jobs for them too), HEAD is pushed as on green
 // without a suite, `SUITE <sha8> docs-only, pushed without the suite`, and
-// unpushed.txt is emptied. `--docs-only FILE` prints `docs`/`code` for each
-// path in FILE and `docs-only` or `suite` (for tests). The same trade-off
+// unpushed.txt is emptied. `--docs-only` prints `docs`/`code` for each
+// path on standard input and `docs-only` or `suite` (for tests). The same trade-off
 // holds for helper scripts (owner, 2026-11-19, #2347; the compiler does not
 // change, and the tests named after the script are the real check): when every
 // path is documentation or a `scripts/X.nika` that no workflow runs (read from
@@ -147,17 +148,17 @@
 // the lock as before a ci/ push; green pushes HEAD without the suite, `SUITE
 // <sha8> scripts-only, local tests green, pushed without the suite`, and
 // empties unpushed.txt; red is `Gate: red local-tests` as below. CI's
-// `changes` job skips build and test for the same set. `--scripts-only FILE`
-// prints `scripts`/`docs`/`code` for each path and `scripts-only` or `suite`.
+// `changes` job skips build and test for the same set. `--scripts-only`
+// prints `scripts`/`docs`/`code` for each path on standard input and `scripts-only` or `suite`.
 // Before a suite is pushed to its `ci/` branch, the tests named after the
 // changed scripts run here (owner, 2026-11-06; drive_named_filters,
 // `LOCAL tests ...`): red writes `Gate: red local-tests` and their output to
-// the suite log and goes to QA without a CI round; `--named-filters FILE`
-// prints the filters for the paths in FILE (for tests). They run with the
+// the suite log and goes to QA without a CI round; `--named-filters`
+// prints the filters for the paths on standard input (for tests). They run with the
 // driver's own copy of the compiler (drive_tests_run, #1722), and a run that
 // loses its compiler to another lane's rebuild prints `SUITE <sha8> local
 // tests interrupted (compiler rebuilt)` and runs once more instead of going
-// red; `--local-tests FILE` runs them for the paths in FILE and prints `LOCAL
+// red; `--local-tests` runs them for the paths on standard input and prints `LOCAL
 // green` or `LOCAL red` and the output (for tests). Else the driver
 // takes the checkout's suite lock, `mkdir target/suite.lock` with
 // `<pid> <DIR>` in target/suite.lock/owner: two drivers (the main lane and the
@@ -260,7 +261,7 @@
 // output and prints its lines, `--proved-report DIR` prints DIR/proved.out
 // (for tests).
 // `--issue NAME...` prints each brief's issue number (drive_issue) or `none`;
-// `--post-body BRIEF` prints the comment that posts BRIEF, `--run-body DIR
+// `--post-body BRIEF` prints the comment that posts BRIEF, its text on standard input, `--run-body DIR
 // BRIEF` the comment of BRIEF's run from its files in DIR (for tests).
 // `nikaia run` compiles this script once, so a commit to it does nothing until a
 // restart: at the top of each round of a real run the driver reads
@@ -268,13 +269,14 @@
 // line `RESTART drive: scripts/drive.nika changed`, releases the suite lock and
 // runs itself again with the same arguments, its output going where this run's
 // goes, and ends with that run's exit code (drive_restart); exit 3 is left only
-// where the new run cannot be started. `--changed OLDFILE` prints that line or
+// where the new run cannot be started. `--changed` prints that line, the old script on standard input, or
 // `same` (for tests).
 // The scripts are run as programs: a script cannot `use` another.
 
 use std::cli
 use std::env
 use std::fs
+use std::io
 use std::process
 use std::text
 
@@ -3316,6 +3318,13 @@ fn drive_here() -> fs::Root {
 	return fs::Root::Dir(".")
 }
 
+// The text a test hook reads (#2577, supervisor's decision): a hook that
+// takes a file reads its contents on standard input, so it opens no file a
+// caller names (ADR-raw-sinks-1 D11: a name from `cli::args` is outside).
+fn drive_stdin() -> String throws {
+	return io::read_to_string()
+}
+
 fn drive_read(path: String) -> String throws {
 	if !fs::exists(path, fs::Root::Anywhere) { return "" }
 	return fs::read_to_string(path, fs::Root::Anywhere)
@@ -5599,7 +5608,7 @@ fn main() throws {
 		return
 	}
 	if args.len() == 3 && args[1] == "--post-body" {
-		print(drive_post_body(drive_stem(args[2]), drive_read(args[2])))
+		print(drive_post_body(drive_stem(args[2]), drive_stdin()))
 		return
 	}
 	// The merge of a rejected push, without its checks and push (#1430,
@@ -5647,28 +5656,28 @@ fn main() throws {
 		if found == "" { println("none") } else { println(found) }
 		return
 	}
-	if args.len() >= 3 && args[1] == "--queue-add" {
+	if args.len() >= 2 && args[1] == "--queue-add" {
 		let mut numbers: Vec[String] = []
-		let mut i = 3
+		let mut i = 2
 		while i < args.len() {
 			numbers.push(args[i].clone())
 			i += 1
 		}
-		print(drive_queue_add(drive_read(args[2]), numbers))
+		print(drive_queue_add(drive_stdin(), numbers))
 		return
 	}
-	if args.len() == 3 && args[1] == "--closes-in" {
-		for line in drive_closes_in(drive_read(args[2])) { println(line) }
+	if args.len() == 2 && args[1] == "--closes-in" {
+		for line in drive_closes_in(drive_stdin()) { println(line) }
 		return
 	}
-	if args.len() >= 3 && args[1] == "--fixed-in" {
+	if args.len() >= 2 && args[1] == "--fixed-in" {
 		let mut numbers: Vec[String] = []
-		let mut i = 3
+		let mut i = 2
 		while i < args.len() {
 			numbers.push(args[i].clone())
 			i += 1
 		}
-		println(drive_fixed_in(drive_read(args[2]), numbers).join(" "))
+		println(drive_fixed_in(drive_stdin(), numbers).join(" "))
 		return
 	}
 	if args.len() >= 3 && (args[1] == "--queue-plan" || args[1] == "--queue-check") {
@@ -5704,10 +5713,10 @@ fn main() throws {
 		print(drive_found_body(args[2].clone(), args[3].clone(), args[4].clone(), args[5].clone()))
 		return
 	}
-	// Each issue drive_found_file would file from the report REPORT of run
+	// Each issue drive_found_file would file from the report (on stdin) of run
 	// NAME (issue ISSUE): labels, then body (#1769).
-	if args.len() == 5 && args[1] == "--found-issues" {
-		let text = drive_read(args[4].clone())
+	if args.len() == 4 && args[1] == "--found-issues" {
+		let text = drive_stdin()
 		let founds = drive_founds(text.clone())
 		let needs = drive_found_needs(founds.len(), drive_field(text, "Needs"))
 		for found in founds {
@@ -5716,8 +5725,8 @@ fn main() throws {
 		}
 		return
 	}
-	if (args.len() == 5 || args.len() == 6) && args[1] == "--improve-issue" {
-		let text = drive_read(args[4].clone())
+	if (args.len() == 4 || args.len() == 5) && args[1] == "--improve-issue" {
+		let text = drive_stdin()
 		let items = drive_improve_items(text.clone(), args[3].clone(), "")
 		if items.len() == 0 {
 			println("none")
@@ -5727,10 +5736,10 @@ fn main() throws {
 		println("ready,improve")
 		// The report is named by the brief, as the lane directory holds it
 		// (`NAME.md.report.md`), so the output does not carry a temp path.
-		// A sixth argument names the batch directory whose found.txt holds
+		// A fifth argument names the batch directory whose found.txt holds
 		// the numbers the Founds were filed as (drive_filed_numbers).
 		let mut numbers: Vec[String] = []
-		if args.len() == 6 { numbers = drive_filed_numbers(args[5].clone(), args[2].clone(), drive_founds(text.clone()).len()) }
+		if args.len() == 5 { numbers = drive_filed_numbers(args[4].clone(), args[2].clone(), drive_founds(text.clone()).len()) }
 		let founds = drive_improve_founds(text.clone(), numbers)
 		let source = founds + drive_improve_source(f"{args[2]}.md.report.md", text)
 		print(drive_improve_body(args[2].clone(), args[3].clone(), items, source))
@@ -5761,8 +5770,8 @@ fn main() throws {
 	}
 	// The comments a report asks for (#1698), without posting them: per
 	// `Comment: #N <text>` the issue and the body.
-	if args.len() == 5 && args[1] == "--comment-issue" {
-		let comments = drive_comments(drive_read(args[4]))
+	if args.len() == 4 && args[1] == "--comment-issue" {
+		let comments = drive_comments(drive_stdin())
 		if comments.len() == 0 { println("none") }
 		for c in comments {
 			println(f"#{drive_comment_issue(c.clone())}")
@@ -5856,9 +5865,9 @@ fn main() throws {
 		drive_ci_wait(args[2], args[3], args[4].clone())
 		return
 	}
-	if args.len() == 3 && args[1] == "--docs-only" {
+	if args.len() == 2 && args[1] == "--docs-only" {
 		let mut paths: Vec[String] = []
-		for line in drive_read(args[2]).split("\n") {
+		for line in drive_stdin().split("\n") {
 			let p = line.trim().clone()
 			if p == "" { continue }
 			if drive_docs_path(p) { println(f"docs {p}") } else { println(f"code {p}") }
@@ -5867,10 +5876,10 @@ fn main() throws {
 		if drive_docs_only(paths) { println("docs-only") } else { println("suite") }
 		return
 	}
-	if args.len() == 3 && args[1] == "--scripts-only" {
+	if args.len() == 2 && args[1] == "--scripts-only" {
 		let run = drive_workflow_scripts()
 		let mut paths: Vec[String] = []
-		for line in drive_read(args[2]).split("\n") {
+		for line in drive_stdin().split("\n") {
 			let p = line.trim().clone()
 			if p == "" { continue }
 			if drive_docs_path(p.clone()) {
@@ -5885,25 +5894,25 @@ fn main() throws {
 		if drive_scripts_only(paths) { println("scripts-only") } else { println("suite") }
 		return
 	}
-	if args.len() == 3 && args[1] == "--local-tests" {
+	if args.len() == 2 && args[1] == "--local-tests" {
 		let mut paths: Vec[String] = []
-		for line in drive_read(args[2]).split("\n") {
+		for line in drive_stdin().split("\n") {
 			if line.trim() != "" { paths.push(line.trim().clone()) }
 		}
 		let failed = drive_local_tests(paths)
 		if failed == "" { println("LOCAL green") } else { println("LOCAL red\n" + failed.trim()) }
 		return
 	}
-	if args.len() == 3 && args[1] == "--named-filters" {
+	if args.len() == 2 && args[1] == "--named-filters" {
 		let mut paths: Vec[String] = []
-		for line in drive_read(args[2]).split("\n") {
+		for line in drive_stdin().split("\n") {
 			if line.trim() != "" { paths.push(line.trim().clone()) }
 		}
 		println(drive_named_filters(paths).join(" "))
 		return
 	}
-	if args.len() == 3 && args[1] == "--changed" {
-		if drive_read(args[2]) != drive_read("scripts/drive.nika") {
+	if args.len() == 2 && args[1] == "--changed" {
+		if drive_stdin() != drive_read("scripts/drive.nika") {
 			println("RESTART drive: scripts/drive.nika changed")
 		} else {
 			println("same")

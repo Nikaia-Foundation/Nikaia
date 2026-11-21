@@ -18,9 +18,6 @@ fn root() -> String throws {
 fn main() throws {
     let repo = root()
     let nikaia = toolchain()
-    let batch = "target/drive_queue_add_batch.txt"
-    fs::write(f"{batch}", fs::Root::Dir(repo.clone()), "v43-a.md\n#1267 note\n\n")
-    let out = process::run(nikaia, ["run", "scripts/drive.nika", "--", "--queue-add", batch.clone(), "1267", "1266", "1266", "1300"]; dir: repo)
+    let out = process::run(nikaia, ["run", "scripts/drive.nika", "--", "--queue-add", "1267", "1266", "1266", "1300"]; dir: repo, stdin: process::Input::Text("v43-a.md\n#1267 note\n\n"))
     println(out.stdout.trim())
-    fs::remove(f"{batch}", fs::Root::Dir(repo.clone()))
 }

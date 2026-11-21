@@ -1,4 +1,5 @@
-// scripts/drive.nika --scripts-only FILE: the batches of helper scripts (and
+// scripts/drive.nika --scripts-only (the paths on standard input, #2577):
+// the batches of helper scripts (and
 // documentation) the driver pushes after their named tests, without the suite (#2347).
 use std::env
 use std::fs
@@ -15,8 +16,7 @@ fn root() -> String throws {
 }
 
 fn case(nikaia: String, repo: String, tmp: ref fs::Root, name: String, paths: String) throws {
-    fs::write(f"{name}", tmp, paths)
-    let out = process::run(nikaia, ["run", "scripts/drive.nika", "--", "--scripts-only", f"{tmp.path().to_text()}/{name}"]; dir: repo)
+    let out = process::run(nikaia, ["run", "scripts/drive.nika", "--", "--scripts-only"]; dir: repo, stdin: process::Input::Text(paths))
     println(f"== {name}")
     println(out.stdout.trim())
 }
