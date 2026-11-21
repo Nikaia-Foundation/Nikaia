@@ -1,0 +1,17 @@
+// A function whose result the ledger records as owned returns an either-valued
+// call: the call gets `.into()` so the owned result accepts it (#1993).
+fn either_text(flag: bool) -> String {
+    if flag {
+        return "owned".clone()
+    }
+    return "view"
+}
+
+fn owned_result(flag: bool) -> String {
+    return either_text(flag)
+}
+
+fn main() throws {
+    println(owned_result(true))
+    println(owned_result(false))
+}

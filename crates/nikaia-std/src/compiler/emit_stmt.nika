@@ -1539,6 +1539,10 @@ impl EmitState {
             else => false,
         }
         let either = is_return && call_returns_either(world.words, world.items, scope.function) && !is_null && !never_a_value(expr) && !self.facts.mixed_choices.contains(node_key(expr)) && !self.facts.mixed_leaves.contains_key(node_key(expr))
+        // An either-valued call returned from a function whose result is owned
+        // (not either) needs `.into()` to own the text, as assignments do
+        // (#1993). The ledger result is owned, the call returns EitherText.
+        let into_owned = is_return && !either && !is_null && self.either_result(world, expr)
         if either {
             out.push("nikaia_std::either_text::either(")
         }
@@ -1555,6 +1559,9 @@ impl EmitState {
         }
         if either {
             out.push(")")
+        }
+        if into_owned {
+            out.push(".into()")
         }
         // `if x { … };` is legal and noisy; a block-shaped statement ends where
         // its brace does. `async { … }` is not one: it is written as the call
