@@ -21,7 +21,6 @@ pub struct BtRead {
 }
 
 pub trait BtHost {
-    fn char_of(&self, n: i64) -> Option<scalar>;
     fn known(&self, name: &str) -> Option<BuildValue>;
     fn run_grammar(&self, at: i64, which: &str, rule: &str, result: &Ty, input: &str) -> BtRan;
     fn read(&self, path: &str) -> BtRead;
@@ -87,7 +86,7 @@ pub(crate) fn bt_expr<H: BtHost>(expr: &Expr, host: &H, units: &[ParsedView<'_, 
         Expr::LitFloat(written, _) => BuildValue::Float(bt_float(written)?),
         Expr::LitBool(value, _) => { let value = *value; BuildValue::Bool(value) },
         Expr::LitStr { text, .. } => {
-            let decoded = decoded(text, &mut |n| { host.char_of(n) });
+            let decoded = decoded(text);
             if decoded.is_none() { return Err(nikaia_std::error::throwing(BtRefusal::Unevaluable, &"bt_expr")); }
             BuildValue::Text(nikaia_std::index::or(decoded, || "".into()))
         },
@@ -373,7 +372,7 @@ pub(crate) fn bt_interpolated<H: BtHost>(parts: &[FPart], host: &H, units: &[Par
 // this was written - see `contracts::sync`.
 pub(crate) fn bt_flush<H: BtHost>(chunk: &str, out: &mut String, host: &H) -> Result<(), nikaia_std::error::Thrown<BtRefusal>> {
     if chunk.is_empty() { return Ok(()); }
-    let decoded = decoded(chunk, &mut |n| { host.char_of(n) });
+    let decoded = decoded(chunk);
     if decoded.is_none() { return Err(nikaia_std::error::throwing(BtRefusal::Unevaluable, &"bt_flush")); }
     out.push_str(nikaia_std::index::or(decoded.as_deref(), || ""));
     Ok(())
@@ -473,7 +472,7 @@ pub(crate) fn bt_asset<H: BtHost>(args: &[Expr], host: &H) -> Result<BuildValue,
         Expr::LitStr { text, .. } => nikaia_std::block::Text::from(text.to_string()),
         _ => { return Err(nikaia_std::error::throwing(BtRefusal::PathIsComputed, &"bt_asset")) },
     };
-    let path = decoded(&written, &mut |n| { host.char_of(n) });
+    let path = decoded(&written);
     if path.is_none() { return Err(nikaia_std::error::throwing(BtRefusal::PathIsComputed, &"bt_asset")); }
     let wanted = nikaia_std::index::or(path, || "".into());
     let read = host.read(&wanted);

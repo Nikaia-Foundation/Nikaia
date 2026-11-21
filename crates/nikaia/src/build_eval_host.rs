@@ -46,11 +46,6 @@ pub(crate) fn evaluate(
     bt_evaluate(expr, &views, &host).map_err(|thrown| thrown.split().0)
 }
 
-/// Which numbers name a character: Unicode's table, handed to the Nikaia walks.
-pub fn char_of(n: i64) -> Option<char> {
-    u32::try_from(n).ok().and_then(char::from_u32)
-}
-
 /// The files by number (0 is the one being checked), for the run of a grammar.
 struct Host<'h> {
     units: &'h [&'h Parsed],
@@ -59,10 +54,6 @@ struct Host<'h> {
 }
 
 impl BtHost for Host<'_> {
-    fn char_of(&self, n: i64) -> Option<char> {
-        char_of(n)
-    }
-
     fn known(&self, name: &str) -> Option<BuildValue> {
         (self.known)(name)
     }

@@ -4,7 +4,6 @@
 //! it holds borrows and nothing else - and hands it to the Nikaia method.
 
 use super::*;
-use crate::build_eval_host::char_of;
 #[allow(unused_imports)]
 use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 use nikaia_std::compiler::build_eval::{BtRead, BtRefusal};
@@ -271,7 +270,7 @@ impl CheckHost for Host<'_> {
     }
 
     fn decoded(&self, literal: &str) -> Option<String> {
-        decoded(literal, &mut char_of)
+        decoded(literal)
     }
 
     fn composed(&self, text: &str) -> String {
@@ -302,8 +301,7 @@ impl CheckHost for Host<'_> {
                         && matches!(&**func, Expr::Variable(name, _)
                             if parsed.text(*name) == crate::assets::ASSET)
                         && let [Expr::LitStr { text, .. }] = args.as_slice()
-                        && let Some(content) =
-                            decoded(text, &mut char_of).and_then(|path| read.get(&path))
+                        && let Some(content) = decoded(text).and_then(|path| read.get(&path))
                     {
                         *expr = Expr::LitStr {
                             text: nikaia_std::compiler::escapes::as_a_literal(content),
@@ -392,7 +390,7 @@ impl CheckHost for Host<'_> {
         &self,
         text: &str,
     ) -> Option<nikaia_std::compiler::escapes::NotAnEscape> {
-        nikaia_std::compiler::escapes::an_escape_nothing_names(text, &mut char_of)
+        nikaia_std::compiler::escapes::an_escape_nothing_names(text)
     }
 }
 

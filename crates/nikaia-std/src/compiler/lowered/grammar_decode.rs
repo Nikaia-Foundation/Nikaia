@@ -44,7 +44,7 @@ impl GrCursor {
         }
         out
     }
-    pub(crate) fn quoted(&mut self, char_of: &mut impl FnMut(i64) -> Option<scalar>) -> String {
+    pub(crate) fn quoted(&mut self) -> String {
         self.expect('"');
         let mut written: String = String::from("");
         if self.failed { return written; }
@@ -66,7 +66,7 @@ impl GrCursor {
                 self.at = unsafe { nikaia_std::proven::add::<i64>(self.at, 1) };
             }
         }
-        let decoded = decoded(&written, &mut *char_of);
+        let decoded = decoded(&written);
         if decoded.is_none() {
             self.fail(format!("`{}` contains an escape the compiler can't read", written));
             return written;
@@ -75,40 +75,40 @@ impl GrCursor {
     }
 }
 
-pub fn gr_decode(source: &str, char_of: &mut impl FnMut(i64) -> Option<scalar>) -> GrDecoded {
+pub fn gr_decode(source: &str) -> GrDecoded {
     let mut at = GrCursor { chars: nikaia_std::list::scalars(source.chars()), at: 0, detail: String::from(""), failed: false };
-    let value = gr_read(&mut at, &mut *char_of);
+    let value = gr_read(&mut at);
     if at.failed || value.is_none() { return GrDecoded::Unreadable(nikaia_std::block::Text::from(at.detail.to_string())); }
     GrDecoded::Value(nikaia_std::index::or(value, || BuildValue::Bool(false)))
 }
 
-pub(crate) fn gr_items(at: &mut GrCursor, char_of: &mut dyn FnMut(i64) -> Option<scalar>) -> Vec<BuildValue> {
+pub(crate) fn gr_items(at: &mut GrCursor) -> Vec<BuildValue> {
     let mut items: Vec<BuildValue> = vec![];
     loop {
         at.skip_blanks();
         if at.failed || at.at >= at.chars.len() as i64 || at.peek_is(')') { break; }
-        let item = gr_read(at, &mut &mut *char_of);
+        let item = gr_read(at);
         if item.is_none() { break; }
         items.push(nikaia_std::index::or(item, || BuildValue::Bool(false)));
     }
     items
 }
 
-pub(crate) fn gr_read(at: &mut GrCursor, char_of: &mut dyn FnMut(i64) -> Option<scalar>) -> Option<BuildValue> {
+pub(crate) fn gr_read(at: &mut GrCursor) -> Option<BuildValue> {
     at.skip_blanks();
     at.expect('(');
     at.skip_blanks();
     if at.failed { return None; }
     let tag = at.word();
     at.skip_blanks();
-    let value = match gr_shaped(&tag, at, &mut &mut *char_of) { Some(__nikaia_value) => __nikaia_value, None => return None };
+    let value = match gr_shaped(&tag, at) { Some(__nikaia_value) => __nikaia_value, None => return None };
     at.skip_blanks();
     at.expect(')');
     if at.failed { return None; }
     Some(value)
 }
 
-pub(crate) fn gr_shaped(tag: &str, at: &mut GrCursor, char_of: &mut dyn FnMut(i64) -> Option<scalar>) -> Option<BuildValue> {
+pub(crate) fn gr_shaped(tag: &str, at: &mut GrCursor) -> Option<BuildValue> {
     if tag == "i" {
         let digits = at.word();
         let mut negative = false;
@@ -133,15 +133,15 @@ pub(crate) fn gr_shaped(tag: &str, at: &mut GrCursor, char_of: &mut dyn FnMut(i6
         Some(BuildValue::Float(nikaia_std::index::or(number, || 0.0)))
     } else if tag == "b" { Some(BuildValue::Bool(at.word() == "true")) } else if tag == "c" {
         let constructor = at.word();
-        let parts = gr_items(at, &mut &mut *char_of);
+        let parts = gr_items(at);
         Some(BuildValue::Constant { constructor, parts })
     } else if tag == "v" {
         let ty = at.word();
         at.skip_blanks();
         let variant = at.word();
-        let payload = gr_items(at, &mut &mut *char_of);
+        let payload = gr_items(at);
         Some(BuildValue::Variant { ty, variant, payload })
-    } else if tag == "s" { Some(BuildValue::Text(at.quoted(&mut &mut *char_of))) } else if tag == "l" { Some(BuildValue::List(gr_items(at, &mut &mut *char_of))) } else if tag == "p" { Some(BuildValue::Tuple(gr_items(at, &mut &mut *char_of))) } else if tag == "t" {
+    } else if tag == "s" { Some(BuildValue::Text(at.quoted())) } else if tag == "l" { Some(BuildValue::List(gr_items(at))) } else if tag == "p" { Some(BuildValue::Tuple(gr_items(at))) } else if tag == "t" {
         let name = at.word();
         let mut fields: collections::BTreeMap<String, BuildValue> = collections::BTreeMap::new();
         loop {
@@ -150,7 +150,7 @@ pub(crate) fn gr_shaped(tag: &str, at: &mut GrCursor, char_of: &mut dyn FnMut(i6
             at.at += 1;
             at.skip_blanks();
             let field = at.word();
-            let held = gr_read(at, &mut &mut *char_of);
+            let held = gr_read(at);
             if held.is_none() { return None; }
             at.skip_blanks();
             at.expect(')');

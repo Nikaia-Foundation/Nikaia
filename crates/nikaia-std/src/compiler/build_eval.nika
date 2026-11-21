@@ -46,8 +46,6 @@ pub struct BtRead {
 /// names a walk above this one worked out, what a build may read, and the run
 /// of a grammar.
 pub trait BtHost {
-    /// Which numbers name a character: Unicode's table.
-    fn char_of(ref self, n: i64) -> scalar? sync
     /// What a name outside a build-time body is worth: a `comptime` already
     /// evaluated, or a `let` whose value folded.
     fn known(ref self, name: ref String) -> BuildValue? sync
@@ -127,7 +125,7 @@ fn bt_expr[H: BtHost](expr: ref Expr, host: ref H, units: ref Vec[ParsedView], m
         Expr::LitFloat(written, _) => BuildValue::Float(bt_float(written)),
         Expr::LitBool(value, _) => BuildValue::Bool(value),
         Expr::LitStr { text, .. } => {
-            let decoded = decoded(text) fn(n) { host.char_of(n) }
+            let decoded = decoded(text)
             if decoded == null {
                 throw BtRefusal::Unevaluable
             }
@@ -522,7 +520,7 @@ fn bt_flush[H: BtHost](chunk: ref String, mut out: String, host: ref H) sync thr
     if chunk.len() == 0 {
         return
     }
-    let decoded = decoded(chunk) fn(n) { host.char_of(n) }
+    let decoded = decoded(chunk)
     if decoded == null {
         throw BtRefusal::Unevaluable
     }
@@ -663,7 +661,7 @@ fn bt_asset[H: BtHost](args: ref Vec[Expr], host: ref H) -> BuildValue sync thro
             throw BtRefusal::PathIsComputed
         },
     }
-    let path = decoded(written) fn(n) { host.char_of(n) }
+    let path = decoded(written)
     if path == null {
         throw BtRefusal::PathIsComputed
     }

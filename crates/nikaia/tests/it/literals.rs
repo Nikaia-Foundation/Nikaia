@@ -451,16 +451,11 @@ fn the_refusal_and_the_decoder_read_one_set() {
         "plain",
     ] {
         assert!(
-            nikaia_std::compiler::escapes::an_escape_nothing_names(
-                literal,
-                &mut nikaia::build_eval_host::char_of
-            )
-            .is_none(),
+            nikaia_std::compiler::escapes::an_escape_nothing_names(literal).is_none(),
             "{literal}"
         );
         assert!(
-            nikaia_std::compiler::escapes::decoded(literal, &mut nikaia::build_eval_host::char_of)
-                .is_some(),
+            nikaia_std::compiler::escapes::decoded(literal).is_some(),
             "{literal}"
         );
     }
@@ -479,16 +474,11 @@ fn the_refusal_and_the_decoder_read_one_set() {
         "a\\",
     ] {
         assert!(
-            nikaia_std::compiler::escapes::an_escape_nothing_names(
-                literal,
-                &mut nikaia::build_eval_host::char_of
-            )
-            .is_some(),
+            nikaia_std::compiler::escapes::an_escape_nothing_names(literal).is_some(),
             "{literal}"
         );
         assert!(
-            nikaia_std::compiler::escapes::decoded(literal, &mut nikaia::build_eval_host::char_of)
-                .is_none(),
+            nikaia_std::compiler::escapes::decoded(literal).is_none(),
             "{literal}"
         );
     }
