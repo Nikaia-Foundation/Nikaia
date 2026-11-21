@@ -334,7 +334,11 @@ pub(crate) fn check_reflect_named_kind(state: &CheckState, name: &str, args: &[T
 }
 
 pub(crate) fn check_reflect_builtin_kind(name: &str) -> String {
-    match name {
+    let plain: String = nikaia_std::index::or(match name.split("::").last() {
+        Some(__nikaia_it) => Some(nikaia_std::block::Text::from(__nikaia_it.to_string())),
+        None => None,
+    }, || nikaia_std::block::Text::from(name.to_string()).into());
+    match &*plain {
         "i64" => String::from("I64"),
         "i32" => String::from("I32"),
         "u8" => String::from("U8"),
@@ -349,6 +353,7 @@ pub(crate) fn check_reflect_builtin_kind(name: &str) -> String {
         "Vec" => String::from("List"),
         "List" => String::from("List"),
         "HashMap" => String::from("Map"),
+        "BTreeMap" => String::from("Map"),
         "Array" => String::from("Array"),
         _ => String::from("Opaque"),
     }

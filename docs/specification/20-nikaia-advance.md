@@ -326,7 +326,7 @@ declaration writes it. `T::kind` is a `meta::Type`, whose parts are types:
 | :--- | :--- |
 | `i64`, `i32`, `u8`, `u64`, `u32`, `f64`, `bool` | `I64`, `I32`, `U8`, `U64`, `U32`, `F64`, `Bool` |
 | `String`, `Bytes`, `scalar` | `Text`, `Bytes`, `Scalar` |
-| `A?`, `Vec[A]`, `HashMap[K, V]` | `Maybe(A)`, `List(A)`, `Map(K, V)` |
+| `A?`, `Vec[A]`, `HashMap[K, V]` and `BTreeMap[K, V]` | `Maybe(A)`, `List(A)`, `Map(K, V)` |
 | `Array[A, N]`, `(A, B, …)` | `Array(A, N)`, `Tuple(parts)`, the parts walked as `T::fields` is |
 | a `struct`, an `enum` | `Struct(T)`, `Enum(T)` |
 | a type whose inside the program does not see | `Opaque(T)` |
