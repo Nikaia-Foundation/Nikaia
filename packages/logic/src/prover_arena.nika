@@ -13,18 +13,113 @@
 use std::collections
 
 /// The terms of one walk. Appended to, never changed.
+///
+/// **Each variable is numbered once** (#2062): `var` gives back the node it
+/// made for a name before, and every node keeps the numbers of the variables
+/// it reads, sorted (`variable_ids`), counted from its children's when it is
+/// made, since a term's names never change. A node a builder appends to
+/// `nodes` itself (`prove_terms.nika`'s `built`) is counted at the next node
+/// the arena makes (`read_all`).
 pub struct TermArena {
     pub nodes: Vec[SolverTerm],
+    /// A variable's name to its number.
+    var_ids: collections::BTreeMap[String, i64],
+    /// A variable's number to the node `var` gives for it.
+    var_nodes: Vec[i64],
+    /// A variable's number to its name.
+    var_names: Vec[String],
+    /// Per node, the sorted numbers of the variables it reads.
+    reads: Vec[Vec[i64]],
 }
 
 impl TermArena {
     pub fn empty() -> TermArena sync {
-        return TermArena { nodes: [] }
+        return TermArena { nodes: [], var_ids: collections::BTreeMap(), var_nodes: [], var_names: [], reads: [] }
     }
 
     fn push(ref mut self, node: SolverTerm) -> i64 {
+        self.read_all()
+        let read = self.read_by(node, self.nodes.len())
         self.nodes.push(node)
+        self.reads.push(read)
         return self.nodes.len() - 1
+    }
+
+    /// The variables of each node appended without `push` counted.
+    fn read_all(ref mut self) {
+        while self.reads.len() < self.nodes.len() {
+            let at = self.reads.len()
+            let node = self.nodes[at].clone()
+            let read = self.read_by(node, at)
+            self.reads.push(read)
+        }
+    }
+
+    /// The sorted numbers of the variables `node`, placed at `at`, reads:
+    /// its children's, or its own name's, numbered here if it is new.
+    fn read_by(ref mut self, node: ref SolverTerm, at: i64) -> Vec[i64] {
+        return match node {
+            SolverTerm::Var(name) => [self.numbered(name, at)],
+            SolverTerm::Neg(a) => self.reads[a].clone(),
+            SolverTerm::Not(a) => self.reads[a].clone(),
+            SolverTerm::Quot(a, _) => self.reads[a].clone(),
+            SolverTerm::Add(a, b) => merged_ids(self.reads[a], self.reads[b]),
+            SolverTerm::Sub(a, b) => merged_ids(self.reads[a], self.reads[b]),
+            SolverTerm::Mul(a, b) => merged_ids(self.reads[a], self.reads[b]),
+            SolverTerm::Le(a, b) => merged_ids(self.reads[a], self.reads[b]),
+            SolverTerm::Lt(a, b) => merged_ids(self.reads[a], self.reads[b]),
+            SolverTerm::Ge(a, b) => merged_ids(self.reads[a], self.reads[b]),
+            SolverTerm::Gt(a, b) => merged_ids(self.reads[a], self.reads[b]),
+            SolverTerm::Eq(a, b) => merged_ids(self.reads[a], self.reads[b]),
+            SolverTerm::Ne(a, b) => merged_ids(self.reads[a], self.reads[b]),
+            SolverTerm::And(parts) => self.parts_read(parts),
+            SolverTerm::Or(parts) => self.parts_read(parts),
+            else => [],
+        }
+    }
+
+    fn parts_read(ref self, parts: ref Vec[i64]) -> Vec[i64] {
+        let mut out: Vec[i64] = []
+        for part in parts {
+            out = merged_ids(out, self.reads[part])
+        }
+        return out
+    }
+
+    /// The number of the variable `name`, given to it, with `at` as its
+    /// node, where it has none yet.
+    fn numbered(ref mut self, name: ref String, at: i64) -> i64 {
+        let known = self.var_ids.get(name)
+        if known != null {
+            return known ?? 0
+        }
+        let number = self.var_nodes.len()
+        self.var_ids.insert(name.clone(), number)
+        self.var_nodes.push(at)
+        self.var_names.push(name.clone())
+        return number
+    }
+
+    /// **The sorted numbers of the variables `id` reads** (#2062), as
+    /// `variables` names them; for a node the arena made, or one appended
+    /// before the arena made another.
+    pub fn variable_ids(ref self, id: i64) -> ref Vec[i64] sync {
+        return self.reads[id]
+    }
+
+    /// The name of the variable numbered `n`.
+    pub fn variable_name(ref self, n: i64) -> ref String sync {
+        return self.var_names[n]
+    }
+
+    /// The number of the variable `name`, where a node read it.
+    pub fn variable_id(ref self, name: ref String) -> i64? sync {
+        return self.var_ids.get(name)
+    }
+
+    /// How many variables are numbered: every number is below it.
+    pub fn variable_count(ref self) -> i64 sync {
+        return self.var_nodes.len()
     }
 
     pub fn at(ref self, id: i64) -> SolverTerm sync {
@@ -39,7 +134,13 @@ impl TermArena {
         return self.push(SolverTerm::Int(value))
     }
 
+    /// The variable `name`: the node made for it before, where there is one.
     pub fn var(ref mut self, name: ref String) -> i64 sync {
+        self.read_all()
+        let known = self.var_ids.get(name)
+        if known != null {
+            return self.var_nodes[known ?? 0]
+        }
         return self.push(SolverTerm::Var(name.clone()))
     }
 
@@ -101,6 +202,16 @@ impl TermArena {
     }
 
     /// Whether `id` reads the variable `name`.
+    /// Whether the term `id` reads the variable `name`, numbered `n`
+    /// (`variable_id`, -1 for none): a node `reads` holds lists it, and a
+    /// name without a number is under none of them (#2062).
+    pub fn mentions_numbered(ref self, id: i64, n: i64, name: ref String) -> bool sync {
+        if id < self.reads.len() {
+            return n >= 0 && self.reads[id].contains(n)
+        }
+        return self.mentions(id, name)
+    }
+
     pub fn mentions(ref self, id: i64, name: ref String) -> bool sync {
         return match self.nodes[id] {
             SolverTerm::Var(n) => n == name,
@@ -381,6 +492,7 @@ impl TermArena {
             }
             self.nodes.push(moved)
         }
+        self.read_all()
         return self.nodes.len() - 1
     }
 
@@ -478,6 +590,42 @@ impl TermArena {
             else => false,
         }
     }
+}
+
+/// The numbers of `a` and of `b`, both sorted, in one sorted list without
+/// repeats.
+fn merged_ids(a: ref Vec[i64], b: ref Vec[i64]) -> Vec[i64] {
+    if b.is_empty() {
+        return a.clone()
+    }
+    if a.is_empty() {
+        return b.clone()
+    }
+    let mut out: Vec[i64] = []
+    let mut i = 0
+    let mut j = 0
+    while i < a.len() && j < b.len() {
+        if a[i] < b[j] {
+            out.push(a[i])
+            i += 1
+        } else if b[j] < a[i] {
+            out.push(b[j])
+            j += 1
+        } else {
+            out.push(a[i])
+            i += 1
+            j += 1
+        }
+    }
+    while i < a.len() {
+        out.push(a[i])
+        i += 1
+    }
+    while j < b.len() {
+        out.push(b[j])
+        j += 1
+    }
+    return out
 }
 
 fn moved_by(parts: ref Vec[i64], base: i64) -> Vec[i64] {

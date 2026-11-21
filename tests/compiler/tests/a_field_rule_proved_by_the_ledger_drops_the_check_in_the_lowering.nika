@@ -1,0 +1,33 @@
+// #2447: the lowering proves a file's checks with the package's other files
+// beside it (ADR-391 D1), and the file itself is not one of them. Handed the
+// whole package, the emitter read each field of the file as "declared in a
+// file beside", no rule's candidate, so `used <= limit` (ADR-369 D4) and the
+// marks below the trail's length (ADR-306 D21) were proved for the ledger and
+// `--bounds` but not where the code is written: the addition and the index
+// kept their checks. Lowered, both are written without them.
+use std::env
+use std::fs
+use std::process
+
+fn toolchain() -> String throws {
+    let exe = env::current_exe()?.display() ?? ""
+    if exe.len() > 0 { return exe }
+    return "target/fast/nikaia"
+}
+
+fn lowered(tmp: ref fs::Root, source: String) -> String throws {
+    fs::write("p.nika", tmp, source)
+    let done = process::run(toolchain(), ["lower", "p.nika", "-o", "p.rs"]; dir: tmp.path().to_text())
+    if done.stdout.contains("Lowered p.nika") == false { println(done.stderr) }
+    return fs::read_to_string("p.rs", tmp)
+}
+
+fn main() throws {
+    let tmp = fs::scratch()
+    let budget = lowered(tmp, "struct Budget {\n    used: i64,\n    limit: i64,\n}\n\nimpl Budget {\n    fn tick(mut self) -> bool sync {\n        if self.used == self.limit {\n            return false\n        }\n        self.used += 1\n        return true\n    }\n}\n\nfn budget(n: i64) -> Budget {\n    if n < 0 {\n        return Budget { used: 0, limit: 0 }\n    }\n    return Budget { used: 0, limit: n }\n}\n\nfn main() throws {\n    let mut b = budget(2)\n    println(f\"{b.tick()} {b.tick()} {b.tick()}\")\n}\n")
+    println(f"a counter below its limit field: {budget.matches("nikaia_std::proven::add::<").count()} proven::add")
+    let levels = lowered(tmp, "struct Levels {\n    marks: Vec[i64],\n    trail: Vec[i64],\n}\n\nimpl Levels {\n    fn decide(ref mut self, x: i64) {\n        self.marks.push(self.trail.len())\n        self.trail.push(x)\n    }\n\n    fn carried(ref self) -> Vec[i64] {\n        let top = if self.marks.len() > 0 { self.marks[0] } else { self.trail.len() }\n        let mut out: Vec[i64] = []\n        for i in 0..<top {\n            out.push(self.trail[i])\n        }\n        return out\n    }\n}\n\nfn main() throws {\n    let mut levels = Levels { marks: [], trail: [] }\n    levels.decide(2)\n    levels.decide(4)\n    println(levels.carried().len())\n}\n")
+    println(f"a mark below the trail's length: {levels.matches("nikaia_std::proven::read(").count()} proven::read")
+    let ran = process::run(toolchain(), ["run", "p.nika"]; dir: tmp.path().to_text())
+    println(ran.stdout.trim())
+}

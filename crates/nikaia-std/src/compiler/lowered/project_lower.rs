@@ -49,6 +49,7 @@ pub trait ProjectLowerHost {
     fn cached(&self) -> Option<ProjectLowerArtifacts>;
     fn record(&self, made: &ProjectLowerArtifacts);
     fn proofs_settled(&self) -> bool;
+    fn record_once_proofs_written(&self, made: &ProjectLowerArtifacts);
     fn in_the_wrapper(&self) -> bool;
     fn eprint(&self, text: &str);
     fn check_open(&self) -> Vec<CheckUnit>;
@@ -128,7 +129,7 @@ pub(crate) fn project_lower_made<H: ProjectLowerHost>(host: &H) -> Result<Projec
         warnings = format!("{}{}", warnings, line);
     }
     let made = ProjectLowerArtifacts { rust, ledger: text, derived, warnings, promise, lost, keepers, theirs };
-    if host.proofs_settled() { host.record(&made); }
+    if host.proofs_settled() { host.record(&made); } else { host.record_once_proofs_written(&made); }
     Ok(made)
 }
 
