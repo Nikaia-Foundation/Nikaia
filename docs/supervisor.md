@@ -371,6 +371,23 @@ Moved from the former `docs/architect.md` (2026-10-31). `nikaia` here means
   `--max` reached, a push rejected whose merge of `origin/develop` conflicted
   (a conflict only in the generated `lowered/*.rs` the driver resolves itself
   by re-lowering, #1430), a suite still red after two QA rounds.
+* **Starting the driver, detached** (as the CI lane runs it, 2026-11-21). A
+  driver under `run_in_background` ends with the session's turn and cannot be
+  stopped (`kill` is denied), so it is started on its own, its output
+  appended to a log in the scratchpad:
+
+      cd /home/user/Nikaia && git fetch -q origin develop \
+        && cargo build -q --profile fast -p nikaia \
+        && PATH=$PWD/target/fast:$PATH setsid nohup sh -c \
+          'nikaia run scripts/drive.nika -- docs/briefs/LANE; echo "DRIVER EXIT $?"' \
+          >> SCRATCHPAD/drive-LANE.log 2>&1 < /dev/null & disown
+
+  Then a `Monitor` (timeout 30 minutes, re-armed when it expires) on that
+  log greps `^WAKE ` and `DRIVER EXIT`, and once a minute checks with
+  `ps -ef | grep "drive.nika -- docs/briefs/LANE"` that the driver still
+  runs (`DRIVER GONE` when not). `DRIVER EXIT 4` is the time limit: start it
+  again. A heartbeat every 45 minutes (`send_later`) checks the driver and
+  re-arms the monitor.
 * **Act only on that final line.** `cycle.nika -- DIR --done N` clears an
   OWNER line; after the owner's answer, start `drive.nika` again. A `RESTART
   drive: ...` line needs nothing: the driver runs the changed script again by
@@ -611,6 +628,11 @@ own driver run:
   own issue (the job files none): a wrong expectation for the solver lane,
   a wrong verdict as a `solver` defect, each with the file from the run's
   `z3-findings` artifact, and `fuzz N SEED` where the fuzzer found it.
+* **Async lane, `docs/briefs/async/`** (owner, 2026-11-21): the issues
+  labelled `async`: the build of ADR-async-5 (the umbrella "async: one
+  concept, task" (#983) is closed; its steps are the lane). They run in the
+  order of their dependencies; the session sets a `blocked` step to `ready`
+  once what it waits for is closed.
 * **At least one active session runs the improvement lane and at least one the
   bug lane** (owner, 2026-11-15). A session that starts while neither runs takes
   one of them first.
