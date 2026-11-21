@@ -1,0 +1,16 @@
+// A task handle's `join()` takes it (Part III `NK2105`, ADR-async-5 D12,
+// #2645): a second `join()` of a child handle, or of a detached task's
+// handle, uses a handle already taken, and is `NK2105`, not rustc's use of
+// a moved value.
+fn work(n: i64) -> i64 {
+	return n * 10
+}
+
+fn main() throws {
+	let h = async(handle) fn { work(2) }
+	println(f"{h.join()}")
+	println(f"{h.join()}")
+	let d = async(detached) fn { work(3) }
+	println(f"{d.join()}")
+	println(f"{d.join()}")
+}

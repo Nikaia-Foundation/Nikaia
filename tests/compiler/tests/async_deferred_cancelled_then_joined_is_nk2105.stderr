@@ -1,0 +1,9 @@
+error[NK2105]: You're using `backup` again, but it was taken by its `cancel()`.
+   --> tests/async_deferred_cancelled_then_joined_is_nk2105.nika:16:2
+    |
+ 16 | 	backup.join()
+    |  ^
+    |
+    = note: `backup` is a `task::ChildHandle[()]`: a task's handle is not copied, and its `join()`, `cancel()` and `detach()` take it.
+    = help: Take the handle once: bind what `join()` gives with `let` and use that.
+

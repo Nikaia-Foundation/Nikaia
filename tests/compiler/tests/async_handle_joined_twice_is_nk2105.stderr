@@ -1,0 +1,17 @@
+error[NK2105]: You're using `h` again, but it was taken by its `join()`.
+   --> tests/async_handle_joined_twice_is_nk2105.nika:12:2
+    |
+ 12 | 	println(f"{h.join()}")
+    |  ^
+    |
+    = note: `h` is a `task::ChildHandle[i64]`: a task's handle is not copied, and its `join()`, `cancel()` and `detach()` take it.
+    = help: Take the handle once: bind what `join()` gives with `let` and use that.
+error[NK2105]: You're using `d` again, but it was taken by its `join()`.
+   --> tests/async_handle_joined_twice_is_nk2105.nika:15:2
+    |
+ 15 | 	println(f"{d.join()}")
+    |  ^
+    |
+    = note: `d` is a `TaskHandle[i64]`: a task's handle is not copied, and its `join()`, `cancel()` and `detach()` take it.
+    = help: Take the handle once: bind what `join()` gives with `let` and use that.
+
