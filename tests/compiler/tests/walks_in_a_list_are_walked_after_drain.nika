@@ -1,0 +1,7 @@
+// The way out of #1424's refusal: `drain()` takes the sequences out of the
+// list, and each is walked once.
+fn main() throws {
+    let xs = [1, 2, 3]
+    let ws = [xs.par_iter().map(fn(x) { x * 2 })]
+    for v in ws.drain() { println(f"{v.count()}") }
+}

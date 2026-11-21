@@ -332,7 +332,7 @@ pub(crate) fn vc_mentions_stmt(stmt: &Stmt, name: &str, ask: &VcAsk<'_, '_, '_, 
 }
 
 pub(crate) fn vc_first_use(stmt: &Stmt, name: &str, ask: &VcAsk<'_, '_, '_, '_, '_, '_, '_, '_, '_, '_, '_>, holes_of: &mut dyn FnMut(&Expr) -> Vec<Expr>) -> Option<Span> {
-    for block in check_visit_stmt_blocks(stmt) { for each in block.stmts.iter() { if vc_mentions_stmt(&each.node, name, ask, &mut &mut *holes_of) { return Some(nikaia_std::index::or(vc_first_use(&each.node, name, ask, &mut &mut *holes_of), || each.span.clone().into())); } } }
+    for block in check_visit_stmt_blocks(stmt) { for each in block.stmts.iter() { if vc_mentions_stmt(&each.node, name, ask, &mut &mut *holes_of) { return Some(nikaia_std::index::or(vc_first_use(&each.node, name, ask, &mut &mut *holes_of), || each.span.clone())); } } }
     None
 }
 
@@ -788,7 +788,7 @@ pub(crate) fn vc_block(block: &Block, outer: &[VcView], ask: &VcAsk<'_, '_, '_, 
         if looping {
             for view in inner_views.iter_mut() {
                 let name = nikaia_std::block::Text::from((*view).name.to_string());
-                if (*view).used.is_none() && !(*view).lent_only && vc_mentions_stmt(&stmt.node, &name, ask, &mut &mut *holes_of) { (*view).used = Some(nikaia_std::index::or(vc_first_use(&stmt.node, &name, ask, &mut &mut *holes_of), || at.clone().into())); }
+                if (*view).used.is_none() && !(*view).lent_only && vc_mentions_stmt(&stmt.node, &name, ask, &mut &mut *holes_of) { (*view).used = Some(nikaia_std::index::or(vc_first_use(&stmt.node, &name, ask, &mut &mut *holes_of), || at.clone())); }
             }
         }
         match &stmt.node {

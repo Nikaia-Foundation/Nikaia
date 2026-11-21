@@ -182,6 +182,21 @@ impl EmitState {
                 out.push(&format!("            {}::{}(e) => {},\n", name, variant, held));
             }
             out.push("        }\n    }\n}\n\n");
+            if !borrows {
+                let mut read: String = String::from("");
+                let mut taken: String = String::from("");
+                for member in members.iter() {
+                    let variant = sum_variant(member);
+                    if self.name_of_error(world, member) == 0 {
+                        read = format!("{}            {}::{}(e) => e as &(dyn std::error::Error + 'static),\n", read, name, variant);
+                        taken = format!("{}            {}::{}(e) => std::boxed::Box::new(e) as std::boxed::Box<dyn std::error::Error>,\n", taken, name, variant);
+                    } else {
+                        read = format!("{}            {}::{}(e) => e.held() as &(dyn std::error::Error + 'static),\n", read, name, variant);
+                        taken = format!("{}            {}::{}(e) => std::boxed::Box::new(e.split().0) as std::boxed::Box<dyn std::error::Error>,\n", taken, name, variant);
+                    }
+                }
+                out.push(&format!("impl nikaia_std::error::Members for {} {{\n    fn member(&self) -> &(dyn std::error::Error + 'static) {{\n        match self {{\n{}        }}\n    }}\n    fn into_member(self: std::boxed::Box<Self>) -> std::boxed::Box<dyn std::error::Error> {{\n        match *self {{\n{}        }}\n    }}\n}}\n\n", name, read, taken));
+            }
             let mut arms: String = String::from("");
             let mut fatal_arms: String = String::from("");
             for member in members.iter() {

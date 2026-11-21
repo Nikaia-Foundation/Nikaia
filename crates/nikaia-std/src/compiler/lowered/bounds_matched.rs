@@ -55,7 +55,7 @@ pub(crate) fn bm_matched(words: &winnow_grammar::InternerContext, rules: &collec
 pub(crate) fn bm_bound(words: &winnow_grammar::InternerContext, rules: &collections::BTreeSet<String>, bound_name: &str, what: &Pattern, found: &mut BmMatched) {
     let class = bm_class(words, rules, what);
     if class.is_some() {
-        found.classes.insert(nikaia_std::block::Text::from(bound_name.to_string()), nikaia_std::index::or(class, || bm_range(0, 0).into()));
+        found.classes.insert(nikaia_std::block::Text::from(bound_name.to_string()), nikaia_std::index::or(class, || bm_range(0, 0)));
         return;
     }
     match what {
@@ -66,7 +66,7 @@ pub(crate) fn bm_bound(words: &winnow_grammar::InternerContext, rules: &collecti
                 let counted = bm_counted(rep);
                 if counted.lo < 0 { return; }
                 found.text_lengths.insert(nikaia_std::block::Text::from(bound_name.to_string()), Range { lo: Some(counted.lo), hi: counted.hi });
-                found.text_classes.insert(nikaia_std::block::Text::from(bound_name.to_string()), nikaia_std::index::or(each, || bm_range(0, 0).into()));
+                found.text_classes.insert(nikaia_std::block::Text::from(bound_name.to_string()), nikaia_std::index::or(each, || bm_range(0, 0)));
                 return;
             }
         },

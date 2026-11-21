@@ -1760,12 +1760,13 @@ pub(crate) fn rsrc_struct_fields(unit: &Unit, asked: &Asked<'_, '_, '_>, here: &
         let mut whole = true;
         if field.value.is_some() { whole = rsrc_bare_variable(Option::as_ref(&field.value)); }
         let mut owning = false;
-        let mut either_whole = false;
+        let mut moves_in = false;
         for (written, ty) in declared.iter() {
             if written == named && !ty.is_view && !ty.either && (rsrc_plain_text(asked, ty) || rsrc_scalar(asked, ty)) { owning = true; }
-            if written == named && ty.either && rsrc_text_or_none(asked, ty) && whole { either_whole = true; }
+            if written == named && ty.either && rsrc_text_or_none(asked, ty) && whole { moves_in = true; }
+            if written == named && !ty.either && whole && !rsrc_type_holds_view(asked, ty) { moves_in = true; }
         }
-        if either_whole {
+        if moves_in {
             let mut kept = rsrc_none();
             for entry in more.iter() { if !entry.starts_with('!') && !entry.starts_with('=') { kept.insert(nikaia_std::block::Text::from(entry.to_string())); } }
             more = kept;

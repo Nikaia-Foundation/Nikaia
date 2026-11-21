@@ -765,7 +765,7 @@ impl SvSimplex {
                 { let __nikaia_stored = call; unsafe { nikaia_std::proven::write(&mut self.rb_at, (at) as usize, __nikaia_stored) }; }
                 let found = self.row_bound(r, up);
                 { let __nikaia_stored = found.is_some(); nikaia_std::index::set(&mut self.rb_has, nikaia_std::index::at(at), __nikaia_stored); }
-                if found.is_some() { { let __nikaia_stored = nikaia_std::index::or(found, || sv_sx_zero().into()); nikaia_std::index::set(&mut self.rb_val, nikaia_std::index::at(at), __nikaia_stored); } }
+                if found.is_some() { { let __nikaia_stored = nikaia_std::index::or(found, || sv_sx_zero()); nikaia_std::index::set(&mut self.rb_val, nikaia_std::index::at(at), __nikaia_stored); } }
             }
             if !*nikaia_std::index::get(&self.rb_has, nikaia_std::index::at(at)) { continue; }
             let order = sv_delta_cmp(nikaia_std::index::get(&self.rb_val, nikaia_std::index::at(at)), &seen.value);
@@ -794,7 +794,7 @@ impl SvSimplex {
         let mut seen = sv_sx_view_unknown();
         seen.known = true;
         let got = self.view_of(l, book);
-        if got.is_some() { seen = nikaia_std::index::or(got, || seen.into()); }
+        if got.is_some() { seen = nikaia_std::index::or(got, || seen); }
         if seen.usable {
             let a = l / 2u32;
             let n = (*nikaia_std::index::get(&self.var_atoms, nikaia_std::index::at(seen.var))).len() as i64;
@@ -1288,8 +1288,7 @@ impl SvSimplex {
             l_terms.push(SvTerm { col: *unsafe { nikaia_std::proven::read(&form_b.cols, (i) as usize) }, k: *nikaia_std::index::get(&form_b.ks, (i) as usize) });
             i = unsafe { nikaia_std::proven::add::<i64>(i, 1) };
         }
-        let mut cut_cols: Vec<u32> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-        let mut cut_ks: Vec<SvRat> = nikaia_std::block::list(nikaia_std::block::Place::Block);
+        let mut cut: collections::BTreeMap<u32, SvRat> = collections::BTreeMap::new();
         let mut cut_c = sv_int(1);
         let mut side1: Vec<SvRat> = vec![];
         let mut side2: Vec<SvRat> = vec![];
@@ -1317,13 +1316,8 @@ impl SvSimplex {
                 let c = *unsafe { nikaia_std::proven::read(&form.cols, (j) as usize) };
                 if ks != 0 { l_terms.push(SvTerm { col: c, k: match ks.checked_mul(*nikaia_std::index::get(&form.ks, (j) as usize)) { Some(__nikaia_value) => __nikaia_value, None => return None } }); }
                 let add = match sv_rat_mul(&a_s, &sv_int(*nikaia_std::index::get(&form.ks, (j) as usize))) { Some(__nikaia_value) => __nikaia_value, None => return None };
-                let mut at: i64 = 0;
-                while at < cut_cols.len() as i64 && *unsafe { nikaia_std::proven::read(&cut_cols, (at) as usize) } != c { at = unsafe { nikaia_std::proven::add::<i64>(at, 1) }; }
-                if at == cut_cols.len() as i64 {
-                    cut_cols.push(c);
-                    cut_ks.push(sv_int(0));
-                }
-                { let __nikaia_stored = match sv_rat_sub(nikaia_std::index::get(&cut_ks, nikaia_std::index::at(at)), &add) { Some(__nikaia_value) => __nikaia_value, None => return None }; unsafe { nikaia_std::proven::write(&mut cut_ks, (at) as usize, __nikaia_stored) }; }
+                let had = nikaia_std::index::or(cut.get(&c), || sv_int(0));
+                cut.insert(c, match sv_rat_sub(&had, &add) { Some(__nikaia_value) => __nikaia_value, None => return None });
                 j = unsafe { nikaia_std::proven::add::<i64>(j, 1) };
             }
             cut_c = match sv_rat_add(&cut_c, &match sv_rat_mul(&a_s, &bound) { Some(__nikaia_value) => __nikaia_value, None => return None }) { Some(__nikaia_value) => __nikaia_value, None => return None };
@@ -1334,17 +1328,15 @@ impl SvSimplex {
         let fl = sv_rat_floor(&at.c);
         if sv_rat_cmp(&match sv_rat_sub(&at.c, &sv_int(fl)) { Some(__nikaia_value) => __nikaia_value, None => return None }, &f0) != 0 { return None; }
         let mut den: i64 = cut_c.den;
-        for r in cut_ks.iter() {
+        for (_, r) in cut.iter() {
             let r = *r;
             let g = match sv_gcd(den, r.den) { Some(__nikaia_value) => __nikaia_value, None => return None };
             den = match (den / g).checked_mul(r.den) { Some(__nikaia_value) => __nikaia_value, None => return None };
         }
         let mut c_terms: Vec<SvTerm> = vec![];
-        let mut n: i64 = 0;
-        while ((n) as usize) < cut_cols.len() {
-            let r = *nikaia_std::index::get(&cut_ks, (n) as usize);
-            c_terms.push(SvTerm { col: *unsafe { nikaia_std::proven::read(&cut_cols, (n) as usize) }, k: match r.num.checked_mul(den / r.den) { Some(__nikaia_value) => __nikaia_value, None => return None } });
-            n = unsafe { nikaia_std::proven::add::<i64>(n, 1) };
+        c_terms.reserve(cut.iter().size_hint().0); for (col, r) in cut.iter() {
+            let col = nikaia_std::num::value(col);let r = *r;
+            c_terms.push(SvTerm { col, k: match r.num.checked_mul(den / r.den) { Some(__nikaia_value) => __nikaia_value, None => return None } });
         }
         let hold = match sv_row_of(c_terms, match cut_c.num.checked_mul(den / cut_c.den) { Some(__nikaia_value) => __nikaia_value, None => return None }) { Some(__nikaia_value) => __nikaia_value, None => return None };
         if hold.cols.is_empty() { return None; }

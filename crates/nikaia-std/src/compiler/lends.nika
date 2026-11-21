@@ -297,14 +297,17 @@ fn option_at(contract: ref FnContract, name: ref String) -> i64? {
 }
 
 /// **An option is lent as a parameter is** (ADR-282 D2, D5): a `String`
-/// option of a function - not a method, whose call this cannot tie to one
-/// entry (ADR-288) - that the body does not keep is a view below, as one
-/// written `ref String` is. One answer for the declaration, the call and
-/// the checker. **A `String?` one too** (#1729), as a `T?` parameter the
-/// body only reads is the option of a view (#1256): `Option<&str>` below.
+/// option that the body does not keep is a view below, as one written
+/// `ref String` is. One answer for the declaration, the call and the
+/// checker. **A `String?` one too** (#1729), as a `T?` parameter the body
+/// only reads is the option of a view (#1256): `Option<&str>` below. **A
+/// method's too** (#1452), as its parameters are (`lends_with`, ADR-views-v4
+/// D1): a method call's options are checked against the entry it resolves
+/// to (#1446), and an impl keeps what its trait method keeps (D17); but for
+/// the ones `by_value` names (a method named as a function value).
 fn lends_option(contract: ref FnContract, option: ref ConfigContract) -> bool {
     let signature = contract.signature ?? return false
-    if signature.takes_a_receiver() || contract.keeps.contains(option.name) {
+    if contract.keeps.contains(option.name) || (signature.takes_a_receiver() && contract.by_value.contains(option.name)) {
         return false
     }
     return lends_option_type(option.ty)

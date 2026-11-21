@@ -1517,7 +1517,14 @@ fn check_core_stmt_let[H: CheckHost](mut state: CheckState, world: ref CheckWorl
         else => false,
     }
     // **A list's `get` that copies its element out holds the value** (#1609).
-    if of_a_map && !word_copied && !state.facts.copied_walks.contains(id_of(value) as i64) {
+    // **Nor a `let` typed as an option of a struct that copies** (#1302):
+    // `let known: R? = m.get(k)` holds the struct, copied out at the `let`,
+    // and a `??` over it is the struct, handed to a `ref R` as `&had`.
+    let declared_copy = ty != null && match bound {
+        Ty::Nullable(inner) => !inner.is_a_view() && state.a_package_copy(world, inner),
+        else => false,
+    }
+    if of_a_map && !word_copied && !declared_copy && !state.facts.copied_walks.contains(id_of(value) as i64) {
         let kept: Ty = match bound {
             Ty::Nullable(inner) => {
                 if inner.is_a_view() {
@@ -2691,6 +2698,7 @@ fn check_core_stmt_return[H: CheckHost](mut state: CheckState, world: ref CheckW
         let returned = value ?? return Ty::Unknown
         state.narrowed_reads_given_back(returned)
         state.place_clones_handed_back(world, returned)
+        state.a_pausing_cleanup_returned(world, returned)
     }
     state.a_way_out("return", "", span)
     return Ty::Unknown
@@ -2912,6 +2920,14 @@ fn check_core_block[H: CheckHost](mut state: CheckState, world: ref CheckWorld, 
         at += 1
     }
     check_crossings_a_bound_handle_is_taken(state, world, block)
+    // **The block's value leaves it** (#1323): `{ let r = ...; r }` hands `r`
+    // on as `return r` does.
+    if count > 0 {
+        match block.stmts[count - 1].node {
+            Stmt::Expr(value) => state.a_pausing_cleanup_returned(world, value),
+            else => {},
+        }
+    }
     state.failing_cleanups_settled()
     if count > 0 {
         state.views_end(state.scope.len() as i64 - 1, block.stmts[count - 1].span.end as i64)

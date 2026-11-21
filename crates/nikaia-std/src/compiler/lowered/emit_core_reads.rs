@@ -8,6 +8,13 @@ pub(crate) fn emit_read_a_length(world: &EmitWorld<'_, '_, '_, '_>, expr: &Expr)
     }
 }
 
+pub(crate) fn emit_read_a_counted_length(facts: &CheckFacts, expr: &Expr) -> bool {
+    match expr {
+        Expr::MethodCall { receiver, .. } => { let receiver = nikaia_std::boxed::open(receiver); facts.std_lengths.contains(&node_key(receiver)) },
+        _ => false,
+    }
+}
+
 pub(crate) fn emit_read_a_call(expr: &Expr) -> bool {
     match expr {
         Expr::Try(inner, _) => { let inner = nikaia_std::boxed::open(inner); emit_read_is_call(inner) },
@@ -67,6 +74,7 @@ impl EmitState {
         if emit_read_a_length(world, rhs) && !emit_read_a_length(world, lhs) && walk.never_negative(world, &scope.function, lhs) { counter_first = true; } else if emit_read_a_length(world, lhs) && !emit_read_a_length(world, rhs) && walk.never_negative(world, &scope.function, rhs) { counter_first = false; } else { return Ok(false); }
         let counter = if counter_first { lhs } else { rhs };
         let length = if counter_first { rhs } else { lhs };
+        if !emit_read_a_counted_length(&self.facts, length) { return Ok(false); }
         let mut written = EmitOut::empty();
         self.emit_core_nested(world, walk, &mut written, host, length, 255, depth, flow, scope)?;
         let mut bare: String = String::from("");

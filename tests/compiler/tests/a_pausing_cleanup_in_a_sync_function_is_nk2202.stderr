@@ -1,0 +1,19 @@
+error[NK2202]: `make` is `sync`, but the cleanup of `_r`, `Res::cleanup`, can pause.
+   --> tests/a_pausing_cleanup_in_a_sync_function_is_nk2202.nika:30:5
+    |
+ 30 |     let _r = Res { name: "a" }
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: A `sync` function promises never to pause or do I/O.
+    = note: `_r` is cleaned up where it dies in `make`, and `Res::cleanup` doesn't say `sync`.
+    = help: Remove `sync` from `make`, write `sync` after the signature of `Res::cleanup` if it never pauses, or create `_r` outside `make` and pass it in.
+error[NK2202]: `half_handed_back` is `sync`, but the cleanup of `l`, `Log::cleanup`, can pause.
+   --> tests/a_pausing_cleanup_in_a_sync_function_is_nk2202.nika:44:5
+    |
+ 44 |     let l = Log { name: "d" }
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: A `sync` function promises never to pause or do I/O.
+    = note: `l` is cleaned up where it dies in `half_handed_back`, and `Log::cleanup` doesn't say `sync`.
+    = help: Remove `sync` from `half_handed_back`, write `sync` after the signature of `Log::cleanup` if it never pauses, or create `l` outside `half_handed_back` and pass it in.
+2 calls a `sync` function may not make

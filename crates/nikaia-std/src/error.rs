@@ -726,14 +726,73 @@ impl Full for crate::grammar::ParseError {
     }
 }
 
+/// **A generated error sum, opened** (#1372): the member it holds, as the
+/// error the program threw. A box holding the sum is asked through it, since
+/// the box cannot name the sum's type; `main` registers each sum with [`sum`].
+pub trait Members {
+    /// The member, read in place.
+    fn member(&self) -> &(dyn Error + 'static);
+    /// The member, taken out.
+    fn into_member(self: Box<Self>) -> Box<dyn Error>;
+}
+
+type MemberProbe = for<'a> fn(&'a (dyn Error + 'static)) -> Option<&'a (dyn Error + 'static)>;
+type IntoMemberProbe = fn(Box<dyn Error>) -> Result<Box<dyn Error>, Box<dyn Error>>;
+
+/// One registered sum's two questions: its member read and taken out.
+#[derive(Clone, Copy)]
+struct SumProbe {
+    member: MemberProbe,
+    into_member: IntoMemberProbe,
+}
+
+/// The program's error sums, for a box that holds one: `main` registers each
+/// before its first statement.
+static SUMS: std::sync::Mutex<Vec<SumProbe>> = std::sync::Mutex::new(Vec::new());
+
+/// **Register a program's error sum** (#1372) so that [`holds`], [`opened`]
+/// and [`handed`] see its members through a box.
+pub fn sum<T: Members + Error + 'static>() {
+    SUMS.lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .push(SumProbe {
+            member: |error| error.downcast_ref::<T>().map(Members::member),
+            into_member: |error| error.downcast::<T>().map(Members::into_member),
+        });
+}
+
+fn sum_probes() -> Vec<SumProbe> {
+    SUMS.lock().unwrap_or_else(|e| e.into_inner()).clone()
+}
+
+/// The member of the registered sum `error` is, if it is one.
+fn member_of<'a>(error: &'a (dyn Error + 'static)) -> Option<&'a (dyn Error + 'static)> {
+    sum_probes()
+        .into_iter()
+        .find_map(|probe| (probe.member)(error))
+}
+
+/// The member of the registered sum in the box, or the box as it is.
+pub(crate) fn member_into(error: Box<dyn Error>) -> Result<Box<dyn Error>, Box<dyn Error>> {
+    let mut error = error;
+    for probe in sum_probes() {
+        match (probe.into_member)(error) {
+            Ok(member) => return Ok(member),
+            Err(back) => error = back,
+        }
+    }
+    Err(error)
+}
+
 /// **Whether the box a `join` hands on holds an `E`**
 /// ([ADR-346](../../docs/specification/adr/adr-346.md) D5): as itself, or
-/// raised into the box from its envelope.
+/// raised into the box from its envelope, or as the member of a sum the box
+/// holds (#1372).
 pub fn holds<E: Error + 'static>(error: &(dyn Error + 'static)) -> bool {
     error.is::<E>()
         || error
             .downcast_ref::<Raised>()
-            .is_some_and(|raised| raised.inner().is::<E>())
+            .is_some_and(|raised| holds::<E>(raised.inner()))
         || match error.downcast_ref::<crate::task::Late>() {
             Some(crate::task::Late::Crashed(e)) => (e as &dyn Error).is::<E>(),
             Some(crate::task::Late::TimedOut(e)) => (e as &dyn Error).is::<E>(),
@@ -743,7 +802,8 @@ pub fn holds<E: Error + 'static>(error: &(dyn Error + 'static)) -> bool {
         || error
             .downcast_ref::<crate::supervisor::Handed>()
             .and_then(crate::supervisor::Handed::itself)
-            .is_some_and(|itself| itself.is::<E>())
+            .is_some_and(holds::<E>)
+        || member_of(error).is_some_and(holds::<E>)
 }
 
 /// Whether `error` is a socket read's failure (`net::ReadFailed`) carrying an
@@ -766,60 +826,81 @@ fn read_failed_holds<E: Error + 'static>(_error: &(dyn Error + 'static)) -> bool
     false
 }
 
-/// A socket read's failure, as the error it carries; any other error as it is.
+/// A socket read's failure, as the error it carries; any other error back.
 #[cfg(feature = "async-io")]
-fn read_failed_opened(error: Box<dyn Error>) -> Box<dyn Error> {
+fn read_failed_opened(error: Box<dyn Error>) -> Result<Box<dyn Error>, Box<dyn Error>> {
     match error.downcast::<crate::net::ReadFailed>() {
-        Ok(failed) => match *failed {
+        Ok(failed) => Ok(match *failed {
             crate::net::ReadFailed::Io(e) => Box::new(e),
             crate::net::ReadFailed::TimedOut(e) => Box::new(e),
-        },
-        Err(error) => error,
+        }),
+        Err(error) => Err(error),
     }
 }
 
 #[cfg(not(feature = "async-io"))]
-fn read_failed_opened(error: Box<dyn Error>) -> Box<dyn Error> {
-    error
+fn read_failed_opened(error: Box<dyn Error>) -> Result<Box<dyn Error>, Box<dyn Error>> {
+    Err(error)
 }
 
 /// **The child's own error a supervisor's hand-over carries**, if it is an
 /// `E` ([ADR-346](../../docs/specification/adr/adr-346.md) D7): what a `catch`
 /// arm naming the child's type over a typed channel looks at.
 pub fn handed<E: Error + 'static>(handed: &crate::supervisor::Handed) -> Option<&E> {
-    handed
-        .itself()
-        .and_then(|itself| itself.downcast_ref::<E>())
+    let itself = handed.itself()?;
+    itself
+        .downcast_ref::<E>()
+        .or_else(|| member_of(itself)?.downcast_ref::<E>())
 }
 
-/// **The `E` out of that box**; the emitter asks [`holds`] first.
+/// **The `E` out of that box**; the emitter asks [`holds`] first. Each layer
+/// [`holds`] looks through is opened in turn: the envelope, a late task's
+/// error, a socket read's failure, a supervisor's hand-over and a sum (#1372).
 pub fn opened<E: Error + 'static>(error: Box<dyn Error>) -> E {
-    let error = match error.downcast::<Raised>() {
-        Ok(raised) => raised.inner,
-        Err(error) => error,
-    };
-    let error: Box<dyn Error> = match error.downcast::<crate::task::Late>() {
-        Ok(late) => match *late {
-            crate::task::Late::Crashed(e) => Box::new(e),
-            crate::task::Late::TimedOut(e) => Box::new(e),
-        },
-        Err(error) => error,
-    };
-    let error = read_failed_opened(error);
-    let error: Box<dyn Error> = if error.is::<E>() {
-        error
-    } else {
-        match error.downcast::<crate::supervisor::Handed>() {
+    let mut error = error;
+    loop {
+        error = match error.downcast::<E>() {
+            Ok(found) => return *found,
+            Err(error) => error,
+        };
+        error = match error.downcast::<Raised>() {
+            Ok(raised) => {
+                error = raised.inner;
+                continue;
+            }
+            Err(error) => error,
+        };
+        error = match error.downcast::<crate::task::Late>() {
+            Ok(late) => {
+                error = match *late {
+                    crate::task::Late::Crashed(e) => Box::new(e),
+                    crate::task::Late::TimedOut(e) => Box::new(e),
+                };
+                continue;
+            }
+            Err(error) => error,
+        };
+        error = match read_failed_opened(error) {
+            Ok(inner) => {
+                error = inner;
+                continue;
+            }
+            Err(error) => error,
+        };
+        error = match error.downcast::<crate::supervisor::Handed>() {
             Ok(handed) => match handed.into_itself() {
-                Some(itself) => itself,
+                Some(itself) => {
+                    error = itself;
+                    continue;
+                }
                 None => unreachable!("the emitter asked `holds` first"),
             },
             Err(error) => error,
-        }
-    };
-    match error.downcast::<E>() {
-        Ok(found) => *found,
-        Err(_) => unreachable!("the emitter asked `holds` first"),
+        };
+        error = match member_into(error) {
+            Ok(member) => member,
+            Err(_) => unreachable!("the emitter asked `holds` first"),
+        };
     }
 }
 

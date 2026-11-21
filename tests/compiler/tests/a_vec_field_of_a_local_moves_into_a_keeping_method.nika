@@ -1,0 +1,47 @@
+// #1301: the Vec field itself, handed to a keeping method of a field of a mut
+// parameter, moves out of the local and the program runs.
+pub enum S {
+	A(u32),
+	B(u32),
+}
+
+pub struct M {
+	pub a: Vec[S],
+}
+
+pub struct Log {
+	pub steps: Vec[Vec[S]],
+}
+
+impl Log {
+	fn add(ref mut self, a: Vec[S]) -> i64 {
+		self.steps.push(a)
+		return self.steps.len()
+	}
+}
+
+pub struct Book {
+	pub log: Log,
+}
+
+fn mk(parts: ref Vec[S]) -> M? {
+	let mut a: Vec[S] = []
+	for p in parts {
+		a.push(p)
+	}
+	return M { a: a }
+}
+
+fn f(parts: ref Vec[S], mut book: Book) -> i64? {
+	let m = mk(parts) ?? return null
+	let mut i = 0
+	while i < m.a.len() {
+		i += 1
+	}
+	return book.log.add(m.a)
+}
+
+fn main() throws {
+	let mut b = Book { log: Log { steps: [] } }
+	println(f([S::A(1), S::B(2)], b) ?? 0)
+}

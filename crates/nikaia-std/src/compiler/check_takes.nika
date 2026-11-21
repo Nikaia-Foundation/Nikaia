@@ -38,7 +38,33 @@ impl CheckState {
     /// **`NK2605` waits for the block's end** (#934): `name`'s cleanup can
     /// fail, but a `close()` later in the block may leave nothing to clean up.
     fn a_failing_cleanup_held(ref mut self, name: ref String, finding: CheckFinding, span: ref Span) {
-        self.cleanups_pending.push(CheckPendingCleanup { name: name.clone(), binding: null, depth: self.scope.len(), choices: self.branch.clone(), loops: self.flow.loops, from: span.end as i64, leaves: [], finding: finding })
+        self.cleanups_pending.push(CheckPendingCleanup { name: name.clone(), binding: null, depth: self.scope.len(), choices: self.branch.clone(), loops: self.flow.loops, from: span.end as i64, leaves: [], finding: finding, handed_on: false })
+    }
+
+    /// **A `sync` function's `NK2202` for a cleanup that may pause waits for
+    /// the block's end too** (#1323): a value returned or handed on before it
+    /// dies elsewhere, and its settle is not this function's.
+    fn a_pausing_cleanup_held(ref mut self, name: ref String, finding: CheckFinding, span: ref Span) {
+        self.cleanups_pending.push(CheckPendingCleanup { name: name.clone(), binding: null, depth: self.scope.len(), choices: self.branch.clone(), loops: self.flow.loops, from: span.end as i64, leaves: [], finding: finding, handed_on: true })
+    }
+
+    /// **`return r`, or `r` as its block's value, hands a held `NK2202`'s
+    /// value on** (#1323): on the path the `let` stands on, it dies there,
+    /// not here. A `return` takes
+    /// nothing in `handed`, since nothing after it reads.
+    fn a_pausing_cleanup_returned(ref mut self, world: ref CheckWorld, value: ref Expr) {
+        let name = match value {
+            Expr::Variable(name, _) => world.words.resolve(name).clone(),
+            else => return,
+        }
+        let binding = self.binding_id(name)
+        let mut kept: Vec[CheckPendingCleanup] = []
+        for held in self.cleanups_pending {
+            if !held.handed_on || held.name != name || held.binding != binding || held.choices != self.branch || held.leaves.len() > 0 {
+                kept.push(held.clone())
+            }
+        }
+        self.cleanups_pending = kept
     }
 
     /// After a statement of a block: the `let` of a held value has bound its
@@ -87,12 +113,13 @@ impl CheckState {
         self.cleanups_pending = []
     }
 
-    /// **Closed on every path**: by a `close()` in the block itself - not in
+    /// **Closed on every path**: by a `close()` (or, for a held `NK2202`, any
+    /// taking that hands the value on) in the block itself - not in
     /// one arm of a choice (a loop or a lambda is `NK2105`'s) - with no
     /// `return`, `break` or `continue` between the `let` and it.
     fn closed_by_hand(ref self, held: ref CheckPendingCleanup) -> bool {
         for taken in self.handed {
-            if taken.path != held.name || taken.to != "closed by `close`" || taken.binding != held.binding || taken.from < held.from || taken.until != null || taken.choices != held.choices {
+            if taken.path != held.name || (!held.handed_on && taken.to != "closed by `close`") || taken.binding != held.binding || taken.from < held.from || taken.until != null || taken.choices != held.choices {
                 continue
             }
             let left = held.leaves.iter().any(fn(at) { at < taken.from }) || self.ways_out.iter().any(fn(way) { way.how == "return" && way.at > held.from && way.at < taken.from })
@@ -823,6 +850,11 @@ impl CheckState {
         if self.reading_only || !a_sequence_that_is_used_up(ty) {
             return
         }
+        // A `for` binding over a list is lent the element (#1424).
+        if self.binding(name)?.lent ?? false {
+            self.a_lent_sequence_is_taken(f"`{name}`", "the list this loop walks", "that list", ty, span)
+            return
+        }
         let taken = self.taken(name.clone(), ty.clone(), self.read_seq, "", span)
         self.walked.push(taken)
         let bound = self.frame_of(name)
@@ -842,6 +874,18 @@ impl CheckState {
             help = f"Collect it into a list before the loop and walk the list: `let {name} = {name}.collect()`."
         }
         self.findings.push(check_refusal("NK2702", span, f"`{name}` is a sequence, and you're using it up inside a {what} it was declared outside of.", [f"A sequence of `{item}` makes its elements as they're asked for, so walking it uses it up - and {again}.", "A `Vec` is different: it already holds its elements and can be walked as often as you like."], help))
+    }
+
+    /// `NK2702`: a sequence a list lends, used up (#1424). A walk takes the
+    /// sequence by value (ADR-105 D2), and a `for` over a list or an index
+    /// into it only lends the element (ADR-094 D4): the walk would take it
+    /// out of a list that still holds it.
+    fn a_lent_sequence_is_taken(ref mut self, what: String, holder: String, again: String, ty: ref Ty, span: ref Span) sync {
+        if self.reading_only || !a_sequence_that_is_used_up(ty) {
+            return
+        }
+        let item = an_item_text(ty)
+        self.findings.push(check_refusal("NK2702", span, f"{what} is a sequence lent by {holder}, and using it up would take it out of {again}.", [f"A sequence of `{item}` makes its elements as they're asked for, so walking it uses it up (ADR-105 D2): a `for`, a `collect()`, a `count()` or any other walk, or a `let` that names it.", "A `for` over a list or a map, or an index into one, only lends the element (ADR-094 D4), and the container would still hold a sequence already used up."], "Take the sequences out of the container to walk them: `for w in list.drain()`."))
     }
 
     /// `NK2702`: a sequence walked twice, said once per site.

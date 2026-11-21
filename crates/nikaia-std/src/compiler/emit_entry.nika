@@ -252,6 +252,12 @@ impl EmitState {
             if fatal_member && !borrows {
                 text = f"{text}    nikaia_std::process::fatal::<{self.sum_root()}{name}>();\n"
             }
+            // **Every sum a box can hold opens through it** (#1372): a
+            // `catch` arm naming a member finds it inside the box a child,
+            // a supervisor or a joined task hands on.
+            if !borrows {
+                text = f"{text}    nikaia_std::error::sum::<{self.sum_root()}{name}>();\n"
+            }
         }
         let fatal = self.own_contracts.implementations.get("Fatal") ?? return text
         for item in world.items {

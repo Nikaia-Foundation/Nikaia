@@ -1444,7 +1444,14 @@ fn check_core_index[H: CheckHost](mut state: CheckState, world: ref CheckWorld, 
     let writing = state.flow.writing_index
     state.flow.writing_index = false
     let first = check_core_expr(state, world, host, base, span)
+    let said = state.flow.unknown_said
     let key = check_core_expr(state, world, host, index, span)
+    // **An open number in the brackets is no reason the read has no type**
+    // (#1952): its uses type it, so `args[at]` over a `cli::Args` is
+    // `NK1245` as `args[0]` is.
+    if state.number_shaped(world, index) {
+        state.flow.unknown_said = said
+    }
     // **An index of a mapping is a page fault** (ADR-281 D35).
     state.io_inside_a_door(world, first, "this index", span)
     let stamped = match first {

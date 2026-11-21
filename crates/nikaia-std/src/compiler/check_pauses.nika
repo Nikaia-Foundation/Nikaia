@@ -39,6 +39,22 @@ impl CheckState {
         self.a_pause(pause, span)
     }
 
+    /// **`NK2202`: a value whose cleanup may pause dies in a `sync` function**
+    /// (ADR-297 D3, #1323): its settle is a call that pauses, and the function
+    /// promised never to.
+    /// A value bound by a `let` (`waits`) is refused only where it is still
+    /// held at its block's end: one handed on before dies elsewhere.
+    fn a_pausing_cleanup_in_a_sync_body(ref mut self, name: ref String, owner: ref String, span: ref Span, waits: bool) sync {
+        let caller = self.inside_a_sync_function?.clone() ?? return
+        let notes: Vec[String] = ["A `sync` function promises never to pause or do I/O.", f"`{name}` is cleaned up where it dies in `{caller}`, and `{owner}::cleanup` doesn't say `sync`."]
+        let finding = check_refusal("NK2202", span, f"`{caller}` is `sync`, but the cleanup of `{name}`, `{owner}::cleanup`, can pause.", notes, f"Remove `sync` from `{caller}`, write `sync` after the signature of `{owner}::cleanup` if it never pauses, or create `{name}` outside `{caller}` and pass it in.")
+        if waits {
+            self.a_pausing_cleanup_held(name, finding, span)
+        } else {
+            self.findings.push(finding)
+        }
+    }
+
     /// `NK2209` and `NK2202`: a pause where a core is held up or a lock is held.
     fn a_pause(ref mut self, pause: ref CheckPause, span: ref Span) {
         // **Another package's function that does not pause and never said so**

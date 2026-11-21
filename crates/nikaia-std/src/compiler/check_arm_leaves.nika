@@ -960,7 +960,10 @@ impl CheckState {
         }
         for asked in arms {
             let arm = asked.tail ?? continue
-            let mut ty = self.text_literal(world, want, arm, true) ?? asked.ty.clone()
+            // **A tuple literal arm builds its text parts too** (ADR-282 D4,
+            // #1950): `("a", 1)` beside `(f"b", 2)` under `(String, i64)` is
+            // asked as `return ("a", 1)` alone is.
+            let mut ty = self.text_literal(world, want, arm, true) ?? self.tuple_literal(world, asked.ty, want, arm) ?? asked.ty.clone()
             // **An open-number arm is asked as a number written there** (#600):
             // `if c { "a" } else { 1 }` under `String` is refused as
             // `let s: String = 3` is.
