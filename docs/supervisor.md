@@ -387,7 +387,9 @@ Moved from the former `docs/architect.md` (2026-10-31). `nikaia` here means
   `ps -ef | grep "drive.nika -- docs/briefs/LANE"` that the driver still
   runs (`DRIVER GONE` when not). `DRIVER EXIT 4` is the time limit: start it
   again. A heartbeat every 45 minutes (`send_later`) checks the driver and
-  re-arms the monitor.
+  re-arms the monitor. Re-arming an expired monitor and a heartbeat that
+  finds the driver running are not reported to the owner (owner,
+  2026-11-21: noise); only what the driver's lines ask for is.
 * **Act only on that final line.** `cycle.nika -- DIR --done N` clears an
   OWNER line; after the owner's answer, start `drive.nika` again. A `RESTART
   drive: ...` line needs nothing: the driver runs the changed script again by
