@@ -1,0 +1,13 @@
+// A position of a text chosen at run time, `ref(a | b)`, neither cuts nor
+// moves (ADR-374 D5): the compiler cannot say which text it belongs to (#743).
+use std::text
+
+fn pick(a: String, b: String, first: bool) -> String {
+    let p = if first { a.start() } else { b.end() }
+    let q = p.forward(scalars: 1) ?? return ""
+    return a.after(p).clone()
+}
+
+fn main() throws {
+    println(pick("ab", "cd", true))
+}

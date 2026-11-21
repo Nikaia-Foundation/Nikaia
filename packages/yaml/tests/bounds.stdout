@@ -1,4 +1,4 @@
-bounds in src/main.nika: 67 indexes, 67 proved; 106 operations, 80 proved
+bounds in src/main.nika: 66 indexes, 66 proved; 106 operations, 80 proved
   1495  depth_of(x) + 1                       justified: a count of nodes, which the memory holding them bounds: a tree's depth is at most its node count
   1501  depth_of(e.key) + 1                   justified: a count of nodes, which the memory holding them bounds: a tree's depth is at most its node count
   1501  depth_of(e.value) + 1                 justified: a count of nodes, which the memory holding them bounds: a tree's depth is at most its node count
@@ -17,11 +17,11 @@ bounds in src/main.nika: 67 indexes, 67 proved; 106 operations, 80 proved
   2823  row - prev - 1                        justified: a count over the input, which its length bounds: a count of a block scalar's lines
   2832  row += 1                              justified: a count over the input, which its length bounds: a count of a block scalar's lines
   2850  rows - prev                           justified: a count over the input, which its length bounds: a count of a block scalar's lines
-  2972  value * radix + hex_value(…)          justified: at most 16 hex digits, the first at most 7, or 21 octal: `radix_value`'s guard keeps it within `i64`
-  2972  value * radix                         justified: at most 16 hex digits, the first at most 7, or 21 octal: `radix_value`'s guard keeps it within `i64`
-  3183  self.column += 1                      justified: a column of the text the library writes, which its length bounds
-  3242  self.indent += 2                      justified: an indentation of the text the library writes, at most twice the depth
-  3529  (…) + tag_length(n.tag)               justified: a count over the input, which its length bounds: a tag's length
-  3549  length += …                           justified: a count over the input, which its length bounds: the length of a node's text
-  3610  (width - 1) * 4                       justified: a width the callers write as a literal, 2 to 8 digits
-  3683  at + utf8_length(c)                   justified: a count over the input, which its length bounds: a byte offset into the scalar's text
+  2982  value * radix + hex_value(…)          justified: at most 16 hex digits, the first at most 7, or 21 octal: `radix_value`'s guard keeps it within `i64`
+  2982  value * radix                         justified: at most 16 hex digits, the first at most 7, or 21 octal: `radix_value`'s guard keeps it within `i64`
+  3193  self.column += 1                      justified: a column of the text the library writes, which its length bounds
+  3252  self.indent += 2                      justified: an indentation of the text the library writes, at most twice the depth
+  3539  (…) + tag_length(n.tag)               justified: a count over the input, which its length bounds: a tag's length
+  3559  length += …                           justified: a count over the input, which its length bounds: the length of a node's text
+  3620  (width - 1) * 4                       justified: a width the callers write as a literal, 2 to 8 digits
+  3693  at + utf8_length(c)                   justified: a count over the input, which its length bounds: a byte offset into the scalar's text

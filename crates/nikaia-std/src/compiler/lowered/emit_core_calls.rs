@@ -1351,6 +1351,33 @@ impl EmitState {
             out.push(")");
             return Ok(());
         }
+        let moved: Option<Expr> = match self.facts.pos_moves.get(&node_key(node)) {
+            Some(__nikaia_it) => Some(__nikaia_it.clone()),
+            None => None,
+        };
+        if (name == "forward" || name == "back") && moved.is_some() {
+            let text: Expr = match moved { Some(__nikaia_value) => __nikaia_value, None => return Ok(()) };
+            let mut unit: &'static str = "";
+            let mut count: Vec<Expr> = nikaia_std::block::list(nikaia_std::block::Place::Block);
+            if !emit_call_option_named(world, config, "scalars").is_empty() {
+                unit = "scalars";
+                count = emit_call_option_named(world, config, "scalars");
+            } else if !emit_call_option_named(world, config, "graphemes").is_empty() {
+                unit = "graphemes";
+                count = emit_call_option_named(world, config, "graphemes");
+            } else {
+                unit = "bytes";
+                count = emit_call_option_named(world, config, "bytes");
+            }
+            out.push(&format!("nikaia_std::text::{}_{}(&", name, unit));
+            self.emit_core_nested(world, walk, out, host, &text, 255, depth, flow, scope)?;
+            out.push(", ");
+            self.emit_core_nested(world, walk, out, host, receiver, 0, depth, flow, scope)?;
+            out.push(", ");
+            if !count.is_empty() { self.emit_core_nested(world, walk, out, host, unsafe { nikaia_std::proven::read(&count, (0) as usize) }, 0, depth, flow, scope)?; } else { out.push("0"); }
+            out.push(")");
+            return Ok(());
+        }
         if name == "split" && args.len() == 1 && self.facts.bytes_splits.contains(&node_key(receiver)) {
             out.push("nikaia_std::bytes::split(&");
             self.emit_core_nested(world, walk, out, host, receiver, 255, depth, flow, scope)?;
@@ -1509,8 +1536,8 @@ pub(crate) fn emit_tuple_part_copy(i: i64, word: &str) -> String {
 }
 
 pub(crate) fn emit_tuple_part_copies(parts: &[String]) -> String {
-    let copies: Vec<String> = parts.iter().enumerate().map(|(at, item)| (at as i64, item)).map(|__nikaia_tuple112141| {
-        let (i, word) = __nikaia_tuple112141;
+    let copies: Vec<String> = parts.iter().enumerate().map(|(at, item)| (at as i64, item)).map(|__nikaia_tuple113598| {
+        let (i, word) = __nikaia_tuple113598;
         emit_tuple_part_copy(i, word)
     }).collect::<Vec<_>>();
     if copies.len() == 1 { return format!("({},)", *unsafe { nikaia_std::proven::read(&copies, (0) as usize) }); }

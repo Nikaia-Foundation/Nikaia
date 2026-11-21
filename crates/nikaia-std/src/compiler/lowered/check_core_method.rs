@@ -766,6 +766,7 @@ pub(crate) fn check_core_method<H: CheckHost>(state: &mut CheckState, world: &Ch
     if mapped { state.stored_frames.push(CheckStoredCode::empty()); }
     if !code_keys.is_empty() { state.stored_frames.push(CheckStoredCode::empty()); }
     let walked = check_core_method_walked(state, world, host, expr, safe, receiver, method, args, config, span);
+    check_pos_call(state, world, expr, receiver, args, config, span);
     let listed = mapped && check_core_stmt_a_list_type(&walked);
     let found = check_core_method_deadline(&state, world, receiver, config, walked);
     state.flow.method_passed.remove(&(id_of(receiver) as i64));

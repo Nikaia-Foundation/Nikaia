@@ -412,7 +412,7 @@ signature = "(k: TagKind, v: ref Node) -> bool"
 
 [fn."fold"]
 sync = true
-panics = true
+panics = false
 touches = []
 views = ["raw: borrowed"]
 signature = "(raw: ref String, single: bool) -> String"
@@ -796,6 +796,13 @@ panics = false
 touches = []
 views = ["e: borrowed"]
 signature = "(e: ref Event) -> String"
+
+[fn."push_between"]
+sync = true
+panics = true
+touches = []
+views = ["t: borrowed"]
+signature = "(mut out: String, t: ref String, a: i64, b: i64)"
 
 [fn."quoted_node"]
 pub = true

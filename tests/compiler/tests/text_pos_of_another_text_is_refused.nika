@@ -1,0 +1,14 @@
+// A position belongs to the text it was taken from (ADR-374 D5): a cut, a
+// search or a `let mut` given a position of another text is NK1214 (#743).
+use std::text
+
+fn main() throws {
+    let a = "abc"
+    let b = "xyz"
+    let m = a.find("b") ?? return
+    println(b.after(m.end))
+    println(b.find("z"; from: a.start()) == null)
+    let mut k = b.start()
+    k = m.start
+    println(b.before(k))
+}

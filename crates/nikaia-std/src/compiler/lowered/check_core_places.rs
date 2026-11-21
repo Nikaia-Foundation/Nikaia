@@ -929,6 +929,185 @@ pub(crate) fn check_core_places_text_cut(state: &mut CheckState, world: &CheckWo
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
+pub(crate) fn check_pos_text_named(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, text: &Expr) -> Option<CheckPosText> {
+    let mut root: &Expr = text;
+    let mut walking = true;
+    while walking {
+        match root {
+            Expr::Field { base, .. } => {
+                let base = nikaia_std::boxed::open(base);
+                root = base;
+            },
+            _ => { walking = false; },
+        }
+    }
+    let named = match root {
+        Expr::Variable(name, _) => { let name = *name; state.binding(world.words.resolve(name)).is_some() },
+        _ => false,
+    };
+    if !named { return None; }
+    Some(CheckPosText { key: check_core_places_text_key(state, world, text), text: text.clone(), chosen: false })
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn check_pos_texts_either(one: &CheckPosText, other: &CheckPosText) -> CheckPosText { CheckPosText { key: nikaia_std::block::Text::from(one.key.to_string()), text: one.text.clone(), chosen: one.chosen || other.chosen || one.key != other.key } }
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn check_pos_block_text(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, block: &Block) -> Option<CheckPosText> {
+    if block.stmts.len() != 1 { return None; }
+    match &unsafe { nikaia_std::proven::read(&block.stmts, (0) as usize) }.node {
+        Stmt::Expr(value) => check_pos_text_of(state, world, value),
+        _ => None,
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn check_pos_text_of(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, expr: &Expr) -> Option<CheckPosText> {
+    match expr {
+        Expr::MethodCall { receiver, args, .. } => {
+            let receiver = nikaia_std::boxed::open(receiver);
+            let key: String = match match state.facts.method_callees.get(&(id_of(receiver) as i64)) {
+                Some(__nikaia_it) => Some(__nikaia_it.clone()),
+                None => None,
+            } { Some(__nikaia_value) => __nikaia_value, None => return None };
+            if key == "str::start" || key == "str::end" || key == "str::find" || key == "str::rfind" { return check_pos_text_named(state, world, receiver); }
+            if key == "regex::Regex::find" && args.len() == 1 { return check_pos_text_named(state, world, unsafe { nikaia_std::proven::read(&args, (0) as usize) }); }
+            if key == "text::Pos::forward" || key == "text::Pos::back" { return check_pos_text_of(state, world, receiver); }
+            return None;
+        },
+        Expr::Field { base, name, .. } => {
+            let base = nikaia_std::boxed::open(base); let name = *name;
+            let field = world.words.resolve(name);
+            if field == "start" || field == "end" { return check_pos_text_of(state, world, base); }
+            return None;
+        },
+        Expr::SafeField { base, name, .. } => {
+            let base = nikaia_std::boxed::open(base); let name = *name;
+            let field = world.words.resolve(name);
+            if field == "start" || field == "end" { return check_pos_text_of(state, world, base); }
+            return None;
+        },
+        Expr::Variable(name, _) => {
+            let name = *name;
+            let local = match state.binding(world.words.resolve(name)) { Some(__nikaia_value) => __nikaia_value, None => return None };
+            let kept = match *nikaia_std::index::get(&state.facts.pos_texts, &local.id) { Some(__nikaia_value) => __nikaia_value, None => return None };
+            return Some(kept.clone());
+        },
+        Expr::Coalesce { value, fallback, .. } => {
+            let value = nikaia_std::boxed::open(value); let fallback = nikaia_std::boxed::open(fallback);
+            let found: CheckPosText = match check_pos_text_of(state, world, value) { Some(__nikaia_value) => __nikaia_value, None => return None };
+            if check_core_places_leaves(fallback) || state.exits(world, fallback) { return Some(found); }
+            let other: CheckPosText = match check_pos_text_of(state, world, fallback) { Some(__nikaia_value) => __nikaia_value, None => return None };
+            return Some(check_pos_texts_either(&found, &other));
+        },
+        Expr::If { then_branch, else_branch, .. } => {
+            let otherwise: &Block = match else_branch { Some(__nikaia_value) => __nikaia_value, None => return None };
+            let one: CheckPosText = match check_pos_block_text(state, world, then_branch) { Some(__nikaia_value) => __nikaia_value, None => return None };
+            let other: CheckPosText = match check_pos_block_text(state, world, otherwise) { Some(__nikaia_value) => __nikaia_value, None => return None };
+            return Some(check_pos_texts_either(&one, &other));
+        },
+        _ => return None,
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn check_pos_call(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, expr: &Expr, receiver: &Expr, args: &[Expr], config: &[ConfigArg], span: &Span) {
+    let key: String = match match state.facts.method_callees.get(&(id_of(receiver) as i64)) {
+        Some(__nikaia_it) => Some(__nikaia_it.clone()),
+        None => None,
+    } { Some(__nikaia_value) => __nikaia_value, None => return };
+    if key == "text::Pos::forward" || key == "text::Pos::back" {
+        check_pos_move(state, world, expr, receiver, &key, config, span);
+        return;
+    }
+    if key == "str::before" || key == "str::after" || key == "str::between" || key == "str::split_at" { for arg in args.iter() { check_pos_in_text(state, world, receiver, arg, "cut", span); } }
+    if key == "str::find" { for option in config.iter() { if world.words.resolve(option.name) == "from" { check_pos_in_text(state, world, receiver, &option.value, "searched", span); } } }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn check_pos_move(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, expr: &Expr, receiver: &Expr, key: &str, config: &[ConfigArg], span: &Span) {
+    let way = if key == "text::Pos::forward" { "forward" } else { "back" };
+    let shown = written_expression(world.words, receiver);
+    let mut units = 0;
+    for option in config.iter() {
+        let unit = world.words.resolve(option.name);
+        if unit == "scalars" || unit == "graphemes" || unit == "bytes" { units += 1; }
+    }
+    if units != 1 {
+        let said = if units == 0 { "names no unit" } else { "names more than one unit" };
+        state.findings.push(check_refusal("NK1285", span, format!("`{}.{}(…)` {}: a position moves in scalars, in graphemes or in bytes, exactly one of them.", shown, way, said), vec![String::from("A scalar, a grapheme and a byte are steps of different lengths, so a move says which it takes (ADR-374 D4).")], Some(format!("Write one of `{}.{}(scalars: n)`, `{}.{}(graphemes: n)` or `{}.{}(bytes: n)`.", shown, way, shown, way, shown, way))));
+        return;
+    }
+    let help: String = String::from("Take the position from the text the move walks: `t.start()`, `t.end()` or a match of `t.find(…)`, bound by a `let` in this function; a scanner that keeps its place holds a `text::Cursor`.");
+    let notes: Vec<String> = vec![String::from("A position is a byte offset below the language: a move is handed the text the position came from, which the compiler follows through names and branches (ADR-374 D4, D5).")];
+    let held: Option<CheckPosText> = check_pos_text_of(&state, world, receiver);
+    if held.is_none() {
+        state.findings.push(check_refusal("NK1214", span, format!("`{}` moves {}, but which text it belongs to is not known here: a position moves only in the text it was taken from.", shown, way), notes, Some(help)));
+        return;
+    }
+    let text: CheckPosText = match held { Some(__nikaia_value) => __nikaia_value, None => return };
+    if text.chosen {
+        state.findings.push(check_refusal("NK1214", span, format!("`{}` moves {}, but it is a position of a text chosen at run time: a position moves only in one text.", shown, way), notes, Some(help)));
+        return;
+    }
+    let now: Option<CheckPosText> = check_pos_text_named(&state, world, &text.text);
+    let again: String = nikaia_std::index::or(match now.as_ref().map(|__nikaia_it| __nikaia_it.key.as_str()) {
+        Some(__nikaia_it) => Some(nikaia_std::block::Text::from(__nikaia_it.to_string())),
+        None => None,
+    }, || "".into()); #[allow(clippy::redundant_locals)] let notes = notes;
+    if again != text.key {
+        state.findings.push(check_refusal("NK1214", span, format!("`{}` moves {}, but `{}`, the text it belongs to, is another text here.", shown, way, written_expression(world.words, &text.text)), notes, Some(help)));
+        return;
+    }
+    state.facts.pos_moves.insert(id_of(expr) as i64, text.text.clone());
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn check_pos_in_text(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, text: &Expr, position: &Expr, doing: &str, span: &Span) {
+    let held: CheckPosText = match check_pos_text_of(&state, world, position) { Some(__nikaia_value) => __nikaia_value, None => return };
+    let shown = written_expression(world.words, text);
+    let at = written_expression(world.words, position);
+    let notes: Vec<String> = vec![String::from("A position is a boundary in exactly one text, the one it was taken from; in another it may fall inside a scalar, or read the wrong place (ADR-374 D5).")];
+    let help: String = format!("Take the position from `{}` itself: `{}.start()`, `{}.end()`, or a match of `{}.find(…)`.", shown, shown, shown, shown); #[allow(clippy::redundant_locals)] let notes = notes;
+    if held.chosen {
+        state.findings.push(check_refusal("NK1214", span, format!("`{}` is {} at `{}`, a position of a text chosen at run time.", shown, doing, at), notes, Some(help)));
+        return;
+    }
+    let own: CheckPosText = match check_pos_text_named(&state, world, text) { Some(__nikaia_value) => __nikaia_value, None => return };
+    if own.key != held.key { state.findings.push(check_refusal("NK1214", span, format!("`{}` is {} at `{}`, a position of `{}`, another text.", shown, doing, at, written_expression(world.words, &held.text)), notes, Some(help))); }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn check_pos_assigned(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, target: &Expr, value: &Expr, span: &Span) {
+    let local: CheckLocal = match target {
+        Expr::Variable(name, _) => { let name = *name; match state.binding(world.words.resolve(name)) { Some(__nikaia_value) => __nikaia_value, None => return } },
+        _ => return,
+    };
+    let held: CheckPosText = match match state.facts.pos_texts.get(&local.id) {
+        Some(__nikaia_it) => Some(__nikaia_it.clone()),
+        None => None,
+    } { Some(__nikaia_value) => __nikaia_value, None => return };
+    let given: Option<CheckPosText> = check_pos_text_of(&state, world, value);
+    let given_key: String = nikaia_std::index::or(match given.as_ref().map(|__nikaia_it| __nikaia_it.key.as_str()) {
+        Some(__nikaia_it) => Some(nikaia_std::block::Text::from(__nikaia_it.to_string())),
+        None => None,
+    }, || "".into());
+    let chosen: bool = nikaia_std::index::or(given.as_ref().map(|__nikaia_it| __nikaia_it.chosen), || true);
+    if given.is_some() && !chosen && given_key == held.key { return; }
+    let of = written_expression(world.words, &held.text);
+    let which = if given.is_none() { String::from("whose text is not known here") } else if chosen { String::from("of a text chosen at run time") } else { format!("of `{}`", written_expression(world.words, &match given { Some(__nikaia_value) => __nikaia_value, None => return }.text)) };
+    state.findings.push(check_refusal("NK1214", span, format!("`{}` holds positions of `{}`, and is given `{}`, a position {}.", local.name, of, written_expression(world.words, value), which), vec![String::from("A name keeps the text its positions belong to, which every move and cut of it is handed (ADR-374 D5).")], Some(format!("Give `{}` positions of `{}` only: its `start()`, `end()`, a match of `{}.find(…)` or a move of one.", local.name, of, of))));
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
 pub(crate) fn check_core_index<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, expr: &Expr, base: &Expr, index: &Expr, span: &Span) -> Ty {
     let writing = state.flow.writing_index;
     state.flow.writing_index = false;

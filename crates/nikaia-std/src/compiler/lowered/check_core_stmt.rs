@@ -1064,6 +1064,10 @@ pub(crate) fn check_core_stmt_let<H: CheckHost>(state: &mut CheckState, world: &
         let position = check_core_places_text_position(&state, world, value);
         if position.is_some() { state.text_positions.insert(id, nikaia_std::index::or(position, || CheckTextPosition { text: String::from(""), step: -1 })); }
     }
+    if names.len() == 1 && shape.is_empty() {
+        let held: Option<CheckPosText> = check_pos_text_of(&state, world, value);
+        if held.is_some() { state.facts.pos_texts.insert(id, match held { Some(__nikaia_value) => __nikaia_value, None => return check_core_stmt_unit() }); }
+    }
     if ty.is_none() && !mutable {
         match value {
             Expr::LitChar(written, _) => {
@@ -1459,6 +1463,7 @@ pub(crate) fn check_core_stmt_assign<H: CheckHost>(state: &mut CheckState, world
         check_fields_map_first_written(state, world, target, value, &found, span);
     }
     if op.is_none() { check_core_a_kept_lambda(state, world, host, &into, value, span); }
+    if op.is_none() { check_pos_assigned(state, world, target, value, span); }
     if op.is_none() && state.mixed_text_assigned(world, target, value, &found) { return check_core_stmt_unit(); }
     if op.is_none() {
         let built = state.text_literal(world, &into, value, true);

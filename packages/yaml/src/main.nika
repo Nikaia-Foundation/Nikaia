@@ -2785,8 +2785,8 @@ fn block_end(header: u32, from: u32, s: String) -> u32 sync {
 // indentation `indent`; for a folded one (8.1.3) a single break between two
 // lines that start with no space is a space and each empty line between them
 // a break, every other break kept; the end chomped (8.1.1.2). The lines are
-// views of the raw text, copied out as slices; the indentation is spaces
-// (8.1.1.1), so each of its columns is one byte.
+// views of the raw text, copied out as cuts at text positions; the
+// indentation is spaces (8.1.1.1), so each of its columns is one byte.
 fn block(raw: String, indent: i64, chomp: Chomp, folded: bool) -> String sync {
 	// The columns each line skips; a negative indentation skips none.
 	let mut skip = 0
@@ -2825,7 +2825,7 @@ fn block(raw: String, indent: i64, chomp: Chomp, folded: bool) -> String sync {
 			} else {
 				out.push_str(breaks(row - prev))
 			}
-			out.push_str(bs[skip..<size].text() catch { "" })
+			push_between(out, line, skip, size)
 			prev = row
 			prev_more = more
 		}
@@ -2850,6 +2850,16 @@ fn block(raw: String, indent: i64, chomp: Chomp, folded: bool) -> String sync {
 		Chomp::Keep => out.push_str(breaks(rows - prev))
 	}
 	return out
+}
+
+// The bytes `a..<b` of `t` onto `out`. The caller ends both at an ASCII byte
+// it tested or at an end of `t`, so each is a scalar boundary: the cut moves
+// by bytes (ADR-374 D4) and copies the text without checking it as UTF-8
+// again, as a cut of the bytes back into text would (#2453).
+fn push_between(mut out: String, t: String, a: i64, b: i64) sync {
+	let p = t.start().forward(bytes: a) ?? return
+	let q = t.start().forward(bytes: b) ?? return
+	out.push_str(t.between(p, q))
 }
 
 // Folds the lines of a flow scalar: the spaces around a line break go, one

@@ -1,0 +1,13 @@
+// A move is handed the text its position came from (ADR-374 D4, D5): a
+// position handed in as a parameter belongs to a text this function cannot
+// name, so it does not move, NK1214 (#743).
+use std::text
+
+fn next(t: String, p: text::Pos) -> text::Pos? {
+    return p.forward(scalars: 1)
+}
+
+fn main() throws {
+    let t = "abc"
+    println(next(t, t.start()) == null)
+}

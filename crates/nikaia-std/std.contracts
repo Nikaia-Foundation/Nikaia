@@ -8338,6 +8338,26 @@ orders = true
 hashes = true
 copies = true
 
+# **The position `n` units on, in the one unit written** (ADR-374 D4):
+# `scalars:`, `graphemes:` or `bytes:`, exactly one (`NK1285`); `null` past the
+# end, and for `bytes:` inside a scalar. A position of the same text, which the
+# compiler finds the move by (D5, `NK1214`).
+[fn."text::Pos::forward"]
+pub = true
+panics = true
+sync = true
+touches = []
+signature = "(self; scalars: i64 = 0, graphemes: i64 = 0, bytes: i64 = 0) -> text::Pos?"
+
+# **The position `n` units back**, as `forward` (ADR-374 D4): `null` before the
+# start, and for `bytes:` inside a scalar.
+[fn."text::Pos::back"]
+pub = true
+panics = true
+sync = true
+touches = []
+signature = "(self; scalars: i64 = 0, graphemes: i64 = 0, bytes: i64 = 0) -> text::Pos?"
+
 # **A text and a position in it** (ADR-374 D6), a view of the text: what a
 # scanner that keeps its place holds, since a position is no field.
 [type."text::Cursor"]

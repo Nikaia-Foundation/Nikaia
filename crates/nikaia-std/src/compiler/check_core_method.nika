@@ -1096,6 +1096,8 @@ fn check_core_method[H: CheckHost](mut state: CheckState, world: ref CheckWorld,
         state.stored_frames.push(CheckStoredCode::empty())
     }
     let walked = check_core_method_walked(state, world, host, expr, safe, receiver, method, args, config, span)
+    // **A position moves, cuts and searches in its own text** (ADR-374 D4, D5).
+    check_pos_call(state, world, expr, receiver, args, config, span)
     let listed = mapped && check_core_stmt_a_list_type(walked)
     let found = check_core_method_deadline(state, world, receiver, config, walked)
     state.flow.method_passed.remove(id_of(receiver) as i64)

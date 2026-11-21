@@ -1,0 +1,19 @@
+// A position is no field (ADR-374 D6): a field of type `text::Pos`, or of a
+// type holding one, is NK1284, and the help names `text::Cursor` (#743).
+use std::text
+
+struct Scanner {
+    text: String,
+    at: text::Pos,
+}
+
+struct Marks {
+    seen: Vec[text::Pos?],
+}
+
+fn main() throws {
+    let t = "ab"
+    let s = Scanner { text: t, at: t.start() }
+    let m = Marks { seen: [] }
+    println(f"{s.text} {m.seen.len()}")
+}

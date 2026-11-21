@@ -2014,6 +2014,36 @@ impl EmitState {
             out.push(")")
             return
         }
+        // **A position moves in the unit it names** (ADR-374 D4), handed the
+        // text the checker found it belongs to (D5).
+        let moved: Expr? = self.facts.pos_moves.get(node_key(node))?.clone()
+        if (name == "forward" || name == "back") && moved != null {
+            let text: Expr = moved ?? return
+            let mut unit: String = ""
+            let mut count: Vec[Expr] = []
+            if emit_call_option_named(world, config, "scalars").len() > 0 {
+                unit = "scalars"
+                count = emit_call_option_named(world, config, "scalars")
+            } else if emit_call_option_named(world, config, "graphemes").len() > 0 {
+                unit = "graphemes"
+                count = emit_call_option_named(world, config, "graphemes")
+            } else {
+                unit = "bytes"
+                count = emit_call_option_named(world, config, "bytes")
+            }
+            out.push(f"nikaia_std::text::{name}_{unit}(&")
+            self.emit_core_nested(world, walk, out, host, text, 255, depth, flow, scope)
+            out.push(", ")
+            self.emit_core_nested(world, walk, out, host, receiver, 0, depth, flow, scope)
+            out.push(", ")
+            if count.len() > 0 {
+                self.emit_core_nested(world, walk, out, host, count[0], 0, depth, flow, scope)
+            } else {
+                out.push("0")
+            }
+            out.push(")")
+            return
+        }
         // **A `Bytes` cut by a set** (ADR-375 D3): `std`'s `split`, which
         // takes a `Bytes`, a cut and a text's own bytes alike.
         if name == "split" && args.len() == 1 && self.facts.bytes_splits.contains(node_key(receiver)) {

@@ -99,6 +99,10 @@ impl CheckState {
         let mut held: Vec<FieldContract> = vec![];
         held.reserve(fields.iter().size_hint().0); for field in fields.iter() {
             let ty = self.collect_declared(world, beside, &field.ty, &field.span);
+            if ty.text().contains("text::Pos") {
+                let shown = format!("{}.{}", world.here.text(name), world.here.text(field.name));
+                self.findings.push(check_refusal("NK1284", &field.span, format!("`{}` holds a `text::Pos`, and a position is no field: nothing ties it to the text it belongs to.", shown), vec![String::from("A position belongs to exactly one text, which the compiler follows through names, parameters and branches; a field keeps its own sources, so a text field beside it is no tie (ADR-374 D5, D6).")], Some(String::from("Hold the text and the position together in a `text::Cursor`: `text::Cursor(t)`, `c.at()`, `c.go(p)`, `c.until(needle)`, `c.rest()`."))));
+            }
             held.push(FieldContract { name: world.here.text(field.name), ty: ty.parameterise(&parameters), public: field.is_public, default: collect_default_written((field.default).as_ref()), attributes: vec![] });
         }
         let own = world.here.text(name); #[allow(unused_mut, clippy::redundant_locals)] let mut order = order;

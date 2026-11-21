@@ -3209,7 +3209,7 @@ pub mod check_exprs {
 pub mod check_extern {}
 pub mod check_facts {
     #[allow(unused_imports)]
-    pub use super::{FactWrap, FactKeyForm, FactViewed, FactNarrowing, FactPausing, FactClaim, CheckAsyncWaitAt, CheckAsyncWait, CheckFacts, check_claims_report};
+    pub use super::{FactWrap, FactKeyForm, FactViewed, FactNarrowing, FactPausing, CheckPosText, FactClaim, CheckAsyncWaitAt, CheckAsyncWait, CheckFacts, check_claims_report};
 }
 pub mod check_fallible {
     #[allow(unused_imports)]
@@ -3920,4 +3920,4 @@ pub fn nikaia_run_tests(filters: &[std::string::String], list: bool, more: std::
 /// **The digest of this lowered set** (#1610): every file `lower-std` wrote
 /// beside this index, and the index above this line. Compiled into the same
 /// crate as the code it names, it is the compiler's identity for its caches.
-pub const LOWERED_DIGEST: &str = "6eecea782338474233a90ce4161e09b823013a0384dbb63459780148d09b606c";
+pub const LOWERED_DIGEST: &str = "a80dd67d1ace81ca5cab080d91da49fea6451df8da6a0d6f644bcc125c5fff7a";

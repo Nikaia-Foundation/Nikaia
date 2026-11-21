@@ -98,6 +98,77 @@ pub fn split_at(text: &str, at: Pos) -> (&str, &str) {
     text.split_at(at.0)
 }
 
+// **A position moves only in a unit it names** (ADR-374 D4): `p.forward(scalars:
+// n)` and the rest lower to these, handed the text the compiler found `p`
+// belongs to (D5). Each gives `None` past either end, `bytes:` also inside a
+// scalar, and a negative count. Until D8, the text is cut at `p` with Rust's
+// check of the boundary.
+
+/// `p.forward(scalars: n)`: `n` scalars on.
+#[inline]
+pub fn forward_scalars(text: &str, p: Pos, n: i64) -> Option<Pos> {
+    let n = usize::try_from(n).ok()?;
+    let mut at = p.0;
+    let mut scalars = text[p.0..].chars();
+    for _ in 0..n {
+        at += scalars.next()?.len_utf8();
+    }
+    Some(Pos(at))
+}
+
+/// `p.back(scalars: n)`: `n` scalars back.
+#[inline]
+pub fn back_scalars(text: &str, p: Pos, n: i64) -> Option<Pos> {
+    let n = usize::try_from(n).ok()?;
+    let head = &text[..p.0];
+    let mut at = head.len();
+    let mut scalars = head.chars();
+    for _ in 0..n {
+        at -= scalars.next_back()?.len_utf8();
+    }
+    Some(Pos(at))
+}
+
+/// `p.forward(graphemes: n)`: `n` graphemes on.
+#[inline]
+pub fn forward_graphemes(text: &str, p: Pos, n: i64) -> Option<Pos> {
+    let n = usize::try_from(n).ok()?;
+    let rest = &text[p.0..];
+    let mut at = p.0;
+    let mut graphemes = unicode_segmentation::UnicodeSegmentation::graphemes(rest, true);
+    for _ in 0..n {
+        at += graphemes.next()?.len();
+    }
+    Some(Pos(at))
+}
+
+/// `p.back(graphemes: n)`: `n` graphemes back.
+#[inline]
+pub fn back_graphemes(text: &str, p: Pos, n: i64) -> Option<Pos> {
+    let n = usize::try_from(n).ok()?;
+    let head = &text[..p.0];
+    let mut at = head.len();
+    let mut graphemes = unicode_segmentation::UnicodeSegmentation::graphemes(head, true);
+    for _ in 0..n {
+        at -= graphemes.next_back()?.len();
+    }
+    Some(Pos(at))
+}
+
+/// `p.forward(bytes: n)`: `n` bytes on, an addition and a test of one byte.
+#[inline]
+pub fn forward_bytes(text: &str, p: Pos, n: i64) -> Option<Pos> {
+    let at = p.0.checked_add(usize::try_from(n).ok()?)?;
+    text.is_char_boundary(at).then_some(Pos(at))
+}
+
+/// `p.back(bytes: n)`: `n` bytes back.
+#[inline]
+pub fn back_bytes(text: &str, p: Pos, n: i64) -> Option<Pos> {
+    let at = p.0.checked_sub(usize::try_from(n).ok()?)?;
+    (p.0 <= text.len() && text.is_char_boundary(at)).then_some(Pos(at))
+}
+
 #[cold]
 #[inline(never)]
 #[track_caller]
