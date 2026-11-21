@@ -3920,4 +3920,4 @@ pub fn nikaia_run_tests(filters: &[std::string::String], list: bool, more: std::
 /// **The digest of this lowered set** (#1610): every file `lower-std` wrote
 /// beside this index, and the index above this line. Compiled into the same
 /// crate as the code it names, it is the compiler's identity for its caches.
-pub const LOWERED_DIGEST: &str = "9cd08a8d3889db30931c17cee1a1a3c1e44f33d76b5aeff16d673258e468ce10";
+pub const LOWERED_DIGEST: &str = "fabe9f3b7cfe5400ac3716363ce51191bfe194154011305b66b0b0e427892dcb";

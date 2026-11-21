@@ -1,5 +1,5 @@
 //! What a C library hands back that this language has to copy
-//! ([ADR-302](../../../docs/specification/adr/adr-302.md) D8).
+//! ([ADR-c-boundary-v1](../../../docs/specification/adr/adr-c-boundary-v1.md) D8).
 //!
 //! `getenv` hands back a C string: memory the caller does not own, whose
 //! lifetime is the library's, and which ends at a zero byte rather than
@@ -9,15 +9,15 @@
 //! own `unsafe` block.
 //!
 //! **The handle is opaque and has no `cleanup`**, which is what tells it from
-//! [ADR-302](../../../docs/specification/adr/adr-302.md) D7's: a `FILE` is ours
+//! [ADR-c-boundary-v1](../../../docs/specification/adr/adr-c-boundary-v1.md) D7's: a `FILE` is ours
 //! to close and a C string is not ours at all. Nothing here frees anything.
 
 /// **A C function said it hands back a handle, and handed back nothing**
-/// ([ADR-302](../../../docs/specification/adr/adr-302.md) D12).
+/// ([ADR-c-boundary-v1](../../../docs/specification/adr/adr-c-boundary-v1.md) D12).
 ///
 /// A declaration that does not say `?` is the author's **claim** that this
 /// never happens — the arrangement `sync` on a declaration already has
-/// ([ADR-302](../../../docs/specification/adr/adr-302.md) D2). A declaration is
+/// ([ADR-c-boundary-v1](../../../docs/specification/adr/adr-c-boundary-v1.md) D2). A declaration is
 /// written from a header by somebody reading it, and reading is where it can go
 /// wrong, so the claim is checked: what a program gets is an abort in this
 /// language's words rather than a handle that is secretly null.
@@ -55,7 +55,7 @@ pub struct CStr(CText);
 
 impl CStr {
     /// What a declaration that says `-> CStr` hands back
-    /// ([ADR-302](../../../docs/specification/adr/adr-302.md) D12): the text,
+    /// ([ADR-c-boundary-v1](../../../docs/specification/adr/adr-c-boundary-v1.md) D12): the text,
     /// or an abort naming the declaration that claimed there would be one.
     #[track_caller]
     pub fn from_c(declaration: &str, text: Option<CText>) -> CStr {
@@ -76,7 +76,7 @@ impl CStr {
     /// **It fails in one way**, and only one: the bytes may not be UTF-8, which
     /// text in this language is — the same failure `fs::read_to_string` has, for
     /// the same reason. *There is no text* is a **value**
-    /// ([ADR-302](../../../docs/specification/adr/adr-302.md) D13): a declaration
+    /// ([ADR-c-boundary-v1](../../../docs/specification/adr/adr-c-boundary-v1.md) D13): a declaration
     /// says `-> CStr?` where the library may find nothing, and the program
     /// writes `?? ""`.
     pub fn to_string(self) -> Result<crate::block::Text, crate::io::IoError> {

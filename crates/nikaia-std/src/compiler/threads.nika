@@ -180,7 +180,7 @@ fn crossing_walk(ty: ref Ty, walking: ref Walking, mut seen: collections::BTreeS
         Ty::Unknown => Crossing::Undecided { part: "?" },
         // A count is part of the type and not of the value (ADR-152 D1).
         Ty::Count(_) => Crossing::May,
-        // What the C boundary lends lives for the call (ADR-302 D5); a
+        // What the C boundary lends lives for the call (ADR-c-boundary-v1 D5); a
         // variable nothing bound, a lambda's captures and what a sequence
         // walks are written down nowhere.
         Ty::Pointed { .. } => Crossing::Undecided { part: ty.text() },

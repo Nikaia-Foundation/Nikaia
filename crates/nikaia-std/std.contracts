@@ -5643,7 +5643,7 @@ signature = "(text: ref String) -> f64?"
 # `touches` line above bought it (ADR-292). The claim is a promise about a
 # Rust type, written here and reviewed like code, exactly as `sync = true` is.
 # **Text a C library owns**
-# ([ADR-302](../../docs/specification/adr/adr-302.md) D8). An opaque handle with
+# ([ADR-c-boundary-v1](../../docs/specification/adr/adr-c-boundary-v1.md) D8). An opaque handle with
 # **no cleanup**, which is what tells it from that record's D3: a `FILE` is ours
 # to close and a C string is not ours at all, so nothing here frees anything.
 #
@@ -5666,7 +5666,7 @@ pub = true
 #
 # `throws` in the one way this can fail - bytes that are not UTF-8 - which is
 # what `fs::read_to_string` fails on for the same reason. *There is no text* was
-# the second until [ADR-302](../../docs/specification/adr/adr-302.md) D13 made it
+# the second until [ADR-c-boundary-v1](../../docs/specification/adr/adr-c-boundary-v1.md) D13 made it
 # a **value**: a declaration says `-> CStr?` where the library may find nothing,
 # and `getenv` finding nothing is an ordinary Tuesday rather than an error.
 # A copy of the text, owned by whoever asked for it.

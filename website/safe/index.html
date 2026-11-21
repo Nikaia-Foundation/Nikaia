@@ -106,8 +106,8 @@ percent(140)</code></pre></div><div class="home-code markdown-body"><pre class="
       <div class="safe-tile safe-tile-b">
         <span class="safe-chip safe-chip-build">Caught at compile time</span>
         <h3>What crosses into C</h3>
-        <p>A call into a C library is written inside <code>unsafe</code>, and what crosses is a view that lives for the call or an opaque handle that a cleanup releases. A lock may go into a task of the program's own, and the compiler refuses it where it would reach code that nothing describes.</p>
-        <a class="safe-more" href="{{ "/docs/specification/adr/adr-302.html" | relative_url }}">ADR-302 →</a>
+        <p>A call into a C library is written inside <code>unsafe</code>, and what crosses is a view that lives for the call or an opaque handle that a cleanup releases; an address C keeps is a raw pointer, written inside <code>unsafe</code> too. A lock may go into a task of the program's own, and the compiler refuses it where it would reach code that nothing describes.</p>
+        <a class="safe-more" href="{{ "/docs/specification/adr/adr-c-boundary-v1.html" | relative_url }}">ADR-c-boundary-v1 →</a>
       </div>
     </div>
   </div>

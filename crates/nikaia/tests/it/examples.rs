@@ -58,7 +58,7 @@ const DIRECTORIES_CHECKED_ELSEWHERE: &[(&str, &str)] = &[
         "tests/it/project.rs: the_http_package_serves_its_example",
     ),
     // **The C boundary against a real library**
-    // ([ADR-302](../../../docs/specification/adr/adr-302.md) step 5). It
+    // ([ADR-c-boundary-v1](../../../docs/specification/adr/adr-c-boundary-v1.md) step 5). It
     // needs `libsqlite3` and `pkg-config`, which not every machine has, so its
     // test skips rather than fails where they are missing — and a run that may
     // skip cannot be one this file asserts output for.

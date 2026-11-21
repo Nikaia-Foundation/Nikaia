@@ -70,7 +70,7 @@ shared-bytes = { path = "../unsafe/shared-bytes" }
 # Bytes checked as text once, in chunks across the pool, and a file mapped and
 # checked (Part III 17.1).
 checked-text = { path = "../unsafe/checked-text", features = ["rayon", "map", "simd"] }
-# Text a C library owns, copied out (ADR-302 D8).
+# Text a C library owns, copied out (ADR-c-boundary-v1 D8).
 c-text = { path = "../unsafe/c-text" }
 c-boundary = { path = "../unsafe/c-boundary" }
 # An error's site in one word, or its cold part boxed (ADR-280 D24).

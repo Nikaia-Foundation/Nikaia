@@ -830,7 +830,7 @@ pub struct CheckState {
     /// file, where no call crosses a file boundary.
     pub modules: collections::BTreeSet[String],
     /// **The names an `extern "C"` block declares**
-    /// ([ADR-302](../../docs/specification/adr/adr-302.md) D3).
+    /// ([ADR-c-boundary-v1](../../docs/specification/adr/adr-c-boundary-v1.md) D3).
     ///
     /// Collected from the item tree rather than read off the ledger, because
     /// the ledger records what a name *is* and this asks where it **came
@@ -838,7 +838,7 @@ pub struct CheckState {
     /// one of them has to be called inside an `unsafe` block.
     pub foreign_names: collections::BTreeSet[String],
     /// **The opaque handles this file declares**
-    /// ([ADR-302](../../docs/specification/adr/adr-302.md) D7), by name.
+    /// ([ADR-c-boundary-v1](../../docs/specification/adr/adr-c-boundary-v1.md) D7), by name.
     ///
     /// A handle is an address the language never dereferences, so it has no
     /// fields and no indexing — and both are refused here rather than left to

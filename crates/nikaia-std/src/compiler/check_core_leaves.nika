@@ -35,7 +35,13 @@ fn check_core_a_field_of_a_borrowed_subject_given[H: CheckHost](mut state: Check
     }
     let field = check_core_field_of_self(world, value) ?? return
     let ty = check_core_expr(state, world, host, value, span)
-    if ty.is_unknown() || copies_plainly(ty) {
+    // **A type that copies is no piece taken out** (ADR-150, #2468): a
+    // `time::Duration`, which `std`'s ledger copies, as much as an `i64`.
+    let in_package = match ty {
+        Ty::Named { name, .. } => state.copies_in_the_package.contains(name),
+        else => false,
+    }
+    if ty.is_unknown() || state.copied(world, ty) || in_package {
         return
     }
     if read && is_text_type(ty) {

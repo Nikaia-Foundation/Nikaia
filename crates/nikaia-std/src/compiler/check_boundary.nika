@@ -91,7 +91,7 @@ impl CheckState {
     }
 
     /// **Whether this argument is a count a C declaration takes in `size_t`**
-    /// ([ADR-302](../../docs/specification/adr/adr-302.md) D6).
+    /// ([ADR-c-boundary-v1](../../docs/specification/adr/adr-c-boundary-v1.md) D6).
     ///
     /// `usize` is not a type this language's own values have
     /// ([ADR-285](../../docs/specification/adr/adr-285.md) D1) — a length is an
