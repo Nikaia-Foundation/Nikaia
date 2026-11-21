@@ -1,0 +1,15 @@
+// #1467: a variant written without its enum, `Op(t)`, is refused (NK1117)
+// inside a list pattern too, instead of failing in rustc (NK1343).
+enum Cmd {
+    Op(i64),
+    Nop,
+}
+
+fn main() throws {
+    let cmds = [Cmd::Op(3)]
+    let said = match cmds {
+        [Op(t)] => t,
+        else => 0,
+    }
+    println(said)
+}

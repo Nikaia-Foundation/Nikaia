@@ -549,8 +549,8 @@ impl CheckState {
                 if open.bytes.contains(&read) { if first_byte.is_none() || nikaia_std::index::or(first_byte.as_ref().map(|__nikaia_it| __nikaia_it.start), || 0u32) > at.start { first_byte = Some(at.clone()); } } else if first_scalar.is_none() || nikaia_std::index::or(first_scalar.as_ref().map(|__nikaia_it| __nikaia_it.start), || 0u32) > at.start { first_scalar = Some(at.clone()); }
             }
             if first_byte.is_some() && first_scalar.is_some() {
-                let byte_at = nikaia_std::index::or(first_byte, || open.at.clone().into());
-                let scalar_at = nikaia_std::index::or(first_scalar, || open.at.clone().into());
+                let byte_at = nikaia_std::index::or(first_byte, || open.at.clone());
+                let scalar_at = nikaia_std::index::or(first_scalar, || open.at.clone());
                 let mut first = "scalar";
                 let mut second = "u8";
                 let mut later = byte_at.clone();

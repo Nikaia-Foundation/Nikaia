@@ -1,0 +1,56 @@
+// #1323: a value whose cleanup may pause, bound in a `sync` function, dies
+// there, and its settle pauses: `NK2202` names the value and the cleanup
+// (ADR-297 D3). A cleanup that says `sync` settles there without a pause
+// (`a_cleanup_that_says_sync_settles_in_a_sync_function`), and one handed
+// back before its block ends dies elsewhere: `handed_back` and `tail` are
+// no refusal, `half_handed_back` (handed back on one path only) is.
+use std::fs
+
+struct Res {
+    name: String,
+}
+
+impl Cleanup for Res {
+    fn cleanup(ref mut self) throws {
+        fs::write(f"nk1323-{self.name}", fs::scratch(), "x")
+    }
+}
+
+struct Log {
+    name: String,
+}
+
+impl Cleanup for Log {
+    fn cleanup(ref mut self) {
+        fs::write(f"nk1323-{self.name}", fs::scratch(), "x") catch { }
+    }
+}
+
+fn make() sync throws {
+    let _r = Res { name: "a" }
+}
+
+fn handed_back() -> Log sync {
+    let l = Log { name: "b" }
+    return l
+}
+
+fn tail() -> Log sync {
+    let l = Log { name: "c" }
+    l
+}
+
+fn half_handed_back(early: bool) -> Log sync {
+    let l = Log { name: "d" }
+    if early {
+        return l
+    }
+    return Log { name: "e" }
+}
+
+fn main() throws {
+    make()
+    let _b = handed_back()
+    let _c = tail()
+    let _d = half_handed_back(true)
+}

@@ -645,6 +645,15 @@ pub fn spoken(ty: ref Ty, other: ref Ty?) -> String {
         }
         return out
     }
+    // **A walk with a deadline says so** (#1424): `timed` is no word of the
+    // type's text, so `par_iter()` and `par_iter(within: d)` printed alike.
+    let timed = match ty {
+        Ty::Seq { shape, .. } => shape.timed,
+        else => false,
+    }
+    if timed {
+        return f"`{written}` with a deadline (`within:`)"
+    }
     let against = other ?? return f"`{written}`"
     if !holds_a_view(against) || ty_shown(against) != written {
         return f"`{written}`"

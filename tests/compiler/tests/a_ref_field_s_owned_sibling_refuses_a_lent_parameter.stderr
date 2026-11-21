@@ -1,0 +1,8 @@
+error[NK1106]: `Holder.items` holds a `Vec[i64]` of its own, but you're giving it a view of a `Vec[i64]`.
+  --> tests/a_ref_field_s_owned_sibling_refuses_a_lent_parameter.nika:8:40
+   |
+ 8 |     return Holder { name: name, items: items }
+   |                                        ^^^^^
+   |
+   = help: Write `.clone()` to turn this view into a value of its own.
+1 type error

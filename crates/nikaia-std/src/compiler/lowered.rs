@@ -2923,17 +2923,6 @@ mod tiers_lowered {
 pub use tiers_lowered::*;
 
 #[allow(unsafe_code)]
-mod toml_lowered {
-    #[allow(unused_imports)]
-    use super::*;
-    #[allow(unused_imports)]
-    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
-    include!("lowered/toml.rs");
-}
-#[allow(unused_imports)]
-pub use toml_lowered::*;
-
-#[allow(unsafe_code)]
 mod touch_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -3826,10 +3815,6 @@ pub mod throws {
     pub use super::{AS_VALUE, MethodsCalled, ThrowsGraph, unit_throws, stored_throws, params_as_places, throws_given, throws_published, error_sets, error_type, Thrown, Contribution};
 }
 pub mod tiers {}
-pub mod toml {
-    #[allow(unused_imports)]
-    pub use super::{Toml};
-}
 pub mod touch {
     #[allow(unused_imports)]
     pub use super::{Reached, Reach, TouchGraph, unit_touches, touches_of_graph};
@@ -3887,12 +3872,12 @@ pub fn nikaia_tests() -> std::vec::Vec<(std::string::String, fn() -> Result<(), 
     let mut all: std::vec::Vec<(std::string::String, fn() -> Result<(), std::boxed::Box<dyn std::error::Error>>)> = std::vec::Vec::new();
     all.extend(ast_nikaia_tests().into_iter().map(|(name, run)| (name.to_string(), run)));
     all.extend(crossing_nikaia_tests().into_iter().map(|(name, run)| (name.to_string(), run)));
+    all.extend(locks_nikaia_tests().into_iter().map(|(name, run)| (name.to_string(), run)));
     all.extend(manifest_nikaia_tests().into_iter().map(|(name, run)| (name.to_string(), run)));
     all.extend(modules_nikaia_tests().into_iter().map(|(name, run)| (name.to_string(), run)));
     all.extend(paths_nikaia_tests().into_iter().map(|(name, run)| (name.to_string(), run)));
     all.extend(signature_nikaia_tests().into_iter().map(|(name, run)| (name.to_string(), run)));
     all.extend(threads_nikaia_tests().into_iter().map(|(name, run)| (name.to_string(), run)));
-    all.extend(toml_nikaia_tests().into_iter().map(|(name, run)| (name.to_string(), run)));
     all.extend(touch_nikaia_tests().into_iter().map(|(name, run)| (name.to_string(), run)));
     all.extend(ty_nikaia_tests().into_iter().map(|(name, run)| (name.to_string(), run)));
     all.extend(logic::nikaia_tests().into_iter().map(|(test, run)| (format!("logic::{test}"), run)));
@@ -3936,4 +3921,4 @@ pub fn nikaia_run_tests(filters: &[std::string::String], list: bool, more: std::
 /// **The digest of this lowered set** (#1610): every file `lower-std` wrote
 /// beside this index, and the index above this line. Compiled into the same
 /// crate as the code it names, it is the compiler's identity for its caches.
-pub const LOWERED_DIGEST: &str = "7ee9fa6069bff60ccc6efcea24e40ae1db8f476c7f7506524746526c3de52bad";
+pub const LOWERED_DIGEST: &str = "c201b66881af8ca6c84ae85b33959cf69db7d98a5c0ff6970a618c37f8d53d7a";

@@ -24,7 +24,18 @@ impl CheckState {
         let binding = self.binding_id(&root);
         CheckTaken { path, ty, from: span.start as i64, at: span.end as i64, seq, choices: self.branch.copy_owned(), until: None, to: nikaia_std::block::Text::from(to.to_string()), binding }
     }
-    pub(crate) fn a_failing_cleanup_held(&mut self, name: &str, finding: CheckFinding, span: &Span) { self.cleanups_pending.push(CheckPendingCleanup { name: nikaia_std::block::Text::from(name.to_string()), binding: None, depth: self.scope.len() as i64, choices: self.branch.copy_owned(), loops: self.flow.loops, from: span.end as i64, leaves: vec![], finding }); }
+    pub(crate) fn a_failing_cleanup_held(&mut self, name: &str, finding: CheckFinding, span: &Span) { self.cleanups_pending.push(CheckPendingCleanup { name: nikaia_std::block::Text::from(name.to_string()), binding: None, depth: self.scope.len() as i64, choices: self.branch.copy_owned(), loops: self.flow.loops, from: span.end as i64, leaves: vec![], finding, handed_on: false }); }
+    pub(crate) fn a_pausing_cleanup_held(&mut self, name: &str, finding: CheckFinding, span: &Span) { self.cleanups_pending.push(CheckPendingCleanup { name: nikaia_std::block::Text::from(name.to_string()), binding: None, depth: self.scope.len() as i64, choices: self.branch.copy_owned(), loops: self.flow.loops, from: span.end as i64, leaves: vec![], finding, handed_on: true }); }
+    pub(crate) fn a_pausing_cleanup_returned(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, value: &Expr) {
+        let name = match value {
+            Expr::Variable(name, _) => { let name = *name; nikaia_std::block::Text::from(world.words.resolve(name).to_string()) },
+            _ => return,
+        };
+        let binding = self.binding_id(&name);
+        let mut kept: Vec<CheckPendingCleanup> = vec![];
+        for held in self.cleanups_pending.iter() { if !held.handed_on || held.name != name || held.binding != binding || held.choices != self.branch || !held.leaves.is_empty() { kept.push(held.clone()); } }
+        self.cleanups_pending = kept;
+    }
     pub(crate) fn failing_cleanups_bound(&mut self) {
         let depth = self.scope.len() as i64;
         for at in 0..self.cleanups_pending.len() as i64 {
@@ -48,7 +59,7 @@ impl CheckState {
     }
     pub(crate) fn closed_by_hand(&self, held: &CheckPendingCleanup) -> bool {
         for taken in self.handed.iter() {
-            if taken.path != held.name || taken.to != "closed by `close`" || taken.binding != held.binding || taken.from < held.from || taken.until.is_some() || taken.choices != held.choices { continue; }
+            if taken.path != held.name || !held.handed_on && taken.to != "closed by `close`" || taken.binding != held.binding || taken.from < held.from || taken.until.is_some() || taken.choices != held.choices { continue; }
             let left = held.leaves.iter().copied().any(|at| { at < taken.from }) || self.ways_out.iter().any(|way| { way.how == "return" && way.at > held.from && way.at < taken.from });
             if !left { return true; }
         }
@@ -536,6 +547,10 @@ impl CheckState {
     // this was written - see `contracts::sync`.
     pub(crate) fn a_sequence_is_taken(&mut self, name: &str, ty: &Ty, span: &Span) {
         if self.reading_only || !a_sequence_that_is_used_up(ty) { return; }
+        if nikaia_std::index::or(self.binding(name).as_ref().map(|__nikaia_it| __nikaia_it.lent), || false) {
+            self.a_lent_sequence_is_taken(&format!("`{}`", name), "the list this loop walks", "that list", ty, span);
+            return;
+        }
         let taken = self.taken(nikaia_std::block::Text::from(name.to_string()), ty.clone(), self.read_seq, "", span);
         self.walked.push(taken);
         let bound = self.frame_of(name);
@@ -551,6 +566,13 @@ impl CheckState {
             help = format!("Collect it into a list before the loop and walk the list: `let {} = {}.collect()`.", name, name);
         }
         self.findings.push(check_refusal("NK2702", span, format!("`{}` is a sequence, and you're using it up inside a {} it was declared outside of.", name, what), vec![format!("A sequence of `{}` makes its elements as they're asked for, so walking it uses it up - and {}.", item, again), String::from("A `Vec` is different: it already holds its elements and can be walked as often as you like.")], Some(help)));
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub(crate) fn a_lent_sequence_is_taken(&mut self, what: &str, holder: &str, again: &str, ty: &Ty, span: &Span) {
+        if self.reading_only || !a_sequence_that_is_used_up(ty) { return; }
+        let item = an_item_text(ty);
+        self.findings.push(check_refusal("NK2702", span, format!("{} is a sequence lent by {}, and using it up would take it out of {}.", what, holder, again), vec![format!("A sequence of `{}` makes its elements as they're asked for, so walking it uses it up (ADR-105 D2): a `for`, a `collect()`, a `count()` or any other walk, or a `let` that names it.", item), String::from("A `for` over a list or a map, or an index into one, only lends the element (ADR-094 D4), and the container would still hold a sequence already used up.")], Some(String::from("Take the sequences out of the container to walk them: `for w in list.drain()`."))));
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.

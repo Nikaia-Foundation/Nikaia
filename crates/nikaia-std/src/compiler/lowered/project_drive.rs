@@ -62,6 +62,21 @@ impl nikaia_std::error::Full for __NikaiaThrows_ProjectDriveRefusal__io_IoError 
     }
 }
 
+impl nikaia_std::error::Members for __NikaiaThrows_ProjectDriveRefusal__io_IoError {
+    fn member(&self) -> &(dyn std::error::Error + 'static) {
+        match self {
+            __NikaiaThrows_ProjectDriveRefusal__io_IoError::ProjectDriveRefusal(e) => e.held() as &(dyn std::error::Error + 'static),
+            __NikaiaThrows_ProjectDriveRefusal__io_IoError::io_IoError(e) => e.held() as &(dyn std::error::Error + 'static),
+        }
+    }
+    fn into_member(self: std::boxed::Box<Self>) -> std::boxed::Box<dyn std::error::Error> {
+        match *self {
+            __NikaiaThrows_ProjectDriveRefusal__io_IoError::ProjectDriveRefusal(e) => std::boxed::Box::new(e.split().0) as std::boxed::Box<dyn std::error::Error>,
+            __NikaiaThrows_ProjectDriveRefusal__io_IoError::io_IoError(e) => std::boxed::Box::new(e.split().0) as std::boxed::Box<dyn std::error::Error>,
+        }
+    }
+}
+
 
 
 
@@ -1110,7 +1125,7 @@ pub async fn project_drive_wrapper<H: ProjectDriveWrapperHost>(host: &H) -> Resu
     let shown: Option<String> = match env::var("NIKAIA_SHOWN_AS") {
         None => None,
         Some(ref value) => {
-            let (entry, written) = nikaia_std::index::or(value.split_once("\x1f"), || ("".into(), "".into()));
+            let (entry, written) = nikaia_std::index::or(value.split_once("\x1f"), || ("", ""));
             if AsRef::<str>::as_ref(&(nikaia_std::fs::path::display(&(project_members_canonical(&source))))) == AsRef::<str>::as_ref(&(entry)) { Some(nikaia_std::block::Text::from(written.to_string())) } else { None }
         },
     };

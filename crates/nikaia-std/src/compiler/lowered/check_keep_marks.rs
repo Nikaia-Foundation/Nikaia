@@ -141,7 +141,7 @@ pub(crate) fn keep_marks_of_body(view: &ParsedView<'_, '_, '_, '_, '_, '_, '_>, 
                     let at = nikaia_std::index::or(keep_marks_keeping_statement(view, item, (match target {
                         Some(__nikaia_it) => Some(nikaia_std::block::Text::from(__nikaia_it.to_string())),
                         None => None,
-                    }).as_deref(), &parameter, own, library, &indexes, resolved, &mut *holes_of), || arg.span.clone().into());
+                    }).as_deref(), &parameter, own, library, &indexes, resolved, &mut *holes_of), || arg.span.clone());
                     out.push(check_refusal("NK2302", &at, format!("`{}` keeps `{}`, but `{}` is not marked `keep`.", found.key, parameter, parameter), vec![String::from("A parameter the body keeps - stores into something that outlives the call, gives to a task, or hands to a parameter that keeps it - says so in the signature (ADR-views-v4 D2)."), String::from("Raised in a file that writes `keep` at least once, until the migration has written it everywhere (#1213).")], Some(keep_marks_help(view, item, &parameter, &found.key))));
                 }
                 if arg.keep && !kept {

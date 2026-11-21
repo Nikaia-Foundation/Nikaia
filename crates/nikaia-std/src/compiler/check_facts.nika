@@ -309,6 +309,12 @@ pub struct CheckFacts {
     /// `update_all_copied`, whose block works on copies, so a panic in it
     /// poisons nothing.
     pub copied_doors: collections::BTreeSet[i64],
+    /// **A door's view handed back out of its block is the value** (#1454),
+    /// by the read's id: an `access` or `access_all` block that ends in its
+    /// parameter, over a number, a `bool`, a `char` (or a tuple of them) or
+    /// an open number. The block sees a reference into the lock, so the
+    /// emitter writes `*v`, the copy.
+    pub door_copies: collections::BTreeSet[i64],
     /// The copies among them that copy text, by the receiver's id: reached
     /// through `?.`, the receiver is a reference to the text, which may itself
     /// be a view (ADR-282 D29), and only `to_string` copies both.
@@ -338,7 +344,8 @@ pub struct CheckFacts {
     /// The `??`s whose fallback is a name of the word the left side holds, a
     /// number, `bool`, `char` or `scalar` (#1841): the fallback is written as
     /// it is, never `.into()`, which left `Or`'s type open beside an
-    /// `Option<&f64>`.
+    /// `Option<&f64>`; and so is any fallback of the struct that copies the
+    /// left side holds (#1302), `m.get(k) ?? zero()`.
     pub word_fallbacks: collections::BTreeSet[i64],
     /// The `??`s whose left side holds a view of text and whose fallback is
     /// a name that is a view of text (#719): the fallback is read as `str`.
@@ -955,6 +962,7 @@ impl CheckFacts {
             copied_slots: collections::BTreeSet(),
             owned_copies: collections::BTreeSet(),
             copied_doors: collections::BTreeSet(),
+            door_copies: collections::BTreeSet(),
             text_copies: collections::BTreeSet(),
             tuple_copies: collections::BTreeMap(),
             static_field_reads: collections::BTreeSet(),

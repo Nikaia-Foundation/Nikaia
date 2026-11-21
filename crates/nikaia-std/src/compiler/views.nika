@@ -2519,16 +2519,22 @@ fn rsrc_struct_fields(unit: ref Unit, asked: ref Asked, here: ref Here, known: r
             whole = rsrc_bare_variable(field.value)
         }
         let mut owning = false
-        let mut either_whole = false
+        let mut moves_in = false
         for (written, ty) in declared {
             if written == named && !ty.is_view && !ty.either && (rsrc_plain_text(asked, ty) || rsrc_scalar(asked, ty)) {
                 owning = true
             }
             if written == named && ty.either && rsrc_text_or_none(asked, ty) && whole {
-                either_whole = true
+                moves_in = true
+            }
+            // **A field whose type holds no view** (ADR-views-v4 D5, #1637)
+            // owns a parameter taken by value given to it whole: a sibling
+            // `ref` field does not make it a view of that parameter.
+            if written == named && !ty.either && whole && !rsrc_type_holds_view(asked, ty) {
+                moves_in = true
             }
         }
-        if either_whole {
+        if moves_in {
             let mut kept = rsrc_none()
             for entry in more {
                 if !entry.starts_with("!") && !entry.starts_with("=") {

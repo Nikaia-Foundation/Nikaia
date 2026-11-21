@@ -11,7 +11,9 @@ place of `trusted:`) added November 19, 2026 (owner's decision on
 D17 (the compiler's own build paths) added November 21, 2026 (owner's decision on
 [#2442](https://github.com/Nikaia-Foundation/Nikaia/issues/2442)); D17 items 6-8
 added the same day (supervisor's decision on
-[#2460](https://github.com/Nikaia-Foundation/Nikaia/issues/2460))
+[#2460](https://github.com/Nikaia-Foundation/Nikaia/issues/2460)); D7's
+`html::Raw` check added the same day (supervisor's decision on
+[#2650](https://github.com/Nikaia-Foundation/Nikaia/issues/2650))
 **Answers:** what the compiler does when data from outside the program reaches
 a place that reads text as code or as a location: a shell command, an SQL
 text, markup written as is, a path with no root to keep it in
@@ -173,6 +175,19 @@ sinks the error the call already throws, with the sink and the part that broke
 it, the part escaped as the log escapes it. Every `fs` call and
 `db::Raw::execute` throw already. `html::Raw` checks where its markup is
 written, a call that throws.
+
+`html::Raw` is checked where it is made (supervisor's decision on
+[#2650](https://github.com/Nikaia-Foundation/Nikaia/issues/2650), November 21,
+2026). The template that writes the markup and `html::Render` stay as they
+are: a template does not throw, and a value does not carry a breach past the
+line that made it. Under `warn`, each part from outside that the compiler did
+not prove at an `html::Raw(...)` site is checked with `html::is_plain` where
+the value is made, and a part that fails throws
+`html::HtmlError::NotPlain(part)` from that site, the part escaped as the log
+escapes it. `std::html` declares that error. The site throws only in a
+function that throws already: in one that does not, `warn` does not lower the
+site, and it stays `NK1308`, because a site whose check cannot throw is a
+breach with no check at all.
 
 ### D8 — It is switched on when our own code builds under it.
 

@@ -1,0 +1,49 @@
+// A `??` over a map of a struct that copies, whose fallback is a call that
+// makes one (#1302): the answer is the struct, found or made, so `.clone()`,
+// a field and a `ref` parameter after it compile. `zero().into()` left the
+// type to rustc, which refused it; a `let` typed `R?` over the map's `get`
+// held the struct, and the checker typed it as a view of the map.
+use std::collections
+
+pub struct R {
+	pub n: i64,
+}
+
+fn zero() -> R {
+	return R { n: 0 }
+}
+
+fn sub(a: ref R, b: ref R) -> R? {
+	return R { n: a.n.checked_sub(b.n) ?? return null }
+}
+
+fn moved(typed: bool) -> i64? {
+	let mut m: collections::BTreeMap[u32, R] = collections::BTreeMap()
+	m.insert(1, R { n: 5 })
+	let cs: Vec[u32] = [1, 2]
+	for c in cs {
+		let add = R { n: 2 }
+		if typed {
+			let known: R? = m.get(c)
+			let had = known ?? zero()
+			m.insert(c, sub(had, add) ?? return null)
+		} else {
+			let had = m.get(c) ?? zero()
+			m.insert(c, sub(had, add) ?? return null)
+		}
+	}
+	return (m.get(2) ?? zero()).n * 10 + (m.get(1) ?? zero()).n
+}
+
+fn main() throws {
+	let mut m: collections::BTreeMap[u32, R] = collections::BTreeMap()
+	m.insert(1, R { n: 5 })
+	let c: u32 = 2
+	let had = (m.get(c) ?? zero()).clone()
+	println(had.n)
+	println((m.get(1) ?? zero()).n)
+	let found = m.get(1) ?? zero()
+	println(found.n)
+	println(moved(true) ?? 0)
+	println(moved(false) ?? 0)
+}

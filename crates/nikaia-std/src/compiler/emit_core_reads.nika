@@ -18,6 +18,15 @@ fn emit_read_a_length(world: ref EmitWorld, expr: ref Expr) -> bool {
     }
 }
 
+/// Whether a `len()` is one of a type `std` counts in a `usize` (the checker's
+/// `std_lengths`, ADR-306 D4).
+fn emit_read_a_counted_length(facts: ref CheckFacts, expr: ref Expr) -> bool {
+    return match expr {
+        Expr::MethodCall { receiver, .. } => facts.std_lengths.contains(node_key(receiver)),
+        else => false,
+    }
+}
+
 /// Whether the expression is a call (through a `?` or not).
 fn emit_read_a_call(expr: ref Expr) -> bool {
     return match expr {
@@ -99,6 +108,12 @@ impl EmitState {
         }
         let counter = if counter_first { lhs } else { rhs }
         let length = if counter_first { rhs } else { lhs }
+        // **Only a length `std` counts is a `usize` below** (#1952): a
+        // `len` of the program's own type, of `cli::Args` or of
+        // `fs::Metadata` hands back an `i64` already.
+        if !emit_read_a_counted_length(self.facts, length) {
+            return false
+        }
         let mut written = EmitOut::empty()
         self.emit_core_nested(world, walk, written, host, length, 255, depth, flow, scope)
         let mut bare: String = ""

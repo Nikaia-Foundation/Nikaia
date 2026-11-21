@@ -1,0 +1,27 @@
+// #1323: a value whose cleanup says `sync` may die in a `sync` function: its
+// settle does not pause (ADR-297 D3, #1317). One whose cleanup may pause is
+// `NK2202` (`a_pausing_cleanup_in_a_sync_function_is_nk2202`).
+
+struct Counted {
+    name: String,
+}
+
+impl Cleanup for Counted {
+    fn cleanup(ref mut self) sync {
+        println(f"cleanup {self.name}") catch { }
+    }
+}
+
+fn bound() sync {
+    let _c = Counted { name: "bound" }
+    if true {
+        let _d = Counted { name: "inner" }
+        println("block ends") catch { }
+    }
+    println("bound ends") catch { }
+}
+
+fn main() throws {
+    bound()
+    println("done")
+}

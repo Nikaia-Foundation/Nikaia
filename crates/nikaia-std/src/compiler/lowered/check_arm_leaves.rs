@@ -641,7 +641,7 @@ impl CheckState {
         }
         for asked in arms.iter() {
             let arm = match asked.tail { Some(__nikaia_value) => __nikaia_value, None => continue };
-            let mut ty = nikaia_std::index::or(self.text_literal(world, want, arm, true), || asked.ty.clone().into());
+            let mut ty = nikaia_std::index::or(self.text_literal(world, want, arm, true), || nikaia_std::index::or(self.tuple_literal(world, &asked.ty, want, arm), || asked.ty.clone().into()).into());
             if ty.is_unknown() && arm_is_a_written_integer(arm) && self.no_integer_is(world, want) { ty = Ty::Named { name: String::from("i64"), args: vec![], view: false }; }
             if what == "field" { self.flow.field_either = mixed; }
             if what == "let" && check_core_stmt_element_view(self, world, arm, &ty, want) == 1 {

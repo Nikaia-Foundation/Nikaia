@@ -284,13 +284,19 @@ impl CheckState {
     /// `x.as_ref().unwrap()`, a `&T`, though its type here is the `T`, so
     /// beside a value it is read through `*` (#1599: `made != ty` with
     /// `made: String?` compared a `&Text` with a `Text`).
-    /// A field's read is `as_deref` text below, compared as it is.
+    /// A field's text is `as_deref` text below, compared as it is; any other
+    /// field lent out of its option (bit 4) is the `&T` too (#1951: `e.r ==
+    /// Hold::Alone` with `r: Hold?` compared a `&Hold` with a `Hold`).
     fn a_narrowed_read_lent(ref self, side: ref Expr) -> bool sync {
-        match side {
-            Expr::Variable(_, _) => {}
+        let field = match side {
+            Expr::Variable(_, _) => false,
+            Expr::Field { .. } => true,
             else => return false,
         }
         let bits = self.facts.narrowed_reads.get(node_key(side)) ?? return false
+        if field {
+            return (bits / 4) % 2 == 1 && (bits / 8) % 2 == 0 && (bits / 16) % 2 == 0 && (bits / 64) % 2 == 0
+        }
         return bits % 2 == 0 && (bits / 8) % 2 == 0 && (bits / 32) % 2 == 0
     }
 

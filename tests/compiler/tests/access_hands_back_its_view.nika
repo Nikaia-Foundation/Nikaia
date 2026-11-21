@@ -1,0 +1,15 @@
+// An `access` block that ends in its view of a number, a `bool` or a `char`
+// hands back the value (#1454); so does `access_all`.
+fn main() throws {
+    let n = SharedMut(4)
+    let m = n.access fn(c) { c }
+    println(f"{m}")
+    let flag = SharedMut(true)
+    let f = flag.access fn(b) { b }
+    println(f"{f}")
+    let a = SharedMut(5)
+    let b = SharedMut(6)
+    let x = access_all(a, b) fn(p, q) { p }
+    let y = access_all(a, b) fn(p, q) { q }
+    println(f"{x} {y}")
+}
