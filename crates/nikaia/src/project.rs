@@ -2540,22 +2540,25 @@ impl project_check::ProjectCheckExplainHost for ExplainHost<'_> {
                 settings.build.prove_through_loops,
                 settings.words.unproved_claims == "warn",
             ),
-            "trust" => crate::contracts::trust::render_with_escapes(
-                &crate::contracts::trust::analyse_in(
+            // The raw sinks the build allows close the report (ADR-raw-sinks-1 D10).
+            "trust" => {
+                crate::contracts::trust::render_with_escapes(
+                    &crate::contracts::trust::analyse_in(
+                        &unit.parsed,
+                        &program
+                            .units
+                            .iter()
+                            .filter(|u| u.package == unit.package)
+                            .map(|u| &u.parsed)
+                            .collect::<Vec<_>>(),
+                        library,
+                    ),
                     &unit.parsed,
-                    &program
-                        .units
-                        .iter()
-                        .filter(|u| u.package == unit.package)
-                        .map(|u| &u.parsed)
-                        .collect::<Vec<_>>(),
                     library,
-                ),
-                &unit.parsed,
-                library,
-                &unit.path.display().to_text(),
-                &unit.source,
-            ),
+                    &unit.path.display().to_text(),
+                    &unit.source,
+                ) + &nikaia_std::compiler::trust::render_allowed(&settings.words.allow)
+            }
             other => unreachable!("no `--explain` report `{other}`"),
         }
     }

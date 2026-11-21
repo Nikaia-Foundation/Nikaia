@@ -232,7 +232,7 @@ so not outside:
 let editor = match env::var("EDITOR") ?? "" {
     "vim" => "vim",
     "nano" => "nano",
-    _ => "vi",
+    else => "vi",
 }
 ```
 

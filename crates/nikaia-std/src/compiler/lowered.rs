@@ -3829,7 +3829,7 @@ pub mod tree_build {
 }
 pub mod trust {
     #[allow(unused_imports)]
-    pub use super::{Wrote, spelled, Reason, read_by_operator, first_literal, operator_read, SourceCall, source_calls, mark_trusted, main_parameters_source, takes_the_command_line, Place, render, MapPlan, trusted_maps, EscapePlan, EscapedCall, no_escapes, escaped_sinks, render_escapes};
+    pub use super::{Wrote, spelled, Reason, read_by_operator, first_literal, operator_read, SourceCall, source_calls, mark_trusted, main_parameters_source, takes_the_command_line, Place, render, render_allowed, MapPlan, trusted_maps, EscapePlan, EscapedCall, no_escapes, escaped_sinks, render_escapes};
 }
 pub mod ty {
     #[allow(unused_imports)]
@@ -3920,4 +3920,4 @@ pub fn nikaia_run_tests(filters: &[std::string::String], list: bool, more: std::
 /// **The digest of this lowered set** (#1610): every file `lower-std` wrote
 /// beside this index, and the index above this line. Compiled into the same
 /// crate as the code it names, it is the compiler's identity for its caches.
-pub const LOWERED_DIGEST: &str = "c358fd370057beb5d034d404301347e399f70edb89d46455d70e545bf6e0a5e6";
+pub const LOWERED_DIGEST: &str = "806b95ddcbd62f21805f390aca93f4f8eff52b62f939d1d77876bdf9a15fbbb1";
