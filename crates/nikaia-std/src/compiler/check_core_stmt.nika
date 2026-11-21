@@ -4055,6 +4055,20 @@ fn check_async_block(mut state: CheckState, world: ref CheckWorld, block: ref Bl
                         state.facts.async_waits.insert(id_of(guarded) as i64, CheckAsyncWait { at: CheckAsyncWaitAt::GroupEnd, group: group })
                         pending.push(count)
                     },
+                    // `async e catch { f }` as a statement: nobody reads it,
+                    // so it is waited for at its group's end and its fallback
+                    // stands in for its failure there (D21, D22).
+                    Expr::TryCatch { expr: guarded, .. } if check_an_async_task(guarded) => {
+                        state.facts.async_waits.insert(id_of(guarded) as i64, CheckAsyncWait { at: CheckAsyncWaitAt::GroupEnd, group: group })
+                        if last && beside == 0 {
+                            state.a_task_with_nothing_beside_it(stmt.span, "it is the last statement of its group, which waits for it at once")
+                        }
+                        pending.push(count)
+                        match guarded {
+                            Expr::Async(inner, _, _, _) => check_async_in(state, inner, group, stmt.span),
+                            else => {},
+                        }
+                    },
                     Expr::Async(inner, _, _, _) => {
                         state.facts.async_waits.insert(id_of(value) as i64, CheckAsyncWait { at: CheckAsyncWaitAt::GroupEnd, group: group })
                         if last && beside == 0 {
@@ -4172,6 +4186,14 @@ fn check_a_child_task(expr: ref Expr) -> bool sync {
     }
 }
 
+/// Whether `expr` is `async e`, a task of its group.
+fn check_an_async_task(expr: ref Expr) -> bool sync {
+    return match expr {
+        Expr::Async(_, _, _, _) => true,
+        else => false,
+    }
+}
+
 /// Whether a statement starts a task as a whole, `let x = async e` or `async
 /// e`: a pending binding it names is waited for in that task, so the main line
 /// waits where another statement names it (D6).
@@ -4187,6 +4209,7 @@ fn starts_a_task(stmt: ref Stmt) -> bool sync {
         },
         Stmt::Expr(value) => match value {
             Expr::Async(_, _, _, _) => true,
+            Expr::TryCatch { expr, .. } => check_an_async_task(expr),
             else => false,
         },
         else => false,

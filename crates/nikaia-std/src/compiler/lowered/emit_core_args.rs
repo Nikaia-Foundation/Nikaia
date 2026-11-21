@@ -1448,6 +1448,7 @@ impl EmitState {
             Stmt::Let { names, value, .. } => {
                 match value {
                     Expr::TryCatch { expr: guarded, .. } => { let guarded = nikaia_std::boxed::open(guarded); match guarded {
+                        Expr::Async(_, id, _, _) if { let id = *id; self.emit_async_kind(i64::from(id.get())) == "spawn" } => { return Ok(false); },
                         Expr::Async(inner, id, within, admission) => {
                             let inner = nikaia_std::boxed::open(inner); let within = nikaia_std::boxed::open(within); let admission = nikaia_std::boxed::open(admission); let id = *id;
                             if names.len() == 1 {

@@ -2324,6 +2324,9 @@ impl EmitState {
             Stmt::Let { names, value, .. } => {
                 match value {
                     Expr::TryCatch { expr: guarded, .. } => match guarded {
+                        // Nothing names it: a statement's task, whose fallback
+                        // runs in it (D21, D22).
+                        Expr::Async(_, id, _, _) if self.emit_async_kind(id.get()) == "spawn" => return false,
                         Expr::Async(inner, id, within, admission) => {
                             if names.len() == 1 {
                                 tasks.push((inner.clone(), id.get() as i64))

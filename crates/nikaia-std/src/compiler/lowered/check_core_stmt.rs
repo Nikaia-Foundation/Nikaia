@@ -2965,6 +2965,16 @@ pub(crate) fn check_async_block(state: &mut CheckState, world: &CheckWorld<'_, '
                         state.facts.async_waits.insert(id_of(guarded) as i64, CheckAsyncWait { at: CheckAsyncWaitAt::GroupEnd, group });
                         pending.push(count);
                     },
+                    Expr::TryCatch { expr: guarded, .. } if { let guarded = nikaia_std::boxed::peek(&guarded); check_an_async_task(guarded) } => {
+                        let guarded = nikaia_std::boxed::open(guarded);
+                        state.facts.async_waits.insert(id_of(guarded) as i64, CheckAsyncWait { at: CheckAsyncWaitAt::GroupEnd, group });
+                        if last && beside == 0 { state.a_task_with_nothing_beside_it(&stmt.span, "it is the last statement of its group, which waits for it at once"); }
+                        pending.push(count);
+                        match guarded {
+                            Expr::Async(inner, _, _, _) => { let inner = nikaia_std::boxed::open(inner); check_async_in(state, inner, group, &stmt.span); },
+                            _ => { },
+                        }
+                    },
                     Expr::Async(inner, _, _, _) => {
                         let inner = nikaia_std::boxed::open(inner);
                         state.facts.async_waits.insert(id_of(value) as i64, CheckAsyncWait { at: CheckAsyncWaitAt::GroupEnd, group });
@@ -3066,6 +3076,10 @@ pub(crate) fn check_a_child_task(expr: &Expr) -> bool {
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
+pub(crate) fn check_an_async_task(expr: &Expr) -> bool { matches!(expr, Expr::Async(_, _, _, _)) }
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
 pub(crate) fn starts_a_task(stmt: &Stmt) -> bool {
     match stmt {
         Stmt::Let { value, .. } => match value {
@@ -3073,7 +3087,11 @@ pub(crate) fn starts_a_task(stmt: &Stmt) -> bool {
             Expr::TryCatch { expr, .. } => { let expr = nikaia_std::boxed::open(expr); matches!(expr, Expr::Async(_, _, _, _)) },
             _ => false,
         },
-        Stmt::Expr(value) => matches!(value, Expr::Async(_, _, _, _)),
+        Stmt::Expr(value) => match value {
+            Expr::Async(_, _, _, _) => true,
+            Expr::TryCatch { expr, .. } => { let expr = nikaia_std::boxed::open(expr); check_an_async_task(expr) },
+            _ => false,
+        },
         _ => false,
     }
 }

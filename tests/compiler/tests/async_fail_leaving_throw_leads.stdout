@@ -1,0 +1,11 @@
+the group's statements run on
+task 1 failed
+  raised at run
+  (no trace; set NIKAIA_TRACE=1 to capture one)
+  and then:
+  task 7 failed
+    raised at work
+  and then:
+  task 8 failed
+    raised at work
+0

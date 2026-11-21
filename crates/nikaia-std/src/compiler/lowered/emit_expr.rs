@@ -370,6 +370,16 @@ impl EmitState {
                     walk.async_deferred = deferred;
                     self.emit_core_spawn_fallback(world, walk, out, host, expr, body, handler, id.get(), depth, &flow, scope)?;
                 },
+                Expr::Async(task, aid, within, admission) if { let aid = *aid; self.emit_async_kind(i64::from(aid.get())) == "spawn" } => {
+                    let task = nikaia_std::boxed::open(task); let within = nikaia_std::boxed::open(within); let admission = nikaia_std::boxed::open(admission); let aid = *aid;
+                    walk.async_within = self.emit_async_deadline(world, walk, host, (within).as_ref(), depth, &flow, scope)?;
+                    walk.async_admission = self.emit_async_option(world, walk, host, (admission).as_ref(), depth, &flow, scope)?;
+                    let mut at: u32 = 0u32;
+                    if flow.statement > 0 { at = u32::try_from(flow.statement).unwrap_or_else(|_| panic!("the value does not fit in an `u32`")); }
+                    let guarded = Expr::Block(Block { stmts: vec![Spanned::new(Stmt::Expr(task.clone()), Span { start: at, end: at })] }, numbered_id(aid.get()));
+                    let caught = Expr::TryCatch { expr: nikaia_std::block::Boxed::placed(guarded), handler: handler.clone(), id: numbered_id(id.get()) };
+                    self.emit_async_task(world, walk, out, host, &caught, i64::from(aid.get()), "spawn", depth, &flow, scope)?;
+                },
                 _ => { self.emit_core_try_catch(world, walk, out, host, expr, handler, depth, flow, scope)?; },
             }; },
             Expr::Try(inner, _) => { let inner = nikaia_std::boxed::open(inner); self.emit_core_try(world, walk, out, host, inner, depth, flow, scope)?; },
