@@ -1,0 +1,33 @@
+// A user trait's method named like a `Vec` method (#1298): `vs[0].push(3)`
+// asks `Vec::push`, not every method called `push`, whether it changes its
+// receiver, so the element is written as the place it is.
+trait Th {
+	fn push(ref mut self)
+	fn clear(ref mut self)
+}
+
+struct A {
+	n: i64,
+}
+
+impl Th for A {
+	fn push(ref mut self) {
+		self.n += 1
+	}
+
+	fn clear(ref mut self) {
+		self.n = 0
+	}
+}
+
+fn main() throws {
+	let mut a = A { n: 0 }
+	a.push()
+	let mut vs: Vec[Vec[i64]] = [[]]
+	vs[0].push(3)
+	println(f"{a.n} {vs[0].len()}")
+	vs.push([1, 2])
+	vs[1].clear()
+	a.clear()
+	println(f"{a.n} {vs[1].len()}")
+}
