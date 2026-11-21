@@ -422,12 +422,13 @@ impl CheckState {
         }
         let mut constructs = self.variant_parts.contains_key(&name) || self.declares_a_type(world, &name) || is_hull(&name);
         if !constructs {
-            let at = nikaia_std::search::find(&name, &"::", 0);
-            if at.is_some() {
-                let cut = nikaia_std::index::or(at, || 0);
-                let ty = nikaia_std::block::Text::from(nikaia_std::index::get(&name, nikaia_std::index::at(0..cut)).to_string());
-                let variant = nikaia_std::block::Text::from(nikaia_std::index::get(&name, nikaia_std::index::at(cut + "::".len() as i64..)).to_string());
-                constructs = self.is_variant(&ty, &variant);
+            match nikaia_std::text::find_first(&name, &"::") {
+                None => { },
+                Some(cut) => {
+                    let ty = nikaia_std::block::Text::from(name.before(cut.start).to_string());
+                    let variant = nikaia_std::block::Text::from(name.after(cut.end).to_string());
+                    constructs = self.is_variant(&ty, &variant);
+                },
             }
         }
         if constructs { return; }

@@ -1241,13 +1241,13 @@ pub(crate) struct LoopParsed {
 }
 
 pub(crate) fn loop_term_of(arena: &mut logic::TermArena, word: &str) -> Option<LoopParsed> {
-    let open = nikaia_std::index::or(nikaia_std::search::find(&word, &"(", 0), || (word.len() as i64).into());
-    let comma = nikaia_std::index::or(nikaia_std::search::find(&word, &",", 0), || (word.len() as i64).into());
-    let close = nikaia_std::index::or(nikaia_std::search::find(&word, &")", 0), || (word.len() as i64).into());
+    let open = nikaia_std::index::or(nikaia_std::text::find_first(&word, &"(").as_ref().map(|__nikaia_it| __nikaia_it.start), || word.end().into());
+    let comma = nikaia_std::index::or(nikaia_std::text::find_first(&word, &",").as_ref().map(|__nikaia_it| __nikaia_it.start), || word.end().into());
+    let close = nikaia_std::index::or(nikaia_std::text::find_first(&word, &")").as_ref().map(|__nikaia_it| __nikaia_it.start), || word.end().into());
     let first = if open < comma { open } else { comma };
     let end = if first < close { first } else { close };
-    let head = nikaia_std::block::Text::from(nikaia_std::index::get(&word, nikaia_std::index::at(0..end)).to_string());
-    let rest = nikaia_std::block::Text::from(nikaia_std::index::get(&word, nikaia_std::index::at(end..)).to_string());
+    let head = nikaia_std::block::Text::from(word.before(end).to_string());
+    let rest = nikaia_std::block::Text::from(word.after(end).to_string());
     if !rest.starts_with('(') {
         if head == "true" || head == "false" { return Some(LoopParsed { term: arena.boolean(head == "true"), rest }); }
         let n = text::parse_i64(&head);
@@ -1260,10 +1260,10 @@ pub(crate) fn loop_term_of(arena: &mut logic::TermArena, word: &str) -> Option<L
         let inner = match loop_term_of(arena, &after) { Some(__nikaia_value) => __nikaia_value, None => return None };
         if !inner.rest.starts_with(',') { return None; }
         let tail = nikaia_std::block::Text::from(nikaia_std::index::or(inner.rest.strip_prefix(','), || "").to_string());
-        let shut = match nikaia_std::search::find(&tail, &")", 0) { Some(__nikaia_value) => __nikaia_value, None => return None };
-        let k = match text::parse_i64(&nikaia_std::block::Text::from(nikaia_std::index::get(&tail, nikaia_std::index::at(0..shut)).to_string())) { Some(__nikaia_value) => __nikaia_value, None => return None };
+        let shut = match nikaia_std::text::find_first(&tail, &")") { Some(__nikaia_value) => __nikaia_value, None => return None };
+        let k = match text::parse_i64(&nikaia_std::block::Text::from(tail.before(shut.start).to_string())) { Some(__nikaia_value) => __nikaia_value, None => return None };
         if k <= 0 { return None; }
-        return Some(LoopParsed { term: arena.quot(inner.term, k), rest: nikaia_std::block::Text::from(nikaia_std::index::get(&tail, nikaia_std::index::at(shut + 1..)).to_string()) });
+        return Some(LoopParsed { term: arena.quot(inner.term, k), rest: nikaia_std::block::Text::from(tail.after(shut.end).to_string()) });
     }
     let mut args: Vec<i64> = vec![];
     loop {
@@ -1305,9 +1305,9 @@ pub(crate) fn loop_recorded(arena: &mut logic::TermArena, record: &LoopRecord, r
     let mut parts: Vec<(i64, String)> = vec![];
     let mut all: Vec<i64> = vec![];
     for part in recorded.split(';') {
-        let at = match nikaia_std::search::find(&part, &"=", 0) { Some(__nikaia_value) => __nikaia_value, None => return None };
-        let origin = nikaia_std::block::Text::from(nikaia_std::index::get(&part, nikaia_std::index::at(0..at)).replace('-', " "));
-        let read = match loop_term_of(arena, &nikaia_std::block::Text::from(nikaia_std::index::get(&part, nikaia_std::index::at(at + 1..)).to_string())) { Some(__nikaia_value) => __nikaia_value, None => return None };
+        let at = match nikaia_std::text::find_first(&part, &"=") { Some(__nikaia_value) => __nikaia_value, None => return None };
+        let origin = nikaia_std::block::Text::from(part.before(at.start).replace('-', " "));
+        let read = match loop_term_of(arena, &nikaia_std::block::Text::from(part.after(at.end).to_string())) { Some(__nikaia_value) => __nikaia_value, None => return None };
         if !read.rest.is_empty() || origin.is_empty() { return None; }
         parts.push((read.term, origin));
         all.push(read.term);

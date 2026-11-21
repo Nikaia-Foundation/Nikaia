@@ -339,7 +339,7 @@ fn property_mark() -> String {
 /// is one: `xs` of `xs.prop@p()`.
 fn property_base(name: ref String) -> String? {
     let at = name.find(f".{property_mark()}") ?? return null
-    return name[0..<at].clone()
+    return name.before(at.start).clone()
 }
 
 /// What follows a property's mark: `p()`, `p(n)`, `.m(n)`.
@@ -390,7 +390,7 @@ fn property_carried(name: ref String) -> bool {
 /// `p(n)`, empty of `p()`.
 fn property_inner(called: ref String) -> String? {
     let open = called.find("(") ?? return null
-    let tail = called[open..<called.len()]
+    let tail = called.after(open.start)
     let inner = tail.strip_prefix("(") ?? return null
     return (inner.strip_suffix(")") ?? return null).clone()
 }
@@ -405,7 +405,7 @@ fn property_shown(name: ref String) -> String {
         return f"{on}{called}"
     }
     let open = called.find("(") ?? return name.clone()
-    let callee = called[0..<open].clone()
+    let callee = called.before(open.start).clone()
     let inner = property_inner(called) ?? ""
     if inner.is_empty() {
         return f"{callee}({on})"

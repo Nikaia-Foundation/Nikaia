@@ -7,15 +7,15 @@ use std::io
 
 fn main() throws {
     let all = io::read_to_string() + "head 7/9\nrest"
-    let nl = all.find("\n") ?? all.len()
-    let line = f"{all[0..<nl]}"
-    let counted = if nl < all.len() { f"{all[nl + "\n".len()..]}" } else { "" }
+    let nl = all.find("\n")
+    let line = f"{all.before(nl?.start ?? all.end())}"
+    let counted = f"{all.after(nl?.end ?? all.end())}"
     let at = line.rfind(" ") ?? return
-    let shown = f"{line[at + 1..]}"
-    let slash = shown.find("/") ?? shown.len()
-    println(f"[{shown[0..<slash]}] [{line[0..<at]}] [{counted}]")
-    let colon = line.find(" ") ?? -1
-    if colon >= 0 {
-        println(f"{line.bytes[colon..<line.len()].len()}")
+    let shown = f"{line.after(at.end)}"
+    let slash = shown.find("/")?.start ?? shown.end()
+    println(f"[{shown.before(slash)}] [{line.before(at.start)}] [{counted}]")
+    let colon = line.find(" ")
+    if colon != null {
+        println(f"{line.after(colon?.start ?? line.end()).bytes.len()}")
     }
 }

@@ -1,8 +1,9 @@
-//! **A position the text hands out cuts it without a view** (ADR-320 D5,
-//! Part I 2.6, #453 step 6): `find`'s result, either end of the text and such a
-//! position moved by the byte length of a text literal cut the text they came
-//! from; a number the program made up, or a position of another text, is
-//! `NK1214`, and a cut inside a scalar stops the program in the language's words.
+//! **A position the text hands out cuts it without a view** (ADR-374 D1-D3,
+//! Part I 2.6, #453 step 6): a match's `start` and `end` cut the text by name;
+//! in brackets either end of the text and such a position moved by the byte
+//! length of a text literal still cut it (until #743 removes text brackets); a
+//! number the program made up is `NK1214`, and a cut inside a scalar stops the
+//! program in the language's words.
 
 use crate::common;
 #[allow(unused_imports)]
@@ -38,16 +39,16 @@ fn refused(name: &str, source: &str) -> String {
     format!("{out}{err}")
 }
 
-/// Part I's example: the name before the `;` and the rest after it, the end
-/// of the text, and a position moved by a literal's `.len()`.
+/// Part I's example: the name before the `;` and the rest after it, and the
+/// text between a match's end and the text's end, or between its two ends.
 #[test]
 fn a_position_from_find_cuts_its_text() {
     let source = "fn split(line: ref String) throws {\n\
          \x20   let sep = line.find(\";\") ?? return\n\
-         \x20   let name = line[..<sep]\n\
-         \x20   let rest = line[sep + 1..]\n\
-         \x20   let same = line[sep + \";\".len()..<line.len()]\n\
-         \x20   let whole = line[0..<line.len()]\n\
+         \x20   let name = line.before(sep.start)\n\
+         \x20   let rest = line.after(sep.end)\n\
+         \x20   let same = line.between(sep.end, line.end())\n\
+         \x20   let whole = line.between(line.start(), line.end())\n\
          \x20   println(f\"{name}|{rest}|{same}|{whole}\")\n\
          }\n\
          \n\
@@ -62,19 +63,17 @@ fn a_position_from_find_cuts_its_text() {
     );
 }
 
-/// `find(";"; from: p)` hands out a position of the same text, and a fallback
-/// of `0` (the start of every text) keeps it one; the `+ 1` a one-byte needle
-/// allows is not carried past such a fallback, so the literal's length is
-/// written.
+/// `find(";"; from: p)` from a match's end hands out a match of the same
+/// text, whose ends cut it.
 #[test]
 fn a_position_found_from_a_position_cuts() {
     let source = "fn main() throws {\n\
          \x20   let line = \"a;b\u{e4};c\"\n\
-         \x20   let sep = line.find(\";\") ?? 0\n\
-         \x20   let next = line.find(\";\"; from: sep + 1) ?? return\n\
-         \x20   println(line[..<sep])\n\
-         \x20   println(line[sep + \";\".len()..<next])\n\
-         \x20   println(line[next + 1..])\n\
+         \x20   let sep = line.find(\";\") ?? return\n\
+         \x20   let next = line.find(\";\"; from: sep.end) ?? return\n\
+         \x20   println(line.before(sep.start))\n\
+         \x20   println(line.between(sep.end, next.start))\n\
+         \x20   println(line.after(next.end))\n\
          }\n";
     assert_eq!(run("positions-from", source), "a\nb\u{e4}\nc\n");
 }
@@ -106,7 +105,8 @@ fn a_counter_and_a_wrong_step_are_refused() {
     assert!(step.contains("NK1214"), "{step}");
 }
 
-/// A position of one text does not cut another.
+/// A match is no number: it does not cut a text in brackets, its own or
+/// another (ADR-374 D3).
 #[test]
 fn a_position_of_another_text_is_refused() {
     let err = refused(
@@ -114,7 +114,6 @@ fn a_position_of_another_text_is_refused() {
         "fn main() throws {\n    let a = \"ab;c\"\n    let b = \"abcdef\"\n    let sep = a.find(\";\") ?? return\n    println(b[..<sep])\n}\n",
     );
     assert!(err.contains("NK1214"), "{err}");
-    assert!(err.contains("another text"), "{err}");
 }
 
 /// Cuts of `s.bytes` and of a `Bytes` take any number.
@@ -134,25 +133,25 @@ fn a_cut_of_bytes_takes_any_number() {
 }
 
 /// A cut inside `ä` - one byte past where it starts, which a literal's length
-/// can reach - stops the program in the language's words.
+/// moving the start can reach - stops the program in the language's words.
 #[test]
 fn a_cut_inside_a_scalar_stops_the_program() {
     let (ok, out, err) = nikaia(
         "positions-inside",
         "run",
-        "fn main() throws {\n    let s = \"x\u{e4}y\"\n    let at = s.find(\"\u{e4}\") ?? return\n    println(s[at + \"a\".len()..])\n}\n",
+        "fn main() throws {\n    let s = \"x\u{e4}y\"\n    println(s[\"xa\".len()..])\n}\n",
     );
     assert!(!ok, "{out}{err}");
     assert!(err.contains("byte position 2 is inside a scalar"), "{err}");
     assert!(!err.contains("char boundary"), "{err}");
 }
 
-/// `rfind` hands out a position of its text, as `find` does.
+/// `rfind` hands out a match of its text, as `find` does.
 #[test]
 fn a_position_from_rfind_cuts_its_text() {
     let out = run(
         "positions-rfind",
-        "fn last(name: String) -> String {\n    let colon = name.rfind(\"::\") ?? return name.clone()\n    return name[colon + \"::\".len()..].clone()\n}\n\nfn main() throws {\n    println(last(\"std::io::Write\"))\n    println(last(\"plain\"))\n}\n",
+        "fn last(name: String) -> String {\n    let colon = name.rfind(\"::\") ?? return name.clone()\n    return name.after(colon.end).clone()\n}\n\nfn main() throws {\n    println(last(\"std::io::Write\"))\n    println(last(\"plain\"))\n}\n",
     );
     assert_eq!(out, "Write\nplain\n");
 }
@@ -167,7 +166,7 @@ fn the_ends_moved_by_a_literal_cut() {
     assert_eq!(out, "-cdx\nab-cd\n");
 }
 
-/// An `rfind` position of one text does not cut another.
+/// An `rfind` match does not cut a text in brackets either.
 #[test]
 fn an_rfind_position_of_another_text_is_refused() {
     let err = refused(
@@ -175,13 +174,12 @@ fn an_rfind_position_of_another_text_is_refused() {
         "fn main() throws {\n    let a = \"ab;c\"\n    let b = \"abcdef\"\n    let sep = a.rfind(\";\") ?? return\n    println(b[..<sep])\n}\n",
     );
     assert!(err.contains("NK1214"), "{err}");
-    assert!(err.contains("another text"), "{err}");
 }
 
-/// **A fallback that never comes back keeps `find`'s position** (#683): the
+/// **A fallback that never comes back keeps `find`'s match** (#683): the
 /// value of `find(..) ?? panic(..)`, `?? throw` or `?? return` is always the
-/// left side's, so each cuts the text; a made-up number as the fallback does
-/// not (`0`, the start of every text, would).
+/// left side's, so each cuts the text; a number as the fallback is no match
+/// (`NK1103`).
 #[test]
 fn a_fallback_that_never_returns_keeps_the_position() {
     let out = run(
@@ -191,17 +189,17 @@ fn a_fallback_that_never_returns_keeps_the_position() {
          \n\
          fn by_panic(line: ref String) -> String {\n\
          \x20   let at = line.find(\";\") ?? panic(\"no separator\")\n\
-         \x20   return line[..<at]\n\
+         \x20   return line.before(at.start)\n\
          }\n\
          \n\
          fn by_throw(line: ref String) -> String throws {\n\
          \x20   let at = line.find(\";\") ?? throw Bad::Missing\n\
-         \x20   return line[at + 1..]\n\
+         \x20   return line.after(at.end)\n\
          }\n\
          \n\
          fn by_return(line: ref String) throws {\n\
          \x20   let at = line.find(\";\") ?? return\n\
-         \x20   println(line[..<at])\n\
+         \x20   println(line.before(at.start))\n\
          }\n\
          \n\
          fn main() throws {\n\
@@ -213,7 +211,7 @@ fn a_fallback_that_never_returns_keeps_the_position() {
     assert_eq!(out, "ab\n1.0\ncd\n");
     let err = refused(
         "positions-fallback-number",
-        "fn main() throws {\n    let line = \"ab;1.0\"\n    let at = line.find(\";\") ?? 1\n    println(line[..<at])\n}\n",
+        "fn main() throws {\n    let line = \"ab;1.0\"\n    let at = line.find(\";\") ?? 1\n    println(line.before(at.start))\n}\n",
     );
-    assert!(err.contains("NK1214"), "{err}");
+    assert!(err.contains("NK1103"), "{err}");
 }

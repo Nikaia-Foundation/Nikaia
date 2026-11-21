@@ -3581,8 +3581,8 @@ fn drive_improve_items(text: String, issue: String, existing: String) -> Vec[Str
 fn drive_improve_broke(point: String) -> bool {
 	let rest = point.strip_prefix("Issue: ") ?? ""
 	if rest == "" { return false }
-	let colon = rest.find(": ") ?? rest.len()
-	let kind = f"{rest[0..<colon]}".trim().to_lowercase()
+	let colon = rest.find(": ")?.start ?? rest.end()
+	let kind = f"{rest.before(colon)}".trim().to_lowercase()
 	if kind.starts_with("rules-gap") { return false }
 	if kind.starts_with("broke") || kind.contains("not followed") { return true }
 	if kind.contains("wrong") || kind.contains("missed") { return true }
@@ -3714,12 +3714,12 @@ fn drive_improve_dup(point: String, existing: String) -> String {
 	let mut number: String = ""
 	for line in existing.split("\n") {
 		if line.starts_with("#") {
-			let tab = line.find("\t") ?? line.len()
-			number = f"{line["#".len()..<tab]}"
-			if tab == line.len() { continue }
+			let tab = line.find("\t")?.start ?? line.end()
+			number = f"{line.before(tab).strip_prefix("#") ?? ""}"
+			if tab == line.end() { continue }
 			let title = f"{drive_improve_point(line.clone())}"
-			let colon = title.find(": ") ?? title.len()
-			let text = if title.starts_with("After ") && colon < title.len() { f"{title[colon + ": ".len()..]}" } else { title }
+			let colon = title.find(": ")
+			let text = if title.starts_with("After ") && colon != null { f"{title.after(colon?.end ?? title.end())}" } else { title }
 			if drive_improve_alike(said.clone(), text) { return number }
 		} else if line.starts_with("\t- ") && number != "" {
 			let reported = drive_improve_unheaded(f"{line["\t- ".len()..]}")
@@ -3731,9 +3731,9 @@ fn drive_improve_dup(point: String, existing: String) -> String {
 
 // POINT without its `<field>: ` head (`Friction: x` gives `x`).
 fn drive_improve_unheaded(point: String) -> String {
-	let colon = point.find(": ") ?? point.len()
-	if colon == point.len() || colon > "Comment (no issue number)".len() { return point }
-	return f"{point[colon + ": ".len()..]}"
+	let colon = point.find(": ") ?? return point
+	if point.before(colon.start).len() > "Comment (no issue number)".len() { return point }
+	return f"{point.after(colon.end)}"
 }
 
 // The open improvement issues and those closed in the last 14 days, as
@@ -3783,8 +3783,8 @@ fn drive_issue_answers(value: String) -> Vec[String] {
 	let mut open: Vec[String] = []
 	for part in parts {
 		let t = part.trim()
-		let colon = t.find(": ") ?? t.len()
-		if f"{t[0..<colon]}".trim().ends_with("(built)") { continue }
+		let colon = t.find(": ")?.start ?? t.end()
+		if f"{t.before(colon)}".trim().ends_with("(built)") { continue }
 		let word = drive_word(f"{t}").to_lowercase()
 		if word == "complete" || word == "meets" || word == "fits" || word == "none" || word == "-" { continue }
 		if t != "" { open.push(f"{t}") }
@@ -3797,9 +3797,9 @@ fn drive_issue_answers(value: String) -> Vec[String] {
 fn drive_comment_issue(value: String) -> String {
 	let t = value.trim()
 	if !t.starts_with("#") { return "" }
-	let space = t.find(" ") ?? t.len()
-	if space == t.len() || space < "#0".len() { return "" }
-	let number = f"{t["#".len()..<space]}"
+	let space = t.find(" ") ?? return ""
+	let number = f"{t.before(space.start).strip_prefix("#") ?? ""}"
+	if number == "" { return "" }
 	for c in number.scalars {
 		if c < '0' || c > '9' { return "" }
 	}
@@ -3809,8 +3809,8 @@ fn drive_comment_issue(value: String) -> String {
 // The text of a report's `Comment:` value after its `#N`.
 fn drive_comment_text(value: String) -> String {
 	let t = value.trim()
-	let space = t.find(" ") ?? t.len()
-	return f"{t[space..]}".trim().clone()
+	let space = t.find(" ")?.start ?? t.end()
+	return f"{t.after(space)}".trim().clone()
 }
 
 // The `Comment:` values of a report that name an issue (`#N <text>`): what a
@@ -3934,8 +3934,8 @@ fn drive_improve_body(name: String, issue: String, items: Vec[String], source: S
 // field name, `After #591: the issue names a Rust test file ...`.
 fn drive_improve_title(name: String, issue: String, item: String) -> String {
 	let from = if issue == "" { name } else { f"#{issue}" }
-	let colon = item.find(": ") ?? item.len()
-	let text = if colon == item.len() { item.clone() } else { f"{item[colon + ": ".len()..]}" }
+	let colon = item.find(": ")
+	let text = if colon == null { item.clone() } else { f"{item.after(colon?.end ?? item.end())}" }
 	return drive_found_title(f"After {from}: {text}")
 }
 
@@ -4304,8 +4304,8 @@ fn drive_focus_record(
 	for brief in briefs {
 		let report = drive_report_of(brief)
 		if report != "" { reports.push(drive_read(report)) }
-		let cut = brief.rfind("/") ?? 0
-		let home = if cut > 0 { brief[0..<cut] } else { "." }
+		let cut = brief.rfind("/")?.start ?? brief.start()
+		let home = if cut > brief.start() { brief.before(cut) } else { "." }
 		for row in drive_read(f"{home}/tokens.txt").split("\n") {
 			if row.trim().split(" ").collect()[0] == brief { tokens.push(row.clone()) }
 		}

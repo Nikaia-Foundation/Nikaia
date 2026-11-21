@@ -157,8 +157,8 @@ pub(crate) fn check_walked_seed(state: &mut CheckState, world: &CheckWorld<'_, '
 }
 
 pub(crate) fn check_walked_prefix_into(key: &str, prefixes: &mut collections::BTreeSet<String>) {
-    let cut = match nikaia_std::search::find(&key, &"::", 0) { Some(__nikaia_value) => __nikaia_value, None => return };
-    prefixes.insert(nikaia_std::block::Text::from(nikaia_std::index::get(&key, nikaia_std::index::at(0..cut)).to_string()));
+    let cut = match nikaia_std::text::find_first(&key, &"::") { Some(__nikaia_value) => __nikaia_value, None => return };
+    prefixes.insert(nikaia_std::block::Text::from(key.before(cut.start).to_string()));
 }
 
 pub(crate) fn check_walked_payload_of(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, ty: &str, variant: &str) -> Option<Vec<Ty>> {
@@ -174,9 +174,9 @@ pub(crate) fn check_walked_payload_of(world: &CheckWorld<'_, '_, '_, '_, '_, '_,
 pub(crate) fn check_walked_place_of(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, place: &str, here: i64) -> CheckPlace {
     let none = CheckPlace { at: -1, function: None };
     let rest = nikaia_std::block::Text::from(match place.strip_prefix('@') { Some(__nikaia_value) => __nikaia_value, None => return none }.to_string());
-    let colon = match nikaia_std::search::find(&rest, &":", 0) { Some(__nikaia_value) => __nikaia_value, None => return none };
-    let unit = match text::parse_i64(nikaia_std::index::get(&rest, nikaia_std::index::at(0..colon))) { Some(__nikaia_value) => __nikaia_value, None => return none };
-    let byte = match text::parse_i64(nikaia_std::index::get(&rest, nikaia_std::index::at(colon + 1..))) { Some(__nikaia_value) => __nikaia_value, None => return none };
+    let colon = match nikaia_std::text::find_first(&rest, &":") { Some(__nikaia_value) => __nikaia_value, None => return none };
+    let unit = match text::parse_i64(rest.before(colon.start)) { Some(__nikaia_value) => __nikaia_value, None => return none };
+    let byte = match text::parse_i64(rest.after(colon.end)) { Some(__nikaia_value) => __nikaia_value, None => return none };
     if unit < 0 || byte < 0 || byte > 4294967295i64 { return none; }
     if unit == here { return CheckPlace { at: byte, function: None }; }
     let mut function: Option<String> = None;

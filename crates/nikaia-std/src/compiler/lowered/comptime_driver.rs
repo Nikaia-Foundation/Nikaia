@@ -97,9 +97,10 @@ pub(crate) struct CrRow {
 
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn cr_with_driver(rust: &str, rows: &[(i64, i64, i64)], value_fn: &str, dump: &str, helpers: &str, stopped_at: &str, budget: u64, memory: u64) -> Option<String> {
-    let start = match nikaia_std::search::find(&rust, &"\nfn main() {\n", 0) { Some(__nikaia_value) => __nikaia_value, None => return None };
-    let close = match nikaia_std::search::find(&rust, &"\n}\n", start + "\n".len() as i64) { Some(__nikaia_value) => __nikaia_value, None => return None };
-    let end = close + "\n}\n".len() as i64;
+    let opened = match nikaia_std::text::find_first(&rust, &"\nfn main() {\n") { Some(__nikaia_value) => __nikaia_value, None => return None };
+    let close = match nikaia_std::text::find(&rust, &"\n}\n", opened.start) { Some(__nikaia_value) => __nikaia_value, None => return None };
+    let start = rust.before(opened.start).as_bytes().len() as i64;
+    let end = rust.before(close.end).as_bytes().len() as i64;
     let main = cr_main(value_fn, dump, budget, memory);
     let mut starts: Vec<i64> = nikaia_std::block::List::from_array_in([0], nikaia_std::block::Place::Block);
     let mut byte: i64 = 0;
@@ -109,7 +110,7 @@ pub(crate) fn cr_with_driver(rust: &str, rows: &[(i64, i64, i64)], value_fn: &st
         if c == '\n' { starts.push(byte); }
     }
     let mut placed: collections::BTreeMap<i64, CrRow> = collections::BTreeMap::new();
-    let moved = cr_lines(&main) - cr_lines(&nikaia_std::block::Text::from(nikaia_std::index::get(&rust, nikaia_std::index::at(start..end)).to_string()));
+    let moved = cr_lines(&main) - cr_lines(&nikaia_std::block::Text::from(rust.between(opened.start, close.end).to_string()));
     for (generated, at, unit) in rows.iter() {
         let generated = nikaia_std::num::value(generated);let at = nikaia_std::num::value(at);let unit = nikaia_std::num::value(unit);
         if generated >= start && generated < end || at == 0 { continue; }
@@ -129,13 +130,12 @@ pub(crate) fn cr_with_driver(rust: &str, rows: &[(i64, i64, i64)], value_fn: &st
         { use ::core::fmt::Write as _; let _ = table.write_fmt(format_args!("    ({}, \"{}{}\", {}),\n", line, stopped_at, row.unit, row.byte)); };
     }
     table.push_str("];\n");
-    let rest = nikaia_std::block::Text::from(nikaia_std::index::get(&rust, nikaia_std::index::at(end..)).to_string());
-    let empty = match nikaia_std::search::find(&rest, &"const __NIKAIA_SITES", 0) { Some(__nikaia_value) => __nikaia_value, None => return None };
-    let shut = match nikaia_std::search::find(&rest, &"];\n", empty) { Some(__nikaia_value) => __nikaia_value, None => return None };
-    let after = shut + "];\n".len() as i64;
-    let front = nikaia_std::block::Text::from(nikaia_std::index::get(&rust, nikaia_std::index::at(0..start)).to_string());
-    let middle = nikaia_std::block::Text::from(nikaia_std::index::get(&rest, nikaia_std::index::at(0..empty)).to_string());
-    let back = nikaia_std::block::Text::from(nikaia_std::index::get(&rest, nikaia_std::index::at(after..)).to_string());
+    let rest = nikaia_std::block::Text::from(rust.after(close.end).to_string());
+    let empty = match nikaia_std::text::find_first(&rest, &"const __NIKAIA_SITES") { Some(__nikaia_value) => __nikaia_value, None => return None };
+    let shut = match nikaia_std::text::find(&rest, &"];\n", empty.start) { Some(__nikaia_value) => __nikaia_value, None => return None };
+    let front = nikaia_std::block::Text::from(rust.before(opened.start).to_string());
+    let middle = nikaia_std::block::Text::from(rest.before(empty.start).to_string());
+    let back = nikaia_std::block::Text::from(rest.after(shut.end).to_string());
     Some(format!("{}{}{}{}{}{}\nextern crate nikaia_bundle;\n", front, main, middle, table, back, helpers))
 }
 

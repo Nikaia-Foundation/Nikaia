@@ -1,8 +1,8 @@
 error[NK1301]: `.to_string()` on text adds nothing.
   --> tests/text_to_string_refused.nika:5:12
    |
- 5 |     return line[m + 1..].to_string()
-   |            ^^^^^^^^^^^^^^^^^^^^^^^^^
+ 5 |     return line.after(m.end).to_string()
+   |            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
    |
    = note: A view is a `String` already, and the compiler decides whether text is a view or text of its own (Part I 2.3).
    = help: Drop `.to_string()`, or write `.clone()` where a copy is meant; `nikaia fix` drops it.

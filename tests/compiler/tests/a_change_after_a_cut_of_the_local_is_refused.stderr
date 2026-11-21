@@ -12,7 +12,7 @@ error[NK2305]: `v` is changed here, but `w` may point into its data and is used 
 error[NK2305]: `s` is changed here, but `c` may point into its data and is used later.
    --> tests/a_change_after_a_cut_of_the_local_is_refused.nika:18:5
     |
- 17 |     let c = s[0..<i]
+ 17 |     let c = s.before(i)
     |         - `c` is a view into `s`
  18 |     s.push_str("!")
     |     ^ `s` changes here

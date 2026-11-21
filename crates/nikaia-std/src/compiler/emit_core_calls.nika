@@ -1952,7 +1952,7 @@ impl EmitState {
     /// call, ADR-279 D13): the forms that are not the call itself, then the call.
     fn emit_core_method_arm[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, node: ref Expr, receiver: ref Expr, method: winnow_grammar::Symbol, args: ref Vec[Expr], config: ref Vec[ConfigArg], depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
         let name = emit_text(world, method)
-        // **`s.find(needle; from:)` on text is `std`'s search** (ADR-320 D6): the
+        // **`s.find(needle; from:)` on text is `std`'s search** (ADR-374 D2): the
         // language below's `str::find` takes one argument and answers a `usize`.
         // **`a.compare(b)` and `a.eq(b)` are the standard library's** (ADR-341 D2):
         // a bound gives the method, and a number or a text has it too.
@@ -1986,12 +1986,14 @@ impl EmitState {
             out.push(")")
             return
         }
-        // **`rfind` and `replacen` count in `i64`**, as `find` does: the
-        // language below's own take and give a `usize`. **Each, and `find`,
-        // takes a text or one scalar** (#877), lent with `&` whichever it is.
+        // **`rfind` gives a `text::Match`** (ADR-374 D2), `replacen` counts
+        // in `i64`: the language below's own give a `usize`. **Each, and
+        // `find`, takes a text or one scalar** (#877), lent with `&` whichever
+        // it is.
         let replaced_here = self.facts.replaced_in_place.contains(node_key(receiver)) || self.facts.replaced_last_uses.contains(node_key(receiver))
         if (name == "rfind" || (name == "replacen" && !replaced_here)) && self.facts.text_finds.contains(node_key(receiver)) {
-            out.push(f"nikaia_std::search::{name}(&")
+            let module = if name == "rfind" { "text" } else { "search" }
+            out.push(f"nikaia_std::{module}::{name}(&")
             self.emit_core_nested(world, walk, out, host, receiver, 255, depth, flow, scope)
             let mut i = 0
             for arg in args {
@@ -2002,13 +2004,43 @@ impl EmitState {
             out.push(")")
             return
         }
-        // **`split_at` takes its position in `i64`** (#616), as `find` gives it.
+        // **`split_at` takes a `text::Pos`** (ADR-374 D3), as a match gives it.
         if name == "split_at" && args.len() == 1 && self.facts.text_finds.contains(node_key(receiver)) {
-            out.push("nikaia_std::search::split_at(&")
+            out.push("nikaia_std::text::split_at(&")
             self.emit_core_nested(world, walk, out, host, receiver, 255, depth, flow, scope)
             // An argument: nothing binds looser than the call's own parentheses.
             out.push(", ")
             self.emit_core_nested(world, walk, out, host, args[0], 0, depth, flow, scope)
+            out.push(")")
+            return
+        }
+        // **A position moves in the unit it names** (ADR-374 D4), handed the
+        // text the checker found it belongs to (D5).
+        let moved: Expr? = self.facts.pos_moves.get(node_key(node))?.clone()
+        if (name == "forward" || name == "back") && moved != null {
+            let text: Expr = moved ?? return
+            let mut unit: String = ""
+            let mut count: Vec[Expr] = []
+            if emit_call_option_named(world, config, "scalars").len() > 0 {
+                unit = "scalars"
+                count = emit_call_option_named(world, config, "scalars")
+            } else if emit_call_option_named(world, config, "graphemes").len() > 0 {
+                unit = "graphemes"
+                count = emit_call_option_named(world, config, "graphemes")
+            } else {
+                unit = "bytes"
+                count = emit_call_option_named(world, config, "bytes")
+            }
+            out.push(f"nikaia_std::text::{name}_{unit}(&")
+            self.emit_core_nested(world, walk, out, host, text, 255, depth, flow, scope)
+            out.push(", ")
+            self.emit_core_nested(world, walk, out, host, receiver, 0, depth, flow, scope)
+            out.push(", ")
+            if count.len() > 0 {
+                self.emit_core_nested(world, walk, out, host, count[0], 0, depth, flow, scope)
+            } else {
+                out.push("0")
+            }
             out.push(")")
             return
         }
@@ -2022,8 +2054,11 @@ impl EmitState {
             out.push(")")
             return
         }
+        // **`find` gives a `text::Match`** (ADR-374 D2), from the text's start
+        // or from a position of it.
         if name == "find" && self.facts.text_finds.contains(node_key(receiver)) {
-            out.push("nikaia_std::search::find(&")
+            let from = emit_call_option_named(world, config, "from")
+            out.push(if from.len() > 0 { "nikaia_std::text::find(&" } else { "nikaia_std::text::find_first(&" })
             self.emit_core_nested(world, walk, out, host, receiver, 255, depth, flow, scope)
             out.push(", &")
             if args.len() > 0 {
@@ -2031,12 +2066,9 @@ impl EmitState {
             } else {
                 out.push("\"\"")
             }
-            out.push(", ")
-            let from = emit_call_option_named(world, config, "from")
             if from.len() > 0 {
+                out.push(", ")
                 self.emit_expr(world, walk, out, host, from[0], depth, flow, scope)
-            } else {
-                out.push("0")
             }
             out.push(")")
             return

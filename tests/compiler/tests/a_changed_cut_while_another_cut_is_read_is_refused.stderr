@@ -1,9 +1,9 @@
 error[NK2305]: `rest` gets the text of `line`, but `head` still reads it afterwards.
    --> tests/a_changed_cut_while_another_cut_is_read_is_refused.nika:9:20
     |
-  8 |     let head = line[..m]
+  8 |     let head = line.before(m.end)
     |         ---- `head` may be the text of `line`
-  9 |     let mut rest = line[m..]
+  9 |     let mut rest = line.after(m.start)
     |                    ^^^^ `rest` is changed later, so it takes the text of `line` here
     ...
  11 |     return f"{head}|{rest}"

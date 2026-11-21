@@ -8,6 +8,30 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1510] — 2026-11-21
+
+**Builders' changes (#2453, #2455)**
+- yaml flow scalars that fold over lines copy their runs at text positions instead of checking each run as UTF-8 again; the bounds prover follows an equality to the loop that changes a name (`let start = i; let mut j = start`)
+- Bounds: an inner scan that starts at a name the outer counter was copied to (`let start = i; let mut j = start`) keeps its indexes proved (ADR-361 D2, #2453)
+- Bounds: an index of an inner scan whose counter starts at the outer `while` counter (`let mut j = i ... i = j + 1`) is proved; a goal left open asks each loop a chain of snapshot facts ties it to (ADR-361 D2, #2455)
+
+## [0.0.1509] — 2026-11-21
+
+**A position moves only in a unit it names: forward/back(scalars:|graphemes:|bytes:), handed the text the compiler follows it to (ADR-374 D4, D5)**
+- A text position moves only in a unit it names: p.forward(scalars: n), forward(graphemes: n), forward(bytes: n) and back, each a text::Pos? (null past an end, and for bytes: inside a scalar); exactly one unit or NK1285 (ADR-374 D4). The compiler follows which text a position belongs to: a move, cut or search with a position of another text, or of a text chosen at run time, is NK1214 (ADR-374 D5).
+
+## [0.0.1508] — 2026-11-20
+
+**Builders' changes (#2440, #2441, #2450)**
+- A file root bound to a name (`let at = fs::Root::Dir(dir)`, `let at = fs::Root::Anywhere`) is judged as a raw path sink at the call that uses it, as a root written in the call is (NK1308, ADR-raw-sinks-1 D2, D11).
+- A part `Root::join` adds from outside (`fs::Root::Dir(cache).join(key)`, bound to a name or chained, or under `fs::scratch()`) is judged as a part of the root, NK1308, and passes after `path::is_component` or `path::is_below` under a clean base (ADR-raw-sinks-1 D11, D14).
+- A path guard holds past a call handed the guarded name: what `path::is_component(key)` (or any named property) proves of a binding without `mut` stays known after `fs::exists(key, ...)`, `root.join(key)` or a function taking `key`, since no call can change such a binding (ADR-381 D2, ADR-raw-sinks-1 D14).
+
+## [0.0.1507] — 2026-11-20
+
+**A builder's pre-push checks the version lines without the driver's badges (#2414)**
+- A builder's `pre-push.nika` no longer turns `version` red on the driver's stale self-hosted badge: `bump.py check --no-badges` checks the version lines alone.
+
 ## [0.0.1506] — 2026-11-20
 
 **tests: the last test programs leave mktemp and Root::Anywhere for fs::scratch() roots (#2301)**

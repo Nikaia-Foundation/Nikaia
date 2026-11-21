@@ -1,0 +1,13 @@
+bounds in tests/an_inner_scan_from_a_named_start_keeps_its_indexes_proved.nika: 6 indexes, 6 proved; 6 operations, 6 proved
+    14  bs[j]      proved
+    14  bs[j]      proved
+    15  j += 1     proved
+    21  bs[j]      proved
+    23  j + 2      proved
+    27  bs[e - 1]  proved
+    27  e - 1      proved
+    28  e -= 1     proved
+    31  j + 1      proved
+    32  bs[i]      proved
+    32  bs[i]      proved
+    33  i += 1     proved

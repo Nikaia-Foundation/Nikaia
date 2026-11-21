@@ -85,8 +85,14 @@ pub(crate) fn check_program_program<H: CheckHost>(state: &mut CheckState, world:
             },
             Item::Test { body, .. } => { check_program_body(state, world, host, body); },
             Item::Bench { body, .. } => { check_program_body(state, world, host, body); },
-            Item::Grammar(gram) => { check_function_grammar(state, world, host, gram); },
+            Item::Grammar(_) => { },
             Item::Import { path, .. } => { state.an_import_that_brings_a_name_in(world, path, &item.span); },
+            _ => { },
+        }
+    }
+    for item in world.here.items.iter() {
+        match &item.node {
+            Item::Grammar(gram) => { check_function_grammar(state, world, host, gram); },
             _ => { },
         }
     }

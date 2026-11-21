@@ -1,0 +1,35 @@
+// A position moves only in the unit it names (ADR-374 D4): `forward` and
+// `back` with `scalars:`, `graphemes:` or `bytes:` give a `text::Pos?` of the
+// same text, `null` past either end and, for `bytes:`, inside a scalar. The
+// compiler hands each move the text its position came from (D5), through a
+// `let mut` carried by a loop (#743).
+use std::text
+
+fn rows(t: String) -> Vec[String] {
+    let mut out: Vec[String] = []
+    let mut k = t.start()
+    while k < t.end() {
+        let e = t.find("\n"; from: k) ?? return out
+        out.push(t.between(k, e.start).clone())
+        k = e.start.forward(scalars: 1) ?? return out
+    }
+    return out
+}
+
+fn main() throws {
+    let t = "abcdefg"
+    let m = t.find("b") ?? return
+    let p = m.end.forward(scalars: 4) ?? return
+    println(t.before(p))
+    println(t.after(p.back(scalars: 2) ?? t.start()))
+    println(f"{t.end().forward(scalars: 1) == null} {t.start().back(bytes: 1) == null}")
+    let u = "aäb"
+    let one = u.start().forward(bytes: 1) ?? return
+    println(f"{one.forward(bytes: 1) == null} {u.after(one.forward(bytes: 2) ?? u.end())}")
+    let g = "éx"
+    let past = g.start().forward(graphemes: 1) ?? return
+    println(f"{g.after(past)} {g.before(g.end().back(scalars: 1) ?? g.start()).bytes.len()} {g.after(g.end().back(graphemes: 2) ?? g.end()).bytes.len()}")
+    for row in rows("ab\ncd\n") {
+        println(f"<{row}>")
+    }
+}

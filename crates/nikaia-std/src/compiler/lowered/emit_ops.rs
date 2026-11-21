@@ -159,9 +159,9 @@ pub(crate) fn a_list_read_as_a_slice(written: String) -> String {
     let mut lead: String = String::from("&");
     let mut rest: String = nikaia_std::block::Text::from(after.to_string());
     if after.starts_with('\'') {
-        let space = match nikaia_std::search::find(&after, &" ", 0) { Some(__nikaia_value) => __nikaia_value, None => return written };
-        lead = format!("&{} ", nikaia_std::index::get(&after, nikaia_std::index::at(0..space)));
-        rest = nikaia_std::block::Text::from(nikaia_std::index::get(&after, nikaia_std::index::at(space + 1..)).to_string());
+        let space = match nikaia_std::text::find_first(&after, &" ") { Some(__nikaia_value) => __nikaia_value, None => return written };
+        lead = format!("&{} ", after.before(space.start));
+        rest = nikaia_std::block::Text::from(after.after(space.end).to_string());
     }
     if rest.starts_with("Vec<") {
         let inner = nikaia_std::index::or(rest.strip_prefix("Vec<"), || "");

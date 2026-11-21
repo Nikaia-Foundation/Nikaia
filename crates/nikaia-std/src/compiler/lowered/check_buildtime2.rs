@@ -14,19 +14,19 @@ impl CheckState {
     pub(crate) fn a_build_time_run_over_its_bound(&mut self, bound: &str, over: &str, value_fn: &str, span: &Span) {
         let mut what: &str = over.trim();
         let mut path: &str = "";
-        let bar = nikaia_std::search::find(&over, &"|", 0);
+        let bar = nikaia_std::text::find_first(&over, &"|");
         if bar.is_some() {
-            let at = nikaia_std::index::or(bar, || 0);
-            what = nikaia_std::index::get(&over, nikaia_std::index::at(0..at)).trim();
-            path = nikaia_std::index::get(&over, nikaia_std::index::at(at + "|".len() as i64..)).trim();
+            let at = match bar { Some(__nikaia_value) => __nikaia_value, None => return };
+            what = over.before(at.start).trim();
+            path = over.after(at.end).trim();
         }
         let mut kind: String = nikaia_std::block::Text::from(what.to_string());
         let mut limit: String = String::from("");
-        let space = nikaia_std::search::find(&what, &" ", 0);
+        let space = nikaia_std::text::find_first(&what, &" ");
         if space.is_some() {
-            let at = nikaia_std::index::or(space, || 0);
-            kind = nikaia_std::block::Text::from(nikaia_std::index::get(&what, nikaia_std::index::at(0..at)).to_string());
-            limit = nikaia_std::block::Text::from(nikaia_std::index::get(&what, nikaia_std::index::at(at + " ".len() as i64..)).to_string());
+            let at = match space { Some(__nikaia_value) => __nikaia_value, None => return };
+            kind = nikaia_std::block::Text::from(what.before(at.start).to_string());
+            limit = nikaia_std::block::Text::from(what.after(at.end).to_string());
         }
         let mut message: String = format!("`{}` took more than {} steps while the program was built.", bound, limit);
         let mut note: String = String::from("Each turn of a loop and each call is a step, and the count is the same on every machine.");

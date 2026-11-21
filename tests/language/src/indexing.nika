@@ -75,36 +75,29 @@ test "a field of an indexed element compiles and runs" {
     assert(cell == 3)
 }
 
-// …and **a range the program computes stays in the conversion**, which is
-// where `index::at` earns its place over a slice: a range built out of
-// **names** is an `i64` one and has to be converted (ADR-285 D1).
-// `examples/k-nucleotide/src/main.nika` writes the second shape.
-test "a slice of text is converted where the range is computed" {
+// …and **a text is cut at the positions a search hands out** (ADR-374 D2,
+// D3): a match's `start` and `end` and the cuts by name, where a range of
+// numbers no longer reaches a text.
+test "a text is cut at the positions a search hands out" {
     let text = "hello"
-    let at = text.find("e") ?? 0
-    let last = at + "el".len()
-    let part = text[at..last]
-    let end = at + "ell".len()
-    let computed = f"{text[at..<end]}"
+    let m = text.find("ell") ?? return
+    let part = text.between(m.start, m.end)
+    let computed = f"{text.after(m.start)}"
     let written = part == "ell"
     assert(written)
-    assert(computed == "ell")
+    assert(computed == "ello")
 }
 
-// **A slice of text read as a value did not lower** (ADR-182 D2): over a
-// **range** the read answers a `&str` already, and `*` over one is a `str`.
-//
-// **Off the shape of what is in the brackets** and not off a type: a range is
-// a run and a key is not, in this language and in the one below alike.
-test "a slice of text read as a value runs" {
+// **A cut of text read as a value runs** (ADR-182 D2): it answers a `&str`
+// already, and `*` over one would be a `str`.
+test "a cut of text read as a value runs" {
     let text = "hello world"
-    let at = text.find("e") ?? 0
-    let last = at + "el".len()
-    let space = text.find(" ") ?? 0
-    let bare = f"{text[at..last]}"
-    let part = text[at..last]
+    let m = text.find("ell") ?? return
+    let space = text.find(" ") ?? return
+    let bare = f"{text.between(m.start, m.end)}"
+    let part = text.between(m.start, m.end)
     let viewed = f"{part}"
-    let open = f"{text[0..<space]}"
+    let open = f"{text.before(space.start)}"
     assert(bare == "ell")
     assert(viewed == "ell")
     assert(open == "hello")

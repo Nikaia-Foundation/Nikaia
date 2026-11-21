@@ -1331,7 +1331,8 @@ impl EmitState {
         }
         let replaced_here = self.facts.replaced_in_place.contains(&node_key(receiver)) || self.facts.replaced_last_uses.contains(&node_key(receiver));
         if (name == "rfind" || name == "replacen" && !replaced_here) && self.facts.text_finds.contains(&node_key(receiver)) {
-            out.push(&format!("nikaia_std::search::{}(&", name));
+            let module = if name == "rfind" { "text" } else { "search" };
+            out.push(&format!("nikaia_std::{}::{}(&", module, name));
             self.emit_core_nested(world, walk, out, host, receiver, 255, depth, flow, scope)?;
             let mut i = 0;
             for arg in args.iter() {
@@ -1343,10 +1344,37 @@ impl EmitState {
             return Ok(());
         }
         if name == "split_at" && args.len() == 1 && self.facts.text_finds.contains(&node_key(receiver)) {
-            out.push("nikaia_std::search::split_at(&");
+            out.push("nikaia_std::text::split_at(&");
             self.emit_core_nested(world, walk, out, host, receiver, 255, depth, flow, scope)?;
             out.push(", ");
             self.emit_core_nested(world, walk, out, host, unsafe { nikaia_std::proven::read(&args, (0) as usize) }, 0, depth, flow, scope)?;
+            out.push(")");
+            return Ok(());
+        }
+        let moved: Option<Expr> = match self.facts.pos_moves.get(&node_key(node)) {
+            Some(__nikaia_it) => Some(__nikaia_it.clone()),
+            None => None,
+        };
+        if (name == "forward" || name == "back") && moved.is_some() {
+            let text: Expr = match moved { Some(__nikaia_value) => __nikaia_value, None => return Ok(()) };
+            let mut unit: &'static str = "";
+            let mut count: Vec<Expr> = nikaia_std::block::list(nikaia_std::block::Place::Block);
+            if !emit_call_option_named(world, config, "scalars").is_empty() {
+                unit = "scalars";
+                count = emit_call_option_named(world, config, "scalars");
+            } else if !emit_call_option_named(world, config, "graphemes").is_empty() {
+                unit = "graphemes";
+                count = emit_call_option_named(world, config, "graphemes");
+            } else {
+                unit = "bytes";
+                count = emit_call_option_named(world, config, "bytes");
+            }
+            out.push(&format!("nikaia_std::text::{}_{}(&", name, unit));
+            self.emit_core_nested(world, walk, out, host, &text, 255, depth, flow, scope)?;
+            out.push(", ");
+            self.emit_core_nested(world, walk, out, host, receiver, 0, depth, flow, scope)?;
+            out.push(", ");
+            if !count.is_empty() { self.emit_core_nested(world, walk, out, host, unsafe { nikaia_std::proven::read(&count, (0) as usize) }, 0, depth, flow, scope)?; } else { out.push("0"); }
             out.push(")");
             return Ok(());
         }
@@ -1359,13 +1387,15 @@ impl EmitState {
             return Ok(());
         }
         if name == "find" && self.facts.text_finds.contains(&node_key(receiver)) {
-            out.push("nikaia_std::search::find(&");
+            let from = emit_call_option_named(world, config, "from");
+            out.push(if !from.is_empty() { "nikaia_std::text::find(&" } else { "nikaia_std::text::find_first(&" });
             self.emit_core_nested(world, walk, out, host, receiver, 255, depth, flow, scope)?;
             out.push(", &");
             if !args.is_empty() { self.emit_core_nested(world, walk, out, host, unsafe { nikaia_std::proven::read(&args, (0) as usize) }, 255, depth, flow, scope)?; } else { out.push("\"\""); }
-            out.push(", ");
-            let from = emit_call_option_named(world, config, "from");
-            if !from.is_empty() { self.emit_expr(world, walk, out, host, unsafe { nikaia_std::proven::read(&from, (0) as usize) }, depth, flow, scope)?; } else { out.push("0"); }
+            if !from.is_empty() {
+                out.push(", ");
+                self.emit_expr(world, walk, out, host, unsafe { nikaia_std::proven::read(&from, (0) as usize) }, depth, flow, scope)?;
+            }
             out.push(")");
             return Ok(());
         }
@@ -1506,8 +1536,8 @@ pub(crate) fn emit_tuple_part_copy(i: i64, word: &str) -> String {
 }
 
 pub(crate) fn emit_tuple_part_copies(parts: &[String]) -> String {
-    let copies: Vec<String> = parts.iter().enumerate().map(|(at, item)| (at as i64, item)).map(|__nikaia_tuple111918| {
-        let (i, word) = __nikaia_tuple111918;
+    let copies: Vec<String> = parts.iter().enumerate().map(|(at, item)| (at as i64, item)).map(|__nikaia_tuple113598| {
+        let (i, word) = __nikaia_tuple113598;
         emit_tuple_part_copy(i, word)
     }).collect::<Vec<_>>();
     if copies.len() == 1 { return format!("({},)", *unsafe { nikaia_std::proven::read(&copies, (0) as usize) }); }

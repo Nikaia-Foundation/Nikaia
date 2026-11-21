@@ -225,10 +225,12 @@ pub(crate) fn is_a_bool_type(ty: &Ty) -> bool {
     }
 }
 
-pub(crate) fn is_a_text_position(ty: &Ty) -> bool {
+pub(crate) fn is_a_text_position(ty: &Ty) -> bool { text_position_kind(ty) != "" }
+
+pub(crate) fn text_position_kind(ty: &Ty) -> String {
     match ty.unseen() {
-        Ty::Named { ref name, ref args, .. } => args.is_empty() && name == "text::Pos",
-        _ => false,
+        Ty::Named { ref name, ref args, .. } => if args.is_empty() && (name == "text::Pos" || name == "text::Match") { nikaia_std::block::Text::from(name.to_string()) } else { String::from("") },
+        _ => String::from(""),
     }
 }
 
@@ -259,9 +261,10 @@ impl CheckState {
         let left_collection = is_a_collection_type(left);
         if !left_collection && !is_a_collection_type(right) {
             if declared_with_no_arithmetic(&world.here, left).is_some() { self.arithmetic_on_a_declared_type(world, &symbol, left_expr, left, right_expr, right, 0, compound, span); } else if declared_with_no_arithmetic(&world.here, right).is_some() { self.arithmetic_on_a_declared_type(world, &symbol, right_expr, right, left_expr, left, 1, compound, span); } else if is_a_text_position(left) || is_a_text_position(right) {
-                let note: String = String::from("A `text::Pos` is a boundary in one text, not a number, and takes no arithmetic (ADR-374 D1).");
+                let kind = if is_a_text_position(left) { text_position_kind(left) } else { text_position_kind(right) };
+                let note: String = String::from("A `text::Pos` is a boundary in one text, not a number, and takes no arithmetic; a `text::Match`'s `start` and `end` are two (ADR-374 D1, D2).");
                 let help: String = String::from("Cut the text there with `before`, `after` or `between`; the bytes before it are `t.before(p).bytes.len()`.");
-                self.findings.push(check_refusal("NK1191", span, format!("You can't use `{}` on a `text::Pos`.", symbol), vec![note], Some(help)));
+                self.findings.push(check_refusal("NK1191", span, format!("You can't use `{}` on a `{}`.", symbol, kind), vec![note], Some(help)));
             } else if text_or_bool_in_arithmetic(&op, left, right) {
                 let mut culprit = left.shown();
                 if is_text_type(&left.unseen()) { culprit = String::from("String"); } else if !is_a_bool_type(left) {

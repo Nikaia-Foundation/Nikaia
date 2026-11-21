@@ -1,0 +1,25 @@
+error[NK1214]: `b` is cut at `m.end`, a position of `a`, another text.
+  --> tests/text_pos_of_another_text_is_refused.nika:9:5
+   |
+ 9 |     println(b.after(m.end))
+   |     ^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: A position is a boundary in exactly one text, the one it was taken from; in another it may fall inside a scalar, or read the wrong place (ADR-374 D5).
+   = help: Take the position from `b` itself: `b.start()`, `b.end()`, or a match of `b.find(…)`.
+error[NK1214]: `b` is searched at `a.start()`, a position of `a`, another text.
+   --> tests/text_pos_of_another_text_is_refused.nika:10:5
+    |
+ 10 |     println(b.find("z"; from: a.start()) == null)
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: A position is a boundary in exactly one text, the one it was taken from; in another it may fall inside a scalar, or read the wrong place (ADR-374 D5).
+    = help: Take the position from `b` itself: `b.start()`, `b.end()`, or a match of `b.find(…)`.
+error[NK1214]: `k` holds positions of `b`, and is given `m.start`, a position of `a`.
+   --> tests/text_pos_of_another_text_is_refused.nika:12:5
+    |
+ 12 |     k = m.start
+    |     ^^^^^^^^^^^
+    |
+    = note: A name keeps the text its positions belong to, which every move and cut of it is handed (ADR-374 D5).
+    = help: Give `k` positions of `b` only: its `start()`, `end()`, a match of `b.find(…)` or a move of one.
+3 type errors

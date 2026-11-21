@@ -6,7 +6,7 @@ fn look(inner: String, named: ref collections::BTreeMap[String, i64], hashed: re
     let mut name: String = inner.clone()
     let colon = inner.find(":")
     if colon != null {
-        name = inner.bytes[0..<colon].text() catch { "" }
+        name = inner.before(colon?.start ?? inner.end())
     }
     name = name.trim().clone()
     let a = named[name] ?? -1

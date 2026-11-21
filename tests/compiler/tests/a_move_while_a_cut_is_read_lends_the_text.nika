@@ -6,8 +6,8 @@
 struct Box { s: String }
 
 fn moved(keep line: String) -> String {
-    let m = line.find(";") ?? 0
-    let head = line[..m]
+    let m = line.find(";")?.end ?? line.start()
+    let head = line.before(m)
     let b = Box { s: line }
     return f"{head}|{b.s}"
 }
@@ -22,7 +22,7 @@ fn main() throws {
     println(moved(f"Hamburg;{12}"))
     let line = made()
     let m = line.find(";") ?? return
-    let tail = line[m..]
+    let tail = line.after(m.start)
     let b = Box { s: line }
     println(f"{tail}|{b.s}")
 }
