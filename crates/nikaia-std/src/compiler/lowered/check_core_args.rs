@@ -241,13 +241,20 @@ pub(crate) fn check_core_args_other<H: CheckHost>(state: &mut CheckState, world:
     let mut wants_pausing_fn = false;
     let mut wants_throwing_fn = false;
     let mut viewed: Vec<bool> = vec![];
+    let mut generic: Vec<bool> = vec![];
+    let mut any_generic = false;
     if at < expected.len() as i64 {
         lends = (*unsafe { nikaia_std::proven::read(&expected, (at) as usize) }).is_a_view();
         match unsafe { nikaia_std::proven::read(&expected, (at) as usize) } {
             Ty::Fn { params, is_sync, can_throw, .. } => {
                 let can_throw = *can_throw; let is_sync = *is_sync;
                 wants_fn = true;
-                viewed.reserve(params.iter().size_hint().0); for p in params.iter() { viewed.push(p.is_a_view()); }
+                for p in params.iter() {
+                    viewed.push(p.is_a_view());
+                    let variable = matches!(p, Ty::Var { .. });
+                    any_generic = any_generic || variable;
+                    generic.push(variable);
+                }
                 let plain: bool = is_sync;
                 wants_pausing_fn = !plain;
                 wants_throwing_fn = can_throw;
@@ -282,7 +289,10 @@ pub(crate) fn check_core_args_other<H: CheckHost>(state: &mut CheckState, world:
     }
     if declared_here && named && runs && wants_throwing_fn && found_throws { state.facts.boxed_fn_values.insert(id_of(arg) as i64, arity); }
     if declared_here && named && runs && wants_throwing_fn && found_fn && !found_throws { state.facts.infallible_fn_values.insert(id_of(arg) as i64, arity); }
-    if named && wants_fn && found_fn { state.facts.named_fn_values.insert(id_of(arg) as i64, viewed); }
+    if named && wants_fn && found_fn {
+        state.facts.named_fn_values.insert(id_of(arg) as i64, viewed);
+        if any_generic { state.facts.generic_fn_slots.insert(id_of(arg) as i64, generic); }
+    }
     if declared_here && named && runs && wants_pausing_fn && found_fn { state.facts.sync_functions_run_async.insert(id_of(arg) as i64, arity); }
     if declared_here && wants_fn && found_fn && runs && !check_core_args_a_run_parameter(&state, world, arg) && !named {
         state.facts.kept_args.insert(id_of(arg) as i64);

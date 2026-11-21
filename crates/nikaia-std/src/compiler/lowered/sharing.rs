@@ -946,6 +946,8 @@ pub(crate) fn field_slot(base: &Expr, field: &str, asked: &Asked<'_, '_, '_>, wa
     Some(slot(FIELDS, &key))
 }
 
+pub(crate) fn sharing_option(expr: Option<&Expr>, asked: &Asked<'_, '_, '_>, holes_of: &mut dyn FnMut(&Expr) -> Vec<Expr>, ty_of: &mut dyn FnMut(&Type) -> Ty, walk: &mut SharingWalk) { sharing_expression(match expr { Some(__nikaia_value) => __nikaia_value, None => return }, asked, &mut &mut *holes_of, &mut &mut *ty_of, walk); }
+
 pub(crate) fn sharing_expression(expr: &Expr, asked: &Asked<'_, '_, '_>, holes_of: &mut dyn FnMut(&Expr) -> Vec<Expr>, ty_of: &mut dyn FnMut(&Type) -> Ty, walk: &mut SharingWalk) {
     match expr {
         Expr::Spawn { body, .. } => {
@@ -986,7 +988,13 @@ pub(crate) fn sharing_expression(expr: &Expr, asked: &Asked<'_, '_, '_>, holes_o
             sharing_block(body, asked, &mut &mut *holes_of, &mut &mut *ty_of, walk);
         },
         Expr::Block(block, _) => { sharing_block(block, asked, &mut &mut *holes_of, &mut &mut *ty_of, walk); },
-        Expr::AsyncGroup(block, _, _, _, _) => { sharing_block(block, asked, &mut &mut *holes_of, &mut &mut *ty_of, walk); },
+        Expr::AsyncGroup(block, _, within, limit, admission) => {
+            let within = nikaia_std::boxed::open(within); let limit = nikaia_std::boxed::open(limit); let admission = nikaia_std::boxed::open(admission);
+            sharing_option((within).as_ref(), asked, &mut &mut *holes_of, &mut &mut *ty_of, walk);
+            sharing_option((limit).as_ref(), asked, &mut &mut *holes_of, &mut &mut *ty_of, walk);
+            sharing_option((admission).as_ref(), asked, &mut &mut *holes_of, &mut &mut *ty_of, walk);
+            sharing_block(block, asked, &mut &mut *holes_of, &mut &mut *ty_of, walk);
+        },
         Expr::Overlap(block, _) => { sharing_block(block, asked, &mut &mut *holes_of, &mut &mut *ty_of, walk); },
         Expr::If { cond, then_branch, else_branch, .. } => {
             let cond = nikaia_std::boxed::open(cond);
@@ -1006,7 +1014,12 @@ pub(crate) fn sharing_expression(expr: &Expr, asked: &Asked<'_, '_, '_>, holes_o
         },
         Expr::Unary { expr, .. } => { let expr = nikaia_std::boxed::open(expr); sharing_expression(expr, asked, &mut &mut *holes_of, &mut &mut *ty_of, walk); },
         Expr::Try(inner, _) => { let inner = nikaia_std::boxed::open(inner); sharing_expression(inner, asked, &mut &mut *holes_of, &mut &mut *ty_of, walk); },
-        Expr::Async(inner, _, _, _) => { let inner = nikaia_std::boxed::open(inner); sharing_expression(inner, asked, &mut &mut *holes_of, &mut &mut *ty_of, walk); },
+        Expr::Async(inner, _, within, admission) => {
+            let inner = nikaia_std::boxed::open(inner); let within = nikaia_std::boxed::open(within); let admission = nikaia_std::boxed::open(admission);
+            sharing_option((within).as_ref(), asked, &mut &mut *holes_of, &mut &mut *ty_of, walk);
+            sharing_option((admission).as_ref(), asked, &mut &mut *holes_of, &mut &mut *ty_of, walk);
+            sharing_expression(inner, asked, &mut &mut *holes_of, &mut &mut *ty_of, walk);
+        },
         Expr::Throw(inner, _) => { let inner = nikaia_std::boxed::open(inner); sharing_expression(inner, asked, &mut &mut *holes_of, &mut &mut *ty_of, walk); },
         Expr::Cast { expr, .. } => { let expr = nikaia_std::boxed::open(expr); sharing_expression(expr, asked, &mut &mut *holes_of, &mut &mut *ty_of, walk); },
         Expr::Field { base, .. } => { let base = nikaia_std::boxed::open(base); sharing_expression(base, asked, &mut &mut *holes_of, &mut &mut *ty_of, walk); },

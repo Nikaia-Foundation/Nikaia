@@ -1,0 +1,21 @@
+// ADR-async-5 D12's example in its old form (#2645): the `else` path cancels
+// the deferred handle, which takes it (`cancel(self)`, Part III B.2), so the
+// `join()` after the `if` uses a handle already taken: `NK2105` (Part III),
+// not rustc's use of a moved value.
+fn copy_all(src: i64, dst: i64) throws {
+	println(f"copied {src} to {dst}")
+}
+
+fn save(dst: i64, need: i64) throws {
+	let mut backup = async(deferred) fn { copy_all(1, dst) }
+	if dst > need {
+		backup.start()
+	} else {
+		backup.cancel()
+	}
+	backup.join()
+}
+
+fn main() throws {
+	save(10, 5)
+}
