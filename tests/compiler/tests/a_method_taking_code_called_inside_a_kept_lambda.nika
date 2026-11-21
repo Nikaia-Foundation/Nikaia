@@ -1,0 +1,14 @@
+struct S {
+    n: i64,
+}
+
+impl S {
+    fn high(ref self, h: fn(i64) -> i64) -> i64 { return h(self.n) }
+}
+
+fn twice(x: i64) -> i64 { return x * 2 }
+
+fn main() throws {
+    let hi: fn(fn(i64) -> i64) -> i64 = fn(h) { return S { n: 3 }.high(h) }
+    println(hi(twice))
+}
