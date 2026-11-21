@@ -3,8 +3,9 @@
 // NIKAIA_DRIVE_STARTED where a restart set it); `--time-up DIR` (#1885): an
 // agent of DIR starts only where the minutes left until the task's end
 // (NIKAIA_DRIVE_TASK_MIN, default 120) cover a builder of DIR
-// (BRIEF.posted to BRIEF.run.json, else its duration_ms), the median of the
-// last nine, 60 with none.
+// (BRIEF.posted to BRIEF.run.json, else its duration_ms, the line
+// `--run-record DIR BRIEF` appends to DIR/runs.txt after each run, #2459), the
+// median of the last nine lines, 60 with none.
 use std::env
 use std::fs
 use std::process
@@ -51,6 +52,13 @@ fn main() throws {
     let runs = fs::scratch()
     let now = text::parse_i64(process::run("date", ["+%s"]).stdout.trim()) ?? 0
     process::run("sh", ["-c", f"cd {runs.path().to_text()} && echo '\"duration_ms\":45000,' > a.md.run.json && touch a.md.posted && touch -d @{now - 3000} a.md.posted && touch -d @{now - 600} a.md.run.json && echo '\"duration_ms\":600000,' > b.md.run.json && echo '\"duration_ms\":6000000,' > c.md.run.json"])
+    for b in ["a", "b", "c", "missing"] {
+        process::run(nikaia.clone(), ["run", "scripts/drive.nika", "--", "--run-record", runs.path().to_text(), f"{runs.path().to_text()}/{b}.md"]; dir: repo.clone())
+    }
+    let today = process::run("date", ["+%F"]).stdout.trim().clone()
+    print(fs::read_to_string("runs.txt", runs).replace(today, "DATE"))
+    // The run files are not read: only runs.txt counts.
+    process::run("sh", ["-c", f"rm -f {runs.path().to_text()}/*.run.json"])
     lane(nikaia.clone(), repo.clone(), runs.path().to_text(), "runs of 40, 22 min in", 1350, "")
     lane(nikaia.clone(), repo.clone(), runs.path().to_text(), "runs of 40, 75 min in", 4530, "")
     lane(nikaia.clone(), repo.clone(), runs.path().to_text(), "runs of 40, 85 min in", 5130, "")

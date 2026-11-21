@@ -519,7 +519,7 @@ fn drive_time_up() -> bool throws {
 	return drive_elapsed() >= limit * 60
 }
 
-// The seconds of one run of DIR's past runs, BRIEF.run.json: the span from
+// The seconds of one run, BRIEF.run.json: the span from
 // BRIEF.posted (written just before the agent starts) to the run.json, since
 // claude's `duration_ms` covers only the last turn of a run a background task
 // woke; that field where the span is missing or longer than the agent's 150
@@ -537,20 +537,34 @@ fn drive_run_seconds(json_path: String) -> i64 throws {
 }
 
 // Minutes a builder of DIR is expected to take (#1885, #2022): the median of
-// DIR's last nine runs (drive_run_seconds, newest run.json first; the upper
-// one of an even count), rounded up; 60 while DIR has none. The longest run
-// stopped a lane with one long run at every start, after its merges, with
-// most of the task's time left (#2022).
+// the SECONDS of DIR/runs.txt's last nine lines (`DATE STEM SECONDS`, one per
+// run, drive_run_record, #2459; the upper one of an even count), rounded up;
+// 60 while DIR has none. The longest run stopped a lane with one long run at
+// every start, after its merges, with most of the task's time left (#2022).
 fn drive_run_minutes(dir: String) -> i64 throws {
-	let listed = process::run("sh", ["-c", "ls -t -- \"$1\"/*.run.json 2>/dev/null | head -9", "sh", dir.clone()]).stdout
+	let lines: Vec[String] = drive_read(f"{dir}/runs.txt").trim().split("\n").collect()
 	let mut spans: Vec[i64] = []
-	for path in listed.split("\n") {
-		if path.trim() == "" { continue }
-		spans.push(drive_run_seconds(path.trim().clone()))
+	let mut i = lines.len()
+	while i > 0 && spans.len() < 9 {
+		i -= 1
+		let cells: Vec[String] = lines[i].trim().split(" ").collect()
+		if cells.len() == 3 { spans.push(text::parse_i64(cells[2].clone()) ?? 0) }
 	}
 	if spans.len() == 0 { return 60 }
 	spans.sort()
 	return (spans[spans.len() / 2] + 59) / 60
+}
+
+// After a run of BRIEF: `DATE STEM SECONDS` appended to DIR/runs.txt (#2459,
+// untracked like cost.txt), SECONDS by drive_run_seconds; nothing without a
+// BRIEF.run.json.
+fn drive_run_record(dir: String, brief: String) throws {
+	let abs = process::run("realpath", [brief]).stdout.trim().clone()
+	let json = f"{abs}.run.json"
+	if !fs::exists(json.clone(), fs::Root::Anywhere) { return }
+	let seconds = drive_run_seconds(json)
+	let today = process::run("date", ["+%F"]).stdout.trim().clone()
+	drive_append(f"{dir}/runs.txt", f"{today} {drive_stem(abs)} {seconds}")
 }
 
 // Whether an agent of DIR may start (#1885): "" when it may; `up` past
@@ -2578,7 +2592,7 @@ fn drive_settle(exe: String, dir: String) throws {
 		drive_qa_input(dir, out, steps)
 		drive_qa_copy(dir)
 		process::run("rm", ["-f", f"{qa}.report.md"])
-		drive_disk(exe.clone(), false)
+		drive_disk(exe.clone(), false, dir.clone())
 		drive_agent(exe, false, dir, qa, "qa")
 		rounds += 1
 		drive_report_pushed(false, qa)
@@ -2826,7 +2840,7 @@ fn drive_nothing_new(dir: String) -> bool throws {
 // (header comment).
 fn drive_suite(exe: String, dry: bool, dir: String) throws {
 	let qa = drive_qa_brief(dir)
-	drive_cleanup(exe.clone(), dry)
+	drive_cleanup(exe.clone(), dry, dir.clone())
 	drive_say(
 		dry,
 		"a suite still running (target/suite.lock/testing): wait for it first (SUITE <sha8> waiting)",
@@ -3078,10 +3092,12 @@ fn drive_run_issue(brief: String, dir: String) -> String throws {
 	return drive_focus_issue(drive_read("docs/briefs/focus.txt"), "", dir)
 }
 
-// After a run: its comment on its issue (drive_run_comment). No issue, or a
-// failed post, is logged (`no issue for <brief>`, `post failed for <brief>`)
-// and stops nothing; the files stay for the driver and the supervisor.
+// After a run: its line in DIR/runs.txt (drive_run_record), its comment on its
+// issue (drive_run_comment). No issue, or a failed post, is logged (`no issue
+// for <brief>`, `post failed for <brief>`) and stops nothing; the files stay
+// for the driver and the supervisor.
 fn drive_post_run(dir: String, brief: String, cost_from: i64, fallback: String) throws {
+	drive_run_record(dir.clone(), brief.clone())
 	let name = drive_stem(brief)
 	let issue = drive_run_issue(brief, dir)
 	if issue == "" {
@@ -3106,9 +3122,33 @@ fn drive_tidy(dry: bool, dir: String) throws {
 	for i in 0..<stray.len() { process::run("rm", ["-f", stray[i].clone()]) }
 }
 
+// The before-binary of HEAD (#2459): target/bins/<HEAD's 12-digit sha>/nikaia,
+// which agent.nika hands its agent as NIKAIA_OLD, one per commit for all
+// lanes instead of a copy in each scratchpad. Made when missing: from
+// target/fast/nikaia where that is not older than HEAD's last commit under
+// crates/, else after `cargo build --profile fast -p nikaia`; copied under a
+// temp name and moved into place, since two lanes may make it at once; named
+// exactly `nikaia` in its own directory (#1868). Prints `BINS <sha> made`, or
+// `BINS <sha> not made: <why>` (the agent then runs without NIKAIA_OLD).
+fn drive_bins(dry: bool) throws {
+	drive_say(
+		dry,
+		"target/bins/<HEAD sha12>/nikaia missing: copy target/fast/nikaia there (cargo build --profile fast -p nikaia first where it is older than HEAD's last commit under crates/), through a temp name and mv; agent.nika gives claude its path as NIKAIA_OLD",
+	)
+	if dry { return }
+	let out = process::run(
+		"sh",
+		["-c", "sha=$(git rev-parse --short=12 HEAD) || exit 0; d=target/bins/$sha; [ -x \"$d/nikaia\" ] && exit 0; b=target/fast/nikaia; last=$(git log -1 --format=%ct -- crates/); if [ ! -x $b ] || [ $(stat -c %Y $b) -lt \"${last:-0}\" ]; then cargo build --profile fast -p nikaia >/dev/null 2>&1 || { echo \"BINS $sha not made: cargo build failed\"; exit 0; }; fi; mkdir -p \"$d\" && cp $b \"$d/.nikaia.$$\" && mv \"$d/.nikaia.$$\" \"$d/nikaia\" && echo \"BINS $sha made\" || echo \"BINS $sha not made: copy failed\""],
+	)
+	let said = out.stdout.trim()
+	if said != "" { println(said) }
+}
+
 // Runs one agent; prints `<role> done ...`; escalates on anything else.
 fn drive_agent(exe: String, dry: bool, dir: String, brief: String, role: String) throws {
+	drive_bins(dry)
 	drive_say(dry, f"{exe} run scripts/agent.nika -- {brief} --dir {dir}")
+	drive_say(dry, f"append <date> {drive_stem(brief)} <seconds from {brief}.posted to its run.json, else duration_ms> to {dir}/runs.txt")
 	drive_say(
 		dry,
 		f"gh api {drive_comments_api("<issue of " + drive_stem(brief) + ">")} -F body=@<Run: the result, tokens, cost, time, turns, report, debrief, the footer>",
@@ -3195,12 +3235,21 @@ fn drive_sweep() -> i64 throws {
 // with a newer one beside them freed 6.4 GB, 1498 files there and 162 in the
 // ledger tree, free space from 4.4 GB to 11 GB). Prints `CLEANUP freed <N> MB,
 // <M> MB free: ...`.
-fn drive_cleanup(exe: String, dry: bool) throws {
+fn drive_cleanup(exe: String, dry: bool, dir: String) throws {
 	drive_say(
 		dry,
 		f"rm -rf target/debug (unless a cargo in this checkout builds into it) target/nikaia-example-tests target/gate-tests-* target/pre-push-*; rm -rf each $TMPDIR/nikaia-test-<pid>-<n> whose pid is gone; NIKAIA_CACHE_DIR=target/nikaia-project-tests NIKAIA_CACHE_LIMIT=2G {exe} cache prune; under 6 GB after it and no cargo or rustc building into target/fast or target/release, rm -rf target/fast/incremental target/release/incremental target/ledger-target/fast/incremental, and in target/fast/deps target/release/deps target/ledger-target/fast/deps rm each <name>-<16 hex><rest> last changed over 3 h ago whose <name> has a newer file of another hash; print CLEANUP freed <N> MB, <M> MB free",
 	)
+	drive_say(dry, "rm -rf each target/bins/<sha> but HEAD's, the 2 newest of HEAD's history and those a running process names (its args or environment)")
+	if dir != "" {
+		drive_say(
+			dry,
+			f"for each {dir}/issue-N.md with a .posted whose issue N is closed (and its debrief reviewed in docs/briefs/facts-reviewed.txt): rm its .md, .posted, .running, .session, .run.json, .report.md, .run*.report.md, .debrief.md and its claude session dir; print CLEANUP removed <N> briefs, <M> MB",
+		)
+	}
 	if dry { return }
+	drive_bins_gone()
+	if dir != "" { drive_briefs_gone(dir) }
 	let before = drive_free()
 	// A cargo building into target/debug: one whose working directory is in
 	// this checkout and that names no other profile or target directory.
@@ -3245,6 +3294,68 @@ fn drive_cleanup(exe: String, dry: bool) throws {
 	println(f"CLEANUP freed {after - before} MB, {after} MB free: {debug}, target/nikaia-example-tests, {swept} stale sandboxes, {pruned}{incremental}")
 }
 
+// Removes each target/bins/<sha> (drive_bins, #2459) but HEAD's, those of
+// the 2 newest commits of HEAD's last 500 that have one, and those whose path
+// a running process names in its arguments or its environment (an agent's
+// NIKAIA_OLD).
+fn drive_bins_gone() throws {
+	process::run(
+		"sh",
+		["-c", "[ -d target/bins ] || exit 0; keep=$(git rev-parse --short=12 HEAD) || exit 0; head=$keep; n=0; for h in $(git log --format=%h --abbrev=12 -500 HEAD); do [ $n -ge 2 ] && break; [ \"$h\" = \"$head\" ] && continue; [ -d \"target/bins/$h\" ] && { keep=\"$keep $h\"; n=$((n + 1)); }; done; used=$({ ps -eww -o args=; cat /proc/[0-9]*/environ 2>/dev/null | tr '\\0' '\\n'; } | grep -o 'target/bins/[0-9a-f]*' | sort -u); for d in target/bins/*/; do h=$(basename \"$d\"); case \" $keep \" in *\" $h \"*) continue;; esac; echo \"$used\" | grep -qx \"target/bins/$h\" && continue; rm -rf \"target/bins/$h\"; done"],
+	)
+}
+
+// Removes the run files of DIR's briefs whose issue is closed (#2459): for
+// each `issue-N.md` with an `issue-N.md.posted` whose issue N GitHub reports
+// closed, the brief, its .posted, .running, .session, .run.json, reports
+// (`.report.md`, `.run<k>.report.md`, of the brief or its stem), debrief and
+// the claude session dir of its run (the id from .session, else the
+// run.json's session_id). Everything there is on the issue (drive_post_brief,
+// drive_post_run); an open issue keeps its files (drive_blocked_on,
+// drive_report_aside, the QA agent and the block-end facts read them), and so
+// does a debrief facts-collect has not reviewed yet. Prints `CLEANUP removed
+// <N> briefs, <M> MB`.
+fn drive_briefs_gone(dir: String) throws {
+	let reviewed = drive_read("docs/briefs/facts-reviewed.txt") + "\n"
+	let parts: Vec[String] = dir.trim_end_matches("/").split("/").collect()
+	let lane = parts[parts.len() - 1].clone()
+	let base = process::run("sh", ["-c", "echo \"${TMPDIR:-/tmp}/claude-$(id -u)/$(pwd -P | sed 's/[^a-zA-Z0-9]/-/g')\""]).stdout.trim().clone()
+	let mut briefs: i64 = 0
+	let mut paths: Vec[String] = []
+	for entry in fs::read_dir(dir.clone(), fs::Root::Anywhere) {
+		let names: Vec[String] = entry.to_text().split("/").collect()
+		let name = names[names.len() - 1].clone()
+		let n = (name.strip_prefix("issue-") ?? "").strip_suffix(".md") ?? ""
+		let mut digits = n != ""
+		for c in n.scalars { if !c.is_ascii_digit() { digits = false } }
+		if !digits { continue }
+		let brief = f"{dir}/{name}"
+		let stem = f"{dir}/issue-{n}"
+		if !fs::exists(f"{brief}.posted", fs::Root::Anywhere) { continue }
+		let debrief = if fs::exists(f"{stem}.debrief.md", fs::Root::Anywhere) { f"issue-{n}.debrief.md" } else { f"{name}.debrief.md" }
+		if fs::exists(f"{dir}/{debrief}", fs::Root::Anywhere) && !reviewed.contains(f"{lane}/{debrief}\n") { continue }
+		let state = process::run("gh", ["api", f"repos/{drive_repo()}/issues/{n}", "--jq", ".state"])
+		if !state.ok || state.stdout.trim() != "closed" { continue }
+		let mut id = drive_read(f"{brief}.session").trim().split(" ").collect()[0].clone()
+		if id == "" { id = drive_json_field(drive_read(f"{brief}.run.json"), "session_id") }
+		let mut safe = id != ""
+		for c in id.scalars { if !c.is_ascii_hexdigit() && c != '-' { safe = false } }
+		if safe { paths.push(f"{base}/{id}") }
+		for suffix in ["", ".posted", ".running", ".session", ".run.json", ".report.md", ".debrief.md"] { paths.push(f"{brief}{suffix}") }
+		for suffix in [".report.md", ".debrief.md"] { paths.push(f"{stem}{suffix}") }
+		let runs = process::run("sh", ["-c", "ls -d -- \"$1\".run*.report.md \"$2\".run*.report.md 2>/dev/null", "sh", brief, stem])
+		for r in runs.stdout.trim().split("\n") { if r.trim() != "" { paths.push(r.trim().clone()) } }
+		briefs += 1
+	}
+	let mut mb: i64 = 0
+	if paths.len() > 0 {
+		let mut args: Vec[String] = ["-c", "du -scm -- \"$@\" 2>/dev/null | tail -1 | cut -f1; rm -rf -- \"$@\"", "sh"]
+		for p in paths { args.push(p.clone()) }
+		mb = text::parse_i64(process::run("sh", args).stdout.trim()) ?? 0
+	}
+	println(f"CLEANUP removed {briefs} briefs, {mb} MB")
+}
+
 // Removes, in each directory of DIRS, every file `<name>-<16 hex
 // digits><rest>` last changed more than 3 h ago for which a newer file of the
 // same `<name>` and another hash exists (#2318): the old variants cargo leaves
@@ -3260,7 +3371,7 @@ fn drive_old_deps(dirs: Vec[String]) -> i64 throws {
 // Free disk before agents start: under 6 GB the cleanup runs at once, and
 // still under 3 GB after it the driver stops, before agent.nika would
 // escalate (#1521).
-fn drive_disk(exe: String, dry: bool) throws {
+fn drive_disk(exe: String, dry: bool, dir: String) throws {
 	let fake = env::var("NIKAIA_DRIVE_FREE_MB") ?? ""
 	if dry && fake == "" {
 		drive_say(
@@ -3272,7 +3383,7 @@ fn drive_disk(exe: String, dry: bool) throws {
 	let free = drive_free()
 	if free >= 6144 { return }
 	println(f"DISK {free} MB free, under 6 GB: cleanup")
-	drive_cleanup(exe, dry)
+	drive_cleanup(exe, dry, dir)
 	let left = drive_free()
 	if left < 3072 { drive_escalate(f"less than 3 GB free after the cleanup ({left} MB)") }
 }
@@ -3299,7 +3410,7 @@ fn drive_builder(exe: String, dry: bool, dir: String, brief: String) throws {
 		let why = drive_time_check(dir)
 		if why != "" { drive_time_stop(why) }
 	}
-	drive_disk(exe.clone(), dry)
+	drive_disk(exe.clone(), dry, dir.clone())
 	drive_post_brief(dry, brief)
 	drive_wip_start(dry, brief)
 	drive_say(dry, f"write {brief}.running (the run's start, removed when its follow-up is done)")
@@ -5514,9 +5625,16 @@ fn main() throws {
 		}
 		return
 	}
-	// The cleanup alone (#1521), in the directory it runs in.
-	if args.len() == 2 && args[1] == "--cleanup" {
-		drive_cleanup(drive_exe(), false)
+	// The line a run of BRIEF adds to DIR/runs.txt (#2459), alone.
+	if args.len() == 4 && args[1] == "--run-record" {
+		drive_run_record(args[2].clone(), args[3].clone())
+		return
+	}
+	// The cleanup alone (#1521), in the directory it runs in; with DIR, also
+	// the run files of DIR's closed issues (#2459).
+	if (args.len() == 2 || args.len() == 3) && args[1] == "--cleanup" {
+		let lane = if args.len() == 3 { args[2].clone() } else { "" }
+		drive_cleanup(drive_exe(), false, lane)
 		return
 	}
 	// The old deps variants step alone (#2318), on the directories named.

@@ -11,7 +11,8 @@
 // filled in) on one line; `batch.nika` reads it for its `NEXT` line.
 //
 // Reads BRIEF's frontmatter (agent, model, max_turns, budget_usd, effort), runs
-// `claude -p` within 150 minutes (larger steps, owner 2026-10-28), writes BRIEF.run.json, appends the
+// `claude -p` within 150 minutes (larger steps, owner 2026-10-28; with NIKAIA_OLD, the
+// driver's before-binary of HEAD, agent_old_env, #2459), writes BRIEF.run.json, appends the
 // session's token counts, summed over its transcript (`tokenspeed.nika --usage`),
 // to DIR/tokens.txt (through `batch.nika --tokens`) and the cost to DIR/cost.txt, and prints
 // `done <sha8> report <path> cost <usd> turns <api calls>`. A failed run writes
@@ -119,6 +120,19 @@ fn agent_resume_args(brief: String, body: String, session: String) -> Vec[String
 fn agent_transcript(session: String) -> String throws {
     let path = "${CLAUDE_CONFIG_DIR:-$HOME/.claude}/projects/$(pwd | sed 's/[^a-zA-Z0-9]/-/g')/" + session + ".jsonl"
     return process::run("sh", ["-c", "echo " + path]).stdout.trim().clone()
+}
+
+// The environment claude runs with (#2459): NIKAIA_OLD, the absolute path of
+// HEAD's before-binary target/bins/<sha12>/nikaia, which the driver made
+// (drive_bins); none where it is missing.
+fn agent_old_env() -> Vec[(String, String)] throws {
+    let mut env: Vec[(String, String)] = []
+    let sha = process::run("git", ["rev-parse", "--short=12", "HEAD"]).stdout.trim().clone()
+    let bin = f"target/bins/{sha}/nikaia"
+    if sha != "" && fs::exists(bin.clone(), fs::Root::Anywhere) {
+        env.push(("NIKAIA_OLD", process::run("realpath", [bin]).stdout.trim().clone()))
+    }
+    return env
 }
 
 // The report of BRIEF that exists (`BRIEF.report.md`, else the stem's), or the
@@ -554,9 +568,10 @@ fn main() throws {
     if spent > 1000 * 1000000 { agent_escalate(dir.clone(), f"cost today {spent / 1000000} USD above 1000") }
 
     let mut out = process::run("true", [])
+    let old_env = agent_old_env()
     if resumed != "" {
         fs::write(record.clone(), fs::Root::Anywhere, f"{resumed} {sum} resumed\n")
-        out = process::run(claude.clone(), agent_resume_args(abs.clone(), text.clone(), resumed.clone()); within: 150.minutes())
+        out = process::run(claude.clone(), agent_resume_args(abs.clone(), text.clone(), resumed.clone()); env: old_env.clone(), within: 150.minutes())
         if !out.timed_out && agent_json(out.stdout.clone(), "session_id") == "" {
             println(f"resume of {resumed} failed at once (code {out.code}), starting fresh")
             resumed = ""
@@ -566,7 +581,7 @@ fn main() throws {
     }
     if resumed == "" {
         fs::write(record.clone(), fs::Root::Anywhere, f"{wanted} {sum}\n")
-        out = process::run(claude.clone(), claude_args; within: 150.minutes())
+        out = process::run(claude.clone(), claude_args; env: old_env, within: 150.minutes())
     }
     let json = out.stdout
     fs::write(f"{abs}.run.json", fs::Root::Anywhere, json.clone())
