@@ -1,0 +1,8 @@
+fn twice(x: i64) -> i64 { return x * 2 }
+
+fn high(h: fn(i64) -> i64) -> i64 { return h(3) }
+
+fn main() throws {
+    let hi: fn(fn(i64) -> i64) -> i64 = high
+    println(hi(twice))
+}

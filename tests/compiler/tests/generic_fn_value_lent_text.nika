@@ -1,0 +1,16 @@
+// A named function whose `String` or `Vec` parameter is lent, handed to a
+// generic `fn(T)` parameter, binds `T` to the type it wrote, not to the
+// unsized view it lowers to (#2018).
+fn eat(a: String) -> i64 { return a.len() }
+fn total(a: Vec[i64]) -> i64 { return a.len() }
+fn eat_plus(a: String, b: i64) -> i64 { return a.len() + b }
+fn gen[T](f: fn(T) -> i64, t: T) -> i64 { return f(t) }
+fn gen_two[T](f: fn(T, i64) -> i64, t: T) -> i64 { return f(t, 10) }
+fn make() -> String { let mut s = String(); s.push_str("made"); return s }
+fn three() -> Vec[i64] { let mut v: Vec[i64] = []; v.push(1); v.push(2); v.push(3); return v }
+
+fn main() throws {
+    println(gen(eat, make()))
+    println(gen(total, three()))
+    println(gen_two(eat_plus, make()))
+}
