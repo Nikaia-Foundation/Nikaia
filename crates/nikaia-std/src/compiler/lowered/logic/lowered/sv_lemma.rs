@@ -38,9 +38,9 @@ pub(crate) fn sv_rat_abs(b: &SvRat) -> Option<SvRat> {
 pub(crate) fn sv_lemma_formula(arena: &mut TermArena, defs: &[SvNl], l: &SvLemma) -> Option<i64> {
     if l.def < 0 || l.def >= defs.len() as i64 { return None; }
     let t = unsafe { nikaia_std::proven::read(&defs, (l.def) as usize) };
-    let m = nikaia_std::block::Text::from(t.name.to_string());
-    let x = nikaia_std::block::Text::from(t.a.to_string());
-    let y = nikaia_std::block::Text::from(t.b.to_string());
+    let m = &t.name;
+    let x = &t.a;
+    let y = &t.b;
     let zero = sv_int(0);
     let one = sv_int(1);
     let s = &l.schema;
@@ -48,40 +48,40 @@ pub(crate) fn sv_lemma_formula(arena: &mut TermArena, defs: &[SvNl], l: &SvLemma
         if l.other < 0 || l.other >= defs.len() as i64 || unsafe { nikaia_std::proven::read(&defs, (l.other) as usize) }.op != t.op { return None; }
         let u = unsafe { nikaia_std::proven::read(&defs, (l.other) as usize) };
         if s == "congruence" {
-            let mut parts: Vec<i64> = vec![match sv_lvv(arena, "distinct", &x, &u.a) { Some(__nikaia_value) => __nikaia_value, None => return None }];
-            if t.op != "pow2" { parts.push(match sv_lvv(arena, "distinct", &y, &u.b) { Some(__nikaia_value) => __nikaia_value, None => return None }); }
-            parts.push(match sv_lvv(arena, "=", &m, &u.name) { Some(__nikaia_value) => __nikaia_value, None => return None });
+            let mut parts: Vec<i64> = vec![match sv_lvv(arena, "distinct", x, &u.a) { Some(__nikaia_value) => __nikaia_value, None => return None }];
+            if t.op != "pow2" { parts.push(match sv_lvv(arena, "distinct", y, &u.b) { Some(__nikaia_value) => __nikaia_value, None => return None }); }
+            parts.push(match sv_lvv(arena, "=", m, &u.name) { Some(__nikaia_value) => __nikaia_value, None => return None });
             return Some(arena.or(parts));
         }
         if s == "pow2-mono" {
-            let wider = match sv_lvv(arena, ">", &x, &u.a) { Some(__nikaia_value) => __nikaia_value, None => return None };
-            let below = match sv_lvv(arena, "<=", &m, &u.name) { Some(__nikaia_value) => __nikaia_value, None => return None };
+            let wider = match sv_lvv(arena, ">", x, &u.a) { Some(__nikaia_value) => __nikaia_value, None => return None };
+            let below = match sv_lvv(arena, "<=", m, &u.name) { Some(__nikaia_value) => __nikaia_value, None => return None };
             return Some(arena.or(vec![wider, below]));
         }
         if t.op != "*" { return None; }
-        let xn = match sv_lv(arena, "<", &x, &zero) { Some(__nikaia_value) => __nikaia_value, None => return None };
-        let yn = match sv_lv(arena, "<", &y, &zero) { Some(__nikaia_value) => __nikaia_value, None => return None };
-        let xw = match sv_lvv(arena, ">", &x, &u.a) { Some(__nikaia_value) => __nikaia_value, None => return None };
-        let yw = match sv_lvv(arena, ">", &y, &u.b) { Some(__nikaia_value) => __nikaia_value, None => return None };
-        let below = match sv_lvv(arena, "<=", &m, &u.name) { Some(__nikaia_value) => __nikaia_value, None => return None };
+        let xn = match sv_lv(arena, "<", x, &zero) { Some(__nikaia_value) => __nikaia_value, None => return None };
+        let yn = match sv_lv(arena, "<", y, &zero) { Some(__nikaia_value) => __nikaia_value, None => return None };
+        let xw = match sv_lvv(arena, ">", x, &u.a) { Some(__nikaia_value) => __nikaia_value, None => return None };
+        let yw = match sv_lvv(arena, ">", y, &u.b) { Some(__nikaia_value) => __nikaia_value, None => return None };
+        let below = match sv_lvv(arena, "<=", m, &u.name) { Some(__nikaia_value) => __nikaia_value, None => return None };
         return Some(arena.or(vec![xn, yn, xw, yw, below]));
     }
     if t.op == "*" {
         if s == "square" {
             if x != y { return None; }
-            return sv_lv(arena, ">=", &m, &zero);
+            return sv_lv(arena, ">=", m, &zero);
         }
         if s == "zero" {
-            let m0 = match sv_lv(arena, "=", &m, &zero) { Some(__nikaia_value) => __nikaia_value, None => return None };
+            let m0 = match sv_lv(arena, "=", m, &zero) { Some(__nikaia_value) => __nikaia_value, None => return None };
             if l.sa == 1 || l.sa == 2 {
-                let v = if l.sa == 1 { &x } else { &y };
+                let v = if l.sa == 1 { x } else { y };
                 let off = match sv_lv(arena, "distinct", v, &zero) { Some(__nikaia_value) => __nikaia_value, None => return None };
                 return Some(arena.or(vec![off, m0]));
             }
             if l.sa == 0 {
-                let m1 = match sv_lv(arena, "distinct", &m, &zero) { Some(__nikaia_value) => __nikaia_value, None => return None };
-                let x0 = match sv_lv(arena, "=", &x, &zero) { Some(__nikaia_value) => __nikaia_value, None => return None };
-                let y0 = match sv_lv(arena, "=", &y, &zero) { Some(__nikaia_value) => __nikaia_value, None => return None };
+                let m1 = match sv_lv(arena, "distinct", m, &zero) { Some(__nikaia_value) => __nikaia_value, None => return None };
+                let x0 = match sv_lv(arena, "=", x, &zero) { Some(__nikaia_value) => __nikaia_value, None => return None };
+                let y0 = match sv_lv(arena, "=", y, &zero) { Some(__nikaia_value) => __nikaia_value, None => return None };
                 return Some(arena.or(vec![m1, x0, y0]));
             }
             return None;
@@ -92,19 +92,19 @@ pub(crate) fn sv_lemma_formula(arena: &mut TermArena, defs: &[SvNl], l: &SvLemma
             let sb = sv_int(l.sb);
             let both = sv_int(l.sa * l.sb);
             if s == "sign" {
-                let xs = match sv_la(arena, "<=", &match sv_lm(&sa, &x) { Some(__nikaia_value) => __nikaia_value, None => return None }) { Some(__nikaia_value) => __nikaia_value, None => return None };
-                let ys = match sv_la(arena, "<=", &match sv_lm(&sb, &y) { Some(__nikaia_value) => __nikaia_value, None => return None }) { Some(__nikaia_value) => __nikaia_value, None => return None };
-                let ms = match sv_la(arena, ">", &match sv_lm(&both, &m) { Some(__nikaia_value) => __nikaia_value, None => return None }) { Some(__nikaia_value) => __nikaia_value, None => return None };
+                let xs = match sv_la(arena, "<=", &match sv_lm(&sa, x) { Some(__nikaia_value) => __nikaia_value, None => return None }) { Some(__nikaia_value) => __nikaia_value, None => return None };
+                let ys = match sv_la(arena, "<=", &match sv_lm(&sb, y) { Some(__nikaia_value) => __nikaia_value, None => return None }) { Some(__nikaia_value) => __nikaia_value, None => return None };
+                let ms = match sv_la(arena, ">", &match sv_lm(&both, m) { Some(__nikaia_value) => __nikaia_value, None => return None }) { Some(__nikaia_value) => __nikaia_value, None => return None };
                 return Some(arena.or(vec![xs, ys, ms]));
             }
             let na = match sv_rat_neg(&l.a) { Some(__nikaia_value) => __nikaia_value, None => return None };
             let nb = match sv_rat_neg(&l.b) { Some(__nikaia_value) => __nikaia_value, None => return None };
-            let xa = match sv_lin_scale(&match sv_lm_c(&one, &x, &na) { Some(__nikaia_value) => __nikaia_value, None => return None }, &sa) { Some(__nikaia_value) => __nikaia_value, None => return None };
-            let yb = match sv_lin_scale(&match sv_lm_c(&one, &y, &nb) { Some(__nikaia_value) => __nikaia_value, None => return None }, &sb) { Some(__nikaia_value) => __nikaia_value, None => return None };
+            let xa = match sv_lin_scale(&match sv_lm_c(&one, x, &na) { Some(__nikaia_value) => __nikaia_value, None => return None }, &sa) { Some(__nikaia_value) => __nikaia_value, None => return None };
+            let yb = match sv_lin_scale(&match sv_lm_c(&one, y, &nb) { Some(__nikaia_value) => __nikaia_value, None => return None }, &sb) { Some(__nikaia_value) => __nikaia_value, None => return None };
             let ab = match sv_rat_mul(&l.a, &l.b) { Some(__nikaia_value) => __nikaia_value, None => return None };
-            let mut tp = match sv_lm_c(&one, &m, &ab) { Some(__nikaia_value) => __nikaia_value, None => return None };
-            tp = match sv_lin_add(&tp, &match sv_lm(&nb, &x) { Some(__nikaia_value) => __nikaia_value, None => return None }) { Some(__nikaia_value) => __nikaia_value, None => return None };
-            tp = match sv_lin_add(&tp, &match sv_lm(&na, &y) { Some(__nikaia_value) => __nikaia_value, None => return None }) { Some(__nikaia_value) => __nikaia_value, None => return None };
+            let mut tp = match sv_lm_c(&one, m, &ab) { Some(__nikaia_value) => __nikaia_value, None => return None };
+            tp = match sv_lin_add(&tp, &match sv_lm(&nb, x) { Some(__nikaia_value) => __nikaia_value, None => return None }) { Some(__nikaia_value) => __nikaia_value, None => return None };
+            tp = match sv_lin_add(&tp, &match sv_lm(&na, y) { Some(__nikaia_value) => __nikaia_value, None => return None }) { Some(__nikaia_value) => __nikaia_value, None => return None };
             tp = match sv_lin_scale(&tp, &both) { Some(__nikaia_value) => __nikaia_value, None => return None };
             let xs = match sv_la(arena, "<", &xa) { Some(__nikaia_value) => __nikaia_value, None => return None };
             let ys = match sv_la(arena, "<", &yb) { Some(__nikaia_value) => __nikaia_value, None => return None };
@@ -113,10 +113,10 @@ pub(crate) fn sv_lemma_formula(arena: &mut TermArena, defs: &[SvNl], l: &SvLemma
         }
         if s == "point" && (l.sa == 1 || l.sa == 2) {
             let fixed = if l.sa == 1 { nikaia_std::block::Text::from(x.to_string()) } else { nikaia_std::block::Text::from(y.to_string()) };
-            let free = if l.sa == 1 { &y } else { &x };
+            let free = if l.sa == 1 { y } else { x };
             let off = match sv_lv(arena, "distinct", &fixed, &l.a) { Some(__nikaia_value) => __nikaia_value, None => return None };
             let na = match sv_rat_neg(&l.a) { Some(__nikaia_value) => __nikaia_value, None => return None };
-            let d = match sv_lin_add(&sv_lin_var(&m), &match sv_lm(&na, free) { Some(__nikaia_value) => __nikaia_value, None => return None }) { Some(__nikaia_value) => __nikaia_value, None => return None };
+            let d = match sv_lin_add(&sv_lin_var(m), &match sv_lm(&na, free) { Some(__nikaia_value) => __nikaia_value, None => return None }) { Some(__nikaia_value) => __nikaia_value, None => return None };
             let on = match sv_la(arena, "=", &d) { Some(__nikaia_value) => __nikaia_value, None => return None };
             return Some(arena.or(vec![off, on]));
         }
@@ -124,20 +124,20 @@ pub(crate) fn sv_lemma_formula(arena: &mut TermArena, defs: &[SvNl], l: &SvLemma
     }
     if t.op == "/" && s == "divpoint" {
         if l.b.num == 0 { return None; }
-        let off = match sv_lv(arena, "distinct", &y, &l.b) { Some(__nikaia_value) => __nikaia_value, None => return None };
-        let d = match sv_lin_sub(&match sv_lm(&l.b, &m) { Some(__nikaia_value) => __nikaia_value, None => return None }, &sv_lin_var(&x)) { Some(__nikaia_value) => __nikaia_value, None => return None };
+        let off = match sv_lv(arena, "distinct", y, &l.b) { Some(__nikaia_value) => __nikaia_value, None => return None };
+        let d = match sv_lin_sub(&match sv_lm(&l.b, m) { Some(__nikaia_value) => __nikaia_value, None => return None }, &sv_lin_var(x)) { Some(__nikaia_value) => __nikaia_value, None => return None };
         let on = match sv_la(arena, "=", &d) { Some(__nikaia_value) => __nikaia_value, None => return None };
         return Some(arena.or(vec![off, on]));
     }
     if (t.op == "div" || t.op == "mod") && s == "division" {
         if l.b.num == 0 || !sv_rat_is_int(&l.b) { return None; }
-        let off = match sv_lv(arena, "distinct", &y, &l.b) { Some(__nikaia_value) => __nikaia_value, None => return None };
+        let off = match sv_lv(arena, "distinct", y, &l.b) { Some(__nikaia_value) => __nikaia_value, None => return None };
         let size = match sv_rat_abs(&l.b) { Some(__nikaia_value) => __nikaia_value, None => return None };
         let top = match sv_rat_sub(&size, &one) { Some(__nikaia_value) => __nikaia_value, None => return None };
         let nb = match sv_rat_neg(&l.b) { Some(__nikaia_value) => __nikaia_value, None => return None };
         let q = if t.op == "div" { nikaia_std::block::Text::from(m.to_string()) } else { nikaia_std::block::Text::from(t.partner.to_string()) };
         if q == "" { return None; }
-        let r = match sv_lin_add(&sv_lin_var(&x), &match sv_lm(&nb, &q) { Some(__nikaia_value) => __nikaia_value, None => return None }) { Some(__nikaia_value) => __nikaia_value, None => return None };
+        let r = match sv_lin_add(&sv_lin_var(x), &match sv_lm(&nb, &q) { Some(__nikaia_value) => __nikaia_value, None => return None }) { Some(__nikaia_value) => __nikaia_value, None => return None };
         if t.op == "div" {
             let low = match sv_la(arena, ">=", &r) { Some(__nikaia_value) => __nikaia_value, None => return None };
             let high = match sv_la(arena, "<=", &match sv_lin_sub(&r, &sv_lin_constant(top)) { Some(__nikaia_value) => __nikaia_value, None => return None }) { Some(__nikaia_value) => __nikaia_value, None => return None };
@@ -145,28 +145,28 @@ pub(crate) fn sv_lemma_formula(arena: &mut TermArena, defs: &[SvNl], l: &SvLemma
             return Some(arena.or(vec![off, on]));
         }
         let is = match sv_la(arena, "=", &match sv_lin_sub(&r, &sv_lin_var(&nikaia_std::block::Text::from(m.to_string()))) { Some(__nikaia_value) => __nikaia_value, None => return None }) { Some(__nikaia_value) => __nikaia_value, None => return None };
-        let low = match sv_lv(arena, ">=", &m, &zero) { Some(__nikaia_value) => __nikaia_value, None => return None };
-        let high = match sv_lv(arena, "<=", &m, &top) { Some(__nikaia_value) => __nikaia_value, None => return None };
+        let low = match sv_lv(arena, ">=", m, &zero) { Some(__nikaia_value) => __nikaia_value, None => return None };
+        let high = match sv_lv(arena, "<=", m, &top) { Some(__nikaia_value) => __nikaia_value, None => return None };
         let on = arena.and(vec![is, low, high]);
         return Some(arena.or(vec![off, on]));
     }
     if t.op == "pow2" {
         if s == "pow2-neg" {
-            let up = match sv_lv(arena, ">=", &x, &zero) { Some(__nikaia_value) => __nikaia_value, None => return None };
-            let m0 = match sv_lv(arena, "=", &m, &zero) { Some(__nikaia_value) => __nikaia_value, None => return None };
+            let up = match sv_lv(arena, ">=", x, &zero) { Some(__nikaia_value) => __nikaia_value, None => return None };
+            let m0 = match sv_lv(arena, "=", m, &zero) { Some(__nikaia_value) => __nikaia_value, None => return None };
             return Some(arena.or(vec![up, m0]));
         }
         if s == "pow2-low" {
-            let down = match sv_lv(arena, "<", &x, &zero) { Some(__nikaia_value) => __nikaia_value, None => return None };
-            let d = match sv_lin_sub(&sv_lin_var(&m), &sv_lin_var(&x)) { Some(__nikaia_value) => __nikaia_value, None => return None };
+            let down = match sv_lv(arena, "<", x, &zero) { Some(__nikaia_value) => __nikaia_value, None => return None };
+            let d = match sv_lin_sub(&sv_lin_var(m), &sv_lin_var(x)) { Some(__nikaia_value) => __nikaia_value, None => return None };
             let above = match sv_la(arena, ">=", &match sv_lin_sub(&d, &sv_lin_constant(one)) { Some(__nikaia_value) => __nikaia_value, None => return None }) { Some(__nikaia_value) => __nikaia_value, None => return None };
             return Some(arena.or(vec![down, above]));
         }
-        if s == "pow2-pos" { return sv_lv(arena, ">=", &m, &zero); }
+        if s == "pow2-pos" { return sv_lv(arena, ">=", m, &zero); }
         if s == "pow2-point" && sv_rat_is_int(&l.a) && l.a.num >= 0 && l.a.num <= 62 {
             let p = match sv_pow2(l.a.num) { Some(__nikaia_value) => __nikaia_value, None => return None };
-            let off = match sv_lv(arena, "distinct", &x, &l.a) { Some(__nikaia_value) => __nikaia_value, None => return None };
-            let on = match sv_lv(arena, "=", &m, &sv_int(p)) { Some(__nikaia_value) => __nikaia_value, None => return None };
+            let off = match sv_lv(arena, "distinct", x, &l.a) { Some(__nikaia_value) => __nikaia_value, None => return None };
+            let on = match sv_lv(arena, "=", m, &sv_int(p)) { Some(__nikaia_value) => __nikaia_value, None => return None };
             return Some(arena.or(vec![off, on]));
         }
     }
