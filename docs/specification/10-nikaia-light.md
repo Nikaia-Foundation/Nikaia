@@ -614,7 +614,7 @@ let (q, r) = high.narrowing_div_rem(low, d) ?? return   // q * d + r == high * 2
 types, built from the methods above so that a program does not carry two
 halves, a carry and a sign by hand.
 
-```text
+```nika
 let t = Wide::product(a, x).add(Wide::product(b, y)) ?? return  // a*x + b*y, exact
 let r = t.rem(g) ?? return                                      // t mod g, in T
 let (q, _) = t.div_rem(g) ?? return                             // Wide[T], T

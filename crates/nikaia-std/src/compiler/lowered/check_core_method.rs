@@ -693,6 +693,8 @@ pub(crate) fn check_core_method_called<H: CheckHost>(state: &mut CheckState, wor
     let lanes = value_of_a_copy(&on.unseen());
     state.a_lane_method_not_offered(&lanes, &name, span);
     state.a_shuffle_out_of_lanes(world, &lanes, &name, args, span);
+    let widened: Option<Ty> = state.wide_method(world, expr, &on, &name, span);
+    if widened.is_some() { return nikaia_std::index::or(widened, || Ty::Unknown); }
     let changed: Option<Ty> = check_simd_method_result(&lanes, &name);
     if changed.is_some() { return nikaia_std::index::or(changed, || Ty::Unknown); }
     walked

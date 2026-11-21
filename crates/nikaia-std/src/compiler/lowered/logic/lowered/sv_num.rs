@@ -165,69 +165,49 @@ pub(crate) fn sv_rat_add(a: &SvRat, b: &SvRat) -> Option<SvRat> {
 }
 
 pub(crate) fn sv_rat_add_wide(a: &SvRat, b: &SvRat, g: i64, da: i64, db: i64) -> Option<SvRat> {
-    let (low, high) = match sv_wide_mul_add(a.num, db, b.num, da) { Some(__nikaia_value) => __nikaia_value, None => return None };
-    let rest = match sv_wide_rest(low, high, g) { Some(__nikaia_value) => __nikaia_value, None => return None };
+    let t = match sv_wide_mul_add(a.num, db, b.num, da) { Some(__nikaia_value) => __nikaia_value, None => return None };
+    let rest = match sv_wide_rest(t, g) { Some(__nikaia_value) => __nikaia_value, None => return None };
     let g2 = match sv_gcd(rest, g) { Some(__nikaia_value) => __nikaia_value, None => return None };
-    let (num, _) = match { let __wide = (((high) as i128) << 64) | ((low) as i128); let __by = (g2) as i128; match (__wide.checked_div(__by), __wide.checked_rem(__by)) { (Some(__q), Some(__r)) => i64::try_from(__q).ok().map(|__q| (__q, __r as i64)), _ => None } } { Some(__nikaia_value) => __nikaia_value, None => return None };
+    let (quotient, _) = match { let __wide: i128 = t; let __by = (g2) as i128; match (__wide.checked_div(__by), __wide.checked_rem(__by)) { (Some(__q), Some(__r)) => Some((__q, __r as i64)), _ => None } } { Some(__nikaia_value) => __nikaia_value, None => return None };
+    let num = match { let __wide: i128 = quotient; i64::try_from(__wide).ok() } { Some(__nikaia_value) => __nikaia_value, None => return None };
     let den = match da.checked_mul(b.den / g2) { Some(__nikaia_value) => __nikaia_value, None => return None };
     Some(SvRat { num, den })
 }
 
-pub(crate) fn sv_wide_mul_add(a: i64, x: i64, b: i64, y: i64) -> Option<(u64, i64)> {
-    let (l1, h1) = { let __wide = (a) as i128 * (x) as i128; (__wide as u64, (__wide >> 64) as i64) };
-    let (l2, h2) = { let __wide = (b) as i128 * (y) as i128; (__wide as u64, (__wide >> 64) as i64) };
-    let (low, carry) = l1.overflowing_add(l2);
-    let (top, over) = h1.overflowing_add(h2);
-    let (high, past) = top.overflowing_add(if carry { 1 } else { 0 });
-    if over || past { return None; }
-    Some((low, high))
+pub(crate) fn sv_wide_mul_add(a: i64, x: i64, b: i64, y: i64) -> Option<i128> { { let __wide: i128 = ((a) as i128 * (x) as i128); __wide.checked_add(((b) as i128 * (y) as i128)) } }
+
+pub(crate) fn sv_wide_rest(t: i128, g: i64) -> Option<i64> {
+    if g <= 0 { return None; }
+    let rest = match { let __wide: i128 = t; let __by = (g) as i128; if __by == 0 { None } else { Some(__wide.wrapping_rem(__by) as i64) } } { Some(__nikaia_value) => __nikaia_value, None => return None };
+    Some(if rest < 0 { 0 - rest } else { rest })
 }
 
-pub(crate) fn sv_wide_rest(low: u64, high: i64, g: i64) -> Option<i64> {
-    let zero: u64 = 0u64;
-    let mut size_low = low;
-    let mut size_high = high;
-    if high < 0 {
-        size_low = zero.wrapping_sub(low);
-        size_high = if low == 0u64 { 0 - high } else { unsafe { nikaia_std::proven::sub::<i64>(0 - high, 1) } };
-    }
-    let by = match u64::try_from(g).ok() { Some(__nikaia_value) => __nikaia_value, None => return None };
-    let up = match u64::try_from(size_high).ok() { Some(__nikaia_value) => __nikaia_value, None => return None };
-    if by == 0u64 { return None; }
-    let (_, rest) = match { let __wide = (((up % by) as u128) << 64) | ((size_low) as u128); let __by = (by) as u128; match (__wide.checked_div(__by), __wide.checked_rem(__by)) { (Some(__q), Some(__r)) => u64::try_from(__q).ok().map(|__q| (__q, __r as u64)), _ => None } } { Some(__nikaia_value) => __nikaia_value, None => return None };
-    i64::try_from(rest).ok()
-}
-
-pub(crate) fn sv_wide_reduced(lows: &[u64], highs: &[i64]) -> Option<Vec<i64>> {
-    if (lows.len() as i64) != highs.len() as i64 { return None; }
+pub(crate) fn sv_wide_reduced(ks: &[i128]) -> Option<Vec<i64>> {
     let mut g: i64 = 0;
     let mut wide = false;
     let mut i: i64 = 0;
-    while ((i) as usize) < lows.len() {
-        let small = { let __wide = (((*unsafe { nikaia_std::proven::read(&highs, (i) as usize) }) as i128) << 64) | ((*unsafe { nikaia_std::proven::read(&lows, (i) as usize) }) as i128); let __by = (1) as i128; match (__wide.checked_div(__by), __wide.checked_rem(__by)) { (Some(__q), Some(__r)) => i64::try_from(__q).ok().map(|__q| (__q, __r as i64)), _ => None } };
-        if small.is_none() { wide = true; } else {
-            let (k, _) = nikaia_std::index::or(small, || (0, 0));
-            g = match sv_gcd(g, k) { Some(__nikaia_value) => __nikaia_value, None => return None };
-        }
+    while ((i) as usize) < ks.len() {
+        let small = { let __wide: i128 = *unsafe { nikaia_std::proven::read(&ks, (i) as usize) }; i64::try_from(__wide).ok() };
+        if small.is_none() { wide = true; } else { g = match sv_gcd(g, nikaia_std::index::or(small, || 0)) { Some(__nikaia_value) => __nikaia_value, None => return None }; }
         i = unsafe { nikaia_std::proven::add::<i64>(i, 1) };
     }
     if wide {
         i = 0;
-        while ((i) as usize) < lows.len() {
+        while ((i) as usize) < ks.len() {
             if g <= 1 { return None; }
-            if { let __wide = (((*unsafe { nikaia_std::proven::read(&highs, (i) as usize) }) as i128) << 64) | ((*unsafe { nikaia_std::proven::read(&lows, (i) as usize) }) as i128); let __by = (1) as i128; match (__wide.checked_div(__by), __wide.checked_rem(__by)) { (Some(__q), Some(__r)) => i64::try_from(__q).ok().map(|__q| (__q, __r as i64)), _ => None } }.is_none() {
-                let rest = match sv_wide_rest(*unsafe { nikaia_std::proven::read(&lows, (i) as usize) }, *unsafe { nikaia_std::proven::read(&highs, (i) as usize) }, g) { Some(__nikaia_value) => __nikaia_value, None => return None };
+            if { let __wide: i128 = *unsafe { nikaia_std::proven::read(&ks, (i) as usize) }; i64::try_from(__wide).ok() }.is_none() {
+                let rest = match sv_wide_rest(*unsafe { nikaia_std::proven::read(&ks, (i) as usize) }, g) { Some(__nikaia_value) => __nikaia_value, None => return None };
                 g = match sv_gcd(rest, g) { Some(__nikaia_value) => __nikaia_value, None => return None };
             }
             i = unsafe { nikaia_std::proven::add::<i64>(i, 1) };
         }
     }
     let by = if g <= 0 { 1 } else { g };
-    let mut out: Vec<i64> = Vec::with_capacity(nikaia_std::count::of(lows.len() as i64));
+    let mut out: Vec<i64> = Vec::with_capacity(nikaia_std::count::of(ks.len() as i64));
     i = 0;
-    while ((i) as usize) < lows.len() {
-        let (q, _) = match { let __wide = (((*unsafe { nikaia_std::proven::read(&highs, (i) as usize) }) as i128) << 64) | ((*unsafe { nikaia_std::proven::read(&lows, (i) as usize) }) as i128); let __by = (by) as i128; match (__wide.checked_div(__by), __wide.checked_rem(__by)) { (Some(__q), Some(__r)) => i64::try_from(__q).ok().map(|__q| (__q, __r as i64)), _ => None } } { Some(__nikaia_value) => __nikaia_value, None => return None };
-        out.push(q);
+    while ((i) as usize) < ks.len() {
+        let (q, _) = match { let __wide: i128 = *unsafe { nikaia_std::proven::read(&ks, (i) as usize) }; let __by = (by) as i128; match (__wide.checked_div(__by), __wide.checked_rem(__by)) { (Some(__q), Some(__r)) => Some((__q, __r as i64)), _ => None } } { Some(__nikaia_value) => __nikaia_value, None => return None };
+        out.push(match { let __wide: i128 = q; i64::try_from(__wide).ok() } { Some(__nikaia_value) => __nikaia_value, None => return None });
         i = unsafe { nikaia_std::proven::add::<i64>(i, 1) };
     }
     Some(out)

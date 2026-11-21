@@ -118,4 +118,4 @@ zerocopy-derive = ["0.8.63"]
 zeroize = ["1.9.2"]
 
 [units."src/main.nika"]
-source = "cf2ed16d9cfab4a3fa4629d534949d115c589f9c35d07ecbc0507b08b9483968"
+source = "1163c4e22e3c0e62af49faff69a0faa1d11d50cef8c7e698d05816d619e57793"

@@ -5214,20 +5214,21 @@ signature = "(moves: i64, params: ref SvWalkParams) -> i64"
 sync = "inferred"
 panics = false
 touches = []
-signature = "(a: i64, x: i64, b: i64, y: i64) -> (u64, i64)?"
+signature = "(a: i64, x: i64, b: i64, y: i64) -> Wide[i64]?"
 
 [fn."sv_wide_reduced"]
 sync = "inferred"
 panics = true
 touches = []
-views = ["lows: borrowed", "highs: borrowed"]
-signature = "(lows: ref Vec[u64], highs: ref Vec[i64]) -> Vec[i64]?"
+views = ["ks: borrowed"]
+signature = "(ks: ref Vec[Wide[i64]]) -> Vec[i64]?"
 
 [fn."sv_wide_rest"]
 sync = "inferred"
+keeps = ["t"]
 panics = true
 touches = []
-signature = "(low: u64, high: i64, g: i64) -> i64?"
+signature = "(t: Wide[i64], g: i64) -> i64?"
 
 [fn."sv_written"]
 sync = "inferred"
