@@ -21,7 +21,11 @@ pub(crate) fn check_core_a_field_of_a_borrowed_subject_given<H: CheckHost>(state
     if !state.borrowing_self { return; }
     let field = match check_core_field_of_self(world, value) { Some(__nikaia_value) => __nikaia_value, None => return };
     let ty = check_core_expr(state, world, host, value, span);
-    if ty.is_unknown() || copies_plainly(&ty) { return; }
+    let in_package = match ty {
+        Ty::Named { ref name, .. } => state.copies_in_the_package.contains(name),
+        _ => false,
+    };
+    if ty.is_unknown() || state.copied(world, &ty) || in_package { return; }
     if read && is_text_type(&ty) { return; }
     let notes: Vec<String> = vec![format!("`self` and `mut self` borrow the value, and `{}` is a `{}`. Giving it away would take a piece out of something this method doesn't own.", field, ty.shown())];
     let mut help: String = format!("Write `self.{}.clone()` for a copy, or take `keep self` if the method is meant to use up its value.", field); #[allow(clippy::redundant_locals)] let notes = notes;
