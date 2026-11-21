@@ -1,0 +1,3 @@
+bounds in tests/wide_product_narrowed_keeps_its_interval.nika: 1 indexes, 1 proved; 0 operations, 0 proved
+     9  xs[n]  proved
+  derived  pick: 0 <= a, a <= xs.len(), a < xs.len(), a <= b, a < b, 0 <= b, b <= xs.len(), b < xs.len(), proved at the calls on lines 14, 15
