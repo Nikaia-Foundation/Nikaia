@@ -1090,6 +1090,9 @@ fn check_core_call_named_call[H: CheckHost](mut state: CheckState, world: ref Ch
         return Ty::Unknown
     }
     let described = check_core_call_described(state, world, host, name, key, contract, args, found, config, passed, span)
+    // **`std`'s `Wide[T]` is made by its three functions** (Part I 2.2,
+    // #2619): `T` one of the five integer types, the call recorded.
+    let widened: Ty? = if key.starts_with("Wide::") { state.wide_made(world, key, args, found, func, span) } else { null }
     // **`simd::Fixed::from([…])` takes the lanes as an array** (ADR-377 D3).
     if lanes && name == "simd::Fixed::from" && args.len() == 1 {
         state.facts.array_literals.insert(id_of(args[0]) as i64)
@@ -1099,7 +1102,7 @@ fn check_core_call_named_call[H: CheckHost](mut state: CheckState, world: ref Ch
             state.findings.push(a_list_the_wrong_length_for_its_array(lanes_written, lanes_wanted, span, false))
         }
     }
-    let made = if lanes && described.is_unknown() { check_simd_made(wanted, name, args) } else { described }
+    let made = if widened != null { widened ?? Ty::Unknown } else if lanes && described.is_unknown() { check_simd_made(wanted, name, args) } else { described }
     // **`simd::splat(';')` splats a byte** where the lanes are `u8`, as a
     // `'…'` is one wherever a `u8` is wanted (Part I 2.6).
     if lanes && name == "simd::splat" && args.len() == 1 && check_simd_kind(made).len() > 0 {

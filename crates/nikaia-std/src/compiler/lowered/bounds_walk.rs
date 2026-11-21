@@ -3101,7 +3101,7 @@ pub(crate) fn bounding_stmts(walk: &mut BoundsWalk, block: &Block, from: i64, fa
         }
         walk.at = stmt.span.start as i64;
         let looped = matches!(stmt.node, Stmt::For { .. } | Stmt::While { .. });
-        if looped && context.through_loops && !walk.collecting { return bounding_past_loop(walk, block, at, &stmt.node, facts, bound, context, program, words, &mut &mut *ask); }
+        if looped && context.through_loops && !walk.collecting && !walk.checking { return bounding_past_loop(walk, block, at, &stmt.node, facts, bound, context, program, words, &mut &mut *ask); }
         if bounding_stmt(walk, &stmt.node, facts, context, program, words, &mut &mut *ask) { return true; }
         at += 1;
     }
@@ -3252,7 +3252,7 @@ pub(crate) fn bounding_loop_stmt(walk: &mut BoundsWalk, stmt: &Stmt, facts: &mut
     let start = walk.at;
     let open = walk.open;
     walk.settled_loops.remove(&start);
-    if !context.through_loops || walk.collecting {
+    if !context.through_loops || walk.collecting || walk.checking {
         bounding_loop_framed(walk, stmt, facts, context, program, words, &mut &mut *ask);
         return;
     }

@@ -40,6 +40,47 @@ fn refuting_values(mut arena: logic::TermArena, facts: ref Vec[i64], claim: i64,
     return values_of(names, values)
 }
 
+/// **The values the facts force on an `i64` operation, where it overflows
+/// on them** (ADR-396 D8 step 2, ADR-270 D11, #1810): the solver, counting
+/// in `i64` and never wrapping, answers nothing about a goal at the type's
+/// ends, so `assert(x == 9223372036854775000)` then `x + 1000` is refuted
+/// by neither `refuting_values` nor `breaking_values`. A model of the facts
+/// gives each name of `term` a value; where `term` leaves `i64` on them in
+/// checked arithmetic and the solver proves every name equal to its value,
+/// every state that reaches it overflows. Nothing where a name is read by
+/// no fact (no model is asked then), the model is missing, `term` fits, or
+/// a value is not forced.
+fn forced_overflow_values(mut arena: logic::TermArena, facts: ref Vec[i64], term: i64, names: ref collections::BTreeSet[String], ask: fn(ref logic::TermArena, ref Vec[i64], i64) -> SolverAnswer sync, model: fn(ref logic::TermArena, ref Vec[i64], i64) -> collections::BTreeMap[String, i64]? sync) -> collections::BTreeMap[String, i64]? {
+    if names.is_empty() {
+        return null
+    }
+    let mut tied: collections::BTreeSet[String] = collections::BTreeSet()
+    for fact in facts {
+        arena.variables(fact, tied)
+    }
+    for name in names {
+        if !tied.contains(name) {
+            return null
+        }
+    }
+    let falsum = arena.boolean(false)
+    let found = model(arena, facts, falsum) ?? return null
+    let values = values_of(names, found)
+    if values.len() != names.len() || arena.int_value(term, values) != null {
+        return null
+    }
+    for (name, value) in values {
+        let named = arena.var(name)
+        let pinned = arena.int(value)
+        let forced = arena.equal(named, pinned)
+        match ask(arena, facts, forced) {
+            SolverAnswer::Proved => {},
+            else => return null,
+        }
+    }
+    return values
+}
+
 /// **Values that reach a claim and make it false** (ADR-269 D8), where it
 /// is not false every time: a model of the facts and the claim's negation,
 /// checked by evaluating it, read where the facts are exactly what reaches

@@ -5293,7 +5293,9 @@ fn bounding_stmts(
 			Stmt::While { .. } => true,
 			else => false,
 		}
-		if looped && context.through_loops && !walk.collecting {
+		// A rule check keeps only what its rules give (`rules_check`): no
+		// loop of it is asked through (#2464).
+		if looped && context.through_loops && !walk.collecting && !walk.checking {
 			return bounding_past_loop(
 				walk,
 				block,
@@ -5615,7 +5617,11 @@ fn bounding_loop_stmt(
 	let start = walk.at
 	let open = walk.open
 	walk.settled_loops.remove(start)
-	if !context.through_loops || walk.collecting {
+	// **A walk that checks rules asks no goal through a loop** (#2464): it
+	// keeps only which rules a method fails (`rules_check`), and a loop's
+	// rules are carried by their own turns (`rules_turn_end`), so what an
+	// invariant would prove there is never read.
+	if !context.through_loops || walk.collecting || walk.checking {
 		bounding_loop_framed(walk, stmt, facts, context, program, words, ask)
 		return
 	}

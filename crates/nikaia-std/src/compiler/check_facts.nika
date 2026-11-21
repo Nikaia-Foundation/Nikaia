@@ -18,6 +18,10 @@ pub enum FactWrap {
     Path,
     /// ...and a view of one.
     PathView,
+    /// ...and wrapped as a `T?` of it: text into `fs::Path?` (#1986).
+    PathSome,
+    /// ...and a view of one, where the slot lends it (`Option<&Path>`).
+    PathViewSome,
     /// An integer widened where no value can be lost: the type the slot states.
     Widen(String),
     /// ...and wrapped as a `T?` of it: `u32` into `i64?`.
@@ -280,6 +284,11 @@ pub struct CheckFacts {
     /// the bounds walk reads the entry's `ensures` and `ensures_each`
     /// (ADR-314 D3, ADR-375 D5).
     pub std_receivers: collections::BTreeMap[i64, String],
+    /// **A call of `std`'s `Wide[T]`** (Part I 2.2, #2619), by the node the
+    /// emitter reads (the method call, or the callee of `Wide::of` and the
+    /// two other makers): the operation and `T`, as `"add i64"`. The
+    /// emitter writes the native type of twice `T`'s width from it.
+    pub wide_calls: collections::BTreeMap[i64, String],
     /// **The method a call resolves to by its receiver's type** (#842), by the
     /// receiver's node, as the ledger keys it (`Holder::put`).
     pub method_callees: collections::BTreeMap[i64, String],
@@ -942,6 +951,7 @@ impl CheckFacts {
             shifts: collections::BTreeMap(),
             divisions: collections::BTreeMap(),
             std_receivers: collections::BTreeMap(),
+            wide_calls: collections::BTreeMap(),
             method_callees: collections::BTreeMap(),
             field_owners: collections::BTreeMap(),
             outside: ProverOutside::nothing(),

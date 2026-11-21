@@ -211,6 +211,13 @@ impl EmitState {
         return false
     }
 
+    /// Whether a call of both kinds of text, handed back by `function`, is
+    /// made owned (#1993): `function`'s own result is owned text, as
+    /// `either_back` makes an assignment of one.
+    fn either_into_owned(ref self, world: ref EmitWorld, value: ref Expr, function: ref String, at: i64) -> bool {
+        return !self.facts.lent_returns.contains(at) && !call_returns_either(world.words, world.items, function) && self.either_result(world, value)
+    }
+
     /// Whether a struct's field is text both kinds of which flow into
     /// (ADR-282 D14).
     fn either_field(ref self, world: ref EmitWorld, owner: ref String, field: winnow_grammar::Symbol) -> bool {

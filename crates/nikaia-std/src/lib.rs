@@ -388,6 +388,7 @@ pub mod runtime {
     clippy::map_entry,
     clippy::large_enum_variant,
     clippy::double_ended_iterator_last,
+    clippy::double_parens,
     clippy::precedence,
     clippy::manual_unwrap_or_default,
     clippy::manual_unwrap_or,

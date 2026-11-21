@@ -1009,6 +1009,13 @@ places = true
 touches = []
 signature = "(ref mut self, r: i64, j: i64, exact: bool) -> bool"
 
+[fn."SvSimplex::pivot_row"]
+sync = "inferred"
+panics = true
+places = true
+touches = []
+signature = "(ref mut self, at: SvViolation, bland: bool, mut book: SvBook) -> SvPivoted"
+
 [fn."SvSimplex::pivots"]
 sync = "inferred"
 panics = false
@@ -1067,6 +1074,12 @@ places = true
 touches = []
 signature = "(ref mut self, r: i64, mut book: SvBook) -> SvClause?"
 
+[fn."SvSimplex::row_part_wide"]
+sync = "inferred"
+panics = true
+touches = []
+signature = "(ref self, r: i64, real: bool) -> SvRat?"
+
 [fn."SvSimplex::row_parts"]
 sync = "inferred"
 panics = true
@@ -1087,6 +1100,12 @@ views = ["moved: borrowed"]
 signature = "(ref self, r: i64, b: i64, a: i64, moved: ref SvDelta?) -> SvDelta?"
 
 [fn."SvSimplex::row_value"]
+sync = "inferred"
+panics = true
+touches = []
+signature = "(ref self, r: i64) -> SvDelta?"
+
+[fn."SvSimplex::row_value_wide"]
 sync = "inferred"
 panics = true
 touches = []
@@ -1131,6 +1150,12 @@ sync = "inferred"
 panics = true
 touches = []
 signature = "(ref self) -> SvViolation"
+
+[fn."SvSimplex::violated_all"]
+sync = "inferred"
+panics = true
+touches = []
+signature = "(ref self) -> Vec[SvViolation]"
 
 [fn."SvSmtReader::annotated"]
 sync = "inferred"
@@ -5214,20 +5239,28 @@ signature = "(moves: i64, params: ref SvWalkParams) -> i64"
 sync = "inferred"
 panics = false
 touches = []
-signature = "(a: i64, x: i64, b: i64, y: i64) -> (u64, i64)?"
+signature = "(a: i64, x: i64, b: i64, y: i64) -> Wide[i64]?"
+
+[fn."sv_wide_ratio"]
+sync = "inferred"
+keeps = ["t"]
+panics = true
+touches = []
+signature = "(t: Wide[i64], d: i64) -> SvRat?"
 
 [fn."sv_wide_reduced"]
 sync = "inferred"
 panics = true
 touches = []
-views = ["lows: borrowed", "highs: borrowed"]
-signature = "(lows: ref Vec[u64], highs: ref Vec[i64]) -> Vec[i64]?"
+views = ["ks: borrowed"]
+signature = "(ks: ref Vec[Wide[i64]]) -> Vec[i64]?"
 
 [fn."sv_wide_rest"]
 sync = "inferred"
+keeps = ["t"]
 panics = true
 touches = []
-signature = "(low: u64, high: i64, g: i64) -> i64?"
+signature = "(t: Wide[i64], g: i64) -> i64?"
 
 [fn."sv_written"]
 sync = "inferred"
@@ -5895,6 +5928,13 @@ copies = true
 
 [type."SvParts"]
 fields = ["conjunction: bool", "lits: Vec[i64]"]
+compares = true
+equates = true
+hashes = true
+
+[type."SvPivoted"]
+pub = true
+variants = ["Done", "Ended(SvChecked)", "Left"]
 compares = true
 equates = true
 hashes = true

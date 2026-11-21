@@ -421,6 +421,26 @@ impl CheckState {
         return a_parameter && a_view
     }
 
+    /// **A field read off a `let` over a place or a `for`'s element**
+    /// (ADR-views-v4 D5, Part I 6.5, #1991): the name is a view of what it
+    /// was bound over, so a part of it is lent as a part of a `ref`
+    /// parameter is. Not a name the body changes.
+    fn a_place_of_a_lent_let(ref self, world: ref CheckWorld, value: ref Expr) -> bool sync {
+        let a_field = match value {
+            Expr::Field { .. } => true,
+            else => false,
+        }
+        if !a_field {
+            return false
+        }
+        let root = self.rooted_at(world, value) ?? return false
+        if root == "self" || !self.lent_here(root) {
+            return false
+        }
+        let found = self.binding(root) ?? return false
+        return !found.changing
+    }
+
     /// A place as a path - `name`, `p.name`, `a.b.c` - where it is one.
     fn place_path(ref self, world: ref CheckWorld, expr: ref Expr) -> String? sync {
         return dotted_path(world, expr)

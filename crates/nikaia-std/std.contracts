@@ -2932,6 +2932,135 @@ sync = true
 touches = []
 signature = "(self, u64, u64) -> (u64, u64)?"
 
+# ## A value of twice the width (#2619)
+#
+# **`Wide[T]`** is the exact value of twice the width of `T` (Part I 2.2,
+# ADR-270 D11 as amended 2026-11-21), for `u8`, `u32`, `i32`, `u64` and
+# `i64`: what `widening_mul`, `overflowing_*` and `narrowing_div_rem` give
+# by halves, held as one value, so a program carries no carry, sign or
+# halves' order by hand. Keyed with no module in front, like `Fixed`. No
+# Rust type stands behind it: the emitter writes it as the native type of
+# twice the width (`i128` for an `i64`) and each method as that type's
+# operation (`emit_core_calls.nika`), so it costs what the program wrote.
+# The checker types what the signatures leave open (`?`): the low half of
+# `from_halves` and `halves`, the unsigned type of the same width, and
+# `abs`, a `Wide` of that type (`check_core_wide.nika`).
+#
+# `touches = []` and `sync = true` for the reason the arithmetic entries give.
+[type."Wide"]
+pub = true
+crosses = true
+compares = true
+equates = true
+orders = true
+hashes = true
+copies = true
+
+# A value of `T` as a `Wide[T]`.
+[fn."Wide::of"]
+pub = true
+panics = false
+sync = true
+touches = []
+signature = "[T](value: T) -> Wide[T]"
+
+# The exact product of two `T`s, what `widening_mul` gives as halves.
+[fn."Wide::product"]
+pub = true
+panics = false
+sync = true
+touches = []
+signature = "[T](a: T, b: T) -> Wide[T]"
+
+# The value `high * 2^w + low`, the low half in the unsigned type of `T`'s width.
+[fn."Wide::from_halves"]
+pub = true
+panics = false
+sync = true
+touches = []
+signature = "[T](low: ?, high: T) -> Wide[T]"
+
+# The halves `from_halves` takes: the low one unsigned, the high one a `T`.
+[fn."Wide::halves"]
+pub = true
+panics = false
+sync = true
+touches = []
+signature = "[T](self: Wide[T]) -> (?, T)"
+
+# The value as a `T`, or `null` where a `T` does not hold it.
+[fn."Wide::narrow"]
+pub = true
+panics = false
+sync = true
+touches = []
+signature = "[T](self: Wide[T]) -> T?"
+
+# -1, 0 or 1 as the value is below, at or above zero.
+[fn."Wide::sign"]
+pub = true
+panics = false
+sync = true
+touches = []
+signature = "[T](self: Wide[T]) -> i64"
+
+# The sum, or `null` where it leaves twice the width.
+[fn."Wide::add"]
+pub = true
+panics = false
+sync = true
+touches = []
+signature = "[T](self: Wide[T], other: Wide[T]) -> Wide[T]?"
+
+# The difference, or `null` where it leaves twice the width.
+[fn."Wide::sub"]
+pub = true
+panics = false
+sync = true
+touches = []
+signature = "[T](self: Wide[T], other: Wide[T]) -> Wide[T]?"
+
+# The value negated, or `null` where that leaves twice the width.
+[fn."Wide::neg"]
+pub = true
+panics = false
+sync = true
+touches = []
+signature = "[T](self: Wide[T]) -> Wide[T]?"
+
+# The value times a `T`, or `null` where it leaves twice the width.
+[fn."Wide::mul"]
+pub = true
+panics = false
+sync = true
+touches = []
+signature = "[T](self: Wide[T], k: T) -> Wide[T]?"
+
+# Quotient and rest by a `T`, rounded as `/` and `%`, or `null` for a divisor
+# of 0 or a quotient past twice the width.
+[fn."Wide::div_rem"]
+pub = true
+panics = false
+sync = true
+touches = []
+signature = "[T](self: Wide[T], d: T) -> (Wide[T], T)?"
+
+# The rest by a `T`, as `%` gives it, or `null` for a divisor of 0.
+[fn."Wide::rem"]
+pub = true
+panics = false
+sync = true
+touches = []
+signature = "[T](self: Wide[T], d: T) -> T?"
+
+# The magnitude of a signed `T`'s value, a `Wide` of the unsigned type of its width.
+[fn."Wide::abs"]
+pub = true
+panics = false
+sync = true
+touches = []
+signature = "[T](self: Wide[T]) -> ?"
+
 # **A conversion that asks whether it fits** (ADR-315): the number in the
 # destination type, or `null` where that type does not hold it. One entry per
 # destination, as `truncating_` has, and only out of a type that has values

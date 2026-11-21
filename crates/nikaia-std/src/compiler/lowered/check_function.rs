@@ -722,6 +722,8 @@ pub(crate) fn check_function_wrap_tail<H: CheckHost>(state: &mut CheckState, wor
         FactWrap::Constructor => { if branches && nullable { state.some_at_the_tails(value); } else { state.facts.wrapped.insert(node, FactWrap::Constructor); } },
         FactWrap::Widen(ref into) => { state.facts.wrapped.insert(node, FactWrap::Widen(nikaia_std::block::Text::from(into.to_string()))); },
         FactWrap::WidenSome(ref into) => { state.facts.wrapped.insert(node, FactWrap::WidenSome(nikaia_std::block::Text::from(into.to_string()))); },
+        FactWrap::PathSome => { state.facts.wrapped.insert(node, FactWrap::PathSome); },
+        FactWrap::PathViewSome => { state.facts.wrapped.insert(node, FactWrap::PathViewSome); },
         FactWrap::Unsigned(ref into) => { state.facts.wrapped.insert(node, FactWrap::Unsigned(nikaia_std::block::Text::from(into.to_string()))); },
         _ => { },
     }

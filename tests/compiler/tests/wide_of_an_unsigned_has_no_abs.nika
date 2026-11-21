@@ -1,0 +1,8 @@
+// `abs` is a signed `Wide`'s (Part I 2.2, #2619): a `Wide[u64]` is never
+// below zero, and has none.
+fn main() throws {
+	let x: u64 = 7
+	let w = Wide::of(x)
+	let m = w.abs()
+	println(m.sign())
+}

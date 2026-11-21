@@ -1,0 +1,21 @@
+struct Ty {
+    name: String,
+}
+
+struct L {
+    ty: Ty,
+    n: i64,
+}
+
+struct Wide {
+    inner: L,
+}
+
+fn o(l: L) -> Ty {
+    return l.ty
+}
+
+fn main() throws {
+    let t = o(L { ty: Ty { name: "a" }, n: 1 })
+    println(t.name)
+}
