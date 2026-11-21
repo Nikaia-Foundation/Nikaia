@@ -643,8 +643,10 @@ fn drive_unlock() throws {
 fn drive_silence_stop_hook() throws {
 	let home = env::var("HOME") ?? ""
 	if home == "" { return }
-	let hook = f"{home}/.claude/stop-hook-git-check.sh"
-	if drive_read(hook) != "" { fs::write(hook, fs::Root::Anywhere, "") }
+	// Under the home directory the operator chose (D11), not the checkout.
+	let at = fs::Root::Dir(home)
+	let hook = ".claude/stop-hook-git-check.sh"
+	if fs::exists(hook, at) && fs::read_to_string(hook, at) != "" { fs::write(hook, at, "") }
 }
 // Takes the suite lock: waits in 60 s steps while another live driver holds
 // it, takes over a dead one's. An owner file not yet written counts as live
@@ -1613,16 +1615,15 @@ fn drive_lowered_dirs() -> Vec[String] throws {
 	let root = drive_lowered_root()
 	let mut parts: Vec[String] = []
 	if !fs::exists(root.clone(), fs::Root::Anywhere) { return parts }
-	for entry in fs::read_dir(root.clone(), fs::Root::Anywhere) {
-		let path = entry.to_text()
-		let names: Vec[String] = path.split("/").collect()
-		let name = names[names.len() - 1]
+	let at = drive_here().join(root.clone())
+	for entry in fs::read_dir(".", at) {
+		let name = entry.to_text()
 		// Only a part's directory can hold a lowered index or directory; a
 		// file such as `abort.rs` is no part (`abort.rs/lowered.rs` throws
 		// "Not a directory" rather than answering false).
-		if !fs::metadata(f"{root}/{name}", fs::Root::Anywhere).is_dir() { continue }
-		let dir = f"{root}/{name}/lowered"
-		if fs::exists(dir.clone() + ".rs", fs::Root::Anywhere) || fs::exists(dir.clone(), fs::Root::Anywhere) { parts.push(dir) }
+		if !fs::metadata(name.clone(), at).is_dir() { continue }
+		let part = at.join(name.clone())
+		if fs::exists("lowered.rs", part) || fs::exists("lowered", part) { parts.push(f"{root}/{name}/lowered") }
 	}
 	parts.sort()
 	return parts
@@ -1840,7 +1841,7 @@ fn drive_merge_regenerate(cause: String, unmerged: String, lower: String, build:
 	let tree = process::run("git", ["write-tree"])
 	if !tree.ok { drive_merge_abort_paths(cause, unmerged, "git write-tree of the merge failed") }
 	at = drive_now()
-	let copy = process::run("mktemp", ["-d"]).stdout.trim().clone()
+	let copy = fs::scratch().path().to_text()
 	let sha = tree.stdout.trim().clone()
 	let made = process::run(
 		"sh",
@@ -2051,7 +2052,7 @@ fn drive_badges() throws {
 // match the committed tree (owner, 2026-11-15: the driver regenerates until
 // they do, so no builder sees a badge red).
 fn drive_badges_check() -> bool throws {
-	let copy = process::run("mktemp", ["-d"]).stdout.trim().clone()
+	let copy = fs::scratch().path().to_text()
 	let checked = process::run(
 		"sh",
 		["-c", f"git archive HEAD | tar -x -C '{copy}' && cd '{copy}' && python3 scripts/badges.py --check"],
@@ -2061,7 +2062,7 @@ fn drive_badges_check() -> bool throws {
 }
 
 fn drive_badges_once() throws {
-	let copy = process::run("mktemp", ["-d"]).stdout.trim().clone()
+	let copy = fs::scratch().path().to_text()
 	let made = process::run(
 		"sh",
 		[
@@ -2654,10 +2655,11 @@ fn drive_workflow_scripts() -> Vec[String] throws {
 	let mut out: Vec[String] = []
 	let wf = ".github/workflows"
 	if !fs::exists(wf, fs::Root::Anywhere) { return out }
-	for entry in fs::read_dir(wf, fs::Root::Anywhere) {
+	let at = drive_here().join(wf)
+	for entry in fs::read_dir(".", at) {
 		let file = entry.to_text()
 		if !file.ends_with(".yml") && !file.ends_with(".yaml") { continue }
-		for raw in drive_read(f"{wf}/{file}").split("\n") {
+		for raw in fs::read_to_string(file.clone(), at).split("\n") {
 			if raw.trim().starts_with("#") { continue }
 			let line = raw.split(" #").collect()[0].clone()
 			let parts: Vec[String] = line.split("scripts/").collect()
@@ -2735,7 +2737,7 @@ fn drive_named_filters(paths: Vec[String]) -> Vec[String] throws {
 		if first != key && first.len() >= 5 && !keys.contains(first.clone()) { keys.push(first) }
 	}
 	let mut tests: Vec[String] = []
-	for entry in fs::read_dir("tests/compiler/tests", fs::Root::Anywhere) {
+	for entry in fs::read_dir(".", drive_here().join("tests/compiler/tests")) {
 		let n = entry.to_text()
 		if n.ends_with(".nika") { tests.push(n) }
 	}
@@ -2969,10 +2971,10 @@ fn drive_comments_api(issue: String) -> String {
 // Posts `body` as a comment on issue N (`gh api ... -F body=@FILE`, the file
 // a temporary one); true when it went through.
 fn drive_comment(issue: String, body: String) -> bool throws {
-	let file = process::run("mktemp", []).stdout.trim().clone()
-	fs::write(file, fs::Root::Anywhere, body)
-	let posted = process::run("gh", ["api", drive_comments_api(issue), "-F", f"body=@{file}"])
-	process::run("rm", ["-f", file])
+	let scratch = fs::scratch()
+	fs::write("body.md", scratch, body)
+	let posted = process::run("gh", ["api", drive_comments_api(issue), "-F", f"body=@{scratch.path().to_text()}/body.md"])
+	process::run("rm", ["-rf", scratch.path().to_text()])
 	return posted.ok
 }
 
@@ -3136,6 +3138,15 @@ fn drive_agent(exe: String, dry: bool, dir: String, brief: String, role: String)
 	println(f"{role} {done}")
 }
 
+// The checkout drive runs from, as a root (ADR-raw-sinks-1 D11): a directory
+// it lists is `drive_here().join(dir)` and each name is opened under that
+// (D13), so its run-time check (ADR-108 D3) proves the name. A name outside
+// the checkout throws there; a temporary file is made under fs::scratch()
+// (D12).
+fn drive_here() -> fs::Root {
+	return fs::Root::Dir(".")
+}
+
 fn drive_read(path: String) -> String throws {
 	if !fs::exists(path, fs::Root::Anywhere) { return "" }
 	return fs::read_to_string(path, fs::Root::Anywhere)
@@ -3163,14 +3174,17 @@ fn drive_free() -> i64 throws {
 fn drive_sweep() -> i64 throws {
 	let tmp = env::var("TMPDIR") ?? "/tmp"
 	let mut removed: i64 = 0
-	for entry in fs::read_dir(tmp.clone(), fs::Root::Anywhere) {
+	// The names opened under their directory (D13); TMPDIR is the operator's.
+	let under = fs::Root::Dir(tmp.clone())
+	let procs = fs::Root::Dir("/proc")
+	for entry in fs::read_dir(".", under) {
 		let path = entry.to_text()
 		let parts: Vec[String] = path.split("/").collect()
 		let name = parts[parts.len() - 1]
 		let rest = name.strip_prefix("nikaia-test-") ?? ""
 		let pid = rest.split("-").collect()[0].clone()
 		if pid == "" || (text::parse_i64(pid.clone()) ?? 0) <= 0 { continue }
-		if fs::exists(f"/proc/{pid}", fs::Root::Anywhere) { continue }
+		if fs::exists(pid, procs) { continue }
 		process::run("rm", ["-rf", f"{tmp}/{name}"])
 		removed += 1
 	}
@@ -3343,10 +3357,8 @@ fn drive_builder_after(dry: bool, dir: String, brief: String) throws {
 fn drive_pickup(dir: String) throws {
 	if !fs::exists(dir, fs::Root::Anywhere) { return }
 	let mut briefs: Vec[String] = []
-	for entry in fs::read_dir(dir.clone(), fs::Root::Anywhere) {
-		let path = entry.to_text()
-		let parts: Vec[String] = path.split("/").collect()
-		let name = parts[parts.len() - 1]
+	for entry in fs::read_dir(".", drive_here().join(dir.clone())) {
+		let name = entry.to_text()
 		let stem = name.strip_suffix(".running") ?? ""
 		if stem != "" { briefs.push(f"{dir}/{stem}") }
 	}
@@ -3560,9 +3572,9 @@ fn drive_found_file(dir: String, brief: String) throws {
 // Files an issue with TITLE, BODY and LABELS (`gh api .../issues`); its
 // number, "" when the call failed.
 fn drive_issue_new(title: String, body: String, labels: Vec[String]) -> String throws {
-	let file = process::run("mktemp", []).stdout.trim().clone()
-	fs::write(file.clone(), fs::Root::Anywhere, body)
-	let mut args: Vec[String] = ["api", f"repos/{drive_repo()}/issues", "-f", f"title={title}", "-F", f"body=@{file}"]
+	let scratch = fs::scratch()
+	fs::write("body.md", scratch, body)
+	let mut args: Vec[String] = ["api", f"repos/{drive_repo()}/issues", "-f", f"title={title}", "-F", f"body=@{scratch.path().to_text()}/body.md"]
 	for l in labels {
 		args.push("-f")
 		args.push(f"labels[]={l}")
@@ -3570,7 +3582,7 @@ fn drive_issue_new(title: String, body: String, labels: Vec[String]) -> String t
 	args.push("--jq")
 	args.push(".number")
 	let made = process::run("gh", args)
-	process::run("rm", ["-f", file])
+	process::run("rm", ["-rf", scratch.path().to_text()])
 	if !made.ok { return "" }
 	return made.stdout.trim().clone()
 }
