@@ -49,10 +49,15 @@ pub struct BodyShape {
 /// program that take a parameter `mut` - they change what they are handed,
 /// whichever type they are called on.
 /// **What one walk to check the rules failed** (#2396), with the found
-/// returns of the callees it could read (`context.returns`, ADR-306 D23):
-/// it serves a walk with the same key only where those are the same.
+/// returns of the callees it could read (`context.returns`, ADR-306 D23)
+/// and the field bounds it read (`context.around.field_bounds`, ADR-306
+/// D21), its callees' derived claims' included: in `fields` those it found,
+/// in `absent` those it asked for and found none. It serves a walk with the
+/// same key only where those are the same.
 pub struct RulesChecked {
 	pub reads: collections::BTreeMap[String, BoundsReturns],
+	pub fields: collections::BTreeMap[String, Range],
+	pub absent: collections::BTreeSet[String],
 	pub failed: collections::BTreeSet[i64],
 }
 
@@ -81,11 +86,10 @@ pub struct Around {
 	/// found again from it, walking only the bodies it changed; kept by
 	/// `bounds_proven` for the bodies after.
 	pub checked: collections::BTreeMap[String, RulesChecked],
-	/// **The field bounds and the list-returning functions `checked` was
-	/// found under**: a walk reads them, so `checked` serves only a context
-	/// that holds the same, and is emptied when they change
-	/// (`rules_checked_keep`).
-	pub checked_fields: collections::BTreeMap[String, Range],
+	/// **The list-returning functions `checked` was found under**: a walk
+	/// reads them, so `checked` serves only a context that holds the same,
+	/// and is emptied when they change (`rules_checked_keep`). The field
+	/// bounds each entry read it keeps itself (`RulesChecked.fields`).
 	pub checked_returning: collections::BTreeSet[String],
 	/// The private functions whose callers may bound their parameters, and
 	/// what the walks so far proved at their calls (ADR-391 D1,
