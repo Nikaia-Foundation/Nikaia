@@ -1,0 +1,28 @@
+// scripts/drive.nika --closes-in LOG: what the pushed commits' messages in LOG
+// (newest first) do to the issues they name, which drive_close_pushed acts on
+// after a push to `develop` (owner, 2026-11-21): `close N` where the newest
+// line about N is `Fixes`, `reopen N` where it is `Reopens` (#2152). `Part of
+// #N` and a prose mention do nothing.
+use std::env
+use std::fs
+use std::process
+
+fn toolchain() -> String throws {
+    let exe = env::current_exe()?.display() ?? ""
+    if exe.len() > 0 { return exe }
+    return "target/fast/nikaia"
+}
+
+fn root() -> String throws {
+    return env::current_main()?.parent()?.parent()?.parent()?.parent()?.display() ?? "../.."
+}
+
+fn main() throws {
+    let repo = root()
+    let nikaia = toolchain()
+    let log = "target/drive_close_fixed_log.txt"
+    fs::write(f"{log}", fs::Root::Dir(repo.clone()), "redo: the bundle again\n\nFixes #1800\nrevert: the bundle\n\nReopens #1700, #1800\ndocs: a citation\n\nFixes #1662\n\nCo-Authored-By: x\ndrive: two\n\nFixes #1500, #1501\nPart of #1400\nthe fix for #1300 waits\nbundle: lean\n\nFixes #1700\n")
+    let out = process::run(nikaia, ["run", "scripts/drive.nika", "--", "--closes-in", log.clone()]; dir: repo)
+    println(out.stdout.trim())
+    fs::remove(f"{log}", fs::Root::Dir(repo.clone()))
+}
