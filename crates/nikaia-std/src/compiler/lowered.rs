@@ -2945,6 +2945,17 @@ mod tiers_lowered {
 pub use tiers_lowered::*;
 
 #[allow(unsafe_code)]
+mod toml_lowered {
+    #[allow(unused_imports)]
+    use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
+    include!("lowered/toml.rs");
+}
+#[allow(unused_imports)]
+pub use toml_lowered::*;
+
+#[allow(unsafe_code)]
 mod touch_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -3845,6 +3856,10 @@ pub mod throws {
     pub use super::{AS_VALUE, MethodsCalled, ThrowsGraph, unit_throws, stored_throws, params_as_places, throws_given, throws_published, error_sets, error_type, Thrown, Contribution};
 }
 pub mod tiers {}
+pub mod toml {
+    #[allow(unused_imports)]
+    pub use super::{Toml};
+}
 pub mod touch {
     #[allow(unused_imports)]
     pub use super::{Reached, Reach, TouchGraph, unit_touches, touches_of_graph};
@@ -3908,6 +3923,7 @@ pub fn nikaia_tests() -> std::vec::Vec<(std::string::String, fn() -> Result<(), 
     all.extend(paths_nikaia_tests().into_iter().map(|(name, run)| (name.to_string(), run)));
     all.extend(signature_nikaia_tests().into_iter().map(|(name, run)| (name.to_string(), run)));
     all.extend(threads_nikaia_tests().into_iter().map(|(name, run)| (name.to_string(), run)));
+    all.extend(toml_nikaia_tests().into_iter().map(|(name, run)| (name.to_string(), run)));
     all.extend(touch_nikaia_tests().into_iter().map(|(name, run)| (name.to_string(), run)));
     all.extend(ty_nikaia_tests().into_iter().map(|(name, run)| (name.to_string(), run)));
     all.extend(logic::nikaia_tests().into_iter().map(|(test, run)| (format!("logic::{test}"), run)));
@@ -3951,4 +3967,4 @@ pub fn nikaia_run_tests(filters: &[std::string::String], list: bool, more: std::
 /// **The digest of this lowered set** (#1610): every file `lower-std` wrote
 /// beside this index, and the index above this line. Compiled into the same
 /// crate as the code it names, it is the compiler's identity for its caches.
-pub const LOWERED_DIGEST: &str = "5ed0c955bcc9ecf475a031a3386cde53325a2a74880e6a6c1a9c648dcca21cdd";
+pub const LOWERED_DIGEST: &str = "88041148094d5d74ce790b32bd6d2104deac7c91bff3979049dbf52445db225c";
