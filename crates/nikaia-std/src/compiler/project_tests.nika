@@ -1448,6 +1448,82 @@ pub fn project_tests_report_failures(failed: ref Vec[ProjectTestsFailed]) throws
                 eprintln(text::escape_control(line.clone()))
             }
         }
+        if !agree {
+            project_tests_explain_settings(one.outcomes)
+        }
+    }
+}
+
+/// **Where the settings disagree, what each did otherwise** (#2592): every
+/// setting against the first, as differences, so a test that failed with
+/// `the settings disagree` says from its report alone which setting printed,
+/// wrote or ended how. A child's standard error is untrusted (ADR-398): each
+/// line of its difference is escaped.
+fn project_tests_explain_settings(outcomes: ref Vec[(String, ProjectTestsOutcome)]) throws {
+    let base = outcomes[0].1
+    let named = outcomes[0].0
+    for (setting, outcome) in outcomes[1..<outcomes.len()] {
+        if outcome == base {
+            continue
+        }
+        println(f"the settings differ (- at user-parallelism = {named}, + at user-parallelism = {setting}):")
+        if outcome.ended_well != base.ended_well || outcome.stopped != base.stopped {
+            println(f"  - {project_tests_ending(base)}")
+            println(f"  + {project_tests_ending(outcome)}")
+        }
+        if outcome.passed != base.passed {
+            println(f"  - {project_tests_passing(base)}")
+            println(f"  + {project_tests_passing(outcome)}")
+        }
+        if outcome.stdout != base.stdout {
+            println("standard output:")
+            print(project_tests_difference(base.stdout, outcome.stdout))
+        }
+        if outcome.stderr != base.stderr {
+            println("standard error:")
+            for line in differing_lines(base.stderr, outcome.stderr).lines() {
+                println(text::escape_control(line.clone()))
+            }
+        }
+        for (want, got) in base.files.iter().zip(outcome.files.iter()) {
+            if want.1 != got.1 {
+                println(f"{want.0}:")
+                print(project_tests_difference(project_tests_or_none(want.1), project_tests_or_none(got.1)))
+            }
+        }
+        for (want, got) in base.bounds.iter().zip(outcome.bounds.iter()) {
+            if want.2 != got.2 {
+                println(f"tests/{want.0}:")
+                print(project_tests_difference(want.2, got.2))
+            }
+        }
+    }
+}
+
+/// A file a test may have written, its bytes, or none where it wrote none.
+fn project_tests_or_none(written: ref Bytes?) -> Bytes {
+    return match written {
+        null => Bytes([]),
+        bytes => bytes.clone(),
+    }
+}
+
+/// How a test's process ended, in a word for the settings' difference.
+fn project_tests_ending(outcome: ref ProjectTestsOutcome) -> String {
+    if outcome.ended_well {
+        return "ended successfully"
+    }
+    if outcome.stopped {
+        return "stopped (exit 101)"
+    }
+    return "ended unsuccessfully"
+}
+
+/// Whether a test passed, in words for the settings' difference.
+fn project_tests_passing(outcome: ref ProjectTestsOutcome) -> String {
+    return match outcome.passed {
+        true => "passed",
+        false => "failed",
     }
 }
 

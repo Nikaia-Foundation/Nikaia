@@ -8,6 +8,14 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1518] — 2026-11-21
+
+**Builders' changes (#2459, #2592)**
+- The driver keeps one before-binary per commit in target/bins/<sha> and gives agents its path as NIKAIA_OLD; run times go to a lane's runs.txt; a cleanup removes the brief files and claude session dirs of closed issues.
+- Faster bound proofs: a type's rule check is not walked again when the callee returns it looked up changed only by a pending entry where pending reads as absent, or not at all (ADR-306 D23).
+- Faster bound proofs: a function's found returns are not walked again in a round where nothing it reads changed (ADR-306 D23).
+- Changed: `nikaia test` ends a test that failed with "the settings disagree" with each setting's difference from the first: how it ended, whether it passed, and line differences of its output, standard error, written files and bounds reports.
+
 ## [0.0.1517] — 2026-11-21
 
 **Builders' changes (#2421, #2432)**
