@@ -464,6 +464,13 @@ pub(crate) fn check_core_method_called<H: CheckHost>(state: &mut CheckState, wor
     let outer_door = state.flow.at_a_write_door;
     state.flow.at_a_write_door = at_a_door;
     let holding = (name == "update" || name == "access") && locked_content_of(&on).is_some();
+    let door_content = if name == "access" { locked_content_of(&on) } else { None };
+    if door_content.is_some() && !args.is_empty() {
+        match unsafe { nikaia_std::proven::read(&args, (nikaia_std::proven::sub::<i64>(args.len() as i64, 1)) as usize) } {
+            Expr::Closure { params, body, .. } => { if params.len() == 1 { door_views_handed_back(state, world, body, *unsafe { nikaia_std::proven::read(&params, (0) as usize) }, nikaia_std::index::or(door_content.as_ref(), || &Ty::Unknown), span); } },
+            _ => { },
+        }
+    }
     let outer_inside = state.inside_a_door;
     state.inside_a_door = holding;
     check_core_method_changes(state, world, &on, receiver, &name, span);

@@ -148,6 +148,11 @@ impl EmitState {
             out.push(&after);
             return Ok(());
         }
+        if self.facts.door_copies.contains(&at) {
+            out.push("*");
+            self.emit_expr_after_the_copy(world, walk, out, host, node, depth, flow, scope)?;
+            return Ok(());
+        }
         if self.facts.copied_reads.contains(&at) {
             let indexed = matches!(node, Expr::Index { .. });
             let held = indexed && !self.facts.flat_reads.contains(&at);

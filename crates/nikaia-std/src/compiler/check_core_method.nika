@@ -627,6 +627,18 @@ fn check_core_method_called[H: CheckHost](mut state: CheckState, world: ref Chec
     state.flow.at_a_write_door = at_a_door
     // **And `access` holds one open too** (ADR-281 D10).
     let holding = (name == "update" || name == "access") && locked_content_of(on) != null
+    // **What an `access` block hands back of its view** (#1454): a copy, or `NK1131`.
+    let door_content = if name == "access" { locked_content_of(on) } else { null }
+    if door_content != null && args.len() > 0 {
+        match args[args.len() as i64 - 1] {
+            Expr::Closure { params, body, .. } => {
+                if params.len() == 1 {
+                    door_views_handed_back(state, world, body, params[0], door_content ?? Ty::Unknown, span)
+                }
+            },
+            else => {}
+        }
+    }
     let outer_inside = state.inside_a_door
     state.inside_a_door = holding
     check_core_method_changes(state, world, on, receiver, name, span)
