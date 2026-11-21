@@ -1,0 +1,12 @@
+// `cli::Args` is read with `nth`, not indexed: an open number in the brackets
+// does not hide that the read has no type (#1952), as `args[0]` does not.
+use std::cli
+
+fn main() throws {
+    let args = cli::args()
+    let mut at = 0
+    while at < args.len() {
+        if args[at] == "--exe" { println("exe") }
+        at += 1
+    }
+}

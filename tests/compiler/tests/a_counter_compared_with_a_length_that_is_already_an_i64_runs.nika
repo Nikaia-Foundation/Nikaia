@@ -1,0 +1,31 @@
+// A never-negative counter compared with a `len()` is compared as a `usize`
+// only where the length is one `std` counts (#1952): a `len` of the
+// program's own type and `cli::Args::len` hand back an `i64` already.
+use std::cli
+
+struct Bag { items: Vec[i64] }
+
+impl Bag {
+    fn len(ref self) -> i64 { self.items.len() }
+}
+
+fn main() throws {
+    let bag = Bag { items: [1, 2, 3] }
+    let mut at = 0
+    while at < bag.len() {
+        at += 1
+    }
+    println(f"{at}")
+    let args = cli::args()
+    let mut seen = 0
+    while seen < args.len() {
+        seen += 1
+    }
+    println(f"{seen > 0}")
+    let xs = [4, 5]
+    let mut i = 0
+    while i < xs.len() {
+        i += 1
+    }
+    println(f"{i}")
+}
