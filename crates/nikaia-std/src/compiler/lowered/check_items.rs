@@ -468,9 +468,9 @@ impl CheckState {
         self.findings.push(check_refusal("NK1117", span, format!("There's no function called `{}`.", name), vec![String::from("A function called by its name alone is one of yours or one that's always available. A function from a package is called with the package's name in front: `package::name(…)`.")], Some(help)));
     }
     pub(crate) fn a_trait_nothing_declares(&mut self, view: &ParsedView<'_, '_, '_, '_, '_, '_, '_>, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, written: &str, span: &Span) {
-        let at = nikaia_std::search::find(&written, &"::", 0);
+        let at = nikaia_std::text::find_first(&written, &"::");
         if at.is_some() {
-            let head = nikaia_std::block::Text::from(nikaia_std::index::get(&written, nikaia_std::index::at(0..match at { Some(__nikaia_value) => __nikaia_value, None => return })).to_string());
+            let head = nikaia_std::block::Text::from(written.before(match at { Some(__nikaia_value) => __nikaia_value, None => return }.start).to_string());
             self.a_head_nothing_declares(view, world, &head, written, span);
             return;
         }

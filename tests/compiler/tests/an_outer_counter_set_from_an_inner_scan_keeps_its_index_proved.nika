@@ -1,0 +1,22 @@
+// An outer `while` counter set from an inner scan's counter (#2455): `j`
+// starts at `i >= 0` and only grows, and `i = j + 1` keeps `i >= 0`, so
+// `bs[j]` is proved (ADR-361 D2, D13).
+fn f(raw: String) -> i64 sync {
+	let bs = raw.bytes
+	let n = bs.len() as i64
+	let mut c = 0
+	let mut i = 0
+	while i < n {
+		let mut j = i
+		while j < n && bs[j] != 10 {
+			j += 1
+		}
+		c = j
+		i = j + 1
+	}
+	return c
+}
+
+fn main() throws {
+	println(f("ab\ncde"))
+}

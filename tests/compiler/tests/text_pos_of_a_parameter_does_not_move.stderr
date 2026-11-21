@@ -1,0 +1,9 @@
+error[NK1214]: `p` moves forward, but which text it belongs to is not known here: a position moves only in the text it was taken from.
+  --> tests/text_pos_of_a_parameter_does_not_move.nika:7:5
+   |
+ 7 |     return p.forward(scalars: 1)
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: A position is a byte offset below the language: a move is handed the text the position came from, which the compiler follows through names and branches (ADR-374 D4, D5).
+   = help: Take the position from the text the move walks: `t.start()`, `t.end()` or a match of `t.find(…)`, bound by a `let` in this function; a scanner that keeps its place holds a `text::Cursor`.
+1 type error

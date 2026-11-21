@@ -26,8 +26,8 @@ impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     pub(crate) fn a_module_used_before_it_is_introduced(&mut self, name: &str, span: &Span) {
-        let at = match nikaia_std::search::find(&name, &"::", 0) { Some(__nikaia_value) => __nikaia_value, None => return };
-        let module = nikaia_std::block::Text::from(nikaia_std::index::get(&name, nikaia_std::index::at(0..at)).to_string());
+        let at = match nikaia_std::text::find_first(&name, &"::") { Some(__nikaia_value) => __nikaia_value, None => return };
+        let module = nikaia_std::block::Text::from(name.before(at.start).to_string());
         if !self.std_modules.contains(&module) || self.std_in_scope.contains(&module) { return; }
         if is_a_hull(&module) || starts_with_a_capital(&module) { return; }
         if self.modules.contains(&module) { return; }
@@ -36,9 +36,9 @@ impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     pub(crate) fn a_prelude_name_with_a_module_in_front(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, name: &str, span: &Span) {
-        let at = match nikaia_std::search::find(&name, &"::", 0) { Some(__nikaia_value) => __nikaia_value, None => return };
-        let module = nikaia_std::block::Text::from(nikaia_std::index::get(&name, nikaia_std::index::at(0..at)).to_string());
-        let last = nikaia_std::block::Text::from(nikaia_std::index::get(&name, nikaia_std::index::at(at + 2..)).to_string());
+        let at = match nikaia_std::text::find_first(&name, &"::") { Some(__nikaia_value) => __nikaia_value, None => return };
+        let module = nikaia_std::block::Text::from(name.before(at.start).to_string());
+        let last = nikaia_std::block::Text::from(name.after(at.end).to_string());
         if !self.std_modules.contains(&module) || self.modules.contains(&module) { return; }
         if world.library.functions.contains_key(name) || !world.library.functions.contains_key(&last) { return; }
         self.findings.push(check_refusal("NK1163", span, format!("`{}` isn't in `{}`: it's always available on its own.", last, module), vec![format!("`{}` needs no `use` and no module in front of it.", last), String::from("Every other `std` name is reached through its module.")], Some(format!("Write `{}(…)` without the `{}::`.", last, module))));

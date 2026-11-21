@@ -64,6 +64,7 @@ pub struct Match<'s> {
 
 impl<'s> Match<'s> {
     /// The match of `hay[range]`, whose ends a search found on scalars.
+    #[inline]
     pub(crate) fn of(hay: &'s str, range: std::ops::Range<usize>) -> Match<'s> {
         Match {
             start: crate::text::Pos::at(range.start),

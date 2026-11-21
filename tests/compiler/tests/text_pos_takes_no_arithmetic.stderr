@@ -4,6 +4,6 @@ error[NK1191]: You can't use `+` on a `text::Pos`.
  5 |     let p = t.start() + 1
    |     ^^^^^^^^^^^^^^^^^^^^^
    |
-   = note: A `text::Pos` is a boundary in one text, not a number, and takes no arithmetic (ADR-374 D1).
+   = note: A `text::Pos` is a boundary in one text, not a number, and takes no arithmetic; a `text::Match`'s `start` and `end` are two (ADR-374 D1, D2).
    = help: Cut the text there with `before`, `after` or `between`; the bytes before it are `t.before(p).bytes.len()`.
 1 type error

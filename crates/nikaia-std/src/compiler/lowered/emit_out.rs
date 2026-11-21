@@ -86,7 +86,8 @@ impl EmitOut {
         false
     }
     pub(crate) fn insert_after_first_brace(&mut self, text: &str) {
-        let at = (match nikaia_std::search::find(&self.buf, &"{", 0) { Some(__nikaia_value) => __nikaia_value, None => return }) + 1;
+        let brace = match nikaia_std::text::find_first(&self.buf, &"{") { Some(__nikaia_value) => __nikaia_value, None => return };
+        let at = self.buf.before(brace.end).as_bytes().len() as i64;
         self.buf.insert_str(nikaia_std::count::of(at), text);
         self.shift_entries(at, text.len() as i64);
     }
@@ -95,7 +96,8 @@ impl EmitOut {
         self.shift_entries(at, text.len() as i64);
     }
     pub(crate) fn insert_before_last_brace(&mut self, text: &str) {
-        let at = match nikaia_std::search::rfind(&self.buf, &"}") { Some(__nikaia_value) => __nikaia_value, None => return };
+        let brace = match nikaia_std::text::rfind(&self.buf, &"}") { Some(__nikaia_value) => __nikaia_value, None => return };
+        let at = self.buf.before(brace.start).as_bytes().len() as i64;
         self.buf.insert_str(nikaia_std::count::of(at), text);
         self.shift_entries(at, text.len() as i64);
     }

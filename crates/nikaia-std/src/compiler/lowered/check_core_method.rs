@@ -766,6 +766,7 @@ pub(crate) fn check_core_method<H: CheckHost>(state: &mut CheckState, world: &Ch
     if mapped { state.stored_frames.push(CheckStoredCode::empty()); }
     if !code_keys.is_empty() { state.stored_frames.push(CheckStoredCode::empty()); }
     let walked = check_core_method_walked(state, world, host, expr, safe, receiver, method, args, config, span);
+    check_pos_call(state, world, expr, receiver, args, config, span);
     let listed = mapped && check_core_stmt_a_list_type(&walked);
     let found = check_core_method_deadline(&state, world, receiver, config, walked);
     state.flow.method_passed.remove(&(id_of(receiver) as i64));
@@ -857,11 +858,12 @@ pub(crate) fn check_core_method_walked<H: CheckHost>(state: &mut CheckState, wor
         if witness >= 0 { check_core_expr(state, world, host, &unsafe { nikaia_std::proven::read(&config, (witness) as usize) }.value, span); }
         let mut owner: String = nikaia_std::block::Text::from(entry.to_string());
         let mut rule: String = String::from("");
-        let cut = nikaia_std::search::find(&entry, &"::", 0);
-        if cut.is_some() {
-            let split = nikaia_std::index::or(cut, || 0);
-            owner = nikaia_std::block::Text::from(nikaia_std::index::get(&entry, nikaia_std::index::at(0..split)).to_string());
-            rule = nikaia_std::block::Text::from(nikaia_std::index::get(&entry, nikaia_std::index::at(split + "::".len() as i64..)).to_string());
+        match nikaia_std::text::find_first(&entry, &"::") {
+            None => { },
+            Some(split) => {
+                owner = nikaia_std::block::Text::from(entry.before(split.start).to_string());
+                rule = nikaia_std::block::Text::from(entry.after(split.end).to_string());
+            },
         }
         state.a_grammar_reached_through_a_dot(&owner, &rule, span);
         return check_core_grammar_call(state, world, host, &entry, args, config, span);

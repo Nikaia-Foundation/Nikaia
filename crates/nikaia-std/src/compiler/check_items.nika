@@ -691,7 +691,7 @@ impl CheckState {
     fn a_trait_nothing_declares(ref mut self, view: ref ParsedView, world: ref CheckWorld, written: ref String, span: ref Span) {
         let at = written.find("::")
         if at != null {
-            let head = written[0..<(at ?? return)].clone()
+            let head = written.before((at ?? return).start).clone()
             self.a_head_nothing_declares(view, world, head, written, span)
             return
         }

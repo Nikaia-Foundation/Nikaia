@@ -728,10 +728,12 @@ pub(crate) fn features_span(toml: &str, feature: &str, entry: &str) -> Span {
                 let indent = line.len() as i64 - line.trim_start().len() as i64;
                 if !entry.is_empty() {
                     let quoted = format!("\"{}\"", entry);
-                    let found = nikaia_std::search::find(&line, &quoted, 0);
-                    if found.is_some() {
-                        let start = offset + nikaia_std::index::or(found, || 0);
-                        return Span { start: u32::try_from(start).unwrap_or_else(|_| panic!("the value does not fit in an `u32`")), end: u32::try_from(start + quoted.len() as i64).unwrap_or_else(|_| panic!("the value does not fit in an `u32`")) };
+                    match nikaia_std::text::find_first(&line, &quoted) {
+                        None => { },
+                        Some(found) => {
+                            let start = offset + line.before(found.start).as_bytes().len() as i64;
+                            return Span { start: u32::try_from(start).unwrap_or_else(|_| panic!("the value does not fit in an `u32`")), end: u32::try_from(start + quoted.len() as i64).unwrap_or_else(|_| panic!("the value does not fit in an `u32`")) };
+                        },
                     }
                 }
                 let start = offset + indent;

@@ -126,13 +126,20 @@ fn check_program_program[H: CheckHost](mut state: CheckState, world: ref CheckWo
             Item::Bench { body, .. } => {
                 check_program_body(state, world, host, body)
             },
-            Item::Grammar(gram) => {
-                check_function_grammar(state, world, host, gram)
-            },
+            // A grammar after the rest (below).
+            Item::Grammar(_) => {},
             // **A `use` brings no name in, for `std` as for a package** (ADR-140 D5).
             Item::Import { path, .. } => {
                 state.an_import_that_brings_a_name_in(world, path, item.span)
             },
+            else => {},
+        }
+    }
+    // **A grammar after the bodies that enter it** (ADR-374 D7): its `here`
+    // and `span(p)` take the kind of the input they hand it.
+    for item in world.here.items {
+        match item.node {
+            Item::Grammar(gram) => check_function_grammar(state, world, host, gram),
             else => {},
         }
     }

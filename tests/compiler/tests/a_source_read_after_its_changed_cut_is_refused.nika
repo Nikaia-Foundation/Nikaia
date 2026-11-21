@@ -4,7 +4,7 @@
 
 fn after(keep line: String) -> String throws {
     let m = line.find(";") ?? return line
-    let mut rest = line[m..]
+    let mut rest = line.after(m.start)
     rest += "!"
     println(line)
     return rest
@@ -12,7 +12,7 @@ fn after(keep line: String) -> String throws {
 
 fn lent(line: String) -> String {
     let m = line.find(";") ?? return f"{line}"
-    let mut rest = line[..m]
+    let mut rest = line.before(m.end)
     rest += "."
     return rest
 }

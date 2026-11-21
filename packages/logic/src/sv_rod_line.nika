@@ -100,13 +100,13 @@ fn sv_new_theory(engine: String) -> String {
 /// a `match` of the two parts fails in rustc (#1310).
 fn sv_engine_name(engine: String) -> String {
 	let at = engine.find(":") ?? return engine.clone()
-	return engine[0..<at]
+	return engine.before(at.start)
 }
 
 /// The settings of `ENGINE[:SETTINGS]`, empty where there are none.
 fn sv_engine_settings(engine: String) -> String {
 	let at = engine.find(":") ?? return ""
-	return engine[at + ":".len()..]
+	return engine.after(at.end)
 }
 
 /// One file's answer and the work it took: `proved`, `refuted`, `unknown

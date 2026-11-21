@@ -124,7 +124,7 @@ fn ts_unescape(s: String) -> String throws {
     let mut i = 0
     let n = s.len()
     while i < n {
-        let at = s.find("\\"; from: i) ?? -1
+        let at = s.bytes.find('\\' as u8; from: i) ?? -1
         if at < 0 || at + 1 >= n {
             out = out + s.bytes[i..<n].text()
             break
@@ -142,12 +142,11 @@ fn ts_unescape(s: String) -> String throws {
 
 // The string after `marker` up to its closing quote, unescaped; "" if absent.
 fn ts_value(line: String, marker: String) -> String throws {
-    let at = line.find(marker.clone(); from: 0) ?? -1
-    if at < 0 { return "" }
-    let start = at + marker.len()
+    let found = line.find(marker.clone()) ?? return ""
+    let start = line.before(found.end).bytes.len()
     let mut j = start
     while j < line.len() {
-        let q = line.find("\""; from: j) ?? -1
+        let q = line.bytes.find('"' as u8; from: j) ?? -1
         if q < 0 { break }
         let mut slashes = 0
         let mut k = q - 1
@@ -163,9 +162,8 @@ fn ts_value(line: String, marker: String) -> String throws {
 
 // The integer after `marker`; 0 if absent.
 fn ts_int(line: String, marker: String) -> i64 throws {
-    let at = line.find(marker.clone(); from: 0) ?? -1
-    if at < 0 { return 0 }
-    let start = at + marker.len()
+    let found = line.find(marker.clone()) ?? return 0
+    let start = line.before(found.end).bytes.len()
     let mut j = start
     while j < line.len() && ts_digit(ts_at(line, j)) { j += 1 }
     return text::parse_i64(line.bytes[start..<j].text()) ?? 0
@@ -239,8 +237,9 @@ fn ts_words(s: String) -> Vec[String] throws {
 }
 
 fn ts_find_or(s: String, needle: String, none: i64) -> i64 {
-    let at = s.find(needle.clone(); from: 0) ?? -1
-    if at < 0 || at + needle.len() > 500 { return none }
+    let found = s.find(needle.clone()) ?? return none
+    let at = s.before(found.start).bytes.len()
+    if at + needle.len() > 500 { return none }
     return at
 }
 
@@ -273,7 +272,7 @@ fn ts_agent(path: String, name: String, root: String) -> TsAgent throws {
     let mut adds: Vec[String] = []
     for line in body.split("\n") {
         // a line cut off, or two lines written into one, is not JSON
-        if !line.ends_with("}") || (line.find("{\"parentUuid\""; from: 1) ?? -1) >= 0 { continue }
+        if !line.ends_with("}") || (line.strip_prefix("{") ?? line).contains("{\"parentUuid\"") { continue }
         let stamp = ts_value(line.clone(), "\"timestamp\":\"")
         if stamp != "" { stamps.push(ts_millis(stamp)) }
         if first == "" && line.contains("\"role\":\"user\",\"content\":\"") {
@@ -295,9 +294,9 @@ fn ts_agent(path: String, name: String, root: String) -> TsAgent throws {
         }
         last_id = id
         last = [0, 0, 0, 0]
-        let at = line.find("\"usage\":{"; from: 0) ?? -1
-        if at >= 0 {
-            let tail = line.bytes[at..<line.len()].text()
+        let usage = line.find("\"usage\":{")
+        if usage != null {
+            let tail = line.after(usage?.start ?? line.end())
             last = [ts_int(tail.clone(), "\"input_tokens\":"), ts_int(tail.clone(), "\"cache_read_input_tokens\":"), ts_int(tail.clone(), "\"cache_creation_input_tokens\":"), ts_int(tail, "\"output_tokens\":")]
             let t = last[0] + last[1] + last[2]
             ctx += t
@@ -425,8 +424,8 @@ fn ts_compiler_nika(root: String) -> String throws {
         if inside && line.starts_with("}") { break }
         if inside && line.starts_with("    \"") {
             let rest = (line.strip_prefix("    \"") ?? "").clone()
-            let at = rest.find("\""; from: 0) ?? -1
-            if at > 0 { names = names + rest.bytes[0..<at].text() + "|" }
+            let at = rest.find("\"")?.start ?? rest.start()
+            if at > rest.start() { names = names + rest.before(at) + "|" }
         }
     }
     return names
@@ -452,14 +451,15 @@ fn ts_counts(root: String, commit: String, compiler: String) -> Vec[i64] throws 
 }
 
 fn ts_version(subject: String) -> String throws {
-    let mut from = 0
-    while from < subject.len() {
-        let at = subject.find("0.0."; from: from) ?? -1
-        if at < 0 { break }
+    let mut from = subject.start()
+    while from < subject.end() {
+        let found = subject.find("0.0."; from: from) ?? break
+        let at = subject.before(found.start).bytes.len()
         let mut j = at + 4
         while j < subject.len() && ts_digit(ts_at(subject, j)) { j += 1 }
         if j > at + 4 { return f"{subject.bytes[at..<j].text()}" }
-        from = at + 1
+        // No `0.0.` starts inside one that no digit follows.
+        from = found.end
     }
     return ""
 }
@@ -473,8 +473,8 @@ fn ts_progress(root: String, since: String) -> Vec[String] throws {
         if line.trim() == "" { continue }
         let parts = line.split(" ").collect()
         let subject = (line.strip_prefix(parts[0].clone() + " " + parts[1].clone() + " ") ?? "").clone()
-        let paren = subject.find("(0.0."; from: 0) ?? -1
-        if paren < 0 || ts_version(subject.bytes[paren..<subject.len()].text()) == "" { continue }
+        let paren = subject.find("(0.0.") ?? continue
+        if ts_version(subject.after(paren.start)) == "" { continue }
         let h = parts[0].clone()
         let c = ts_counts(root.clone(), h.clone(), compiler.clone())
         let module = if subject.starts_with("emit") { "emit" } else if subject.starts_with("check") { "check" } else { "other" }

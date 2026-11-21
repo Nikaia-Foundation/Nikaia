@@ -1393,8 +1393,8 @@ fn emit_split_lifetimes(state: ref EmitState, world: ref EmitWorld, ty: ref Type
     let mut of_field: collections::BTreeMap[String, Vec[String]] = collections::BTreeMap()
     for entry in returns.split("),") {
         let colon = entry.find(":") ?? return null
-        let path = entry[0..<colon].trim()
-        let written = entry[colon + 1..].trim()
+        let path = entry.before(colon.start).trim()
+        let written = entry.after(colon.end).trim()
         let opened = written.strip_prefix("ref(") ?? return null
         let mut params: Vec[String] = []
         for alternative in opened.trim_end_matches(")").split("|") {
@@ -1525,13 +1525,13 @@ fn emit_fn_code_that_crosses(spelled: ref String) -> String {
 fn emit_fn_code_that_changes(spelled: ref String) -> String {
     let async_at = spelled.find("AsyncFn(")
     if async_at != null {
-        let at = async_at ?? 0
-        let before = spelled[0..<at]
-        let after = spelled[at + "AsyncFn(".len()..]
+        let at = async_at ?? return spelled.clone()
+        let before = spelled.before(at.start)
+        let after = spelled.after(at.end)
         return f"{before}AsyncFnMut({after}"
     }
     let at = spelled.find("Fn(") ?? return spelled.clone()
-    let before = spelled[0..<at]
-    let after = spelled[at + "Fn(".len()..]
+    let before = spelled.before(at.start)
+    let after = spelled.after(at.end)
     return f"{before}FnMut({after}"
 }

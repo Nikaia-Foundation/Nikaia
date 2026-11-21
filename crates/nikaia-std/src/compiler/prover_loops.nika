@@ -1728,13 +1728,13 @@ struct LoopParsed {
 /// **`loop_term_word` read back**, its nodes appended to the arena; nothing
 /// for text it did not write.
 fn loop_term_of(mut arena: logic::TermArena, word: ref String) -> LoopParsed? {
-    let open = word.find("(") ?? word.len()
-    let comma = word.find(",") ?? word.len()
-    let close = word.find(")") ?? word.len()
+    let open = word.find("(")?.start ?? word.end()
+    let comma = word.find(",")?.start ?? word.end()
+    let close = word.find(")")?.start ?? word.end()
     let first = if open < comma { open } else { comma }
     let end = if first < close { first } else { close }
-    let head = word[0..<end].clone()
-    let rest = word[end..].clone()
+    let head = word.before(end).clone()
+    let rest = word.after(end).clone()
     if !rest.starts_with("(") {
         if head == "true" || head == "false" {
             return LoopParsed { term: arena.boolean(head == "true"), rest: rest }
@@ -1754,11 +1754,11 @@ fn loop_term_of(mut arena: logic::TermArena, word: ref String) -> LoopParsed? {
         }
         let tail = (inner.rest.strip_prefix(",") ?? "").clone()
         let shut = tail.find(")") ?? return null
-        let k = text::parse_i64(tail[0..<shut].clone()) ?? return null
+        let k = text::parse_i64(tail.before(shut.start).clone()) ?? return null
         if k <= 0 {
             return null
         }
-        return LoopParsed { term: arena.quot(inner.term, k), rest: tail[shut + 1..<tail.len()].clone() }
+        return LoopParsed { term: arena.quot(inner.term, k), rest: tail.after(shut.end).clone() }
     }
     let mut args: Vec[i64] = []
     while true {
@@ -1838,8 +1838,8 @@ fn loop_recorded(mut arena: logic::TermArena, record: ref LoopRecord, recorded: 
     let mut all: Vec[i64] = []
     for part in recorded.split(";") {
         let at = part.find("=") ?? return null
-        let origin = part[0..<at].replace("-", " ")
-        let read = loop_term_of(arena, part[at + 1..<part.len()].clone()) ?? return null
+        let origin = part.before(at.start).replace("-", " ")
+        let read = loop_term_of(arena, part.after(at.end).clone()) ?? return null
         if read.rest.len() != 0 || origin.len() == 0 {
             return null
         }

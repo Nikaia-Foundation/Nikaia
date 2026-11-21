@@ -1,0 +1,21 @@
+// A path guard holds past a call handed the guarded name (ADR-raw-sinks-1
+// D14, ADR-381 D2, ADR-306 D17, #2450): a name bound without `mut` cannot be
+// handed to a call to change (`NK1139`), so `fs::exists(key, ...)`,
+// `root.join(key)` and a function of the program taking it leave the proof
+// of `path::is_component(key)` standing for the joined path after them.
+use std::cli
+use std::fs
+use std::path
+
+fn shown(name: String) -> i64 {
+    return name.len()
+}
+
+fn main() throws {
+    let key = cli::args().nth(1) ?? "k"
+    return if !path::is_component(key)
+    println(fs::exists(key, fs::Root::Dir(".")))
+    let _r = fs::Root::Dir("c").join(key)
+    println(shown(key))
+    println(fs::exists(f"data/{key}", fs::Root::Anywhere))
+}

@@ -824,9 +824,9 @@ pub(crate) fn emit_split_lifetimes(state: &EmitState, world: &EmitWorld<'_, '_, 
     let slots = match state.view_slots.get(&emit_text(world, ty.name)) { Some(__nikaia_value) => __nikaia_value, None => return None };
     let mut of_field: collections::BTreeMap<String, Vec<String>> = collections::BTreeMap::new(); #[allow(clippy::redundant_locals)] let slots = slots;
     for entry in returns.split("),") {
-        let colon = match nikaia_std::search::find(&entry, &":", 0) { Some(__nikaia_value) => __nikaia_value, None => return None };
-        let path = nikaia_std::index::get(&entry, nikaia_std::index::at(0..colon)).trim();
-        let written = nikaia_std::index::get(&entry, nikaia_std::index::at(colon + 1..)).trim();
+        let colon = match nikaia_std::text::find_first(&entry, &":") { Some(__nikaia_value) => __nikaia_value, None => return None };
+        let path = entry.before(colon.start).trim();
+        let written = entry.after(colon.end).trim();
         let opened = match written.strip_prefix("ref(") { Some(__nikaia_value) => __nikaia_value, None => return None };
         let mut params: Vec<String> = vec![];
         for alternative in opened.trim_end_matches(')').split('|') {
@@ -914,16 +914,16 @@ pub(crate) fn emit_fn_code_that_crosses(spelled: &str) -> String {
 }
 
 pub(crate) fn emit_fn_code_that_changes(spelled: &str) -> String {
-    let async_at = nikaia_std::search::find(&spelled, &"AsyncFn(", 0);
+    let async_at = nikaia_std::text::find_first(&spelled, &"AsyncFn(");
     if async_at.is_some() {
-        let at = nikaia_std::index::or(async_at, || 0);
-        let before = nikaia_std::index::get(&spelled, nikaia_std::index::at(0..at));
-        let after = nikaia_std::index::get(&spelled, nikaia_std::index::at(at + "AsyncFn(".len() as i64..));
+        let at = match async_at { Some(__nikaia_value) => __nikaia_value, None => return nikaia_std::block::Text::from(spelled.to_string()) };
+        let before = spelled.before(at.start);
+        let after = spelled.after(at.end);
         return format!("{}AsyncFnMut({}", before, after);
     }
-    let at = match nikaia_std::search::find(&spelled, &"Fn(", 0) { Some(__nikaia_value) => __nikaia_value, None => return nikaia_std::block::Text::from(spelled.to_string()) };
-    let before = nikaia_std::index::get(&spelled, nikaia_std::index::at(0..at));
-    let after = nikaia_std::index::get(&spelled, nikaia_std::index::at(at + "Fn(".len() as i64..));
+    let at = match nikaia_std::text::find_first(&spelled, &"Fn(") { Some(__nikaia_value) => __nikaia_value, None => return nikaia_std::block::Text::from(spelled.to_string()) };
+    let before = spelled.before(at.start);
+    let after = spelled.after(at.end);
     format!("{}FnMut({}", before, after)
 }
 

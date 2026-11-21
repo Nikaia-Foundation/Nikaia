@@ -2,7 +2,7 @@
 // view is a `String` already. A number keeps its text form.
 fn tail(line: String) -> String {
     let m = line.find(";") ?? return ""
-    return line[m + 1..].to_string()
+    return line.after(m.end).to_string()
 }
 
 fn main() throws {

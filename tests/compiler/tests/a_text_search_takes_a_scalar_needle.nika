@@ -4,14 +4,14 @@ fn main() throws {
     let s = "a,b;c,ä;d"
     let first = s.find(',') ?? return
     let last = s.rfind(',') ?? return
-    println(f"{first} {last}")
-    let later = s.find(';'; from: first + 1) ?? return
-    println(f"{later}")
+    println(f"{s.before(first.start).bytes.len()} {s.before(last.start).bytes.len()}")
+    let later = s.find(';'; from: first.end) ?? return
+    println(f"{s.before(later.start).bytes.len()}")
     let umlaut = s.find('ä') ?? return
-    println(f"{umlaut}")
+    println(f"{s.before(umlaut.start).bytes.len()}")
     println(f"{s.find('x') == null} {s.rfind('x') == null}")
     println(s.replace(';', "-"))
     println(s.replacen(',', "+", 1))
     let needle = ","
-    println(f"{s.find(needle) ?? -1} {needle}")
+    println(f"{s.before(s.find(needle)?.start ?? s.end()).bytes.len()} {needle}")
 }

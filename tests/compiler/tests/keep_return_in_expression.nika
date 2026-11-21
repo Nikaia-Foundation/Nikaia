@@ -3,13 +3,13 @@
 
 fn moved(keep line: String) -> String {
     let m = line.find(";") ?? return line
-    return f"{m}"
+    return f"{line.before(m.start).bytes.len()}"
 }
 
 fn trimmed(keep line: String) -> String {
     let t = line.trim()
     let m = t.find(";") ?? return line
-    return f"{m}"
+    return f"{t.before(m.start).bytes.len()}"
 }
 
 fn make(s: String) -> String {

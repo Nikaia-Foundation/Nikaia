@@ -27,6 +27,19 @@ pub(crate) fn emit_any_writes_a_list(world: &EmitWorld<'_, '_, '_, '_>, parts: &
 
 pub(crate) fn emit_span_rule() -> String { String::from("__nikaia_span") }
 
+pub(crate) fn emit_grammar_input_lifetime(written: &str) -> String {
+    let mut out = String::new();
+    let mut rest: &str = written;
+    loop {
+        let found = match nikaia_std::text::find_first(&rest, &"text::Match") { Some(__nikaia_value) => __nikaia_value, None => break };
+        out.push_str(rest.before(found.end));
+        rest = rest.after(found.end);
+        if !rest.starts_with('<') { out.push_str("<'a>"); }
+    }
+    out.push_str(rest);
+    out
+}
+
 pub(crate) fn emit_count_rule() -> String { String::from("__nikaia_count") }
 
 pub(crate) fn emit_here_rule() -> String { String::from("__nikaia_here") }
@@ -167,6 +180,10 @@ pub(crate) fn emit_parallel_fold(spec: &FoldSpec) -> Option<FoldSpec> {
 }
 
 impl EmitState {
+    pub(crate) fn emit_grammar_positions(&self, world: &EmitWorld<'_, '_, '_, '_>, def: &GrammarDef, bytes: bool) -> bool {
+        let named = emit_text(world, def.name);
+        !bytes && (!self.facts.bytes_grammars.contains(&named) || self.facts.text_grammars.contains(&named))
+    }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     pub(crate) fn emit_grammar<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, def: &GrammarDef) -> Result<(), std::boxed::Box<dyn std::error::Error>> {
@@ -327,7 +344,7 @@ impl EmitState {
             let st = out.mark();
             let renamed = if lines && own_ws && emit_text(world, rule.name) == "WS" { emit_own_ws_rule() } else { "" };
             let emitting = rule.stream && rule.is_entry && self.facts.emitting_entries.contains(&format!("{}::{}", emit_text(world, def.name), emit_text(world, rule.name)));
-            self.emit_grammar_rule(world, walk, out, host, rule, renamed, bytes, emitting, &emitters)?;
+            self.emit_grammar_rule(world, walk, out, host, rule, renamed, bytes, self.emit_grammar_positions(world, def, bytes), emitting, &emitters)?;
             if !bytes { out.record(&rule.span, st); }
         }
         let mut lists = false;
@@ -361,12 +378,21 @@ impl EmitState {
             out.push("          n:count(p)\n");
             out.push("            -> { n as i64 }\n");
         }
-        if spans {
+        let positions = self.emit_grammar_positions(world, def, bytes);
+        if spans && positions {
+            out.push(&format!("\n        rule {}<T>(p: Rule<T>) -> ::nikaia_std::text::Match<'a> =\n", emit_span_rule()));
+            out.push("          p @ at\n");
+            out.push("            -> { ::nikaia_std::grammar::matched(input, at) }\n");
+        } else if spans {
             out.push(&format!("\n        rule {}<T>(p: Rule<T>) -> ::nikaia_std::text::Span =\n", emit_span_rule()));
             out.push("          p @ at\n");
             out.push("            -> { ::nikaia_std::text::Span::of(at) }\n");
         }
-        if heres {
+        if heres && positions {
+            out.push(&format!("\n        rule {} -> ::nikaia_std::text::Pos =\n", emit_here_rule()));
+            out.push("          empty @ at\n");
+            out.push("            -> { ::nikaia_std::grammar::position(input, at.start) }\n");
+        } else if heres {
             out.push(&format!("\n        rule {} -> u32 =\n", emit_here_rule()));
             out.push("          empty @ at\n");
             out.push("            -> { ::nikaia_std::text::Span::of(at).start }\n");
@@ -397,7 +423,7 @@ impl EmitState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    pub(crate) fn emit_grammar_rule<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, rule: &GrammarRule, renamed: &str, bytes: bool, emitting: bool, emitters: &[String]) -> Result<(), std::boxed::Box<dyn std::error::Error>> {
+    pub(crate) fn emit_grammar_rule<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, rule: &GrammarRule, renamed: &str, bytes: bool, positions: bool, emitting: bool, emitters: &[String]) -> Result<(), std::boxed::Box<dyn std::error::Error>> {
         match &rule.frame {
             Some(frame) => { out.push(&format!("        {}\n", frame_attribute(frame))); },
             None => { },
@@ -405,7 +431,7 @@ impl EmitState {
         let vis = if rule.is_entry { "pub " } else { "" };
         let mut ret = String::from("");
         match &rule.ret_type {
-            Some(ty) => { ret = format!(" -> {}", host.ty_named(walk, ty)?); },
+            Some(ty) => { ret = format!(" -> {}", emit_grammar_input_lifetime(&host.ty_named(walk, ty)?)); },
             None => { },
         }
         let mut label = String::from("");
@@ -451,7 +477,10 @@ impl EmitState {
                     #[allow(unused_mut)] let mut covered: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut as_texts = as_texts;
                     emit_text_bindings(world, &walk, &alt.pattern, &mut as_texts, &mut covered);
                     for name in as_bytes.iter() { if !nikaia_std::list::contains(&as_texts, &name) { prelude = format!("{}let {} = {}.as_bytes(); ", prelude, name, name); } }
-                    for (name, range) in as_spans.iter().zip(spanned.iter()) { prelude = format!("{}let {} = ::nikaia_std::text::Span::of({}); ", prelude, name, range); }
+                    for (name, range) in as_spans.iter().zip(spanned.iter()) {
+                        let made = if positions { format!("::nikaia_std::grammar::matched(input, {})", range) } else { format!("::nikaia_std::text::Span::of({})", range) };
+                        prelude = format!("{}let {} = {}; ", prelude, name, made);
+                    }
                     let mut bound_bytes: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut as_texts = as_texts; #[allow(unused_mut, clippy::redundant_locals)] let mut covered = covered;
                     emit_bytes_bindings(world, &alt.pattern.node, &mut bound_bytes);
                     for (name, range) in as_texts.iter().zip(covered.iter()) { if nikaia_std::list::contains(&bound_bytes, &name) { if bytes { prelude = format!("{}let {} = ::nikaia_std::grammar::covered_raw(input, {}); ", prelude, name, range); } else { prelude = format!("{}let {} = ::nikaia_std::grammar::covered(input, {}).as_bytes(); ", prelude, name, range); } } else if bytes { prelude = format!("{}let {} = ::nikaia_std::grammar::covered_bytes::<_, __WgEr>(input, {})?; ", prelude, name, range); } else { prelude = format!("{}let {} = ::nikaia_std::grammar::covered(input, {}); ", prelude, name, range); } }

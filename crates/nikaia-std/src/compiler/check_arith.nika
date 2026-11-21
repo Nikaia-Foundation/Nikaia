@@ -321,9 +321,15 @@ fn is_a_bool_type(ty: ref Ty) -> bool {
 /// Whether `ty` is a position in a text, `text::Pos` (ADR-374 D1), which
 /// takes no arithmetic.
 fn is_a_text_position(ty: ref Ty) -> bool {
+    return text_position_kind(ty) != ""
+}
+
+/// `text::Pos` or `text::Match` where `ty` is one, else "": a match is no
+/// number either, its ends are positions (ADR-374 D2).
+fn text_position_kind(ty: ref Ty) -> String {
     return match ty.unseen() {
-        Ty::Named { name, args, .. } => args.len() == 0 && name == "text::Pos",
-        else => false,
+        Ty::Named { name, args, .. } => if args.len() == 0 && (name == "text::Pos" || name == "text::Match") { name.clone() } else { "" },
+        else => "",
     }
 }
 
@@ -361,9 +367,10 @@ impl CheckState {
             } else if declared_with_no_arithmetic(world.here, right) != null {
                 self.arithmetic_on_a_declared_type(world, symbol, right_expr, right, left_expr, left, 1, compound, span)
             } else if is_a_text_position(left) || is_a_text_position(right) {
-                let note: String = "A `text::Pos` is a boundary in one text, not a number, and takes no arithmetic (ADR-374 D1)."
+                let kind = if is_a_text_position(left) { text_position_kind(left) } else { text_position_kind(right) }
+                let note: String = "A `text::Pos` is a boundary in one text, not a number, and takes no arithmetic; a `text::Match`'s `start` and `end` are two (ADR-374 D1, D2)."
                 let help: String = "Cut the text there with `before`, `after` or `between`; the bytes before it are `t.before(p).bytes.len()`."
-                self.findings.push(check_refusal("NK1191", span, f"You can't use `{symbol}` on a `text::Pos`.", [note], help))
+                self.findings.push(check_refusal("NK1191", span, f"You can't use `{symbol}` on a `{kind}`.", [note], help))
             } else if text_or_bool_in_arithmetic(op, left, right) {
                 let mut culprit = left.shown()
                 if is_text_type(left.unseen()) {

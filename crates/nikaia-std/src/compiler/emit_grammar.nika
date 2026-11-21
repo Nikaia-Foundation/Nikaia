@@ -49,6 +49,23 @@ fn emit_span_rule() -> String {
     return "__nikaia_span"
 }
 
+/// **A `text::Match` a rule hands back is a view of the input** (ADR-374
+/// D7): its lifetime is the input's, `'a`, which the backend's head declares.
+fn emit_grammar_input_lifetime(written: ref String) -> String {
+    let mut out = String()
+    let mut rest: ref String = written
+    while true {
+        let found = rest.find("text::Match") ?? break
+        out.push_str(rest.before(found.end))
+        rest = rest.after(found.end)
+        if !rest.starts_with("<") {
+            out.push_str("<'a>")
+        }
+    }
+    out.push_str(rest)
+    return out
+}
+
 /// The template rule `count(p)` lowers to (ADR-grammar-syntax-v1 D15).
 fn emit_count_rule() -> String {
     return "__nikaia_count"
@@ -272,6 +289,15 @@ fn emit_parallel_fold(spec: ref FoldSpec) -> FoldSpec? {
 }
 
 impl EmitState {
+    /// **Whether this copy of a grammar hands out positions of its text**
+    /// (ADR-374 D7): the copy over text of a grammar not entered with a
+    /// `Bytes` alone. Its `here` is a `text::Pos`, its `span(p)` a
+    /// `text::Match`; elsewhere they are a `u32` and a `text::Span`.
+    fn emit_grammar_positions(ref self, world: ref EmitWorld, def: ref GrammarDef, bytes: bool) -> bool {
+        let named = emit_text(world, def.name)
+        return !bytes && (!self.facts.bytes_grammars.contains(named) || self.facts.text_grammars.contains(named))
+    }
+
     /// A grammar, and where a call enters it with a `Bytes`, its copy over
     /// bytes after it (ADR-grammar-input-v1 D1): the backend reads one input per grammar
     /// (winnow-grammar ADR 25).
@@ -504,7 +530,7 @@ impl EmitState {
             let st = out.mark()
             let renamed = if lines && own_ws && emit_text(world, rule.name) == "WS" { emit_own_ws_rule() } else { "" }
             let emitting = rule.stream && rule.is_entry && self.facts.emitting_entries.contains(f"{emit_text(world, def.name)}::{emit_text(world, rule.name)}")
-            self.emit_grammar_rule(world, walk, out, host, rule, renamed, bytes, emitting, emitters)
+            self.emit_grammar_rule(world, walk, out, host, rule, renamed, bytes, self.emit_grammar_positions(world, def, bytes), emitting, emitters)
             if !bytes {
                 out.record(rule.span, st)
             }
@@ -568,12 +594,24 @@ impl EmitState {
             out.push("          n:count(p)\n")
             out.push("            -> { n as i64 }\n")
         }
-        if spans {
+        // **Over text a `text::Match` and a `text::Pos` of the input**
+        // (ADR-374 D7); over a `Bytes`, and in the text copy of a grammar
+        // entered with a `Bytes` only, a `Span` and a `u32`.
+        let positions = self.emit_grammar_positions(world, def, bytes)
+        if spans && positions {
+            out.push(f"\n        rule {emit_span_rule()}<T>(p: Rule<T>) -> ::nikaia_std::text::Match<'a> =\n")
+            out.push("          p @ at\n")
+            out.push("            -> { ::nikaia_std::grammar::matched(input, at) }\n")
+        } else if spans {
             out.push(f"\n        rule {emit_span_rule()}<T>(p: Rule<T>) -> ::nikaia_std::text::Span =\n")
             out.push("          p @ at\n")
             out.push("            -> { ::nikaia_std::text::Span::of(at) }\n")
         }
-        if heres {
+        if heres && positions {
+            out.push(f"\n        rule {emit_here_rule()} -> ::nikaia_std::text::Pos =\n")
+            out.push("          empty @ at\n")
+            out.push("            -> { ::nikaia_std::grammar::position(input, at.start) }\n")
+        } else if heres {
             out.push(f"\n        rule {emit_here_rule()} -> u32 =\n")
             out.push("          empty @ at\n")
             out.push("            -> { ::nikaia_std::text::Span::of(at).start }\n")
@@ -607,7 +645,7 @@ impl EmitState {
         }
     }
 
-    fn emit_grammar_rule[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, rule: ref GrammarRule, renamed: ref String, bytes: bool, emitting: bool, emitters: ref Vec[String]) sync throws {
+    fn emit_grammar_rule[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, rule: ref GrammarRule, renamed: ref String, bytes: bool, positions: bool, emitting: bool, emitters: ref Vec[String]) sync throws {
         match rule.frame {
             frame => out.push(f"        {frame_attribute(frame)}\n"),
             null => {},
@@ -617,7 +655,7 @@ impl EmitState {
         let vis = if rule.is_entry { "pub " } else { "" }
         let mut ret = ""
         match rule.ret_type {
-            ty => { ret = f" -> {host.ty_named(walk, ty)}" },
+            ty => { ret = f" -> {emit_grammar_input_lifetime(host.ty_named(walk, ty))}" },
             null => {},
         }
         // The label sits between the return type and the `=`, in both
@@ -686,7 +724,8 @@ impl EmitState {
                         }
                     }
                     for (name, range) in as_spans.iter().zip(spanned.iter()) {
-                        prelude = f"{prelude}let {name} = ::nikaia_std::text::Span::of({range}); "
+                        let made = if positions { f"::nikaia_std::grammar::matched(input, {range})" } else { f"::nikaia_std::text::Span::of({range})" }
+                        prelude = f"{prelude}let {name} = {made}; "
                     }
                     // a bound `bytes(p)` whose `p` binds names is read as it
                     // is, unchecked (#2409)

@@ -906,10 +906,11 @@ fn copies_text(receiver: ref Expr, ask: ref BufferAsk, walk: ref BufferWalk) -> 
     }
 }
 
-// A method that cuts a text at its ends, or copies it (#915): what it hands
-// back is a view of the text it is called on, and a copy of it is no view.
+// A method that cuts a text at its ends or at a `text::Pos` (ADR-374 D3), or
+// copies it (#915): what it hands back is a view of the text it is called on,
+// and a copy of it is no view.
 fn buffers_a_trim(method: ref String) -> bool {
-    return ["trim", "trim_start", "trim_end", "trim_matches", "trim_start_matches", "trim_end_matches", "clone"].contains(method)
+    return ["trim", "trim_start", "trim_end", "trim_matches", "trim_start_matches", "trim_end_matches", "before", "after", "between", "clone"].contains(method)
 }
 
 // Whether a `clone` of this copies text, so the copy points into nothing:
@@ -925,8 +926,8 @@ fn clones_text(receiver: ref Expr, ask: ref BufferAsk, walk: ref BufferWalk) -> 
             true => clones_text(inner, ask, walk),
             false => false,
         },
-        // `st[f + " for ".len()..].clone()` (#881): a cut of a text, copied,
-        // keeps no view of it.
+        // `st[a..].clone()` (#881): a cut of a text, copied, keeps no view of
+        // it; so does `st.after(f.end).clone()`, a trim above.
         Expr::Index { base, .. } => copies_text(base, ask, walk),
         // `owner.name.clone()`: the text field of a struct of its own, copied.
         Expr::Field { base, name, .. } => held_text_field(base, ask.names.resolve(name), ask, walk) != null,

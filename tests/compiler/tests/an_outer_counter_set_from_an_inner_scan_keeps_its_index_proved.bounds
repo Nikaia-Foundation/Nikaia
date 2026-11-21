@@ -1,0 +1,4 @@
+bounds in tests/an_outer_counter_set_from_an_inner_scan_keeps_its_index_proved.nika: 1 indexes, 1 proved; 2 operations, 2 proved
+    11  bs[j]   proved
+    12  j += 1  proved
+    15  j + 1   proved

@@ -264,13 +264,14 @@ impl CheckState {
                 return pattern_named("Bytes", true)
             }
             // **`span(p)` is the range `p` covered, `here` the position**
-            // (ADR-grammar-syntax-v1 D16): over a `Bytes`, a `text::Span` of two `u32` and a
-            // `u32`. Over text they wait for #743 (`grammar_positions_over_text`).
+            // (ADR-grammar-syntax-v1 D16, ADR-374 D7): over text a
+            // `text::Match` and a `text::Pos` of the input, over a `Bytes` a
+            // `text::Span` of two `u32` and a `u32`.
             if called == "span" && args.len() == 1 {
-                return pattern_named("text::Span", false)
+                return pattern_named(if self.a_grammar_over_text() { "text::Match" } else { "text::Span" }, false)
             }
             if called == "here" && args.len() == 0 {
-                return pattern_named("u32", false)
+                return pattern_named(if self.a_grammar_over_text() { "text::Pos" } else { "u32" }, false)
             }
             // **`same_line` matches nothing and fails after a line break**
             // (ADR-grammar-syntax-v1 D17): it covers no input and yields no value.
@@ -416,20 +417,32 @@ fn grammar_position_in_view(world: ref CheckWorld, view: ref ParsedView, named: 
     return ""
 }
 
-/// **`span(p)` and `here` over text are not built yet** (`NK1187`, ADR-grammar-syntax-v1
-/// D16, #557): over a `Bytes` they are a `text::Span` and a `u32`; over text
-/// they are a `text::Match` and a `text::Pos`, which wait for #743. Asked
-/// where an entry of the grammar `named` is handed text.
-fn grammar_positions_over_text(world: ref CheckWorld, key: ref String, named: ref String, span: ref Span) -> CheckFinding? {
+/// **`span(p)` and `here` take the kind of the input** (ADR-374 D7,
+/// ADR-grammar-syntax-v1 D16): over text a `text::Match` and a `text::Pos` of
+/// it, over a `Bytes` a `text::Span` and a `u32`. An action is checked once,
+/// so a grammar that writes one of them and is entered with both kinds is
+/// refused (`NK1187`) where the second kind comes. Asked where an entry of the
+/// grammar `named` is handed the second kind.
+fn grammar_positions_over_both(world: ref CheckWorld, key: ref String, named: ref String, span: ref Span) -> CheckFinding? {
     let written = grammar_position_of(world, named)
     if written == "" {
         return null
     }
-    let notes: Vec[String] = [f"Over a `Bytes` `{written}` is built (Part II 10.8); over text it is a `text::Match` or a `text::Pos`, which are not built yet (#743)."]
-    return check_refusal("NK1187", span, f"`{key}` is handed text, and its grammar uses `{written}`, which this engine has over a `Bytes` only.", notes, f"Hand `{key}` the input as a `Bytes`.")
+    let notes: Vec[String] = [f"Over text `{written}` is a `text::Pos` or a `text::Match` of the input, over a `Bytes` a `u32` or a `text::Span` (ADR-374 D7); an action of the grammar is checked for one of them."]
+    return check_refusal("NK1187", span, f"`{key}` is handed text and a `Bytes`, and its grammar uses `{written}`, whose type depends on which.", notes, f"Hand the entries of `{named}` one kind of input.")
 }
 
 impl CheckState {
+    /// **Whether the grammar being walked reads text** (ADR-374 D7): every
+    /// grammar does but one entered with a `Bytes` only, whose `here` and
+    /// `span(p)` stay offsets.
+    fn a_grammar_over_text(ref self) -> bool sync {
+        let key: String = self.current?.clone() ?? ""
+        let cut = key.find("::")?.start ?? key.start()
+        let named = key.before(cut)
+        return !self.facts.bytes_grammars.contains(named) || self.facts.text_grammars.contains(named)
+    }
+
     /// **The values a rule takes** (ADR-grammar-syntax-v1 D12): its parameters and its
     /// options, each a local of its patterns and of its actions.
     /// A value written plain or `ref` is lent (ADR-grammar-actions-v1 D7, ADR-views-v4

@@ -19,6 +19,8 @@ use nikaia_std::list::ListExt as _;
 #[allow(unused_imports)]
 use nikaia_std::text::TextNormalized as _;
 #[allow(unused_imports)]
+use nikaia_std::text::TextPositions as _;
+#[allow(unused_imports)]
 use nikaia_std::prelude::Hasher;
 #[allow(unused_imports)]
 use nikaia_std::abort::{ShownByDebug as _, ShownByNothing as _};
@@ -361,4 +363,4 @@ pub fn nikaia_run_tests(filters: &[std::string::String], list: bool, more: std::
 /// **The digest of this lowered set** (#1610): every file `lower-std` wrote
 /// beside this index, and the index above this line. Compiled into the same
 /// crate as the code it names, it is the compiler's identity for its caches.
-pub const LOWERED_DIGEST: &str = "9918cd1d33319e0ca82384f9869a0d13f0396d8746422f234c0bf225e14e285b";
+pub const LOWERED_DIGEST: &str = "41974cfe0bba378376c5eac93670cd737940ed4eea6fce03396ad3325b9c9811";

@@ -10,14 +10,14 @@ fn head(engine: String) -> i64 {
 	let at = engine.find(":")
 	let base = match at {
 		null => engine.clone(),
-		else => engine[0..<(at ?? 0)],
+		else => engine.before(at?.start ?? engine.start()),
 	}
 	return width(base)
 }
 
 fn chosen(engine: String) -> i64 {
 	let at = engine.find(":")
-	let base = if at == null { engine.clone() } else { engine[0..<(at ?? 0)] }
+	let base = if at == null { engine.clone() } else { engine.before(at?.start ?? engine.start()) }
 	return width(base) + width(base)
 }
 

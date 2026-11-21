@@ -58,6 +58,15 @@ pub enum FactPausing {
     Method(String),
 }
 
+/// **Which text a position belongs to** (ADR-374 D5): the text as
+/// `check_core_places_text_key` writes it and the expression that names it, or
+/// `chosen` where it is one of two texts picked at run time (`ref(a | b)`).
+pub struct CheckPosText {
+    pub key: String,
+    pub text: Expr,
+    pub chosen: bool,
+}
+
 /// One `assert` (ADR-269 D2): what its failure says, which only the compiler
 /// knows.
 pub struct FactClaim {
@@ -463,6 +472,12 @@ pub struct CheckFacts {
     /// **Such a lambda, made kept by a use**, by the lambda (#1043): the
     /// `let` names no type, so its closure is cast to the `dyn Fn` below.
     pub let_kept_lambdas: collections::BTreeSet[i64],
+    /// **Which text a position or a match a `let` holds belongs to**
+    /// (ADR-374 D5), by the binding.
+    pub pos_texts: collections::BTreeMap[i64, CheckPosText],
+    /// **A position moved in a named unit** (ADR-374 D4), by the call: the
+    /// text it belongs to, which the move is handed below the language.
+    pub pos_moves: collections::BTreeMap[i64, Expr],
     /// **The key of `entry` on a map keyed by owned text, given a literal or
     /// a view** (#676), by the key: built into text of its own, as `insert`'s
     /// is.
@@ -602,6 +617,10 @@ pub struct CheckFacts {
     /// **A grammar of this file entered with a `Bytes`**, by its name: it is
     /// lowered a second time, with `input bytes;`.
     pub bytes_grammars: collections::BTreeSet[String],
+    /// **A grammar of this file entered with text**, by its name: its `here`
+    /// is a `text::Pos` and its `span(p)` a `text::Match` of the input
+    /// (ADR-374 D7).
+    pub text_grammars: collections::BTreeSet[String],
     pub method_options: collections::BTreeMap[(i64, String), Vec[(String, String)]],
     pub lent_args: collections::BTreeSet[i64],
     /// **A rule's value it is lent** (ADR-grammar-actions-v1 D7), by
@@ -979,6 +998,8 @@ impl CheckFacts {
             lambda_params_by_use: collections::BTreeMap(),
             let_lambdas: collections::BTreeMap(),
             let_kept_lambdas: collections::BTreeSet(),
+            pos_texts: collections::BTreeMap(),
+            pos_moves: collections::BTreeMap(),
             owned_entry_keys: collections::BTreeSet(),
             collection_clones: collections::BTreeSet(),
             map_clones: collections::BTreeSet(),
@@ -1037,6 +1058,7 @@ impl CheckFacts {
             task_handles: collections::BTreeSet(),
             bytes_entries: collections::BTreeSet(),
             bytes_grammars: collections::BTreeSet(),
+            text_grammars: collections::BTreeSet(),
             method_options: collections::BTreeMap(),
             lent_args: collections::BTreeSet(),
             lent_rule_values: collections::BTreeSet(),

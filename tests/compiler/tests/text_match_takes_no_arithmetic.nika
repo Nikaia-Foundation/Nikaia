@@ -1,0 +1,8 @@
+// A `text::Match` is no number either (ADR-374 D2): `+` on one is `NK1191`,
+// not Rust's refusal of the code it became; its ends cut the text by name.
+fn main() throws {
+    let s = "ab::cd"
+    let m = s.find("::") ?? return
+    let x = m + 1
+    println(f"{x}")
+}

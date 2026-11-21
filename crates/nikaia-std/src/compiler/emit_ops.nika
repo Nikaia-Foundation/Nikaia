@@ -216,8 +216,8 @@ fn a_list_read_as_a_slice(written: String) -> String {
     let mut rest: String = after.clone()
     if after.starts_with("'") {
         let space = after.find(" ") ?? return written
-        lead = f"&{after[0..<space]} "
-        rest = after[space + 1..<after.len()].clone()
+        lead = f"&{after.before(space.start)} "
+        rest = after.after(space.end).clone()
     }
     if rest.starts_with("Vec<") {
         let inner = rest.strip_prefix("Vec<") ?? ""

@@ -345,8 +345,8 @@ fn project_tests_bounds_report(printed: String, written: String) -> Bytes {
             inside = true
             let cut = line.find(" - written without their check: ")
             if cut != null {
-                let at = cut ?? 0
-                report.push_str(line[0..<at])
+                let at = cut ?? continue
+                report.push_str(line.before(at.start))
             } else {
                 report.push_str(line)
             }

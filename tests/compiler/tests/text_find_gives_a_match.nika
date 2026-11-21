@@ -1,0 +1,32 @@
+// A search in a text gives a `text::Match` (ADR-374 D2): `find(needle; from:
+// Pos)` and `rfind(needle)`, a match's `start` and `end` positions of the text
+// and `m.text()` the matched text; `split_at(p)` cuts at a position (D3). A
+// scanner's position is a `mut` local carried through its loop, moved to a
+// match's `end`, which no number writes again (#743).
+use std::text
+
+fn rows(t: String) -> Vec[String] {
+    let mut out: Vec[String] = []
+    let mut k = t.start()
+    while k < t.end() {
+        let e = t.find("\n"; from: k) ?? return out
+        out.push(t.between(k, e.start).clone())
+        k = e.end
+    }
+    return out
+}
+
+fn main() throws {
+    let t = "äö::ü::€"
+    let first = t.find("::") ?? return
+    let last = t.rfind("::") ?? return
+    println(f"[{t.before(first.start)}] [{t.after(first.end)}] [{t.between(first.end, last.start)}] [{t.after(last.end)}]")
+    println(f"[{first.text()}] {first.start < last.start} {t.before(last.start).bytes.len()}")
+    let again = t.find("::"; from: first.end) ?? return
+    println(f"{again.start == last.start} {t.find("x") == null} {t.find(':'; from: last.end) == null}")
+    let (head, tail) = t.split_at(last.start)
+    println(f"[{head}] [{tail}]")
+    for row in rows("ab\ncd\n\nef\n") {
+        println(f"<{row}>")
+    }
+}
