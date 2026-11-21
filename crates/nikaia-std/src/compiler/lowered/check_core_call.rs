@@ -241,6 +241,37 @@ pub(crate) fn check_core_call_code_args(state: &mut CheckState, world: &CheckWor
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
+pub(crate) fn check_core_call_std_code_args(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, callee: Option<&FnContract>, key: &str, args: &[Expr], parallel: bool, span: &Span) {
+    let caller: String = match match state.current.as_ref() {
+        Some(__nikaia_it) => Some(__nikaia_it.clone()),
+        None => None,
+    } { Some(__nikaia_value) => __nikaia_value, None => return };
+    let contract: &FnContract = match callee { Some(__nikaia_value) => __nikaia_value, None => return };
+    if parallel { return; }
+    let signature: &Signature = match contract.signature.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return };
+    let mut i: i64 = -1;
+    if signature.takes_a_receiver() { i = -2; }
+    for (param, ty) in signature.params.iter() {
+        i += 1;
+        if i < 0 || i >= args.len() as i64 || nikaia_std::list::contains(&contract.keeps, &param) || nikaia_std::list::contains(&signature.mutable, &param) { continue; }
+        match ty {
+            Ty::Fn { .. } => { },
+            _ => { continue; },
+        }
+        let arg = unsafe { nikaia_std::proven::read(&args, (i) as usize) };
+        let named: String = match arg {
+            Expr::Variable(name, _) => { let name = *name; nikaia_std::block::Text::from(world.words.resolve(name).to_string()) },
+            _ => continue,
+        };
+        if !state.run_code.contains(&named) { continue; }
+        state.a_code_parameter_named(&named);
+        if !check_core_call_a_parameter(&state, &named) { continue; }
+        state.code_args.push(CheckCodeArg { caller: nikaia_std::block::Text::from(caller.to_string()), callee: nikaia_std::block::Text::from(key.to_string()), param: nikaia_std::block::Text::from(param.to_string()), node: id_of(arg) as i64, lambda: false, changes: String::from(""), runs: vec![], handed: named, bound: false, item: false, at_once: false, span: check_span_at(world, arg, span) });
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
 pub(crate) fn check_core_call_a_parameter(state: &CheckState, name: &str) -> bool {
     let local: CheckLocal = match state.binding(name) { Some(__nikaia_value) => __nikaia_value, None => return false };
     let written: CheckImmutable = match local.without_mut { Some(__nikaia_value) => __nikaia_value, None => return false };

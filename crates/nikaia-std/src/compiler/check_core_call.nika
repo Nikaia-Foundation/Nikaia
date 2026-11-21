@@ -341,6 +341,48 @@ fn check_core_call_code_args(mut state: CheckState, world: ref CheckWorld, calle
     }
 }
 
+// **A parameter of code handed on to a `std` method** (#2120): the method
+// runs it as `FnMut`, so the parameter is lent on `&mut *` as to a function
+// of this package, and a second call that hands it on finds it still there.
+// Only a parameter handed on is recorded; a lambda or a named function is
+// handed to a `std` method as it stands, and so is code a walk of a `Par` runs at
+// once (`par_iter().for_each(f)` needs `Fn`, which `&mut *f` is not).
+fn check_core_call_std_code_args(mut state: CheckState, world: ref CheckWorld, callee: ref FnContract?, key: ref String, args: ref Vec[Expr], parallel: bool, span: ref Span) sync {
+    let caller: String = state.current?.clone() ?? return
+    let contract: ref FnContract = callee ?? return
+    if parallel {
+        return
+    }
+    let signature: ref Signature = contract.signature ?? return
+    let mut i = -1
+    if signature.takes_a_receiver() {
+        i = -2
+    }
+    for (param, ty) in signature.params {
+        i += 1
+        if i < 0 || i >= args.len() as i64 || contract.keeps.contains(param) || signature.mutable.contains(param) {
+            continue
+        }
+        match ty {
+            Ty::Fn { .. } => {},
+            else => continue,
+        }
+        let arg = args[i]
+        let named: String = match arg {
+            Expr::Variable(name, _) => world.words.resolve(name).clone(),
+            else => continue,
+        }
+        if !state.run_code.contains(named) {
+            continue
+        }
+        state.a_code_parameter_named(named)
+        if !check_core_call_a_parameter(state, named) {
+            continue
+        }
+        state.code_args.push(CheckCodeArg { caller: caller.clone(), callee: key.clone(), param: param.clone(), node: id_of(arg) as i64, lambda: false, changes: "", runs: [], handed: named, bound: false, item: false, at_once: false, span: check_span_at(world, arg, span) })
+    }
+}
+
 // **A parameter of the function walked, not a `let` that hides one**: code
 // a `let` binds is handed as other code is, never as a parameter lent on.
 fn check_core_call_a_parameter(state: ref CheckState, name: ref String) -> bool sync {
