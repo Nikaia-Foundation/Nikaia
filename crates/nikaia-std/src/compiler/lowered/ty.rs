@@ -49,10 +49,11 @@ pub struct Shape {
     pub sized: bool,
     pub replays: bool,
     pub timed: bool,
+    pub one_at_a_time: bool,
 }
 
 impl Shape {
-    pub fn none() -> Shape { Shape { ends: false, sized: false, replays: false, timed: false } }
+    pub fn none() -> Shape { Shape { ends: false, sized: false, replays: false, timed: false, one_at_a_time: false } }
     pub fn meets(&self, wanted: &Shape) -> bool { self.missing(wanted).is_empty() }
     pub fn missing(&self, wanted: &Shape) -> Vec<String> {
         let mut words: Vec<String> = vec![];
@@ -689,7 +690,7 @@ pub(crate) fn a_sequence(written: &str, word: &str, parallel: bool) -> Option<Ty
     if is_sync && pauses { return None; }
     if !tail.is_empty() { return None; }
     let item = parse(&between(&c, 1, close));
-    let shape = Shape { ends, sized, replays, timed: false };
+    let shape = Shape { ends, sized, replays, timed: false, one_at_a_time: false };
     Some(Ty::Seq { item: nikaia_std::block::Boxed::new(item), is_sync, pauses, can_throw, parallel, shape })
 }
 

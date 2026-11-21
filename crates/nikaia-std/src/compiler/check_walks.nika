@@ -228,13 +228,15 @@ fn check_walks_door_on(state: ref CheckState, value: ref Expr, receiver: ref Exp
 /// lambda. A lock is left out: a `SharedMut` changed through `update` is the
 /// way a parallel lambda combines (ADR-235 D2, which D24 left standing). A
 /// lambda that cannot be accounted for is not refused (Part III C.4), and
-/// `limit: 1` written as the literal on the walk exempts it (D15).
-fn check_walks_a_lambda_against_itself(mut state: CheckState, world: ref CheckWorld, walk: ref Expr, lambda: ref Expr, span: ref Span) sync {
+/// a walk made by `par_iter(limit: 1)`, the literal, exempts it (D15): its
+/// type carries that through `map`, `filter` and a `let` (`walk` is the
+/// type of the walk the lambda is handed to, #2610).
+fn check_walks_a_lambda_against_itself(mut state: CheckState, world: ref CheckWorld, walk: ref Ty, lambda: ref Expr, span: ref Span) sync {
     match lambda {
         Expr::Closure { .. } => {},
         else => return,
     }
-    if check_walks_one_at_a_time(world, walk) {
+    if shape_one_at_a_time(walk) {
         return
     }
     let walking = Walking { own: world.own, library: world.library, into: Going::Ours }
@@ -257,26 +259,6 @@ fn check_walks_a_lambda_against_itself(mut state: CheckState, world: ref CheckWo
     let end = world.here.spans.get(id_of(lambda))?.end ?? span.end
     let at = Span { start: start, end: end }
     state.findings.push(check_refusal("NK2104", at, "This lambda can't run beside its own other runs.", [f"{why}.", "`par_iter()` runs the lambda once for every element, and those runs happen at the same time."], "To run it one element at a time, write `par_iter(limit: 1)`, or walk with `iter()`."))
-}
-
-/// Whether the walk a lambda is handed to starts at `par_iter(limit: 1)`,
-/// the literal (ADR-async-5 D15): its elements then run one at a time.
-fn check_walks_one_at_a_time(world: ref CheckWorld, walk: ref Expr) -> bool {
-    return match walk {
-        Expr::MethodCall { receiver, method, config, .. } => {
-            if world.words.resolve(method) != "par_iter" {
-                return check_walks_one_at_a_time(world, receiver)
-            }
-            for option in config {
-                if world.words.resolve(option.name) == "limit" {
-                    let value: Expr? = option.value.clone()
-                    return check_core_async_one_at_a_time(value)
-                }
-            }
-            false
-        },
-        else => false,
-    }
 }
 
 /// Whether two tasks meet on a resource one of them writes, and the verdict

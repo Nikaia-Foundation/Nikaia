@@ -82,6 +82,7 @@ fn shape_through(contract: ref FnContract, receiver: ref Ty, found: ref Vec[Ty],
     let mut sized = true
     let mut on_every_core = parallel
     let mut timed = false
+    let mut one_at_a_time = false
     if contract.signature != null {
         let signature = contract.signature?.clone() ?? Signature::empty()
         if signature.params.len() > 0 && signature.params[0].0 == "self" && a_sequence_type(signature.params[0].1) {
@@ -94,6 +95,9 @@ fn shape_through(contract: ref FnContract, receiver: ref Ty, found: ref Vec[Ty],
             // **And a walk's deadline goes on to the step that ends it**
             // (ADR-async-5 D27).
             timed = shape_timed(receiver)
+            // **So does `limit: 1`** (ADR-async-5 D15, D26), from the walk
+            // the step is called on only.
+            one_at_a_time = shape_one_at_a_time(receiver)
         }
         let arguments = call_arguments(signature)
         let mut at = 0
@@ -109,7 +113,7 @@ fn shape_through(contract: ref FnContract, receiver: ref Ty, found: ref Vec[Ty],
         }
     }
     ends = ends && (!contract.ends_by_length || sized)
-    return Ty::Seq { item: item, is_sync: is_sync, pauses: pauses, can_throw: can_throw, parallel: on_every_core, shape: Shape { ends: written.ends && ends, sized: written.sized && sized, replays: written.replays, timed: written.timed || timed } }
+    return Ty::Seq { item: item, is_sync: is_sync, pauses: pauses, can_throw: can_throw, parallel: on_every_core, shape: Shape { ends: written.ends && ends, sized: written.sized && sized, replays: written.replays, timed: written.timed || timed, one_at_a_time: written.one_at_a_time || one_at_a_time } }
 }
 
 fn shape_parallel(ty: ref Ty) -> bool {
@@ -124,6 +128,15 @@ fn shape_parallel(ty: ref Ty) -> bool {
 fn shape_timed(ty: ref Ty) -> bool {
     return match ty {
         Ty::Seq { shape, .. } => shape.timed,
+        else => false,
+    }
+}
+
+/// Whether a walk's elements run one at a time, `par_iter(limit: 1)`
+/// (ADR-async-5 D15).
+fn shape_one_at_a_time(ty: ref Ty) -> bool {
+    return match ty {
+        Ty::Seq { shape, .. } => shape.one_at_a_time,
         else => false,
     }
 }
@@ -159,7 +172,7 @@ fn a_pausing_sequence(result: Ty, on: ref Ty) -> Ty {
         else => false,
     }
     return match result {
-        Ty::Seq { item, can_throw, parallel, shape, .. } => Ty::Seq { item: item.clone(), is_sync: false, pauses: true, can_throw: can_throw || fails, parallel: parallel, shape: Shape { ends: false, sized: false, replays: shape.replays, timed: shape.timed } },
+        Ty::Seq { item, can_throw, parallel, shape, .. } => Ty::Seq { item: item.clone(), is_sync: false, pauses: true, can_throw: can_throw || fails, parallel: parallel, shape: Shape { ends: false, sized: false, replays: shape.replays, timed: shape.timed, one_at_a_time: shape.one_at_a_time } },
         else => result,
     }
 }
