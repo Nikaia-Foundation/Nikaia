@@ -124,3 +124,23 @@ quotes a figure.
   the package's `.nika` files (`--lines N` to say otherwise). A function
   added to an analysis needs `@inline(never)` and its name in `analyses()`,
   else its cost lands in *rest of the walk*.
+* **The same per file** (#2649): `nikaia run scripts/analysis_cost.nika --
+  --files` runs the package's check on one thread (`NIKAIA_LOWER_THREADS=1`)
+  with a callgrind dump after the ledger (`infer_package_checked`) and after
+  each file's check (`check_tools_file`), and prints one row per file: its
+  lines, then the instructions of each analysis inside that file's walk,
+  the rest of the walk, the walk and the walk per line. A second table cuts
+  the files, sorted by lines, into four quarters of equal count and gives
+  each analysis's instructions per line in each: a row that rises from the
+  small quarter to the large one grows faster than the lines. The package
+  stays whole: every file is checked with the others beside it, as
+  `lower-std` does; only the counting is per file. A dump is matched to its
+  file by the order `lower-std --findings` checks them on one thread (by
+  name, then the most bytes first), so the files must not change during the
+  run. `--sample N` (at least 7) prints only N rows: the smallest file, the
+  5 largest and the rest at evenly spaced ranks by lines; the quarters are
+  always over every file. `--files --read FILE` reads the dumps `FILE.1`,
+  `FILE.2`, ... of an earlier run. Callgrind cannot switch its
+  instrumentation on at a function (only collection, `--toggle-collect`;
+  the client request that switches it is Rust), so the run instruments the
+  whole command and takes as long as the whole-package run.

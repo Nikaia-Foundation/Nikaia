@@ -16,6 +16,16 @@
 // `--compress-strings=no --compress-pos=no`, as the run writes it. The lines
 // checked are those of the package's `.nika` files, or `--lines N`.
 //
+//     nikaia run scripts/analysis_cost.nika -- --files [--sample N] [--sysroot DIR] [--out FILE | --read FILE]
+//
+// `--files` (#2649) counts per file: the check runs on one thread with a
+// dump after each file's check (`check_tools_file`), and one row per file
+// gives its lines and each analysis's instructions in its walk, then the
+// instructions per line of each quarter of the files by size, which shows an
+// analysis that grows faster than the lines. The package stays whole; only
+// the counting is per file. `--sample N` prints N of the rows: the smallest
+// file, the 5 largest and the rest evenly spaced by size.
+//
 // An analysis is counted by the functions it runs in, each `@inline(never)`
 // in the `.nika` source: the instructions of every call into one of them
 // from a function that is not one of them, so a listed function called by
@@ -95,55 +105,27 @@ fn package_lines(root: String) -> i64 throws {
     return text::parse_i64(out.stdout.trim()) ?? 0
 }
 
-fn usage() throws {
-    eprintln("usage: nikaia run scripts/analysis_cost.nika [-- [--sysroot DIR] [--out FILE] | --read FILE [--lines N]]")
-    process::exit(2)
+// `n`, or 1 where it is less: a divisor.
+fn at_least_one(n: i64) -> i64 {
+    if n < 1 { return 1 }
+    return n
 }
 
-fn main() throws {
-    let mut args: Vec[String] = Vec()
-    for a in cli::args() { args.push(a) }
-    let mut read: String = ""
-    let mut out: String = "target/analysis-cost.callgrind"
-    let mut sysroot: String = ""
-    let mut lines = -1
-    let mut k = 1
-    while k < args.len() {
-        let word = args[k].clone()
-        if k + 1 >= args.len() { usage() }
-        let value = args[k + 1].clone()
-        if word == "--read" { read = value } else if word == "--out" { out = value } else if word == "--sysroot" { sysroot = value } else if word == "--lines" {
-            lines = text::parse_i64(value) ?? -1
-            if lines < 0 { usage() }
-        } else { usage() }
-        k += 2
-    }
-    if lines < 0 {
-        let mut root: String = "."
-        if sysroot.len() > 0 { root = sysroot.clone() }
-        lines = package_lines(root)
-    }
-    if read.len() == 0 {
-        let mut command: String = f"NIKAIA_CACHE_LIMIT=2G valgrind --tool=callgrind --collect-atstart=no '--toggle-collect=*check_walked_walk*' --compress-strings=no --compress-pos=no --callgrind-out-file={out} target/fast/nikaia lower-std --findings"
-        if sysroot.len() > 0 { command = f"{command} --sysroot {sysroot}/crates" }
-        let ran = process::run("sh", ["-c", f"{command} > /dev/null"])
-        if ran.code != 0 {
-            eprintln(ran.stderr)
-            eprintln(f"callgrind over lower-std --findings: exit {ran.code}")
-            process::exit(1)
-        }
-        read = out
-    }
-    let all = analyses()
+// What one callgrind output holds: the instructions of each analysis, the
+// walk's total, and the function whose end triggered the dump (`""` for
+// none).
+fn tally(path: String, all: Vec[(String, Vec[String])]) -> (collections::BTreeMap[String, i64], i64, String) throws {
     let mut counted: collections::BTreeMap[String, i64] = collections::BTreeMap()
     let mut total = 0
+    let mut trigger: String = ""
     // The function the lines stand in, and its analysis.
     let mut here: String = ""
     // The analysis of the function a `calls=` line calls, and whether the
     // next cost line is that call's.
     let mut callee: String = ""
     let mut a_call = false
-    for line in fs::read_to_string(read, fs::Root::Anywhere).lines() {
+    let dumped = fs::read_to_string(path, fs::Root::Anywhere)
+    for line in dumped.lines() {
         if line.starts_with("fn=") {
             here = analysis_of(line.strip_prefix("fn=") ?? "", all)
             continue
@@ -154,6 +136,11 @@ fn main() throws {
         }
         if line.starts_with("calls=") {
             a_call = true
+            continue
+        }
+        if line.starts_with("desc: Trigger:") {
+            let (_, after) = line.split_once("=") ?? continue
+            trigger = after.trim()
             continue
         }
         if line.starts_with("summary:") || line.starts_with("totals:") {
@@ -170,6 +157,231 @@ fn main() throws {
             }
         }
     }
+    return (counted, total, trigger)
+}
+
+// The package's files in the order `lower-std --findings` checks them on
+// one thread: by name, then the largest (in bytes) first, a tie keeping the
+// name order (`bounds_tools` in `sysroot.rs`). Each as (name, lines).
+fn checked_order(root: String) -> Vec[(String, i64)] throws {
+    let dir = f"{root}/crates/nikaia-std/src/compiler"
+    let out = process::run("sh", ["-c", f"cd {dir} && for f in $(LC_ALL=C ls *.nika); do echo \"$f $(wc -c < $f) $(wc -l < $f)\"; done"])
+    let mut keyed: Vec[(i64, i64, String, i64)] = Vec()
+    let mut at = 0
+    for line in out.stdout.lines() {
+        let mut words: Vec[String] = Vec()
+        for w in line.split(" ") { words.push(w.clone()) }
+        if words.len() < 3 { continue }
+        keyed.push((0 - (text::parse_i64(words[1]) ?? 0), at, words[0].clone(), text::parse_i64(words[2]) ?? 0))
+        at += 1
+    }
+    keyed.sort()
+    let mut order: Vec[(String, i64)] = Vec()
+    for (_, _, name, lines) in keyed { order.push((name.clone(), lines)) }
+    return order
+}
+
+// The ranks (0 the smallest) a sample of `want` out of `n` files sorted by
+// lines takes: the smallest, the 5 largest, the rest spread evenly over the
+// ranks between. `want` 0 or at least `n` takes every file.
+fn sample_ranks(n: i64, want: i64) -> Vec[i64] {
+    let mut ranks: Vec[i64] = Vec()
+    if want <= 0 || want >= n {
+        for r in 0..<n { ranks.push(r) }
+        return ranks
+    }
+    let largest = 5
+    let between = want - largest - 1
+    ranks.push(0)
+    // The ranks 1 .. n - largest - 1, `between` of them, evenly spaced.
+    let span = n - largest - 1
+    for k in 1..between {
+        ranks.push(k * span / (between + 1))
+    }
+    for r in (n - largest)..<n { ranks.push(r) }
+    return ranks
+}
+
+// The per-file mode: one row per counted file, from the dumps `FILE.1`,
+// `FILE.2`, ... of a run with a dump after each file's check.
+fn per_file(read: String, root: String, want: i64) throws {
+    let all = analyses()
+    let order = checked_order(root)
+    // Each file's (lines, name, instructions per analysis, walk).
+    let mut rows: Vec[(i64, String, Vec[i64], i64)] = Vec()
+    let mut file = 0
+    let mut k = 1
+    while fs::exists(f"{read}.{k}", fs::Root::Anywhere) {
+        let (counted, total, trigger) = tally(f"{read}.{k}", all)
+        k += 1
+        // A dump another function triggered (the package's ledger, before
+        // the first file) holds no file's check.
+        if !trigger.contains("check_tools_file") { continue }
+        if file >= order.len() {
+            eprintln(f"{read}: more checks than the {order.len()} files of the package")
+            process::exit(1)
+        }
+        let (name, lines) = order[file].clone()
+        file += 1
+        let mut each: Vec[i64] = Vec()
+        for (analysis, _) in all { each.push(counted[analysis] ?? 0) }
+        rows.push((lines, name, each, total))
+    }
+    if file != order.len() {
+        eprintln(f"{read}: {file} checks dumped, the package has {order.len()} files")
+        process::exit(1)
+    }
+    rows.sort()
+    let mut header: String = "| File | Lines |"
+    let mut rule: String = "| :--- | ---: |"
+    for (analysis, _) in all {
+        header = f"{header} {analysis} |"
+        rule = f"{rule} ---: |"
+    }
+    println(f"Instructions per checker analysis per file, in each file's check walk (`check_walked_walk`), {rows.len()} files")
+    println("")
+    println(f"{header} rest of the walk | the walk | walk per line |")
+    println(f"{rule} ---: | ---: | ---: |")
+    let mut wanted: collections::BTreeSet[i64] = collections::BTreeSet()
+    for r in sample_ranks(rows.len(), want) { wanted.insert(r) }
+    let mut rank = 0
+    for (lines, name, each, total) in rows {
+        if wanted.contains(rank) {
+            let mut row: String = f"| {name} | {grouped(lines)} |"
+            let mut named = 0
+            for n in each {
+                row = f"{row} {grouped(n)} |"
+                named += n
+            }
+            let mut per = lines
+            if per < 1 { per = 1 }
+            println(f"{row} {grouped(total - named)} | {grouped(total)} | {grouped(total / per)} |")
+        }
+        rank += 1
+    }
+    // Instructions per line by size: the files sorted by lines, cut into
+    // quarters of equal count, each quarter's instructions over its lines.
+    println("")
+    println("Instructions per line, the files by size in quarters (each quarter's instructions over its lines)")
+    println("")
+    // Per quarter: its smallest and largest file's lines, its lines, its
+    // walk, and (`width` per quarter) its instructions per analysis and
+    // the rest.
+    let width = all.len() + 1
+    let mut least: collections::BTreeMap[i64, i64] = collections::BTreeMap()
+    let mut most: collections::BTreeMap[i64, i64] = collections::BTreeMap()
+    let mut lines_in: collections::BTreeMap[i64, i64] = collections::BTreeMap()
+    let mut walks: collections::BTreeMap[i64, i64] = collections::BTreeMap()
+    let mut sums: collections::BTreeMap[i64, i64] = collections::BTreeMap()
+    let n = rows.len()
+    let mut r = 0
+    for (lines, _, each, total) in rows {
+        let q = r * 4 / n
+        if (lines_in[q] ?? 0) == 0 { least.insert(q, lines) }
+        most.insert(q, lines)
+        lines_in.insert(q, (lines_in[q] ?? 0) + lines)
+        walks.insert(q, (walks[q] ?? 0) + total)
+        let mut named = 0
+        let mut at = q * width
+        for x in each {
+            sums.insert(at, (sums[at] ?? 0) + x)
+            named += x
+            at += 1
+        }
+        sums.insert(at, (sums[at] ?? 0) + total - named)
+        r += 1
+    }
+    let mut head: String = "| Analysis |"
+    let mut line: String = "| :--- |"
+    // A quarter without a file (fewer than 4 files counted) is left out.
+    let mut filled: Vec[i64] = Vec()
+    for q in 0..<4 {
+        if (lines_in[q] ?? 0) == 0 { continue }
+        filled.push(q)
+        head = f"{head} {grouped(least[q] ?? 0)}-{grouped(most[q] ?? 0)} lines |"
+        line = f"{line} ---: |"
+    }
+    println(head)
+    println(line)
+    let mut names: Vec[String] = Vec()
+    for (analysis, _) in all { names.push(analysis.clone()) }
+    names.push("rest of the walk")
+    let mut at = 0
+    for analysis in names {
+        let mut row: String = f"| {analysis} |"
+        for q in filled {
+            row = f"{row} {grouped((sums[q * width + at] ?? 0) / at_least_one(lines_in[q] ?? 0))} |"
+        }
+        println(row)
+        at += 1
+    }
+    let mut row: String = "| the walk |"
+    for q in filled { row = f"{row} {grouped((walks[q] ?? 0) / at_least_one(lines_in[q] ?? 0))} |" }
+    println(row)
+}
+
+fn usage() throws {
+    eprintln("usage: nikaia run scripts/analysis_cost.nika [-- [--files [--sample N]] [--sysroot DIR] [--out FILE] | [--files [--sample N]] --read FILE [--lines N]]")
+    process::exit(2)
+}
+
+fn main() throws {
+    let mut args: Vec[String] = Vec()
+    for a in cli::args() { args.push(a) }
+    let mut read: String = ""
+    let mut out: String = "target/analysis-cost.callgrind"
+    let mut sysroot: String = ""
+    let mut lines = -1
+    let mut files = false
+    let mut want = 0
+    let mut k = 1
+    while k < args.len() {
+        let word = args[k].clone()
+        if word == "--files" {
+            files = true
+            k += 1
+            continue
+        }
+        if k + 1 >= args.len() { usage() }
+        let value = args[k + 1].clone()
+        if word == "--read" { read = value } else if word == "--out" { out = value } else if word == "--sysroot" { sysroot = value } else if word == "--sample" {
+            want = text::parse_i64(value) ?? -1
+            if want < 0 { usage() }
+        } else if word == "--lines" {
+            lines = text::parse_i64(value) ?? -1
+            if lines < 0 { usage() }
+        } else { usage() }
+        k += 2
+    }
+    let mut root: String = "."
+    if sysroot.len() > 0 { root = sysroot.clone() }
+    if files && want > 0 && want < 7 { usage() }
+    if read.len() == 0 {
+        let mut threads: String = ""
+        let mut dumps: String = ""
+        if files {
+            // One thread, so the files are checked one after the other in
+            // the order `checked_order` knows, and a dump after each.
+            threads = "NIKAIA_LOWER_THREADS=1 "
+            dumps = " '--dump-after=*infer_package_checked' '--dump-after=nikaia::sysroot::check_tools_file'"
+        }
+        let mut command: String = f"{threads}NIKAIA_CACHE_LIMIT=2G valgrind --tool=callgrind --collect-atstart=no '--toggle-collect=*check_walked_walk*'{dumps} --compress-strings=no --compress-pos=no --callgrind-out-file={out} target/fast/nikaia lower-std --findings"
+        if sysroot.len() > 0 { command = f"{command} --sysroot {sysroot}/crates" }
+        let ran = process::run("sh", ["-c", f"{command} > /dev/null"])
+        if ran.code != 0 {
+            eprintln(ran.stderr)
+            eprintln(f"callgrind over lower-std --findings: exit {ran.code}")
+            process::exit(1)
+        }
+        read = out
+    }
+    if files {
+        per_file(read, root, want)
+        return
+    }
+    if lines < 0 { lines = package_lines(root) }
+    let all = analyses()
+    let (counted, total, _) = tally(read, all)
     let mut per = lines
     if per < 1 { per = 1 }
     let mut named = 0
