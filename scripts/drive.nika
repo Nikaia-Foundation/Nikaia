@@ -1752,9 +1752,10 @@ fn drive_lowered_print(dir: String) -> String throws {
 // A merge that conflicted only in the generated lowered files (#1430): they
 // are output of `lower-std`, so the conflict has one mechanical resolution.
 // Takes their side of each conflicted file, then drive_merge_regenerate
-// lowers (from our side when theirs fails, #2253), regenerates the badges and
-// commits. Prints `MERGE <sha8> re-lowered [from ours ]<paths>`. Any other
-// failure, or both sides failing, aborts the merge and escalates
+// lowers (from our side when theirs fails, #2253, with the compiler of their
+// commit when ours fails too, #2432), regenerates the badges and commits.
+// Prints `MERGE <sha8> re-lowered [from ours |with their emitter ]<paths>`.
+// Any other failure, or all three failing, aborts the merge and escalates
 // (drive_merge_abort_paths): a partly resolved merge is never left behind.
 fn drive_merge_relower(cause: String, unmerged: String, lower: String, build: String, badges: String) throws {
 	for p in unmerged.split(" ") {
@@ -1777,7 +1778,13 @@ fn drive_merge_relower(cause: String, unmerged: String, lower: String, build: St
 // files). When that fails for a conflict, the conflicted lowered paths take
 // our side instead and it all runs again (#2253: their lowered emitter lacked
 // our unpushed emitter change and lowered our `.nika` into code rustc
-// refused); only both sides failing aborts, each side's tail printed. BUILD and LOWER run in the tree worktree moved to the merged index
+// refused). When our side fails too, the conflicted paths take their side
+// again and the compiler of their commit (MERGE_HEAD) is built in the tree
+// target with drive_tree_exe, where LOWER finds it; the merged index is
+// lowered with it first, then BUILD and LOWER run until settled (#2432: their
+// emitter wrote `Boxed` where the binary from before the merge wrote `Box`,
+// which the merged hand-written Rust refused on both sides). Only all three
+// failing aborts, each one's tail printed. BUILD and LOWER run in the tree worktree moved to the merged index
 // (drive_tree_move, #1916), never on the shared checkout's working tree, which
 // holds the other agents' modified sources. The lowered paths they changed
 // there are copied into the checkout and staged, nothing else, and runs BADGES
@@ -1786,7 +1793,7 @@ fn drive_merge_relower(cause: String, unmerged: String, lower: String, build: St
 // tree (drive_ledgers_refresh, #1591), staging the changed ledger files. Then
 // commits the merge, with the
 // regenerated files in it (the autostash is applied after that commit), and
-// prints `MERGE <sha8> re-lowered [from ours ]<paths>` for a conflict, `MERGE <sha8>
+// prints `MERGE <sha8> re-lowered [from ours |with their emitter ]<paths>` for a conflict, `MERGE <sha8>
 // regenerated <paths>` (or `nothing changed`) for a clean merge; a merge of
 // documentation only is committed as it is. Any failure aborts the merge and
 // escalates.
@@ -1819,6 +1826,7 @@ fn drive_merge_regenerate(cause: String, unmerged: String, lower: String, build:
 	// merged `.nika` into code that does not compile).
 	let mut side = "theirs"
 	let mut failed_theirs: String = ""
+	let mut failed_ours: String = ""
 	let mut wt: String = ""
 	while true {
 		let merged = process::run("git", ["write-tree"])
@@ -1832,15 +1840,26 @@ fn drive_merge_regenerate(cause: String, unmerged: String, lower: String, build:
 		// The binary there is about to be rebuilt from other sources than its stamp names.
 		process::run("rm", ["-f", process::run("realpath", ["-m", drive_tree_target()]).stdout.trim() + "/fast/nikaia.crates"])
 		at = drive_now()
-		let first = process::run("sh", ["-c", f"cd '{wt}' && {build} 2>&1"])
-		times.push(f"build {drive_now() - at}s")
-		if !first.ok {
+		// With their emitter (#2432) the merged index is lowered first: both
+		// sides already showed that it does not build as it stands.
+		let mut needs_lower = side == "emitter"
+		let mut said: String = ""
+		if !needs_lower {
+			let first = process::run("sh", ["-c", f"cd '{wt}' && {build} 2>&1"])
+			times.push(f"build {drive_now() - at}s")
+			if !first.ok {
+				needs_lower = true
+				said = first.stdout.clone()
+			}
+		}
+		if needs_lower {
 			at = drive_now()
 			let old_lowered = process::run("sh", ["-c", f"cd '{wt}' && {lower} 2>&1"])
-			times.push(f"old lower-std {drive_now() - at}s")
+			let which = if side == "emitter" { "their lower-std" } else { "old lower-std" }
+			times.push(f"{which} {drive_now() - at}s")
 			if !old_lowered.ok {
 				failed = "lower-std before the build"
-				println(drive_tail(first.stdout + old_lowered.stdout, 30))
+				println(drive_tail(said + old_lowered.stdout, 30))
 			}
 		}
 		let mut rounds = 0
@@ -1870,7 +1889,38 @@ fn drive_merge_regenerate(cause: String, unmerged: String, lower: String, build:
 			}
 			settled = drive_lowered_print(wt.clone()) == old
 		}
-		if failed == "" || unmerged == "" || side == "ours" { break }
+		if failed == "" || unmerged == "" || side == "emitter" { break }
+		if side == "ours" {
+			// Our side failed too (#2432: their side changed the emitter, Box to
+			// Boxed, and the binary from before the merge writes the old form,
+			// which the merged hand-written Rust refuses either way): the
+			// conflicted lowered paths take their side again, the compiler of
+			// their commit is built in the tree target, where LOWER finds it, and
+			// the regeneration starts again with it.
+			println(f"MERGE re-lowering from ours failed ({failed}), trying their emitter")
+			failed_ours = failed
+			failed = ""
+			side = "emitter"
+			times.push("their emitter")
+			for p in unmerged.split(" ") {
+				let theirs_has = process::run("git", ["cat-file", "-e", f"MERGE_HEAD:{p}"]).ok
+				let took = if theirs_has {
+					process::run("git", ["checkout", "MERGE_HEAD", "--", p.clone()])
+				} else {
+					process::run("git", ["rm", "-q", "-f", "--ignore-unmatch", "--", p.clone()])
+				}
+				if !took.ok { drive_merge_abort_paths(cause, unmerged, f"re-lowering failed ({failed_theirs} from theirs, {failed_ours} from ours), and taking their side of {p} again failed") }
+			}
+			let their_tree = process::run("git", ["rev-parse", f"MERGE_HEAD^{{tree}}"]).stdout.trim().clone()
+			at = drive_now()
+			let exe = if their_tree == "" { "" } else { drive_tree_exe(their_tree) }
+			times.push(f"their build {drive_now() - at}s")
+			if exe == "" {
+				println(f"MERGE timing {times.join(", ")}, total {drive_now() - began}s")
+				drive_merge_abort_paths(cause, unmerged, f"re-lowering failed ({failed_theirs} from theirs, {failed_ours} from ours, and the compiler of theirs did not build)")
+			}
+			continue
+		}
 		// Their side failed: the conflicted lowered paths take our side (HEAD's
 		// copy, or none where HEAD has none) into the index and the checkout,
 		// and the regeneration starts again from that tree.
@@ -1891,7 +1941,13 @@ fn drive_merge_regenerate(cause: String, unmerged: String, lower: String, build:
 	}
 	if failed != "" {
 		println(f"MERGE timing {times.join(", ")}, total {drive_now() - began}s")
-		let why = if failed_theirs == "" { failed } else { f"{failed_theirs} from theirs, {failed} from ours" }
+		let why = if failed_theirs == "" {
+			failed
+		} else if failed_ours == "" {
+			f"{failed_theirs} from theirs, {failed} from ours"
+		} else {
+			f"{failed_theirs} from theirs, {failed_ours} from ours, {failed} with their emitter"
+		}
 		drive_merge_abort_paths(cause, unmerged, f"re-lowering failed ({why})")
 	}
 	// The lowered paths the regeneration rewrote, wrote new or removed in the
@@ -1969,7 +2025,7 @@ fn drive_merge_regenerate(cause: String, unmerged: String, lower: String, build:
 	println(f"MERGE timing {times.join(", ")}, total {drive_now() - began}s")
 	let merge = process::run("git", ["rev-parse", "HEAD"]).stdout.trim().clone()
 	if unmerged != "" {
-		let from = if side == "ours" { "from ours " } else { "" }
+		let from = if side == "ours" { "from ours " } else if side == "emitter" { "with their emitter " } else { "" }
 		println(f"MERGE {drive_short(merge)} re-lowered {from}{unmerged}")
 		return
 	}

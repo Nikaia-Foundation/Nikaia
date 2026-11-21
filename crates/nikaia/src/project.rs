@@ -46,8 +46,8 @@ use anyhow::{Context, Result, anyhow};
 use orchestrator::cache::{Artifacts, Cache, Choices, Layout, Lockfile};
 use orchestrator::project::{
     Cargo, CargoProject, CrateKind, Invocation, Package, Profile, Workspace,
-    record_extra_dependencies, resolved_versions, toolchain_can_build_for, toolchain_is_new_enough,
-    write_if_changed,
+    record_extra_dependencies, resolved_versions, toolchain_can_build_for,
+    toolchain_is_new_enough_as, write_if_changed,
 };
 
 use crate::contracts::{Ledger, sync};
@@ -411,6 +411,10 @@ pub struct Lowered {
     /// back into Cargo's dependency info, or a changed module would not
     /// rebuild.
     pub sources: Vec<PathBuf>,
+    /// **Every file the program was made from**, absolute: the sources and
+    /// what the build read while it ran (`asset`), for a run's record
+    /// (#2421).
+    pub inputs: Vec<PathBuf>,
     /// Whether the build cache answered instead of the emitter.
     pub reused: bool,
     /// **What the author could promise and has not**
@@ -792,7 +796,8 @@ pub fn project_for_file(
 
     let mut settings = Settings::resolve(&Manifest::find(file)?, target, user_parallelism)?;
     command_line(&mut settings)?;
-    lower_reading(file, &settings, no_cache, &[], allowlist)?;
+    let lowered = lower_reading(file, &settings, no_cache, &[], allowlist)?;
+    ran_made_from(lowered.pending.is_none().then_some(lowered.inputs));
     let warned = true;
 
     // The kept project's root, its manifest and the copy of the file:
@@ -809,6 +814,121 @@ pub fn project_for_file(
     project.warned = warned;
     project.written = Some(file.to_path_buf());
     Ok(project)
+}
+
+/// **A run of a file outside any project that built its program before**
+/// (#2421): what the record of that run (`project_drive_ran`,
+/// `tools/project_drive.nika`) holds and what the next one writes, kept
+/// while this one builds. `None` where no record is made.
+struct Ran {
+    record: PathBuf,
+    key: std::string::String,
+    inputs: Option<Vec<PathBuf>>,
+    said: std::string::String,
+}
+
+static RAN: std::sync::Mutex<Option<Ran>> = std::sync::Mutex::new(None);
+
+fn ran() -> std::sync::MutexGuard<'static, Option<Ran>> {
+    RAN.lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+}
+
+/// **Says what the build says on stderr**, and keeps it for the run's
+/// record (#2421): a run that finds its program built says it again from
+/// there, as the build cache replays a warning (`project_lower_reading`).
+pub(crate) fn say(text: &str) {
+    eprint!("{text}");
+    if let Some(ran) = ran().as_mut() {
+        ran.said.push_str(text);
+    }
+}
+
+/// The files the program of this run was made from; `None` makes no record.
+fn ran_made_from(inputs: Option<Vec<PathBuf>>) {
+    if let Some(ran) = ran().as_mut() {
+        ran.inputs = inputs;
+    }
+}
+
+/// **What a run's program was built under besides its files** (#2421): this
+/// compiler, the toolchain, `std`'s bundle, the settings after the command
+/// line, the allowlist and the variables a build reads. `None` where the
+/// program would not be built by `rustc` alone (`run_fast`).
+fn ran_key(settings: &Settings, allowlist: Option<&Path>) -> Option<std::string::String> {
+    let triple = crate::emit::host_target()?;
+    if crate::run_fast::cargo_sets_linker_or_flags(triple.triple()) {
+        return None;
+    }
+    let bundle = crate::comptime_run::run_bundle().ok()?;
+    let mut key = std::format!(
+        "{}\n{}\n{}\n{settings:?}\n{allowlist:?}\n",
+        crate::compiler_identity(),
+        crate::comptime_run::rustc_version(),
+        bundle.stamp,
+    );
+    let mut vars: Vec<(std::ffi::OsString, std::ffi::OsString)> = std::env::vars_os()
+        .filter(|(name, _)| {
+            let name = name.to_string_lossy();
+            ["NIKAIA_", "RUST", "CARGO"]
+                .iter()
+                .any(|start| name.starts_with(start))
+        })
+        .collect();
+    vars.sort();
+    for (name, value) in vars {
+        key.push_str(&std::format!("{name:?}={value:?}\n"));
+    }
+    Some(key)
+}
+
+/// **`nikaia run` of a file outside any project, run again unchanged**
+/// (#2421): its program runs at once, with what its build said said again,
+/// and nothing is read, checked or lowered. Otherwise this run's record is
+/// made ready, for [`DriveHost`] to write before it starts the program, and
+/// the caller builds. Nothing where the cache is off or `file` is a
+/// project's.
+pub fn run_again(
+    file: &Path,
+    target: Option<&str>,
+    user_parallelism: Option<&str>,
+    no_cache: bool,
+    allowlist: Option<&Path>,
+    command_line: &dyn Fn(&mut Settings) -> Result<()>,
+    program_args: &[String],
+) -> Option<i32> {
+    if no_cache || !file.is_file() || Layout::resolve(file).in_project {
+        return None;
+    }
+    let mut settings =
+        Settings::resolve(&Manifest::find(file).ok()?, target, user_parallelism).ok()?;
+    command_line(&mut settings).ok()?;
+    let key = ran_key(&settings, allowlist)?;
+    let (root, _) = project_drive::project_drive_kept_root(file, &Layout::user_cache_dir());
+    let record = project_drive::project_drive_ran_record(&root, &file.display().to_text());
+    if let Some((binary, said)) = block_on(project_drive::project_drive_ran(&record, &key)) {
+        eprint!("{said}");
+        // Used now, for the pruning of the slots and of the user cache.
+        if let Some(slot) = binary.parent() {
+            let _ = std::fs::File::options()
+                .append(true)
+                .open(slot.join("key"))
+                .and_then(|held| held.set_modified(std::time::SystemTime::now()));
+        }
+        orchestrator::cache::use_entry(&root);
+        let code = run_directly(&binary, program_args, &launch_vars(Some(file)));
+        return Some(code.unwrap_or_else(|error| {
+            eprintln!("Error: {error:#}");
+            1
+        }));
+    }
+    *ran() = Some(Ran {
+        record,
+        key,
+        inputs: None,
+        said: std::string::String::new(),
+    });
+    None
 }
 
 /// What `project_drive_kept_for_file` asks of the compiler: the user's cache
@@ -843,7 +963,7 @@ pub fn lower_reading(
     allowlist: Option<&Path>,
 ) -> Result<Lowered> {
     let open = modules::Open::new();
-    let (out, proofs, exported, pending) = with_lower_host(
+    let (out, proofs, exported, pending, inputs) = with_lower_host(
         input,
         settings,
         no_cache,
@@ -859,6 +979,7 @@ pub fn lower_reading(
                     host.proofs.take(),
                     host.exported.take(),
                     host.pending.take(),
+                    host.inputs(),
                 ))
             }
             Err(error) => Err(host.failed.take().unwrap_or_else(|| anyhow!("{error}"))),
@@ -906,6 +1027,7 @@ pub fn lower_reading(
         ledger,
         derived: out.derived,
         sources: out.sources,
+        inputs,
         reused: out.reused,
         notes: out.notes,
         proofs,
@@ -1289,6 +1411,23 @@ impl LowerHost<'_> {
         artifacts
     }
 
+    /// **Every file the program was made from** (#2421): its sources, and
+    /// what it read while it was built, this time or, where the cache
+    /// answered, when its entry was made.
+    fn inputs(&self) -> Vec<PathBuf> {
+        let mut read: std::collections::BTreeSet<std::string::String> =
+            self.reads_taken().into_keys().collect();
+        if let Some(cache) = self.cache.borrow().as_ref() {
+            read.extend(cache.assets_of(&self.unit));
+        }
+        let read = read.into_iter().map(|path| self.layout.root.join(path));
+        project_lower::ProjectLowerHost::source_paths(self)
+            .into_iter()
+            .chain(read)
+            .map(|path| std::path::absolute(&path).unwrap_or(path))
+            .collect()
+    }
+
     /// What the build read, as the cache records it.
     fn reads_taken(&self) -> BTreeMap<std::string::String, std::string::String> {
         self.reads
@@ -1667,7 +1806,7 @@ impl project_lower::ProjectLowerHost for LowerHost<'_> {
     fn eprint(&self, text: &str) {
         // `nikaia lsp` keeps the findings as data instead (#1347).
         if !diagnostics::is_collecting() {
-            eprint!("{text}");
+            say(text);
         }
     }
 
@@ -1854,7 +1993,7 @@ impl project_lower::ProjectLowerHost for LowerHost<'_> {
         for finding in &found {
             let rendered = diagnostics::render_finding_in(finding, &shown, &lines);
             if !diagnostics::is_collecting() {
-                eprint!("{rendered}");
+                say(&format!("{rendered}"));
             }
         }
         Some(project_lower::UnitSaid::Refused(
@@ -2326,7 +2465,7 @@ impl project_check::ProjectCheckHost for CheckHost<'_> {
     fn eprint(&self, text: &str) {
         // `nikaia lsp` keeps the findings as data instead (#1347).
         if !diagnostics::is_collecting() {
-            eprint!("{text}");
+            say(text);
         }
     }
 }
@@ -2731,7 +2870,7 @@ impl Project {
         // silent - a manifest whose setting stopped being read without saying
         // so is the mistake `[build]`'s unknown-key check already exists for.
         for note in manifest.notes() {
-            eprintln!("note: {note}");
+            say(&format!("note: {note}\n"));
         }
         let settings = Settings::resolve(&manifest, target, user_parallelism)?;
         if let Some(missing) = settings.build.target.unbuildable() {
@@ -3162,17 +3301,20 @@ impl Project {
 
         for diagnostic in &translated {
             let at = diagnostic.location.as_ref().map_or(0, |l| l.unit);
-            eprint!(
+            say(&format!(
                 "{}",
                 diagnostics::render(diagnostic, &paths[at], sources[at], &generated)
-            );
+            ));
         }
 
         // **The backend's own words, kept** (ADR-056 D2). Shown above because
         // the reader is being told this is not their mistake, and written here
         // because a bug report is made later and from a file.
         if let Some(log) = diagnostics::log_internal(&translated, &self.gen_dir()) {
-            eprintln!("note: the backend's own messages are in {}", log.display());
+            say(&format!(
+                "note: the backend's own messages are in {}\n",
+                log.display()
+            ));
         }
         Ok(())
     }
@@ -4241,7 +4383,7 @@ impl project_drive::ProjectDriveHost for DriveHost<'_> {
     }
 
     fn eprint(&self, text: &str) {
-        eprint!("{text}");
+        say(text);
     }
 
     fn write_if_changed(&self, path: &Path, text: &str) -> HostResult<()> {
@@ -4295,13 +4437,18 @@ impl project_drive::ProjectDriveHost for DriveHost<'_> {
     }
 
     fn toolchain_is_new_enough(&self) -> Option<String> {
-        toolchain_is_new_enough(crate::emit::RUST_FLOOR)
-            .err()
-            .map(|error| format!("{error:#}"))
+        // The held answer (#2421): a run whose program is built asks no
+        // `rustc` for its version.
+        toolchain_is_new_enough_as(
+            crate::comptime_run::rustc_version(),
+            crate::emit::RUST_FLOOR,
+        )
+        .err()
+        .map(|error| format!("{error:#}"))
     }
 
     fn rustc_version(&self) -> String {
-        orchestrator::project::rustc_version().to_text()
+        crate::comptime_run::rustc_version().to_text()
     }
 
     fn cargo_fresh(&self, record: &Path, handed: &str) -> Option<String> {
@@ -4546,6 +4693,20 @@ impl project_drive::ProjectDriveHost for DriveHost<'_> {
     }
 
     fn run_directly(&self, binary: &Path) -> HostResult<i32> {
+        // **The record of this run** (#2421), for a program `rustc` built
+        // into its slot here: the next run of the same file starts it at once.
+        if let Some(ran) = ran().take()
+            && let Some(inputs) = ran.inputs
+            && binary.starts_with(self.project.own_dir().join("fast").join("slots"))
+        {
+            block_on(project_drive::project_drive_ran_write(
+                &ran.record,
+                &ran.key,
+                binary,
+                &inputs,
+                &ran.said,
+            ));
+        }
         self.held(run_directly(binary, self.program_args, &self.launch_vars()))
     }
 }
@@ -4558,26 +4719,38 @@ impl DriveHost<'_> {
     /// run (`nikaia test`'s test file), else the `.nika` file `run` was
     /// given, else the project's entry point.
     fn launch_vars(&self) -> std::vec::Vec<(std::string::String, std::ffi::OsString)> {
-        let mut vars = std::vec::Vec::new();
-        if let Ok(exe) = std::env::current_exe() {
-            vars.push((
-                std::string::String::from(nikaia_std::env::EXE_VAR),
-                exe.into_os_string(),
-            ));
-        }
-        let main = std::env::var_os(nikaia_std::env::MAIN_VAR)
-            .filter(|value| !value.is_empty())
-            .unwrap_or_else(|| {
-                let main = self
-                    .project
-                    .written
-                    .clone()
-                    .unwrap_or_else(|| self.project.entry());
-                std::path::absolute(&main).unwrap_or(main).into_os_string()
-            });
-        vars.push((std::string::String::from(nikaia_std::env::MAIN_VAR), main));
-        vars
+        let main = self
+            .project
+            .written
+            .clone()
+            .unwrap_or_else(|| self.project.entry());
+        launch_vars(Some(&main))
     }
+}
+
+/// [`DriveHost`]'s `launch_vars`, with `main` the file the program stands in
+/// for where no launcher named one: also a run that finds its program built
+/// (#2421).
+fn launch_vars(main: Option<&Path>) -> std::vec::Vec<(std::string::String, std::ffi::OsString)> {
+    let mut vars = std::vec::Vec::new();
+    if let Ok(exe) = std::env::current_exe() {
+        vars.push((
+            std::string::String::from(nikaia_std::env::EXE_VAR),
+            exe.into_os_string(),
+        ));
+    }
+    let main = std::env::var_os(nikaia_std::env::MAIN_VAR)
+        .filter(|value| !value.is_empty())
+        .or_else(|| {
+            main.map(|main| {
+                std::path::absolute(main)
+                    .unwrap_or_else(|_| main.to_path_buf())
+                    .into_os_string()
+            })
+        })
+        .unwrap_or_default();
+    vars.push((std::string::String::from(nikaia_std::env::MAIN_VAR), main));
+    vars
 }
 
 #[cfg(unix)]

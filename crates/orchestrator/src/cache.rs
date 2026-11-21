@@ -602,6 +602,17 @@ impl Cache {
     pub fn save(&self) -> Result<()> {
         self.lock.save(&self.lock_path)
     }
+
+    /// What the recorded build of `unit` read while it was built, relative to
+    /// its asset root: the files besides its sources a run that skips the
+    /// build checks (#2421).
+    pub fn assets_of(&self, unit: &str) -> Vec<String> {
+        self.lock
+            .units
+            .get(unit)
+            .map(|record| record.assets.keys().cloned().collect())
+            .unwrap_or_default()
+    }
 }
 
 /// Where the lockfile and the store live for a given input.

@@ -1,0 +1,50 @@
+// A file outside any project with one warning, run by a relative and by an
+// absolute path (#2421): each run says the warning once, under the path it
+// was given (ADR-300 D9). Run again unchanged, the program runs at once from
+// the record the last run left: the warning is said again from there, as the
+// build cache replays one, and the file is not read, checked or lowered. The
+// kept project's copy of the file, which every run that reads the file
+// writes again, shows it: removed, it stays away until the file changes.
+use std::env
+use std::fs
+use std::process
+
+fn toolchain() -> String throws {
+    let exe = env::current_exe()?.display() ?? ""
+    if exe.len() > 0 { return exe }
+    return "target/fast/nikaia"
+}
+
+fn copies(tmp: ref fs::Root) -> String throws {
+    return process::run("sh", ["-c", "find \"$0/cache/run\" -path '*/src/main.nika' -type f | sort", tmp.path().to_text()]).stdout.trim().clone()
+}
+
+fn forget_copies(tmp: ref fs::Root) throws {
+    process::run("sh", ["-c", "find \"$0/cache/run\" -path '*/src/main.nika' -type f -delete", tmp.path().to_text()])
+}
+
+fn run(nikaia: String, tmp: ref fs::Root, script: String) throws {
+    let out = process::run("sh", ["-c", "cd \"$2\" && NIKAIA_CACHE_DIR=\"$2/cache\" \"$0\" run \"$1\"", nikaia, script, tmp.path().to_text()])
+    let warnings = out.stderr.lines().filter(fn(line) { line.starts_with("warning[") }).count()
+    let at = out.stderr.lines().find(fn(line) { line.trim().starts_with("--> ") }) ?? ""
+    let shown = at.trim().replace(tmp.path().to_text(), "TMP")
+    println(f"{out.stdout.trim()}; warnings: {warnings} {shown}")
+}
+
+fn both(nikaia: String, tmp: ref fs::Root) throws {
+    run(nikaia.clone(), tmp, "warned.nika")
+    run(nikaia.clone(), tmp, f"{tmp.path().to_text()}/warned.nika")
+}
+
+fn main() throws {
+    let tmp = fs::scratch()
+    let nikaia = toolchain()
+    process::run("sh", ["-c", "printf 'use std::process\\n\\nfn main() throws {\\n    let bin = process::run(\"echo\", [\"true\"]).stdout.trim().clone()\\n    let out = process::run(bin, [\"a\"])\\n    println(f\"ran {out.code}\")\\n}\\n' > \"$0/warned.nika\"", tmp.path().to_text()])
+    both(nikaia.clone(), tmp)
+    forget_copies(tmp)
+    both(nikaia.clone(), tmp)
+    println(f"read again: {copies(tmp).len() > 0}")
+    process::run("sh", ["-c", "printf '// changed\\n' >> \"$0/warned.nika\"", tmp.path().to_text()])
+    both(nikaia.clone(), tmp)
+    println(f"read again once changed: {copies(tmp).len() > 0}")
+}

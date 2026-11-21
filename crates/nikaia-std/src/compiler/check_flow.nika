@@ -474,9 +474,10 @@ pub struct CheckFlow {
     /// #1988), asked where the body ends.
     pub place_clones: Vec[CheckPlaceClone],
     /// **Each name a change reached**, with how many reads the walk had
-    /// recorded when it did: a change of a place clone's root between the
-    /// `let` and its last read keeps the clone needed.
-    pub changes_seen: Vec[(String, i64)],
+    /// recorded when it did and how many loops and lambdas stood around it: a
+    /// change of a place clone's root between the `let` and its last read,
+    /// or in a loop the `let` stands outside of, keeps the clone needed.
+    pub changes_seen: Vec[(String, i64, i64)],
     /// **Each change with the binding it reached** (`-1` for none), in
     /// order: a kept lambda that changes a binding older than itself changes
     /// only its own copy (`NK2101`, Part I 5.4 C, #2047).
@@ -494,6 +495,9 @@ pub struct CheckPlaceClone {
     pub binding: i64?,
     /// The name the place starts from: `self` in `self.lower[v]`.
     pub root: String,
+    /// The root's binding where this body owns it: a read of the whole root
+    /// after the `let` needs the copy (#2009).
+    pub whole: i64?,
     /// The walk's read order and its count of reads where the `let` stands.
     pub seq: i64,
     pub reads: i64,

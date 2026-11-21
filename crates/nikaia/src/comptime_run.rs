@@ -1153,8 +1153,11 @@ pub(crate) fn toolchain() -> &'static str {
     &toolchain_answers().verbose
 }
 
-/// `rustc --version`, of the same `rustc` as `toolchain` (`RUSTC` first).
-fn rustc_version() -> &'static str {
+/// `rustc --version`, of the same `rustc` as `toolchain` (`RUSTC` first),
+/// read from the user cache like `toolchain` (#2151): a `nikaia run` keys
+/// its program on it and starts no `rustc` while the toolchain is unchanged
+/// (#2421).
+pub(crate) fn rustc_version() -> &'static str {
     &toolchain_answers().version
 }
 
