@@ -693,6 +693,30 @@ pub(crate) fn check_deferred_task(expr: &Expr) -> bool {
     }
 }
 
+pub(crate) fn check_started_task(expr: &Expr) -> bool {
+    match expr {
+        Expr::Spawn { deferred, .. } => { let deferred = *deferred; !deferred },
+        Expr::TryCatch { expr: guarded, .. } => { let guarded = nikaia_std::boxed::open(guarded); match guarded {
+            Expr::Spawn { deferred, .. } => { let deferred = *deferred; !deferred },
+            _ => false,
+        } },
+        _ => false,
+    }
+}
+
+pub(crate) fn check_started_options(expr: &Expr) -> &'static str {
+    let child: bool = match expr {
+        Expr::Spawn { child, .. } => { let child = *child; child },
+        Expr::TryCatch { expr: guarded, .. } => { let guarded = nikaia_std::boxed::open(guarded); match guarded {
+            Expr::Spawn { child, .. } => { let child = *child; child },
+            _ => false,
+        } },
+        _ => false,
+    };
+    if child { return "deferred"; }
+    "detached, deferred"
+}
+
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 pub(crate) fn check_crossings_a_deferred_handle_starts(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, block: &Block) {
@@ -718,6 +742,20 @@ pub(crate) fn check_crossings_a_deferred_handle_starts(state: &mut CheckState, w
                         None => None,
                     };
                     if twice.is_some() { state.findings.push(check_refusal("NK2121", nikaia_std::index::or(twice.as_ref(), || &span), format!("The deferred task handle `{}` is started a second time here, on some path.", name), vec![String::from("`start()` starts the task, and a task runs once.")], Some(format!("Start `{}` once on every path: in each branch, or once after them.", name)))); }
+                }
+                if check_started_task(value) && names.len() == 1 {
+                    let name: String = format!("{}", world.words.resolve(*unsafe { nikaia_std::proven::read(&names, (0) as usize) }));
+                    if name != "_" {
+                        let mut found = CheckDeferredFound { unstarted: false, twice: None };
+                        let mut jumps = check_deferred_none();
+                        let start = CheckDeferredPaths { fresh: false, started: true, twice: false };
+                        check_deferred_path(world, &name, &block.stmts, at, start, &mut found, &mut jumps, false);
+                        let started: Option<Span> = match found.twice.as_ref() {
+                            Some(__nikaia_it) => Some(__nikaia_it.clone()),
+                            None => None,
+                        };
+                        if started.is_some() { state.findings.push(check_refusal("NK2121", nikaia_std::index::or(started.as_ref(), || &span), format!("`{}.start()` starts a task that started at once.", name), vec![String::from("Only a deferred task waits for its handle's `start()`: this one started when it was made.")], Some(format!("Write `let mut {} = async({}) fn {{ … }}` to start it here, or drop the `start()`.", name, check_started_options(value))))); }
+                    }
                 }
             },
             _ => { },

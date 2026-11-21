@@ -988,12 +988,44 @@ fn check_deferred_task(expr: ref Expr) -> bool {
     }
 }
 
+/// Whether `expr` is a task that starts at once and hands back a handle
+/// (`async(handle)`, `async(detached)`, `spawn`, none `deferred`): its
+/// handle's `start()` is `NK2121` (ADR-async-5 D12).
+fn check_started_task(expr: ref Expr) -> bool {
+    return match expr {
+        Expr::Spawn { deferred, .. } => !deferred,
+        Expr::TryCatch { expr: guarded, .. } => match guarded {
+            Expr::Spawn { deferred, .. } => !deferred,
+            else => false,
+        },
+        else => false,
+    }
+}
+
+/// The options that make the task `expr` deferred and keep its kind: a
+/// child task's `deferred`, a detached one's `detached, deferred`.
+fn check_started_options(expr: ref Expr) -> String {
+    let child: bool = match expr {
+        Expr::Spawn { child, .. } => child,
+        Expr::TryCatch { expr: guarded, .. } => match guarded {
+            Expr::Spawn { child, .. } => child,
+            else => false,
+        },
+        else => false,
+    }
+    if child {
+        return "deferred"
+    }
+    return "detached, deferred"
+}
+
 /// **`NK2121`: a deferred handle is started, or cancelled, once on every
 /// path** (ADR-async-5 D12). For each `let h = async(deferred) …` of the
 /// block, the paths through the statements after it: one that leaves the
 /// scope, or ends the block, with the task neither started nor cancelled is
 /// refused at the `let`, and a second `start()` on a path at that `start()`.
-/// A deferred task nothing binds is never started.
+/// A deferred task nothing binds is never started, and a task that started
+/// at once is not started again by its handle's `start()`.
 fn check_crossings_a_deferred_handle_starts(mut state: CheckState, world: ref CheckWorld, block: ref Block) sync {
     let mut at = 0
     for stmt in block.stmts {
@@ -1023,6 +1055,22 @@ fn check_crossings_a_deferred_handle_starts(mut state: CheckState, world: ref Ch
                     let twice: Span? = found.twice?.clone()
                     if twice != null {
                         state.findings.push(check_refusal("NK2121", twice ?? span, f"The deferred task handle `{name}` is started a second time here, on some path.", ["`start()` starts the task, and a task runs once."], f"Start `{name}` once on every path: in each branch, or once after them."))
+                    }
+                }
+                if check_started_task(value) && names.len() == 1 {
+                    let name: String = f"{world.words.resolve(names[0])}"
+                    if name != "_" {
+                        // The task started at once: the walk begins with
+                        // the handle started, so its first `start()` is
+                        // a second one.
+                        let mut found = CheckDeferredFound { unstarted: false, twice: null }
+                        let mut jumps = check_deferred_none()
+                        let start = CheckDeferredPaths { fresh: false, started: true, twice: false }
+                        check_deferred_path(world, name, block.stmts, at, start, found, jumps, false)
+                        let started: Span? = found.twice?.clone()
+                        if started != null {
+                            state.findings.push(check_refusal("NK2121", started ?? span, f"`{name}.start()` starts a task that started at once.", ["Only a deferred task waits for its handle's `start()`: this one started when it was made."], f"Write `let mut {name} = async({check_started_options(value)}) fn {{ … }}` to start it here, or drop the `start()`."))
+                        }
                     }
                 }
             },
