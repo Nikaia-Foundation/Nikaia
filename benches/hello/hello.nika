@@ -1,0 +1,5 @@
+// Hello World, the program `bench.nika` counts: what it costs is start-up
+// alone. `println`, since Python's `print` ends the line too.
+fn main() throws {
+	println("Hallo Welt")
+}

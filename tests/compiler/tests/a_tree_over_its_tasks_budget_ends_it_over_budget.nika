@@ -1,0 +1,41 @@
+// **A task whose tree outgrows its budget ends with `task::OverBudget`**
+// (ADR-327 D13, D16, #1879): the tree `grow` builds stays in the task, so
+// its boxes are placed in the task's block, one segment of 64 KiB (D15);
+// past it the task ends, whoever waits for it gets `task::OverBudget`, and
+// another task runs on.
+struct Small {}
+
+impl task::Admission for Small {
+    fn decide(mut self, _load: task::Load) -> task::Decision sync {
+        return task::Decision { start: 1, budget: 65536 }
+    }
+}
+
+enum Tree { Leaf, Node(Tree, Tree) }
+
+fn count(t: Tree) -> i64 {
+    return match t {
+        Tree::Leaf => 1,
+        Tree::Node(l, r) => 1 + count(l) + count(r),
+    }
+}
+
+fn grow(depth: i64) -> i64 {
+    let mut t = Tree::Node(Tree::Leaf, Tree::Leaf)
+    for _ in 0..<depth {
+        t = Tree::Node(t, Tree::Node(Tree::Leaf, Tree::Leaf))
+    }
+    return count(t)
+}
+
+fn main() throws {
+    let big = async(admission: Small {}) grow(100000) catch {
+        match error {
+            task::OverBudget => println(f"over budget: {error}"),
+            else => println(f"failed: {error}"),
+        }
+        0
+    }
+    let small = async(admission: Small {}) grow(10)
+    println(f"after: {big + small}")
+}
