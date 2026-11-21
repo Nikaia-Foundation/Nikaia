@@ -6,7 +6,8 @@
 // CI runner overran 10 s on the two SMPT files that take 4 s and 2 s on an
 // x86 machine (`docs/measuring.md`: count, never time). The files need 31128
 // (Diffusion2D), 225922 (Referendum), 851 (c_inference, which its cases stop
-// first) and 9967 steps (bofill), the same on every machine.
+// first), 9967 (bofill) and 79 steps (clock_synchro), the same on every
+// machine.
 // QF_LIA bofill-scheduling SMT_real_LIA-ex2360_2400_100 took about 25 s on the rod before c29e706e1
 // (the equality elimination compared every pair of bounds each round, #1957)
 // and about 2 s since. QF_LIA 20231117-c_inference 30_30_86_7_sat ran past
@@ -27,6 +28,10 @@
 // and 4541 steps. Their old cost was the price of each step, not the number
 // of steps, so the budget does not catch its return; the measuring rod's
 // count of instructions does (`docs/measuring.md`).
+// QF_LRA clock_synchro clocksynchro_8clocks.main_invar.base answered
+// `unknown (overflow)` until 45c6fe94b (#2307, #2400): every pivot of its
+// simplex formed a row past `i64` in single width; combined in double width
+// and reduced by its gcd it fits, and the file is proved in 79 steps.
 // QF_LIA rings_preprocessed ring_2exp4_5vars_3ite_unsat needs 31150 cases,
 // past the build-time 1024 (its line in the first run is `unknown (cases)`),
 // so a second run gives it alone a case budget of 65536 (`--cases`, #1962):

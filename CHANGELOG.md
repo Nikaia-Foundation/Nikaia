@@ -8,6 +8,23 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1514] — 2026-11-21
+
+**drive: child drivers run with the compiler of HEAD, the CI waiter is watched (#2458)**
+- The driver's restart after a merge and its CI waiter run with the compiler built from HEAD. A restarted script that does not compile, or a waiter that dies, now ends in ESCALATE (a dead waiter is first started once more) instead of a silent exit or a wait without end (#2458).
+
+## [0.0.1513] — 2026-11-21
+
+**Builders' changes (#2120)**
+- The panic hook's `.nika` line lookup is Nikaia (`runtime::lookup`); a code parameter handed on to two std methods now compiles (lent, not moved).
+- A function's parameter of code handed to two `std` methods (`is_sorted_by_key(f)` then `binary_search_by_key(k, f)`) compiles: it is lent on, not moved (it was an internal compiler error, rustc E0382).
+
+## [0.0.1512] — 2026-11-21
+
+**Builders' changes (#2307, #2400, #2401)**
+- The QF_LRA clock_synchro files 3clocks and 8clocks, which overflowed, are proved since the simplex's double-width pivot (#2307); 8clocks joins the regression set, and QF_LRA stands at 512 of 519 with no wrong answer.
+- The solver answers the three QF_LIA c_inference files z3 solves within 10 s (30 of 31, level with z3): the simplex ranks the entering variable by its column's size times its rows, keeps a column index and a backtrack log, and reuses the rows a pivot frees.
+
 ## [0.0.1511] — 2026-11-21
 
 **Builders' changes (#2062, #2446, #2447, #2451)**

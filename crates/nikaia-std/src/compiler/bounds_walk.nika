@@ -314,6 +314,10 @@ struct BoundsWalk {
 	/// a list's name for its values, `name[]` for the values of the lists it
 	/// holds.
 	assumed: collections::BTreeMap[String, Range],
+	/// **The field keys (`.`-keys) a read of `assumed` asked for**, found or
+	/// not, never taken back by `bounding_back`: what a walk of
+	/// `rules_check` read of `context.around.field_bounds` (#2396).
+	assumed_read: collections::BTreeSet[String],
 	/// The join of what this pass saw written, by key.
 	written: collections::BTreeMap[String, Range],
 	/// Keys a write this pass put something unbounded in.
@@ -845,6 +849,7 @@ fn bounding_new(
 		loop_classes: collections::BTreeMap(),
 		shape: shape,
 		assumed: context.around.field_bounds.clone(),
+		assumed_read: collections::BTreeSet(),
 		written: collections::BTreeMap(),
 		poisoned: collections::BTreeSet(),
 		assumed_ends: collections::BTreeMap(),
@@ -1337,8 +1342,12 @@ fn bounding_poisoned(walk: ref BoundsWalk, key: ref String) -> bool {
 	return false
 }
 
-/// The bound assumed of `key`'s values, where there is one.
-fn bounding_assumed(walk: ref BoundsWalk, key: ref String) -> Range? {
+/// The bound assumed of `key`'s values, where there is one; a field key
+/// asked for is noted in `assumed_read` (#2396).
+fn bounding_assumed(mut walk: BoundsWalk, key: ref String) -> Range? {
+	if key.starts_with(".") {
+		walk.assumed_read.insert(key.clone())
+	}
 	let bound = walk.assumed.get(key) ?? return null
 	return bound.clone()
 }
