@@ -11,6 +11,8 @@
 
 use std::cli
 use std::fs
+use std::path
+use std::process
 
 // Longest first, so `..<` is taken before `..`.
 fn operators() -> Vec[String] {
@@ -167,14 +169,18 @@ fn count_tokens(source: String) -> i64 {
 
 fn main() throws {
     let mut first = true
-    for path in cli::args() {
+    for file in cli::args() {
         if first {
             first = false
             continue
         }
-        let source = fs::read_to_string(path, fs::Root::Anywhere)
+        if !path::is_below(file) {
+            println(f"refused: {file} is not a relative path below the working directory")
+            process::exit(2)
+        }
+        let source = fs::read_to_string(file, fs::Root::Dir("."))
         let n = count_tokens(source)
         let shown = f"{n}"
-        println(f"{" ".repeat(6 - shown.len())}{shown}  {path}")
+        println(f"{" ".repeat(6 - shown.len())}{shown}  {file}")
     }
 }

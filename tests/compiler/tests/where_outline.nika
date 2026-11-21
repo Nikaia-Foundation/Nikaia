@@ -67,7 +67,7 @@ fn main() throws {
     fs::write("a.rs", tmp, rust.join("\n") + "\n")
     fs::write("b.nika", tmp, nika.join("\n") + "\n")
     for file in ["a.rs", "b.nika"] {
-        let out = process::run(nikaia.clone(), ["run", f"{repo}/scripts/where.nika", "--", "--outline", f"{tmp.path().to_text()}/{file}"]; dir: repo.clone())
+        let out = process::run(nikaia.clone(), ["run", f"{repo}/scripts/where.nika", "--", "--outline", file.clone()]; dir: tmp.path().to_text())
         println(f"{file}: ok={out.ok}")
         print(out.stdout)
     }
