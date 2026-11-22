@@ -9,3 +9,17 @@ pub fn indented(full: &str) -> String {
     out
 }
 
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub fn long_head(message: &str, origin: &str) -> String {
+    if origin == "(below Nikaia)" { return nikaia_std::block::Text::from(nikaia_std::concat::plus(message, "\n  (raised below Nikaia; no site recorded)")); }
+    nikaia_std::block::Text::from(nikaia_std::concat::plus(nikaia_std::block::Text::from(nikaia_std::concat::plus(message, "\n  raised at ")), origin))
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub fn trace_note(captured: bool, note_trace: bool) -> String {
+    if captured || !note_trace { return String::from(""); }
+    String::from("\n  (no trace; set NIKAIA_TRACE=1 to capture one)")
+}
+

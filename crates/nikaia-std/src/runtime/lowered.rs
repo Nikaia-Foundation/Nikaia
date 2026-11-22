@@ -272,7 +272,7 @@ pub mod cli {
 }
 pub mod error {
     #[allow(unused_imports)]
-    pub use super::{indented};
+    pub use super::{indented, long_head, trace_note};
 }
 pub mod fixed {
     #[allow(unused_imports)]
@@ -379,4 +379,4 @@ pub fn nikaia_run_tests(filters: &[std::string::String], list: bool, more: std::
 /// **The digest of this lowered set** (#1610): every file `lower-std` wrote
 /// beside this index, and the index above this line. Compiled into the same
 /// crate as the code it names, it is the compiler's identity for its caches.
-pub const LOWERED_DIGEST: &str = "362b501e8999253ae3d56d81da7c3b24d36e8d12ba5e84acc9ec6d97b1d00639";
+pub const LOWERED_DIGEST: &str = "03e1013c6de5cb9af5a76b1de5e330e504c501c8641a52a61c442e8aee96f2d3";
