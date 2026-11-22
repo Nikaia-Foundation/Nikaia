@@ -1,0 +1,43 @@
+// ADR-async-5 D28's first row: `par_iter().map(…).collect()` over 10^6
+// elements with a lambda that can throw. No element fails, so the output pins
+// every value and both sides return the whole list; what is counted is the
+// cost of a chain whose lambda may fail: each element's result carried as a
+// success or a failure, and the walk that keeps every failure (D26, Part II
+// 12.6). `par_map.nika` builds it beside its Rayon twin,
+// `src/bin/par_map_throws.rs`, and counts both.
+//
+// The list is made before the chain and the values summed after it, the same
+// on both sides, so the difference between the two counts is the chain's.
+use std::cli
+use std::text
+
+enum Bad { Negative(i64) }
+
+impl Error for Bad {
+	fn message(ref self) -> String {
+		return match self {
+			Bad::Negative(n) => f"element {n} is negative",
+		}
+	}
+}
+
+fn work(n: i64) -> i64 throws {
+	if n < 0 {
+		throw Bad::Negative(n)
+	}
+	return n * 3 + 1
+}
+
+fn main() throws {
+	let n = text::parse_i64(cli::args().nth(1) ?? "1000000") ?? 1000000
+	let mut xs: Vec[i64] = []
+	for i in 0..<n {
+		xs.push(i)
+	}
+	let ys: Vec[i64] = xs.par_iter().map(fn(x) { work(x) }).collect()
+	let mut total = 0
+	for y in ys {
+		total += y
+	}
+	println(f"{ys.len()} {total}")
+}
