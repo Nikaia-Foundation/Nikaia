@@ -433,6 +433,19 @@ impl ComputeHost<'_> {
         )
     }
 
+    /// The `nikaia.contracts` package `package` shipped (ADR-321 D8).
+    fn shipped(&self, package: &str) -> Option<String> {
+        let root = self
+            .files
+            .iter()
+            .find(|parsed| parsed.package.as_deref() == Some(package))?
+            .package_root
+            .as_ref()?;
+        std::fs::read_to_string(root.join("nikaia.contracts"))
+            .ok()
+            .map(|text| text.to_text())
+    }
+
     /// `unit` kept, and its index.
     fn made(&self, unit: Option<Parsed>) -> Option<i64> {
         let mut units = self.units.borrow_mut();
@@ -519,6 +532,22 @@ impl tree::ComptimeComputeHost for ComputeHost<'_> {
         let held = self.units.borrow();
         let refs: Vec<&Parsed> = units.iter().map(|&at| &held[at as usize]).collect();
         by_package(&refs)
+    }
+
+    fn shipped_ledger(&self, package: &str) -> Option<String> {
+        self.shipped(package)
+    }
+
+    fn trace(&self, said: &str) {
+        block_on(
+            nikaia_std::compiler::project_settings::project_settings_trace(
+                crate::project::TRACE_VAR,
+                None,
+                false,
+                said,
+                &crate::project::SettingsHost,
+            ),
+        );
     }
 
     fn derived(
@@ -662,6 +691,19 @@ impl tree::ComptimeComputeHost for ComputeHost<'_> {
                 printed.push_str(&format!("{:?}\n", parsed.package));
                 printed.push_str(&named_print(parsed, &parsed.program));
                 printed.push('\n');
+            }
+            // **And the ledgers the packages shipped** (ADR-321 D8): a value
+            // kept is one whose packages agreed, and only with these.
+            let packages: BTreeSet<&str> = self
+                .files
+                .iter()
+                .filter_map(|parsed| parsed.package.as_deref())
+                .collect();
+            for package in packages {
+                if let Some(text) = self.shipped(package) {
+                    printed.push_str(&text);
+                    printed.push('\n');
+                }
             }
             nikaia_std::hash::sha256_hex(printed.as_bytes()).to_text()
         });

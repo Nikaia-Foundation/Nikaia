@@ -112,7 +112,7 @@ fn refused(thrown: nikaia_std::error::Thrown<ProjectSettingsRefusal>) -> anyhow:
 
 /// What `project_settings.nika` asks of the compiler: the environment,
 /// what `native` is on this machine, a hash and a hard link.
-struct SettingsHost;
+pub(crate) struct SettingsHost;
 
 impl project_settings::ProjectSettingsHost for SettingsHost {
     fn env_var(&self, name: &str) -> Option<String> {
