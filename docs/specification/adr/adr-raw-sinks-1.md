@@ -13,7 +13,11 @@ D17 (the compiler's own build paths) added November 21, 2026 (owner's decision o
 added the same day (supervisor's decision on
 [#2460](https://github.com/Nikaia-Foundation/Nikaia/issues/2460)); D7's
 `html::Raw` check added the same day (supervisor's decision on
-[#2650](https://github.com/Nikaia-Foundation/Nikaia/issues/2650))
+[#2650](https://github.com/Nikaia-Foundation/Nikaia/issues/2650)); D18 (an
+argument of `process::run` read as an option) added November 22, 2026
+(owner's decision on
+[#1939](https://github.com/Nikaia-Foundation/Nikaia/issues/1939),
+alternative C), which changes D9 and D10
 **Answers:** what the compiler does when data from outside the program reaches
 a place that reads text as code or as a location: a shell command, an SQL
 text, markup written as is, a path with no root to keep it in
@@ -92,6 +96,7 @@ its precondition on the outside parts of its text:
 | `html::Raw(markup)` | `html::is_plain(part)`: none of `& < > " '` | `untrusted-markup` |
 | a path under `fs::Root::Anywhere` or `Dir("/")`, in `std::fs` and `http::File` | none: only a value that is not outside passes | `untrusted-paths-anywhere` |
 | the `program` of `process::run` (D10) | none: only a value that is not outside passes | `untrusted-program` |
+| the start of an element of `process::run`'s `args` (D18) | `process::is_operand(part)`: does not start with `-`; or a literal `"--"` earlier in the list | `untrusted-option` |
 
 A call is accepted when each outside part either:
 
@@ -219,8 +224,8 @@ included:
    record keeps `untrusted-shell` for: its escaping is its own, and it builds
    in a program only where the application allows it (D5).
 
-`process::run` stays as it is. Its program is a raw sink by D10; whether an
-argument that starts with `-` is one is left open below.
+`process::run` stays as it is. Its program is a raw sink by D10, and the
+start of each argument by D18.
 
 ### D10 — The program of `process::run` is a raw sink; an outside one is refused, `NK1308`.
 
@@ -237,7 +242,9 @@ name with one runs that file. So the `program` of `process::run` is a raw sink
 with no precondition, as a path under `fs::Root::Anywhere` is (D2): a part that
 is not outside passes, any other is refused, `NK1308`, unless the manifest
 allows `untrusted-program` (D4, D5). The arguments are not this sink: each
-reaches the program as one word and is never read as code (ADR-243).
+reaches the program as one word and is never read as code (ADR-243). Changed
+by D18: one word can still be read as an option, so the start of each
+argument is a sink of its own.
 
 A value is not outside when it is a literal, a constant, or chosen by the
 operator: the environment is the operator's except a CGI host's names
@@ -454,17 +461,57 @@ none:
    A directory beside them is above none of them; the file keeps the name and
    form of every manifest, and `project_check.nika` reads it by its path.
 
+### D18 — An argument of `process::run` that may be read as an option is a raw sink, `NK1308`.
+
+Added November 22, 2026 (owner's decision on
+[#1939](https://github.com/Nikaia-Foundation/Nikaia/issues/1939),
+alternative C).
+
+```nika
+let name = args[1]
+process::run("rm", [name])
+```
+
+removes one file, until a stranger names it `-rf`, or `tar` is handed
+`--checkpoint-action=exec=...`. The argument reaches the program as one word
+(ADR-243), but the program reads a word that starts with `-` as an option, and
+an option can name a program to run or a file to write. So:
+
+1. **The start of each element of `process::run`'s `args` is a raw sink.** An
+   element whose first part is not outside passes, whatever follows it:
+   `"--output=" + name`, `"./" + name` and `f"-I{dir}"` pass, because the
+   option or the path was written by the program. An element whose first
+   part is outside passes only when it is proved (2) or (3); otherwise it is
+   refused, `NK1308`, unless the manifest allows `untrusted-option` (D4, D5).
+2. **The predicate is `process::is_operand(part)`**: the text does not start
+   with `-`. Like every predicate of D2 and D14 it is a guard, and a function
+   that checked it hands back its proof (D14). The empty text holds it.
+3. **A literal `"--"` earlier in the list proves every element after it.** It
+   is the end of the options for every program that follows POSIX's utility
+   conventions, so `process::run("rm", ["--", name])` passes. A `"--"` that is
+   not a literal, or that stands after the element, proves nothing.
+4. **A value made under a root passes.** `Root::path` and `Root::join` (D11,
+   D14) start with the root's own text, which is not outside, so a path of a
+   `Dir` passes as an argument without a guard.
+5. **Option B of #1939 is moot.** It made `process::is_word` refuse a leading
+   `-`; D9 removed `is_word` and `process::shell` with it. What a shell
+   library escapes is its own (D9 item 3).
+
+The run time check under `raw-sinks = "warn"` (D7) throws `process::run`'s own
+error, `io::IoError::Other`, naming the argument, before anything starts.
+
 ## 4. Not decided here
 
 * **Names and codes** are confirmed by the supervisor (2026-11-16, #1253):
   the keys (`untrusted-shell`, `untrusted-sql`, `untrusted-markup`,
-  `untrusted-paths-anywhere`, and `untrusted-program` of D10, confirmed
-  2026-11-19), `[allow.packages.NAME]`, `--allow=KEY` and
+  `untrusted-paths-anywhere`, `untrusted-program` of D10, confirmed
+  2026-11-19, and `untrusted-option` of D18, confirmed 2026-11-22),
+  `[allow.packages.NAME]`, `--allow=KEY` and
   `--allow=PACKAGE:KEY`, the predicates of D2, and the codes `NK1308` and
   `NK1309`, reserved after `NK1303`.
-* **An argument that starts with `-`.** An outside word passed as an argument
-  can be read as an option, by the shell and by `process::run` alike. A
-  precondition against it is open.
+* **An option that starts with `/`.** Some Windows programs read a word that
+  starts with `/` as an option. D18 covers `-` only; a rule for `/` is taken
+  up when a case shows the need, since on Unix it begins an absolute path.
 * **A tool list in the manifest** for `process::run`'s program. A `match`
   over literals (D10) names the programs where they are used; a list beside
   it would be a second place. It is taken up if a case shows the need.
@@ -501,8 +548,9 @@ own precondition, and only a proof of that one admits the value.
   14.2 states the rule beside `NK1302`. Part III 17 gives each sink its
   precondition where its module is described (`std::fs`, `html`,
   `http::File`, `db`), says that `std::process` runs no shell (D9), and gives
-  `process::run`'s program its rule (D10). Part III 13.3 names the key
-  `untrusted-program`. C.3
+  `process::run`'s program its rule (D10), and its arguments theirs with
+  `process::is_operand` (D18). Part III 13.3 names the keys
+  `untrusted-program` and `untrusted-option`. C.3
   lists `NK1308`, `NK1309` and `NK1314`.
 * Part I 1.3 says that outside data at a raw sink is proved or allowed.
 * ADR-010 D8 and ADR-108 D5 carry a note.
@@ -512,7 +560,8 @@ own precondition, and only a proof of that one admits the value.
   [#2216](https://github.com/Nikaia-Foundation/Nikaia/issues/2216); D11-D16 by the issues
   listed on [#2242](https://github.com/Nikaia-Foundation/Nikaia/issues/2242); D17 by
   [#2442](https://github.com/Nikaia-Foundation/Nikaia/issues/2442) and
-  [#2460](https://github.com/Nikaia-Foundation/Nikaia/issues/2460).
+  [#2460](https://github.com/Nikaia-Foundation/Nikaia/issues/2460); D18 by
+  [#2694](https://github.com/Nikaia-Foundation/Nikaia/issues/2694).
 * Part III 13.3 names the keys of D15 and their source lists; Part III 17
   (`std::fs`, `std::path`) gives `Root::join`, `Root::path`,
   `path::is_component` and `path::is_below`.
