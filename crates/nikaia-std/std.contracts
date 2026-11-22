@@ -7026,14 +7026,18 @@ pub = true
 # what somebody else sent it, and a map keyed on its output is hashed with the
 # keyed function (ADR-010 D2).
 
-# Where one of a program's output streams goes (ADR-243 D10): into `Output`
-# as text, or to the caller's own stream as it is written.
+# Where one of a program's output streams goes (ADR-243 D10, D11): into
+# `Output` as text, to the caller's own stream as it is written, to the null
+# device (`Discarded`), or to a file (`File(path)`), created or truncated
+# before the program starts. `Output` holds `""` for every stream but a
+# `Captured` one. A `File`'s path is opened by this program: relative to its
+# working directory, not to `dir`, and a raw sink of ADR-raw-sinks-1 like
+# every path it opens.
 [type."process::Stream"]
 pub = true
 crosses = true
 compares = true
-copies = true
-variants = ["Captured", "Inherited"]
+variants = ["Captured", "Inherited", "Discarded", "File(String)"]
 
 # What a program reads on its standard input (ADR-243 D10): nothing, the
 # caller's own standard input, or this text, then the end.
@@ -7089,19 +7093,22 @@ fields = ["pub code: i64", "pub ok: bool", "pub stdout: String", "pub stderr: St
 # written while its output is read and then closed; a program that ends before
 # reading all of it is no failure. `stdout` and `stderr` are each `Captured`
 # into `Output`, or `Inherited`: the caller's own stream, written as the
-# program writes, and `""` in `Output`.
+# program writes, and `""` in `Output`; or `Discarded`, the null device, or
+# `File(path)`, the file created or truncated before the program starts, both
+# `""` in `Output` (D11). A `File` that cannot be opened starts nothing and
+# throws the `io::IoError` naming its path.
 #
 # The wait gives the thread up, so other tasks run while the program does.
 #
 # **It keeps every list and text it is handed** (ADR-views-v4 D14, #1797):
-# `args`, `env`, `env_remove` and `stdin` are owned below, so a parameter
-# handed to one is moved, not lent.
+# `args`, `env`, `env_remove`, `stdin`, `stdout` and `stderr` are owned
+# below, so a parameter handed to one is moved, not lent.
 [fn."process::run"]
 pub = true
 panics = false
 throws = ["io::IoError"]
 provenance = "untrusted"
-keeps = ["args", "env", "env_remove", "stdin"]
+keeps = ["args", "env", "env_remove", "stdin", "stdout", "stderr"]
 signature = "(program: ref String, args: Vec[String]; dir: ref String = \".\", env: Vec[(String, String)] = [], env_remove: Vec[String] = [], env_clear: bool = false, within: time::Duration? = null, stdin: process::Input = process::Input::Closed, stdout: process::Stream = process::Stream::Captured, stderr: process::Stream = process::Stream::Captured, trusted: bool = false) -> process::Output"
 
 # A program started and not yet waited for (#1177): what `process::spawn`
@@ -7112,18 +7119,35 @@ pub = true
 crosses = true
 
 # Start a program and hand it back running, the shape of Rust's
-# `Command::spawn`: its standard input closed, its standard output and
-# standard error read on threads of their own. `program` is looked for on the
-# caller's `PATH` as `run` looks for it (ADR-243 D6). It fails where the
-# program cannot be started.
+# `Command::spawn`. It takes `run`'s options but `within` (a spawned program
+# is ended with `kill`), with `run`'s defaults and rules (ADR-243 D5-D7, D10,
+# D11): `program` is looked for on the caller's `PATH`, the environment is
+# changed by `env_clear`, `env_remove`, then `env`, and an entry no platform
+# accepts starts nothing. By default its standard input is closed and its
+# standard output and standard error are read on threads of their own; a
+# stream that is `Inherited`, `Discarded` or a `File` is not read, and `wait`
+# hands back `""` for it. It fails where the program cannot be started and
+# where a `File` stream cannot be opened.
+#
+# **A spawned program outlives this one** (D11): neither dropping the `Child`
+# nor this program's end stops it. Its captured streams are read only while
+# this program runs, so one that should outlive it takes `Discarded`, `File`
+# or `Inherited` streams.
 [fn."process::spawn"]
 pub = true
 panics = false
 sync = true
 throws = ["io::IoError"]
 provenance = "untrusted"
-keeps = ["args"]
-signature = "(program: ref String, args: Vec[String]) -> process::Child"
+keeps = ["args", "env", "env_remove", "stdin", "stdout", "stderr"]
+signature = "(program: ref String, args: Vec[String]; dir: ref String = \".\", env: Vec[(String, String)] = [], env_remove: Vec[String] = [], env_clear: bool = false, stdin: process::Input = process::Input::Closed, stdout: process::Stream = process::Stream::Captured, stderr: process::Stream = process::Stream::Captured) -> process::Child"
+
+# The operating system's process id of the program (ADR-243 D11).
+[fn."process::Child::id"]
+pub = true
+panics = false
+sync = true
+signature = "(self: ref process::Child) -> i64"
 
 # The exit code where the program has ended, `-1` where a signal ended it;
 # nothing while it runs. It does not wait.

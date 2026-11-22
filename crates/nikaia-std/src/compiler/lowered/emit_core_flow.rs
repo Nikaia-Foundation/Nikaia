@@ -780,14 +780,14 @@ impl EmitState {
             out.push(&format!("; Ok::<_, {}>(__nikaia_value) }}).await", boxed));
         } else if nested {
             guarded = EmitFlow { breaks_to: at, ..guarded };
-            if a_block { out.push(&format!("'__nikaia_caught_{}: {{ let __nikaia_value = ", at)); } else { out.push(&format!("'__nikaia_caught_{}: {{ Ok::<_, std::boxed::Box<dyn std::error::Error>>(", at)); }
+            if a_block { out.push(&format!("'__nikaia_caught_{}: {{ let __nikaia_value = ", at)); } else if dropped { out.push(&format!("'__nikaia_caught_{}: {{ ", at)); } else { out.push(&format!("'__nikaia_caught_{}: {{ Ok::<_, std::boxed::Box<dyn std::error::Error>>(", at)); }
         } else { guarded = EmitFlow { breaks_to: -1, ..guarded }; }
         walk.boxed_scope = false;
         let bracketed = emit_flow_struct_headed(guarded_expr);
         if bracketed && !bound_here { out.push("("); }
         if !bound_here { self.emit_expr(world, walk, out, host, guarded_expr, depth, guarded, scope)?; }
         if bracketed && !bound_here { out.push(")"); }
-        if nested && a_block && !bound_here { out.push("; Ok::<_, std::boxed::Box<dyn std::error::Error>>(__nikaia_value) }"); } else if nested && !bound_here { out.push(") }"); }
+        if nested && a_block && !bound_here { out.push("; Ok::<_, std::boxed::Box<dyn std::error::Error>>(__nikaia_value) }"); } else if nested && dropped && !bound_here { out.push("; Ok::<_, std::boxed::Box<dyn std::error::Error>>(()) }"); } else if nested && !bound_here { out.push(") }"); }
         let a_scope = a_scope_call && walk.boxed_scope;
         walk.boxed_scope = false;
         let pad = nikaia_std::block::Text::from("    ".repeat(nikaia_std::count::of(depth + 1))); #[allow(clippy::redundant_locals)] let passing = passing;

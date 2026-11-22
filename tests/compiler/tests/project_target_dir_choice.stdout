@@ -1,0 +1,9 @@
+shared: NIKAIA_TARGET_DIR=CACHE/rlib/KEY --target-dir=CACHE/rlib/KEY
+in the cache's rlib tree: true
+this project recorded: yes
+gone project's library: no
+gone project's program: no
+gone project's build directory: no
+gone project's record: no
+another crate: yes
+CARGO_TARGET_DIR=own: NIKAIA_TARGET_DIR=CACHE/tools/own --target-dir=none
