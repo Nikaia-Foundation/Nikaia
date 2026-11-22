@@ -1,0 +1,23 @@
+// A `Wide[T]` parameter is a copy: its methods keep nothing of the caller's,
+// so a file that writes `keep` elsewhere does not ask `keep w` of it (Part I
+// 2.2, ADR-views-v4 D2, #2706).
+fn owned(keep v: Vec[u64]) -> Vec[u64] sync {
+    let o = v
+    return o
+}
+
+fn low_of_abs(w: Wide[i64]) -> u64 sync {
+    let (low, _) = w.abs().halves()
+    return low
+}
+
+fn high_of(w: Wide[i64]) -> i64 sync {
+    let (_, high) = w.halves()
+    return high
+}
+
+fn main() throws {
+    println(low_of_abs(Wide::of(-5)))
+    println(high_of(Wide::of(-5)))
+    println(owned([1]).len())
+}

@@ -322,6 +322,90 @@ pub(crate) fn sv_delta_text(a: &SvDelta) -> String {
     format!("{}{}{}δ", real, sign, sv_rat_text(&a.k))
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct SvBigRat {
+    pub num: bigint::BigInt,
+    pub den: bigint::BigInt,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct SvBigDelta {
+    pub c: SvBigRat,
+    pub k: SvBigRat,
+}
+
+pub(crate) fn sv_big(n: i64) -> bigint::BigInt { bigint::BigInt::of(n) }
+
+pub(crate) fn sv_big_quo(a: &bigint::BigInt, b: &bigint::BigInt) -> bigint::BigInt {
+    let (q, _r) = match a.div_rem(b) { Some(__nikaia_value) => __nikaia_value, None => return sv_big(0) };
+    q
+}
+
+pub(crate) fn sv_big_digits(a: &bigint::BigInt) -> i64 { a.bits() / 64 + 1 }
+
+pub(crate) fn sv_big_rat(n: bigint::BigInt, d: &bigint::BigInt) -> SvBigRat {
+    if n.sign() == 0 { return SvBigRat { num: n, den: sv_big(1) }; }
+    let g = n.gcd(&d);
+    let mut num = sv_big_quo(&n, &g);
+    let mut den = sv_big_quo(&d, &g);
+    if den.sign() < 0 {
+        num = num.neg();
+        den = den.neg();
+    }
+    SvBigRat { num, den }
+}
+
+pub(crate) fn sv_big_rat_of(a: &SvRat) -> SvBigRat { SvBigRat { num: sv_big(a.num), den: sv_big(a.den) } }
+
+pub(crate) fn sv_big_rat_int(n: bigint::BigInt) -> SvBigRat { SvBigRat { num: n, den: sv_big(1) } }
+
+pub(crate) fn sv_big_rat_narrow(a: &SvBigRat) -> Option<SvRat> { Some(SvRat { num: match a.num.narrow() { Some(__nikaia_value) => __nikaia_value, None => return None }, den: match a.den.narrow() { Some(__nikaia_value) => __nikaia_value, None => return None } }) }
+
+pub(crate) fn sv_big_rat_add(a: &SvBigRat, b: &SvBigRat) -> SvBigRat {
+    if a.den == b.den { return sv_big_rat(a.num.add(&b.num), &a.den.clone()); }
+    sv_big_rat(a.num.mul(&b.den).add(&b.num.mul(&a.den)), &a.den.mul(&b.den))
+}
+
+pub(crate) fn sv_big_rat_sub(a: &SvBigRat, b: &SvBigRat) -> SvBigRat {
+    let minus = SvBigRat { num: b.num.neg(), den: b.den.clone() };
+    sv_big_rat_add(a, &minus)
+}
+
+pub(crate) fn sv_big_rat_mul(a: &SvBigRat, b: &SvBigRat) -> SvBigRat { sv_big_rat(a.num.mul(&b.num), &a.den.mul(&b.den)) }
+
+pub(crate) fn sv_big_rat_div(a: &SvBigRat, b: &SvBigRat) -> SvBigRat { sv_big_rat(a.num.mul(&b.den), &a.den.mul(&b.num)) }
+
+pub(crate) fn sv_big_rat_scale(a: &SvBigRat, n: &bigint::BigInt, d: &bigint::BigInt) -> SvBigRat { sv_big_rat(a.num.mul(n), &a.den.mul(d)) }
+
+pub(crate) fn sv_big_rat_cmp(a: &SvBigRat, b: &SvBigRat) -> i64 {
+    if a.den == b.den { return a.num.sub(&b.num).sign(); }
+    a.num.mul(&b.den).sub(&b.num.mul(&a.den)).sign()
+}
+
+pub(crate) fn sv_big_rat_floor(a: &SvBigRat) -> bigint::BigInt {
+    let (q, r) = match a.num.div_rem(&a.den) { Some(__nikaia_value) => __nikaia_value, None => return sv_big(0) };
+    if r.sign() < 0 { return q.sub(&sv_big(1)); }
+    q
+}
+
+pub(crate) fn sv_big_delta_of(a: &SvDelta) -> SvBigDelta { SvBigDelta { c: sv_big_rat_of(&a.c), k: sv_big_rat_of(&a.k) } }
+
+pub(crate) fn sv_big_delta_zero() -> SvBigDelta { SvBigDelta { c: sv_big_rat_int(sv_big(0)), k: sv_big_rat_int(sv_big(0)) } }
+
+pub(crate) fn sv_big_delta_add(a: &SvBigDelta, b: &SvBigDelta) -> SvBigDelta { SvBigDelta { c: sv_big_rat_add(&a.c, &b.c), k: sv_big_rat_add(&a.k, &b.k) } }
+
+pub(crate) fn sv_big_delta_sub(a: &SvBigDelta, b: &SvBigDelta) -> SvBigDelta { SvBigDelta { c: sv_big_rat_sub(&a.c, &b.c), k: sv_big_rat_sub(&a.k, &b.k) } }
+
+pub(crate) fn sv_big_delta_scale(a: &SvBigDelta, n: &bigint::BigInt, d: &bigint::BigInt) -> SvBigDelta { SvBigDelta { c: sv_big_rat_scale(&a.c, n, d), k: sv_big_rat_scale(&a.k, n, d) } }
+
+pub(crate) fn sv_big_delta_cmp(a: &SvBigDelta, b: &SvBigDelta) -> i64 {
+    let first = sv_big_rat_cmp(&a.c, &b.c);
+    if first != 0 { return first; }
+    sv_big_rat_cmp(&a.k, &b.k)
+}
+
+pub(crate) fn sv_big_delta_cmp_small(a: &SvBigDelta, b: &SvDelta) -> i64 { sv_big_delta_cmp(a, &sv_big_delta_of(b)) }
+
 pub(crate) fn sv_num_test_partner(n: i64) -> Vec<i64> { vec![-2, 1, 5, unsafe { nikaia_std::proven::add::<i64>(1, n % 7) }] }
 
 pub(crate) fn sv_num_test_naive(x: &[i64], y: &[i64], j: i64) -> Option<Vec<i64>> {

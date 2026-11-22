@@ -52,6 +52,10 @@ pub struct SvParams {
 	/// cuts in a row before a split.
 	pub bland_after: i64,
 	pub pivot_limit: i64,
+	/// The work the simplex may spend past `i64` in one query, in pivots
+	/// and 64-bit digit products (#2707); spent, the query is unknown
+	/// (overflow).
+	pub big_budget: i64,
 	pub gcd_test: bool,
 	pub cut_kind: String,
 	pub cut_rounds: i64,
@@ -85,6 +89,7 @@ fn sv_params() -> SvParams {
 		walk: sv_walk_params(),
 		bland_after: 64,
 		pivot_limit: 100000,
+		big_budget: 50000000,
 		gcd_test: true,
 		cut_kind: "gmi",
 		cut_rounds: 8,
@@ -155,6 +160,8 @@ fn sv_params_set(mut p: SvParams, name: String, value: String) -> bool {
 		p.bland_after = n
 	} else if name == "pivot_limit" && n > 0 {
 		p.pivot_limit = n
+	} else if name == "big_budget" && n > 0 {
+		p.big_budget = n
 	} else if name == "cut_rounds" {
 		p.cut_rounds = n
 	} else if name == "dense_width" {
@@ -316,6 +323,7 @@ fn sv_strategy_simplex(names: Vec[String], p: ref SvParams) -> SvSimplex {
 	let mut sx = sv_simplex(names)
 	sx.bland_after = p.bland_after
 	sx.pivot_limit = p.pivot_limit
+	sx.big_budget = p.big_budget
 	sx.gcd_test = p.gcd_test
 	sx.cut_kind = p.cut_kind.clone()
 	sx.cut_rounds = p.cut_rounds

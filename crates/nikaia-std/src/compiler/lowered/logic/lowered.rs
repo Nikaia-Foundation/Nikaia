@@ -28,6 +28,8 @@ use nikaia_std::seq::Join as _;
 #[allow(unused_imports)]
 use nikaia_std::text::TextQuoted as _;
 #[allow(unused_imports)]
+use nikaia_std::bigint;
+#[allow(unused_imports)]
 use nikaia_std::collections;
 #[allow(unused_imports)]
 use nikaia_std::env;
@@ -413,7 +415,7 @@ pub mod sv_nl {
 }
 pub mod sv_num {
     #[allow(unused_imports)]
-    pub use super::{SvUnknown, SvRat, SvDelta};
+    pub use super::{SvUnknown, SvRat, SvDelta, SvBigRat, SvBigDelta};
 }
 pub mod sv_pre {
     #[allow(unused_imports)]
@@ -437,7 +439,7 @@ pub mod sv_sat {
 }
 pub mod sv_simplex {
     #[allow(unused_imports)]
-    pub use super::{SvSide, SvUndo, SvPart, SvImplied, SvLitView, SvReading, SvSimplex, SvMult, SvActive, SvGomory, SvGmi, SvPivoted, SvViolation};
+    pub use super::{SvSide, SvUndo, SvPart, SvImplied, SvLitView, SvReading, SvSimplex, SvMult, SvBigRow, SvBigMade, SvActive, SvGomory, SvGmi, SvPivoted, SvViolation};
 }
 pub mod sv_smt {
     #[allow(unused_imports)]
@@ -522,4 +524,4 @@ pub fn nikaia_run_tests(filters: &[std::string::String], list: bool, more: std::
 /// **The digest of this lowered set** (#1610): every file `lower-std` wrote
 /// beside this index, and the index above this line. Compiled into the same
 /// crate as the code it names, it is the compiler's identity for its caches.
-pub const LOWERED_DIGEST: &str = "396d36df3796b1408c36c829c535b88911a5dad9c27f22a6580e00b8d9a69854";
+pub const LOWERED_DIGEST: &str = "3fc40cbb356ca4094022dc30f19194dd31c0ee83938c691eb88a55822caa4eb7";

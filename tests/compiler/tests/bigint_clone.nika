@@ -1,0 +1,20 @@
+// A copy of a `bigint::BigInt` is written `.clone()` (Part I 2.2: `.clone()`
+// is the one word for a copy): `std` writes the struct in Nikaia and its
+// ledger lists the fields, so the derived copy is reached as it is for a
+// struct the program declares (#2707: the checker refused it, NK1171).
+
+use std::bigint
+
+struct Pair {
+	a: bigint::BigInt,
+	b: bigint::BigInt,
+}
+
+fn main() throws {
+	let x = bigint::BigInt::of(9223372036854775807)
+	let big = x.mul(x)
+	let copy = big.clone()
+	let pair = Pair { a: big, b: copy.neg() }
+	let again = pair.clone()
+	println(f"{copy.to_text()} {again.a == copy} {again.b == pair.b} {again.b.to_text()}")
+}

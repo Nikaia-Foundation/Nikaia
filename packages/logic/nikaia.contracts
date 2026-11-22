@@ -287,6 +287,12 @@ panics = false
 touches = []
 signature = "(ref self) -> collections::BTreeMap[String, i64]"
 
+[fn."SvBoth::overflows"]
+sync = "inferred"
+panics = false
+touches = []
+signature = "(ref self) -> i64"
+
 [fn."SvBoth::pivots"]
 sync = "inferred"
 panics = false
@@ -311,6 +317,12 @@ sync = "inferred"
 panics = false
 touches = []
 signature = "(ref self) -> collections::BTreeMap[String, SvRat]"
+
+[fn."SvBoth::resumed"]
+sync = "inferred"
+panics = false
+touches = []
+signature = "(ref self) -> i64"
 
 [fn."SvBoth::shared"]
 sync = "inferred"
@@ -796,6 +808,94 @@ panics = true
 touches = []
 signature = "(ref mut self, level: i64)"
 
+[fn."SvSimplex::big_add_row"]
+sync = "inferred"
+panics = true
+touches = []
+signature = "(ref mut self, s: i64)"
+
+[fn."SvSimplex::big_conflict"]
+sync = "inferred"
+panics = true
+places = true
+touches = []
+signature = "(ref mut self, at: SvViolation, mut book: SvBook) -> SvChecked"
+
+[fn."SvSimplex::big_enter"]
+sync = "inferred"
+panics = true
+places = true
+touches = []
+signature = "(ref mut self) -> bool"
+
+[fn."SvSimplex::big_entering"]
+sync = "inferred"
+panics = true
+touches = []
+signature = "(ref self, r: i64, below: bool, bland: bool) -> i64"
+
+[fn."SvSimplex::big_feasible"]
+sync = "inferred"
+panics = true
+places = true
+touches = []
+signature = "(ref mut self, mut book: SvBook) -> SvChecked"
+
+[fn."SvSimplex::big_fractional"]
+sync = "inferred"
+panics = true
+touches = []
+signature = "(ref self) -> i64"
+
+[fn."SvSimplex::big_integer_values"]
+sync = "inferred"
+panics = true
+touches = []
+signature = "(ref self) -> collections::BTreeMap[String, i64]?"
+
+[fn."SvSimplex::big_move"]
+sync = "inferred"
+keeps = ["to"]
+panics = true
+touches = []
+signature = "(ref mut self, v: i64, to: SvBigDelta)"
+
+[fn."SvSimplex::big_pivot"]
+sync = "inferred"
+panics = true
+touches = []
+signature = "(ref mut self, r: i64, j: i64)"
+
+[fn."SvSimplex::big_rational_values"]
+sync = "inferred"
+panics = true
+touches = []
+signature = "(ref self) -> collections::BTreeMap[String, SvRat]?"
+
+[fn."SvSimplex::big_row_value"]
+sync = "inferred"
+panics = true
+touches = []
+signature = "(ref self, r: i64) -> SvBigDelta"
+
+[fn."SvSimplex::big_split_point"]
+sync = "inferred"
+panics = true
+touches = []
+signature = "(ref self, v: i64) -> i64?"
+
+[fn."SvSimplex::big_unknown"]
+sync = "inferred"
+panics = false
+touches = []
+signature = "(ref self) -> SvChecked"
+
+[fn."SvSimplex::big_violated"]
+sync = "inferred"
+panics = true
+touches = []
+signature = "(ref self) -> SvViolation"
+
 [fn."SvSimplex::bound"]
 sync = "inferred"
 keeps = ["src"]
@@ -996,11 +1096,23 @@ panics = false
 touches = []
 signature = "(ref mut self, col: i64) -> i64"
 
+[fn."SvSimplex::original_row"]
+sync = "inferred"
+panics = true
+touches = []
+signature = "(ref self, s: i64) -> SvBigRow"
+
 [fn."SvSimplex::overflow"]
 sync = "inferred"
 panics = true
 touches = []
 signature = "(ref mut self) -> SvChecked"
+
+[fn."SvSimplex::overflows"]
+sync = "inferred"
+panics = false
+touches = []
+signature = "(ref self) -> i64"
 
 [fn."SvSimplex::pivot"]
 sync = "inferred"
@@ -1061,6 +1173,19 @@ touches = []
 views = ["old: borrowed"]
 signature = "(ref mut self, v: i64, old: ref SvDelta) -> bool"
 
+[fn."SvSimplex::resume"]
+sync = "inferred"
+panics = true
+places = true
+touches = []
+signature = "(ref mut self, counted: bool, mut book: SvBook) -> SvChecked"
+
+[fn."SvSimplex::resumed"]
+sync = "inferred"
+panics = false
+touches = []
+signature = "(ref self) -> i64"
+
 [fn."SvSimplex::row_bound"]
 sync = "inferred"
 panics = true
@@ -1116,6 +1241,12 @@ sync = "inferred"
 panics = false
 touches = []
 signature = "(ref self) -> Vec[u32]"
+
+[fn."SvSimplex::split_point"]
+sync = "inferred"
+panics = true
+touches = []
+signature = "(ref self, v: i64) -> i64?"
 
 [fn."SvSimplex::take_atoms"]
 sync = "inferred"
@@ -1415,6 +1546,11 @@ pub = true
 sync = true
 signature = "(ref self) -> collections::BTreeMap[String, i64]"
 
+[fn."SvTh::overflows"]
+pub = true
+sync = true
+signature = "(ref self) -> i64"
+
 [fn."SvTh::pivots"]
 pub = true
 sync = true
@@ -1434,6 +1570,11 @@ signature = "(ref self)"
 pub = true
 sync = true
 signature = "(ref self) -> collections::BTreeMap[String, SvRat]"
+
+[fn."SvTh::resumed"]
+pub = true
+sync = true
+signature = "(ref self) -> i64"
 
 [fn."SvTh::shared"]
 pub = true
@@ -1485,6 +1626,12 @@ panics = false
 touches = []
 signature = "(ref self) -> collections::BTreeMap[String, i64]"
 
+[fn."SvTheory::overflows"]
+sync = "inferred"
+panics = false
+touches = []
+signature = "(ref self) -> i64"
+
 [fn."SvTheory::pivots"]
 sync = "inferred"
 panics = false
@@ -1509,6 +1656,12 @@ sync = "inferred"
 panics = false
 touches = []
 signature = "(ref self) -> collections::BTreeMap[String, SvRat]"
+
+[fn."SvTheory::resumed"]
+sync = "inferred"
+panics = false
+touches = []
+signature = "(ref self) -> i64"
 
 [fn."SvTheory::shared"]
 sync = "inferred"
@@ -2792,6 +2945,199 @@ panics = true
 touches = []
 views = ["values: borrowed", "solved: borrowed", "names: borrowed"]
 signature = "(values: ref collections::BTreeMap[String, i64], solved: ref Vec[SvSolved], names: ref Vec[String]) -> collections::BTreeMap[String, i64]?"
+
+[fn."sv_big"]
+sync = "inferred"
+panics = false
+touches = []
+signature = "(n: i64) -> bigint::BigInt"
+
+[fn."sv_big_coef"]
+sync = "inferred"
+panics = true
+touches = []
+views = ["x: borrowed"]
+signature = "(x: ref SvBigRow, v: i64) -> bigint::BigInt"
+
+[fn."sv_big_combine"]
+sync = "inferred"
+panics = true
+touches = []
+views = ["x: borrowed", "mx: borrowed", "y: borrowed", "my: borrowed"]
+signature = "(x: ref SvBigRow, mx: ref bigint::BigInt, y: ref SvBigRow, my: ref bigint::BigInt) -> SvBigMade"
+
+[fn."sv_big_delta_add"]
+sync = "inferred"
+keeps = ["a", "b"]
+panics = true
+touches = []
+views = ["a: borrowed", "b: borrowed"]
+signature = "(a: ref SvBigDelta, b: ref SvBigDelta) -> SvBigDelta"
+
+[fn."sv_big_delta_cmp"]
+sync = "inferred"
+keeps = ["a", "b"]
+panics = true
+touches = []
+views = ["a: borrowed", "b: borrowed"]
+signature = "(a: ref SvBigDelta, b: ref SvBigDelta) -> i64"
+
+[fn."sv_big_delta_cmp_small"]
+sync = "inferred"
+keeps = ["a"]
+panics = true
+touches = []
+views = ["a: borrowed", "b: borrowed"]
+signature = "(a: ref SvBigDelta, b: ref SvDelta) -> i64"
+
+[fn."sv_big_delta_of"]
+sync = "inferred"
+panics = false
+touches = []
+views = ["a: borrowed"]
+signature = "(a: ref SvDelta) -> SvBigDelta"
+
+[fn."sv_big_delta_scale"]
+sync = "inferred"
+keeps = ["a"]
+panics = true
+touches = []
+views = ["a: borrowed", "n: borrowed", "d: borrowed"]
+signature = "(a: ref SvBigDelta, n: ref bigint::BigInt, d: ref bigint::BigInt) -> SvBigDelta"
+
+[fn."sv_big_delta_sub"]
+sync = "inferred"
+keeps = ["a", "b"]
+panics = true
+touches = []
+views = ["a: borrowed", "b: borrowed"]
+signature = "(a: ref SvBigDelta, b: ref SvBigDelta) -> SvBigDelta"
+
+[fn."sv_big_delta_zero"]
+sync = "inferred"
+panics = false
+touches = []
+signature = "() -> SvBigDelta"
+
+[fn."sv_big_digits"]
+sync = "inferred"
+panics = true
+touches = []
+views = ["a: borrowed"]
+signature = "(a: ref bigint::BigInt) -> i64"
+
+[fn."sv_big_find"]
+sync = "inferred"
+panics = false
+touches = []
+views = ["x: borrowed"]
+signature = "(x: ref SvBigRow, v: i64) -> i64"
+
+[fn."sv_big_negated"]
+sync = "inferred"
+panics = true
+touches = []
+views = ["x: borrowed"]
+signature = "(x: ref SvBigRow) -> SvBigRow"
+
+[fn."sv_big_quo"]
+sync = "inferred"
+panics = true
+touches = []
+views = ["a: borrowed", "b: borrowed"]
+signature = "(a: ref bigint::BigInt, b: ref bigint::BigInt) -> bigint::BigInt"
+
+[fn."sv_big_rat"]
+sync = "inferred"
+keeps = ["n"]
+panics = true
+touches = []
+signature = "(n: bigint::BigInt, d: bigint::BigInt) -> SvBigRat"
+
+[fn."sv_big_rat_add"]
+sync = "inferred"
+keeps = ["a", "b"]
+panics = true
+touches = []
+views = ["a: borrowed", "b: borrowed"]
+signature = "(a: ref SvBigRat, b: ref SvBigRat) -> SvBigRat"
+
+[fn."sv_big_rat_cmp"]
+sync = "inferred"
+keeps = ["a", "b"]
+panics = true
+touches = []
+views = ["a: borrowed", "b: borrowed"]
+signature = "(a: ref SvBigRat, b: ref SvBigRat) -> i64"
+
+[fn."sv_big_rat_div"]
+sync = "inferred"
+keeps = ["a"]
+panics = true
+touches = []
+views = ["a: borrowed", "b: borrowed"]
+signature = "(a: ref SvBigRat, b: ref SvBigRat) -> SvBigRat"
+
+[fn."sv_big_rat_floor"]
+sync = "inferred"
+keeps = ["a"]
+panics = true
+touches = []
+views = ["a: borrowed"]
+signature = "(a: ref SvBigRat) -> bigint::BigInt"
+
+[fn."sv_big_rat_int"]
+sync = "inferred"
+keeps = ["n"]
+panics = false
+touches = []
+signature = "(n: bigint::BigInt) -> SvBigRat"
+
+[fn."sv_big_rat_mul"]
+sync = "inferred"
+keeps = ["a"]
+panics = true
+touches = []
+views = ["a: borrowed", "b: borrowed"]
+signature = "(a: ref SvBigRat, b: ref SvBigRat) -> SvBigRat"
+
+[fn."sv_big_rat_narrow"]
+sync = "inferred"
+keeps = ["a"]
+panics = true
+touches = []
+views = ["a: borrowed"]
+signature = "(a: ref SvBigRat) -> SvRat?"
+
+[fn."sv_big_rat_of"]
+sync = "inferred"
+panics = false
+touches = []
+views = ["a: borrowed"]
+signature = "(a: ref SvRat) -> SvBigRat"
+
+[fn."sv_big_rat_scale"]
+sync = "inferred"
+keeps = ["a"]
+panics = true
+touches = []
+views = ["a: borrowed", "n: borrowed", "d: borrowed"]
+signature = "(a: ref SvBigRat, n: ref bigint::BigInt, d: ref bigint::BigInt) -> SvBigRat"
+
+[fn."sv_big_rat_sub"]
+sync = "inferred"
+keeps = ["a", "b"]
+panics = true
+touches = []
+views = ["a: borrowed", "b: borrowed"]
+signature = "(a: ref SvBigRat, b: ref SvBigRat) -> SvBigRat"
+
+[fn."sv_big_reduced"]
+sync = "inferred"
+keeps = ["cols", "ks"]
+panics = true
+touches = []
+signature = "(cols: Vec[i64], ks: Vec[bigint::BigInt]) -> SvBigRow"
 
 [fn."sv_book"]
 sync = "inferred"
@@ -4991,6 +5337,14 @@ touches = []
 views = ["parts: borrowed"]
 signature = "(parts: ref Vec[SvPart], mut book: SvBook) -> SvClause?"
 
+[fn."sv_sx_lemma_of"]
+sync = "inferred"
+keeps = ["mult"]
+panics = true
+places = true
+touches = []
+signature = "(mult: SvMult, mut book: SvBook) -> SvClause?"
+
 [fn."sv_sx_multipliers"]
 sync = "inferred"
 panics = true
@@ -5653,6 +6007,34 @@ compares = true
 equates = true
 hashes = true
 
+[type."SvBigDelta"]
+pub = true
+fields = ["pub c: SvBigRat", "pub k: SvBigRat"]
+compares = true
+equates = true
+hashes = true
+
+[type."SvBigMade"]
+pub = true
+fields = ["pub row: SvBigRow", "pub work: i64"]
+compares = true
+equates = true
+hashes = true
+
+[type."SvBigRat"]
+pub = true
+fields = ["pub num: bigint::BigInt", "pub den: bigint::BigInt"]
+compares = true
+equates = true
+hashes = true
+
+[type."SvBigRow"]
+pub = true
+fields = ["pub cols: Vec[i64]", "pub ks: Vec[bigint::BigInt]"]
+compares = true
+equates = true
+hashes = true
+
 [type."SvBook"]
 pub = true
 fields = ["pub log: SvLog", "pub atoms: Vec[SvAtom]", "pub bounds: collections::BTreeMap[u32, SvBound]", "pub pre: collections::BTreeMap[u32, u32]", "pub reals: Vec[u32]"]
@@ -5906,7 +6288,7 @@ copies = true
 
 [type."SvParams"]
 pub = true
-fields = ["pub version: String", "pub pipeline: String", "pub theory: String", "pub fast: bool", "pub pre: bool", "pub walk_after: bool", "pub walk_first: i64", "pub walk: SvWalkParams", "pub bland_after: i64", "pub pivot_limit: i64", "pub gcd_test: bool", "pub cut_kind: String", "pub cut_rounds: i64", "pub dense_width: i64", "pub dense_share: i64", "pub steps: i64", "pub cases: i64"]
+fields = ["pub version: String", "pub pipeline: String", "pub theory: String", "pub fast: bool", "pub pre: bool", "pub walk_after: bool", "pub walk_first: i64", "pub walk: SvWalkParams", "pub bland_after: i64", "pub pivot_limit: i64", "pub big_budget: i64", "pub gcd_test: bool", "pub cut_kind: String", "pub cut_rounds: i64", "pub dense_width: i64", "pub dense_share: i64", "pub steps: i64", "pub cases: i64"]
 compares = true
 equates = true
 hashes = true
@@ -6043,7 +6425,7 @@ copies = true
 
 [type."SvSimplex"]
 pub = true
-fields = ["names: Vec[String]", "col_var: collections::BTreeMap[u32, i64]", "var_col: Vec[i64]", "var_form: Vec[SvRow]", "slack_of: collections::BTreeMap[String, i64]", "rows: Vec[SvRow]", "basic: Vec[i64]", "row_of: Vec[i64]", "values: Vec[SvDelta]", "lower: Vec[SvSide]", "upper: Vec[SvSide]", "undo: Vec[SvUndo]", "trail: Vec[u32]", "levels: Vec[i64]", "marks: Vec[i64]", "implied: Vec[SvImplied]", "held: Vec[i64]", "views: Vec[SvLitView]", "touched: Vec[bool]", "row_dirty: Vec[bool]", "seen_atoms: u32", "touched_list: Vec[i64]", "dirty_list: Vec[i64]", "level_seen: Vec[u32]", "level_rows: Vec[i64]", "level_vars: Vec[i64]", "row_log: Vec[i64]", "var_log: Vec[i64]", "redo: Vec[u32]", "redo_in: Vec[bool]", "var_atoms: Vec[Vec[u32]]", "col_rows: Vec[Vec[i64]]", "mark_round: i64", "row_mark: Vec[i64]", "prop_call: i64", "exam_at: Vec[i64]", "rb_at: Vec[i64]", "rb_has: Vec[bool]", "rb_val: Vec[SvDelta]", "atom_at: Vec[i64]", "stamp: i64", "bound_at: Vec[i64]", "row_at: Vec[i64]", "gcd_at: Vec[i64]", "gcd_rows: Vec[i64]", "gcd_row_in: Vec[bool]", "gcd_vars: Vec[i64]", "spare: Vec[SvRow]", "gcd_var_in: Vec[bool]", "col_count: Vec[i64]", "pub found: collections::BTreeMap[String, i64]", "pub found_real: collections::BTreeMap[String, SvRat]", "pub reals: Vec[u32]", "pub branching: bool", "pub bland_after: i64", "pub pivot_limit: i64", "pub gcd_test: bool", "pub cut_kind: String", "pub cut_rounds: i64", "pub cut_depth: i64", "pub pivots: i64", "pub splits: i64", "pub overflows: i64", "pub cuts: i64", "pub gcd_conflicts: i64"]
+fields = ["names: Vec[String]", "col_var: collections::BTreeMap[u32, i64]", "var_col: Vec[i64]", "var_form: Vec[SvRow]", "slack_of: collections::BTreeMap[String, i64]", "rows: Vec[SvRow]", "basic: Vec[i64]", "row_of: Vec[i64]", "values: Vec[SvDelta]", "lower: Vec[SvSide]", "upper: Vec[SvSide]", "undo: Vec[SvUndo]", "trail: Vec[u32]", "levels: Vec[i64]", "marks: Vec[i64]", "implied: Vec[SvImplied]", "held: Vec[i64]", "views: Vec[SvLitView]", "touched: Vec[bool]", "row_dirty: Vec[bool]", "seen_atoms: u32", "touched_list: Vec[i64]", "dirty_list: Vec[i64]", "level_seen: Vec[u32]", "level_rows: Vec[i64]", "level_vars: Vec[i64]", "row_log: Vec[i64]", "var_log: Vec[i64]", "redo: Vec[u32]", "redo_in: Vec[bool]", "var_atoms: Vec[Vec[u32]]", "col_rows: Vec[Vec[i64]]", "mark_round: i64", "row_mark: Vec[i64]", "prop_call: i64", "exam_at: Vec[i64]", "rb_at: Vec[i64]", "rb_has: Vec[bool]", "rb_val: Vec[SvDelta]", "atom_at: Vec[i64]", "stamp: i64", "bound_at: Vec[i64]", "row_at: Vec[i64]", "gcd_at: Vec[i64]", "gcd_rows: Vec[i64]", "gcd_row_in: Vec[bool]", "gcd_vars: Vec[i64]", "spare: Vec[SvRow]", "gcd_var_in: Vec[bool]", "col_count: Vec[i64]", "pub found: collections::BTreeMap[String, i64]", "pub found_real: collections::BTreeMap[String, SvRat]", "pub reals: Vec[u32]", "pub branching: bool", "pub bland_after: i64", "pub pivot_limit: i64", "pub gcd_test: bool", "pub cut_kind: String", "pub cut_rounds: i64", "pub cut_depth: i64", "pub pivots: i64", "pub splits: i64", "pub overflows: i64", "pub cuts: i64", "pub gcd_conflicts: i64", "big_on: bool", "big_rows: Vec[SvBigRow]", "big_values: Vec[SvBigDelta]", "big_work: i64", "pub big_budget: i64", "pub resumed: i64"]
 compares = true
 equates = true
 hashes = true
@@ -6078,7 +6460,7 @@ hashes = true
 
 [type."SvSmtStats"]
 pub = true
-fields = ["pub conflicts: i64", "pub theory_conflicts: i64", "pub lemmas: i64", "pub repeated: i64", "pub decisions: i64", "pub restarts: i64"]
+fields = ["pub conflicts: i64", "pub theory_conflicts: i64", "pub lemmas: i64", "pub repeated: i64", "pub decisions: i64", "pub restarts: i64", "pub overflows: i64", "pub resumed: i64"]
 compares = true
 equates = true
 hashes = true

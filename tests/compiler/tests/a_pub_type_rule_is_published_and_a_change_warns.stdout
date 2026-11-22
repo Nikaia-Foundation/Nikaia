@@ -1,0 +1,24 @@
+-- first build, the rule published
+[type."Hidden"]
+[type."Piece"]
+rules = ["assert(0 <= start && start <= end; message: \"a piece ends after it starts\")"]
+-- a narrower rule
+warning[NK1208]: the rule of `Piece` asks more of its consumers than the committed ledger says.
+   = note: it was `0 <= start && start <= end; message: "a piece ends after it starts"`, and now is `0 <= start && start < end; message: "a piece ends after it starts"`.
+   = note: a consumer's value of it that kept the rule before may now stop where it is built or written.
+   = help: if that is meant, commit `nikaia.contracts`, and this is not said again.
+[type."Hidden"]
+[type."Piece"]
+rules = ["assert(0 <= start && start < end; message: \"a piece ends after it starts\")"]
+-- a wider rule
+warning[NK1208]: the rule of `Piece` promises less than the committed ledger says.
+   = note: it was `0 <= start && start < end; message: "a piece ends after it starts"`, and now is `0 <= start; message: "a piece ends after it starts"`.
+   = note: a consumer's proof that relied on the rule may no longer hold.
+   = help: if that is meant, commit `nikaia.contracts`, and this is not said again.
+[type."Hidden"]
+[type."Piece"]
+rules = ["assert(0 <= start; message: \"a piece ends after it starts\")"]
+-- the same rule again
+[type."Hidden"]
+[type."Piece"]
+rules = ["assert(0 <= start; message: \"a piece ends after it starts\")"]

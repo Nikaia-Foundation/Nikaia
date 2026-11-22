@@ -158,8 +158,8 @@ direction, in short:
 * **Compiler defects** a move or a package runs into are fixed as they are met.
 * **The `yaml` package**, also as a drop-in Rust crate, with streaming input
   ([#928](https://github.com/Nikaia-Foundation/Nikaia/issues/928)).
-* **Research alongside**: how far the prover reaches with nothing written for
-  it, and how far proofs carry a program towards the speed of the fastest code
+* **Research alongside**: how much the prover proves without invariants written by
+  the programmer, and how far proofs carry a program towards the speed of the fastest code
   while it stays safe. The questions, the evidence and where each stands are
   on [Research questions](../research/).
 * **Later, decided and not scheduled**: WebAssembly, bare metal, `nikaia doc`,
