@@ -49,6 +49,24 @@ impl nikaia_std::error::Joined for __NikaiaThrows_ProjectMembersRefusal__io_IoEr
         }
     }
 }
+impl nikaia_std::error::Crossed for __NikaiaThrows_ProjectMembersRefusal__io_IoError {
+    fn started_at(&mut self, site: nikaia_std::error::Origin) {
+        #[allow(unreachable_patterns)]
+        match self {
+            __NikaiaThrows_ProjectMembersRefusal__io_IoError::ProjectMembersRefusal(e) => nikaia_std::error::Crossed::started_at(e, site),
+            __NikaiaThrows_ProjectMembersRefusal__io_IoError::io_IoError(e) => nikaia_std::error::Crossed::started_at(e, site),
+            _ => {}
+        }
+    }
+    fn arrived_at(&mut self, site: nikaia_std::error::Origin) {
+        #[allow(unreachable_patterns)]
+        match self {
+            __NikaiaThrows_ProjectMembersRefusal__io_IoError::ProjectMembersRefusal(e) => nikaia_std::error::Crossed::arrived_at(e, site),
+            __NikaiaThrows_ProjectMembersRefusal__io_IoError::io_IoError(e) => nikaia_std::error::Crossed::arrived_at(e, site),
+            _ => {}
+        }
+    }
+}
 impl __NikaiaThrows_ProjectMembersRefusal__io_IoError {
     #[allow(dead_code)]
     pub(crate) fn message(&self) -> String { self.to_string().into() }
@@ -58,6 +76,21 @@ impl nikaia_std::error::Full for __NikaiaThrows_ProjectMembersRefusal__io_IoErro
         match self {
             __NikaiaThrows_ProjectMembersRefusal__io_IoError::ProjectMembersRefusal(e) => e.full(),
             __NikaiaThrows_ProjectMembersRefusal__io_IoError::io_IoError(e) => e.full(),
+        }
+    }
+}
+
+impl nikaia_std::error::Members for __NikaiaThrows_ProjectMembersRefusal__io_IoError {
+    fn member(&self) -> &(dyn std::error::Error + 'static) {
+        match self {
+            __NikaiaThrows_ProjectMembersRefusal__io_IoError::ProjectMembersRefusal(e) => e.held() as &(dyn std::error::Error + 'static),
+            __NikaiaThrows_ProjectMembersRefusal__io_IoError::io_IoError(e) => e.held() as &(dyn std::error::Error + 'static),
+        }
+    }
+    fn into_member(self: std::boxed::Box<Self>) -> std::boxed::Box<dyn std::error::Error> {
+        match *self {
+            __NikaiaThrows_ProjectMembersRefusal__io_IoError::ProjectMembersRefusal(e) => std::boxed::Box::new(e.split().0) as std::boxed::Box<dyn std::error::Error>,
+            __NikaiaThrows_ProjectMembersRefusal__io_IoError::io_IoError(e) => std::boxed::Box::new(e.split().0) as std::boxed::Box<dyn std::error::Error>,
         }
     }
 }

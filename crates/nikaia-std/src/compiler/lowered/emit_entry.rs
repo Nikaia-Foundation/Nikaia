@@ -144,6 +144,7 @@ impl EmitState {
                 if self.borrows_named(world, member) { borrows = true; }
             }
             if fatal_member && !borrows { text = format!("{}    nikaia_std::process::fatal::<{}{}>();\n", text, self.sum_root(), name); }
+            if !borrows { text = format!("{}    nikaia_std::error::sum::<{}{}>();\n", text, self.sum_root(), name); }
         }
         let fatal = match self.own_contracts.implementations.get("Fatal") { Some(__nikaia_value) => __nikaia_value, None => return text };
         for item in world.items.iter() {

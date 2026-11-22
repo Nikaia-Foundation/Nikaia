@@ -89,7 +89,7 @@ pub fn config_read(text: &str) -> ConfigRead {
     let mut number: i64 = 0;
     for whole in text.lines() {
         number += 1;
-        let (before, _) = nikaia_std::index::or(whole.split_once("#"), || (std::convert::AsRef::<str>::as_ref(&*whole), "".into()));
+        let (before, _) = nikaia_std::index::or(whole.split_once("#"), || (whole, ""));
         let line = before.trim();
         if line.is_empty() { continue; }
         let (named, written) = match line.split_once("=") { Some(__nikaia_value) => __nikaia_value, None => return config_refused(number, &format!("`{}` is not `key = value` (the file has four keys: {})", line, listed)) };

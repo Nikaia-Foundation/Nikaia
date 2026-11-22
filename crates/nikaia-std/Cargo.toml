@@ -70,7 +70,7 @@ shared-bytes = { path = "../unsafe/shared-bytes" }
 # Bytes checked as text once, in chunks across the pool, and a file mapped and
 # checked (Part III 17.1).
 checked-text = { path = "../unsafe/checked-text", features = ["rayon", "map", "simd"] }
-# Text a C library owns, copied out (ADR-302 D8).
+# Text a C library owns, copied out (ADR-c-boundary-v1 D8).
 c-text = { path = "../unsafe/c-text" }
 c-boundary = { path = "../unsafe/c-boundary" }
 # An error's site in one word, or its cold part boxed (ADR-280 D24).
@@ -136,6 +136,13 @@ polled = { path = "../unsafe/polled", optional = true }
 # adds the system's roots from `rustls-native-certs`.
 rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"], optional = true }
 rustls-native-certs = { version = "0.8", optional = true }
+
+# **A file read whole on the idle shortcut is opened `O_NONBLOCK`** (ADR-263
+# D1, #2137): a FIFO's read side then opens at once instead of waiting for a
+# writer on the calling thread. Only the constant is used; already in every
+# build through `getrandom`.
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
 
 # ADR-303 D3's completion half. A *target* gate and not a feature gate: the
 # bindings do not exist off Linux at all. On Linux whether the ring is used is

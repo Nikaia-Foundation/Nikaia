@@ -185,7 +185,7 @@ pub fn bounds_report_trace(source: &str, path: &str, asked: &str) -> Vec<i64> {
     let mut number = text::parse_i64(asked.trim());
     let split = asked.rsplit_once(":");
     if split.is_some() {
-        let (file, line) = nikaia_std::index::or(split, || ("".into(), "".into()));
+        let (file, line) = nikaia_std::index::or(split, || ("", ""));
         if !path.ends_with(AsRef::<str>::as_ref(file)) { return vec![]; }
         number = text::parse_i64(line.trim());
     }

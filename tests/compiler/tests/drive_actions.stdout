@@ -4,7 +4,9 @@ would run: git fetch origin develop; new commits there merged into HEAD (MERGE <
 would run: df -m --output=avail /: under 6 GB free, the cleanup below; still under 3 GB after it, ESCALATE
 no issue for b1
 would run: write T/b1.md.running (the run's start, removed when its follow-up is done)
+would run: target/bins/<HEAD sha12>/nikaia missing: copy target/fast/nikaia there (cargo build --profile fast -p nikaia first where it is older than HEAD's last commit under crates/), through a temp name and mv; agent.nika gives claude its path as NIKAIA_OLD
 would run: target/fast/nikaia run scripts/agent.nika -- T/b1.md --dir T
+would run: append <date> b1 <seconds from T/b1.md.posted to its run.json, else duration_ms> to T/runs.txt
 would run: gh api repos/Nikaia-Foundation/Nikaia/issues/<issue of b1>/comments -F body=@<Run: the result, tokens, cost, time, turns, report, debrief, the footer>
 would run: rewrite Pushed: in T/b1.md.report.md when its Commit: is in the log (nothing committed)
 would run: append T/b1.md to T/unpushed.txt (no suite until the block or the batch ends)
@@ -12,6 +14,8 @@ would run: builder run 1 of a block of B (drive_lane_block); at B: the suite on 
 DRY-RUN NEXT b1
 == batch done (exit 0)
 would run: rm -rf target/debug (unless a cargo in this checkout builds into it) target/nikaia-example-tests target/gate-tests-* target/pre-push-*; rm -rf each $TMPDIR/nikaia-test-<pid>-<n> whose pid is gone; NIKAIA_CACHE_DIR=target/nikaia-project-tests NIKAIA_CACHE_LIMIT=2G target/fast/nikaia cache prune; under 6 GB after it and no cargo or rustc building into target/fast or target/release, rm -rf target/fast/incremental target/release/incremental target/ledger-target/fast/incremental, and in target/fast/deps target/release/deps target/ledger-target/fast/deps rm each <name>-<16 hex><rest> last changed over 3 h ago whose <name> has a newer file of another hash; print CLEANUP freed <N> MB, <M> MB free
+would run: rm -rf each target/bins/<sha> but HEAD's, the 2 newest of HEAD's history and those a running process names (its args or environment)
+would run: for each T/issue-N.md with a .posted whose issue N is closed (and its debrief reviewed in docs/briefs/facts-reviewed.txt): rm its .md, .posted, .running, .session, .run.json, .report.md, .run*.report.md, .debrief.md and its claude session dir; print CLEANUP removed <N> briefs, <M> MB
 would run: a suite still running (target/suite.lock/testing): wait for it first (SUITE <sha8> waiting)
 would run: git fetch origin develop; git rev-list --count origin/develop..HEAD (0: nothing to test)
 would run: git log --format= --name-only origin/develop..HEAD: all documentation by scripts/ci-changes.sh's rule, push HEAD without the suite (SUITE <sha8> docs-only, pushed without the suite), empty T/unpushed.txt
@@ -26,6 +30,8 @@ would run: wait for the suite (drive_settle), then stop for the supervisor (exit
 DRY-RUN STOP BATCH DONE
 == cut (exit 0)
 would run: rm -rf target/debug (unless a cargo in this checkout builds into it) target/nikaia-example-tests target/gate-tests-* target/pre-push-*; rm -rf each $TMPDIR/nikaia-test-<pid>-<n> whose pid is gone; NIKAIA_CACHE_DIR=target/nikaia-project-tests NIKAIA_CACHE_LIMIT=2G target/fast/nikaia cache prune; under 6 GB after it and no cargo or rustc building into target/fast or target/release, rm -rf target/fast/incremental target/release/incremental target/ledger-target/fast/incremental, and in target/fast/deps target/release/deps target/ledger-target/fast/deps rm each <name>-<16 hex><rest> last changed over 3 h ago whose <name> has a newer file of another hash; print CLEANUP freed <N> MB, <M> MB free
+would run: rm -rf each target/bins/<sha> but HEAD's, the 2 newest of HEAD's history and those a running process names (its args or environment)
+would run: for each T/issue-N.md with a .posted whose issue N is closed (and its debrief reviewed in docs/briefs/facts-reviewed.txt): rm its .md, .posted, .running, .session, .run.json, .report.md, .run*.report.md, .debrief.md and its claude session dir; print CLEANUP removed <N> briefs, <M> MB
 would run: a suite still running (target/suite.lock/testing): wait for it first (SUITE <sha8> waiting)
 would run: git fetch origin develop; git rev-list --count origin/develop..HEAD (0: nothing to test)
 would run: git log --format= --name-only origin/develop..HEAD: all documentation by scripts/ci-changes.sh's rule, push HEAD without the suite (SUITE <sha8> docs-only, pushed without the suite), empty T/unpushed.txt
@@ -44,7 +50,9 @@ would run: git fetch origin develop; new commits there merged into HEAD (MERGE <
 would run: df -m --output=avail /: under 6 GB free, the cleanup below; still under 3 GB after it, ESCALATE
 no issue for b1
 would run: write T/b1.md.running (the run's start, removed when its follow-up is done)
+would run: target/bins/<HEAD sha12>/nikaia missing: copy target/fast/nikaia there (cargo build --profile fast -p nikaia first where it is older than HEAD's last commit under crates/), through a temp name and mv; agent.nika gives claude its path as NIKAIA_OLD
 would run: target/fast/nikaia run scripts/agent.nika -- T/b1.md --dir T
+would run: append <date> b1 <seconds from T/b1.md.posted to its run.json, else duration_ms> to T/runs.txt
 would run: gh api repos/Nikaia-Foundation/Nikaia/issues/<issue of b1>/comments -F body=@<Run: the result, tokens, cost, time, turns, report, debrief, the footer>
 would run: rewrite Pushed: in T/b1.md.report.md when its Commit: is in the log (nothing committed)
 would run: append T/b1.md to T/unpushed.txt (no suite until the block or the batch ends)
@@ -52,6 +60,8 @@ would run: builder run 1 of a block of B (drive_lane_block); at B: the suite on 
 DRY-RUN NEXT b1
 == red, nothing queued (exit 0)
 would run: rm -rf target/debug (unless a cargo in this checkout builds into it) target/nikaia-example-tests target/gate-tests-* target/pre-push-*; rm -rf each $TMPDIR/nikaia-test-<pid>-<n> whose pid is gone; NIKAIA_CACHE_DIR=target/nikaia-project-tests NIKAIA_CACHE_LIMIT=2G target/fast/nikaia cache prune; under 6 GB after it and no cargo or rustc building into target/fast or target/release, rm -rf target/fast/incremental target/release/incremental target/ledger-target/fast/incremental, and in target/fast/deps target/release/deps target/ledger-target/fast/deps rm each <name>-<16 hex><rest> last changed over 3 h ago whose <name> has a newer file of another hash; print CLEANUP freed <N> MB, <M> MB free
+would run: rm -rf each target/bins/<sha> but HEAD's, the 2 newest of HEAD's history and those a running process names (its args or environment)
+would run: for each T/issue-N.md with a .posted whose issue N is closed (and its debrief reviewed in docs/briefs/facts-reviewed.txt): rm its .md, .posted, .running, .session, .run.json, .report.md, .run*.report.md, .debrief.md and its claude session dir; print CLEANUP removed <N> briefs, <M> MB
 would run: a suite still running (target/suite.lock/testing): wait for it first (SUITE <sha8> waiting)
 would run: git fetch origin develop; git rev-list --count origin/develop..HEAD (0: nothing to test)
 would run: git log --format= --name-only origin/develop..HEAD: all documentation by scripts/ci-changes.sh's rule, push HEAD without the suite (SUITE <sha8> docs-only, pushed without the suite), empty T/unpushed.txt
@@ -70,7 +80,9 @@ would run: git fetch origin develop; new commits there merged into HEAD (MERGE <
 would run: df -m --output=avail /: under 6 GB free, the cleanup below; still under 3 GB after it, ESCALATE
 no issue for b1
 would run: write T/b1.md.running (the run's start, removed when its follow-up is done)
+would run: target/bins/<HEAD sha12>/nikaia missing: copy target/fast/nikaia there (cargo build --profile fast -p nikaia first where it is older than HEAD's last commit under crates/), through a temp name and mv; agent.nika gives claude its path as NIKAIA_OLD
 would run: target/fast/nikaia run scripts/agent.nika -- T/b1.md --dir T
+would run: append <date> b1 <seconds from T/b1.md.posted to its run.json, else duration_ms> to T/runs.txt
 would run: gh api repos/Nikaia-Foundation/Nikaia/issues/<issue of b1>/comments -F body=@<Run: the result, tokens, cost, time, turns, report, debrief, the footer>
 would run: rewrite Pushed: in T/b1.md.report.md when its Commit: is in the log (nothing committed)
 would run: append T/b1.md to T/unpushed.txt (no suite until the block or the batch ends)

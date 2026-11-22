@@ -1,0 +1,130 @@
+// crates/nikaia-std/src/compiler/check_core_wide.nika
+//
+// **A value of twice the width** (Part I 2.2, ADR-270 D11 as amended
+// 2026-11-21, #2619): what the checker knows of `std`'s `Wide[T]` beyond its
+// ledger entries. The entries type what a signature can say; this file types
+// what it cannot, the unsigned type of `T`'s width that `from_halves` takes
+// and `halves` hands back, and the `Wide` of it `abs` gives; it refuses a `T`
+// that is not one of the five integer types (`NK1102`) and `abs` on an
+// unsigned one (`NK1171`), and it records, for each call, the operation and
+// `T` (`CheckFacts.wide_calls`), from which the emitter writes the native
+// type of twice the width (`emit_core_wide.nika`).
+
+/// **The unsigned type of `T`'s width**, what the low half is held in: `""`
+/// for a `T` that has no `Wide`.
+pub fn wide_unsigned_of(element: ref String) -> String sync {
+    return match element {
+        "u8" => "u8",
+        "u32" => "u32",
+        "i32" => "u32",
+        "u64" => "u64",
+        "i64" => "u64",
+        else => "",
+    }
+}
+
+/// The name of a plain named type, `""` for any other.
+fn wide_named(ty: ref Ty) -> String sync {
+    return match ty {
+        Ty::Named { name, args, .. } => if args.len() == 0 { name.clone() } else { "" },
+        else => "",
+    }
+}
+
+/// `name` as a type with no arguments.
+fn wide_plain(name: ref String) -> Ty sync {
+    return Ty::Named { name: name.clone(), args: [], view: false }
+}
+
+impl CheckState {
+    /// Whether `Wide` is the program's own type, which then hides `std`'s.
+    fn wide_taken(ref self, world: ref CheckWorld) -> bool sync {
+        return world.own.types.contains_key("Wide") || self.structs.contains_key("Wide") || self.enums.contains_key("Wide")
+    }
+
+    /// **`T` of a `Wide[T]` that is `std`'s**: `""` for any other type.
+    fn wide_element(ref self, world: ref CheckWorld, ty: ref Ty) -> String sync {
+        if self.wide_taken(world) {
+            return ""
+        }
+        return match value_of_a_copy(ty.unseen()) {
+            Ty::Named { name, args, view } => if !view && name == "Wide" && args.len() == 1 {
+                wide_named(args[0])
+            } else {
+                ""
+            },
+            else => "",
+        }
+    }
+
+    /// **A `Wide` made by one of its three functions** (`of`, `product`,
+    /// `from_halves`): `T` is the type of the value given (the high half's
+    /// for `from_halves`, the first typed factor's for `product`), one of the
+    /// five integer types, and the low half is the unsigned type of its
+    /// width. A value whose type its uses decide makes `T` the default,
+    /// `i64`, as an `int` is (ADR-285 D37). The `Wide[T]` made; null where
+    /// the call is not `std`'s or `T` is refused.
+    fn wide_made(mut self, world: ref CheckWorld, key: ref String, args: ref Vec[Expr], found: ref Vec[Ty], func: ref Expr, span: ref Span) -> Ty? sync {
+        if self.wide_taken(world) {
+            return null
+        }
+        let entry = key.strip_prefix("Wide::") ?? return null
+        let mut at = if entry == "from_halves" { 1 } else { 0 }
+        if at >= found.len() || at >= args.len() {
+            return null
+        }
+        if entry == "product" && found.len() == 2 && found[0].is_unknown() {
+            at = 1
+        }
+        let given = value_of_a_copy(found[at].unseen())
+        let mut element = wide_named(given)
+        // An open number, whose type is not known yet, is an `i64` here.
+        if given.is_unknown() {
+            element = "i64"
+        }
+        let parameter = match entry {
+            "of" => "value",
+            "from_halves" => "high",
+            else => if at == 0 { "a" } else { "b" },
+        }
+        if wide_unsigned_of(element) == "" {
+            if !given.is_unknown() {
+                self.findings.push(check_refusal("NK1102", span, f"`{key}` expects `{parameter}` to be an integer of a fixed width, but you're passing `{given.shown()}`.", ["A `Wide[T]` is the exact value of twice the width of `T`, for `u8`, `u32`, `i32`, `u64` and `i64` (Part I 2.2)."], "Pass one of those five types; an `int` is written `i64` here."))
+            }
+            return null
+        }
+        if entry == "from_halves" {
+            let low = value_of_a_copy(found[0].unseen())
+            let wanted = wide_unsigned_of(element)
+            if wide_named(low) != wanted && !low.is_unknown() {
+                self.findings.push(check_refusal("NK1102", span, f"`{key}` expects `low` to be `{wanted}`, but you're passing `{low.shown()}`.", [f"The low half of a `Wide[{element}]` is held in the unsigned type of its width, `{wanted}`, as `widening_mul` hands it back (Part I 2.2)."], f"Pass the low half as a `{wanted}`."))
+            }
+        }
+        self.facts.wide_calls.insert(id_of(func) as i64, f"{entry} {element}")
+        return Ty::Named { name: "Wide", args: [wide_plain(element)], view: false }
+    }
+
+    /// **A method of a `Wide[T]`**: the call recorded for the emitter, and
+    /// the types the ledger's `?` leaves open, the low half of `halves` and
+    /// the `Wide` of the unsigned type `abs` gives; `abs` on an unsigned `T`
+    /// is refused. Nothing for a call on any other type.
+    fn wide_method(mut self, world: ref CheckWorld, expr: ref Expr, on: ref Ty, method: ref String, span: ref Span) -> Ty? sync {
+        let element = self.wide_element(world, on)
+        let unsigned = wide_unsigned_of(element)
+        if unsigned == "" {
+            return null
+        }
+        self.facts.wide_calls.insert(id_of(expr) as i64, f"{method} {element}")
+        if method == "halves" {
+            return Ty::Tuple([wide_plain(unsigned), wide_plain(element)])
+        }
+        if method == "abs" {
+            if unsigned == element {
+                self.findings.push(check_refusal("NK1171", span, f"`Wide[{element}]` has no method called `abs`.", [f"`abs` gives the magnitude of a signed value; a `Wide[{element}]` is never below zero, so it is its own magnitude (Part I 2.2)."], "Use the value as it is."))
+                return Ty::Unknown
+            }
+            return Ty::Named { name: "Wide", args: [wide_plain(unsigned)], view: false }
+        }
+        return null
+    }
+}

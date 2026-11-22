@@ -608,20 +608,24 @@ pub(crate) fn check_core_call_described<H: CheckHost>(state: &mut CheckState, wo
     }
     let mut options: Vec<i64> = vec![];
     let mut literals: Vec<bool> = vec![];
+    let mut integers: Vec<bool> = vec![];
     let mut texts: Vec<String> = vec![];
     for option in config.iter() {
         options.push(id_of(&option.value) as i64);
         literals.push(a_text_literal_expr(&option.value));
+        integers.push(an_integer_literal(&option.value));
         texts.push(check_walked_written(&option.value, world.words));
     }
     state.flow.option_values = options;
     state.flow.option_literals = literals;
+    state.flow.option_integers = integers;
     state.flow.option_written = texts;
     state.flow.call_written = nikaia_std::block::Text::from(name.to_string());
     let typed_options = check_core_call_option_texts(state, world, contract, config, passed);
     let result = check_crossings_arguments(state, world, host, key, name, contract, args, found, &typed_options, span);
     state.flow.option_values = vec![];
     state.flow.option_literals = vec![];
+    state.flow.option_integers = vec![];
     state.flow.option_written = vec![];
     state.flow.call_written = String::from("");
     check_core_call_options_handed_over(state, world, contract, name, config, &typed_options, span);
@@ -831,6 +835,7 @@ pub(crate) fn check_core_call_named_call<H: CheckHost>(state: &mut CheckState, w
         return Ty::Unknown;
     }
     let described = check_core_call_described(state, world, host, name, &key, &contract, args, &found, config, &passed, span);
+    let widened: Option<Ty> = if key.starts_with("Wide::") { state.wide_made(world, &key, args, &found, func, span) } else { None };
     if lanes && name == "simd::Fixed::from" && args.len() == 1 {
         state.facts.array_literals.insert(id_of(unsafe { nikaia_std::proven::read(&args, (0) as usize) }) as i64);
         let lanes_wanted = check_simd_count_of(&nikaia_std::index::or(match wanted.as_ref() {
@@ -840,7 +845,7 @@ pub(crate) fn check_core_call_named_call<H: CheckHost>(state: &mut CheckState, w
         let lanes_written = check_simd_count_of(&check_simd_made(None, name, args));
         if lanes_wanted > 0 && lanes_written > 0 && lanes_wanted != lanes_written { state.findings.push(a_list_the_wrong_length_for_its_array(lanes_written, lanes_wanted, span, false)); }
     }
-    let made = if lanes && described.is_unknown() { check_simd_made((wanted).as_ref(), name, args) } else { described };
+    let made = if widened.is_some() { nikaia_std::index::or(widened, || Ty::Unknown) } else if lanes && described.is_unknown() { check_simd_made((wanted).as_ref(), name, args) } else { described };
     if lanes && name == "simd::splat" && args.len() == 1 && !check_simd_kind(&made).is_empty() {
         let lane = match made {
             Ty::Named { args: ref lane_args, .. } => if !lane_args.is_empty() { (*unsafe { nikaia_std::proven::read(&lane_args, (0) as usize) }).clone() } else { Ty::Unknown },
@@ -905,6 +910,21 @@ pub(crate) fn check_core_free_call<H: CheckHost>(state: &mut CheckState, world: 
             return Ty::Unknown;
         }
     }
+    match func {
+        Expr::Variable(word, _) => {
+            let word = *word;
+            let called = format!("{}", world.words.resolve(word));
+            if args.is_empty() && config.is_empty() && state.walks_fields.contains_key(&format!("$new {}", called)) && state.lookup(&called).is_none() {
+                state.facts.kind_constructors.insert(id_of(func) as i64);
+                state.facts.constructs_by_kind.insert((nikaia_std::index::or(match state.current.as_ref() {
+                    Some(__nikaia_it) => Some(__nikaia_it.clone()),
+                    None => None,
+                }, || "".into()), nikaia_std::block::Text::from(called.to_string())));
+                return Ty::Named { name: called, args: vec![], view: false };
+            }
+        },
+        _ => { },
+    }
     let mut name: String = String::from("");
     match func {
         Expr::Variable(word, _) => {
@@ -916,6 +936,11 @@ pub(crate) fn check_core_free_call<H: CheckHost>(state: &mut CheckState, world: 
             let base = nikaia_std::boxed::open(base); let index = nikaia_std::boxed::open(index);
             let given: Option<Ty> = check_core_call_filled(state, world, host, base, index, args, config, span);
             if given.is_some() { return nikaia_std::index::or(given, || Ty::Unknown); }
+            if check_core_call_a_typed_constructor(&state, world, base) {
+                state.a_constructor_with_generics(world, base, index, span);
+                for arg in args.iter() { check_core_expr(state, world, host, arg, span); }
+                return Ty::Unknown;
+            }
             check_core_expr(state, world, host, func, span);
             state.facts.kept_fn_copies.remove(&(id_of(func) as i64));
             return Ty::Unknown;
@@ -958,6 +983,19 @@ pub(crate) fn check_core_free_call<H: CheckHost>(state: &mut CheckState, world: 
     }
     if state.variant_parts.contains_key(&name) { return check_core_call_variant_parts(state, world, host, args, &name, span); }
     check_core_call_named_call(state, world, host, func, &name, args, config, span, false)
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn check_core_call_a_typed_constructor(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, base: &Expr) -> bool {
+    let name: String = match base {
+        Expr::Variable(word, _) => { let word = *word; format!("{}", world.words.resolve(word)) },
+        Expr::Path(segments, _) => world.here.unaliased(&check_core_call_joined(world, segments)),
+        _ => return false,
+    };
+    let pathed = matches!(base, Expr::Path(_, _));
+    if !pathed && state.lookup(&name).is_some() { return false; }
+    state.declares_a_type(world, &name) || check_core_call_on_built_in(&name)
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before

@@ -18,6 +18,10 @@ pub enum FactWrap {
     Path,
     /// ...and a view of one.
     PathView,
+    /// ...and wrapped as a `T?` of it: text into `fs::Path?` (#1986).
+    PathSome,
+    /// ...and a view of one, where the slot lends it (`Option<&Path>`).
+    PathViewSome,
     /// An integer widened where no value can be lost: the type the slot states.
     Widen(String),
     /// ...and wrapped as a `T?` of it: `u32` into `i64?`.
@@ -136,6 +140,13 @@ pub struct CheckFacts {
     /// **The subjects of a `match` on a kind** (ADR-330 D4): each copy
     /// emits the one arm its type takes.
     pub kind_matches: collections::BTreeSet[i64],
+    /// **`T()` in a `Map` or `List` arm of a `match` on a kind**
+    /// (ADR-grammar-typed-read-v1 D14), by the callee's id: each copy writes the
+    /// empty collection of its own type.
+    pub kind_constructors: collections::BTreeSet[i64],
+    /// The functions that make such a `T()`, each with its parameter: a copy
+    /// for a type with parts asks the language below for its empty value.
+    pub constructs_by_kind: collections::BTreeSet[(String, String)],
     /// The comparisons of two kinds, decided per copy (ADR-330 D6).
     pub kind_compares: collections::BTreeSet[i64],
     /// The paths that are `T::name` (ADR-330 D2).
@@ -175,6 +186,11 @@ pub struct CheckFacts {
     /// receiver's node (ADR-text-reuse-1 D4): the text is handed to it and
     /// replaced in its own buffer.
     pub replaced_last_uses: collections::BTreeSet[i64],
+    /// **Each give and each reuse, narrated** (ADR-text-reuse-1 D5, #2514):
+    /// the first byte of the site and its line, `rest takes the buffer of
+    /// line` or `replace works in the buffer of x`, which `--tethers` prints
+    /// and the language server shows as an inlay hint.
+    pub narrated: collections::BTreeSet[(i64, String)],
     /// **`into.add(part)` of an `impl Hash`**, by the receiver's node
     /// (ADR-010 D12): the emitter writes the part's own hash.
     pub hasher_adds: collections::BTreeSet[i64],
@@ -280,6 +296,11 @@ pub struct CheckFacts {
     /// the bounds walk reads the entry's `ensures` and `ensures_each`
     /// (ADR-314 D3, ADR-375 D5).
     pub std_receivers: collections::BTreeMap[i64, String],
+    /// **A call of `std`'s `Wide[T]`** (Part I 2.2, #2619), by the node the
+    /// emitter reads (the method call, or the callee of `Wide::of` and the
+    /// two other makers): the operation and `T`, as `"add i64"`. The
+    /// emitter writes the native type of twice `T`'s width from it.
+    pub wide_calls: collections::BTreeMap[i64, String],
     /// **The method a call resolves to by its receiver's type** (#842), by the
     /// receiver's node, as the ledger keys it (`Holder::put`).
     pub method_callees: collections::BTreeMap[i64, String],
@@ -302,6 +323,12 @@ pub struct CheckFacts {
     /// `update_all_copied`, whose block works on copies, so a panic in it
     /// poisons nothing.
     pub copied_doors: collections::BTreeSet[i64],
+    /// **A door's view handed back out of its block is the value** (#1454),
+    /// by the read's id: an `access` or `access_all` block that ends in its
+    /// parameter, over a number, a `bool`, a `char` (or a tuple of them) or
+    /// an open number. The block sees a reference into the lock, so the
+    /// emitter writes `*v`, the copy.
+    pub door_copies: collections::BTreeSet[i64],
     /// The copies among them that copy text, by the receiver's id: reached
     /// through `?.`, the receiver is a reference to the text, which may itself
     /// be a view (ADR-282 D29), and only `to_string` copies both.
@@ -331,7 +358,8 @@ pub struct CheckFacts {
     /// The `??`s whose fallback is a name of the word the left side holds, a
     /// number, `bool`, `char` or `scalar` (#1841): the fallback is written as
     /// it is, never `.into()`, which left `Or`'s type open beside an
-    /// `Option<&f64>`.
+    /// `Option<&f64>`; and so is any fallback of the struct that copies the
+    /// left side holds (#1302), `m.get(k) ?? zero()`.
     pub word_fallbacks: collections::BTreeSet[i64],
     /// The `??`s whose left side holds a view of text and whose fallback is
     /// a name that is a view of text (#719): the fallback is read as `str`.
@@ -351,6 +379,11 @@ pub struct CheckFacts {
     /// **Where each `async e` task is waited for**, by the `async` node
     /// (ADR-async-5 D6, D9): what the lowering joins it at.
     pub async_waits: collections::BTreeMap[i64, CheckAsyncWait],
+    /// **The `async e` bindings only other tasks name, two or more of them**
+    /// (ADR-async-5 D8, a diamond, #986), by the `async` node: they read the
+    /// one value, so the lowering keeps it for all (`task::Read`). One that
+    /// moves it leaves the other's mention refused (`NK2105`).
+    pub async_shared: collections::BTreeSet[i64],
     /// **`m.get(k)` on a map**, by the call: an `Option<&T>` below already,
     /// so a nullable view it is lent to opens nothing.
     pub map_gets: collections::BTreeSet[i64],
@@ -557,6 +590,10 @@ pub struct CheckFacts {
     /// as a value (#757), with which parameters of that type are views: the
     /// lowering lends the others the function lends in a closure around it.
     pub named_fn_values: collections::BTreeMap[i64, Vec[bool]],
+    /// Of those, the ones whose parameter of function type takes a type
+    /// variable (#2018), with which of its parameters do: the closure the
+    /// lowering writes around the function types them as it wrote them.
+    pub generic_fn_slots: collections::BTreeMap[i64, Vec[bool]],
     pub pausing_lambdas: collections::BTreeMap[i64, FactPausing],
     /// **The list `map`s that may run element by element with the step their
     /// result goes into** (ADR-342 D1), by the call's id: the receiver is a
@@ -693,6 +730,10 @@ pub struct CheckFacts {
     /// compared with text (#688), by the operator's span: both sides are
     /// read as `str`, owned or viewed.
     pub ordered_texts: collections::BTreeSet[i64],
+    /// **Text compared with text for equality** (#2014), by the operator's
+    /// span: a side that lowers to a kept buffer is a reference, so the
+    /// emitter reads both sides as `str` there.
+    pub text_equalities: collections::BTreeSet[i64],
     pub claims: collections::BTreeMap[(i64, i64), FactClaim],
     pub entries: collections::BTreeMap[String, Vec[PreconditionCheck]],
     pub reaches: collections::BTreeMap[(String, String), CallReach],
@@ -878,6 +919,8 @@ impl CheckFacts {
             type_parts: collections::BTreeMap(),
             type_fields: collections::BTreeMap(),
             kind_matches: collections::BTreeSet(),
+            kind_constructors: collections::BTreeSet(),
+            constructs_by_kind: collections::BTreeSet(),
             kind_compares: collections::BTreeSet(),
             reflected_names: collections::BTreeSet(),
             reflected_docs: collections::BTreeSet(),
@@ -897,6 +940,7 @@ impl CheckFacts {
             replaced_in_place: collections::BTreeSet(),
             replaced_assigns: collections::BTreeSet(),
             replaced_last_uses: collections::BTreeSet(),
+            narrated: collections::BTreeSet(),
             hasher_adds: collections::BTreeSet(),
             receiver_views: collections::BTreeSet(),
             bytes_splits: collections::BTreeSet(),
@@ -930,6 +974,7 @@ impl CheckFacts {
             shifts: collections::BTreeMap(),
             divisions: collections::BTreeMap(),
             std_receivers: collections::BTreeMap(),
+            wide_calls: collections::BTreeMap(),
             method_callees: collections::BTreeMap(),
             field_owners: collections::BTreeMap(),
             outside: ProverOutside::nothing(),
@@ -941,6 +986,7 @@ impl CheckFacts {
             copied_slots: collections::BTreeSet(),
             owned_copies: collections::BTreeSet(),
             copied_doors: collections::BTreeSet(),
+            door_copies: collections::BTreeSet(),
             text_copies: collections::BTreeSet(),
             tuple_copies: collections::BTreeMap(),
             static_field_reads: collections::BTreeSet(),
@@ -960,6 +1006,7 @@ impl CheckFacts {
             optional_fallbacks: collections::BTreeSet(),
             flat_reads: collections::BTreeSet(),
             async_waits: collections::BTreeMap(),
+            async_shared: collections::BTreeSet(),
             copied_reads: collections::BTreeSet(),
             text_in_lists: collections::BTreeSet(),
             owned_patterns: collections::BTreeSet(),
@@ -1028,6 +1075,7 @@ impl CheckFacts {
             boxed_fn_values: collections::BTreeMap(),
             infallible_fn_values: collections::BTreeMap(),
             named_fn_values: collections::BTreeMap(),
+            generic_fn_slots: collections::BTreeMap(),
             pausing_lambdas: collections::BTreeMap(),
             fused_maps: collections::BTreeSet(),
             paused_scopes: collections::BTreeSet(),
@@ -1088,6 +1136,7 @@ impl CheckFacts {
             plain_bracket_calls: collections::BTreeSet(),
             compared_numbers: collections::BTreeSet(),
             ordered_texts: collections::BTreeSet(),
+            text_equalities: collections::BTreeSet(),
             claims: collections::BTreeMap(),
             entries: collections::BTreeMap(),
             reaches: collections::BTreeMap(),
@@ -1185,7 +1234,7 @@ fn check_claim_held(held: ref ClaimHeld?) -> String {
         ClaimHeld::Proved => "proved",
         ClaimHeld::ProvedThrough(how) => how.clone(),
         ClaimHeld::Precondition(f, n) => {
-            // **`main`'s caller is the command line** (ADR-360 D4).
+            // **`main`'s caller is the command line** (ADR-cli-v1 D4).
             if f == "main" {
                 "precondition of `main`, checked where the words arrive"
             } else if n == 0 {
@@ -1228,7 +1277,7 @@ fn check_claim_refused(held: ref ClaimHeld?) -> String? {
 /// light blue, and what the build proved last, in green: proved claims, and
 /// preconditions proved at every call. Within a group the claims are in the
 /// order of their lines; `colour` asks for the colours. `published` gives
-/// `main`'s preconditions carried back from a callee (ADR-269 D15, ADR-360
+/// `main`'s preconditions carried back from a callee (ADR-269 D15, ADR-cli-v1
 /// D3), which no `assert` of `main` states: each is a row of its own.
 /// `derived` gives the preconditions the build derived from a private
 /// function's callers (ADR-391 D4), as `bounds_report_derived` writes them:

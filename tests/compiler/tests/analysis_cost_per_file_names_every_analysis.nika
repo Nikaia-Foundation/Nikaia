@@ -1,0 +1,47 @@
+// scripts/analysis_cost.nika --files (#2649): the dumps of a run with a dump
+// after each file's check are read into one row per file, in the order
+// `lower-std --findings` checks the files on one thread (the largest first),
+// with a header that names every analysis; a dump another function
+// triggered (the package's ledger) is no file's.
+use std::env
+use std::fs
+use std::process
+
+// The checkout: the working directory, or (under `nikaia test`, which runs a
+// test in a directory of its own) the one `nikaia` was started in.
+fn root() -> String throws {
+    return env::current_main()?.parent()?.parent()?.parent()?.parent()?.display() ?? "../.."
+}
+
+// The toolchain that runs this test (CI builds target/release only); if the
+// test was started otherwise, the first built one in the checkout.
+fn toolchain(repo: String) -> String throws {
+    let exe = env::current_exe()?.display() ?? ""
+    if exe.len() > 0 { return exe }
+    return f"{repo}/target/fast/nikaia"
+}
+
+// A dump whose end `trigger` caused, with `outside` instructions in the
+// outside-data analysis and a walk of `walk`.
+fn dump(trigger: String, outside: i64, walk: i64) -> String {
+    let w = "nikaia_std::compiler::check_walked_lowered::check_walked_walk::<nikaia::check::host::Host, nikaia::check::host::Host>"
+    return f"version: 1\ndesc: Trigger: --dump-after={trigger}\nevents: Ir\nfn={w}\n1 50\ncfn=nikaia_std::compiler::check_walked_lowered::check_walked_outside::<nikaia::check::host::Host>\ncalls=1 0\n2 {outside}\ntotals: {walk}\n"
+}
+
+fn main() throws {
+    let tmp = fs::scratch()
+    let repo = root()
+    let nikaia = toolchain(repo.clone())
+    fs::create_dir("p/crates/nikaia-std/src/compiler", tmp; recursive: true)
+    // `big` holds more bytes in fewer lines: the order is by bytes.
+    fs::write("p/crates/nikaia-std/src/compiler/big.nika", tmp, "fn a_function_with_a_long_name() {}\n")
+    fs::write("p/crates/nikaia-std/src/compiler/small.nika", tmp, "fn a() {}\n\n\n")
+    let ledger = "<nikaia_std::compiler::ty_lowered::Ledger as nikaia::contracts::LedgerOps>::infer_package_checked"
+    fs::write("walk.callgrind.1", tmp, dump(ledger, 7, 900))
+    fs::write("walk.callgrind.2", tmp, dump("nikaia::sysroot::check_tools_file", 200, 1000))
+    fs::write("walk.callgrind.3", tmp, dump("nikaia::sysroot::check_tools_file", 30, 300))
+    let out = process::run(nikaia.clone(), ["run", f"{repo}/scripts/analysis_cost.nika", "--", "--files", "--read", "walk.callgrind", "--sysroot", "p"]; dir: tmp.path().to_text())
+    println(f"exit {out.code}")
+    print(out.stdout)
+    if out.code != 0 { print(out.stderr) }
+}

@@ -418,18 +418,31 @@ fn check_core_method_changes(mut state: CheckState, world: ref CheckWorld, on: r
     let root: String = state.rooted_at(world, receiver) ?? return
     let mut count = 0
     let mut all = true
-    for key in ledger_candidates(world.own, world.own_methods, name) {
-        count += 1
-        let contract = world.own.functions[key] ?? continue
-        if !contract.mutates {
-            all = false
-        }
+    // **A receiver of a known type asks its own method** (Part II, method
+    // calls; #1298): a user trait's `push` is no candidate for `Vec::push`.
+    // Only a receiver whose method is not found asks every candidate.
+    let typed: CheckResolved? = match on {
+        Ty::Named { name: owner, .. } => resolve_method(world, f"{owner}::{name}"),
+        else => null,
     }
-    for key in ledger_candidates(world.library, world.library_methods, name) {
-        count += 1
-        let contract = world.library.functions[key] ?? continue
-        if !contract.mutates {
-            all = false
+    if typed != null {
+        let resolved: CheckResolved = typed ?? return
+        count = 1
+        all = resolved.contract.mutates
+    } else {
+        for key in ledger_candidates(world.own, world.own_methods, name) {
+            count += 1
+            let contract = world.own.functions[key] ?? continue
+            if !contract.mutates {
+                all = false
+            }
+        }
+        for key in ledger_candidates(world.library, world.library_methods, name) {
+            count += 1
+            let contract = world.library.functions[key] ?? continue
+            if !contract.mutates {
+                all = false
+            }
         }
     }
     if count == 0 || !all {
@@ -614,6 +627,18 @@ fn check_core_method_called[H: CheckHost](mut state: CheckState, world: ref Chec
     state.flow.at_a_write_door = at_a_door
     // **And `access` holds one open too** (ADR-281 D10).
     let holding = (name == "update" || name == "access") && locked_content_of(on) != null
+    // **What an `access` block hands back of its view** (#1454): a copy, or `NK1131`.
+    let door_content = if name == "access" { locked_content_of(on) } else { null }
+    if door_content != null && args.len() > 0 {
+        match args[args.len() as i64 - 1] {
+            Expr::Closure { params, body, .. } => {
+                if params.len() == 1 {
+                    door_views_handed_back(state, world, body, params[0], door_content ?? Ty::Unknown, span)
+                }
+            },
+            else => {}
+        }
+    }
     let outer_inside = state.inside_a_door
     state.inside_a_door = holding
     check_core_method_changes(state, world, on, receiver, name, span)
@@ -639,6 +664,7 @@ fn check_core_method_called[H: CheckHost](mut state: CheckState, world: ref Chec
                 let made = world.words.resolve(made_by)
                 if (made == "replace" || made == "replacen") && state.facts.text_replaces.contains(id_of(made_on) as i64) {
                     state.facts.replaced_in_place.insert(id_of(receiver) as i64)
+                    let said = state.facts.narrated.insert((span.start as i64, f"{name} works in the buffer the {made} before it made"))
                 }
             },
             else => {}
@@ -891,8 +917,13 @@ fn check_core_method_called[H: CheckHost](mut state: CheckState, world: ref Chec
     }
     // **`filter` is handed a reference to the item** (ADR-231 D2), and so
     // are its kin's (`binds_hands_a_view`).
-    // An item that is an open number copies (#594).
-    let open_items = state.open_items_of(world, receiver) != null
+    // An item that is an open number copies (#594), and so does a range's
+    // item, a number or a `char` (#2103): `(1..3).filter(fn(x) { x > 1 })`.
+    let a_range = match receiver {
+        Expr::Range { .. } => true,
+        else => false,
+    }
+    let open_items = a_range || state.open_items_of(world, receiver) != null
     if binds_hands_a_view(name) && args.len() == 1 {
         match on {
             Ty::Seq { item, .. } => {
@@ -971,6 +1002,12 @@ fn check_core_method_called[H: CheckHost](mut state: CheckState, world: ref Chec
     let lanes = value_of_a_copy(on.unseen())
     state.a_lane_method_not_offered(lanes, name, span)
     state.a_shuffle_out_of_lanes(world, lanes, name, args, span)
+    // **A `Wide[T]`'s method** (Part I 2.2, #2619): the halves and the
+    // magnitude in the unsigned type of `T`'s width.
+    let widened: Ty? = state.wide_method(world, expr, on, name, span)
+    if widened != null {
+        return widened ?? Ty::Unknown
+    }
     let changed: Ty? = check_simd_method_result(lanes, name)
     if changed != null {
         return changed ?? Ty::Unknown
@@ -1124,23 +1161,30 @@ fn check_core_method[H: CheckHost](mut state: CheckState, world: ref CheckWorld,
 
 /// **`xs.par_iter(within: d)` is a walk with a deadline** (ADR-async-5
 /// D27): what it hands back carries it, through `map`, `filter` and the rest,
-/// to the step that ends the walk, which throws `task::TimedOut`.
+/// to the step that ends the walk, which throws `task::TimedOut`. So does
+/// `limit: 1`, the literal (D15): its elements run one at a time.
 fn check_core_method_deadline(state: ref CheckState, world: ref CheckWorld, receiver: ref Expr, config: ref Vec[ConfigArg], found: Ty) -> Ty sync {
     let key = state.facts.method_callees.get(id_of(receiver) as i64)?.clone() ?? return found
     if key != "Vec::par_iter" {
         return found
     }
     let mut within = false
+    let mut one = false
     for option in config {
-        if world.words.resolve(option.name) == "within" {
+        let named = world.words.resolve(option.name)
+        if named == "within" {
             within = true
         }
+        if named == "limit" {
+            let value: Expr? = option.value.clone()
+            one = check_core_async_one_at_a_time(value)
+        }
     }
-    if !within {
+    if !within && !one {
         return found
     }
     return match found {
-        Ty::Seq { item, is_sync, pauses, can_throw, parallel, shape } => Ty::Seq { item: item.clone(), is_sync: is_sync, pauses: pauses, can_throw: can_throw, parallel: parallel, shape: Shape { ends: shape.ends, sized: shape.sized, replays: shape.replays, timed: true } },
+        Ty::Seq { item, is_sync, pauses, can_throw, parallel, shape } => Ty::Seq { item: item.clone(), is_sync: is_sync, pauses: pauses, can_throw: can_throw, parallel: parallel, shape: Shape { ends: shape.ends, sized: shape.sized, replays: shape.replays, timed: shape.timed || within, one_at_a_time: shape.one_at_a_time || one } },
         else => found,
     }
 }
@@ -1191,13 +1235,13 @@ fn check_core_method_walked[H: CheckHost](mut state: CheckState, world: ref Chec
     // The others are kept, typed, for the call to check against the entry
     // it resolves to (#1446).
     let driver = state.dsl_drivers.contains(name)
-    let mut passed: Vec[(String, Ty, i64, bool, String)] = []
+    let mut passed: Vec[(String, Ty, i64, bool, bool, String)] = []
     let mut at = 0
     while at < config.len() as i64 {
         if at != witness && at != on_timeout {
             let ty = check_core_expr(state, world, host, config[at].value, span)
             if !driver {
-                passed.push((world.words.resolve(config[at].name).clone(), ty, id_of(config[at].value) as i64, a_text_literal_expr(config[at].value), check_walked_written(config[at].value, world.words)))
+                passed.push((world.words.resolve(config[at].name).clone(), ty, id_of(config[at].value) as i64, a_text_literal_expr(config[at].value), an_integer_literal(config[at].value), check_walked_written(config[at].value, world.words)))
             }
         }
         at += 1
@@ -1274,6 +1318,14 @@ fn check_core_method_walked[H: CheckHost](mut state: CheckState, world: ref Chec
     if args.len() == 0 && name == "len" && check_core_method_counted(on) {
         state.facts.std_lengths.insert(id_of(receiver) as i64)
         check_core_places_array_length(state, id_of(receiver) as i64, on)
+        if state.elements_take_space(on) {
+            state.facts.sized_lengths.insert(id_of(receiver) as i64)
+        }
+    }
+    // **So does `is_empty`** (#2629): `if xs.is_empty() { return }` says
+    // what `xs.len() == 0` says, to the bounds walk.
+    if args.len() == 0 && name == "is_empty" && check_core_method_counted(on) {
+        state.facts.std_lengths.insert(id_of(receiver) as i64)
         if state.elements_take_space(on) {
             state.facts.sized_lengths.insert(id_of(receiver) as i64)
         }
@@ -1418,14 +1470,36 @@ fn check_core_method_walked[H: CheckHost](mut state: CheckState, world: ref Chec
     // that view, so that what follows it is checked as it will be.
     if name == "chars" && args.len() == 0 && config.len() == 0 && check_core_method_text_receiver(on) {
         state.a_chars_call(world, expr, receiver, span)
-        return Ty::Seq { item: check_core_method_named("scalar"), is_sync: true, pauses: false, can_throw: false, parallel: false, shape: Shape { ends: true, sized: false, replays: false, timed: false } }
+        return Ty::Seq { item: check_core_method_named("scalar"), is_sync: true, pauses: false, can_throw: false, parallel: false, shape: Shape { ends: true, sized: false, replays: false, timed: false, one_at_a_time: false } }
     }
     // **A method on a view of a `String` slot is `String`'s** (#1388): the
     // view is the one text view, but `u.push_str(x)` writes through it.
     if state.check_core_method_on_a_text_slot(world, receiver, on) {
         return check_core_method_called(state, world, host, expr, Ty::Named { name: TEXT.clone(), args: [], view: true }, receiver, method, args, name, span)
     }
+    check_core_method_a_handle_taken(state, world, on, receiver, name, args, config, span)
     return check_core_method_called(state, world, host, expr, on, receiver, method, args, name, span)
+}
+
+/// **A task handle's `join()`, `cancel()` and `detach()` take it** (Part III
+/// `NK2105`, ADR-async-5 D12, #2645): the receiver of a method that takes
+/// `self` is handed over, so a later use of the name is `NK2105`, not rustc's
+/// use of a moved value. A `join(within:)` is left out: in the handler of its
+/// `task::TimedOut` the handle is still live (Part I 8.2).
+fn check_core_method_a_handle_taken(mut state: CheckState, world: ref CheckWorld, on: ref Ty, receiver: ref Expr, name: ref String, args: ref Vec[Expr], config: ref Vec[ConfigArg], span: ref Span) sync {
+    if args.len() > 0 || config.len() > 0 || !check_core_method_task_handle(on) {
+        return
+    }
+    if name != "join" && name != "cancel" && name != "detach" {
+        return
+    }
+    let plain = match receiver {
+        Expr::Variable(_, _) => true,
+        else => false,
+    }
+    if plain {
+        state.hands_over(world, receiver, on, f"taken by its `{name}()`", span)
+    }
 }
 
 /// Which argument of a text method is its pattern, or -1 (#617).

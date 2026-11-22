@@ -1,0 +1,22 @@
+// A method that keeps its text option is handed the name itself (#1452):
+// a use after the call is NK2105, as at a function that keeps it.
+struct P {
+    x: i64,
+}
+
+impl P {
+    fn kept(ref self; label: String = "none") -> String {
+        return label
+    }
+}
+
+fn made() -> String {
+    return f"own{1}"
+}
+
+fn main() throws {
+    let p = P { x: 1 }
+    let o = made()
+    println(p.kept(label: o))
+    println(o)
+}

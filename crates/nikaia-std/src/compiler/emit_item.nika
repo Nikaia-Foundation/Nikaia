@@ -156,7 +156,7 @@ impl EmitState {
         return self.built_at_build_time.contains(emit_text(world, symbol))
     }
 
-    /// What a declaration returns: a handle as the address it is (ADR-302
+    /// What a declaration returns: a handle as the address it is (ADR-c-boundary-v1
     /// D12), text a C library owns as `Option<CText>` (ADR-218).
     fn emit_trait_returned[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, host: ref H, given: ref Type?, foreign: bool) -> String sync {
         let ty = given ?? return "()"
@@ -479,13 +479,13 @@ impl EmitState {
                 }
                 out.push(f"{vis}const {bound}: {value.0} = {value.1};\n")
             },
-            // **Rust's own `extern` block** (ADR-302 D1), `extern "C"` whatever
+            // **Rust's own `extern` block** (ADR-c-boundary-v1 D1), `extern "C"` whatever
             // the source said (ADR-324 D6).
             Item::Extern { abi, declarations, opaque, .. } => {
                 if abi != null {
                     throw EmitRefused { message: "[NK1227] `extern` takes no convention: write `extern { … }`.", at: at }
                 }
-                // **A handle is a type of its own, outside the block** (ADR-302
+                // **A handle is a type of its own, outside the block** (ADR-c-boundary-v1
                 // D7), written before the declarations, because they name it.
                 for handle in opaque {
                     let st = out.mark()
@@ -666,7 +666,7 @@ impl EmitState {
 
     /// One method of a `trait` or an `extern` block: a signature and a `;`.
     /// `sync` is the caller's: a trait method without the word may pause
-    /// (ADR-288 D24), a C declaration never can (ADR-302 D2). A trait's
+    /// (ADR-288 D24), a C declaration never can (ADR-c-boundary-v1 D2). A trait's
     /// methods are barriers (ADR-010 D9): the keyed map.
     fn emit_trait_method[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, trait_name: ref String, method: ref TraitMethod, is_sync: bool, foreign: bool) sync throws {
         walk.floor = true
@@ -683,6 +683,7 @@ impl EmitState {
             }
         }
         let mut shares_a_lifetime = false
+        let mut awaits_code = false
         let mut params: Vec[String] = []
         let mut at = 0
         if method.receiver != null {
@@ -733,6 +734,9 @@ impl EmitState {
                 if walk_runs && !arg.ty.is_nullable && host.overlaps_user_code() && self.emit_fn_code_at_once(key, emit_text(world, arg.name)) {
                     written = emit_fn_code_that_crosses(written)
                 }
+                if written.contains("AsyncFn") {
+                    awaits_code = true
+                }
             } else if !arg.mutable && !arg.keep && !arg.ty.is_view && self.emit_fn_lends(world, key, at) {
                 // **A by-value data parameter the column runs is lent**
                 // (ADR-277 D17, #1498), as the impl's and the call's are:
@@ -773,10 +777,14 @@ impl EmitState {
             outcome = f"{self.rust_result()}<{returned}, std::boxed::Box<dyn std::error::Error>>"
         }
         // **A method that may pause is declared in the return-position form**
-        // (ADR-288 D26); `+ Send` follows the executor, not the type.
+        // (ADR-288 D26); `+ Send` follows the executor, not the type. A
+        // method that awaits code it is handed (`impl AsyncFn..`) has no
+        // `+ Send`: stable Rust cannot bound that code's future, so no impl
+        // could keep the promise (#2054); a call on a known type still leaks
+        // the impl's own `Send`.
         let mut ret: String = ""
         if !is_sync {
-            let send = if host.user_parallelism() { " + Send" } else { "" }
+            let send = if host.user_parallelism() && !awaits_code { " + Send" } else { "" }
             ret = f" -> impl std::future::Future<Output = {outcome}>{send}"
         } else if method.ret_type != null || method.can_throw {
             ret = f" -> {outcome}"
@@ -793,7 +801,7 @@ impl EmitState {
     }
 
     /// **A type in an `extern "C"` declaration, as the pointer C wants**
-    /// (ADR-302 D5): a view or a run (ADR-184 D3, D4) is `*const T` or
+    /// (ADR-c-boundary-v1 D5): a view or a run (ADR-184 D3, D4) is `*const T` or
     /// `*mut T`, anything else the ordinary lowering.
     fn emit_foreign_ty[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, host: ref H, ty: ref Type) -> String sync {
         if self.writes_a_run(world, ty) {

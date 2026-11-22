@@ -8,6 +8,13 @@ pub(crate) fn emit_read_a_length(world: &EmitWorld<'_, '_, '_, '_>, expr: &Expr)
     }
 }
 
+pub(crate) fn emit_read_a_counted_length(facts: &CheckFacts, expr: &Expr) -> bool {
+    match expr {
+        Expr::MethodCall { receiver, .. } => { let receiver = nikaia_std::boxed::open(receiver); facts.std_lengths.contains(&node_key(receiver)) },
+        _ => false,
+    }
+}
+
 pub(crate) fn emit_read_a_call(expr: &Expr) -> bool {
     match expr {
         Expr::Try(inner, _) => { let inner = nikaia_std::boxed::open(inner); emit_read_is_call(inner) },
@@ -67,6 +74,7 @@ impl EmitState {
         if emit_read_a_length(world, rhs) && !emit_read_a_length(world, lhs) && walk.never_negative(world, &scope.function, lhs) { counter_first = true; } else if emit_read_a_length(world, lhs) && !emit_read_a_length(world, rhs) && walk.never_negative(world, &scope.function, rhs) { counter_first = false; } else { return Ok(false); }
         let counter = if counter_first { lhs } else { rhs };
         let length = if counter_first { rhs } else { lhs };
+        if !emit_read_a_counted_length(&self.facts, length) { return Ok(false); }
         let mut written = EmitOut::empty();
         self.emit_core_nested(world, walk, &mut written, host, length, 255, depth, flow, scope)?;
         let mut bare: String = String::from("");
@@ -338,6 +346,19 @@ impl EmitState {
             return Ok(());
         }
         self.emit_core_postfix_base(world, walk, out, host, expr, depth, inside, scope)?;
+        Ok(())
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn emit_core_receiver_as_argument<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, receiver: Option<&Expr>, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
+        if receiver.is_none() {
+            out.push("__nikaia_it");
+            return Ok(());
+        }
+        let expr = match receiver { Some(__nikaia_value) => __nikaia_value, None => return Ok(()) };
+        let inside = if self.facts.changed_elements.contains(&node_key(expr)) { flow.place() } else { flow };
+        self.emit_expr(world, walk, out, host, expr, depth, inside, scope)?;
         Ok(())
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before

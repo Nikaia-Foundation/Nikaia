@@ -1,0 +1,8 @@
+// A walk made by `par_iter()` and bound to a name runs its elements at the
+// same time, so a lambda that prints, handed to it later, meets its own
+// other runs (ADR-async-5 D26, #2610): only `limit: 1` exempts it.
+fn main() throws {
+	let xs: Vec[i64] = [1, 2, 3]
+	let walk = xs.par_iter(limit: 2)
+	walk.for_each(fn(x) { println(f"{x}") catch {} })
+}

@@ -193,12 +193,16 @@ jobs:
       # A solver that does not build fails its tests in the shards, which
       # then build it themselves and say why; it does not hold back the
       # other shards.
+      # Named by its absolute path (#1949): the build runs this script again
+      # in its slot by `env::current_main`, an absolute path, and the path
+      # shown is part of the program's Rust (ADR-300 D9); run as
+      # `scripts/solver.nika` it was lowered twice, about 3.5 s.
       - name: Build the solver program
         continue-on-error: true
         run: |
           trace="$RUNNER_TEMP/solver-trace"
           env -u CARGO_TARGET_DIR NIKAIA_CACHE_DIR="$PWD/target/nikaia-project-tests" NIKAIA_WRAPPER_TRACE="$trace" \
-            ./target/release/nikaia run scripts/solver.nika -- build
+            ./target/release/nikaia run "$PWD/scripts/solver.nika" -- build
           echo "rustc per crate (ran: compiled; reused: from the store):"
           sort "$trace" 2>/dev/null | uniq -c || true
 
@@ -625,7 +629,7 @@ jobs:
 
       - name: The Java binding prints what use.c prints
         if: matrix.shard == 'ledgers'
-        run: ./target/release/nikaia run scripts/java_binding.nika -- --exe "$PWD/target/release/nikaia"
+        run: ./target/release/nikaia run scripts/java_binding.nika
 
       - name: The samples, the page examples and the ledgers
         if: matrix.shard == 'ledgers'

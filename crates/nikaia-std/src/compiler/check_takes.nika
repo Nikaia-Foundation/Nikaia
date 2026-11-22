@@ -38,7 +38,33 @@ impl CheckState {
     /// **`NK2605` waits for the block's end** (#934): `name`'s cleanup can
     /// fail, but a `close()` later in the block may leave nothing to clean up.
     fn a_failing_cleanup_held(ref mut self, name: ref String, finding: CheckFinding, span: ref Span) {
-        self.cleanups_pending.push(CheckPendingCleanup { name: name.clone(), binding: null, depth: self.scope.len(), choices: self.branch.clone(), loops: self.flow.loops, from: span.end as i64, leaves: [], finding: finding })
+        self.cleanups_pending.push(CheckPendingCleanup { name: name.clone(), binding: null, depth: self.scope.len(), choices: self.branch.clone(), loops: self.flow.loops, from: span.end as i64, leaves: [], finding: finding, handed_on: false })
+    }
+
+    /// **A `sync` function's `NK2202` for a cleanup that may pause waits for
+    /// the block's end too** (#1323): a value returned or handed on before it
+    /// dies elsewhere, and its settle is not this function's.
+    fn a_pausing_cleanup_held(ref mut self, name: ref String, finding: CheckFinding, span: ref Span) {
+        self.cleanups_pending.push(CheckPendingCleanup { name: name.clone(), binding: null, depth: self.scope.len(), choices: self.branch.clone(), loops: self.flow.loops, from: span.end as i64, leaves: [], finding: finding, handed_on: true })
+    }
+
+    /// **`return r`, or `r` as its block's value, hands a held `NK2202`'s
+    /// value on** (#1323): on the path the `let` stands on, it dies there,
+    /// not here. A `return` takes
+    /// nothing in `handed`, since nothing after it reads.
+    fn a_pausing_cleanup_returned(ref mut self, world: ref CheckWorld, value: ref Expr) {
+        let name = match value {
+            Expr::Variable(name, _) => world.words.resolve(name).clone(),
+            else => return,
+        }
+        let binding = self.binding_id(name)
+        let mut kept: Vec[CheckPendingCleanup] = []
+        for held in self.cleanups_pending {
+            if !held.handed_on || held.name != name || held.binding != binding || held.choices != self.branch || held.leaves.len() > 0 {
+                kept.push(held.clone())
+            }
+        }
+        self.cleanups_pending = kept
     }
 
     /// After a statement of a block: the `let` of a held value has bound its
@@ -87,12 +113,13 @@ impl CheckState {
         self.cleanups_pending = []
     }
 
-    /// **Closed on every path**: by a `close()` in the block itself - not in
+    /// **Closed on every path**: by a `close()` (or, for a held `NK2202`, any
+    /// taking that hands the value on) in the block itself - not in
     /// one arm of a choice (a loop or a lambda is `NK2105`'s) - with no
     /// `return`, `break` or `continue` between the `let` and it.
     fn closed_by_hand(ref self, held: ref CheckPendingCleanup) -> bool {
         for taken in self.handed {
-            if taken.path != held.name || taken.to != "closed by `close`" || taken.binding != held.binding || taken.from < held.from || taken.until != null || taken.choices != held.choices {
+            if taken.path != held.name || (!held.handed_on && taken.to != "closed by `close`") || taken.binding != held.binding || taken.from < held.from || taken.until != null || taken.choices != held.choices {
                 continue
             }
             let left = held.leaves.iter().any(fn(at) { at < taken.from }) || self.ways_out.iter().any(fn(way) { way.how == "return" && way.at > held.from && way.at < taken.from })
@@ -677,6 +704,7 @@ impl CheckState {
     /// or a lambda around its binding that does not give it a new value.
     /// `value` is the read the handle is handed on by, `whole` what it is
     /// handed into (the call, the literal), whose other reads count too.
+    @inline(never)
     fn a_handle_handed_on(ref mut self, world: ref CheckWorld, value: ref Expr, ty: ref Ty, whole: ref Span) sync {
         let name = match value {
             Expr::Variable(symbol, _) => world.words.resolve(symbol).clone(),
@@ -808,6 +836,12 @@ impl CheckState {
                 continue
             }
             said.insert(used.at)
+            // A task handle has no copy (Part I 4.7): `join()`, `cancel()`
+            // and `detach()` take it (ADR-async-5 D12, #2645).
+            if check_core_method_task_handle(taken.ty) {
+                found.push(check_refusal("NK2105", Span { start: used.at as u32, end: used.at as u32 }, message, [f"`{name}` is a `{taken.ty.shown()}`: a task's handle is not copied, and its `join()`, `cancel()` and `detach()` take it."], "Take the handle once: bind what `join()` gives with `let` and use that."))
+                continue
+            }
             found.push(check_refusal("NK2105", Span { start: used.at as u32, end: used.at as u32 }, message, [f"`{name}` is a `{taken.ty.shown()}`, so it's handed over itself, not a copy. Nikaia never copies behind your back, because a copy costs as much as the value is large.", "Numbers, `bool`s, `scalar`s and views would be fine: they're copied."], f"If both need it, hand over a copy: `{a_copy_said(name, taken.ty)}`."))
         }
         self.handed = []
@@ -820,6 +854,11 @@ impl CheckState {
     /// outside of, and recorded as walked.
     fn a_sequence_is_taken(ref mut self, name: ref String, ty: ref Ty, span: ref Span) sync {
         if self.reading_only || !a_sequence_that_is_used_up(ty) {
+            return
+        }
+        // A `for` binding over a list is lent the element (#1424).
+        if self.binding(name)?.lent ?? false {
+            self.a_lent_sequence_is_taken(f"`{name}`", "the list this loop walks", "that list", ty, span)
             return
         }
         let taken = self.taken(name.clone(), ty.clone(), self.read_seq, "", span)
@@ -841,6 +880,18 @@ impl CheckState {
             help = f"Collect it into a list before the loop and walk the list: `let {name} = {name}.collect()`."
         }
         self.findings.push(check_refusal("NK2702", span, f"`{name}` is a sequence, and you're using it up inside a {what} it was declared outside of.", [f"A sequence of `{item}` makes its elements as they're asked for, so walking it uses it up - and {again}.", "A `Vec` is different: it already holds its elements and can be walked as often as you like."], help))
+    }
+
+    /// `NK2702`: a sequence a list lends, used up (#1424). A walk takes the
+    /// sequence by value (ADR-105 D2), and a `for` over a list or an index
+    /// into it only lends the element (ADR-094 D4): the walk would take it
+    /// out of a list that still holds it.
+    fn a_lent_sequence_is_taken(ref mut self, what: String, holder: String, again: String, ty: ref Ty, span: ref Span) sync {
+        if self.reading_only || !a_sequence_that_is_used_up(ty) {
+            return
+        }
+        let item = an_item_text(ty)
+        self.findings.push(check_refusal("NK2702", span, f"{what} is a sequence lent by {holder}, and using it up would take it out of {again}.", [f"A sequence of `{item}` makes its elements as they're asked for, so walking it uses it up (ADR-105 D2): a `for`, a `collect()`, a `count()` or any other walk, or a `let` that names it.", "A `for` over a list or a map, or an index into one, only lends the element (ADR-094 D4), and the container would still hold a sequence already used up."], "Take the sequences out of the container to walk them: `for w in list.drain()`."))
     }
 
     /// `NK2702`: a sequence walked twice, said once per site.
@@ -1287,12 +1338,13 @@ impl CheckState {
     /// **A `.clone()` met**: said at once where the value's type copies,
     /// held to the body's end where it clones a `let` that may not be read
     /// again.
+    @inline(never)
     fn a_clone_seen(ref mut self, world: ref CheckWorld, expr: ref Expr, receiver: ref Expr, copy: ref Ty, span: ref Span) sync {
         if self.reading_only || self.task_bindings.len() > 0 {
             return
         }
         let at = check_span_at(world, expr, span)
-        if self.a_clone_that_copies(world, copy) {
+        if self.a_clone_that_copies(world, copy) && !self.a_copy_through_a_loan(world, receiver, copy) {
             let what: String = dotted_path(world, receiver) ?? "the value"
             self.a_needless_clone(at, f"`{what}` is a `{copy.shown()}`, which copies by itself: `.clone()` makes nothing new.", ["A number, a `bool`, a `char` and a type whose every part copies are copied wherever they are read (ADR-294 D9.1)."], "Delete `.clone()`.", clone_deleted(world, expr, receiver))
             return
@@ -1383,6 +1435,7 @@ impl CheckState {
             }
             if !lent {
                 self.facts.replaced_last_uses.insert(one.node)
+                let said = self.facts.narrated.insert((one.span.start as i64, f"replace works in the buffer of {one.name}"))
             }
         }
     }
@@ -1406,6 +1459,24 @@ impl CheckState {
             return false
         }
         return !self.takes_away(world, copy)
+    }
+
+    /// **A type of the program's own that copies, read through a loan**
+    /// (#2009): `return sig.kept.clone()` of a borrowed `sig`, `out =
+    /// bound.clone()` of a view. Without the clone the part is given away
+    /// out of what this body only borrows (`NK1131`), or the view is
+    /// assigned where a value of its own is kept (`NK1105`), so the clone is
+    /// not said needless there. A number, a `bool` or a `char` copies at
+    /// any read.
+    fn a_copy_through_a_loan(ref self, world: ref CheckWorld, receiver: ref Expr, copy: ref Ty) -> bool sync {
+        if copies_plainly(copy) {
+            return false
+        }
+        let root: String = place_clone_root(world, receiver) ?? return false
+        if root == "self" {
+            return self.borrowing_self || self.changing_self
+        }
+        return self.lent_here(root) || self.a_mut_parameter(world, root)
     }
 
     /// **A `let` bound to a value made there** (`NK1350`): only its clone
@@ -1435,6 +1506,7 @@ impl CheckState {
     /// **A `for` over a clone of a place it only walks** (`NK1350`): the body
     /// names nothing of the place, and keeps no element it walks unless the
     /// elements copy. The clone's last-use question is not asked again.
+    @inline(never)
     fn a_loop_over_a_needless_clone(ref mut self, world: ref CheckWorld, iter: ref Expr, over: ref Ty, body: ref Block, items: ref Vec[CheckLocal], handed_before: i64, mutable: bool, span: ref Span) sync {
         if mutable || self.reading_only || self.task_bindings.len() > 0 {
             return
@@ -1515,8 +1587,53 @@ impl CheckState {
         if bound.is_a_view() || clone_holds_a_view(bound) || clone_of_the_unknown(bound) || !self.takes_away(world, bound) {
             return
         }
+        // **A root that changes in place** (#2009): a part of `mut self`,
+        // of a `mut` parameter or of a `let mut` view is the caller's, and a
+        // view of it held across a change of it, or across the body's end,
+        // does not check.
+        if root == "self" && self.changing_self {
+            return
+        }
+        // **A borrowed field is read in place only as text** (Part I 6.5,
+        // #839): a `let` over a field of another type of a borrowed `self` or
+        // parameter takes it (`NK2106`); an element is a view of the list.
+        let text_or_element = bound == a_string_type() || match receiver {
+            Expr::Index { .. } => true,
+            else => false,
+        }
+        if root == "self" && self.borrowing_self && !text_or_element {
+            return
+        }
+        let mut whole: i64? = null
+        if root != "self" {
+            let held = self.binding(root) ?? return
+            if held.changing || self.a_changing_view(root) || self.a_mut_parameter(world, root) {
+                return
+            }
+            // **A root that is itself a view**, a `let` over a place or a
+            // `for`'s element (#2009): a view of its part outlives what it
+            // is lent from (`NK2106`). A parameter's part is read in place.
+            if self.lent_here(root) && !clone_of_a_parameter(held) {
+                return
+            }
+            if self.lent_here(root) && !text_or_element {
+                return
+            }
+            // **A root that is itself a proposed copy** (#2009): with both
+            // deleted, this one's root is a view, and its part is taken.
+            for other in self.flow.place_clones {
+                if (other.binding ?? -2) == held.id {
+                    return
+                }
+            }
+            // **A root this body owns**, read whole after the `let`, is
+            // moved or lent while the view of its part is held (#2009).
+            if !self.lent_here(root) {
+                whole = held.id
+            }
+        }
         let binding: i64? = id
-        self.flow.place_clones.push(CheckPlaceClone { name: name.clone(), binding: binding, root: root, seq: self.read_seq, reads: self.reads_on_paths.len() as i64, repeats: self.repeats.len() as i64, escaped: false, span: check_span_at(world, value, span), edit: clone_deleted(world, value, receiver) })
+        self.flow.place_clones.push(CheckPlaceClone { name: name.clone(), binding: binding, root: root, whole: whole, seq: self.read_seq, reads: self.reads_on_paths.len() as i64, repeats: self.repeats.len() as i64, escaped: false, span: check_span_at(world, value, span), edit: clone_deleted(world, value, receiver) })
     }
 
     /// **A read of a place clone's name inside a loop or a lambda** the
@@ -1556,7 +1673,7 @@ impl CheckState {
     /// **A change of a name**, in the order of the walk's reads.
     fn a_change_noted(ref mut self, name: ref String) sync {
         self.changed.push(name.clone())
-        self.flow.changes_seen.push((name.clone(), self.reads_on_paths.len() as i64))
+        self.flow.changes_seen.push((name.clone(), self.reads_on_paths.len() as i64, self.repeats.len() as i64))
         let bound = self.binding(name)?.id ?? -1
         self.flow.changes_bound.push((name.clone(), bound))
     }
@@ -1564,6 +1681,7 @@ impl CheckState {
     /// **The place clones only read**, said where the body ends: not handed
     /// over, not handed back, read in no loop or lambda around, and nothing
     /// changed or took the place's root between the `let` and its last read.
+    @inline(never)
     fn needless_place_clones_said(ref mut self) sync {
         let places = self.flow.place_clones.clone()
         let changes = self.flow.changes_seen.clone()
@@ -1586,11 +1704,34 @@ impl CheckState {
             }
             let last_seq = self.reads_on_paths[last].seq
             let mut needed = false
+            // **The name's own clone held as its last use** (#2009): the two
+            // deletions together hand a view where a value is kept
+            // (`NK1103`, `NK1106`); the later one is said.
+            for held in self.flow.clones {
+                if held.binding == one.binding {
+                    needed = true
+                }
+            }
+            let owner: i64 = one.whole ?? -1
+            if owner >= 0 {
+                let mut each = one.reads
+                while each < self.reads_on_paths.len() as i64 {
+                    if (self.reads_on_paths[each].binding ?? -2) == owner && self.reads_on_paths[each].path == one.root {
+                        needed = true
+                    }
+                    each += 1
+                }
+            }
             for change in changes {
                 if change.0 == one.name && change.1 >= one.reads {
                     needed = true
                 }
                 if change.0 == one.root && change.1 >= one.reads && change.1 <= last {
+                    needed = true
+                }
+                // **A change of the root in a loop the `let` stands
+                // outside of** (#2009): the view is held across its turns.
+                if change.0 == one.root && change.1 >= one.reads && change.2 > one.repeats {
                     needed = true
                 }
             }
@@ -1610,6 +1751,7 @@ impl CheckState {
     }
 
     /// **The clones no read followed**, said where the body ends.
+    @inline(never)
     fn needless_clones_said(ref mut self) sync {
         let clones = self.flow.clones.clone()
         let loans = self.flow.clone_loans.clone()
@@ -1775,6 +1917,14 @@ fn place_clone_root(world: ref CheckWorld, place: ref Expr) -> String? sync {
         Expr::Field { base, .. } => place_clone_root(world, base),
         Expr::Index { base, .. } => place_clone_root(world, base),
         else => null,
+    }
+}
+
+// Whether a binding is a parameter's.
+fn clone_of_a_parameter(local: ref CheckLocal) -> bool {
+    return match local.without_mut {
+        null => local.changing,
+        kept => kept.kind == CheckKind::Parameter,
     }
 }
 

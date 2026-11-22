@@ -662,6 +662,33 @@ impl<'g, T: 'g, E: 'g> ChildHandle<'g, T, E> {
         handle
     }
 
+    /// **A deferred handle to a bound pausing task** (D12, D37): `start()`
+    /// queues the task in `rest`, unstarted, and the main line goes on; the
+    /// gate around it, or the wait for it, starts it where the main line next
+    /// pauses or waits. Before `start()` the cell holds nothing, so neither
+    /// a gate nor the block's end waits for it.
+    pub(super) fn kept_deferred<'b, F>(
+        group: &'b dyn Receiver<E>,
+        rest: &'g Rest<'b>,
+        body: impl FnOnce() -> F + 'b,
+    ) -> Self
+    where
+        'b: 'g,
+        T: 'b,
+        E: 'b,
+        F: std::future::Future<Output = Result<T, E>> + 'b,
+    {
+        let mut handle = ChildHandle::new(group, empty_slot());
+        handle.kept = Some(rest);
+        let slot = handle.slot.clone();
+        handle.deferred = Some(Box::new(move || {
+            rest.held.queue(Box::pin(queued_task(group, slot, body)));
+            None
+        }));
+        handle.is_deferred = true;
+        handle
+    }
+
     /// **A handle to a task that never pauses**, which runs now, to its end
     /// (D20 at `user_parallelism = no`), unless a crash before it cancelled it.
     pub(super) fn now(
@@ -777,26 +804,26 @@ impl<T, E: From<Crashed>> ChildHandle<'_, T, E> {
             self.deferred.is_none(),
             "a deferred task was joined before its start()"
         );
-        let slot = self.slot.clone();
-        let end = std::future::poll_fn(|cx| {
-            // A pausing task of `async e` is polled here, where it is waited
-            // for (#1226); one waiting for a place, once its gate started it
-            // (D37).
-            self.held.poll_in_place(cx);
-            if let Some(kept) = self.kept {
-                kept.poll_rest(cx);
-            }
-            let mut held = locked(&slot);
-            match held.ended.take() {
-                Some(end) => std::task::Poll::Ready(end),
-                None => {
-                    held.joiner = Some(cx.waker().clone());
-                    std::task::Poll::Pending
-                }
-            }
-        })
-        .await;
+        let end = std::future::poll_fn(|cx| self.poll_end(cx)).await;
         joined_end(end)
+    }
+
+    /// One poll of the task's end, where it is waited for: a pausing task of
+    /// `async e` is polled here (#1226); one waiting for a place, once its
+    /// gate started it (D37).
+    fn poll_end(&self, cx: &mut std::task::Context<'_>) -> std::task::Poll<Ended<T, E>> {
+        self.held.poll_in_place(cx);
+        if let Some(kept) = self.kept {
+            kept.poll_rest(cx);
+        }
+        let mut held = locked(&self.slot);
+        match held.ended.take() {
+            Some(end) => std::task::Poll::Ready(end),
+            None => {
+                held.joiner = Some(cx.waker().clone());
+                std::task::Poll::Pending
+            }
+        }
     }
 
     /// **`h.join(within: d, on_timeout: o)`** (ADR-async-5 D17): the task's
@@ -866,6 +893,97 @@ impl<T, E: From<Crashed>> ChildHandle<'_, T, E> {
     }
 }
 
+/// **A pending binding several tasks read** (ADR-async-5 D8, #986): `let b =
+/// async f(a)` and `let c = async g(a)` both wait for `a` and read the one
+/// value. The first to wait joins `a`'s task and keeps its value here; every
+/// other reads it. Where `a` failed, the first receives the error and every
+/// other waiter is cancelled ([`Crashed`] in the group's channel, as a task a
+/// crash before it cancelled is).
+///
+/// What #986 lowers onto it: `let __task_N = Read::new(group.start_here(…))`,
+/// and a mention of `a` in another task as `(*__task_N.join_now()?)`, or
+/// `.join().await` for a task that pauses.
+pub struct Read<'g, T, E> {
+    handle: std::cell::RefCell<Option<ChildHandle<'g, T, E>>>,
+    value: std::cell::OnceCell<T>,
+    /// The task failed and its first waiter received it.
+    failed: std::cell::Cell<bool>,
+    /// The tasks waiting for a pausing one besides the one polling it.
+    waiting: std::cell::RefCell<Vec<std::task::Waker>>,
+}
+
+impl<'g, T: 'g, E: From<Crashed> + 'g> Read<'g, T, E> {
+    pub fn new(handle: ChildHandle<'g, T, E>) -> Self {
+        Read {
+            handle: std::cell::RefCell::new(Some(handle)),
+            value: std::cell::OnceCell::new(),
+            failed: std::cell::Cell::new(false),
+            waiting: std::cell::RefCell::new(Vec::new()),
+        }
+    }
+
+    /// The value of a task that never pauses: it has ended where it started.
+    pub fn join_now(&self) -> Result<&T, E> {
+        if let Some(value) = self.value.get() {
+            return Ok(value);
+        }
+        let handle = self.handle.borrow_mut().take();
+        match handle {
+            Some(handle) => self.kept(handle.join_now()),
+            None => joined_end(Ended::Cancelled),
+        }
+    }
+
+    /// The value of a task that pauses: whoever waits polls it.
+    pub async fn join(&self) -> Result<&T, E> {
+        std::future::poll_fn(|cx| {
+            if self.value.get().is_some() || self.failed.get() {
+                return std::task::Poll::Ready(self.read());
+            }
+            let end = match self.handle.borrow().as_ref() {
+                Some(handle) => {
+                    handle.claimed.set(true);
+                    handle.poll_end(cx)
+                }
+                None => return std::task::Poll::Ready(self.read()),
+            };
+            match end {
+                std::task::Poll::Ready(end) => {
+                    drop(self.handle.borrow_mut().take());
+                    for waker in self.waiting.borrow_mut().drain(..) {
+                        waker.wake();
+                    }
+                    std::task::Poll::Ready(self.kept(joined_end(end)))
+                }
+                std::task::Poll::Pending => {
+                    self.waiting.borrow_mut().push(cx.waker().clone());
+                    std::task::Poll::Pending
+                }
+            }
+        })
+        .await
+    }
+
+    /// The task's end, kept: its value for every waiter, its failure for the
+    /// first only.
+    fn kept(&self, end: Result<T, E>) -> Result<&T, E> {
+        match end {
+            Ok(value) => Ok(self.value.get_or_init(|| value)),
+            Err(error) => {
+                self.failed.set(true);
+                Err(error)
+            }
+        }
+    }
+
+    fn read(&self) -> Result<&T, E> {
+        match self.value.get() {
+            Some(value) => Ok(value),
+            None => joined_end(Ended::Cancelled),
+        }
+    }
+}
+
 /// What `join` hands back for a task's end.
 fn joined_end<T, E: From<Crashed>>(end: Ended<T, E>) -> Result<T, E> {
     match end {
@@ -903,31 +1021,53 @@ impl<T, E> Drop for ChildHandle<'_, T, E> {
 /// the `TaskHandle[T]` that runs only from `h.start()`. A type of its own
 /// because Rust's [`super::TaskHandle::start`] is the call that starts a task.
 ///
-/// What #988 lowers onto it: `Deferred::new(async move { … })`, and
-/// `h.start()` as [`Deferred::start`] at `user_parallelism = no`,
-/// [`Deferred::start_on_pool`] at `yes`, as `spawn` picks
-/// [`super::TaskHandle::start`] or [`super::TaskHandle::start_on_pool`].
-pub struct Deferred<F: std::future::Future> {
-    body: Option<F>,
-    handle: Option<super::TaskHandle<F::Output>>,
+/// What #2512 lowers onto it: `Deferred::new(move || start)`, where `start`
+/// is the very call `spawn` writes ([`super::TaskHandle::start`] or
+/// `start_on_pool`, [`super::FailingTask`], [`super::BoxedTask`]), so the
+/// setting and the body's channel pick the handle as they do for `spawn`;
+/// `h.start()` is [`Deferred::start`], which makes that call. `join`,
+/// `join_within`, `cancel` and `detach` are the started handle's.
+pub struct Deferred<S, H> {
+    start: Option<S>,
+    handle: Option<H>,
 }
 
-impl<F: std::future::Future> Deferred<F> {
-    /// A handle that runs `body` only from `start()`.
-    pub fn new(body: F) -> Self {
+impl<S: FnOnce() -> H, H> Deferred<S, H> {
+    /// A handle whose task `start` starts, only from `start()`.
+    pub fn new(start: S) -> Self {
         Deferred {
-            body: Some(body),
+            start: Some(start),
             handle: None,
         }
     }
 
-    fn body(&mut self) -> F {
-        match self.body.take() {
-            Some(body) => body,
+    /// **`h.start()`**: start the task; the handle stays. A second `start()`
+    /// panics (`NK2121` at compile time).
+    pub fn start(&mut self) {
+        match self.start.take() {
+            Some(start) => self.handle = Some(start()),
             None => panic!("a deferred task was started twice"),
         }
     }
+}
 
+impl<S, H> Deferred<S, H> {
+    fn started(self) -> H {
+        match self.handle {
+            Some(handle) => handle,
+            None => panic!("a deferred task was joined before its start()"),
+        }
+    }
+
+    fn started_ref(&self) -> &H {
+        match &self.handle {
+            Some(handle) => handle,
+            None => panic!("a deferred task was joined before its start()"),
+        }
+    }
+}
+
+impl<S, T> Deferred<S, super::TaskHandle<T>> {
     /// Stop the task as [`super::TaskHandle::cancel`]; one not started never
     /// runs.
     pub fn cancel(self) {
@@ -938,35 +1078,88 @@ impl<F: std::future::Future> Deferred<F> {
 
     /// Nobody waits for this task (ADR-346 D2); one not started never runs.
     pub fn detach(self) {}
-}
 
-impl<F: std::future::Future + 'static> Deferred<F>
-where
-    F::Output: 'static,
-{
-    /// **`h.start()`** at `user_parallelism = no`: start the task; the handle
-    /// stays. A second `start()` panics (`NK2121` at compile time).
-    pub fn start(&mut self) {
-        let body = self.body();
-        self.handle = Some(super::TaskHandle::start(body));
+    /// As [`super::TaskHandle::join_within`].
+    pub async fn join_within(
+        &self,
+        span: std::time::Duration,
+        on_timeout: super::OnTimeout,
+    ) -> Result<T, super::Late> {
+        self.started_ref().join_within(span, on_timeout).await
     }
 }
 
-impl<F: std::future::Future + Send + 'static> Deferred<F>
-where
-    F::Output: Send + 'static,
-{
-    /// **`h.start()`** at `user_parallelism = yes`, on the pool.
-    pub fn start_on_pool(&mut self) {
-        let body = self.body();
-        self.handle = Some(super::TaskHandle::start_on_pool(body));
-    }
-
+impl<S, T: Send + 'static> Deferred<S, super::TaskHandle<T>> {
     /// The task's value, as [`super::TaskHandle::join`].
-    pub async fn join(self) -> Result<F::Output, Crashed> {
-        match self.handle {
-            Some(handle) => handle.join().await,
-            None => panic!("a deferred task was joined before its start()"),
+    pub async fn join(self) -> Result<T, Crashed> {
+        self.started().join().await
+    }
+}
+
+impl<S, T, E> Deferred<S, super::FailingTask<T, E>> {
+    /// As [`super::FailingTask::cancel`].
+    pub fn cancel(self) {
+        if let Some(handle) = self.handle {
+            handle.cancel();
         }
+    }
+
+    /// As [`super::FailingTask::detach`]; one not started never runs.
+    pub fn detach(self) {
+        if let Some(handle) = self.handle {
+            handle.detach();
+        }
+    }
+}
+
+impl<S, T: 'static, E: 'static + From<Crashed>> Deferred<S, super::FailingTask<T, E>> {
+    /// As [`super::FailingTask::join`].
+    pub async fn join(self) -> Result<T, E> {
+        self.started().join().await
+    }
+}
+
+impl<S, T: 'static, E: 'static + From<Crashed> + From<super::TimedOut>>
+    Deferred<S, super::FailingTask<T, E>>
+{
+    /// As [`super::FailingTask::join_within`].
+    pub async fn join_within(
+        &self,
+        span: std::time::Duration,
+        on_timeout: super::OnTimeout,
+    ) -> Result<T, E> {
+        self.started_ref().join_within(span, on_timeout).await
+    }
+}
+
+impl<S, T> Deferred<S, super::BoxedTask<T>> {
+    /// As [`super::BoxedTask::cancel`].
+    pub fn cancel(self) {
+        if let Some(handle) = self.handle {
+            handle.cancel();
+        }
+    }
+
+    /// As [`super::BoxedTask::detach`]; one not started never runs.
+    pub fn detach(self) {
+        if let Some(handle) = self.handle {
+            handle.detach();
+        }
+    }
+}
+
+impl<S, T: Send + 'static> Deferred<S, super::BoxedTask<T>> {
+    /// As [`super::BoxedTask::join`].
+    pub async fn join(self) -> Result<T, Box<dyn std::error::Error>> {
+        self.started().join().await
+    }
+
+    /// As [`super::BoxedTask::join_within`].
+    pub async fn join_within(
+        &self,
+        span: std::time::Duration,
+        on_timeout: super::OnTimeout,
+    ) -> Result<T, Box<dyn std::error::Error>> {
+        self.started_ref().join_within(span, on_timeout).await
     }
 }

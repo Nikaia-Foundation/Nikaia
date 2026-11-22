@@ -170,12 +170,12 @@ fn check_core_places_a_named_field(mut state: CheckState, world: ref CheckWorld,
     // `take`, `skip`, `count` and `for`, borrowed from the text.
     if (ty == "String" || ty == "str") && field == "scalars" {
         state.facts.text_scalars.insert(id_of(expr) as i64)
-        return Ty::Seq { item: check_core_places_named("scalar"), is_sync: true, pauses: false, can_throw: false, parallel: false, shape: Shape { ends: true, sized: false, replays: false, timed: false } }
+        return Ty::Seq { item: check_core_places_named("scalar"), is_sync: true, pauses: false, can_throw: false, parallel: false, shape: Shape { ends: true, sized: false, replays: false, timed: false, one_at_a_time: false } }
     }
     if (ty == "String" || ty == "str") && field == "graphemes" {
         state.facts.text_graphemes.insert(id_of(expr) as i64)
         let grapheme = check_core_places_str_view()
-        return Ty::Seq { item: grapheme, is_sync: true, pauses: false, can_throw: false, parallel: false, shape: Shape { ends: false, sized: false, replays: false, timed: false } }
+        return Ty::Seq { item: grapheme, is_sync: true, pauses: false, can_throw: false, parallel: false, shape: Shape { ends: false, sized: false, replays: false, timed: false, one_at_a_time: false } }
     }
     // **A boxed field is read through its box** (ADR-246 D2).
     let boxed = state.facts.boxed_members.get(ty)
@@ -185,7 +185,7 @@ fn check_core_places_a_named_field(mut state: CheckState, world: ref CheckWorld,
             state.facts.boxed_reads.insert(id_of(expr) as i64)
         }
     }
-    // **A handle has no fields** (ADR-302 D7).
+    // **A handle has no fields** (ADR-c-boundary-v1 D7).
     if state.opaque_handles.contains(ty) {
         state.a_handle_has_nothing_inside(ty, f"the field `{field}`", span)
         return Ty::Unknown
@@ -348,7 +348,20 @@ fn check_core_field_walked[H: CheckHost](mut state: CheckState, world: ref Check
     }
     match on {
         Ty::Tuple(parts) => {
-            return stamped_if(seen_base, check_core_places_tuple_part(state, parts, field, span))
+            let part = check_core_places_tuple_part(state, parts, field, span)
+            // **A tuple's whole-number part is a number of the bounds walk**
+            // (#2629), as a field of a whole-number type is (ADR-306 D17):
+            // `let row = line_at(lines, at).0` is bounded by its guards.
+            match part {
+                Ty::Named { name, args, .. } => {
+                    if args.is_empty() && is_whole_number(name) {
+                        state.facts.whole_fields.insert(id_of(expr) as i64)
+                        state.facts.whole_types.insert(id_of(expr) as i64, name.clone())
+                    }
+                },
+                else => {}
+            }
+            return stamped_if(seen_base, part)
         },
         else => {}
     }
@@ -791,6 +804,7 @@ fn check_core_places_a_handle(ty: ref Ty) -> bool sync {
 /// **A handle read from a place and stored by value** (ADR-312 D1, #1411):
 /// a name or a field path of a handle's type put into a field or a list,
 /// which the lowering clones.
+@inline(never)
 fn check_core_places_store_handle(mut state: CheckState, value: ref Expr, ty: ref Ty) sync {
     if !check_core_places_a_handle(ty) {
         return
@@ -808,6 +822,7 @@ fn check_core_places_store_handle(mut state: CheckState, value: ref Expr, ty: re
 /// **A handle handed on by a `let`, an assignment, a tuple or a variant**
 /// (Part I 6.2, ADR-312 D1, D2, #1212): duplicated where its name is read
 /// again, moved at its last use, as one stored into a field or a list is.
+@inline(never)
 fn check_core_places_give_handle(mut state: CheckState, world: ref CheckWorld, value: ref Expr, ty: ref Ty, span: ref Span) sync {
     if !check_core_places_a_handle(ty) {
         return
@@ -1442,7 +1457,14 @@ fn check_core_index[H: CheckHost](mut state: CheckState, world: ref CheckWorld, 
     let writing = state.flow.writing_index
     state.flow.writing_index = false
     let first = check_core_expr(state, world, host, base, span)
+    let said = state.flow.unknown_said
     let key = check_core_expr(state, world, host, index, span)
+    // **An open number in the brackets is no reason the read has no type**
+    // (#1952): its uses type it, so `args[at]` over a `cli::Args` is
+    // `NK1245` as `args[0]` is.
+    if state.number_shaped(world, index) {
+        state.flow.unknown_said = said
+    }
     // **An index of a mapping is a page fault** (ADR-281 D35).
     state.io_inside_a_door(world, first, "this index", span)
     let stamped = match first {
@@ -1497,7 +1519,7 @@ fn check_core_index_of(mut state: CheckState, world: ref CheckWorld, expr: ref E
         },
         else => return Ty::Unknown,
     }
-    // **And no indexing** (ADR-302 D7).
+    // **And no indexing** (ADR-c-boundary-v1 D7).
     if state.opaque_handles.contains(name) {
         state.a_handle_has_nothing_inside(name, "an index", span)
         return Ty::Unknown
@@ -1655,5 +1677,5 @@ fn check_core_range[H: CheckHost](mut state: CheckState, world: ref CheckWorld, 
     if item.is_unknown() {
         item = to
     }
-    return Ty::Seq { item: item, is_sync: true, pauses: false, can_throw: false, parallel: false, shape: Shape { ends: true, sized: true, replays: true, timed: false } }
+    return Ty::Seq { item: item, is_sync: true, pauses: false, can_throw: false, parallel: false, shape: Shape { ends: true, sized: true, replays: true, timed: false, one_at_a_time: false } }
 }

@@ -1,5 +1,5 @@
 //! **`main`'s parameters are the command line** (Part I 5.5,
-//! [ADR-360](../../../docs/specification/adr/adr-360.md)): subjects are
+//! [ADR-cli-v1](../../../docs/specification/adr/adr-cli-v1.md)): subjects are
 //! positional, options named; `main`'s preconditions, carried back as any
 //! function's are, are checked where the words arrive, and a wrong word ends
 //! the program with status 2 before the body runs.

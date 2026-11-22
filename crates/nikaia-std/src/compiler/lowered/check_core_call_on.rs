@@ -1059,6 +1059,11 @@ pub(crate) fn check_core_call_on_described<H: CheckHost>(state: &mut CheckState,
     let found = check_core_arguments_bound(state, world, host, args, &patterns, &mut bound, &mut expected, world.own.functions.contains_key(key), (callee).as_ref(), span);
     state.call_keepers.clear();
     if world.own.functions.contains_key(key) { check_core_call_code_args(state, world, (callee).as_ref(), key, args, span); } else { check_core_call_std_code_args(state, world, (callee).as_ref(), key, args, parallel, span); }
+    if parallel && (entry == "map" || entry == "filter" || entry == "for_each") && args.len() == 1 { check_walks_a_lambda_against_itself(state, world, on, unsafe { nikaia_std::proven::read(&args, (0) as usize) }, span); }
+    if key == "Par::fold" && args.len() >= 3 {
+        check_walks_a_lambda_against_itself(state, world, on, unsafe { nikaia_std::proven::read(&args, (1) as usize) }, span);
+        check_walks_a_lambda_against_itself(state, world, on, unsafe { nikaia_std::proven::read(&args, (2) as usize) }, span);
+    }
     if keyed && args.len() == 1 && found.len() == 1 { check_core_call_on_a_viewed_key(state, world, unsafe { nikaia_std::proven::read(&args, (0) as usize) }, unsafe { nikaia_std::proven::read(&found, (0) as usize) }, span); }
     if key == "Par::fold" && args.len() >= 3 && found.len() >= 3 {
         let acc: Ty = nikaia_std::index::or(match *nikaia_std::index::get(&bound, "A") {
@@ -1110,20 +1115,24 @@ pub(crate) fn check_core_call_on_described<H: CheckHost>(state: &mut CheckState,
     let mut passed: Vec<(String, Ty)> = vec![];
     let mut values: Vec<i64> = vec![];
     let mut literals: Vec<bool> = vec![];
+    let mut integers: Vec<bool> = vec![];
     let mut texts: Vec<String> = vec![];
-    for (name, ty, value, literal, text) in nikaia_std::index::or(state.flow.method_passed.remove(&node), || vec![].into()) {
+    for (name, ty, value, literal, integer, text) in nikaia_std::index::or(state.flow.method_passed.remove(&node), || vec![].into()) {
         passed.push((name, ty));
         values.push(value);
         literals.push(literal);
+        integers.push(integer);
         texts.push(text);
     }
     state.flow.option_values = values;
     state.flow.option_literals = literals;
+    state.flow.option_integers = integers;
     state.flow.option_written = texts;
     state.flow.call_written = format!("{}.{}", check_walked_written(receiver, world.words), written);
     let result = check_crossings_arguments(state, world, host, key, &written, contract, args, &found, &passed, span);
     state.flow.option_values = vec![];
     state.flow.option_literals = vec![];
+    state.flow.option_integers = vec![];
     state.flow.option_written = vec![];
     state.flow.call_written = String::from("");
     let moving = check_core_call_moving_options(&state, contract, &written, &passed);
@@ -1165,6 +1174,21 @@ pub(crate) fn check_core_call_on_described<H: CheckHost>(state: &mut CheckState,
     let shaped = shape_through(contract, on, &found, substituted);
     let paused = check_crossings_a_lambda_that_pauses_at_an_entry(state, key, receiver, on, args, lambda_at, shaped, span);
     state.stamped_through(contract, &found, paused)
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn check_core_call_on_code(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, on: &Ty, receiver: &Expr, entry: &str, span: &Span) {
+    let code = matches!(on, Ty::Fn { .. });
+    if !code { return; }
+    let written = check_walked_written(receiver, world.words);
+    let mut help: String = format!("Call it first, `{}(…).{}()`, for a method of what it hands back.", written, entry);
+    let named = match receiver {
+        Expr::Variable(_, _) => state.structs.contains_key(&written) || world.own.types.contains_key(&written) || world.library.types.contains_key(&written) || mem_offered(&written),
+        _ => false,
+    };
+    if named { help = format!("`{}` here is its constructor: call it, `{}(…)` with the options it takes, and call `{}` on the value it makes, or write `{}::{}(…)` for a function of the type.", written, written, entry, written, entry); }
+    state.findings.push(check_refusal("NK1171", span, format!("`{}` is code, and code has no method called `{}`.", written, entry), vec![format!("A value of type `{}` is called, `{}(…)`; no declaration, ledger or description gives it methods.", on.shown(), written)], Some(help)));
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -1220,6 +1244,7 @@ pub(crate) fn check_core_call_on<H: CheckHost>(state: &mut CheckState, world: &C
     }
     if !has_name {
         for a in args.iter() { check_core_expr(state, world, host, a, span); }
+        check_core_call_on_code(state, world, &on, receiver, entry, span);
         check_core_call_on_reached(state, None);
         state.method_propagates(id_of(receiver) as i64, false);
         state.method_pauses(id_of(receiver) as i64, false);
@@ -1538,7 +1563,7 @@ pub(crate) fn check_core_call_on_hashed_key(state: &mut CheckState, world: &Chec
         _ => return,
     };
     if base != "HashMap" && base != "HashSet" || args.is_empty() || check_core_call_on_keyless(entry) { return; }
-    for name in check_core_call_on_parameters_in(&state, nikaia_std::index::get(&args, 0)) {
+    for name in check_core_call_on_parameters_in(&state, unsafe { nikaia_std::proven::read(&args, (0) as usize) }) {
         let bounds = match state.type_parameters.get(&name) { Some(__nikaia_value) => __nikaia_value, None => continue };
         let mut allowed = false;
         for bound in bounds.iter() { if !world.own.traits.contains_key(bound) && bound == "Hash" { allowed = true; } }

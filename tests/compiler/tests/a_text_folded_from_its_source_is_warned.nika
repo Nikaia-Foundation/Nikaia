@@ -1,0 +1,25 @@
+// **`NK1385` on the `while i < n` form of the yaml package's `fold`** (#1933):
+// `n` is the length of a view of `raw`, and every push is a cut of `raw`
+// between two of its own positions, so `raw.len()` bytes bound `out`.
+fn fold(raw: String) -> String {
+    let bs = raw.bytes
+    let n = bs.len()
+    let mut out = String()
+    let mut i = 0
+    while i < n {
+        let start = i
+        let mut j = start
+        while j < n && bs[j] != 10 {
+            j += 1
+        }
+        let p = raw.start().forward(bytes: start) ?? break
+        let q = raw.start().forward(bytes: j) ?? break
+        out.push_str(raw.between(p, q))
+        i = j + 1
+    }
+    return out
+}
+
+fn main() throws {
+    println(fold("ab\ncd\nef"))
+}

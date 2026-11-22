@@ -46,8 +46,8 @@ use anyhow::{Context, Result, anyhow};
 use orchestrator::cache::{Artifacts, Cache, Choices, Layout, Lockfile};
 use orchestrator::project::{
     Cargo, CargoProject, CrateKind, Invocation, Package, Profile, Workspace,
-    record_extra_dependencies, resolved_versions, toolchain_can_build_for, toolchain_is_new_enough,
-    write_if_changed,
+    record_extra_dependencies, resolved_versions, toolchain_can_build_for,
+    toolchain_is_new_enough_as, write_if_changed,
 };
 
 use crate::contracts::{Ledger, sync};
@@ -411,6 +411,10 @@ pub struct Lowered {
     /// back into Cargo's dependency info, or a changed module would not
     /// rebuild.
     pub sources: Vec<PathBuf>,
+    /// **Every file the program was made from**, absolute: the sources and
+    /// what the build read while it ran (`asset`), for a run's record
+    /// (#2421).
+    pub inputs: Vec<PathBuf>,
     /// Whether the build cache answered instead of the emitter.
     pub reused: bool,
     /// **What the author could promise and has not**
@@ -792,7 +796,8 @@ pub fn project_for_file(
 
     let mut settings = Settings::resolve(&Manifest::find(file)?, target, user_parallelism)?;
     command_line(&mut settings)?;
-    lower_reading(file, &settings, no_cache, &[], allowlist)?;
+    let lowered = lower_reading(file, &settings, no_cache, &[], allowlist)?;
+    ran_made_from(lowered.pending.is_none().then_some(lowered.inputs));
     let warned = true;
 
     // The kept project's root, its manifest and the copy of the file:
@@ -809,6 +814,144 @@ pub fn project_for_file(
     project.warned = warned;
     project.written = Some(file.to_path_buf());
     Ok(project)
+}
+
+/// **A run of a file outside any project that built its program before**
+/// (#2421): what the record of that run (`project_drive_ran`,
+/// `tools/project_drive.nika`) holds and what the next one writes, kept
+/// while this one builds. `None` where no record is made.
+struct Ran {
+    record: PathBuf,
+    key: std::string::String,
+    inputs: Option<Vec<PathBuf>>,
+    said: std::string::String,
+}
+
+static RAN: std::sync::Mutex<Option<Ran>> = std::sync::Mutex::new(None);
+
+fn ran() -> std::sync::MutexGuard<'static, Option<Ran>> {
+    RAN.lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+}
+
+/// **Says what the build says on stderr**, and keeps it for the run's
+/// record (#2421): a run that finds its program built says it again from
+/// there, as the build cache replays a warning (`project_lower_reading`).
+pub(crate) fn say(text: &str) {
+    if SAID_HERE
+        .with(|here| here.borrow_mut().as_mut().map(|kept| kept.push_str(text)))
+        .is_some()
+    {
+        return;
+    }
+    eprint!("{text}");
+    if let Some(ran) = ran().as_mut() {
+        ran.said.push_str(text);
+    }
+}
+
+thread_local! {
+    /// Set while a worker checks a unit beside others (#1949): what [`say`]
+    /// says is kept here, and said in the units' order after.
+    static SAID_HERE: std::cell::RefCell<Option<std::string::String>> =
+        const { std::cell::RefCell::new(None) };
+}
+
+/// `run`, with what it would [`say`] kept and handed back instead.
+fn said_aside<R>(run: impl FnOnce() -> R) -> (R, std::string::String) {
+    let outer = SAID_HERE.with(|here| here.replace(Some(std::string::String::new())));
+    let out = run();
+    let said = SAID_HERE
+        .with(|here| here.replace(outer))
+        .unwrap_or_default();
+    (out, said)
+}
+
+/// The files the program of this run was made from; `None` makes no record.
+fn ran_made_from(inputs: Option<Vec<PathBuf>>) {
+    if let Some(ran) = ran().as_mut() {
+        ran.inputs = inputs;
+    }
+}
+
+/// **What a run's program was built under besides its files** (#2421): this
+/// compiler, the toolchain, `std`'s bundle, the settings after the command
+/// line, the allowlist and the variables a build reads. `None` where the
+/// program would not be built by `rustc` alone (`run_fast`).
+fn ran_key(settings: &Settings, allowlist: Option<&Path>) -> Option<std::string::String> {
+    let triple = crate::emit::host_target()?;
+    if crate::run_fast::cargo_sets_linker_or_flags(triple.triple()) {
+        return None;
+    }
+    let bundle = crate::comptime_run::run_bundle().ok()?;
+    let mut key = std::format!(
+        "{}\n{}\n{}\n{settings:?}\n{allowlist:?}\n",
+        crate::compiler_identity(),
+        crate::comptime_run::rustc_version(),
+        bundle.stamp,
+    );
+    let mut vars: Vec<(std::ffi::OsString, std::ffi::OsString)> = std::env::vars_os()
+        .filter(|(name, _)| {
+            let name = name.to_string_lossy();
+            ["NIKAIA_", "RUST", "CARGO"]
+                .iter()
+                .any(|start| name.starts_with(start))
+        })
+        .collect();
+    vars.sort();
+    for (name, value) in vars {
+        key.push_str(&std::format!("{name:?}={value:?}\n"));
+    }
+    Some(key)
+}
+
+/// **`nikaia run` of a file outside any project, run again unchanged**
+/// (#2421): its program runs at once, with what its build said said again,
+/// and nothing is read, checked or lowered. Otherwise this run's record is
+/// made ready, for [`DriveHost`] to write before it starts the program, and
+/// the caller builds. Nothing where the cache is off or `file` is a
+/// project's.
+pub fn run_again(
+    file: &Path,
+    target: Option<&str>,
+    user_parallelism: Option<&str>,
+    no_cache: bool,
+    allowlist: Option<&Path>,
+    command_line: &dyn Fn(&mut Settings) -> Result<()>,
+    program_args: &[String],
+) -> Option<i32> {
+    if no_cache || !file.is_file() || Layout::resolve(file).in_project {
+        return None;
+    }
+    let mut settings =
+        Settings::resolve(&Manifest::find(file).ok()?, target, user_parallelism).ok()?;
+    command_line(&mut settings).ok()?;
+    let key = ran_key(&settings, allowlist)?;
+    let (root, _) = project_drive::project_drive_kept_root(file, &Layout::user_cache_dir());
+    let record = project_drive::project_drive_ran_record(&root, &file.display().to_text());
+    if let Some((binary, said)) = block_on(project_drive::project_drive_ran(&record, &key)) {
+        eprint!("{said}");
+        // Used now, for the pruning of the slots and of the user cache.
+        if let Some(slot) = binary.parent() {
+            let _ = std::fs::File::options()
+                .append(true)
+                .open(slot.join("key"))
+                .and_then(|held| held.set_modified(std::time::SystemTime::now()));
+        }
+        orchestrator::cache::use_entry(&root);
+        let code = run_directly(&binary, program_args, &launch_vars(Some(file)));
+        return Some(code.unwrap_or_else(|error| {
+            eprintln!("Error: {error:#}");
+            1
+        }));
+    }
+    *ran() = Some(Ran {
+        record,
+        key,
+        inputs: None,
+        said: std::string::String::new(),
+    });
+    None
 }
 
 /// What `project_drive_kept_for_file` asks of the compiler: the user's cache
@@ -843,7 +986,7 @@ pub fn lower_reading(
     allowlist: Option<&Path>,
 ) -> Result<Lowered> {
     let open = modules::Open::new();
-    let (out, proofs, exported, pending) = with_lower_host(
+    let (out, proofs, exported, pending, inputs) = with_lower_host(
         input,
         settings,
         no_cache,
@@ -859,6 +1002,7 @@ pub fn lower_reading(
                     host.proofs.take(),
                     host.exported.take(),
                     host.pending.take(),
+                    host.inputs(),
                 ))
             }
             Err(error) => Err(host.failed.take().unwrap_or_else(|| anyhow!("{error}"))),
@@ -906,6 +1050,7 @@ pub fn lower_reading(
         ledger,
         derived: out.derived,
         sources: out.sources,
+        inputs,
         reused: out.reused,
         notes: out.notes,
         proofs,
@@ -980,53 +1125,74 @@ pub fn definition(
     alone: bool,
     offset: i64,
 ) -> Option<(String, crate::ast::Span, String)> {
-    let (found, _) =
-        diagnostics::collecting(|| -> Result<Option<(String, crate::ast::Span, String)>> {
-            let (manifest, packages) = match alone {
-                true => (Manifest::default(), Vec::new()),
-                false => (Manifest::find(input)?, packages_of_file(input)?),
-            };
-            let settings = Settings::resolve(&manifest, None, None)?;
-            with_lower_host(
-                input,
-                &settings,
-                true,
-                &packages,
-                None,
-                open,
-                alone,
-                |host, _| {
-                    use project_lower::ProjectLowerHost;
-                    host.read_program().ok()?;
-                    host.infer_program().ok()?;
-                    // A refusal still leaves the facts of what was checked.
-                    let _ = project_lower::project_lower_check(host);
-                    let program = host.program.borrow();
-                    let program = program.as_ref()?;
-                    let at = program.units.iter().position(|unit| unit.path == input)?;
-                    let facts = host.unit_facts.borrow();
-                    let facts = facts.get(&at)?;
-                    let views: Vec<_> = program
-                        .units
-                        .iter()
-                        .map(|unit| crate::check::parsed_view_of(&unit.parsed))
-                        .collect();
-                    let (file, span, name) = nikaia_std::compiler::check_declared::declared_site(
-                        &views, at as i64, facts, offset,
-                    )?;
-                    Some((
-                        program.units[file as usize].path.display().to_text(),
-                        span,
-                        name,
-                    ))
-                },
-            )
-        });
+    checked_unit(input, open, alone, |program, at, facts| {
+        let views: Vec<_> = program
+            .units
+            .iter()
+            .map(|unit| crate::check::parsed_view_of(&unit.parsed))
+            .collect();
+        let (file, span, name) =
+            nikaia_std::compiler::check_declared::declared_site(&views, at as i64, facts, offset)?;
+        Some((
+            program.units[file as usize].path.display().to_text(),
+            span,
+            name,
+        ))
+    })
+}
+
+/// **What the check of `input` narrated** (ADR-text-reuse-1 D5, #2514): each
+/// give and each reuse, by the first byte of its site, for the language
+/// server's inlay hints; read and checked as [`definition`] does.
+pub fn narrated(input: &Path, open: &modules::Open, alone: bool) -> BTreeSet<(i64, String)> {
+    checked_unit(input, open, alone, |_, _, facts| {
+        Some(facts.narrated.clone())
+    })
+    .unwrap_or_default()
+}
+
+/// `input`'s program read and checked as [`diagnose`] does, and `ask` handed
+/// it with `input`'s unit and the facts its check left; nothing where `input`
+/// was not checked (it does not parse).
+fn checked_unit<R>(
+    input: &Path,
+    open: &modules::Open,
+    alone: bool,
+    ask: impl FnOnce(&modules::Program, usize, &check::CheckFacts) -> Option<R>,
+) -> Option<R> {
+    let (found, _) = diagnostics::collecting(|| -> Result<Option<R>> {
+        let (manifest, packages) = match alone {
+            true => (Manifest::default(), Vec::new()),
+            false => (Manifest::find(input)?, packages_of_file(input)?),
+        };
+        let settings = Settings::resolve(&manifest, None, None)?;
+        with_lower_host(
+            input,
+            &settings,
+            true,
+            &packages,
+            None,
+            open,
+            alone,
+            |host, _| {
+                use project_lower::ProjectLowerHost;
+                host.read_program().ok()?;
+                host.infer_program().ok()?;
+                // A refusal still leaves the facts of what was checked.
+                let _ = project_lower::project_lower_check(host);
+                let program = host.program.borrow();
+                let program = program.as_ref()?;
+                let at = program.units.iter().position(|unit| unit.path == input)?;
+                let facts = host.unit_facts.borrow();
+                ask(program, at, facts.get(&at)?)
+            },
+        )
+    });
     found.ok().flatten()
 }
 
 /// What `nikaia lsp` asks of the compiler (`tools/lsp.nika`, #1347):
-/// [`diagnose`] and [`definition`].
+/// [`diagnose`], [`definition`] and [`narrated`].
 pub struct Lsp;
 
 impl nikaia_std::compiler::lsp::LspHost for Lsp {
@@ -1048,6 +1214,15 @@ impl nikaia_std::compiler::lsp::LspHost for Lsp {
         offset: i64,
     ) -> Option<(String, crate::ast::Span, String)> {
         definition(Path::new(entry), open, alone, offset)
+    }
+
+    fn narrated(
+        &self,
+        entry: &str,
+        open: &BTreeMap<String, String>,
+        alone: bool,
+    ) -> BTreeSet<(i64, String)> {
+        narrated(Path::new(entry), open, alone)
     }
 }
 
@@ -1127,6 +1302,7 @@ fn with_lower_host<R>(
         checking: RefCell::new(None),
         checked_facts: RefCell::new(BTreeMap::new()),
         unit_facts: RefCell::new(BTreeMap::new()),
+        ahead: RefCell::new(BTreeMap::new()),
         published: RefCell::new(BTreeMap::new()),
         proofs: RefCell::new(None),
         pending: RefCell::new(None),
@@ -1170,6 +1346,10 @@ struct LowerHost<'a> {
     /// Each unit's facts, by its place in the program, for `nikaia lsp`'s
     /// [`definition`] (#1396): empty for every other build.
     unit_facts: RefCell<BTreeMap<usize, check::CheckFacts>>,
+    /// The dependencies' units `check_ahead` checked on every core (#1949),
+    /// by their place: what each check gave and said, until `check_unit`
+    /// says it in the program's order.
+    ahead: RefCell<BTreeMap<usize, (Result<String>, std::string::String)>>,
     published: RefCell<BTreeMap<String, crate::prove::Published>>,
     /// The book as the lowering left it, in a project.
     proofs: RefCell<Option<crate::proofs::Book>>,
@@ -1194,11 +1374,14 @@ pub struct PendingRecord {
     reads: BTreeMap<std::string::String, std::string::String>,
     choices: Choices,
     artifacts: Artifacts,
-    /// Whether the warnings stored say something, and the committed
-    /// `nikaia.contracts` they were said against: a warning that narrates a
-    /// change to that ledger (`NK2403`) is not repeated once the build has
-    /// written it (ADR-297 D12), so an entry holding one is not recorded
-    /// when the file changed.
+    /// Whether the warnings stored narrate a change to the committed
+    /// `nikaia.contracts` (`NK2402`, `NK2403`), and the file they were said
+    /// against: such a warning is not repeated once the build has written
+    /// it (ADR-297 D12), so an entry holding one is not recorded when the
+    /// file changed. Any other warning is replayed by a cache hit as said,
+    /// so it keeps the entry (#1949: a dependency's `NK1261` kept the
+    /// binary's lowering out of the cache, and the build's `rustc` wrapper
+    /// inferred its ledger a second time).
     warned: bool,
     committed: Option<std::string::String>,
 }
@@ -1257,6 +1440,57 @@ struct Checking {
 
 type HostResult<T> = std::result::Result<T, Box<dyn std::error::Error>>;
 
+/// **One unit of `program` checked** (ADR-286), its questions placed in its
+/// file, a dependency's asked from its own package's `nikaia.proofs`
+/// (`proofs::for_unit`): what it warned, or its refusal.
+fn check_unit_of(
+    unit: &modules::Unit,
+    program: &modules::Program,
+    checking: &Checking,
+    around: Around<'_>,
+    settings: &Settings,
+    facts: Option<&mut Option<check::CheckFacts>>,
+) -> Result<String> {
+    // **A dependency's unit is checked as its own package writes it**
+    // (issue #159). The program's
+    // contracts are the right ledger for the program's own files and the
+    // wrong one for a package's: absorbing qualified its keys *and the
+    // types inside them*, and the package's file writes the bare word.
+    // `Program::as_its_own` is the ledger that package was inferred
+    // with, kept rather than reconstructed.
+    let contracts = match &unit.package {
+        Some(package) => program
+            .as_its_own
+            .get(package)
+            .unwrap_or(&program.contracts),
+        None => &checking.promised,
+    };
+    crate::proofs::for_unit(&unit.path, &unit.source, unit.package.is_some(), || {
+        check(
+            &unit.parsed,
+            contracts,
+            &checking.modules,
+            around,
+            &unit.path,
+            &unit.source,
+            &settings.words.user_parallelism,
+            &settings.words.refuted_claims,
+            &settings.words.unproved_claims,
+            // A dependency is built at `allow` (ADR-306 D29).
+            if unit.package.is_none() {
+                &settings.words.unproved_checks
+            } else {
+                "allow"
+            },
+            &settings.words.raw_sinks,
+            &settings.words.allow,
+            unit.package.as_deref().unwrap_or(""),
+            settings.library(),
+            facts,
+        )
+    })
+}
+
 impl LowerHost<'_> {
     /// The artifacts `made` is stored as in the cache.
     fn artifacts_of(&self, made: &project_lower::ProjectLowerArtifacts) -> Artifacts {
@@ -1287,6 +1521,23 @@ impl LowerHost<'_> {
             artifacts = artifacts.with(EXPORTED, entry_text(&fields));
         }
         artifacts
+    }
+
+    /// **Every file the program was made from** (#2421): its sources, and
+    /// what it read while it was built, this time or, where the cache
+    /// answered, when its entry was made.
+    fn inputs(&self) -> Vec<PathBuf> {
+        let mut read: std::collections::BTreeSet<std::string::String> =
+            self.reads_taken().into_keys().collect();
+        if let Some(cache) = self.cache.borrow().as_ref() {
+            read.extend(cache.assets_of(&self.unit));
+        }
+        let read = read.into_iter().map(|path| self.layout.root.join(path));
+        project_lower::ProjectLowerHost::source_paths(self)
+            .into_iter()
+            .chain(read)
+            .map(|path| std::path::absolute(&path).unwrap_or(path))
+            .collect()
     }
 
     /// What the build read, as the cache records it.
@@ -1347,6 +1598,20 @@ impl LowerHost<'_> {
             exported.java = java;
         }
         Ok(())
+    }
+
+    /// What a unit's check said, for the Nikaia side: its warnings, or the
+    /// refusal it tallied; any other failure kept to be handed back.
+    fn unit_said(&self, checked: Result<String>) -> HostResult<project_lower::UnitSaid> {
+        match checked {
+            Ok(said) => Ok(project_lower::UnitSaid::Warned(said)),
+            Err(e) => match e.downcast_ref::<diagnostics::Refused>() {
+                Some(tally) if tally.at.is_none() && tally.finding.is_none() => {
+                    Ok(project_lower::UnitSaid::Refused(tally.message.clone()))
+                }
+                _ => self.held(Err(e)),
+            },
+        }
     }
 
     /// `result` for the Nikaia side, its error kept to be handed back.
@@ -1646,7 +1911,7 @@ impl project_lower::ProjectLowerHost for LowerHost<'_> {
             reads: self.reads_taken(),
             choices: self.choices().clone(),
             artifacts: self.artifacts_of(made),
-            warned: !made.warnings.is_empty(),
+            warned: made.warnings.contains("[NK2402]") || made.warnings.contains("[NK2403]"),
             committed: std::fs::read_to_string(self.layout.root.join("nikaia.contracts")).ok(),
         });
     }
@@ -1667,7 +1932,7 @@ impl project_lower::ProjectLowerHost for LowerHost<'_> {
     fn eprint(&self, text: &str) {
         // `nikaia lsp` keeps the findings as data instead (#1347).
         if !diagnostics::is_collecting() {
-            eprint!("{text}");
+            say(text);
         }
     }
 
@@ -1741,6 +2006,11 @@ impl project_lower::ProjectLowerHost for LowerHost<'_> {
     }
 
     fn check_unit(&self, at: i64) -> HostResult<project_lower::UnitSaid> {
+        // **Checked ahead** (#1949): said now, in the program's order.
+        if let Some((checked, said)) = self.ahead.borrow_mut().remove(&(at as usize)) {
+            say(&said);
+            return self.unit_said(checked);
+        }
         let settings = self.settings;
         let program = self.program();
         let at = at as usize;
@@ -1761,20 +2031,6 @@ impl project_lower::ProjectLowerHost for LowerHost<'_> {
             reads: self.reads,
             tested: &checking.tested,
         };
-        // **A dependency's unit is checked as its own package writes it**
-        // (issue #159). The program's
-        // contracts are the right ledger for the program's own files and the
-        // wrong one for a package's: absorbing qualified its keys *and the
-        // types inside them*, and the package's file writes the bare word.
-        // `Program::as_its_own` is the ledger that package was inferred
-        // with, kept rather than reconstructed.
-        let contracts = match &unit.package {
-            Some(package) => program
-                .as_its_own
-                .get(package)
-                .unwrap_or(&program.contracts),
-            None => &checking.promised,
-        };
         let lsp = diagnostics::is_collecting();
         let mut facts = None;
         let keep = checking.facts_reusable && unit.package.is_none();
@@ -1790,48 +2046,73 @@ impl project_lower::ProjectLowerHost for LowerHost<'_> {
         // **`nikaia lsp` asks where a name is declared** (#1396): every
         // unit's facts, a refused unit's too, kept apart from the emitter's.
         let (checked, book) = crate::proofs::with_book(book, || {
-            crate::proofs::for_unit(&unit.path, &unit.source, unit.package.is_some(), || {
-                check(
-                    &unit.parsed,
-                    contracts,
-                    &checking.modules,
-                    around,
-                    &unit.path,
-                    &unit.source,
-                    &settings.words.user_parallelism,
-                    &settings.words.refuted_claims,
-                    &settings.words.unproved_claims,
-                    // A dependency is built at `allow` (ADR-306 D29).
-                    if unit.package.is_none() {
-                        &settings.words.unproved_checks
-                    } else {
-                        "allow"
-                    },
-                    &settings.words.raw_sinks,
-                    &settings.words.allow,
-                    unit.package.as_deref().unwrap_or(""),
-                    settings.library(),
-                    (keep || lsp).then_some(&mut facts),
-                )
-            })
+            check_unit_of(
+                unit,
+                &program,
+                checking,
+                around,
+                settings,
+                (keep || lsp).then_some(&mut facts),
+            )
         });
         *self.book.borrow_mut() = Some(book);
         if lsp && let Some(facts) = &facts {
             self.unit_facts.borrow_mut().insert(at, facts.clone());
         }
-        match checked {
-            Ok(said) => {
-                if keep && let Some(facts) = facts {
-                    self.checked_facts.borrow_mut().insert(at, facts);
-                }
-                Ok(project_lower::UnitSaid::Warned(said))
-            }
-            Err(e) => match e.downcast_ref::<diagnostics::Refused>() {
-                Some(tally) if tally.at.is_none() && tally.finding.is_none() => {
-                    Ok(project_lower::UnitSaid::Refused(tally.message.clone()))
-                }
-                _ => self.held(Err(e)),
-            },
+        if let Ok(_) = &checked
+            && keep
+            && let Some(facts) = facts
+        {
+            self.checked_facts.borrow_mut().insert(at, facts);
+        }
+        self.unit_said(checked)
+    }
+
+    fn check_ahead(&self, ats: &[i64]) {
+        // **`nikaia lsp` keeps every unit's facts** and says nothing: each
+        // unit is checked in its turn, as `check_unit` checks it.
+        if diagnostics::is_collecting() {
+            return;
+        }
+        let settings = self.settings;
+        let program = self.program();
+        let checking = self.checking.borrow();
+        let checking = checking.as_ref().expect("the check is open");
+        let foreign = self.foreign.borrow();
+        let foreign = foreign.as_ref().expect("the check is open");
+        let beside: Vec<&crate::parser::Parsed> =
+            program.units.iter().map(|unit| &unit.parsed).collect();
+        let around = Around {
+            foreign,
+            newly: &checking.newly,
+            beside: &beside,
+            reads: self.reads,
+            tested: &checking.tested,
+        };
+        let program = &*program;
+        // A dependency's unit only: its own package's book answers it
+        // (ADR-270 D23, `proofs::for_unit`), so the workers need none of the
+        // build's, and it keeps no facts.
+        let ats: Vec<usize> = ats
+            .iter()
+            .map(|at| *at as usize)
+            .filter(|at| {
+                program
+                    .units
+                    .get(*at)
+                    .is_some_and(|unit| unit.package.is_some())
+            })
+            .collect();
+        // The largest first, so no core is left with a long file at the end.
+        let mut order: Vec<usize> = (0..ats.len()).collect();
+        order.sort_by_key(|k| std::cmp::Reverse(program.units[ats[*k]].parsed.program.items.len()));
+        let done = crate::proofs::in_parallel(&order, None, |k| {
+            let unit = &program.units[ats[k]];
+            said_aside(|| check_unit_of(unit, program, checking, around, settings, None))
+        });
+        let mut ahead = self.ahead.borrow_mut();
+        for (at, checked) in ats.into_iter().zip(done) {
+            ahead.insert(at, checked);
         }
     }
 
@@ -1854,7 +2135,7 @@ impl project_lower::ProjectLowerHost for LowerHost<'_> {
         for finding in &found {
             let rendered = diagnostics::render_finding_in(finding, &shown, &lines);
             if !diagnostics::is_collecting() {
-                eprint!("{rendered}");
+                say(&format!("{rendered}"));
             }
         }
         Some(project_lower::UnitSaid::Refused(
@@ -2326,7 +2607,7 @@ impl project_check::ProjectCheckHost for CheckHost<'_> {
     fn eprint(&self, text: &str) {
         // `nikaia lsp` keeps the findings as data instead (#1347).
         if !diagnostics::is_collecting() {
-            eprint!("{text}");
+            say(text);
         }
     }
 }
@@ -2540,6 +2821,26 @@ struct ExplainHost<'a> {
     library: &'static Ledger,
 }
 
+impl ExplainHost<'_> {
+    /// The check's walk of unit `at`, the other units beside it.
+    fn propagation(&self, at: usize) -> crate::check::CheckFacts {
+        let program = self.program;
+        crate::check::propagation_against(
+            &program.units[at].parsed,
+            &program
+                .units
+                .iter()
+                .enumerate()
+                .filter(|(other, _)| *other != at)
+                .map(|(_, other)| &other.parsed)
+                .collect::<Vec<_>>(),
+            &program.contracts,
+            &program.described,
+            self.reads,
+        )
+    }
+}
+
 impl project_check::ProjectCheckExplainHost for ExplainHost<'_> {
     fn units(&self) -> i64 {
         self.program.units.len() as i64
@@ -2568,12 +2869,25 @@ impl project_check::ProjectCheckExplainHost for ExplainHost<'_> {
         let (program, settings, library) = (self.program, self.settings, self.library);
         let unit = &program.units[at as usize];
         match kind {
-            "overlaps" => crate::contracts::order::overlap_report(
-                &unit.parsed,
-                &program.contracts,
-                library,
-                &crate::emit::branch_starts_first(&unit.parsed, settings.build, &program.contracts),
-            ),
+            // The `overlap { … }` blocks, then the tasks `async` forms start
+            // (ADR-async-5 D32).
+            "overlaps" => {
+                crate::contracts::order::overlap_report(
+                    &unit.parsed,
+                    &program.contracts,
+                    library,
+                    &crate::emit::branch_starts_first(
+                        &unit.parsed,
+                        settings.build,
+                        &program.contracts,
+                    ),
+                ) + &crate::emit::task_report(
+                    &unit.parsed,
+                    &unit.source,
+                    settings.build,
+                    &program.contracts,
+                )
+            }
             "sharing" => crate::contracts::sharing::report(
                 &unit.parsed,
                 &program.contracts,
@@ -2582,21 +2896,18 @@ impl project_check::ProjectCheckExplainHost for ExplainHost<'_> {
                 // Which handovers duplicate a handle is the check's (ADR-312
                 // D2, #1502); an explanation runs before it, so it asks the
                 // check's walk the emitter asks.
-                Some(&crate::check::propagation_against(
-                    &unit.parsed,
-                    &program
-                        .units
-                        .iter()
-                        .enumerate()
-                        .filter(|(other, _)| *other != at as usize)
-                        .map(|(_, other)| &other.parsed)
-                        .collect::<Vec<_>>(),
-                    &program.contracts,
-                    &program.described,
-                    self.reads,
-                )),
+                Some(&self.propagation(at as usize)),
             ),
-            "tethers" => crate::contracts::tether::report(&unit.parsed, &program.contracts),
+            // Then each give and each reuse the check's walk narrated
+            // (ADR-text-reuse-1 D5, #2514).
+            "tethers" => {
+                crate::contracts::tether::report(&unit.parsed, &program.contracts)
+                    + &nikaia_std::compiler::tether::reuses_report(
+                        &self.propagation(at as usize).narrated,
+                        &unit.source,
+                        &unit.path.display().to_text(),
+                    )
+            }
             "asserts" => crate::check::claims_report(
                 &unit.parsed,
                 &unit.source,
@@ -2647,22 +2958,25 @@ impl project_check::ProjectCheckExplainHost for ExplainHost<'_> {
                 settings.build.prove_through_loops,
                 settings.words.unproved_claims == "warn",
             ),
-            "trust" => crate::contracts::trust::render_with_escapes(
-                &crate::contracts::trust::analyse_in(
+            // The raw sinks the build allows close the report (ADR-raw-sinks-1 D10).
+            "trust" => {
+                crate::contracts::trust::render_with_escapes(
+                    &crate::contracts::trust::analyse_in(
+                        &unit.parsed,
+                        &program
+                            .units
+                            .iter()
+                            .filter(|u| u.package == unit.package)
+                            .map(|u| &u.parsed)
+                            .collect::<Vec<_>>(),
+                        library,
+                    ),
                     &unit.parsed,
-                    &program
-                        .units
-                        .iter()
-                        .filter(|u| u.package == unit.package)
-                        .map(|u| &u.parsed)
-                        .collect::<Vec<_>>(),
                     library,
-                ),
-                &unit.parsed,
-                library,
-                &unit.path.display().to_text(),
-                &unit.source,
-            ),
+                    &unit.path.display().to_text(),
+                    &unit.source,
+                ) + &nikaia_std::compiler::trust::render_allowed(&settings.words.allow)
+            }
             other => unreachable!("no `--explain` report `{other}`"),
         }
     }
@@ -2728,7 +3042,7 @@ impl Project {
         // silent - a manifest whose setting stopped being read without saying
         // so is the mistake `[build]`'s unknown-key check already exists for.
         for note in manifest.notes() {
-            eprintln!("note: {note}");
+            say(&format!("note: {note}\n"));
         }
         let settings = Settings::resolve(&manifest, target, user_parallelism)?;
         if let Some(missing) = settings.build.target.unbuildable() {
@@ -3159,17 +3473,20 @@ impl Project {
 
         for diagnostic in &translated {
             let at = diagnostic.location.as_ref().map_or(0, |l| l.unit);
-            eprint!(
+            say(&format!(
                 "{}",
                 diagnostics::render(diagnostic, &paths[at], sources[at], &generated)
-            );
+            ));
         }
 
         // **The backend's own words, kept** (ADR-056 D2). Shown above because
         // the reader is being told this is not their mistake, and written here
         // because a bug report is made later and from a file.
         if let Some(log) = diagnostics::log_internal(&translated, &self.gen_dir()) {
-            eprintln!("note: the backend's own messages are in {}", log.display());
+            say(&format!(
+                "note: the backend's own messages are in {}\n",
+                log.display()
+            ));
         }
         Ok(())
     }
@@ -4238,7 +4555,7 @@ impl project_drive::ProjectDriveHost for DriveHost<'_> {
     }
 
     fn eprint(&self, text: &str) {
-        eprint!("{text}");
+        say(text);
     }
 
     fn write_if_changed(&self, path: &Path, text: &str) -> HostResult<()> {
@@ -4292,13 +4609,18 @@ impl project_drive::ProjectDriveHost for DriveHost<'_> {
     }
 
     fn toolchain_is_new_enough(&self) -> Option<String> {
-        toolchain_is_new_enough(crate::emit::RUST_FLOOR)
-            .err()
-            .map(|error| format!("{error:#}"))
+        // The held answer (#2421): a run whose program is built asks no
+        // `rustc` for its version.
+        toolchain_is_new_enough_as(
+            crate::comptime_run::rustc_version(),
+            crate::emit::RUST_FLOOR,
+        )
+        .err()
+        .map(|error| format!("{error:#}"))
     }
 
     fn rustc_version(&self) -> String {
-        orchestrator::project::rustc_version().to_text()
+        crate::comptime_run::rustc_version().to_text()
     }
 
     fn cargo_fresh(&self, record: &Path, handed: &str) -> Option<String> {
@@ -4452,12 +4774,7 @@ impl project_drive::ProjectDriveHost for DriveHost<'_> {
         let project = self.project;
         let cargo = self.held((|| {
             let target_dir = if shared {
-                let tree = Sysroot::resolve().rlib_cache(
-                    &project.settings.words.target,
-                    &project.codegen(),
-                    &project.settings.words.reentrancy_check,
-                    &project.settings.cpu_key()?,
-                );
+                let tree = cargo_target_dir(project, manifest, shared)?;
                 orchestrator::cache::sweep_programs(&tree, &project.root_tag(), &project.root);
                 Some(tree)
             } else {
@@ -4482,6 +4799,10 @@ impl project_drive::ProjectDriveHost for DriveHost<'_> {
         })())?;
         *self.cargo.borrow_mut() = Some(cargo);
         Ok(())
+    }
+
+    fn target_dir(&self, manifest: &Path, shared: bool) -> HostResult<PathBuf> {
+        self.held(cargo_target_dir(self.project, manifest, shared))
     }
 
     fn is_library(&self) -> bool {
@@ -4543,6 +4864,20 @@ impl project_drive::ProjectDriveHost for DriveHost<'_> {
     }
 
     fn run_directly(&self, binary: &Path) -> HostResult<i32> {
+        // **The record of this run** (#2421), for a program `rustc` built
+        // into its slot here: the next run of the same file starts it at once.
+        if let Some(ran) = ran().take()
+            && let Some(inputs) = ran.inputs
+            && binary.starts_with(self.project.own_dir().join("fast").join("slots"))
+        {
+            block_on(project_drive::project_drive_ran_write(
+                &ran.record,
+                &ran.key,
+                binary,
+                &inputs,
+                &ran.said,
+            ));
+        }
         self.held(run_directly(binary, self.program_args, &self.launch_vars()))
     }
 }
@@ -4555,26 +4890,38 @@ impl DriveHost<'_> {
     /// run (`nikaia test`'s test file), else the `.nika` file `run` was
     /// given, else the project's entry point.
     fn launch_vars(&self) -> std::vec::Vec<(std::string::String, std::ffi::OsString)> {
-        let mut vars = std::vec::Vec::new();
-        if let Ok(exe) = std::env::current_exe() {
-            vars.push((
-                std::string::String::from(nikaia_std::env::EXE_VAR),
-                exe.into_os_string(),
-            ));
-        }
-        let main = std::env::var_os(nikaia_std::env::MAIN_VAR)
-            .filter(|value| !value.is_empty())
-            .unwrap_or_else(|| {
-                let main = self
-                    .project
-                    .written
-                    .clone()
-                    .unwrap_or_else(|| self.project.entry());
-                std::path::absolute(&main).unwrap_or(main).into_os_string()
-            });
-        vars.push((std::string::String::from(nikaia_std::env::MAIN_VAR), main));
-        vars
+        let main = self
+            .project
+            .written
+            .clone()
+            .unwrap_or_else(|| self.project.entry());
+        launch_vars(Some(&main))
     }
+}
+
+/// [`DriveHost`]'s `launch_vars`, with `main` the file the program stands in
+/// for where no launcher named one: also a run that finds its program built
+/// (#2421).
+fn launch_vars(main: Option<&Path>) -> std::vec::Vec<(std::string::String, std::ffi::OsString)> {
+    let mut vars = std::vec::Vec::new();
+    if let Ok(exe) = std::env::current_exe() {
+        vars.push((
+            std::string::String::from(nikaia_std::env::EXE_VAR),
+            exe.into_os_string(),
+        ));
+    }
+    let main = std::env::var_os(nikaia_std::env::MAIN_VAR)
+        .filter(|value| !value.is_empty())
+        .or_else(|| {
+            main.map(|main| {
+                std::path::absolute(main)
+                    .unwrap_or_else(|_| main.to_path_buf())
+                    .into_os_string()
+            })
+        })
+        .unwrap_or_default();
+    vars.push((std::string::String::from(nikaia_std::env::MAIN_VAR), main));
+    vars
 }
 
 #[cfg(unix)]
@@ -4616,6 +4963,27 @@ fn run_directly(
 /// triple they pass Cargo as `--target`: the two bundles
 /// (`tools/comptime_bundle.nika`) and every grammar run's parser.
 ///
+/// **The directory Cargo builds `manifest` in** (ADR-002 D4), which the
+/// wrapper learns as `NIKAIA_TARGET_DIR` (ADR-raw-sinks-1 D17.6): the tree of
+/// the user's cache for these settings when `shared`, else where Cargo puts
+/// it unasked, `CARGO_TARGET_DIR` (relative to where the tools start) or
+/// `target` beside the manifest. The choosing Rust that stays until the outer
+/// build moves (ADR-platform-layer-v1 D5, D6).
+fn cargo_target_dir(project: &Project, manifest: &Path, shared: bool) -> Result<PathBuf> {
+    if shared {
+        return Ok(Sysroot::resolve().rlib_cache(
+            &project.settings.words.target,
+            &project.codegen(),
+            &project.settings.words.reentrancy_check,
+            &project.settings.cpu_key()?,
+        ));
+    }
+    match std::env::var_os("CARGO_TARGET_DIR").filter(|dir| !dir.is_empty()) {
+        Some(dir) => Ok(Layout::where_tools_start().join(dir)),
+        None => Ok(manifest.parent().unwrap_or(Path::new(".")).join("target")),
+    }
+}
+
 /// **The tree a program with no settings is built in** (`Sysroot::rlib_cache`,
 /// ADR-002 D4), with the program's `--target` and the profile a generated
 /// workspace gives its dependencies, so Cargo compiles `std` there once for the

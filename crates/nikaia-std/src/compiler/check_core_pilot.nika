@@ -483,9 +483,11 @@ fn check_reflect_named_kind(state: ref CheckState, name: ref String, args: ref V
 
 /// **The kind of a type the language itself names** (Part II 10.3, the table
 /// of `T::kind`): `Opaque` for any other name. Shared with the copies of a
-/// grammar rule that chooses by kind (`grammar_types.nika`).
+/// grammar rule that chooses by kind (`grammar_types.nika`). The name is
+/// read without its module: `collections::HashMap` is `HashMap` (#2599).
 fn check_reflect_builtin_kind(name: ref String) -> String {
-    return match name {
+    let plain: String = name.split("::").last()?.clone() ?? name.clone()
+    return match plain {
         "i64" => "I64",
         "i32" => "I32",
         "u8" => "U8",
@@ -500,6 +502,7 @@ fn check_reflect_builtin_kind(name: ref String) -> String {
         "Vec" => "List",
         "List" => "List",
         "HashMap" => "Map",
+        "BTreeMap" => "Map",
         "Array" => "Array",
         else => "Opaque",
     }
@@ -942,6 +945,12 @@ fn check_reflect_match[H: CheckHost](mut state: CheckState, world: ref CheckWorl
         return null
     }
     state.facts.kind_matches.insert(id_of(value) as i64)
+    let subject: String = match value {
+        Expr::Path(segments, _) => f"{world.words.resolve(segments[0])}",
+        else => "",
+    }
+    let made = f"$new {subject}"
+    let made_before: String? = state.walks_fields.get(made)?.clone()
     let mut answered: Vec[CheckArm] = []
     let mut seen: Ty = Ty::Unknown
     let mut any = false
@@ -971,7 +980,23 @@ fn check_reflect_match[H: CheckHost](mut state: CheckState, world: ref CheckWorl
             state.type_parameters.insert(name.clone(), bounds.clone())
             state.walks_fields.insert(f"$kind {name}", name.clone())
         }
+        // **In a `Map` or `List` arm, `T()` is the empty collection of the
+        // type `T` is** (ADR-grammar-typed-read-v1 D14); in any other arm it
+        // is not.
+        if (case == "Map" || case == "List") && state.type_parameters.contains_key(subject) {
+            state.walks_fields.insert(made.clone(), subject.clone())
+        } else {
+            state.walks_fields.remove(made)
+        }
         let got = check_core_expr(state, world, host, arm.body, span)
+        match made_before {
+            null => {
+                state.walks_fields.remove(made)
+            },
+            before => {
+                state.walks_fields.insert(made.clone(), before.clone())
+            },
+        }
         for one in held {
             state.walks_fields.remove(f"$kind {one.0}")
             match one.1 {

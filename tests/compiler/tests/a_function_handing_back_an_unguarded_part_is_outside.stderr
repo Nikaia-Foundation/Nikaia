@@ -7,7 +7,7 @@ warning[NK1308]: `first` reaches the program `process::run` runs, and it comes f
     = note: `first` comes from `cli::args`: whoever sends it chooses the value, so nothing the compiler can see says what it holds.
     = note: No check makes a stranger's choice of program safe: a name is looked up on `PATH`, a path runs that file.
     = note: `raw-sinks = "warn"` lets this build through.
-    = help: Name the program with a literal, or choose it with a `match` whose arms are literals. If the program means to run a program from outside, `untrusted-program = true` under `[allow]` in the manifest builds it.
+    = help: Name the program with a literal, or choose it with a `match` whose arms are literals: `let editor = match env::var("EDITOR") ?? "" { "vim" => "vim", "nano" => "nano", else => "vi", }`. If the program means to run a program from outside, `untrusted-program = true` under `[allow]` in the manifest builds it.
 warning[NK1308]: `second` reaches the program `process::run` runs, and it comes from outside the program.
    --> tests/a_function_handing_back_an_unguarded_part_is_outside.nika:44:9
     |
@@ -17,7 +17,7 @@ warning[NK1308]: `second` reaches the program `process::run` runs, and it comes 
     = note: `second` comes from `cli::args`: whoever sends it chooses the value, so nothing the compiler can see says what it holds.
     = note: No check makes a stranger's choice of program safe: a name is looked up on `PATH`, a path runs that file.
     = note: `raw-sinks = "warn"` lets this build through.
-    = help: Name the program with a literal, or choose it with a `match` whose arms are literals. If the program means to run a program from outside, `untrusted-program = true` under `[allow]` in the manifest builds it.
+    = help: Name the program with a literal, or choose it with a `match` whose arms are literals: `let editor = match env::var("EDITOR") ?? "" { "vim" => "vim", "nano" => "nano", else => "vi", }`. If the program means to run a program from outside, `untrusted-program = true` under `[allow]` in the manifest builds it.
 warning[NK1308]: `third` reaches the program `process::run` runs, and it comes from outside the program.
    --> tests/a_function_handing_back_an_unguarded_part_is_outside.nika:45:9
     |
@@ -27,7 +27,7 @@ warning[NK1308]: `third` reaches the program `process::run` runs, and it comes f
     = note: `third` comes from `cli::args`: whoever sends it chooses the value, so nothing the compiler can see says what it holds.
     = note: No check makes a stranger's choice of program safe: a name is looked up on `PATH`, a path runs that file.
     = note: `raw-sinks = "warn"` lets this build through.
-    = help: Name the program with a literal, or choose it with a `match` whose arms are literals. If the program means to run a program from outside, `untrusted-program = true` under `[allow]` in the manifest builds it.
+    = help: Name the program with a literal, or choose it with a `match` whose arms are literals: `let editor = match env::var("EDITOR") ?? "" { "vim" => "vim", "nano" => "nano", else => "vi", }`. If the program means to run a program from outside, `untrusted-program = true` under `[allow]` in the manifest builds it.
 warning[NK1308]: `fourth` reaches the program `process::run` runs, and it comes from outside the program.
    --> tests/a_function_handing_back_an_unguarded_part_is_outside.nika:46:9
     |
@@ -37,4 +37,4 @@ warning[NK1308]: `fourth` reaches the program `process::run` runs, and it comes 
     = note: `fourth` comes from `cli::args`: whoever sends it chooses the value, so nothing the compiler can see says what it holds.
     = note: No check makes a stranger's choice of program safe: a name is looked up on `PATH`, a path runs that file.
     = note: `raw-sinks = "warn"` lets this build through.
-    = help: Name the program with a literal, or choose it with a `match` whose arms are literals. If the program means to run a program from outside, `untrusted-program = true` under `[allow]` in the manifest builds it.
+    = help: Name the program with a literal, or choose it with a `match` whose arms are literals: `let editor = match env::var("EDITOR") ?? "" { "vim" => "vim", "nano" => "nano", else => "vi", }`. If the program means to run a program from outside, `untrusted-program = true` under `[allow]` in the manifest builds it.

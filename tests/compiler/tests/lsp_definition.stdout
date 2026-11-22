@@ -1,6 +1,6 @@
 Content-Length: ok\r\n
 \r\n
-{"jsonrpc":"2.0","id":1,"result":{"capabilities":{"textDocumentSync":1,"definitionProvider":true}}}
+{"jsonrpc":"2.0","id":1,"result":{"capabilities":{"textDocumentSync":1,"definitionProvider":true,"inlayHintProvider":true}}}
 Content-Length: ok\r\n
 \r\n
 {"jsonrpc":"2.0","id":2,"result":{"uri":"file://<scratch>/pk/src/main.nika","range":{"start":{"line":24,"character":8},"end":{"line":24,"character":9}}}}

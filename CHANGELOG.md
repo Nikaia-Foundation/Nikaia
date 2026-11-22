@@ -8,6 +8,156 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1535] — 2026-11-22
+
+**A dependency's warning no longer keeps a binary's lowering out of the build cache**
+- A build whose dependency says warnings reuses its binary's lowering in the rustc wrapper instead of checking and lowering it a second time (#1949).
+
+## [0.0.1534] — 2026-11-22
+
+**drive.nika proves the lane directory where it arrives: guards in main and the hooks, every helper under drive_here (ADR-raw-sinks-1 D11-D14) (#2475)**
+- drive.nika opens every lane path under the checkout root and refuses a lane directory that is not a relative path below it (exit 2), so `nikaia check scripts/drive.nika` reports no NK1308.
+
+## [0.0.1533] — 2026-11-22
+
+**drive.nika: lock, merge, tree and brief helpers open their paths under the checkout root (ADR-raw-sinks-1 D11) (#2470)**
+- drive.nika opens its lock, merge, worktree and brief files under the checkout root fs::Root::Dir(".") instead of Anywhere (ADR-raw-sinks-1 D11)
+
+## [0.0.1532] — 2026-11-22
+
+**suite: build the solver by its absolute path, lowered once, not twice**
+- none (CI only)
+
+## [0.0.1531] — 2026-11-22
+
+**ledger: prove a unit's bounds with the result summaries its check proves (#2684)**
+- Bounds: the ledger's proof of a unit reads the private functions' result summaries the emitter's does, so a cold build takes the ledger's proof instead of proving again, and a task whose index a summary proves is no longer said to panic.
+
+## [0.0.1530] — 2026-11-22
+
+**Builders' changes (#2514, #2649)**
+- `--tethers` names each cut that takes its source's buffer and each `replace` that works in a buffer already there, one `FILE:LINE:` line per site (`rest takes the buffer of line`, `replace works in the buffer of t`), and the language server shows the same text as an inlay hint at the end of that line (ADR-text-reuse-1 D5).
+- Analysis cost per file: `analysis_cost.nika --files` fits each checker analysis as a fixed cost per file plus a cost per line; `docs/analysis-at-scale.md` holds the table for the compiler's 274 files. Every analysis is linear in the lines. A fixed 676 M per file, from package-wide views and returned-place facts, makes up 61 % of the cost.
+
+## [0.0.1529] — 2026-11-22
+
+**Builders' changes (#2469, #2471, #2472, #2473, #2481, #2482, #2485, #2526, #2577, #2590, #2591)**
+- db::raw is a raw sink (NK1308): outside text in it is refused unless guarded by db::is_identifier or allowed by `untrusted-sql = true`; a guard on a dependency's pure bool function now proves it after.
+- A path guard whose refusing branch ends in process::exit(..) now proves the name after it, as one ending in return does (ADR-raw-sinks-1 D14)
+- scripts/agent.nika passes the raw path sink check by proof: its files open under `fs::Root::Dir(".")`, `--dir` must be a relative path below the working directory, and the transcript path is built in Nikaia from the environment.
+- A local bound from a literal, the environment or a proved function result now leads a guarded path join a function hands back, without NK1308.
+- scripts/batch.nika, cycle.nika, commit.nika and ledgers.nika pass the raw path sink check by proof: batch and cycle take DIR only as a relative path below the working directory, all four open their files under `fs::Root::Dir(".")` or a `fs::scratch()` root, and no `mktemp` is left.
+- scripts/batch.nika takes its DIR only as a relative path below the working directory and opens its files under `fs::Root::Dir(".")`.
+- scripts/cycle.nika takes its DIR only as a relative path below the working directory and opens its files under `fs::Root::Dir(".")`.
+- scripts/commit.nika opens its report and the listed files under `fs::Root::Dir(".")` and makes its temporary files with `fs::scratch()` instead of `mktemp`.
+- The small scripts pass the raw path sink check by proof: their argument paths are guarded with path::is_below and opened under fs::Root::Dir("."); java_binding.nika and pre-push.nika run the checkout's nikaia by a literal path, and java_binding.nika's --exe is gone, from CI too
+- scripts/tokenspeed.nika opens a transcript under the claude projects directory (from the environment) or below the working directory, refuses any other path, and reads directory names under a root joined to the directory.
+- scripts/release.nika and scripts/status.nika refuse a reports directory that is not a relative path below the working directory, open its files under `fs::Root::Dir(".")` and read its report names under a root joined to it; status.nika lists the directory with `fs::read_dir` instead of `ls`.
+- scripts/move_tests.nika and scripts/analysis_scale.nika refuse a path argument that is not relative below the working directory and open it under `fs::Root::Dir(".")`; syntax.nika reads the example tests under a root joined to tests/compiler/tests; facts-collect.nika opens the debriefs it finds under `fs::Root::Dir(".")`.
+- scripts/gate.nika and scripts/proved.nika open their paths under a literal root; proved.nika refuses a report path outside the working directory, and drive.nika writes the bounds report into the worktree it measures
+- scripts/grammar_arrow.nika, tokens.nika, where.nika (--outline) and probe.nika (--file) refuse a path outside the working directory (exit 2); where.nika reads the files it walks under the directory walked
+- scripts/java_binding.nika drops --exe and runs target/release/nikaia, else target/fast/nikaia, with bind --project; pre-push.nika runs the page examples with the build's literal path and test --project; CI's Java binding step no longer passes --exe
+- `fs::copy_between(from, from_root, to, to_root)` copies a file from one root into another and keeps its permission bits. It is the first platform primitive (ADR-platform-layer-v1 D7 item 1). Its raw-sink check (NK1308) judges each name under its own root.
+- `fs::copy_between(from, from_root, to, to_root)` copies a file from one root into another, each name resolved under its own root, and keeps its permission bits: the first platform primitive (ADR-platform-layer-v1 D4, D7 item 1; added Rust: `fs::copy_between` in crates/nikaia-std/src/fs.rs, one `std::fs::copy`, listed for #557 / #125 by D6).
+- The raw-sink check (`NK1308`) of `fs::copy_between` judges each name under its own root: an outside `from` under a clean `from_root` passes, an outside `to` is a write (`untrusted-paths-write`), and a root a function takes at `to_root` is judged where it is passed.
+- The wrapper learns the directory Cargo builds in: `NIKAIA_TARGET_DIR`, set beside `NIKAIA_GEN_DIR`, names the shared cache tree or the `CARGO_TARGET_DIR` a build asked for.
+- Path guards: a guard whose branch calls an own `panic` or a package's `process::exit` no longer counts as a proof (NK1308 stays) (#2485)
+- Website: the safety page names the raw-sink rule (ADR-raw-sinks-1), marked specified, not built yet.
+- drive.nika reads a test hook's directory and second file under the checkout (fs::Root::Dir("."), ADR-raw-sinks-1 D11); its tests pass lanes under target/drive-test/
+- A path guard on a clone proves the name: `path::is_below(d.clone())` and `path::is_component(d.clone())` now prove `d` for a later sink, as the guard on `d` does (ADR-raw-sinks-1 D14).
+- A root from outside passed to a function is a raw sink at the call: `listed(fs::Root::Dir(d))`, where `listed` opens a path under its parameter, now draws NK1308 as `fs::read_dir(".", fs::Root::Dir(d))` does, through any number of functions that hand the root on; a name bound to a root is judged through a `.clone()` too.
+
+## [0.0.1528] — 2026-11-22
+
+**escape_scalar in escapes.nika answers which numbers name a character; the char_of parameters and BtHost::char_of go (#2672)**
+- The build-time folder finds a `comptime`, an `enum` variant and a grammar's entry rule in Nikaia (build_eval.nika over ParsedViews), and a `comptime` may now fold a `comptime` declared in another file of the package; `crates/nikaia/src/build_time.rs` is gone, and the `char_of` callback is gone from every escape walk (`escape_scalar` in escapes.nika).
+
+## [0.0.1527] — 2026-11-22
+
+**Builders' changes (#2618, #2629, #2647, #2661)**
+- none (test only)
+- Prover: a method's result summary holds on any receiver (`r.kind(t)`), for an impl function called by its path (`Reader::sized(t)`), and a call's summary inside a value or an `if` condition (`if kind(t) == 0`, `self.kind(t) + 0`) (ADR-359 D14, #2618)
+- Bounds walk: is_empty guards, tuple parts and small-type casts are proved - if xs.is_empty() { return } proves xs[0], let row = f().0 is bounded by its guards like let row: i64, and -1 - s.start as i64 with a u32 field fits (#2629).
+- The prover reads a Wide exactly: a value past `Wide::of(a).narrow() ?? return` (and past add, sub, mul by a constant, and product of bounded factors) keeps the range of the values it was made from, so an index by it is proved.
+- The prover no longer asks the solver whether a checked i64 operation overflows where the facts' own bounds keep it inside the type.
+
+## [0.0.1526] — 2026-11-22
+
+**Builders' changes (#1933)**
+- NK1385: a warning on a String built by push from a source that bounds it | `let mut out = String()` filled in one loop over `s` (its view, `0..<s.len()` or `while i < len`) with parts of `s` now warns NK1385, and `nikaia fix` writes `String(capacity: s.len())` (ADR-149 D5).
+- lower-std's checker analyses have their own entry points, and scripts/analysis_cost.nika prints instructions per analysis (handles, outside data, bounds, proofs, views, lints) as a table from callgrind.
+
+## [0.0.1525] — 2026-11-21
+
+**checker: a task handle used after join(), cancel() or detach() took it is NK2105, not rustc's NK1343 (#2645)**
+- A task handle used after its join(), cancel() or detach() took it is now refused with NK2105, with its own note and help, instead of an internal error from rustc (NK1343).
+
+## [0.0.1524] — 2026-11-21
+
+**Builders' changes (#2512, #2561, #2562, #2610, #2643, #2644)**
+- A `par_iter` lambda that writes a resource (prints, writes a file) is refused against its own other runs (NK2104) unless the walk is `par_iter(limit: 1)`; and two tasks that print text with holes, or a name, now meet (NK2104), where before the check gave up on them.
+- async(deferred) - `async(deferred) fn { … }` and `async(detached, deferred) fn { … }` build: the task runs only from the handle's `start()` (ADR-async-5 D12); a deferred handle neither started nor cancelled on some path, or started twice, is NK2121.
+- An unread task with a fallback (`async e catch { f }` as a statement or a binding nothing names, with or without `within:`) runs its fallback instead of raising at the group's end; the group's end throws the first unread failure with the rest as its `secondary`, and a leaving `throw` leads with them (ADR-async-5 D21, D22).
+- An error that crosses a task's boundary shows, under its `raised at` line, `started at` and `arrived at` for each crossing (value tasks, child and detached handles, unread failures at a group's end, each `secondary` with its own); under `NIKAIA_TRACE=1` the task's trace and the waiting code's are stitched with `── started at <site> ──` per crossing (ADR-async-5 D23).
+- A walk made by `par_iter(limit: 1)` and bound to a name (`let walk = xs.par_iter(limit: 1)`) runs one element at a time wherever it is used, so a printing lambda handed to it later is no longer refused with NK2104.
+- A child handle's task, `async(handle) fn { … }`, is now checked against the statements that run beside it until its join, and a deferred one from its `start()` (NK2104, ADR-async-5 D11, D12).
+- Checker: `start()` on a task handle that is not deferred (`async(handle)`, `async(detached)`, `spawn`) is now refused as NK2121 at the `start()`, instead of panicking at run time or failing in rustc.
+
+## [0.0.1523] — 2026-11-21
+
+**Builders' changes (#2619)**
+- Simplex: a pivot that leaves i64 waits for another violated row | ADR-270 D11: before answering overflow, the simplex tries every other violated row's pivots, and computes a row value in double width where only partial sums leave i64. (#2101)
+- Faster bound proofs: a type's rule check is not walked again when the callee returns it looked up changed only by a pending entry where pending reads as absent, or not at all (ADR-306 D23).
+- Integers have an exact double-width value: Wide[T] for u8, u32, i32, u64 and i64 (of, product, from_halves, add, sub, neg, mul, div_rem, rem, abs, sign, halves, narrow), lowered to the native type of twice the width; the solver holds its double-width sums in it
+
+## [0.0.1522] — 2026-11-21
+
+**A B-tree map that is a mut parameter, drained, is taken as it is**
+- Fixed: draining a B-tree map that is a `mut` parameter (`for (k, v) in kept.drain()`, `m.extend(kept.drain())`) no longer fails to compile
+
+## [0.0.1521] — 2026-11-21
+
+**Hello World below Python: the run bundle linked -Bsymbolic-functions, release and C rows, the pass table (#2532)**
+- Hello World starts below Python: a warm `nikaia run` costs 0.29 of Python's start (it was 1.24), since the run bundle binds its own calls at link time (-Bsymbolic-functions) instead of 25,691 loader lookups per start; a built binary costs 0.01 of it; benches/hello adds a release row, a C floor and a pass table, and its README explains what an edit (6.75 to 16.42 of Python) and a new file (17.72) cost
+
+## [0.0.1520] — 2026-11-21
+
+**Builders' changes (#1879, #2530, #860)**
+- binary-trees 3.37x of Rust #5 (was 5.75x): each node's box is built in the task's block, main's included, and a free in a segment beyond a block's current one finds its segment by its address instead of a walk over all parked segments (248.8 → 145.8 instructions a node with checks off, callgrind binary-trees 16, 2026-11-21, Nikaia 0.0.1517)
+- Benchmarks: `benches/hello/` counts a warm `nikaia run` without its run record too: the record, which skips reading, checking and lowering an unchanged file, saves 35.4 M of nikaia's 44.7 M (warm run 1.25x Python's start instead of 2.13x)
+- Benchmarks: `benches/hello/` counts Hello World's start: built binary 0.01x Python, warm `nikaia run` 1.24x, after an edit 7.7x (Rust unchanged) to 17.3x, a new file 15.8x
+
+## [0.0.1519] — 2026-11-21
+
+**Builders' changes (#2497, #986)**
+- `nikaia check --overlaps` lists every task an `async` form starts: its window, where it is waited for, its group's end and whether it is started first
+- async: a task takes a name bound in a block that ends before its group (a later mention is NK2105), and two tasks that both wait for one pending binding (a diamond) read the one value
+
+## [0.0.1518] — 2026-11-21
+
+**Builders' changes (#2459, #2592)**
+- The driver keeps one before-binary per commit in target/bins/<sha> and gives agents its path as NIKAIA_OLD; run times go to a lane's runs.txt; a cleanup removes the brief files and claude session dirs of closed issues.
+- Faster bound proofs: a type's rule check is not walked again when the callee returns it looked up changed only by a pending entry where pending reads as absent, or not at all (ADR-306 D23).
+- Faster bound proofs: a function's found returns are not walked again in a round where nothing it reads changed (ADR-306 D23).
+- Changed: `nikaia test` ends a test that failed with "the settings disagree" with each setting's difference from the first: how it ended, whether it passed, and line differences of its output, standard error, written files and bounds reports.
+
+## [0.0.1517] — 2026-11-21
+
+**Builders' changes (#2421, #2432)**
+- nikaia run of an unchanged file starts its built program at once from a run record, with no parse, check or rustc --version; its warnings are said once per run
+- nikaia run of an unchanged file outside a project starts its built program at once from a run record (key, binary, every input's digest, the warnings said), replaying its warnings once
+- Driver: a merge whose lowered-file conflict neither side can re-lower with the old compiler is re-lowered with the compiler built from the incoming commit (an emitter change such as Box to Boxed), instead of escalating.
+
+## [0.0.1516] — 2026-11-21
+
+**check: a field of self whose type copies by std's ledger is given as a copy, not refused by NK1131 (#2468)**
+- A `time::Duration` (or other ledger-copied type) field of `self` can be passed by value in a `self` or `mut self` method; NK1131 no longer refuses it.
+
+## [0.0.1515] — 2026-11-21
+
+**NK1308's help at process::run shows the literal match; --trust lists the raw sinks the build allows; D10's example writes else (ADR-raw-sinks-1 D10) (#2217)**
+- NK1308 at `process::run` shows the literal `match` to choose a program, and `--trust` lists the raw sinks `[allow]` and `--allow` let through (ADR-raw-sinks-1 D10).
+
 ## [0.0.1514] — 2026-11-21
 
 **drive: child drivers run with the compiler of HEAD, the CI waiter is watched (#2458)**

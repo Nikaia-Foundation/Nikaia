@@ -1,0 +1,49 @@
+// #2217, ADR-raw-sinks-1 D10: the program `process::run` runs is a raw sink.
+// A name read from stdin and handed to it is `NK1308`, and the help shows the
+// `match` whose arms are literals; a literal program passes, and so does that
+// `match`, while one arm that is not a literal keeps `NK1308`. `[allow]
+// untrusted-program = true` admits it, and `--trust` lists the key.
+use std::env
+use std::fs
+use std::process
+
+// The running `nikaia` (`env::current_exe`, ADR-program-path-1 D3).
+fn toolchain() -> String throws {
+    return env::current_exe()?.display() ?? "target/fast/nikaia"
+}
+
+fn said(nikaia: String, label: String, manifest: String, body: String, verb: Vec[String]) throws {
+    let root = fs::scratch()
+    let tmp = f"{root.path().display()}"
+    fs::create_dir("src", root)
+    fs::write("nikaia.toml", root, f"[package]\nname = \"p\"\nversion = \"0.1.0\"\n{manifest}")
+    fs::write("src/main.nika", root, f"use std::io\nuse std::process\n\nfn main() throws {{\n    let name = io::read_line() ?? \"\"\n{body}}}\n")
+    let mut args = verb.clone()
+    args.push("src/main.nika")
+    let out = process::run(nikaia, args; dir: tmp.clone(), env: [("RUST_BACKTRACE", "0")])
+    println(f"-- {label}")
+    println(f"exit {out.code}")
+    let mut listing = false
+    for line in f"{out.stdout}{out.stderr}".lines() {
+        if line.starts_with("raw sinks allowed") {
+            listing = true
+        } else if !line.starts_with("    ") {
+            listing = false
+        }
+        if listing || line.contains("NK1308") || line.contains("whose arms are literals") || line.contains(" --> ") {
+            println(line.replace(tmp, "TMP").trim())
+        }
+    }
+}
+
+fn main() throws {
+    let nikaia = toolchain()
+    let check: Vec[String] = ["check"]
+    said(nikaia, "stdin names the program", "", "    process::run(name, [])\n", check)
+    said(nikaia, "a literal program", "", "    process::run(\"vi\", [name])\n", check)
+    said(nikaia, "a match whose arms are literals", "", "    let p = match name { \"vim\" => \"vim\", \"nano\" => \"nano\", else => \"vi\", }\n    process::run(p, [])\n", check)
+    said(nikaia, "a match with an arm that is no literal", "", "    let p = match name { \"vim\" => \"vim\", else => name, }\n    process::run(p, [])\n", check)
+    said(nikaia, "[allow] untrusted-program", "[allow]\nuntrusted-program = true\n", "    process::run(name, [])\n", check)
+    said(nikaia, "--trust lists the key", "[allow]\nuntrusted-program = true\n", "    process::run(name, [])\n", ["check", "--trust"])
+    said(nikaia, "--trust with nothing allowed", "", "    process::run(\"vi\", [])\n", ["check", "--trust"])
+}

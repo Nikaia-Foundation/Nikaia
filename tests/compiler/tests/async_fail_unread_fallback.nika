@@ -1,0 +1,69 @@
+// A task nobody reads that has a fallback raises nothing at its group's end
+// (ADR-async-5 D21, D22, #2561): the fallback runs for its failure instead,
+// for a statement task, a binding nothing names and a child handle never
+// joined alike, and the group ends with its value. A deadline binds the task
+// inside its fallback, which stands in for `task::TimedOut` too (D16).
+use std::time
+
+enum Bad { Oops(i64) }
+impl Error for Bad {
+	fn message(ref self) -> String {
+		return match self {
+			Bad::Oops(n) => f"task {n} failed",
+		}
+	}
+}
+
+fn work(n: i64) -> i64 throws {
+	if n > 5 {
+		throw Bad::Oops(n)
+	}
+	return n
+}
+
+fn run() -> i64 throws {
+	let n = async {
+		async work(7) catch {
+			println(f"statement fallback: {error}")
+			0
+		}
+		let _unread = async work(8) catch {
+			println(f"binding fallback: {error}")
+			0
+		}
+		let _h = async(handle) fn { work(9) } catch {
+			println(f"handle fallback: {error}")
+			0
+		}
+		println("the group's statements run on")
+		1
+	}
+	return n
+}
+
+fn late(n: i64) -> i64 throws {
+	time::sleep(50.millis())
+	return work(n)
+}
+
+fn bounded() -> i64 throws {
+	async(within: 1.millis()) late(10) catch {
+		println(f"bound fallback: {error}")
+		0
+	}
+	println("the bound group's statements run on")
+	return 2
+}
+
+fn main() throws {
+	let n = run() catch {
+		println(f"raised: {error}")
+		0
+	}
+	println(f"{n}")
+	let m = bounded() catch {
+		println(f"raised: {error}")
+		0
+	}
+	println(f"{m}")
+}

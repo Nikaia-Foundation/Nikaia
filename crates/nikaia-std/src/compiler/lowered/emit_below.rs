@@ -143,6 +143,7 @@ impl EmitState {
         }
         false
     }
+    pub(crate) fn either_into_owned(&self, world: &EmitWorld<'_, '_, '_, '_>, value: &Expr, function: &str, at: i64) -> bool { !self.facts.lent_returns.contains(&at) && !call_returns_either(world.words, world.items, function) && self.either_result(world, value) }
     pub(crate) fn either_field(&self, world: &EmitWorld<'_, '_, '_, '_>, owner: &str, field: winnow_grammar::Symbol) -> bool {
         let wanted = world.words.resolve(field);
         let own = emit_base(owner);

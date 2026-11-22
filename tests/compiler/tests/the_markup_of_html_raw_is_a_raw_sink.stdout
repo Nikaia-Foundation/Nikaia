@@ -1,0 +1,12 @@
+-- stdin in the markup
+exit 0
+warning[NK1308]: `name` reaches the markup of `html::Raw`, written to the page as it is, and it comes from outside the program.
+--> src/main.nika:6:5
+= note: `raw-sinks = "warn"` lets this build through.
+= help: Check it where it arrives: `throw BadInput(name) if !html::is_plain(name)`, after which it is proved; or write it as text, which `html` escapes. If the program means to write markup from outside, `untrusted-markup = true` under `[allow]` in the manifest builds it.
+-- a literal markup
+exit 0
+-- after the guard html::is_plain
+exit 0
+-- [allow] untrusted-markup
+exit 0

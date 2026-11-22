@@ -1,0 +1,46 @@
+// A failure that crosses two tasks' boundaries records where each was
+// started and where its failure arrived (ADR-async-5 D23, Part I 7.1, #2562):
+// `work` fails in a task of `middle`, which fails in a task of `outer`, so the
+// long form shows the `raised` site and one `started`/`arrived` pair per
+// crossing, the innermost first. A failure no task carried has none.
+
+enum Bad { Oops(i64) }
+impl Error for Bad {
+	fn message(ref self) -> String {
+		return match self {
+			Bad::Oops(n) => f"task {n} failed",
+		}
+	}
+}
+
+fn work(n: i64) -> i64 throws {
+	if n > 5 {
+		throw Bad::Oops(n)
+	}
+	return n
+}
+
+fn middle(n: i64) -> i64 throws {
+	let v = async work(n)
+	let beside = n * 2
+	return v + beside
+}
+
+fn outer(n: i64) -> i64 throws {
+	let m = async middle(n)
+	let beside = n + 3
+	return m + beside
+}
+
+fn main() throws {
+	let n = outer(7) catch {
+		println(error.full())
+		0
+	}
+	let k = outer(2) catch { 0 }
+	let plain = work(9) catch {
+		println(error.full())
+		0
+	}
+	println(f"{n} {k} {plain}")
+}

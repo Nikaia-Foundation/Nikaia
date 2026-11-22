@@ -1,0 +1,9 @@
+error[NK1245]: The arms of this `if` are `Par[?] sync ends sized` and `Par[?] sync ends sized` with a deadline (`within:`), so the compiler can't tell what type its value is.
+  --> tests/walk_arms_with_a_deadline_name_both_types.nika:8:43
+   |
+ 8 |     let w = if b { xs.par_iter() } else { xs.par_iter(within: 5.millis()) }
+   |                                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: What is not known is not checked, so the value of an `if` whose arms disagree is refused rather than left to the language below.
+   = help: Make the arms of the `if` the same type.
+1 type error

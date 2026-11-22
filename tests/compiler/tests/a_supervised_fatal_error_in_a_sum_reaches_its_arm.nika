@@ -1,0 +1,30 @@
+// A supervised child whose fatal error travels in a sum with `io::IoError`
+// (it prints, so it throws both) is handed on in a box holding that sum:
+// a `catch` arm naming the fatal type still finds it there (#1372).
+use std::supervisor
+
+enum Doom { Over(i64) }
+impl Error for Doom {
+    fn message(ref self) -> String { return "doom" }
+}
+impl Fatal for Doom {}
+
+fn stop() throws {
+    println("stopping")
+    throw Doom::Over(3)
+}
+
+fn watch() throws {
+    supervisor::run([
+        supervisor::child(fn { stop() }; restart: supervisor::Kind::Permanent),
+    ])
+}
+
+fn main() throws {
+    watch() catch {
+        match error {
+            Doom::Over(c) => println(f"taken {c}"),
+            else => throw error,
+        }
+    }
+}

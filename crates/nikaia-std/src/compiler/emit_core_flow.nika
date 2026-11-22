@@ -605,7 +605,11 @@ impl EmitState {
         }
         // **Text ordered against text** (#733): `&str < String` does not exist
         // below, so both sides are read as `str`, whichever tier each lowered to.
-        if self.facts.ordered_texts.contains(site) {
+        // **Text compared with a kept buffer** (#2014): the kept name is a
+        // `&String` below and the other side an owned text or a view, which do
+        // not compare, so both are read as `str` there too.
+        let kept_side = self.emit_stmt_a_kept_name(world, walk, lhs) || self.emit_stmt_a_kept_name(world, walk, rhs)
+        if self.facts.ordered_texts.contains(site) || ((op == BinaryOp::Eq || op == BinaryOp::Ne) && kept_side && self.facts.text_equalities.contains(site)) {
             let symbol = binary_op(op)
             out.push("AsRef::<str>::as_ref(&(")
             self.emit_expr(world, walk, out, host, lhs, depth, wide, scope)
@@ -1448,6 +1452,9 @@ impl EmitState {
             if either {
                 out.push(")")
             }
+            if !self.facts.wrapped.contains_key(node_key(held)) && !self.facts.some_tails.contains(node_key(held)) && self.either_into_owned(world, held, scope.function, -1) {
+                out.push(".into()")
+            }
             if flow.can_throw {
                 out.push(")")
             }
@@ -1598,6 +1605,11 @@ impl EmitState {
         // the body moves is the new handle and the caller's own survives the
         // `spawn`.
         let handles = self.emit_task_handles(task)
+        // **A deferred task** (`async(detached, deferred)`, ADR-async-5 D12):
+        // the start below is a closure its handle's `start()` calls, so the
+        // setting and the body's channel pick the handle as for `spawn`.
+        let deferred = walk.async_deferred
+        walk.async_deferred = false
         // **A deadline** (ADR-async-5 D16, #986) counts from here, outside
         // the future; a fallback inside the task binds its guarded block by
         // it, so `task::TimedOut` reaches the fallback.
@@ -1669,10 +1681,19 @@ impl EmitState {
                 kind = "BoxedTask"
             }
         }
+        if deferred {
+            out.push("nikaia_std::task::Deferred::new(move || ")
+        }
+        // **A failure leaves the task with where it was started**
+        // (ADR-async-5 D23, `error::started_paused`).
+        let mut starter: String = "async move "
+        if failing {
+            starter = "nikaia_std::error::started_paused(async move "
+        }
         if host.overlaps_user_code() {
-            out.push(f"nikaia_std::task::{kind}::start_on_pool(async move ")
+            out.push(f"nikaia_std::task::{kind}::start_on_pool({starter}")
         } else {
-            out.push(f"nikaia_std::task::{kind}::start(async move ")
+            out.push(f"nikaia_std::task::{kind}::start({starter}")
         }
         // Plain, like any other lambda body: a `return` inside the task leaves the
         // task, and a failure in it is the task's. `in_lambda` is deliberately
@@ -1687,7 +1708,7 @@ impl EmitState {
             } else {
                 out.append(inner)
             }
-            out.push(f"; Ok::<_, {scope.channel}>(__nikaia_task) }}")
+            out.push(f"; Ok::<_, {scope.channel}>(__nikaia_task) }}, &{rust_string(scope.origin)})")
             // What its error says in the log if nobody waits (ADR-346 D6). One
             // of the two traits answers `report`, so the other is unused
             // (#1686).
@@ -1707,6 +1728,9 @@ impl EmitState {
             }
             self.emit_stmt_block_opening_with(world, walk, out, host, body, depth, inside, inside_scope, EmitTail::Return, opening)
             walk.async_bound = ""
+            out.push(")")
+        }
+        if deferred {
             out.push(")")
         }
         if opened {

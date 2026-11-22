@@ -106,8 +106,8 @@ percent(140)</code></pre></div><div class="home-code markdown-body"><pre class="
       <div class="safe-tile safe-tile-b">
         <span class="safe-chip safe-chip-build">Caught at compile time</span>
         <h3>What crosses into C</h3>
-        <p>A call into a C library is written inside <code>unsafe</code>, and what crosses is a view that lives for the call or an opaque handle that a cleanup releases. A lock may go into a task of the program's own, and the compiler refuses it where it would reach code that nothing describes.</p>
-        <a class="safe-more" href="{{ "/docs/specification/adr/adr-302.html" | relative_url }}">ADR-302 →</a>
+        <p>A call into a C library is written inside <code>unsafe</code>, and what crosses is a view that lives for the call or an opaque handle that a cleanup releases; an address C keeps is a raw pointer, written inside <code>unsafe</code> too. A lock may go into a task of the program's own, and the compiler refuses it where it would reach code that nothing describes.</p>
+        <a class="safe-more" href="{{ "/docs/specification/adr/adr-c-boundary-v1.html" | relative_url }}">ADR-c-boundary-v1 →</a>
       </div>
     </div>
   </div>
@@ -161,6 +161,16 @@ assert(n == 41)</code></pre></div><div class="home-code markdown-body"><pre clas
         <h3>Text from outside, matched and inserted</h3>
         <p><code>std::regex</code> uses a dialect that matches in time linear in the input, so a hostile input cannot make a match run away. A template escapes every value it inserts, unless the value is marked raw. Bytes become text only through a check that they are valid UTF-8.</p>
         <a class="safe-more" href="{{ "/docs/specification/adr/adr-017.html" | relative_url }}">ADR-017 →</a>
+      </div>
+      <div class="safe-tile safe-tile-b" id="raw-sinks">
+        <span class="safe-chip safe-chip-run">Specified, not built yet</span>
+        <h3>Raw markup, SQL, paths and programs</h3>
+        <p>Every boundary escapes by default: SQL takes its values as parameters, a process its arguments as a list, a path its root, a template escapes what it inserts. What reaches past that is a raw sink: <code>html::Raw</code>, <code>db::raw</code>, a path under <code>fs::Root::Anywhere</code>, the program of <code>process::run</code>. Data from outside goes there only when it is proved to meet the sink's precondition, or when the manifest allows the sink's key under <code>[allow]</code>; else the program is refused, <code>NK1308</code>. Today that check only warns by default (<a href="https://github.com/Nikaia-Foundation/Nikaia/issues/2332">#2332</a> makes it a refusal).</p>
+<div class="home-code markdown-body"><pre><code class="language-nika">let column = form.get("sort") ?? "name"
+throw BadInput(column) if !db::is_identifier(column)
+db::raw(f"ORDER BY {column}")</code></pre></div><p>The guard where the value arrives is the proof; past it, the call builds. Where no proof can hold, as for a program named by another program's output, only the manifest's key lets it through:</p><div class="home-code markdown-body"><pre><code class="language-toml">[allow]
+untrusted-program = true</code></pre></div>
+        <a class="safe-more" href="{{ "/docs/specification/adr/adr-raw-sinks-1.html" | relative_url }}">ADR-raw-sinks-1 →</a>
       </div>
       <div class="safe-tile safe-tile-b">
         <span class="safe-chip safe-chip-run">Specified, not built yet</span>

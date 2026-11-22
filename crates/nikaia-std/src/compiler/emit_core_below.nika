@@ -416,6 +416,18 @@ impl EmitState {
         }
     }
 
+    /// Whether **a task an `async` form starts** can pause (ADR-async-5 D20,
+    /// D32): any call in the form, its lambda's body included, by the key it
+    /// resolves to, or a method call the checker said pauses.
+    pub fn task_pauses(ref self, world: ref EmitWorld, task: ref Expr) -> bool {
+        for each in visited_in_expr(task) {
+            if self.expr_pauses(world, each) {
+                return true
+            }
+        }
+        return false
+    }
+
     /// Whether a **`catch` handler** can pause (#1715): any call in it by
     /// the key it resolves to, or a method call the checker said pauses.
     fn block_pauses(ref self, world: ref EmitWorld, block: ref Block) -> bool {

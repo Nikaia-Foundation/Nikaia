@@ -1,0 +1,12 @@
+// `par_iter(limit: 1)`, the literal, runs the elements one at a time, so a
+// lambda that prints does not meet its own other runs (ADR-async-5 D15, D26,
+// #2508). A lock changed through `update` is how a parallel lambda combines,
+// and is no meeting either (ADR-235 D2).
+fn main() throws {
+	let xs: Vec[i64] = [1, 2, 3]
+	xs.par_iter(limit: 1).for_each(fn(x) { println(f"{x}") catch {} })
+	xs.par_iter(limit: 1).map(fn(x) { x * 10 }).for_each(fn(x) { println(f"{x}") catch {} })
+	let total = SharedMut(0)
+	xs.par_iter().for_each(fn(x) { total.update fn(mut t) { t += x } })
+	println(total.get())
+}

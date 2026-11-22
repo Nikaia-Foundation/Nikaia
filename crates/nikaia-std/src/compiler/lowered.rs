@@ -668,6 +668,17 @@ mod check_core_stmt_lowered {
 pub use check_core_stmt_lowered::*;
 
 #[allow(unsafe_code)]
+mod check_core_wide_lowered {
+    #[allow(unused_imports)]
+    use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
+    include!("lowered/check_core_wide.rs");
+}
+#[allow(unused_imports)]
+pub use check_core_wide_lowered::*;
+
+#[allow(unsafe_code)]
 mod check_crossings_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -1185,6 +1196,17 @@ mod check_result_from_lowered {
 pub use check_result_from_lowered::*;
 
 #[allow(unsafe_code)]
+mod check_room_ahead_lowered {
+    #[allow(unused_imports)]
+    use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
+    include!("lowered/check_room_ahead.rs");
+}
+#[allow(unused_imports)]
+pub use check_room_ahead_lowered::*;
+
+#[allow(unsafe_code)]
 mod check_scope_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -1667,6 +1689,17 @@ mod emit_core_types_lowered {
 }
 #[allow(unused_imports)]
 pub use emit_core_types_lowered::*;
+
+#[allow(unsafe_code)]
+mod emit_core_wide_lowered {
+    #[allow(unused_imports)]
+    use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
+    include!("lowered/emit_core_wide.rs");
+}
+#[allow(unused_imports)]
+pub use emit_core_wide_lowered::*;
 
 #[allow(unsafe_code)]
 mod emit_entry_lowered {
@@ -2923,6 +2956,17 @@ mod tiers_lowered {
 pub use tiers_lowered::*;
 
 #[allow(unsafe_code)]
+mod toml_lowered {
+    #[allow(unused_imports)]
+    use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
+    include!("lowered/toml.rs");
+}
+#[allow(unused_imports)]
+pub use toml_lowered::*;
+
+#[allow(unsafe_code)]
 mod touch_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -3187,6 +3231,10 @@ pub mod check_core_ops {
 pub mod check_core_pilot {}
 pub mod check_core_places {}
 pub mod check_core_stmt {}
+pub mod check_core_wide {
+    #[allow(unused_imports)]
+    pub use super::{wide_unsigned_of};
+}
 pub mod check_crossings {
     #[allow(unused_imports)]
     pub use super::{CheckCrossingsPath};
@@ -3285,6 +3333,7 @@ pub mod check_result_from {
     #[allow(unused_imports)]
     pub use super::{result_from_check};
 }
+pub mod check_room_ahead {}
 pub mod check_scope {
     #[allow(unused_imports)]
     pub use super::{CheckResolved};
@@ -3407,6 +3456,10 @@ pub mod emit_core_match {}
 pub mod emit_core_places {}
 pub mod emit_core_reads {}
 pub mod emit_core_types {}
+pub mod emit_core_wide {
+    #[allow(unused_imports)]
+    pub use super::{emit_wide_native};
+}
 pub mod emit_entry {}
 pub mod emit_expr {}
 pub mod emit_exprs {}
@@ -3493,7 +3546,7 @@ pub mod emit_walk {
 }
 pub mod escapes {
     #[allow(unused_imports)]
-    pub use super::{NotAnEscape, an_escape_nothing_names, decoded, as_a_literal};
+    pub use super::{NotAnEscape, an_escape_nothing_names, decoded, as_a_literal, escape_scalar};
 }
 pub mod findings {
     #[allow(unused_imports)]
@@ -3618,7 +3671,7 @@ pub mod node_numbers {
 }
 pub mod order {
     #[allow(unused_imports)]
-    pub use super::{Operation, Accounted, Verdict, verdict, group_verdict, group_of, accounted, OneCall, overlap_report};
+    pub use super::{Operation, Accounted, Verdict, verdict, group_verdict, group_of, accounted, OneCall, overlap_report, task_report};
 }
 pub mod panics {
     #[allow(unused_imports)]
@@ -3667,7 +3720,7 @@ pub mod project_check {
 }
 pub mod project_drive {
     #[allow(unused_imports)]
-    pub use super::{ProjectDriveLowered, ProjectDriveFast, ProjectDriveHost, ProjectDriveRefusal, project_drive_drive_to, project_drive_fresh, project_drive_record, project_drive_no_std_for, project_drive_publishable, project_drive_spliced, project_drive_hand_modules, project_drive_backend_said, ProjectDriveKeptHost, project_drive_not_the_entry, project_drive_kept_for_file, ProjectDriveWrapperHost, project_drive_wrapper};
+    pub use super::{ProjectDriveLowered, ProjectDriveFast, ProjectDriveHost, ProjectDriveRefusal, project_drive_drive_to, project_drive_fresh, project_drive_record, project_drive_no_std_for, project_drive_publishable, project_drive_spliced, project_drive_hand_modules, project_drive_backend_said, ProjectDriveKeptHost, project_drive_not_the_entry, project_drive_kept_root, project_drive_ran_record, project_drive_ran_write, project_drive_ran, project_drive_kept_for_file, ProjectDriveWrapperHost, project_drive_wrapper};
 }
 pub mod project_features {
     #[allow(unused_imports)]
@@ -3800,7 +3853,7 @@ pub mod template {
 }
 pub mod tether {
     #[allow(unused_imports)]
-    pub use super::{RESULT_POSITION, INPUT_POSITION, Buffer, PackageTypes, declare_unit, a_parse_that_views, function_views, makes_a_buffer, tethers_report};
+    pub use super::{RESULT_POSITION, INPUT_POSITION, Buffer, PackageTypes, declare_unit, a_parse_that_views, function_views, makes_a_buffer, narrated_lines, reuses_report, tethers_report};
 }
 pub mod text_tiers {
     #[allow(unused_imports)]
@@ -3815,6 +3868,10 @@ pub mod throws {
     pub use super::{AS_VALUE, MethodsCalled, ThrowsGraph, unit_throws, stored_throws, params_as_places, throws_given, throws_published, error_sets, error_type, Thrown, Contribution};
 }
 pub mod tiers {}
+pub mod toml {
+    #[allow(unused_imports)]
+    pub use super::{Toml};
+}
 pub mod touch {
     #[allow(unused_imports)]
     pub use super::{Reached, Reach, TouchGraph, unit_touches, touches_of_graph};
@@ -3829,7 +3886,7 @@ pub mod tree_build {
 }
 pub mod trust {
     #[allow(unused_imports)]
-    pub use super::{Wrote, spelled, Reason, read_by_operator, first_literal, operator_read, SourceCall, source_calls, mark_trusted, main_parameters_source, takes_the_command_line, Place, render, MapPlan, trusted_maps, EscapePlan, EscapedCall, no_escapes, escaped_sinks, render_escapes};
+    pub use super::{Wrote, spelled, Reason, read_by_operator, first_literal, operator_read, SourceCall, source_calls, mark_trusted, main_parameters_source, takes_the_command_line, Place, render, render_allowed, MapPlan, trusted_maps, EscapePlan, EscapedCall, no_escapes, escaped_sinks, render_escapes};
 }
 pub mod ty {
     #[allow(unused_imports)]
@@ -3872,11 +3929,13 @@ pub fn nikaia_tests() -> std::vec::Vec<(std::string::String, fn() -> Result<(), 
     let mut all: std::vec::Vec<(std::string::String, fn() -> Result<(), std::boxed::Box<dyn std::error::Error>>)> = std::vec::Vec::new();
     all.extend(ast_nikaia_tests().into_iter().map(|(name, run)| (name.to_string(), run)));
     all.extend(crossing_nikaia_tests().into_iter().map(|(name, run)| (name.to_string(), run)));
+    all.extend(locks_nikaia_tests().into_iter().map(|(name, run)| (name.to_string(), run)));
     all.extend(manifest_nikaia_tests().into_iter().map(|(name, run)| (name.to_string(), run)));
     all.extend(modules_nikaia_tests().into_iter().map(|(name, run)| (name.to_string(), run)));
     all.extend(paths_nikaia_tests().into_iter().map(|(name, run)| (name.to_string(), run)));
     all.extend(signature_nikaia_tests().into_iter().map(|(name, run)| (name.to_string(), run)));
     all.extend(threads_nikaia_tests().into_iter().map(|(name, run)| (name.to_string(), run)));
+    all.extend(toml_nikaia_tests().into_iter().map(|(name, run)| (name.to_string(), run)));
     all.extend(touch_nikaia_tests().into_iter().map(|(name, run)| (name.to_string(), run)));
     all.extend(ty_nikaia_tests().into_iter().map(|(name, run)| (name.to_string(), run)));
     all.extend(logic::nikaia_tests().into_iter().map(|(test, run)| (format!("logic::{test}"), run)));
@@ -3920,4 +3979,4 @@ pub fn nikaia_run_tests(filters: &[std::string::String], list: bool, more: std::
 /// **The digest of this lowered set** (#1610): every file `lower-std` wrote
 /// beside this index, and the index above this line. Compiled into the same
 /// crate as the code it names, it is the compiler's identity for its caches.
-pub const LOWERED_DIGEST: &str = "b63ceb33f67c67b155fc8bef9bb41eb398731ff9700d1f6cac5819b6ee05b398";
+pub const LOWERED_DIGEST: &str = "472b7ee8ee36c4938864e0d0dbc04096313c5d755ddffa0f01199ba94da3287a";

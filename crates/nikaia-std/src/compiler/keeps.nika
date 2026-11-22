@@ -2184,6 +2184,13 @@ fn keeps_by_value(mut ledger: Ledger, units: ref Vec[ParsedView], library: ref L
                 by_value.push(name.clone())
             }
         }
+        // A method named as a function value takes its options by value
+        // too (`lends_option`, #1452).
+        if named.contains(key) {
+            for option in signature.config {
+                by_value.push(option.name.clone())
+            }
+        }
         found.insert(key.clone(), by_value)
     }
     for (key, by_value) in found {

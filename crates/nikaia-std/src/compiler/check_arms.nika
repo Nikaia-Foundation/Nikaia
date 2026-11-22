@@ -217,7 +217,51 @@ impl CheckState {
         for arm in arms {
             self.an_arm_beside_a_null(world, arm, literals, text)
         }
+        self.reads_beside_an_owned_arm(world, arms)
         return Ty::Nullable(plain ?? Ty::Unknown)
+    }
+
+    /// **A map's read beside an arm of its own is copied out** (ADR-293 D15,
+    /// ADR-387 D1, #2170): `match lit { true => 3, else => m[k] }` is an `i64?`
+    /// of its own, since one owned arm decides it, so the read arm is copied
+    /// out as `a_map_read_kept` copies one where a `T?` is wanted. Arms that
+    /// are all reads (or `null`) stay the view a lone read is.
+    fn reads_beside_an_owned_arm(ref mut self, world: ref CheckWorld, arms: ref Vec[CheckArm]) sync {
+        let mut owned = false
+        for arm in arms {
+            let tail = arm.tail ?? continue
+            if an_arm_is_a_number(arm) {
+                owned = true
+                continue
+            }
+            if ends_in_null(tail) || self.flow.map_read_sites.contains(id_of(tail) as i64) {
+                continue
+            }
+            let inner = the_type_inside(arm.ty)
+            if !inner.is_a_view() && !inner.is_unknown() {
+                owned = true
+            }
+        }
+        if !owned {
+            return
+        }
+        for arm in arms {
+            let tail = arm.tail ?? continue
+            let node = id_of(tail) as i64
+            if !self.flow.map_read_sites.contains(node) || self.facts.copied_walks.contains(node) {
+                continue
+            }
+            let read = match arm.ty {
+                Ty::Nullable(read) => read.clone(),
+                else => continue,
+            }
+            if read.is_a_view() || read.is_unknown() {
+                continue
+            }
+            if self.copied(world, read) {
+                let added = self.facts.copied_reads.insert(node)
+            }
+        }
     }
 
     /// A plain arm is `Some` below, and a text literal among them a `String`.

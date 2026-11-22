@@ -1,0 +1,25 @@
+// A `Wide` whose value may leave `T` or lie past the list stays checked after
+// `narrow()` (#2647): twice a value below 10 or past it is bounded by nothing
+// above, and a product of an unbounded factor has no interval.
+fn pick_times(xs: ref Vec[i64], a: i64) -> i64? {
+	if a < 0 || xs.len() < 10 {
+		return null
+	}
+	let w = Wide::of(a).mul(2) ?? return null
+	let n = w.narrow() ?? return null
+	return xs[n]
+}
+
+fn pick_product(xs: ref Vec[i64], a: i64, b: i64) -> i64? {
+	if a < 0 || a >= 3 || b < 0 || xs.len() < 10 {
+		return null
+	}
+	let n = Wide::product(a, b).narrow() ?? return null
+	return xs[n]
+}
+
+fn main() throws {
+	let xs: Vec[i64] = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+	println(pick_times(xs, 4) ?? 0)
+	println(pick_product(xs, 2, 3) ?? 0)
+}

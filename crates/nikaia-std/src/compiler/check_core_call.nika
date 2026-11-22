@@ -802,20 +802,24 @@ fn check_core_call_described[H: CheckHost](mut state: CheckState, world: ref Che
     }
     let mut options: Vec[i64] = []
     let mut literals: Vec[bool] = []
+    let mut integers: Vec[bool] = []
     let mut texts: Vec[String] = []
     for option in config {
         options.push(id_of(option.value) as i64)
         literals.push(a_text_literal_expr(option.value))
+        integers.push(an_integer_literal(option.value))
         texts.push(check_walked_written(option.value, world.words))
     }
     state.flow.option_values = options
     state.flow.option_literals = literals
+    state.flow.option_integers = integers
     state.flow.option_written = texts
     state.flow.call_written = name.clone()
     let typed_options = check_core_call_option_texts(state, world, contract, config, passed)
     let result = check_crossings_arguments(state, world, host, key, name, contract, args, found, typed_options, span)
     state.flow.option_values = []
     state.flow.option_literals = []
+    state.flow.option_integers = []
     state.flow.option_written = []
     state.flow.call_written = ""
     check_core_call_options_handed_over(state, world, contract, name, config, typed_options, span)
@@ -874,7 +878,7 @@ fn check_core_call_options_handed_over(mut state: CheckState, world: ref CheckWo
 
 /// The options of a call that move what they are handed (#1595): those the
 /// callee does not lend, nor takes `mut`; none across the C boundary
-/// (ADR-302 D5). Each one's name and the type it was handed.
+/// (ADR-c-boundary-v1 D5). Each one's name and the type it was handed.
 fn check_core_call_moving_options(state: ref CheckState, contract: ref FnContract, written: ref String, passed: ref Vec[(String, Ty)]) -> Vec[(String, Ty)] sync {
     let signature = contract.signature ?? return []
     if state.foreign_names.contains(written) {
@@ -1064,7 +1068,7 @@ fn check_core_call_named_call[H: CheckHost](mut state: CheckState, world: ref Ch
         let ty: String = variant ?? ""
         return check_core_call_named(ty)
     }
-    // **A handle is not constructed** (ADR-302 D7).
+    // **A handle is not constructed** (ADR-c-boundary-v1 D7).
     if state.opaque_handles.contains(name) {
         state.a_handle_is_not_made_here(name, span)
         return check_core_call_named(name)
@@ -1086,6 +1090,9 @@ fn check_core_call_named_call[H: CheckHost](mut state: CheckState, world: ref Ch
         return Ty::Unknown
     }
     let described = check_core_call_described(state, world, host, name, key, contract, args, found, config, passed, span)
+    // **`std`'s `Wide[T]` is made by its three functions** (Part I 2.2,
+    // #2619): `T` one of the five integer types, the call recorded.
+    let widened: Ty? = if key.starts_with("Wide::") { state.wide_made(world, key, args, found, func, span) } else { null }
     // **`simd::Fixed::from([…])` takes the lanes as an array** (ADR-377 D3).
     if lanes && name == "simd::Fixed::from" && args.len() == 1 {
         state.facts.array_literals.insert(id_of(args[0]) as i64)
@@ -1095,7 +1102,7 @@ fn check_core_call_named_call[H: CheckHost](mut state: CheckState, world: ref Ch
             state.findings.push(a_list_the_wrong_length_for_its_array(lanes_written, lanes_wanted, span, false))
         }
     }
-    let made = if lanes && described.is_unknown() { check_simd_made(wanted, name, args) } else { described }
+    let made = if widened != null { widened ?? Ty::Unknown } else if lanes && described.is_unknown() { check_simd_made(wanted, name, args) } else { described }
     // **`simd::splat(';')` splats a byte** where the lanes are `u8`, as a
     // `'…'` is one wherever a `u8` is wanted (Part I 2.6).
     if lanes && name == "simd::splat" && args.len() == 1 && check_simd_kind(made).len() > 0 {
@@ -1182,6 +1189,20 @@ fn check_core_free_call[H: CheckHost](mut state: CheckState, world: ref CheckWor
             return Ty::Unknown
         }
     }
+    // **`T()` in a `Map` or `List` arm of a `match` on a kind is the empty
+    // collection of the type `T` is** (ADR-grammar-typed-read-v1 D14), which
+    // each copy writes for its own type.
+    match func {
+        Expr::Variable(word, _) => {
+            let called = f"{world.words.resolve(word)}"
+            if args.len() == 0 && config.len() == 0 && state.walks_fields.contains_key(f"$new {called}") && state.lookup(called) == null {
+                state.facts.kind_constructors.insert(id_of(func) as i64)
+                state.facts.constructs_by_kind.insert((state.current?.clone() ?? "", called.clone()))
+                return Ty::Named { name: called, args: [], view: false }
+            }
+        },
+        else => {}
+    }
     // **The callee is named and resolved before the arguments are walked**
     // (ADR-288).
     let mut name: String = ""
@@ -1192,6 +1213,16 @@ fn check_core_free_call[H: CheckHost](mut state: CheckState, world: ref CheckWor
             let given: Ty? = check_core_call_filled(state, world, host, base, index, args, config, span)
             if given != null {
                 return given ?? Ty::Unknown
+            }
+            // **A type written with its generics, then called**, is refused
+            // at the checker, not lowered as an index into the constructor
+            // (#2635): which it means is not decided yet.
+            if check_core_call_a_typed_constructor(state, world, base) {
+                state.a_constructor_with_generics(world, base, index, span)
+                for arg in args {
+                    check_core_expr(state, world, host, arg, span)
+                }
+                return Ty::Unknown
             }
             check_core_expr(state, world, host, func, span)
             state.facts.kept_fn_copies.remove(id_of(func) as i64)
@@ -1243,6 +1274,24 @@ fn check_core_free_call[H: CheckHost](mut state: CheckState, world: ref CheckWor
 /// where `f` is no generic function this program can call, and the brackets
 /// are an index. `NK1233` is said only where a value argument's type could
 /// have said every type written (ADR-grammar-typed-read-v1 D11).
+/// Whether `base`, the part before the brackets of `Name[…](…)`, names a
+/// type rather than a value: a declared type no binding in scope hides.
+fn check_core_call_a_typed_constructor(state: ref CheckState, world: ref CheckWorld, base: ref Expr) -> bool sync {
+    let name: String = match base {
+        Expr::Variable(word, _) => f"{world.words.resolve(word)}",
+        Expr::Path(segments, _) => world.here.unaliased(check_core_call_joined(world, segments)),
+        else => return false,
+    }
+    let pathed = match base {
+        Expr::Path(_, _) => true,
+        else => false,
+    }
+    if !pathed && state.lookup(name) != null {
+        return false
+    }
+    return state.declares_a_type(world, name) || check_core_call_on_built_in(name)
+}
+
 fn check_core_call_filled[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, base: ref Expr, index: ref Expr, args: ref Vec[Expr], config: ref Vec[ConfigArg], span: ref Span) -> Ty? sync {
     // **A path to a generic function is the same form as its bare name**
     // (ADR-grammar-typed-read-v1 D11, `json::read[Contact](bytes)`): another package's,

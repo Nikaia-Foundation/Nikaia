@@ -1,4 +1,4 @@
-// `extern` and `unsafe`, the two words Part III 15.1 writes (ADR-302): a C
+// `extern` and `unsafe`, the two words Part III 15.1 writes (ADR-c-boundary-v1): a C
 // function declared and called. How the two forms parse, are checked and
 // lower is `crates/nikaia/tests/foreign_declarations.rs`.
 

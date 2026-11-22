@@ -966,9 +966,11 @@ signature = "(s: ref Scalar) -> String"
 
 [fn."uri_decoded"]
 sync = true
+returns = "ref(s)"
+keeps = ["s"]
 panics = false
 touches = []
-views = ["s: borrowed"]
+views = ["s: borrowed", "<result>: borrowed"]
 signature = "(s: ref String) -> String"
 
 [fn."uri_escaped"]

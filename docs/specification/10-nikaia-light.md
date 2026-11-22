@@ -1,7 +1,7 @@
 # Nikaia Language Specification
 **Part I: The Language Core**
-**Version:** 0.0.1514 (Draft)
-**Date:** 2026-11-21
+**Version:** 0.0.1535 (Draft)
+**Date:** 2026-11-22
 
 ---
 
@@ -221,7 +221,8 @@ is not moved, so a `let` over a place stays a view of it (6.5).
 changed, `p with { x: 1 }` (4.2).
 
 **`extern` and `unsafe` are reserved for their constructs**: an `extern`
-block, and the `unsafe { … }` a call into one is written in (Part III 15.1).
+block, and the `unsafe { … }` a call into one, and every operation on a raw
+pointer, is written in (Part III 15.1).
 
 **`select` is reserved for its construct**: the block that races several
 waits and takes the first to finish (Part II, 12.4).
@@ -607,6 +608,39 @@ smaller than the divisor. It is on the same five types.
 ```nika
 let (q, r) = high.narrowing_div_rem(low, d) ?? return   // q * d + r == high * 2^64 + low
 ```
+
+**A computation that goes on in double width holds a `Wide[T]`** (owner,
+2026-11-21): std's exact value of twice the width of `T`, for the same five
+types, built from the methods above so that a program does not carry two
+halves, a carry and a sign by hand.
+
+```nika
+let t = Wide::product(a, x).add(Wide::product(b, y)) ?? return  // a*x + b*y, exact
+let r = t.rem(g) ?? return                                      // t mod g, in T
+let (q, _) = t.div_rem(g) ?? return                             // Wide[T], T
+let n = q.narrow() ?? return                                    // back in T where it fits
+```
+
+* **Made**: `Wide::of(v)`, `Wide::product(a, b)` (what `widening_mul` gives),
+  `Wide::from_halves(low, high)`; read back with `halves()`, `narrow() -> T?`
+  and `sign() -> i64`.
+* **Exact or `null`, never wrapped**: `add`, `sub`, `neg` and `mul(k: T)`
+  give `Wide[T]?`, `null` only where the value leaves twice the width;
+  `div_rem(d: T)` gives `(Wide[T], T)?` and `rem(d: T)` gives `T?`, rounded as
+  `/` and `%` round, `null` for `d == 0`; `abs` on a signed `T` gives the
+  magnitude as `Wide` of the unsigned type of the same width. `==` and the
+  comparisons are a `Wide[T]`'s with another of the same `T`.
+* **Not a number type**: no literal, no operator, no `as`, no `T` of more than
+  64 bits. Part I 2.2's types stay as they are ([ADR-294](adr/adr-294.md));
+  `Wide[T]` is a value the program reaches only through these methods, and
+  `narrow()` is the way back.
+* **No cost a program did not write**: the lowering gives `Wide[T]` the native
+  type of twice the width where the target has one (`i128` for an `i64`, as it
+  already does for `widening_mul`), so `add` is two instructions and `product`
+  one multiply; `div_rem` by a `T` is the two-step 128-by-64 division, not a
+  general wide one. It is a copy, 16 bytes at most. Values are still held in
+  `T` and taken into `Wide` only for the step that may leave it
+  ([ADR-270](adr/adr-270.md) D11).
 
 Two conversions lose digits without anything failing:
 
@@ -1420,9 +1454,11 @@ enum with more than one variant is refused with `NK1252`.
 | `[]`, `[x]`, `[first, .., last]`, `[h, ..rest]` | a `Vec[T]`, an `Array[T]` or a view of either, element by element (ADR-355). `..` is the elements not named and binds nothing; `..rest` binds them as a view of the run. A pattern has at most one `..` (`NK1258`), and a `match` with a list pattern needs `else` |
 | `Point { x: 0, y }`, `Move { x: px, .. }` | a field against a pattern: `x: 0` matches where the field is `0`, `x: px` binds the field to the name `px`, and `x: Op::Times` or `x: (0, y)` reaches inside it. It names every field, or ends with `..`; one that leaves a field out otherwise is refused with `NK1234` |
 
-**`..` means two different things**: in a range pattern it is the range, and
+**`..` means three different things**: in a range pattern it is the range, and
 in a struct pattern it is *the rest of the fields*, in a tuple's, a variant's
-or a list's brackets *the rest of its values*. The position says which.
+or a list's brackets *the rest of its values*. In a call's parentheses,
+`..t` is a spread (5.1, [ADR-call-spread-v1](adr/adr-call-spread-v1.md)).
+The position says which.
 
 **A `match` reads what it binds.** Over a name the function owns, an arm that
 only reads a part it binds takes a view of it (6.5), and the name is whole
@@ -1649,7 +1685,12 @@ uses.
 `String(capacity: n)` and `HashMap(capacity: n)` build the same empty value as
 `Vec()`, with room for `n` elements (bytes, entries) held ahead, so the first
 `n` pushes ask for memory once. The option's default is `0`, which is `Vec()`;
-a negative room stops the program, as any negative count does.
+a negative room stops the program, as any negative count does. The compiler
+never holds room ahead on its own: a capacity is a promise about memory, and
+programs say their promises (ADR-149 D5). Where a `String` that starts empty
+grows only by pushes of the parts of one source its loop walks, so that the
+source's length bounds it, the compiler warns (`NK1385`, #1933) and its help
+writes `String(capacity: s.len())`.
 
 ```nika
 let n = 10
@@ -2213,6 +2254,27 @@ is.
 still passed second. The ledger records an option's name, type *and* default,
 the default as its value (Part III, 13.5).
 
+**A call may spread its arguments** ([ADR-call-spread-v1](adr/adr-call-spread-v1.md)).
+`..t` before the `;` passes the values of the tuple `t`, in order, as that many
+subjects at that place: `f(a, ..t)` with `t: (String, Vec[String])` is
+`f(a, t.0, t.1)`. `..s` after the `;` passes each field of the struct `s` as
+the option of the same name; an option the struct has no field for takes its
+default. An option written by name in the same call wins over the spread's
+field of that name, wherever it stands:
+
+```nika
+struct Opts { timeout: time::Duration, method: String }
+let o = Opts { timeout: 5.seconds(), method: "POST" }
+request("https://api.com"; ..o)                  // timeout: o.timeout, method: o.method
+request("https://api.com"; ..o, method: "PUT")   // the written name wins
+```
+
+The call is checked as the call written out, with that call's codes: a tuple
+of the wrong length `NK1101`, a wrong type `NK1102`, a field naming no option
+`NK1109`. A zone holds at most one spread; a second one, or a spread of a value
+that is not a tuple (before the `;`) or a struct (after it), is refused with
+`NK1355`. The spread value is evaluated once, before the call.
+
 **Optional Parentheses**
 A function declared without parameters may omit the parentheses, matching the
 block lambda style.
@@ -2438,7 +2500,7 @@ the second call in the callee that made it *many*.
 ### 5.5. `main`'s Parameters Are the Command Line
 
 A program starts at `main`. `main` may take parameters; they are the words the
-program is started with ([ADR-360](adr/adr-360.md)).
+program is started with ([ADR-cli-v1](adr/adr-cli-v1.md)).
 
 ```nika
 /// Multiplies a positive number.
@@ -2487,6 +2549,60 @@ fn main(a: int; times: int = 4, verbose: bool = false) throws {
   the program with status 0.
 * **A call to `main` inside the program is an ordinary call**, and
   `cli::args()` still returns every word the program was started with.
+* **An option whose type is a struct is flattened**: each field is a named
+  argument of its own, by the field's name and with the field's default
+  (`global: Global` with a field `verbose: bool = false` is `--verbose`). The
+  option's default is the struct with every field at its default; another
+  default, or a field of a type a word cannot be, is refused (`NK1273`).
+
+**A program with several commands** takes one subject `Command[f, g, …]`, a
+type of the prelude naming functions of the program
+([ADR-cli-v1](adr/adr-cli-v1.md) D9-D12):
+
+```nika
+/// Options every command takes.
+struct Global {
+	/// Prints each step.
+	verbose: bool = false,
+}
+
+fn main(command: Command[run, focus_next]; global: Global = Global {}) throws {
+	command.run(..command.args; ..command.options, global: global)
+}
+
+/// Builds the next issue of the lane.
+fn run(; global: Global = Global {}) throws { … }
+
+/// Moves FILE's focus to the next area.
+fn focus_next(file: String, skipped: Vec[String]; global: Global = Global {}) throws { … }
+```
+
+`prog --verbose focus-next areas.md parser`.
+
+* **The first positional word picks the function** whose name, with `_`
+  written `-`, it is; the words after it are read into that function's
+  parameters as `main`'s are. A first word that names no function is a wrong
+  word. The value has the fields `run` (the function picked), `args` (a tuple
+  of its subjects) and `options` (a struct of its options), and
+  `command.run(..command.args; ..command.options)` calls it with the words
+  given (5.1, spread). `Command` elsewhere than as `main`'s one subject is
+  refused (`NK1273`).
+* **`args` and `options` fit only the `run` of the same value**: they are
+  spread only into a call of `run` of the same, unchanged `command`
+  parameter. A copy of them, a spread into a named function and a
+  `mut command` are refused (`NK1358`).
+* **A name `main` declares is `main`'s**: `--verbose` is read into `main`'s
+  `global`. A function the `Command` names may declare the same option, for a
+  test or another caller; it receives `main`'s value only through the call in
+  `main`'s body, which must name it. A `command.run` call that leaves out an
+  option `main` and the picked function share is refused (`NK1356`). Two
+  parameters that flatten to the same name inside `main`, inside one
+  function, or in `main` and a function with another type, are refused
+  (`NK1357`).
+* **The help lists the commands**: `prog --help` prints
+  `prog [OPTIONS] COMMAND …`, `main`'s options and each command by its
+  command-line name with the first `///` line above it; `prog COMMAND --help`
+  prints that function's help followed by `main`'s options.
 
 ---
 
@@ -3102,6 +3218,9 @@ struct Reading { name: String, temp: i32 }   // `name` a view where views flow i
 
 `--tethers` (on `nikaia build` and `nikaia lower`) prints where each buffer lives and why, and changes nothing;
 a change is a ledger diff in review.
+It also prints, one line per site with file and line, each cut that takes its source's buffer and
+each `replace` that works in its source's buffer (ADR-text-reuse-1 D5); the language server shows
+the same line as an inlay hint there.
 
 There is no struct with lifetime parameters in Nikaia.
 
@@ -3826,8 +3945,9 @@ the value.
   and its failure goes to the group as an unread failure does.
 * **`async(deferred) fn { … }`** hands back a child handle whose task does not
   run until `h.start()`. A deferred handle not started or cancelled on some
-  path, or started twice, is refused (`NK2121`). Its window begins at
-  `start()`.
+  path, or started twice, is refused (`NK2121`), as is `start()` on a handle
+  that is not deferred. `start()` changes the handle, so it is bound with
+  `let mut`; `cancel()` takes it. Its window begins at `start()`.
 * **`async(detached) fn { … }`** starts a free task and hands back a
   `TaskHandle[T]` (8.2). `detached` and `deferred` combine,
   `async(detached, deferred) fn { … }`.

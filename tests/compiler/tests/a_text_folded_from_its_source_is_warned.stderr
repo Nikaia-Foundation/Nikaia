@@ -1,0 +1,8 @@
+warning[NK1385]: `out` starts with no room and grows by a push of a part of `raw` in the `while` loop over `raw`: it asks for memory again as it grows.
+  --> tests/a_text_folded_from_its_source_is_warned.nika:7:5
+   |
+ 7 |     let mut out = String()
+   |     ^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: Every change to `out` pushes a part of `raw`, so it ends at most `raw.len()` bytes long; a capacity is a promise about memory, and programs say their promises (ADR-149 D5).
+   = help: Give it the room ahead: `String(capacity: raw.len())`; `nikaia fix` writes it.

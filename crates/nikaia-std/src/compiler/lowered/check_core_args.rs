@@ -241,13 +241,20 @@ pub(crate) fn check_core_args_other<H: CheckHost>(state: &mut CheckState, world:
     let mut wants_pausing_fn = false;
     let mut wants_throwing_fn = false;
     let mut viewed: Vec<bool> = vec![];
+    let mut generic: Vec<bool> = vec![];
+    let mut any_generic = false;
     if at < expected.len() as i64 {
         lends = (*unsafe { nikaia_std::proven::read(&expected, (at) as usize) }).is_a_view();
         match unsafe { nikaia_std::proven::read(&expected, (at) as usize) } {
             Ty::Fn { params, is_sync, can_throw, .. } => {
                 let can_throw = *can_throw; let is_sync = *is_sync;
                 wants_fn = true;
-                viewed.reserve(params.iter().size_hint().0); for p in params.iter() { viewed.push(p.is_a_view()); }
+                for p in params.iter() {
+                    viewed.push(p.is_a_view());
+                    let variable = matches!(p, Ty::Var { .. });
+                    any_generic = any_generic || variable;
+                    generic.push(variable);
+                }
                 let plain: bool = is_sync;
                 wants_pausing_fn = !plain;
                 wants_throwing_fn = can_throw;
@@ -282,7 +289,10 @@ pub(crate) fn check_core_args_other<H: CheckHost>(state: &mut CheckState, world:
     }
     if declared_here && named && runs && wants_throwing_fn && found_throws { state.facts.boxed_fn_values.insert(id_of(arg) as i64, arity); }
     if declared_here && named && runs && wants_throwing_fn && found_fn && !found_throws { state.facts.infallible_fn_values.insert(id_of(arg) as i64, arity); }
-    if named && wants_fn && found_fn { state.facts.named_fn_values.insert(id_of(arg) as i64, viewed); }
+    if named && wants_fn && found_fn {
+        state.facts.named_fn_values.insert(id_of(arg) as i64, viewed);
+        if any_generic { state.facts.generic_fn_slots.insert(id_of(arg) as i64, generic); }
+    }
     if declared_here && named && runs && wants_pausing_fn && found_fn { state.facts.sync_functions_run_async.insert(id_of(arg) as i64, arity); }
     if declared_here && wants_fn && found_fn && runs && !check_core_args_a_run_parameter(&state, world, arg) && !named {
         state.facts.kept_args.insert(id_of(arg) as i64);
@@ -538,6 +548,7 @@ pub(crate) fn check_core_args_door_block<H: CheckHost>(state: &mut CheckState, w
     }
     if !params.is_empty() && (params.len() as i64) != count { check_core_args_no_door(state, writing, "The block takes one value per lock, in the order the locks are written.", span); }
     if writing && count == 2 && a_copy_by_value(unsafe { nikaia_std::proven::read(&held, (0) as usize) }) && a_copy_by_value(unsafe { nikaia_std::proven::read(&held, (1) as usize) }) { state.facts.copied_doors.insert(id_of(unsafe { nikaia_std::proven::read(&args, (0) as usize) }) as i64); }
+    if !writing { for at in 0..params.len() as i64 { if ((at) as usize) < held.len() { door_views_handed_back(state, world, body, *unsafe { nikaia_std::proven::read(&params, (at) as usize) }, &unviewed_type(unsafe { nikaia_std::proven::read(&held, (at) as usize) }), span); } } }
     if writing {
         state.an_update_block_returns_nothing(body, span);
         state.an_update_block_reads_what_it_writes(world, params, body, span);
@@ -551,6 +562,67 @@ pub(crate) fn check_core_args_door_block<H: CheckHost>(state: &mut CheckState, w
     state.inside_a_door = outer_inside;
     if writing { return Ty::Tuple(vec![]); }
     Ty::Named { name: nikaia_std::block::Text::from(SEEN.to_string()), args: vec![Ty::Unknown], view: false }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn door_views_handed_back(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, body: &Block, param: winnow_grammar::Symbol, content: &Ty, span: &Span) {
+    for stmt in body.stmts.iter() {
+        match &stmt.node {
+            Stmt::Let { names, .. } => {
+                for name in names.iter() {
+                    let name = *name;
+                    if world.words.resolve(name) == world.words.resolve(param) { return; }
+                }
+            },
+            _ => { },
+        }
+    }
+    for value in block_tail(body) { door_view_handed_back(state, world, value, param, content, span); }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn door_view_handed_back(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, value: &Expr, param: winnow_grammar::Symbol, content: &Ty, span: &Span) {
+    match value {
+        Expr::Variable(symbol, _) => {
+            let symbol = *symbol;
+            let name = world.words.resolve(symbol);
+            if name != world.words.resolve(param) { return; }
+            if content.is_unknown() || door_copies_out(content) {
+                let added = state.facts.door_copies.insert(id_of(value) as i64);
+                return;
+            }
+            let given_away = match content {
+                Ty::Named { view, .. } => { let view = *view; !view },
+                Ty::Tuple(_) => true,
+                _ => false,
+            };
+            if given_away {
+                let notes: Vec<String> = vec![format!("`{}` is a view of what the lock holds, open only while the block runs, and it is a `{}`. Handing it out of the block would take it out of the lock.", name, content.shown())];
+                state.findings.push(check_refusal("NK1131", &check_span_at(world, value, span), format!("You can't give away `{}` here: `{}` is only borrowed.", name, name), notes, Some(format!("Write `{}.clone()` for a copy: a lambda hands back a value of its own.", name))));
+            }
+        },
+        Expr::Block(block, _) => { door_views_handed_back(state, world, block, param, content, span); },
+        Expr::If { then_branch, else_branch, .. } => {
+            door_views_handed_back(state, world, then_branch, param, content, span);
+            if else_branch.is_some() { door_views_handed_back(state, world, match else_branch { Some(__nikaia_value) => __nikaia_value, None => return }, param, content, span); }
+        },
+        Expr::Match { arms, .. } => { for arm in arms.iter() { door_view_handed_back(state, world, &arm.body, param, content, span); } },
+        _ => { },
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn door_copies_out(content: &Ty) -> bool {
+    match content {
+        Ty::Tuple(parts) => {
+            for part in parts.iter() { if !a_copy_by_value(part) { return false; } }
+            !parts.is_empty()
+        },
+        _ => a_copy_by_value(content),
+    }
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before

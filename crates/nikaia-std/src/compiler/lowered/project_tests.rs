@@ -49,6 +49,24 @@ impl nikaia_std::error::Joined for __NikaiaThrows_ProjectTestsRefusal__io_IoErro
         }
     }
 }
+impl nikaia_std::error::Crossed for __NikaiaThrows_ProjectTestsRefusal__io_IoError {
+    fn started_at(&mut self, site: nikaia_std::error::Origin) {
+        #[allow(unreachable_patterns)]
+        match self {
+            __NikaiaThrows_ProjectTestsRefusal__io_IoError::ProjectTestsRefusal(e) => nikaia_std::error::Crossed::started_at(e, site),
+            __NikaiaThrows_ProjectTestsRefusal__io_IoError::io_IoError(e) => nikaia_std::error::Crossed::started_at(e, site),
+            _ => {}
+        }
+    }
+    fn arrived_at(&mut self, site: nikaia_std::error::Origin) {
+        #[allow(unreachable_patterns)]
+        match self {
+            __NikaiaThrows_ProjectTestsRefusal__io_IoError::ProjectTestsRefusal(e) => nikaia_std::error::Crossed::arrived_at(e, site),
+            __NikaiaThrows_ProjectTestsRefusal__io_IoError::io_IoError(e) => nikaia_std::error::Crossed::arrived_at(e, site),
+            _ => {}
+        }
+    }
+}
 impl __NikaiaThrows_ProjectTestsRefusal__io_IoError {
     #[allow(dead_code)]
     pub(crate) fn message(&self) -> String { self.to_string().into() }
@@ -58,6 +76,21 @@ impl nikaia_std::error::Full for __NikaiaThrows_ProjectTestsRefusal__io_IoError 
         match self {
             __NikaiaThrows_ProjectTestsRefusal__io_IoError::ProjectTestsRefusal(e) => e.full(),
             __NikaiaThrows_ProjectTestsRefusal__io_IoError::io_IoError(e) => e.full(),
+        }
+    }
+}
+
+impl nikaia_std::error::Members for __NikaiaThrows_ProjectTestsRefusal__io_IoError {
+    fn member(&self) -> &(dyn std::error::Error + 'static) {
+        match self {
+            __NikaiaThrows_ProjectTestsRefusal__io_IoError::ProjectTestsRefusal(e) => e.held() as &(dyn std::error::Error + 'static),
+            __NikaiaThrows_ProjectTestsRefusal__io_IoError::io_IoError(e) => e.held() as &(dyn std::error::Error + 'static),
+        }
+    }
+    fn into_member(self: std::boxed::Box<Self>) -> std::boxed::Box<dyn std::error::Error> {
+        match *self {
+            __NikaiaThrows_ProjectTestsRefusal__io_IoError::ProjectTestsRefusal(e) => std::boxed::Box::new(e.split().0) as std::boxed::Box<dyn std::error::Error>,
+            __NikaiaThrows_ProjectTestsRefusal__io_IoError::io_IoError(e) => std::boxed::Box::new(e.split().0) as std::boxed::Box<dyn std::error::Error>,
         }
     }
 }
@@ -906,7 +939,7 @@ pub(crate) fn project_tests_blessed_line(label: &str, blessed: &ProjectTestsBles
 pub(crate) async fn project_tests_bless_program(program: &ProgramTest, outcomes: &[(String, ProjectTestsOutcome)], stderr: bool) -> Result<ProjectTestsBlessed, nikaia_std::error::Thrown<nikaia_std::io::IoError>> {
     if outcomes.is_empty() { return Ok(ProjectTestsBlessed::Unchanged); }
     if !project_tests_agree(outcomes) { return Ok(ProjectTestsBlessed::Refused(String::from("the settings disagree"))); }
-    let first = &nikaia_std::index::get(&outcomes, 0).1;
+    let first = &unsafe { nikaia_std::proven::read(&outcomes, (0) as usize) }.1;
     let refused = !first.ended_well && !first.stopped && is_refusal(&first.stderr);
     let stops = first.stopped && program.stops.is_some();
     if refused && program.stderr.is_none() && !stderr { return Ok(ProjectTestsBlessed::Refused(String::from("the program is refused, no .stderr expects it and --bless-stderr was not given"))); }
@@ -972,7 +1005,7 @@ pub(crate) fn project_tests_explain_output(output: &OutputTest, outcome: &Projec
 pub(crate) async fn project_tests_bless(output: &OutputTest, outcomes: &[(String, ProjectTestsOutcome)]) -> Result<ProjectTestsBlessed, nikaia_std::error::Thrown<nikaia_std::io::IoError>> {
     if outcomes.is_empty() { return Ok(ProjectTestsBlessed::Unchanged); }
     if !project_tests_agree(outcomes) { return Ok(ProjectTestsBlessed::Refused(String::from("the settings disagree"))); }
-    let first = &nikaia_std::index::get(&outcomes, 0).1;
+    let first = &unsafe { nikaia_std::proven::read(&outcomes, (0) as usize) }.1;
     let stops = first.stopped && output.stops.is_some();
     if !first.ended_well && !stops { return Ok(ProjectTestsBlessed::Refused(String::from("the program did not end successfully"))); }
     if !stops && output.stops.is_some() { return Ok(ProjectTestsBlessed::Refused(String::from("the program did not stop, as its .stops expects"))); }
@@ -1035,8 +1068,67 @@ pub fn project_tests_report_failures(failed: &[ProjectTestsFailed]) -> Result<()
             }
             for line in outcome.stderr.lines() { nikaia_std::io::eprintln(format_args!("{}", text::escape_control(&nikaia_std::block::Text::from(line.to_string()))))?; }
         }
+        if !agree { project_tests_explain_settings(&one.outcomes)?; }
     }
     Ok(())
+}
+
+pub(crate) fn project_tests_explain_settings(outcomes: &[(String, ProjectTestsOutcome)]) -> Result<(), nikaia_std::error::Thrown<nikaia_std::io::IoError>> {
+    let base = &nikaia_std::index::get(&outcomes, 0).1;
+    let named = &unsafe { nikaia_std::proven::read(&outcomes, (0) as usize) }.0;
+    for (setting, outcome) in nikaia_std::index::get(&outcomes, 1..).iter() {
+        if outcome == base { continue; }
+        nikaia_std::io::println(format_args!("the settings differ (- at user-parallelism = {}, + at user-parallelism = {}):", named, setting))?;
+        if outcome.ended_well != base.ended_well || outcome.stopped != base.stopped {
+            nikaia_std::io::println(format_args!("  - {}", project_tests_ending(base)))?;
+            nikaia_std::io::println(format_args!("  + {}", project_tests_ending(outcome)))?;
+        }
+        if outcome.passed != base.passed {
+            nikaia_std::io::println(format_args!("  - {}", project_tests_passing(base)))?;
+            nikaia_std::io::println(format_args!("  + {}", project_tests_passing(outcome)))?;
+        }
+        if outcome.stdout != base.stdout {
+            nikaia_std::io::println(format_args!("standard output:"))?;
+            nikaia_std::io::print(format_args!("{}", project_tests_difference(&base.stdout, &outcome.stdout)))?;
+        }
+        if outcome.stderr != base.stderr {
+            nikaia_std::io::println(format_args!("standard error:"))?;
+            for line in differing_lines(&base.stderr, &outcome.stderr).lines() { nikaia_std::io::println(format_args!("{}", text::escape_control(&nikaia_std::block::Text::from(line.to_string()))))?; }
+        }
+        for (want, got) in base.files.iter().zip(outcome.files.iter()) {
+            if want.1 != got.1 {
+                nikaia_std::io::println(format_args!("{}:", want.0))?;
+                nikaia_std::io::print(format_args!("{}", project_tests_difference(&project_tests_or_none((want.1).as_deref()), &project_tests_or_none((got.1).as_deref()))))?;
+            }
+        }
+        for (want, got) in base.bounds.iter().zip(outcome.bounds.iter()) {
+            if want.2 != got.2 {
+                nikaia_std::io::println(format_args!("tests/{}:", want.0))?;
+                nikaia_std::io::print(format_args!("{}", project_tests_difference(&want.2, &got.2)))?;
+            }
+        }
+    }
+    Ok(())
+}
+
+pub(crate) fn project_tests_or_none(written: Option<&[u8]>) -> Bytes {
+    match written {
+        None => Bytes(vec![]),
+        Some(bytes) => bytes.copy_of(),
+    }
+}
+
+pub(crate) fn project_tests_ending(outcome: &ProjectTestsOutcome) -> &'static str {
+    if outcome.ended_well { return "ended successfully"; }
+    if outcome.stopped { return "stopped (exit 101)"; }
+    "ended unsuccessfully"
+}
+
+pub(crate) fn project_tests_passing(outcome: &ProjectTestsOutcome) -> &'static str {
+    match outcome.passed {
+        true => "passed",
+        false => "failed",
+    }
 }
 
 #[allow(clippy::too_many_arguments)]

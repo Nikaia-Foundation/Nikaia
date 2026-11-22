@@ -1,0 +1,46 @@
+// #1253, ADR-raw-sinks-1 D2, D3, D4: the text of `db::raw` is a raw sink.
+// A part read from stdin and written into it is `NK1308` (a warning under
+// the default `raw-sinks = "warn"`), joined by `+` too; after the guard
+// `db::is_identifier` it is proved and passes, and so do a literal text, a
+// whole number and a `match` whose arms are literals; `[allow] untrusted-sql
+// = true` admits it unproved.
+use std::env
+use std::fs
+use std::process
+
+// The running `nikaia` (`env::current_exe`, ADR-program-path-1 D3).
+fn toolchain() -> String throws {
+    return env::current_exe()?.display() ?? "target/fast/nikaia"
+}
+
+fn root() -> String throws {
+    return env::current_main()?.parent()?.parent()?.parent()?.parent()?.display() ?? "../.."
+}
+
+fn said(nikaia: String, repo: String, label: String, manifest: String, body: String) throws {
+    let root = fs::scratch()
+    let tmp = f"{root.path().display()}"
+    fs::create_dir("src", root)
+    fs::write("nikaia.toml", root, f"[package]\nname = \"p\"\nversion = \"0.1.0\"\n\n[dependencies]\ndb = {{ path = \"{repo}/packages/db\" }}\n{manifest}")
+    fs::write("src/main.nika", root, f"use db\nuse std::io\nuse std::text\n\nfn main() throws {{\n    let name = io::read_line() ?? \"\"\n{body}}}\n")
+    let out = process::run(nikaia, ["check", "src/main.nika"]; dir: tmp.clone(), env: [("RUST_BACKTRACE", "0")])
+    println(f"-- {label}")
+    println(f"exit {out.code}")
+    for line in f"{out.stdout}{out.stderr}".lines() {
+        if line.contains("NK13") || line.contains(" --> ") || line.contains("= help") || line.contains("lets this build through") {
+            println(line.replace(tmp, "TMP").replace(repo, "REPO").trim())
+        }
+    }
+}
+
+fn main() throws {
+    let nikaia = toolchain()
+    let repo = root()
+    said(nikaia, repo, "stdin in the text", "", "    let s = db::raw(f\"SELECT * FROM {name}\")\n")
+    said(nikaia, repo, "stdin joined by +", "", "    let s = db::raw(\"SELECT * FROM \" + name)\n")
+    said(nikaia, repo, "a literal text", "", "    let s = db::raw(\"SELECT * FROM users WHERE name = :name\")\n")
+    said(nikaia, repo, "after the guard db::is_identifier", "", "    if !db::is_identifier(name) {\n        return\n    }\n    let s = db::raw(f\"SELECT * FROM {name}\")\n")
+    said(nikaia, repo, "a whole number", "", "    let n = text::parse_i64(name) ?? 0\n    let s = db::raw(f\"SELECT * FROM users LIMIT {n}\")\n")
+    said(nikaia, repo, "a match whose arms are literals", "", "    let column = match name { \"age\" => \"age\", else => \"name\", }\n    let s = db::raw(f\"SELECT * FROM users ORDER BY {column}\")\n")
+    said(nikaia, repo, "[allow] untrusted-sql", "[allow]\nuntrusted-sql = true\n", "    let s = db::raw(f\"SELECT * FROM {name}\")\n")
+}

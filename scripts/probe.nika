@@ -20,6 +20,7 @@
 
 use std::cli
 use std::fs
+use std::path
 use std::process
 
 fn probe_usage() throws {
@@ -57,7 +58,7 @@ fn probe_newlines(text: String) -> String {
 }
 
 fn probe_source(file: String, parts: Vec[String]) -> String throws {
-	if file != "" { return fs::read_to_string(file, fs::Root::Anywhere) }
+	if file != "" { return fs::read_to_string(file, fs::Root::Dir(".")) }
 	if parts.len() == 0 { probe_usage() }
 	let src = probe_newlines(parts.join(" "))
 	if src.contains("fn main") { return src }
@@ -101,6 +102,11 @@ fn main() throws {
 			parts.push(a)
 		}
 		i = i + 1
+	}
+	// The file lies below the working directory (ADR-raw-sinks-1 D14).
+	if file != "" && !path::is_below(file) {
+		println(f"refused: {file} is not a relative path below the working directory; copy it there, e.g. to target/")
+		process::exit(2)
 	}
 	let src = probe_source(file, parts)
 	process::run("mkdir", ["-p", "target/probe"])

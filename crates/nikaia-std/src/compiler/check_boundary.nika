@@ -91,7 +91,7 @@ impl CheckState {
     }
 
     /// **Whether this argument is a count a C declaration takes in `size_t`**
-    /// ([ADR-302](../../docs/specification/adr/adr-302.md) D6).
+    /// ([ADR-c-boundary-v1](../../docs/specification/adr/adr-c-boundary-v1.md) D6).
     ///
     /// `usize` is not a type this language's own values have
     /// ([ADR-285](../../docs/specification/adr/adr-285.md) D1) — a length is an
@@ -419,6 +419,26 @@ impl CheckState {
             else => false,
         }
         return a_parameter && a_view
+    }
+
+    /// **A field read off a `let` over a place or a `for`'s element**
+    /// (ADR-views-v4 D5, Part I 6.5, #1991): the name is a view of what it
+    /// was bound over, so a part of it is lent as a part of a `ref`
+    /// parameter is. Not a name the body changes.
+    fn a_place_of_a_lent_let(ref self, world: ref CheckWorld, value: ref Expr) -> bool sync {
+        let a_field = match value {
+            Expr::Field { .. } => true,
+            else => false,
+        }
+        if !a_field {
+            return false
+        }
+        let root = self.rooted_at(world, value) ?? return false
+        if root == "self" || !self.lent_here(root) {
+            return false
+        }
+        let found = self.binding(root) ?? return false
+        return !found.changing
     }
 
     /// A place as a path - `name`, `p.name`, `a.b.c` - where it is one.

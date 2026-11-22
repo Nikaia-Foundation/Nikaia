@@ -1,7 +1,7 @@
 # ADR-grammar-typed-read-v1: A Grammar Entry May Take a Type, and the Compiler Builds a Parser per Type; `members[S]` Fills a Struct by the Compiler's Rules, So a Typed Read Is a Grammar and Not a Library Walk
 
 **Status:** Accepted
-**Date:** November 20, 2026 (the consolidation, #904; the decisions themselves October 30 to November 18, 2026)
+**Date:** November 20, 2026 (the consolidation, #904; the decisions themselves October 30 to November 18, 2026); D7 rewritten November 22, 2026 (owner, #2426)
 **Answers:** how an official package offers a typed read, `json::read[T](text)`,
 so that it is a parser specialised for `T` built from the package's grammar,
 rather than a library function that walks `T::fields` and needs a way to build
@@ -184,21 +184,36 @@ It lowers to the engine's `#[stream]`. A JSON Lines file is read in parallel by
 `par_fold` over a generic `@frame` rule, `init`, `step` and `merge` handed in as
 rule values (ADR-grammar-syntax-v1 D12). An entry takes `String` or `Bytes` (`NK1282`).
 
-* **The call is a sequence walked once.** `for ev in Yaml::events(bytes)` walks
-  the items as the parser produces them; it lowers to `#[stream(each)]`, and a
-  `break` in the loop becomes `ControlFlow::Break` and stops the parse. A
-  result held without walking it is that sequence's value, not a list.
-* **The items are owned.** An item does not borrow from the input, so it may
-  outlive the step that produced it (yaml's `Event` owns its text).
+* **The call is a sequence.** `for ev in Yaml::events(bytes)` walks the items
+  as the parser produces them, and a `break` stops the parse. The call may also
+  be held, passed on, handed back, stored, given to a task and combined
+  (`zip`, `map`, `take`), as any sequence may.
+* **An item views the input it is parsed from** (ADR-views-v4 D5) and lives as
+  long as the input. A sequence handed back is `from` its input (ADR-views-v4
+  D16); one that must outlive the input takes it with `keep`, or its items are
+  copied with `.clone()`.
+* **The compiler chooses how each walk runs**, and the ledger names the choice
+  per walk and where a copy is made. The rule above holds for every method:
+
+  | walk | method |
+  |---|---|
+  | a `for` over the call, or over a held sequence it alone walks, whose body does not pause | the body is the parser's `each`: no thread |
+  | a held or passed sequence with one consumer the compiler cannot see through; a body that pauses | a thread that borrows the input |
+  | several sequences walked together | a state machine each consumer drives; until it is built, a thread per sequence |
+  | a sequence that outlives the input's loan | its own thread with the input owned; items owned where they leave it |
+
+* **A sequence walked twice parses twice**, and the ledger names it; the
+  compiler may instead collect it once where it sees that is cheaper.
 * **A reader is the Rust side's.** Where a feature reaches the entry
   (ADR-393 D4), the Rust user reads stdin or a socket through
   `G::<rule>_reader(r)`, an associated function of the grammar's type beside
   the forms over a whole input. It takes `impl std::io::Read + Send +
   'static` and returns an iterator of `Result<Item, ParseError>`, the shape of
-  the Nikaia walk. The engine's own `parse_<rule>_reader`, which returns the
-  fold's count, stays private to the grammar's module. An item is owned, so it
-  is `'static`; an item type that is not `Send` is refused at the build of the
-  feature (`NK1345`). A Nikaia entry still takes `String` or `Bytes`.
+  the Nikaia walk. Its input is not in memory, so it hands out an owned form of
+  the item type, generated beside it; an owned form that is not `Send` is
+  refused at the build of the feature (`NK1345`). The engine's own
+  `parse_<rule>_reader`, which returns the fold's count, stays private to the
+  grammar's module. A Nikaia entry still takes `String` or `Bytes`.
 * **An item may be emitted.** An item need not be the element the entry's
   body repeats. A rule reached from a `@stream` entry may hand over an item
   with an `emit` form in its action; the item is the entry's output, not a
@@ -209,6 +224,16 @@ rule values (ADR-grammar-syntax-v1 D12). An entry takes `String` or `Bytes` (`NK
   not buffer items to hide a backtrack. The fixed-path body (`NK1349`) stays
   the plain form; an entry whose items are all emitted states no repetition of
   its own.
+
+Why the item views the input: a Nikaia entry reads a `String` or `Bytes`
+held in memory, so a view of it is as good as the in-memory walk's. One item
+type serves both, since D5 keeps view and owned out of the type. Rejected: a
+second, owning item type for the stream (the language already keeps the
+difference out of the type); a single method for every walk, since pushing into
+`each` cannot hold or combine a sequence, and a thread with owned items copies
+each item and pays a channel for the common `for`; a reference-counted slice of
+the input, a new kind of text for one case, which a thread that borrows the
+input makes unnecessary.
 
 ### D8 — Writing stays a function per type.
 
@@ -260,6 +285,30 @@ The name is the wire name of D4 (an attribute may rename it). A variant with a
 payload is `NK1250` until its form (a tag member, an object of one member) is
 decided.
 
+### D14 — Inside an arm whose pattern names `Map(K, V)` or `List(E)`, `T()` builds the empty collection of the type `T` is.
+
+```nika
+rule Value[T] -> T = match T::kind {
+    Map(K, V) => es:list(Entry[V], ",") -> {
+        let mut m: T = T()     // a HashMap or a BTreeMap: whatever T is
+        for (k, v) in es { m.insert(k.clone(), v.clone()) }
+        m
+    }
+    ...
+}
+```
+
+The arm is checked under the kind its pattern names (D2), so the compiler
+knows there that `T` is a collection with an empty value; each copy lowers
+`T()` to the constructor of its own type. The same holds in a `match T::kind`
+arm of a generic function (ADR-330 D4). Outside such an arm `T()` stays
+`NK1117`: a type parameter has no constructor of its own. Decided by the
+owner, 2026-11-21 ([#2626](https://github.com/Nikaia-Foundation/Nikaia/issues/2626)).
+
+**Rejected.** Explicit generics in a constructor call (`HashMap[K, V]()`):
+the arm must still pick one map type, so one arm cannot serve both. An empty
+map literal typed from the `let`: new syntax for one case.
+
 **Rejected.** A library walk with a constructor from fields (Option A): a
 second way to build a struct, and a scanner outside the grammar. `field.set`:
 needs a half-built struct. A `Value` tree converted afterwards: two passes and
@@ -296,3 +345,4 @@ there is no text to parse while running.
   ([#1020](https://github.com/Nikaia-Foundation/Nikaia/issues/1020)).
 * **The JSON form of a variant that carries a payload** (D13).
 * **A reader type in `std`** for a Nikaia caller of a `@stream` entry (D7).
+* **Which method a given walk gets** beyond D7's table: the table states when each is taken, and a method that counts fewer instructions for a row may replace another without a new decision.

@@ -176,7 +176,7 @@ pub(crate) fn option_at(contract: &FnContract, name: &str) -> Option<i64> {
 
 pub(crate) fn lends_option(contract: &FnContract, option: &ConfigContract) -> bool {
     let signature = match contract.signature.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return false };
-    if signature.takes_a_receiver() || nikaia_std::list::contains(&contract.keeps, &option.name) { return false; }
+    if nikaia_std::list::contains(&contract.keeps, &option.name) || signature.takes_a_receiver() && nikaia_std::list::contains(&contract.by_value, &option.name) { return false; }
     lends_option_type(&option.ty)
 }
 

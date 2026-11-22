@@ -27,6 +27,59 @@ pub(crate) fn check_core_stmt_a_map_read(value: &Expr) -> bool { matches!(value,
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
+pub(crate) fn check_core_stmt_reads_in_arms(state: &CheckState, value: &Expr) -> i64 {
+    let mut reads: i64 = 0;
+    match value {
+        Expr::Match { arms, .. } => {
+            for arm in arms.iter() {
+                let found = check_core_stmt_reads_in_arms(state, &arm.body);
+                if found < 0 { return -1; }
+                reads += found;
+            }
+            return reads;
+        },
+        Expr::If { then_branch, else_branch, .. } => {
+            for tail in block_tail(then_branch) {
+                let found = check_core_stmt_reads_in_arms(state, tail);
+                if found < 0 { return -1; }
+                reads += found;
+            }
+            let other = match else_branch { Some(__nikaia_value) => __nikaia_value, None => return -1 };
+            for tail in block_tail(other) {
+                let found = check_core_stmt_reads_in_arms(state, tail);
+                if found < 0 { return -1; }
+                reads += found;
+            }
+            return reads;
+        },
+        Expr::Block(block, _) => {
+            for tail in block_tail(block) {
+                let found = check_core_stmt_reads_in_arms(state, tail);
+                if found < 0 { return -1; }
+                reads += found;
+            }
+            return reads;
+        },
+        _ => { },
+    }
+    if ends_in_null(value) { return 0; }
+    let node = id_of(value) as i64;
+    if state.flow.map_read_sites.contains(&node) && !state.facts.copied_reads.contains(&node) && !state.facts.copied_walks.contains(&node) { return 1; }
+    -1
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn check_core_stmt_arms_all_reads(state: &CheckState, value: &Expr) -> bool {
+    match value {
+        Expr::Match { .. } => check_core_stmt_reads_in_arms(state, value) > 0,
+        Expr::If { .. } => check_core_stmt_reads_in_arms(state, value) > 0,
+        _ => false,
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
 pub(crate) fn check_core_stmt_a_get(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, read: &Expr) -> bool {
     match read {
         Expr::MethodCall { method, .. } => { let method = *method; world.words.resolve(method) == "get" },
@@ -37,6 +90,15 @@ pub(crate) fn check_core_stmt_a_get(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 pub(crate) fn check_core_stmt_an_index(read: &Expr) -> bool { matches!(read, Expr::Index { .. }) }
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn check_core_stmt_a_map_index(state: &CheckState, read: &Expr) -> bool {
+    match read {
+        Expr::Index { base, .. } => { let base = nikaia_std::boxed::open(base); state.facts.map_indices.contains(&(id_of(base) as i64)) },
+        _ => false,
+    }
+}
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
@@ -300,6 +362,25 @@ pub(crate) fn check_core_stmt_a_part_of_an_owned_parameter(state: &CheckState, w
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
+pub(crate) fn check_core_stmt_over_a_changing_part(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, names: &[winnow_grammar::Symbol], shape: &[i64], mutable: bool, ty: Option<&Type>, value: &Expr) -> i64 {
+    if mutable || ty.is_some() || names.len() != 1 || !shape.is_empty() { return 0; }
+    match value {
+        Expr::Field { .. } => { },
+        _ => { return 0; },
+    }
+    let path = match dotted_path(world, value) { Some(__nikaia_value) => __nikaia_value, None => return 0 };
+    for around in state.repeats.iter() { if around.what == "lambda" { return 0; } }
+    let root = a_root_segment(&path);
+    if root == "self" { if !state.changing_self { return 0; } } else {
+        let local = match state.binding(&root) { Some(__nikaia_value) => __nikaia_value, None => return 0 };
+        if !local.changing && !state.a_changing_view(&root) { return 0; }
+    }
+    if state.flow.kept_names.contains(world.words.resolve(*unsafe { nikaia_std::proven::read(&names, (0) as usize) })) { return 2; }
+    1
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
 pub(crate) fn check_core_stmt_a_part_of_an_unchanged_let(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, value: &Expr) -> bool {
     match value {
         Expr::Field { base, .. } => { let base = nikaia_std::boxed::open(base); match base {
@@ -322,6 +403,20 @@ pub(crate) fn check_core_stmt_an_unchanged_owned_let(state: &CheckState, name: &
         CheckKind::Loop => !local.lent,
         _ => false,
     }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn check_core_stmt_replaced_said(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, target: &Expr, value: &Expr) -> String {
+    let named: String = match target {
+        Expr::Variable(name, _) => { let name = *name; nikaia_std::block::Text::from(world.words.resolve(name).to_string()) },
+        _ => String::from(""),
+    };
+    let by: String = match value {
+        Expr::MethodCall { method, .. } => { let method = *method; nikaia_std::block::Text::from(world.words.resolve(method).to_string()) },
+        _ => String::from("replace"),
+    };
+    format!("{} works in the buffer of {}", by, named)
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -605,6 +700,7 @@ pub(crate) fn check_core_stmt_given_cut(state: &mut CheckState, world: &CheckWor
     }
     if held.ty.is_a_view() { return; }
     state.facts.cut_gives.insert(node_key(value));
+    let said = state.facts.narrated.insert((span.start as i64, format!("{} takes the buffer of {}", name, source)));
     state.hands_over_name(world, &source, &to, span);
 }
 
@@ -734,7 +830,8 @@ pub(crate) fn check_core_stmt_let<H: CheckHost>(state: &mut CheckState, world: &
     };
     state.flow.let_lambda_use = None;
     let typed_by_use = ty.is_none() && by_use.is_some();
-    check_core_a_field_of_a_borrowed_subject(state, world, host, value, span, "bound");
+    let over_part = check_core_stmt_over_a_changing_part(&state, world, names, shape, mutable, ty, value);
+    if over_part == 0 { check_core_a_field_of_a_borrowed_subject(state, world, host, value, span, "bound"); }
     check_core_a_mut_parameter_given_away(state, world, host, value, span, "bound");
     let outer_read = state.flow.read_a_map;
     state.flow.read_a_map = false;
@@ -804,7 +901,7 @@ pub(crate) fn check_core_stmt_let<H: CheckHost>(state: &mut CheckState, world: &
     state.a_narrowed_read_given_up(value);
     let was_read = state.flow.read_a_map;
     state.flow.read_a_map = outer_read;
-    let of_a_map = was_read && check_core_stmt_a_map_read(value);
+    let of_a_map = was_read && (check_core_stmt_a_map_read(value) || check_core_stmt_arms_all_reads(&state, value));
     let element_read = check_core_stmt_element_read(&state, world, value);
     let got = check_core_stmt_got(&state, world, value);
     let got_by_a_match = !got && check_core_stmt_got_by_a_match(&state, world, value);
@@ -845,7 +942,14 @@ pub(crate) fn check_core_stmt_let<H: CheckHost>(state: &mut CheckState, world: &
     let bytes_view = !mutable && names.len() == 1 && shape.is_empty() && state.a_text_bytes_view(world, value);
     let mut moved_out = false;
     let mut handing_refused = false;
-    if seen_through || element_view == 1 { check_core_stmt_lent_let(state, world, names, span); } else if any_named && !bytes_view && !(ty.is_none() && !mutable && names.len() == 1 && shape.is_empty() && state.a_lent_text_place(world, value, &found)) {
+    if seen_through || element_view == 1 { check_core_stmt_lent_let(state, world, names, span); } else if over_part == 1 && state.takes_away(world, &found) { } else if over_part == 2 && state.takes_away(world, &found) {
+        let to = format!("bound to `{}` by a `let`", nikaia_std::block::Text::from(bound_names.join("`, `")));
+        let before = state.findings.len() as i64;
+        state.hands_over(world, value, &found, &to, span);
+        moved_out = state.facts.taken_parts.contains_key(&node_key(value));
+        handing_refused = (state.findings.len() as i64) > before;
+        if !moved_out && !handing_refused { check_core_a_field_of_a_borrowed_subject(state, world, host, value, span, "bound"); }
+    } else if any_named && !bytes_view && !(ty.is_none() && !mutable && names.len() == 1 && shape.is_empty() && (state.a_lent_text_place(world, value, &found) || found == a_string_type() && state.a_place_of_a_lent_let(world, value))) {
         let to = format!("bound to `{}` by a `let`", nikaia_std::block::Text::from(bound_names.join("`, `")));
         let before = state.findings.len() as i64;
         state.hands_over(world, value, &found, &to, span);
@@ -906,7 +1010,7 @@ pub(crate) fn check_core_stmt_let<H: CheckHost>(state: &mut CheckState, world: &
             let met = state.views_meet_owned_text(world, value);
             bound = nikaia_std::index::or(met, || found.clone().into());
         } else if found == a_string_type() {
-            let lent = state.lent_arms_bound(world, value);
+            let lent: Option<Ty> = if moved_out { None } else { state.lent_arms_bound(world, value) };
             let none_lent = lent.is_none();
             bound = nikaia_std::index::or(lent, || found.clone().into());
             if none_lent && !mutable && !moved_out && names.len() == 1 && shape.is_empty() && check_core_stmt_a_place(&state, value) && state.facts.lent_lets.contains(&(span.start as i64)) { bound = Ty::Named { name: nikaia_std::block::Text::from(TEXT_VIEW.to_string()), args: vec![], view: true }; }
@@ -1003,7 +1107,7 @@ pub(crate) fn check_core_stmt_let<H: CheckHost>(state: &mut CheckState, world: &
                 part_opens.reserve(parts.iter().size_hint().0); for part in parts.iter() {
                     let mut at: i64 = -1;
                     if ((i) as usize) < unknowns.len() && *unsafe { nikaia_std::proven::read(&unknowns, (i) as usize) } && state.number_shaped(world, part) {
-                        at = span.start as i64 + i + 1;
+                        at = unsafe { nikaia_std::proven::add::<i64>(nikaia_std::proven::add::<i64>(span.start as i64, i), 1) };
                         let named = format!("{}.{}", name, i);
                         state.flow.open_numbers.insert(at, check_core_stmt_open_number(&named, false, &Span { start: span.start + u32::try_from(i).unwrap_or_else(|_| panic!("the value does not fit in an `u32`")) + 1u32, end: span.end }));
                         state.open_number_given(world, at, part, span);
@@ -1100,7 +1204,11 @@ pub(crate) fn check_core_stmt_let<H: CheckHost>(state: &mut CheckState, world: &
         Ty::Nullable(ref inner) => { let inner = nikaia_std::boxed::open(inner); (!a_copy_by_value(inner) && state.a_word_by_its_kind(world, inner) || check_core_stmt_a_tuple(inner)) && (state.facts.copied_walks.contains(&(id_of(value) as i64)) || state.facts.copied_reads.contains(&(id_of(value) as i64))) },
         _ => false,
     };
-    if of_a_map && !word_copied && !state.facts.copied_walks.contains(&(id_of(value) as i64)) {
+    let declared_copy = ty.is_some() && match bound {
+        Ty::Nullable(ref inner) => { let inner = nikaia_std::boxed::open(inner); !inner.is_a_view() && state.a_package_copy(world, inner) },
+        _ => false,
+    };
+    if of_a_map && !word_copied && !declared_copy && !state.facts.copied_walks.contains(&(id_of(value) as i64)) {
         let kept: Ty = match bound {
             Ty::Nullable(ref inner) => {
                 let inner = nikaia_std::boxed::open(inner);
@@ -1442,7 +1550,7 @@ pub(crate) fn check_core_stmt_assign<H: CheckHost>(state: &mut CheckState, world
         if state.a_text_slot_name(world, target) { into = Ty::Named { name: nikaia_std::block::Text::from(TEXT.to_string()), args: vec![], view: false }; } else if !of_text { into = unviewed_type(&into); }
     }
     check_narrow_written_through(state, target);
-    if check_core_stmt_an_index(target) {
+    if check_core_stmt_a_map_index(&state, target) {
         let slot: Ty = match into {
             Ty::Nullable(ref inner) => { let inner = nikaia_std::boxed::open(inner); inner.clone() },
             _ => into.clone(),
@@ -1500,7 +1608,10 @@ pub(crate) fn check_core_stmt_assign<H: CheckHost>(state: &mut CheckState, world
         let o: &BinaryOp = match op { Some(__nikaia_value) => __nikaia_value, None => return check_core_stmt_unit() };
         if check_core_ops_add(&o.clone()) { let added = state.facts.appended_texts.insert(span.start as i64); }
     }
-    if op.is_none() && is_text_type(&into.unseen()) && !into.is_a_view() && check_core_stmt_replaces_itself(world, target, value) { let replaced = state.facts.replaced_assigns.insert(span.start as i64); }
+    if op.is_none() && is_text_type(&into.unseen()) && !into.is_a_view() && check_core_stmt_replaces_itself(world, target, value) {
+        let replaced = state.facts.replaced_assigns.insert(span.start as i64);
+        let said = state.facts.narrated.insert((span.start as i64, check_core_stmt_replaced_said(world, target, value)));
+    }
     if op.is_some() && !check_core_stmt_a_shift(std::convert::identity(op)) {
         let o: &BinaryOp = match op { Some(__nikaia_value) => __nikaia_value, None => return check_core_stmt_unit() };
         if !state.an_integer_beside_a_float(world, target, &into, value, &found, span) { state.a_compound_over_two_integer_types(world, &o.clone(), target, &into, value, &found, span); }
@@ -1804,9 +1915,9 @@ pub(crate) fn check_core_stmt_for<H: CheckHost>(state: &mut CheckState, world: &
                 state.facts.copied_loop_bindings.insert((span.start as i64, nikaia_std::block::Text::from(unsafe { nikaia_std::proven::read(&frame, (0) as usize) }.name.to_string())));
                 (*unsafe { nikaia_std::proven::slot(&mut frame, (0) as usize) }).lent = false;
             }
-        } else if list.1 >= 2 && check_core_stmt_unknown_list_levels(&unsafe { nikaia_std::proven::read(&frame, (0) as usize) }.ty.unseen()) == list.1 - 1 {
+        } else if list.1 >= 2 && check_core_stmt_unknown_list_levels(&unsafe { nikaia_std::proven::read(&frame, (0) as usize) }.ty.unseen()) == unsafe { nikaia_std::proven::sub::<i64>(list.1, 1) } {
             state.flow.open_elements.insert(unsafe { nikaia_std::proven::read(&frame, (0) as usize) }.id, list.0);
-            if list.1 > 2 { state.flow.open_levels.insert(unsafe { nikaia_std::proven::read(&frame, (0) as usize) }.id, list.1 - 1); }
+            if list.1 > 2 { state.flow.open_levels.insert(unsafe { nikaia_std::proven::read(&frame, (0) as usize) }.id, unsafe { nikaia_std::proven::sub::<i64>(list.1, 1) }); }
         }
     }
     if bindings.len() == 1 && !frame.is_empty() && unsafe { nikaia_std::proven::read(&frame, (0) as usize) }.ty.is_unknown() {
@@ -1887,6 +1998,7 @@ pub(crate) fn check_core_stmt_return<H: CheckHost>(state: &mut CheckState, world
         let returned = match value { Some(__nikaia_value) => __nikaia_value, None => return Ty::Unknown };
         state.narrowed_reads_given_back(returned);
         state.place_clones_handed_back(world, returned);
+        state.a_pausing_cleanup_returned(world, returned);
     }
     state.a_way_out("return", "", span);
     Ty::Unknown
@@ -2068,12 +2180,20 @@ pub(crate) fn check_core_block<H: CheckHost>(state: &mut CheckState, world: &Che
         at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
     }
     check_crossings_a_bound_handle_is_taken(state, world, block);
+    check_crossings_a_deferred_handle_starts(state, world, block);
+    if count > 0 {
+        match &nikaia_std::index::get(&block.stmts, nikaia_std::index::at(unsafe { nikaia_std::proven::sub::<i64>(count, 1) })).node {
+            Stmt::Expr(value) => { state.a_pausing_cleanup_returned(world, value); },
+            _ => { },
+        }
+    }
     state.failing_cleanups_settled();
     if count > 0 { state.views_end(unsafe { nikaia_std::proven::sub::<i64>(state.scope.len() as i64, 1) }, nikaia_std::index::get(&block.stmts, nikaia_std::index::at(unsafe { nikaia_std::proven::sub::<i64>(count, 1) })).span.end as i64); }
     if ends_group.is_some() { state.tasks_meet_on_nothing(world, block, nikaia_std::index::or(ends_group, || 0)); }
     check_core_view_lists_end(state, world, block);
     check_core_place_in_block(state, world, block);
     check_core_place_boxes(state, world, block);
+    state.a_text_without_room(world, block);
     state.scope.pop();
     tail
 }
@@ -2870,7 +2990,7 @@ pub(crate) fn check_async_group_ended(state: &CheckState, block: &Block) -> Opti
     if block.stmts.is_empty() { return None; }
     if state.flow.async_group_block.is_some() { return std::convert::identity(state.flow.async_group_block); }
     if state.flow.async_group.is_some() { return None; }
-    Some(-1 - unsafe { nikaia_std::proven::read(&block.stmts, (0) as usize) }.span.start as i64)
+    Some(unsafe { nikaia_std::proven::sub::<i64>(-1, nikaia_std::proven::read(&block.stmts, (0) as usize).span.start as i64) })
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -2880,7 +3000,7 @@ pub(crate) fn check_async_block(state: &mut CheckState, world: &CheckWorld<'_, '
     state.flow.async_group_block = None;
     let count = block.stmts.len() as i64;
     if count == 0 { return; }
-    let mut group = -1 - unsafe { nikaia_std::proven::read(&block.stmts, (0) as usize) }.span.start as i64;
+    let mut group = unsafe { nikaia_std::proven::sub::<i64>(-1, nikaia_std::proven::read(&block.stmts, (0) as usize).span.start as i64) };
     let mut ends_group = true;
     if own.is_some() { group = nikaia_std::index::or(own, || group); } else if state.flow.async_group.is_some() {
         group = nikaia_std::index::or(state.flow.async_group, || group);
@@ -2945,6 +3065,16 @@ pub(crate) fn check_async_block(state: &mut CheckState, world: &CheckWorld<'_, '
                         state.facts.async_waits.insert(id_of(guarded) as i64, CheckAsyncWait { at: CheckAsyncWaitAt::GroupEnd, group });
                         pending.push(count);
                     },
+                    Expr::TryCatch { expr: guarded, .. } if { let guarded = nikaia_std::boxed::peek(&guarded); check_an_async_task(guarded) } => {
+                        let guarded = nikaia_std::boxed::open(guarded);
+                        state.facts.async_waits.insert(id_of(guarded) as i64, CheckAsyncWait { at: CheckAsyncWaitAt::GroupEnd, group });
+                        if last && beside == 0 { state.a_task_with_nothing_beside_it(&stmt.span, "it is the last statement of its group, which waits for it at once"); }
+                        pending.push(count);
+                        match guarded {
+                            Expr::Async(inner, _, _, _) => { let inner = nikaia_std::boxed::open(inner); check_async_in(state, inner, group, &stmt.span); },
+                            _ => { },
+                        }
+                    },
                     Expr::Async(inner, _, _, _) => {
                         let inner = nikaia_std::boxed::open(inner);
                         state.facts.async_waits.insert(id_of(value) as i64, CheckAsyncWait { at: CheckAsyncWaitAt::GroupEnd, group });
@@ -2981,16 +3111,26 @@ pub(crate) fn check_async_binding(state: &mut CheckState, world: &CheckWorld<'_,
         wanted.insert(nikaia_std::block::Text::from(world.words.resolve(name).to_string()));
     }
     let mut named = count;
+    let mut readers = 0;
     let mut index: i64 = 0;
     for stmt in block.stmts.iter() {
-        if index > at && named == count && !starts_a_task(&stmt.node) {
+        if index > at && named == count {
             let mut seen: collections::BTreeSet<String> = collections::BTreeSet::new();
             names_in_statement(&stmt.node, world.words, &mut seen);
-            for name in wanted.iter() { if seen.contains(name) { named = index; } }
+            for name in wanted.iter() {
+                if seen.contains(name) {
+                    if starts_a_task(&stmt.node) {
+                        readers += 1;
+                        break;
+                    }
+                    named = index;
+                }
+            }
         }
         index = unsafe { nikaia_std::proven::add::<i64>(index, 1) };
     }
     if named == count {
+        if readers > 1 { state.facts.async_shared.insert(id_of(task) as i64); }
         state.facts.async_waits.insert(id_of(task) as i64, CheckAsyncWait { at: CheckAsyncWaitAt::GroupEnd, group });
         if last && others == 0 { state.a_task_with_nothing_beside_it(span, "nothing names its binding, and it is the last statement of its group, which waits for it at once"); }
         return count;
@@ -3036,6 +3176,10 @@ pub(crate) fn check_a_child_task(expr: &Expr) -> bool {
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
+pub(crate) fn check_an_async_task(expr: &Expr) -> bool { matches!(expr, Expr::Async(_, _, _, _)) }
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
 pub(crate) fn starts_a_task(stmt: &Stmt) -> bool {
     match stmt {
         Stmt::Let { value, .. } => match value {
@@ -3043,7 +3187,11 @@ pub(crate) fn starts_a_task(stmt: &Stmt) -> bool {
             Expr::TryCatch { expr, .. } => { let expr = nikaia_std::boxed::open(expr); matches!(expr, Expr::Async(_, _, _, _)) },
             _ => false,
         },
-        Stmt::Expr(value) => matches!(value, Expr::Async(_, _, _, _)),
+        Stmt::Expr(value) => match value {
+            Expr::Async(_, _, _, _) => true,
+            Expr::TryCatch { expr, .. } => { let expr = nikaia_std::boxed::open(expr); check_an_async_task(expr) },
+            _ => false,
+        },
         _ => false,
     }
 }

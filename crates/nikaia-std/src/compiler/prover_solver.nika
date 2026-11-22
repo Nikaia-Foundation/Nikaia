@@ -40,6 +40,169 @@ fn refuting_values(mut arena: logic::TermArena, facts: ref Vec[i64], claim: i64,
     return values_of(names, values)
 }
 
+/// **The values the facts force on an `i64` operation, where it overflows
+/// on them** (ADR-396 D8 step 2, ADR-270 D11, #1810): the solver, counting
+/// in `i64` and never wrapping, answers nothing about a goal at the type's
+/// ends, so `assert(x == 9223372036854775000)` then `x + 1000` is refuted
+/// by neither `refuting_values` nor `breaking_values`. A model of the facts
+/// gives each name of `term` a value; where `term` leaves `i64` on them in
+/// checked arithmetic and the solver proves every name equal to its value,
+/// every state that reaches it overflows. Nothing where a name is read by
+/// no fact or the facts' own bounds keep `term` inside `i64`
+/// (`facts_range`; no question is asked then, #2661), the model is
+/// missing, `term` fits, or a value is not forced.
+fn forced_overflow_values(mut arena: logic::TermArena, facts: ref Vec[i64], term: i64, names: ref collections::BTreeSet[String], ask: fn(ref logic::TermArena, ref Vec[i64], i64) -> SolverAnswer sync, model: fn(ref logic::TermArena, ref Vec[i64], i64) -> collections::BTreeMap[String, i64]? sync) -> collections::BTreeMap[String, i64]? {
+    if names.is_empty() {
+        return null
+    }
+    let mut tied: collections::BTreeSet[String] = collections::BTreeSet()
+    for fact in facts {
+        arena.variables(fact, tied)
+    }
+    for name in names {
+        if !tied.contains(name) {
+            return null
+        }
+    }
+    // **Decided without a question** (#2661): where the bounds the facts
+    // state keep `term` inside `i64`, no state overflows, and the model of
+    // the facts alone (a question whose goal is `false`) would only cost a
+    // solver call and a `nikaia.proofs` entry.
+    let mut lows: collections::BTreeMap[String, i64] = collections::BTreeMap()
+    let mut highs: collections::BTreeMap[String, i64] = collections::BTreeMap()
+    for fact in facts {
+        fact_bounds(arena, fact, false, lows, highs)
+    }
+    if facts_range(arena, term, lows, highs) != null {
+        return null
+    }
+    let falsum = arena.boolean(false)
+    let found = model(arena, facts, falsum) ?? return null
+    let values = values_of(names, found)
+    if values.len() != names.len() || arena.int_value(term, values) != null {
+        return null
+    }
+    for (name, value) in values {
+        let named = arena.var(name)
+        let pinned = arena.int(value)
+        let forced = arena.equal(named, pinned)
+        match ask(arena, facts, forced) {
+            SolverAnswer::Proved => {},
+            else => return null,
+        }
+    }
+    return values
+}
+
+/// **The bounds a fact states on single names** (#2661): each comparison
+/// of a name with a constant, under `and` and `not` (`negated` turns it),
+/// narrows the name's low end in `lows` or its high end in `highs`. What
+/// the fact says otherwise is left out, which only widens the bounds.
+fn fact_bounds(arena: ref logic::TermArena, fact: i64, negated: bool, mut lows: collections::BTreeMap[String, i64], mut highs: collections::BTreeMap[String, i64]) sync {
+    match arena.at(fact) {
+        logic::SolverTerm::And(parts) => {
+            if !negated {
+                for part in parts {
+                    fact_bounds(arena, part, false, lows, highs)
+                }
+            }
+        },
+        logic::SolverTerm::Not(a) => fact_bounds(arena, a, !negated, lows, highs),
+        logic::SolverTerm::Le(a, b) => if negated { bound_below(arena, b, a, true, lows, highs) } else { bound_below(arena, a, b, false, lows, highs) },
+        logic::SolverTerm::Lt(a, b) => if negated { bound_below(arena, b, a, false, lows, highs) } else { bound_below(arena, a, b, true, lows, highs) },
+        logic::SolverTerm::Ge(a, b) => if negated { bound_below(arena, a, b, true, lows, highs) } else { bound_below(arena, b, a, false, lows, highs) },
+        logic::SolverTerm::Gt(a, b) => if negated { bound_below(arena, a, b, false, lows, highs) } else { bound_below(arena, b, a, true, lows, highs) },
+        logic::SolverTerm::Eq(a, b) => {
+            if !negated {
+                bound_below(arena, a, b, false, lows, highs)
+                bound_below(arena, b, a, false, lows, highs)
+            }
+        },
+        else => {},
+    }
+}
+
+/// `a <= b` (`a < b` where `strict`), read where one side is a name and the
+/// other a constant: the name's high or low end, the tighter one kept.
+fn bound_below(arena: ref logic::TermArena, a: i64, b: i64, strict: bool, mut lows: collections::BTreeMap[String, i64], mut highs: collections::BTreeMap[String, i64]) sync {
+    let step = if strict { 1 } else { 0 }
+    match arena.at(a) {
+        logic::SolverTerm::Var(name) => {
+            let c = arena.constant(b) ?? return
+            let high = c.checked_sub(step) ?? return
+            let known = highs[name] ?? high
+            highs.insert(name.clone(), if high < known { high } else { known })
+            return
+        },
+        else => {},
+    }
+    match arena.at(b) {
+        logic::SolverTerm::Var(name) => {
+            let c = arena.constant(a) ?? return
+            let low = c.checked_add(step) ?? return
+            let known = lows[name] ?? low
+            lows.insert(name.clone(), if low > known { low } else { known })
+        },
+        else => {},
+    }
+}
+
+/// **The range of an integer term under the names' bounds**, where every
+/// name it reads has both ends and no end leaves `i64` in checked
+/// arithmetic (#2661): then the term fits `i64` in every state the bounds
+/// allow.
+fn facts_range(arena: ref logic::TermArena, id: i64, lows: ref collections::BTreeMap[String, i64], highs: ref collections::BTreeMap[String, i64]) -> (i64, i64)? sync {
+    return match arena.at(id) {
+        logic::SolverTerm::Int(n) => (n, n),
+        logic::SolverTerm::Var(name) => {
+            let lo = lows[name] ?? return null
+            let hi = highs[name] ?? return null
+            (lo, hi)
+        },
+        logic::SolverTerm::Neg(a) => {
+            let (lo, hi) = facts_range(arena, a, lows, highs) ?? return null
+            let low = hi.checked_neg() ?? return null
+            let high = lo.checked_neg() ?? return null
+            (low, high)
+        },
+        logic::SolverTerm::Add(a, b) => {
+            let (alo, ahi) = facts_range(arena, a, lows, highs) ?? return null
+            let (blo, bhi) = facts_range(arena, b, lows, highs) ?? return null
+            let low = alo.checked_add(blo) ?? return null
+            let high = ahi.checked_add(bhi) ?? return null
+            (low, high)
+        },
+        logic::SolverTerm::Sub(a, b) => {
+            let (alo, ahi) = facts_range(arena, a, lows, highs) ?? return null
+            let (blo, bhi) = facts_range(arena, b, lows, highs) ?? return null
+            let low = alo.checked_sub(bhi) ?? return null
+            let high = ahi.checked_sub(blo) ?? return null
+            (low, high)
+        },
+        logic::SolverTerm::Mul(a, b) => {
+            let (alo, ahi) = facts_range(arena, a, lows, highs) ?? return null
+            let (blo, bhi) = facts_range(arena, b, lows, highs) ?? return null
+            let p = alo.checked_mul(blo) ?? return null
+            let q = alo.checked_mul(bhi) ?? return null
+            let r = ahi.checked_mul(blo) ?? return null
+            let t = ahi.checked_mul(bhi) ?? return null
+            let low = if p < q { p } else { q }
+            let high = if p < q { q } else { p }
+            let low2 = if r < t { r } else { t }
+            let high2 = if r < t { t } else { r }
+            (if low < low2 { low } else { low2 }, if high > high2 { high } else { high2 })
+        },
+        logic::SolverTerm::Quot(a, k) => {
+            if k <= 0 {
+                return null
+            }
+            let (lo, hi) = facts_range(arena, a, lows, highs) ?? return null
+            (lo / k, hi / k)
+        },
+        else => null,
+    }
+}
+
 /// **Values that reach a claim and make it false** (ADR-269 D8), where it
 /// is not false every time: a model of the facts and the claim's negation,
 /// checked by evaluating it, read where the facts are exactly what reaches

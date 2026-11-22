@@ -940,12 +940,23 @@ pub mod io {
     /// the read stops.
     ///
     /// The `open` and the `stat` are the ring's own first two steps
-    /// (`file_ring::Ring::begin`), made on this thread there too, so a path
+    /// (`file_ring::Ring::begin_read`), made on this thread there too, so a path
     /// that does not open fails with the same error either way.
+    ///
+    /// **Opened `O_NONBLOCK`** (#2137): the read side of a FIFO with no writer
+    /// would otherwise wait in `open` for one, on this thread, before the
+    /// `stat` below could send it to the runtime - and this thread is the one
+    /// running the program. On a regular file the flag changes nothing and
+    /// costs no call; a FIFO's descriptor is dropped here, and the runtime
+    /// opens the path again where waiting is allowed.
     fn read_here(path: &Path) -> Option<Result<Vec<u8>>> {
         use std::io::Read;
 
-        let mut file = match std::fs::File::open(path) {
+        let mut options = std::fs::OpenOptions::new();
+        options.read(true);
+        #[cfg(unix)]
+        std::os::unix::fs::OpenOptionsExt::custom_flags(&mut options, libc::O_NONBLOCK);
+        let mut file = match options.open(path) {
             Ok(file) => file,
             Err(e) => return Some(Err(e)),
         };
@@ -1003,33 +1014,34 @@ pub mod io {
         {
             return InFlight::Done(Some(done));
         }
-        match runtime.files() {
-            #[cfg(all(target_os = "linux", feature = "async-io"))]
-            Files::Completion => {
-                match runtime
-                    .with_ring(|ring| ring.begin_read(path))
-                    .expect("`Files::Completion` means there is a ring")
-                {
-                    Ok(slot) => InFlight::held(slot),
-                    // The `open` or the `stat` failed, which is a path walk and
-                    // not a transfer: there was never anything on the ring.
-                    Err(e) => InFlight::Done(Some(Err(e))),
-                }
+        #[cfg(all(target_os = "linux", feature = "async-io"))]
+        if runtime.files() == Files::Completion {
+            match runtime
+                .with_ring(|ring| ring.begin_read(path))
+                .expect("`Files::Completion` means there is a ring")
+            {
+                Ok(Some(slot)) => return InFlight::held(slot),
+                // The `open` or the `stat` failed, which is a path walk and
+                // not a transfer: there was never anything on the ring.
+                Err(e) => return InFlight::Done(Some(Err(e))),
+                // Not a regular file (a FIFO, a device): read on a worker,
+                // which may wait in `open` for a writer (#2137).
+                Ok(None) => {}
             }
-            #[cfg(not(all(target_os = "linux", feature = "async-io")))]
-            Files::Completion => unreachable!("no completion queue off Linux"),
-            Files::Blocking => {
-                let (reply, answer) = std::sync::mpsc::channel();
-                match runtime.workers.send(worker::Op::Read {
-                    path: path.to_path_buf(),
-                    reply,
-                }) {
-                    true => InFlight::Worker(answer),
-                    false => InFlight::Done(Some(Err(Error::other(
-                        "the runtime has already been drained",
-                    )))),
-                }
-            }
+        }
+        #[cfg(not(all(target_os = "linux", feature = "async-io")))]
+        if runtime.files() == Files::Completion {
+            unreachable!("no completion queue off Linux");
+        }
+        let (reply, answer) = std::sync::mpsc::channel();
+        match runtime.workers.send(worker::Op::Read {
+            path: path.to_path_buf(),
+            reply,
+        }) {
+            true => InFlight::Worker(answer),
+            false => InFlight::Done(Some(Err(Error::other(
+                "the runtime has already been drained",
+            )))),
         }
     }
 

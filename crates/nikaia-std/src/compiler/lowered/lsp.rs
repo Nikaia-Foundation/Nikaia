@@ -49,6 +49,24 @@ impl nikaia_std::error::Joined for __NikaiaThrows_LspRefusal__io_IoError {
         }
     }
 }
+impl nikaia_std::error::Crossed for __NikaiaThrows_LspRefusal__io_IoError {
+    fn started_at(&mut self, site: nikaia_std::error::Origin) {
+        #[allow(unreachable_patterns)]
+        match self {
+            __NikaiaThrows_LspRefusal__io_IoError::LspRefusal(e) => nikaia_std::error::Crossed::started_at(e, site),
+            __NikaiaThrows_LspRefusal__io_IoError::io_IoError(e) => nikaia_std::error::Crossed::started_at(e, site),
+            _ => {}
+        }
+    }
+    fn arrived_at(&mut self, site: nikaia_std::error::Origin) {
+        #[allow(unreachable_patterns)]
+        match self {
+            __NikaiaThrows_LspRefusal__io_IoError::LspRefusal(e) => nikaia_std::error::Crossed::arrived_at(e, site),
+            __NikaiaThrows_LspRefusal__io_IoError::io_IoError(e) => nikaia_std::error::Crossed::arrived_at(e, site),
+            _ => {}
+        }
+    }
+}
 impl __NikaiaThrows_LspRefusal__io_IoError {
     #[allow(dead_code)]
     pub(crate) fn message(&self) -> String { self.to_string().into() }
@@ -62,6 +80,21 @@ impl nikaia_std::error::Full for __NikaiaThrows_LspRefusal__io_IoError {
     }
 }
 
+impl nikaia_std::error::Members for __NikaiaThrows_LspRefusal__io_IoError {
+    fn member(&self) -> &(dyn std::error::Error + 'static) {
+        match self {
+            __NikaiaThrows_LspRefusal__io_IoError::LspRefusal(e) => e.held() as &(dyn std::error::Error + 'static),
+            __NikaiaThrows_LspRefusal__io_IoError::io_IoError(e) => e.held() as &(dyn std::error::Error + 'static),
+        }
+    }
+    fn into_member(self: std::boxed::Box<Self>) -> std::boxed::Box<dyn std::error::Error> {
+        match *self {
+            __NikaiaThrows_LspRefusal__io_IoError::LspRefusal(e) => std::boxed::Box::new(e.split().0) as std::boxed::Box<dyn std::error::Error>,
+            __NikaiaThrows_LspRefusal__io_IoError::io_IoError(e) => std::boxed::Box::new(e.split().0) as std::boxed::Box<dyn std::error::Error>,
+        }
+    }
+}
+
 // use json
 
 
@@ -71,6 +104,7 @@ impl nikaia_std::error::Full for __NikaiaThrows_LspRefusal__io_IoError {
 pub trait LspHost {
     fn diagnose(&self, entry: &str, open: &collections::BTreeMap<String, String>, alone: bool, tests: bool) -> Vec<(String, Shown)>;
     fn definition(&self, entry: &str, open: &collections::BTreeMap<String, String>, alone: bool, offset: i64) -> Option<(String, Span, String)>;
+    fn narrated(&self, entry: &str, open: &collections::BTreeMap<String, String>, alone: bool) -> collections::BTreeSet<(i64, String)>;
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -132,7 +166,7 @@ pub(crate) fn lsp_refuse(id: &json::Value, code: i64, message: &str) -> Result<(
     Ok(())
 }
 
-pub(crate) fn lsp_capabilities() -> json::Value { lsp_object(&vec![("capabilities", lsp_object(&vec![("textDocumentSync", lsp_number(1)), ("definitionProvider", json::Value::Bool(true))]))]) }
+pub(crate) fn lsp_capabilities() -> json::Value { lsp_object(&vec![("capabilities", lsp_object(&vec![("textDocumentSync", lsp_number(1)), ("definitionProvider", json::Value::Bool(true)), ("inlayHintProvider", json::Value::Bool(true))]))]) }
 
 pub async fn lsp_serve<H: LspHost>(host: &H) -> Result<i64, __NikaiaThrows_LspRefusal__io_IoError> {
     let mut shut_down = false;
@@ -188,7 +222,7 @@ pub async fn lsp_serve<H: LspHost>(host: &H) -> Result<i64, __NikaiaThrows_LspRe
                 if method == "initialize" { lsp_respond(asked, lsp_capabilities())?; } else if method == "shutdown" {
                     shut_down = true;
                     lsp_respond(asked, json::Value::Null)?;
-                } else if method == "textDocument/definition" { lsp_respond(asked, lsp_definition(host, (cargo_json_member(Some(&message), "params")).as_ref(), &open, &uris).await)?; } else { lsp_refuse(asked, -32601, &format!("no method `{}`", method))?; }
+                } else if method == "textDocument/definition" { lsp_respond(asked, lsp_definition(host, (cargo_json_member(Some(&message), "params")).as_ref(), &open, &uris).await)?; } else if method == "textDocument/inlayHint" { lsp_respond(asked, lsp_inlay_hints(host, (cargo_json_member(Some(&message), "params")).as_ref(), &open).await)?; } else { lsp_refuse(asked, -32601, &format!("no method `{}`", method))?; }
             },
         }
     }
@@ -257,6 +291,24 @@ pub(crate) async fn lsp_definition<H: LspHost>(host: &H, params: Option<&json::V
     let offset = lsp_offset(&lsp_text_of(&path, open).await, line, character);
     let (file, span, name) = match host.definition(&path, open, alone, offset) { Some(__nikaia_value) => __nikaia_value, None => return json::Value::Null };
     lsp_object(&vec![("uri", lsp_string(&lsp_uri_of(&file, uris))), ("range", lsp_range(&lsp_text_of(&file, open).await, &span, &name))])
+}
+
+pub(crate) async fn lsp_inlay_hints<H: LspHost>(host: &H, params: Option<&json::Value>, open: &collections::BTreeMap<String, String>) -> json::Value {
+    let document = cargo_json_member(params, "textDocument");
+    let uri = match cargo_json_text((cargo_json_member((document).as_ref(), "uri")).as_ref()) { Some(__nikaia_value) => __nikaia_value, None => return json::Value::Null };
+    let range = cargo_json_member(params, "range");
+    let first = nikaia_std::index::or(cargo_json_number((cargo_json_member((cargo_json_member((range).as_ref(), "start")).as_ref(), "line")).as_ref()), || 0);
+    let last = nikaia_std::index::or(cargo_json_number((cargo_json_member((cargo_json_member((range).as_ref(), "end")).as_ref(), "line")).as_ref()), || 1000000000);
+    let alone = !uri.starts_with("file://");
+    let path = if alone { nikaia_std::block::Text::from(uri.to_string()) } else { match lsp_uri_path(&uri) { Some(__nikaia_value) => __nikaia_value, None => return json::Value::Null } };
+    let source = lsp_text_of(&path, open).await;
+    let mut hints: Vec<json::Value> = vec![];
+    for (_, line, text) in narrated_lines(&host.narrated(&path, open, alone), &source) {
+        if line < first || line > last { continue; }
+        let (_, end) = lsp_position(&source, lsp_offset(&source, line, 1000000000));
+        hints.push(lsp_object(&vec![("position", lsp_point(line, end)), ("label", lsp_string(&text)), ("paddingLeft", json::Value::Bool(true))]));
+    }
+    json::Value::Array(hints)
 }
 
 pub(crate) async fn lsp_text_of(path: &str, open: &collections::BTreeMap<String, String>) -> String {

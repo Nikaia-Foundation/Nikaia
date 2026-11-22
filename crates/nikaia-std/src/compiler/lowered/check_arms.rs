@@ -132,7 +132,35 @@ impl CheckState {
             if plain.is_none() { plain = Some(text.clone()); }
         }
         for arm in arms.iter() { self.an_arm_beside_a_null(world, arm, literals, &text); }
+        self.reads_beside_an_owned_arm(world, arms);
         Some(Ty::Nullable(nikaia_std::block::Boxed::new(nikaia_std::index::or(plain, || Ty::Unknown))))
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub(crate) fn reads_beside_an_owned_arm(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, arms: &[CheckArm<'_>]) {
+        let mut owned = false;
+        for arm in arms.iter() {
+            let tail = match arm.tail { Some(__nikaia_value) => __nikaia_value, None => continue };
+            if an_arm_is_a_number(arm) {
+                owned = true;
+                continue;
+            }
+            if ends_in_null(tail) || self.flow.map_read_sites.contains(&(id_of(tail) as i64)) { continue; }
+            let inner = the_type_inside(&arm.ty);
+            if !inner.is_a_view() && !inner.is_unknown() { owned = true; }
+        }
+        if !owned { return; }
+        for arm in arms.iter() {
+            let tail = match arm.tail { Some(__nikaia_value) => __nikaia_value, None => continue };
+            let node = id_of(tail) as i64;
+            if !self.flow.map_read_sites.contains(&node) || self.facts.copied_walks.contains(&node) { continue; }
+            let read = match &arm.ty {
+                Ty::Nullable(read) => { let read = nikaia_std::boxed::open(read); read.clone() },
+                _ => continue,
+            };
+            if read.is_a_view() || read.is_unknown() { continue; }
+            if self.copied(world, &read) { let added = self.facts.copied_reads.insert(node); }
+        }
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.

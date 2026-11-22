@@ -1,0 +1,50 @@
+// What a method that changes `self` is handed from `self` and reads first
+// stays accepted (#1300): a scalar, a value made in the call, a copy.
+use std::collections
+
+struct F {
+	xs: Vec[i64],
+}
+
+struct R {
+	f: F,
+	funs: collections::BTreeMap[String, F],
+	n: i64,
+}
+
+impl R {
+	fn use_it(ref mut self, f: ref F) -> i64 {
+		self.n += 1
+		return f.xs.len() + self.n
+	}
+
+	fn bump(ref mut self, k: i64) -> i64 {
+		self.n += k
+		return self.n
+	}
+
+	fn go(ref mut self, k: String) -> i64 {
+		let a = self.bump(self.n)
+		let b = self.bump(self.f.xs.len())
+		let n = self.n
+		let c = self.bump(n)
+		let d = self.use_it(self.f.clone())
+		let g = self.funs.get(k) ?? return 0
+		let size = g.xs.len()
+		let e = self.bump(size)
+		match self.funs.get(k) {
+			null => {},
+			f => {
+				let copy = f.clone()
+				return a + b + c + d + e + self.use_it(copy)
+			},
+		}
+		return 0
+	}
+}
+
+fn main() throws {
+	let mut r = R { f: F { xs: [1, 2] }, funs: collections::BTreeMap(), n: 1 }
+	r.funs.insert("a", F { xs: [1, 2] })
+	println(r.go("a"))
+}

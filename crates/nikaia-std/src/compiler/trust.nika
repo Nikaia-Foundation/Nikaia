@@ -260,7 +260,7 @@ pub fn main_parameters_source() -> String {
     return "the command line, through `main`'s parameters,"
 }
 
-/// **Whether the file's free `main` takes parameters** (ADR-360 D1,
+/// **Whether the file's free `main` takes parameters** (ADR-cli-v1 D1,
 /// ADR-399 D1): they are read from the words of the command line, so they
 /// are an untrusted source with no call to see. No marker makes them
 /// trusted (owner, 2026-11-14): `cli::args(trusted: true)` is the way.
@@ -335,6 +335,21 @@ pub fn render(untrusted: bool, reasons: ref Array[Reason], places: ref Array[Pla
     }
     for place in places {
         out.push_str(ref f"    {path}:{place.line}:{place.column}  {place.entry} writes {spelled(place.wrote)}\n")
+    }
+    return out
+}
+
+/// **The raw sinks the build lets data from outside reach unproved**, as
+/// `--trust` lists them (ADR-raw-sinks-1 D4, D5, D10, D15): each word of the
+/// application's `[allow]`, a dependency's as `NAME:key`, then each
+/// `--allow`, as the build resolved them.
+pub fn render_allowed(allow: ref Vec[String]) -> String {
+    let mut out: String = "raw sinks allowed data from outside unproved ([allow] and --allow):\n"
+    if allow.len() == 0 {
+        out.push_str("    none - every raw sink asks for a proof\n")
+    }
+    for word in allow {
+        out.push_str(ref f"    {word}\n")
     }
     return out
 }

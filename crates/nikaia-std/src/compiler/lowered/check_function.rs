@@ -265,6 +265,39 @@ pub(crate) fn check_function_shrunk_leaves(state: &mut CheckState, words: &winno
     }
 }
 
+pub(crate) fn check_function_kept_names(words: &winnow_grammar::InternerContext, body: &Block) -> collections::BTreeSet<String> {
+    let mut leaving: Vec<&Expr> = vec![];
+    check_function_leaving_in(body, &mut leaving);
+    for each in visited_in_block(body) {
+        match each {
+            Expr::Return(value, _) => {
+                let value = nikaia_std::boxed::open(value);
+                match value {
+                    None => { },
+                    Some(left) => { leaving.push(left); },
+                }
+            },
+            Expr::MethodCall { method, args, .. } => {
+                let method = *method;
+                if puts_its_argument(words.resolve(method)) { leaving.reserve(args.iter().size_hint().0); for arg in args.iter() { leaving.push(arg); } }
+            },
+            _ => { },
+        }
+    }
+    let mut out: collections::BTreeSet<String> = collections::BTreeSet::new();
+    for value in leaving.iter() {
+        let value = *value;
+        match value {
+            Expr::Variable(name, _) => {
+                let name = *name;
+                out.insert(nikaia_std::block::Text::from(words.resolve(name).to_string()));
+            },
+            _ => { },
+        }
+    }
+    out
+}
+
 pub(crate) fn check_function_leaving_in<'a>(block: &'a Block, out: &mut Vec<&'a Expr>) {
     for stmt in block.stmts.iter() {
         match &stmt.node {
@@ -722,6 +755,8 @@ pub(crate) fn check_function_wrap_tail<H: CheckHost>(state: &mut CheckState, wor
         FactWrap::Constructor => { if branches && nullable { state.some_at_the_tails(value); } else { state.facts.wrapped.insert(node, FactWrap::Constructor); } },
         FactWrap::Widen(ref into) => { state.facts.wrapped.insert(node, FactWrap::Widen(nikaia_std::block::Text::from(into.to_string()))); },
         FactWrap::WidenSome(ref into) => { state.facts.wrapped.insert(node, FactWrap::WidenSome(nikaia_std::block::Text::from(into.to_string()))); },
+        FactWrap::PathSome => { state.facts.wrapped.insert(node, FactWrap::PathSome); },
+        FactWrap::PathViewSome => { state.facts.wrapped.insert(node, FactWrap::PathViewSome); },
         FactWrap::Unsigned(ref into) => { state.facts.wrapped.insert(node, FactWrap::Unsigned(nikaia_std::block::Text::from(into.to_string()))); },
         _ => { },
     }
@@ -858,12 +893,15 @@ pub(crate) fn check_function_fn<H: CheckHost>(state: &mut CheckState, world: &Ch
     state.flow.high_bytes.clear();
     let outer_grown = state.flow.grown_text.copy_owned();
     state.flow.grown_text = check_function_grown_text(&world.here, body);
+    let outer_kept = state.flow.kept_names.copy_owned();
+    state.flow.kept_names = check_function_kept_names(world.here.words, body);
     let outer_mixed = state.flow.mixed_text.copy_owned();
     state.flow.mixed_text = check_function_mixed_text(&world.here, body, &state.flow.grown_text);
     let outer_lone = state.flow.lone_texts.copy_owned();
     state.flow.lone_texts = lone_texts_of(world.here.words, body);
     let tail = check_core_block(state, world, host, body);
     state.flow.grown_text = outer_grown;
+    state.flow.kept_names = outer_kept;
     state.flow.mixed_text = outer_mixed;
     let (tail_lent, tail_view) = check_function_handed_back(state, world, host, body, (expected).as_ref(), &tail);
     state.numbers_typed_by_their_uses();

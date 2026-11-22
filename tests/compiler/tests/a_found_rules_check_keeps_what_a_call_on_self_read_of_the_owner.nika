@@ -1,0 +1,69 @@
+/// A method's check of the found rules is kept by what its walk read of the
+/// type of the body being proven (#2396): only a call `self.m(…)` reads it,
+/// for `m`'s result summary (ADR-359 D14). `fill` keeps `used <= limit`
+/// through `least`'s summary, so the check is kept with the summary it
+/// found, and one walk serves the bodies of every type that finds the same:
+/// `Meter`'s methods, `Gauge`'s and the free functions.
+struct Meter {
+	used: i64,
+	limit: i64,
+}
+
+impl Meter {
+	fn least(ref self, a: i64, b: i64) -> i64 sync {
+		if a < b {
+			return a
+		}
+		return b
+	}
+
+	fn fill(mut self, n: i64) sync {
+		self.used = self.least(n, self.limit)
+	}
+
+	fn tick(mut self) -> bool sync {
+		if self.used == self.limit {
+			return false
+		}
+		self.used += 1
+		return true
+	}
+
+	fn room(ref self) -> i64 {
+		if self.used == self.limit {
+			return 0
+		}
+		return self.used + 1
+	}
+}
+
+struct Gauge {
+	seen: i64,
+}
+
+impl Gauge {
+	fn look(ref self, m: ref Meter) -> i64 {
+		if m.used == m.limit {
+			return self.seen
+		}
+		return m.used + 1
+	}
+}
+
+fn room_outside(m: ref Meter) -> i64 {
+	if m.used == m.limit {
+		return 0
+	}
+	return m.used + 1
+}
+
+fn meter() -> Meter {
+	return Meter { used: 0, limit: 0 }
+}
+
+fn main() throws {
+	let mut m = meter()
+	m.fill(3)
+	let g = Gauge { seen: 2 }
+	println(f"{m.used} {m.limit} {m.tick()} {m.room()} {room_outside(m)} {g.look(m)}")
+}

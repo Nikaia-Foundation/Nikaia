@@ -584,7 +584,19 @@ fn comptime_bundle_bundle_of[H: ComptimeBundleHost](flavour: ComptimeBundleFlavo
     // profile and a program's `--target`, so Cargo compiles `std` once for
     // both bundles, the grammar runs' parsers and a program with no settings.
     let target = host.shared_target()
-    let built = process::run(cargo, ["rustc", "--quiet", "--lib", "--crate-type", "dylib", "--message-format=json", "--manifest-path", cargo_toml.display(), "--target-dir", target.display(), "--target", host.build_target(), "--", "-C", "prefer-dynamic"]; dir: host.where_tools_start().display()) catch {
+    let triple = host.build_target()
+    let elf = triple.contains("-linux")
+    let mut args: Vec[String] = ["rustc", "--quiet", "--lib", "--crate-type", "dylib", "--message-format=json", "--manifest-path", cargo_toml.display(), "--target-dir", target.display(), "--target", triple, "--", "-C", "prefer-dynamic"]
+    // **The library's calls of its own functions bound when it is linked**
+    // (#2532): a Rust `dylib` exports every function, and each call of one
+    // from within went through a slot the loader filled at every start,
+    // 25,691 symbol lookups that cost a program 40 M instructions before its
+    // `main`, as much as all of Python's start; bound at link time, 2.5 M.
+    if elf {
+        args.push("-C")
+        args.push("link-arg=-Wl,-Bsymbolic-functions")
+    }
+    let built = process::run(cargo, args; dir: host.where_tools_start().display()) catch {
         throw ComptimeBundleFailed::Said(f"running cargo: {error}")
     }
     if !built.ok {

@@ -1556,6 +1556,9 @@ impl EmitState {
         if either {
             out.push(")")
         }
+        if is_return && !self.facts.wrapped.contains_key(node_key(expr)) && !self.facts.some_tails.contains(node_key(expr)) && self.either_into_owned(world, expr, scope.function, at) {
+            out.push(".into()")
+        }
         // `if x { … };` is legal and noisy; a block-shaped statement ends where
         // its brace does. `async { … }` is not one: it is written as the call
         // of `task::group` (ADR-async-5 D9), which a `;` ends.

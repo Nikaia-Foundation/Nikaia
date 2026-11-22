@@ -221,7 +221,7 @@ fn element_below(library: ref Ledger, found: ref Ty) -> String? sync {
 /// What a `&[T]` is a view of, and `None` for anything else.
 ///
 /// **`&mut [T]` is not one.** It is the C boundary's
-/// ([ADR-302](../../docs/specification/adr/adr-302.md) D5) and is refused away
+/// ([ADR-c-boundary-v1](../../docs/specification/adr/adr-c-boundary-v1.md) D5) and is refused away
 /// from it, so a position that may be written through never reaches here — and
 /// a `const` that could be written through would not be a `const`.
 fn slice_element(ty: ref Ty) -> Ty? sync {

@@ -1,0 +1,16 @@
+// #2672: a `\u{…}` escape in a `comptime` text is decoded while the program
+// is built, through `escape_scalar` in `escapes.nika`: the highest scalar,
+// one above the surrogates and an emoji come out as the characters they
+// name, the same as the literal read at run time.
+comptime FACE: String = "a\u{1F600}b"
+comptime LAST: String = "\u{10FFFF}"
+comptime AFTER: String = "\u{E000}\x41"
+
+fn main() throws {
+	let face = "a\u{1F600}b"
+	println(FACE == face)
+	println(f"{FACE.scalars.count()} {LAST.scalars.count()} {AFTER.scalars.count()}")
+	println(LAST == "\u{10FFFF}")
+	println(AFTER == "\u{E000}A")
+	println(FACE)
+}

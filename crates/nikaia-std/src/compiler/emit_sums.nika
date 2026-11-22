@@ -324,6 +324,21 @@ impl EmitState {
                 }
             }
             out.push("            _ => {}\n        }\n    }\n}\n")
+            // **Where a failure crossed a task's boundary** (ADR-async-5
+            // D23): a member in an envelope records it there; one without
+            // keeps nothing.
+            let mut crossed: String = ""
+            for member in members {
+                let variant = sum_variant(member)
+                if self.sum_member_held(world, member, params).starts_with("nikaia_std::error::Thrown<") {
+                    crossed = f"{crossed}            {name}::{variant}(e) => nikaia_std::error::Crossed::WHICH(e, site),\n"
+                }
+            }
+            let mut crossing: String = f"impl{decl} nikaia_std::error::Crossed for {name}{params} {{\n"
+            for which in ["started_at", "arrived_at"] {
+                crossing = f"{crossing}    fn {which}(&mut self, site: nikaia_std::error::Origin) {{\n        #[allow(unreachable_patterns)]\n        match self {{\n{crossed.replace("WHICH", which)}            _ => {{}}\n        }}\n    }}\n"
+            }
+            out.push(f"{crossing}}}\n")
             if crashed {
                 out.push(f"impl{decl} nikaia_std::task::Crosses for {name}{params} {{\n    type Sent = Self;\n    fn sent(self) -> Self {{ self }}\n    fn back(sent: Self) -> Self {{ sent }}\n}}\n")
             }
@@ -346,6 +361,25 @@ impl EmitState {
                 out.push(f"            {name}::{variant}(e) => {held},\n")
             }
             out.push("        }\n    }\n}\n\n")
+            // **A box holding the sum is opened through it** (#1372): the
+            // sum hands its member to `holds`, `opened` and `handed`, which
+            // cannot name its type. Only a sum without lifetime parameters
+            // can sit in a box (`fatal_registrations`).
+            if !borrows {
+                let mut read: String = ""
+                let mut taken: String = ""
+                for member in members {
+                    let variant = sum_variant(member)
+                    if self.name_of_error(world, member) == 0 {
+                        read = f"{read}            {name}::{variant}(e) => e as &(dyn std::error::Error + 'static),\n"
+                        taken = f"{taken}            {name}::{variant}(e) => std::boxed::Box::new(e) as std::boxed::Box<dyn std::error::Error>,\n"
+                    } else {
+                        read = f"{read}            {name}::{variant}(e) => e.held() as &(dyn std::error::Error + 'static),\n"
+                        taken = f"{taken}            {name}::{variant}(e) => std::boxed::Box::new(e.split().0) as std::boxed::Box<dyn std::error::Error>,\n"
+                    }
+                }
+                out.push(f"impl nikaia_std::error::Members for {name} {{\n    fn member(&self) -> &(dyn std::error::Error + 'static) {{\n        match self {{\n{read}        }}\n    }}\n    fn into_member(self: std::boxed::Box<Self>) -> std::boxed::Box<dyn std::error::Error> {{\n        match *self {{\n{taken}        }}\n    }}\n}}\n\n")
+            }
             // **`Exit` ends `main` with its code** (ADR-345 D4): a sum that
             // holds it answers for it.
             // So does every other fatal member (ADR-345 D1) for the status a

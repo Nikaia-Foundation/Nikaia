@@ -170,6 +170,14 @@ impl EmitState {
                 }
             }
             out.push("            _ => {}\n        }\n    }\n}\n");
+            let mut crossed: String = String::from("");
+            for member in members.iter() {
+                let variant = sum_variant(member);
+                if self.sum_member_held(world, member, &params).starts_with("nikaia_std::error::Thrown<") { crossed = format!("{}            {}::{}(e) => nikaia_std::error::Crossed::WHICH(e, site),\n", crossed, name, variant); }
+            }
+            let mut crossing: String = format!("impl{} nikaia_std::error::Crossed for {}{} {{\n", decl, name, params);
+            for which in ["started_at", "arrived_at"] { crossing = format!("{}    fn {}(&mut self, site: nikaia_std::error::Origin) {{\n        #[allow(unreachable_patterns)]\n        match self {{\n{}            _ => {{}}\n        }}\n    }}\n", crossing, which, nikaia_std::block::Text::from(crossed.replace("WHICH", which))); }
+            out.push(&format!("{}}}\n", crossing));
             if crashed { out.push(&format!("impl{} nikaia_std::task::Crosses for {}{} {{\n    type Sent = Self;\n    fn sent(self) -> Self {{ self }}\n    fn back(sent: Self) -> Self {{ sent }}\n}}\n", decl, name, params)); }
             let block_types = self.on_block_types();
             let into = if block_types { ".into()" } else { "" };
@@ -182,6 +190,21 @@ impl EmitState {
                 out.push(&format!("            {}::{}(e) => {},\n", name, variant, held));
             }
             out.push("        }\n    }\n}\n\n");
+            if !borrows {
+                let mut read: String = String::from("");
+                let mut taken: String = String::from("");
+                for member in members.iter() {
+                    let variant = sum_variant(member);
+                    if self.name_of_error(world, member) == 0 {
+                        read = format!("{}            {}::{}(e) => e as &(dyn std::error::Error + 'static),\n", read, name, variant);
+                        taken = format!("{}            {}::{}(e) => std::boxed::Box::new(e) as std::boxed::Box<dyn std::error::Error>,\n", taken, name, variant);
+                    } else {
+                        read = format!("{}            {}::{}(e) => e.held() as &(dyn std::error::Error + 'static),\n", read, name, variant);
+                        taken = format!("{}            {}::{}(e) => std::boxed::Box::new(e.split().0) as std::boxed::Box<dyn std::error::Error>,\n", taken, name, variant);
+                    }
+                }
+                out.push(&format!("impl nikaia_std::error::Members for {} {{\n    fn member(&self) -> &(dyn std::error::Error + 'static) {{\n        match self {{\n{}        }}\n    }}\n    fn into_member(self: std::boxed::Box<Self>) -> std::boxed::Box<dyn std::error::Error> {{\n        match *self {{\n{}        }}\n    }}\n}}\n\n", name, read, taken));
+            }
             let mut arms: String = String::from("");
             let mut fatal_arms: String = String::from("");
             for member in members.iter() {

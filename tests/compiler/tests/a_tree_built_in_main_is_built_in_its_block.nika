@@ -1,0 +1,23 @@
+// **A tree built and walked in `main` itself is built in its block** (ADR-327
+// D14, D16, #1879): `main` is the root task with a block of its own, and `t`
+// never leaves it, so each box of `t` is placed there and the count is right.
+enum Tree { Leaf, Node(Tree, Tree) }
+
+fn count(t: Tree) -> i64 {
+    return match t {
+        Tree::Leaf => 1,
+        Tree::Node(l, r) => 1 + count(l) + count(r),
+    }
+}
+
+fn main() throws {
+    let mut nodes = 0
+    for _ in 0..<100 {
+        let mut t = Tree::Node(Tree::Leaf, Tree::Leaf)
+        for _ in 0..<12 {
+            t = Tree::Node(t, Tree::Node(Tree::Leaf, Tree::Leaf))
+        }
+        nodes += count(t)
+    }
+    println(f"{nodes} nodes walked in main")
+}

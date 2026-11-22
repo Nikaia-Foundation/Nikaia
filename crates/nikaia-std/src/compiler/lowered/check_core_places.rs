@@ -107,12 +107,12 @@ pub(crate) fn check_core_places_a_named_field(state: &mut CheckState, world: &Ch
     }
     if (ty == "String" || ty == "str") && field == "scalars" {
         state.facts.text_scalars.insert(id_of(expr) as i64);
-        return Ty::Seq { item: nikaia_std::block::Boxed::new(check_core_places_named("scalar")), is_sync: true, pauses: false, can_throw: false, parallel: false, shape: Shape { ends: true, sized: false, replays: false, timed: false } };
+        return Ty::Seq { item: nikaia_std::block::Boxed::new(check_core_places_named("scalar")), is_sync: true, pauses: false, can_throw: false, parallel: false, shape: Shape { ends: true, sized: false, replays: false, timed: false, one_at_a_time: false } };
     }
     if (ty == "String" || ty == "str") && field == "graphemes" {
         state.facts.text_graphemes.insert(id_of(expr) as i64);
         let grapheme = check_core_places_str_view();
-        return Ty::Seq { item: nikaia_std::block::Boxed::new(grapheme), is_sync: true, pauses: false, can_throw: false, parallel: false, shape: Shape { ends: false, sized: false, replays: false, timed: false } };
+        return Ty::Seq { item: nikaia_std::block::Boxed::new(grapheme), is_sync: true, pauses: false, can_throw: false, parallel: false, shape: Shape { ends: false, sized: false, replays: false, timed: false, one_at_a_time: false } };
     }
     let boxed = state.facts.boxed_members.get(ty);
     if boxed.is_some() {
@@ -245,7 +245,19 @@ pub(crate) fn check_core_field_walked<H: CheckHost>(state: &mut CheckState, worl
         return Ty::Unknown;
     }
     match on {
-        Ty::Tuple(ref parts) => { return stamped_if(seen_base, check_core_places_tuple_part(state, parts, &field, span)); },
+        Ty::Tuple(ref parts) => {
+            let part = check_core_places_tuple_part(state, parts, &field, span);
+            match part {
+                Ty::Named { ref name, ref args, .. } => {
+                    if args.is_empty() && is_whole_number(name) {
+                        state.facts.whole_fields.insert(id_of(expr) as i64);
+                        state.facts.whole_types.insert(id_of(expr) as i64, nikaia_std::block::Text::from(name.to_string()));
+                    }
+                },
+                _ => { },
+            }
+            return stamped_if(seen_base, part);
+        },
         _ => { },
     }
     let mut seen: Ty = on.clone();
@@ -589,6 +601,7 @@ pub(crate) fn check_core_places_a_handle(ty: &Ty) -> bool {
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
+#[inline(never)]
 pub(crate) fn check_core_places_store_handle(state: &mut CheckState, value: &Expr, ty: &Ty) {
     if !check_core_places_a_handle(ty) { return; }
     let place = matches!(value, Expr::Variable(_, _) | Expr::Field { .. });
@@ -597,6 +610,7 @@ pub(crate) fn check_core_places_store_handle(state: &mut CheckState, value: &Exp
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
+#[inline(never)]
 pub(crate) fn check_core_places_give_handle(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, value: &Expr, ty: &Ty, span: &Span) {
     if !check_core_places_a_handle(ty) { return; }
     check_core_places_store_handle(state, value, ty);
@@ -1112,7 +1126,9 @@ pub(crate) fn check_core_index<H: CheckHost>(state: &mut CheckState, world: &Che
     let writing = state.flow.writing_index;
     state.flow.writing_index = false;
     let first = check_core_expr(state, world, host, base, span);
+    let said = state.flow.unknown_said;
     let key = check_core_expr(state, world, host, index, span);
+    if state.number_shaped(world, index) { state.flow.unknown_said = said; }
     state.io_inside_a_door(world, &first, "this index", span);
     let stamped = match first {
         Ty::Named { ref name, ref args, .. } => name == SEEN && args.len() == 1,
@@ -1273,6 +1289,6 @@ pub(crate) fn check_core_range<H: CheckHost>(state: &mut CheckState, world: &Che
     let to = check_core_expr(state, world, host, end, span);
     let mut item: Ty = from;
     if item.is_unknown() { item = to; }
-    Ty::Seq { item: nikaia_std::block::Boxed::new(item), is_sync: true, pauses: false, can_throw: false, parallel: false, shape: Shape { ends: true, sized: true, replays: true, timed: false } }
+    Ty::Seq { item: nikaia_std::block::Boxed::new(item), is_sync: true, pauses: false, can_throw: false, parallel: false, shape: Shape { ends: true, sized: true, replays: true, timed: false, one_at_a_time: false } }
 }
 

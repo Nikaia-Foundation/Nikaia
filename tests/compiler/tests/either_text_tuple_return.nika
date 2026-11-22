@@ -1,0 +1,42 @@
+// A tuple of text a function hands back as either kind (one part a view of
+// its parameter, one text of its own), read again by a caller (#1311): a
+// `.clone()` of it, of `list[i]` of a list of them, or a tuple `let` taking
+// it apart, each takes the parts as they are handed back (`EitherText`),
+// where rustc refused the code before.
+fn pairs(arg: String) -> Vec[(String, String)] {
+	let mut out: Vec[(String, String)] = []
+	let base = arg.split("/").last() ?? arg
+	out.push((base, arg.clone()))
+	return out
+}
+
+fn pair(arg: String) -> (String, String) {
+	let base = arg.split("/").last() ?? arg
+	return (base, arg.clone())
+}
+
+fn main() throws {
+	let files = pairs("a/b")
+	let mut kept: Vec[(String, String)] = []
+	for k in 0..<files.len() {
+		kept.push(files[k].clone())
+	}
+	println(kept.len())
+	let p = pair("c/d")
+	kept.push(p.clone())
+	println(p.0)
+	let typed: (String, String) = pair("e/f")
+	kept.push(typed.clone())
+	println(typed.1)
+	for (g, f) in kept {
+		println(f"{g} {f}")
+	}
+	let (a, b) = pair("g/h")
+	let mut texts: Vec[String] = []
+	texts.push(a)
+	texts.push(b.clone())
+	println(texts.len())
+	for t in texts {
+		println(t)
+	}
+}

@@ -1,0 +1,31 @@
+// An uncaught task failure prints, in the long form, where it was raised,
+// where its task was started and where the failure arrived (ADR-async-5 D23,
+// Part I 7.1, #2562): for a value task, at the read of its binding, and for a
+// child handle, at its `join`. Each runs as a program of its own, whose
+// failure leaves `main`.
+use std::env
+use std::fs
+use std::process
+
+fn toolchain() -> String throws {
+    let exe = env::current_exe()?.display() ?? ""
+    if exe.len() > 0 { return exe }
+    return "target/fast/nikaia"
+}
+
+fn main() throws {
+    let tmp = fs::scratch()
+    let shared = "struct Bad {}\n\nimpl Error for Bad {\n\tfn message(ref self) -> String {\n\t\treturn \"the task failed\"\n\t}\n}\n\nfn work(n: i64) -> i64 throws {\n\tif n > 5 {\n\t\tthrow Bad {}\n\t}\n\treturn n\n}\n\n"
+    let value = "fn load(n: i64) -> i64 throws {\n\tlet v = async work(n)\n\tlet beside = n * 2\n\treturn v + beside\n}\n\nfn main() throws {\n\tlet n = load(8)\n\tprintln(f\"{n}\")\n}\n"
+    let handle = "fn joined(n: i64) -> i64 throws {\n\tlet h = async(handle) fn { work(n) }\n\tlet beside = n * 2\n\treturn h.join() + beside\n}\n\nfn main() throws {\n\tlet n = joined(9)\n\tprintln(f\"{n}\")\n}\n"
+    for (name, body) in [("value", value), ("handle", handle)] {
+        fs::write(f"{name}.nika", tmp, f"{shared}{body}")
+        let out = process::run(toolchain(), ["run", f"{name}.nika"]; dir: tmp.path().to_text())
+        println(f"the {name} form, exit {out.code}:")
+        for line in out.stderr.lines() {
+            if !line.trim().starts_with("Compiling") && !line.trim().starts_with("Finished") && !line.trim().starts_with("Running") {
+                println(line)
+            }
+        }
+    }
+}

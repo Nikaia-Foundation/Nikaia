@@ -1,0 +1,4 @@
+fix: src/lib.nika:21: NK1350: deleted `.clone()`
+src/lib.nika:27: NK1350: deleted `.clone()`
+check: exit 0
+Checked src/lib.nika

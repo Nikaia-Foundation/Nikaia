@@ -414,6 +414,9 @@ fn check_core_ops_equal[H: CheckHost](mut state: CheckState, world: ref CheckWor
     if lent_item && is_text_type(left.unseen()) && is_text_type(right.unseen()) {
         let added = state.facts.ordered_texts.insert(at.start as i64)
     }
+    if is_text_type(left.unseen()) && is_text_type(right.unseen()) {
+        let noted = state.facts.text_equalities.insert(at.start as i64)
+    }
     if names_a_path(left, right) {
         state.facts.path_comparisons.insert(at.start as i64)
     }
@@ -470,6 +473,13 @@ fn check_core_ops_outcome[H: CheckHost](mut state: CheckState, world: ref CheckW
     }
     if check_core_ops_ordering(op) {
         state.an_operator_needs_a_bound(world, op, left, right, at)
+        let symbol: String = match op {
+            BinaryOp::Lt => "<",
+            BinaryOp::Le => "<=",
+            BinaryOp::Gt => ">",
+            else => ">=",
+        }
+        check_crossings_a_type_with_no_order(state, world, symbol, left, right, at)
         state.a_maybe_compared_with_a_value(left, right, span)
         state.a_view_compared_with_a_value(world, lhs, left, rhs, right, at)
         // **Text ordered against text** (#733): a view and an owned text do not
@@ -1116,6 +1126,13 @@ fn check_core_ops_coalesce[H: CheckHost](mut state: CheckState, world: ref Check
     // the ledger says copies, a `simd::Fixed[f64, 4]` (ADR-279 D8, #1842).
     let held_word = unviewed_type(inner)
     if nullable && check_core_ops_variable(fallback) && (a_copy_by_value(held_word) || a_word_held) && (held_word == other || other.is_unknown() && check_core_ops_a_number(held_word)) {
+        state.facts.word_fallbacks.insert(id_of(expr) as i64)
+    }
+    // **And so is any value of the copy type the left side holds** (#1302):
+    // `m.get(k) ?? zero()` over a map of a struct that copies passes `zero()`
+    // as it is, and `index::or` copies the struct out of the `Option<&R>`;
+    // `zero().into()` left `Or`'s type open there, and rustc refused it.
+    if nullable && !other.is_a_view() && held_word == other && state.a_package_copy(world, held_word) {
         state.facts.word_fallbacks.insert(id_of(expr) as i64)
     }
     // **A value written out beside a view of a word is the word** (ADR-279

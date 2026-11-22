@@ -790,6 +790,21 @@ fn project_command(args: &Cli, command: &Command) -> Result<i32> {
             file: Some(file),
             args: program_args,
         } => {
+            // **Run again unchanged, the program runs at once** (#2421):
+            // nothing is read, checked or lowered.
+            if !reports_asked(args).asked()
+                && let Some(code) = project::run_again(
+                    file,
+                    args.target.as_deref(),
+                    args.user_parallelism.as_deref(),
+                    args.no_cache,
+                    args.allow_read_from_list.as_deref(),
+                    &|settings| command_line_settings(args, settings),
+                    program_args,
+                )
+            {
+                return Ok(code);
+            }
             let project = project::project_for_file(
                 file,
                 args.target.as_deref(),
@@ -913,17 +928,22 @@ fn drive(args: &Cli, project: &Project, subcommand: &str, program_args: &[String
         program_args,
         args.no_cache,
         args.locked,
-        project::Explain {
-            overlaps: args.overlaps,
-            sharing: args.sharing,
-            tethers: args.tethers,
-            trust: args.trust,
-            comptime: args.comptime,
-            asserts: args.asserts,
-            bounds: args.bounds,
-        },
+        reports_asked(args),
         args.allow_read_from_list.as_deref(),
     )
+}
+
+/// The reports the command line asked a build for.
+fn reports_asked(args: &Cli) -> project::Explain {
+    project::Explain {
+        overlaps: args.overlaps,
+        sharing: args.sharing,
+        tethers: args.tethers,
+        trust: args.trust,
+        comptime: args.comptime,
+        asserts: args.asserts,
+        bounds: args.bounds,
+    }
 }
 
 /// `nikaia test` ([ADR-269](../../docs/specification/adr/adr-269.md) D1, D12,

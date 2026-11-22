@@ -58,6 +58,73 @@ fn check_core_stmt_a_map_read(value: ref Expr) -> bool sync {
     }
 }
 
+/// **A choice whose arms are all a map's read** (or `null`, or a jump) is
+/// the view a lone read is (ADR-293 D15, #2170): `match lit { true => m[k],
+/// else => m[k] }` binds an option of a view. An arm of its own beside a
+/// read copied the read out (`reads_beside_an_owned_arm`). The count of reads,
+/// or `-1` where an arm is anything else.
+fn check_core_stmt_reads_in_arms(state: ref CheckState, value: ref Expr) -> i64 sync {
+    let mut reads = 0
+    match value {
+        Expr::Match { arms, .. } => {
+            for arm in arms {
+                let found = check_core_stmt_reads_in_arms(state, arm.body)
+                if found < 0 {
+                    return -1
+                }
+                reads += found
+            }
+            return reads
+        }
+        Expr::If { then_branch, else_branch, .. } => {
+            for tail in block_tail(then_branch) {
+                let found = check_core_stmt_reads_in_arms(state, tail)
+                if found < 0 {
+                    return -1
+                }
+                reads += found
+            }
+            let other = else_branch ?? return -1
+            for tail in block_tail(other) {
+                let found = check_core_stmt_reads_in_arms(state, tail)
+                if found < 0 {
+                    return -1
+                }
+                reads += found
+            }
+            return reads
+        }
+        Expr::Block(block, _) => {
+            for tail in block_tail(block) {
+                let found = check_core_stmt_reads_in_arms(state, tail)
+                if found < 0 {
+                    return -1
+                }
+                reads += found
+            }
+            return reads
+        }
+        else => {}
+    }
+    if ends_in_null(value) {
+        return 0
+    }
+    let node = id_of(value) as i64
+    if state.flow.map_read_sites.contains(node) && !state.facts.copied_reads.contains(node) && !state.facts.copied_walks.contains(node) {
+        return 1
+    }
+    return -1
+}
+
+/// Whether a choice ends only in a map's read, by `check_core_stmt_reads_in_arms`.
+fn check_core_stmt_arms_all_reads(state: ref CheckState, value: ref Expr) -> bool sync {
+    return match value {
+        Expr::Match { .. } => check_core_stmt_reads_in_arms(state, value) > 0,
+        Expr::If { .. } => check_core_stmt_reads_in_arms(state, value) > 0,
+        else => false,
+    }
+}
+
 /// A call of `get`, by its method's name.
 fn check_core_stmt_a_get(world: ref CheckWorld, read: ref Expr) -> bool sync {
     return match read {
@@ -70,6 +137,14 @@ fn check_core_stmt_a_get(world: ref CheckWorld, read: ref Expr) -> bool sync {
 fn check_core_stmt_an_index(read: ref Expr) -> bool sync {
     return match read {
         Expr::Index { .. } => true,
+        else => false,
+    }
+}
+
+/// An index into a map, whose base the index typing recorded (#1296).
+fn check_core_stmt_a_map_index(state: ref CheckState, read: ref Expr) -> bool sync {
+    return match read {
+        Expr::Index { base, .. } => state.facts.map_indices.contains(id_of(base) as i64),
         else => false,
     }
 }
@@ -392,6 +467,42 @@ fn check_core_stmt_a_part_of_an_owned_parameter(state: ref CheckState, world: re
     }
 }
 
+/// **A `let` over a field of a `mut` place** (ADR-views-v4 D23, #1994): of
+/// `mut self`, of a `mut` parameter or of a `let mut` view, bound to one name
+/// without a type. 1 where the name is only read (a view), 2 where the body
+/// keeps it (a taking: `flow.kept_names`), 0 where it is no such `let`. Not
+/// inside a lambda, which is a function of its own.
+fn check_core_stmt_over_a_changing_part(state: ref CheckState, world: ref CheckWorld, names: ref Vec[winnow_grammar::Symbol], shape: ref Vec[i64], mutable: bool, ty: ref Type?, value: ref Expr) -> i64 sync {
+    if mutable || ty != null || names.len() != 1 || shape.len() != 0 {
+        return 0
+    }
+    match value {
+        Expr::Field { .. } => {},
+        else => return 0,
+    }
+    let path = dotted_path(world, value) ?? return 0
+    for around in state.repeats {
+        if around.what == "lambda" {
+            return 0
+        }
+    }
+    let root = a_root_segment(path)
+    if root == "self" {
+        if !state.changing_self {
+            return 0
+        }
+    } else {
+        let local = state.binding(root) ?? return 0
+        if !local.changing && !state.a_changing_view(root) {
+            return 0
+        }
+    }
+    if state.flow.kept_names.contains(world.words.resolve(names[0])) {
+        return 2
+    }
+    return 1
+}
+
 /// A field path whose root is a `let` without `mut` that owns what it holds
 /// (#1142), or the binding of a `for` over elements the loop owns (`drain()`,
 /// a produced sequence; ADR-views-v4 D26): not a view of a place, not a `for`
@@ -425,6 +536,20 @@ fn check_core_stmt_an_unchanged_owned_let(state: ref CheckState, name: ref Strin
 /// A bare name.
 /// `x = x.replace(a, b)` (or `replacen`) where neither `a` nor `b` reads
 /// `x` (ADR-text-reuse-1 D4).
+/// **What `x = x.replace(a, b)` narrates** (ADR-text-reuse-1 D5, #2514):
+/// `replace works in the buffer of x`, with the method as written.
+fn check_core_stmt_replaced_said(world: ref CheckWorld, target: ref Expr, value: ref Expr) -> String sync {
+    let named: String = match target {
+        Expr::Variable(name, _) => world.words.resolve(name).clone(),
+        else => "",
+    }
+    let by: String = match value {
+        Expr::MethodCall { method, .. } => world.words.resolve(method).clone(),
+        else => "replace",
+    }
+    return f"{by} works in the buffer of {named}"
+}
+
 fn check_core_stmt_replaces_itself(world: ref CheckWorld, target: ref Expr, value: ref Expr) -> bool sync {
     let named: String = match target {
         Expr::Variable(name, _) => world.words.resolve(name).clone(),
@@ -773,6 +898,7 @@ fn check_core_stmt_given_cut(mut state: CheckState, world: ref CheckWorld, name:
         return
     }
     state.facts.cut_gives.insert(node_key(value))
+    let said = state.facts.narrated.insert((span.start as i64, f"{name} takes the buffer of {source}"))
     state.hands_over_name(world, source, to, span)
 }
 
@@ -913,7 +1039,12 @@ fn check_core_stmt_let[H: CheckHost](mut state: CheckState, world: ref CheckWorl
     let by_use: Ty? = state.flow.let_lambda_use?.clone()
     state.flow.let_lambda_use = null
     let typed_by_use = ty == null && by_use != null
-    check_core_a_field_of_a_borrowed_subject(state, world, host, value, span, "bound")
+    // **A `let` over a part of a `mut` place views it, or takes it where the
+    // name is kept** (ADR-views-v4 D23, #1994): neither gives `self.part` away.
+    let over_part = check_core_stmt_over_a_changing_part(state, world, names, shape, mutable, ty, value)
+    if over_part == 0 {
+        check_core_a_field_of_a_borrowed_subject(state, world, host, value, span, "bound")
+    }
     check_core_a_mut_parameter_given_away(state, world, host, value, span, "bound")
     let outer_read = state.flow.read_a_map
     state.flow.read_a_map = false
@@ -1029,7 +1160,7 @@ fn check_core_stmt_let[H: CheckHost](mut state: CheckState, world: ref CheckWorl
     // **A name bound to a map read is a view of the map** (#297).
     let was_read = state.flow.read_a_map
     state.flow.read_a_map = outer_read
-    let of_a_map = was_read && check_core_stmt_a_map_read(value)
+    let of_a_map = was_read && (check_core_stmt_a_map_read(value) || check_core_stmt_arms_all_reads(state, value))
     let element_read = check_core_stmt_element_read(state, world, value)
     // **A value `get` hands back past a jump is a reference** (D30).
     let got = check_core_stmt_got(state, world, value)
@@ -1099,9 +1230,28 @@ fn check_core_stmt_let[H: CheckHost](mut state: CheckState, world: ref CheckWorl
     let mut handing_refused = false
     if seen_through || element_view == 1 {
         check_core_stmt_lent_let(state, world, names, span)
-    } else if any_named && !bytes_view && !(ty == null && !mutable && names.len() == 1 && shape.len() == 0 && state.a_lent_text_place(world, value, found)) {
+    } else if over_part == 1 && state.takes_away(world, found) {
+        // **Only read, it is a view of the part** (ADR-views-v4 D23): lent
+        // below as a `let` over a place, and nothing is taken out.
+    } else if over_part == 2 && state.takes_away(world, found) {
+        // **Kept, it takes the part** (ADR-views-v4 D18, D20, D23): the
+        // place holds its empty value or a stand-in until an assignment
+        // gives the part back (`NK2108` asks that one does). The name owns
+        // what it holds, so it is no view of the place.
+        let to = f"bound to `{bound_names.join("`, `")}` by a `let`"
+        let before = state.findings.len()
+        state.hands_over(world, value, found, to, span)
+        moved_out = state.facts.taken_parts.contains_key(node_key(value))
+        handing_refused = state.findings.len() > before
+        // A part with no empty value and no stand-in cannot be taken out: it
+        // is given away, as before.
+        if !moved_out && !handing_refused {
+            check_core_a_field_of_a_borrowed_subject(state, world, host, value, span, "bound")
+        }
+    } else if any_named && !bytes_view && !(ty == null && !mutable && names.len() == 1 && shape.len() == 0 && (state.a_lent_text_place(world, value, found) || (found == a_string_type() && state.a_place_of_a_lent_let(world, value)))) {
         // A plain `let` over a `String` read through a `ref` parameter is a
-        // view of it (Part I 6.5, #839), bound so below.
+        // view of it (Part I 6.5, #839), bound so below; so is one read off a
+        // `let` over a place or a `for`'s element (#1991).
         let to = f"bound to `{bound_names.join("`, `")}` by a `let`"
         let before = state.findings.len()
         state.hands_over(world, value, found, to, span)
@@ -1215,7 +1365,9 @@ fn check_core_stmt_let[H: CheckHost](mut state: CheckState, world: ref CheckWorl
             let met = state.views_meet_owned_text(world, value)
             bound = met ?? found.clone()
         } else if found == a_string_type() {
-            let lent = state.lent_arms_bound(world, value)
+            // **Taken out, the text is the name's own** (ADR-views-v4 D23,
+            // #1994): no view of the place it came from.
+            let lent: Ty? = if moved_out { null } else { state.lent_arms_bound(world, value) }
             let none_lent = lent == null
             bound = lent ?? found.clone()
             // **A plain `let` over a `String` place of a local is a view of
@@ -1509,7 +1661,14 @@ fn check_core_stmt_let[H: CheckHost](mut state: CheckState, world: ref CheckWorl
         else => false,
     }
     // **A list's `get` that copies its element out holds the value** (#1609).
-    if of_a_map && !word_copied && !state.facts.copied_walks.contains(id_of(value) as i64) {
+    // **Nor a `let` typed as an option of a struct that copies** (#1302):
+    // `let known: R? = m.get(k)` holds the struct, copied out at the `let`,
+    // and a `??` over it is the struct, handed to a `ref R` as `&had`.
+    let declared_copy = ty != null && match bound {
+        Ty::Nullable(inner) => !inner.is_a_view() && state.a_package_copy(world, inner),
+        else => false,
+    }
+    if of_a_map && !word_copied && !declared_copy && !state.facts.copied_walks.contains(id_of(value) as i64) {
         let kept: Ty = match bound {
             Ty::Nullable(inner) => {
                 if inner.is_a_view() {
@@ -1985,7 +2144,9 @@ fn check_core_stmt_assign[H: CheckHost](mut state: CheckState, world: ref CheckW
         }
     }
     check_narrow_written_through(state, target)
-    if check_core_stmt_an_index(target) {
+    // **A map's slot holds its `V`**, though its index reads a `V?` (D1);
+    // an element of a `Vec[T?]` holds the `T?` it reads (#1296).
+    if check_core_stmt_a_map_index(state, target) {
         let slot: Ty = match into {
             Ty::Nullable(inner) => inner.clone(),
             else => into.clone(),
@@ -2099,6 +2260,7 @@ fn check_core_stmt_assign[H: CheckHost](mut state: CheckState, world: ref CheckW
     // D4): `x` owns its text and is not read by `a` or `b`.
     if op == null && is_text_type(into.unseen()) && !into.is_a_view() && check_core_stmt_replaces_itself(world, target, value) {
         let replaced = state.facts.replaced_assigns.insert(span.start as i64)
+        let said = state.facts.narrated.insert((span.start as i64, check_core_stmt_replaced_said(world, target, value)))
     }
     // **`x += a` over two integer types is `x = x + a`** (ADR-285 D32).
     if op != null && !check_core_stmt_a_shift(op) {
@@ -2681,6 +2843,7 @@ fn check_core_stmt_return[H: CheckHost](mut state: CheckState, world: ref CheckW
         let returned = value ?? return Ty::Unknown
         state.narrowed_reads_given_back(returned)
         state.place_clones_handed_back(world, returned)
+        state.a_pausing_cleanup_returned(world, returned)
     }
     state.a_way_out("return", "", span)
     return Ty::Unknown
@@ -2902,6 +3065,15 @@ fn check_core_block[H: CheckHost](mut state: CheckState, world: ref CheckWorld, 
         at += 1
     }
     check_crossings_a_bound_handle_is_taken(state, world, block)
+    check_crossings_a_deferred_handle_starts(state, world, block)
+    // **The block's value leaves it** (#1323): `{ let r = ...; r }` hands `r`
+    // on as `return r` does.
+    if count > 0 {
+        match block.stmts[count - 1].node {
+            Stmt::Expr(value) => state.a_pausing_cleanup_returned(world, value),
+            else => {},
+        }
+    }
     state.failing_cleanups_settled()
     if count > 0 {
         state.views_end(state.scope.len() as i64 - 1, block.stmts[count - 1].span.end as i64)
@@ -2914,6 +3086,7 @@ fn check_core_block[H: CheckHost](mut state: CheckState, world: ref CheckWorld, 
     check_core_view_lists_end(state, world, block)
     check_core_place_in_block(state, world, block)
     check_core_place_boxes(state, world, block)
+    state.a_text_without_room(world, block)
     state.scope.pop()
     return tail
 }
@@ -4033,6 +4206,20 @@ fn check_async_block(mut state: CheckState, world: ref CheckWorld, block: ref Bl
                         state.facts.async_waits.insert(id_of(guarded) as i64, CheckAsyncWait { at: CheckAsyncWaitAt::GroupEnd, group: group })
                         pending.push(count)
                     },
+                    // `async e catch { f }` as a statement: nobody reads it,
+                    // so it is waited for at its group's end and its fallback
+                    // stands in for its failure there (D21, D22).
+                    Expr::TryCatch { expr: guarded, .. } if check_an_async_task(guarded) => {
+                        state.facts.async_waits.insert(id_of(guarded) as i64, CheckAsyncWait { at: CheckAsyncWaitAt::GroupEnd, group: group })
+                        if last && beside == 0 {
+                            state.a_task_with_nothing_beside_it(stmt.span, "it is the last statement of its group, which waits for it at once")
+                        }
+                        pending.push(count)
+                        match guarded {
+                            Expr::Async(inner, _, _, _) => check_async_in(state, inner, group, stmt.span),
+                            else => {},
+                        }
+                    },
                     Expr::Async(inner, _, _, _) => {
                         state.facts.async_waits.insert(id_of(value) as i64, CheckAsyncWait { at: CheckAsyncWaitAt::GroupEnd, group: group })
                         if last && beside == 0 {
@@ -4074,13 +4261,19 @@ fn check_async_binding(mut state: CheckState, world: ref CheckWorld, block: ref 
         wanted.insert(world.words.resolve(name).clone())
     }
     let mut named = count
+    // The tasks that name it, each waiting for it in itself (D8).
+    let mut readers = 0
     let mut index = 0
     for stmt in block.stmts {
-        if index > at && named == count && !starts_a_task(stmt.node) {
+        if index > at && named == count {
             let mut seen: collections::BTreeSet[String] = collections::BTreeSet()
             names_in_statement(stmt.node, world.words, seen)
             for name in wanted {
                 if seen.contains(name) {
+                    if starts_a_task(stmt.node) {
+                        readers += 1
+                        break
+                    }
                     named = index
                 }
             }
@@ -4088,6 +4281,9 @@ fn check_async_binding(mut state: CheckState, world: ref CheckWorld, block: ref 
         index += 1
     }
     if named == count {
+        if readers > 1 {
+            state.facts.async_shared.insert(id_of(task) as i64)
+        }
         state.facts.async_waits.insert(id_of(task) as i64, CheckAsyncWait { at: CheckAsyncWaitAt::GroupEnd, group: group })
         if last && others == 0 {
             state.a_task_with_nothing_beside_it(span, "nothing names its binding, and it is the last statement of its group, which waits for it at once")
@@ -4141,6 +4337,14 @@ fn check_a_child_task(expr: ref Expr) -> bool sync {
     }
 }
 
+/// Whether `expr` is `async e`, a task of its group.
+fn check_an_async_task(expr: ref Expr) -> bool sync {
+    return match expr {
+        Expr::Async(_, _, _, _) => true,
+        else => false,
+    }
+}
+
 /// Whether a statement starts a task as a whole, `let x = async e` or `async
 /// e`: a pending binding it names is waited for in that task, so the main line
 /// waits where another statement names it (D6).
@@ -4156,6 +4360,7 @@ fn starts_a_task(stmt: ref Stmt) -> bool sync {
         },
         Stmt::Expr(value) => match value {
             Expr::Async(_, _, _, _) => true,
+            Expr::TryCatch { expr, .. } => check_an_async_task(expr),
             else => false,
         },
         else => false,

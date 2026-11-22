@@ -3,7 +3,7 @@
 An issue is the work order: a builder plans its steps from it, so it holds
 what an agent cannot find out quickly. A run judges its issue by these rules
 (last section); a rule found wrong or missing is changed here, citing the run.
-Before filing, run `nikaia run scripts/issue-check.nika -- --body FILE` (or
+Before filing, run `nikaia run scripts/issue-check.nika -- --body - < FILE` (or
 `-- N`): the driver queues no issue it refuses (I4, I8, I9; #2003).
 
 ## Every issue
@@ -159,6 +159,10 @@ Before filing, run `nikaia run scripts/issue-check.nika -- --body FILE` (or
   its output, never a guessed path. Added Rust names what allows it (a
   CLAUDE.md exception, a dated decision, a move into Nikaia first), else `no
   decision yet` (I6).
+  * The work area's facts: a `Facts: <section>, ...` line naming the topic
+    sections of `docs/builder-facts-lookup.md` (CI and caches, Ledger and
+    bounds proofs, ...) the builder starts from; an issue of a new area names
+    none and the first debrief opens one.
   * Limits it runs into: caps (`most_facts()`), silently trimmed sets. A change
     to a pass every build runs names the time before (command, file, wall or
     user, commit) and per-body recomputation it multiplies; one limit over

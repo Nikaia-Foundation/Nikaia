@@ -1,0 +1,22 @@
+// `<` on a type with no order is the checker's refusal, not rustc's
+// (Part I, *`Eq` and `Ord`*, #2123): a declared `struct` or `enum` without
+// `impl Ord`, and a library type whose ledger lacks `orders`.
+use std::target
+
+struct P {
+    x: i64,
+}
+
+enum Colour {
+    Red,
+    Green,
+}
+
+fn main() throws {
+    let a = P { x: 1 }
+    let b = P { x: 2 }
+    let c = Colour::Red
+    println(f"{a < b} {c >= Colour::Green}")
+    let i = target::Instruction::Crc32c
+    println(f"{i < target::Instruction::Bmi2}")
+}

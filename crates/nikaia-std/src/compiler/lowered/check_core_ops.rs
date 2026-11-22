@@ -265,6 +265,7 @@ pub(crate) fn check_core_ops_equal<H: CheckHost>(state: &mut CheckState, world: 
     state.a_view_compared_with_a_value(world, lhs, left, rhs, right, at);
     let lent_item = check_core_ops_lent_text_item(&state, world, lhs) || check_core_ops_lent_text_item(&state, world, rhs);
     if lent_item && is_text_type(&left.unseen()) && is_text_type(&right.unseen()) { let added = state.facts.ordered_texts.insert(at.start as i64); }
+    if is_text_type(&left.unseen()) && is_text_type(&right.unseen()) { let noted = state.facts.text_equalities.insert(at.start as i64); }
     if names_a_path(left, right) { state.facts.path_comparisons.insert(at.start as i64); }
     let formatted = state.facts.text_formats.contains(&(id_of(lhs) as i64)) || state.facts.text_formats.contains(&(id_of(rhs) as i64));
     if formatted && is_text_type(&left.unseen()) && is_text_type(&right.unseen()) { state.facts.compared_formats.insert(at.start as i64); }
@@ -299,6 +300,13 @@ pub(crate) fn check_core_ops_outcome<H: CheckHost>(state: &mut CheckState, world
     if check_core_ops_equality(&op) { return check_core_ops_equal(state, world, host, &op, lhs, left, rhs, right, at, span); }
     if check_core_ops_ordering(&op) {
         state.an_operator_needs_a_bound(world, &op, left, right, at);
+        let symbol: String = match op {
+            BinaryOp::Lt => String::from("<"),
+            BinaryOp::Le => String::from("<="),
+            BinaryOp::Gt => String::from(">"),
+            _ => String::from(">="),
+        };
+        check_crossings_a_type_with_no_order(state, world, &symbol, left, right, at);
         state.a_maybe_compared_with_a_value(left, right, span);
         state.a_view_compared_with_a_value(world, lhs, left, rhs, right, at);
         if is_text_type(&left.unseen()) && is_text_type(&right.unseen()) { let added = state.facts.ordered_texts.insert(at.start as i64); }
@@ -748,6 +756,7 @@ pub(crate) fn check_core_ops_coalesce<H: CheckHost>(state: &mut CheckState, worl
     }
     let held_word = unviewed_type(&inner);
     if nullable && check_core_ops_variable(fallback) && (a_copy_by_value(&held_word) || a_word_held) && (held_word == other || other.is_unknown() && check_core_ops_a_number(&held_word)) { state.facts.word_fallbacks.insert(id_of(expr) as i64); }
+    if nullable && !other.is_a_view() && held_word == other && state.a_package_copy(world, &held_word) { state.facts.word_fallbacks.insert(id_of(expr) as i64); }
     if nullable && !from_a_map && inner.is_a_view() && !other.is_a_view() && state.a_package_copy(world, &unviewed_type(&inner)) && state.a_value_written_out(world, fallback) { return unviewed_type(&inner); }
     if nullable && !from_a_map && inner.is_a_view() && !other.is_a_view() && check_core_ops_not_plain(&inner) && state.a_value_written_out(world, fallback) {
         if made_in_the_call(fallback) { state.facts.slot_fallbacks.insert(id_of(expr) as i64, false); } else { Some(state.facts.lent_map_fallbacks.insert(id_of(expr) as i64)); }

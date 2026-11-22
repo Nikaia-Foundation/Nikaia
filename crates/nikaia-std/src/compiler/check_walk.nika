@@ -128,7 +128,7 @@ fn blocks_of_expr(expr: ref Expr) -> Vec[ref Block] {
     let mut out: Vec[ref Block] = []
     match expr {
         // An `unsafe` block is part of the function that writes it
-        // (ADR-302 D3): it makes no boundary of its own, so what it calls,
+        // (ADR-c-boundary-v1 D3): it makes no boundary of its own, so what it calls,
         // the function calls.
         Expr::Block(block, _) => {
             out.push(block)

@@ -87,7 +87,7 @@ reports under *Briefs and reports*.
   lane's `batch.txt`), or a revert. A revert of a commit that said `Fixes #N`
   says `Reopens #N` on a line of its own: the driver skips an issue a `Fixes`
   on `develop` names until a newer `Reopens` takes it back (#2152), and the
-  issue is reopened by hand if `promote` closed it.
+  driver reopens the issue with `ready` when it pushes that `Reopens` line.
 
 ## Trunk, CI and issues
 
@@ -147,9 +147,12 @@ Moved from `CLAUDE.md` (2026-11-01); there each rule has its short form.
   tests and, green, pushes without a `ci/` run (`SUITE <sha8> scripts-only`,
   `drive_scripts_only` in `scripts/drive.nika`); a script without a named
   test gets the suite.
-* **How issues close.** `promote` closes an issue only when a commit it brings
-  to `main` names it with `Fixes`, `Closes` or `Resolves`
-  (`scripts/fixed-issues.py`); `(#N)` and `Part of #N` close nothing. Any tense
+* **How issues close** (owner, 2026-11-21). The driver closes an issue when it
+  pushes to `develop` a commit with a line `Fixes #N` (`drive_close_pushed` in
+  `scripts/drive.nika`): as completed, with a comment naming the commit, and
+  without `wip`. `promote` still closes what reaches `main` named with
+  `Fixes`, `Closes` or `Resolves` (`scripts/fixed-issues.py`), so a push by
+  hand is caught there; `(#N)` and `Part of #N` close nothing. Any tense
   counts, in prose too (5d7be91e's "the compiler fix #1000" closed #1000
   unbuilt). The commit that builds the last step of a *To build* list writes
   `Fixes #N`, and also names every issue that list absorbed (`Fixes #439,
@@ -371,6 +374,33 @@ Moved from the former `docs/architect.md` (2026-10-31). `nikaia` here means
   `--max` reached, a push rejected whose merge of `origin/develop` conflicted
   (a conflict only in the generated `lowered/*.rs` the driver resolves itself
   by re-lowering, #1430), a suite still red after two QA rounds.
+* **Starting the driver, detached** (as the CI lane runs it, 2026-11-21). A
+  driver under `run_in_background` ends with the session's turn and cannot be
+  stopped (`kill` is denied), so it is started on its own, its output
+  appended to a log in the scratchpad:
+
+      cd /home/user/Nikaia \
+        && { [ "$(git rev-parse --is-shallow-repository)" = false ] || git fetch -q --unshallow origin; } \
+        && git fetch -q origin develop \
+        && cargo build -q --profile fast -p nikaia \
+        && PATH=$PWD/target/fast:$PATH NIKAIA_DRIVE_TASK_MIN=1440 NIKAIA_DRIVE_LIMIT_MIN=1440 \
+          setsid nohup sh -c \
+          'nikaia run scripts/drive.nika -- docs/briefs/LANE; echo "DRIVER EXIT $?"' \
+          >> SCRATCHPAD/drive-LANE.log 2>&1 < /dev/null & disown
+
+  A fresh container's clone is shallow: there the driver's ancestry checks
+  fail (`ESCALATE drive: ci/LANE holds <sha>, which is not in HEAD's
+  history`) for a commit that is on `develop`, hence the `--unshallow`.
+  Then a `Monitor` (timeout 30 minutes, re-armed when it expires) on that
+  log greps `^WAKE ` and `DRIVER EXIT`, and once a minute checks with
+  `ps -ef | grep "drive.nika -- docs/briefs/LANE"` that the driver still
+  runs (`DRIVER GONE` when not). The two limits are the 2 h a `run_in_background` task lives; a detached
+  driver is not ended then, so they are raised, and it stops only for what
+  needs the supervisor. `DRIVER EXIT 4` is the time limit: start it
+  again. A heartbeat every 45 minutes (`send_later`) checks the driver and
+  re-arms the monitor. Re-arming an expired monitor and a heartbeat that
+  finds the driver running are not reported to the owner (owner,
+  2026-11-21: noise); only what the driver's lines ask for is.
 * **Act only on that final line.** `cycle.nika -- DIR --done N` clears an
   OWNER line; after the owner's answer, start `drive.nika` again. A `RESTART
   drive: ...` line needs nothing: the driver runs the changed script again by
@@ -453,7 +483,10 @@ Moved from the former `docs/architect.md` (2026-10-31). `nikaia` here means
   after each run; the supervisor watches the driver's log for `builder done`,
   reads the debrief at once and, before the next brief is written, turns each
   point into one of three things: a line in `docs/builder-facts-lookup.md` (a trap, a
-  location, a recipe), a fix to the brief template or a wrong fact in a
+  location, a recipe, or a work area's file, measure or figure in its topic
+  section; owner, 2026-11-21: topic facts in place of a resumed agent; a newer
+  figure replaces the older, what no longer holds is deleted, and an `UNPLACED`
+  topic gets its section with a `Paths:` line), a fix to the brief template or a wrong fact in a
   waiting brief, or a `ready` issue when the toolchain lacks what the builder
   needed. A point two builders reported is never left for a third.
 * **Cost watch.** A builder past about 120 turns or 200k context is told to push what is verified and end; the
@@ -611,6 +644,11 @@ own driver run:
   own issue (the job files none): a wrong expectation for the solver lane,
   a wrong verdict as a `solver` defect, each with the file from the run's
   `z3-findings` artifact, and `fuzz N SEED` where the fuzzer found it.
+* **Async lane, `docs/briefs/async/`** (owner, 2026-11-21): the issues
+  labelled `async`: the build of ADR-async-5 (the umbrella "async: one
+  concept, task" (#983) is closed; its steps are the lane). They run in the
+  order of their dependencies; the session sets a `blocked` step to `ready`
+  once what it waits for is closed.
 * **At least one active session runs the improvement lane and at least one the
   bug lane** (owner, 2026-11-15). A session that starts while neither runs takes
   one of them first.

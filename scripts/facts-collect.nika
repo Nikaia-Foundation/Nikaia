@@ -60,8 +60,9 @@ fn facts_knowledge(line: String) -> Vec[String] {
 // The proposed lines of one debrief, and the `knowledge:` answers of the
 // `Issue:` field of the report beside it.
 fn facts_lines(path: String) -> Vec[String] throws {
+	let here = fs::Root::Dir(".")
 	let mut out: Vec[String] = []
-	for l in fs::read_to_string(path.clone(), fs::Root::Anywhere).split("\n") {
+	for l in fs::read_to_string(path.clone(), here).split("\n") {
 		let t = l.trim()
 		let bare = t.trim_start_matches("-").trim_start_matches("*").trim()
 		if bare.starts_with("Fact:") {
@@ -73,8 +74,8 @@ fn facts_lines(path: String) -> Vec[String] throws {
 		}
 	}
 	let report = path.replace(".debrief.md", ".report.md")
-	if report != path && fs::exists(report.clone(), fs::Root::Anywhere) {
-		for l in fs::read_to_string(report, fs::Root::Anywhere).split("\n") {
+	if report != path && fs::exists(report.clone(), here) {
+		for l in fs::read_to_string(report, here).split("\n") {
 			if l.starts_with("Issue:") {
 				for k in facts_knowledge(l.clone()) { out.push(k) }
 			}
@@ -130,7 +131,8 @@ fn facts_enter(fact: String, stem: String) -> bool throws {
 	if facts_known(line.clone()) { return true }
 	let (path, at) = facts_place(section.clone())
 	if at < 0 { return false }
-	let lines: Vec[String] = fs::read_to_string(path.clone(), fs::Root::Anywhere).split("\n").collect()
+	let here = fs::Root::Dir(".")
+	let lines: Vec[String] = fs::read_to_string(path.clone(), here).split("\n").collect()
 	let mut out: Vec[String] = []
 	let mut i = 0
 	while i < lines.len() {
@@ -138,7 +140,7 @@ fn facts_enter(fact: String, stem: String) -> bool throws {
 		if i == at { out.push(f"* {line} ({stem})") }
 		i = i + 1
 	}
-	fs::write(path, fs::Root::Anywhere, out.join("\n"))
+	fs::write(path, here, out.join("\n"))
 	println(f"FACT {section} | {line}")
 	return true
 }

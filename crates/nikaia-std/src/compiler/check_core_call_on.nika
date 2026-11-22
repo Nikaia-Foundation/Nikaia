@@ -1398,6 +1398,16 @@ fn check_core_call_on_described[H: CheckHost](mut state: CheckState, world: ref 
     } else {
         check_core_call_std_code_args(state, world, callee, key, args, parallel, span)
     }
+    // **A lambda of a `par_iter` walk meets its own other runs**
+    // (ADR-async-5 D26): `map`, `filter` and `for_each`, and `fold`'s
+    // `step` and `merge` (Part II 12.6).
+    if parallel && (entry == "map" || entry == "filter" || entry == "for_each") && args.len() == 1 {
+        check_walks_a_lambda_against_itself(state, world, on, args[0], span)
+    }
+    if key == "Par::fold" && args.len() >= 3 {
+        check_walks_a_lambda_against_itself(state, world, on, args[1], span)
+        check_walks_a_lambda_against_itself(state, world, on, args[2], span)
+    }
     if keyed && args.len() == 1 && found.len() == 1 {
         check_core_call_on_a_viewed_key(state, world, args[0], found[0], span)
     }
@@ -1474,20 +1484,24 @@ fn check_core_call_on_described[H: CheckHost](mut state: CheckState, world: ref 
     let mut passed: Vec[(String, Ty)] = []
     let mut values: Vec[i64] = []
     let mut literals: Vec[bool] = []
+    let mut integers: Vec[bool] = []
     let mut texts: Vec[String] = []
-    for (name, ty, value, literal, text) in state.flow.method_passed.remove(node) ?? [] {
+    for (name, ty, value, literal, integer, text) in state.flow.method_passed.remove(node) ?? [] {
         passed.push((name, ty))
         values.push(value)
         literals.push(literal)
+        integers.push(integer)
         texts.push(text)
     }
     state.flow.option_values = values
     state.flow.option_literals = literals
+    state.flow.option_integers = integers
     state.flow.option_written = texts
     state.flow.call_written = f"{check_walked_written(receiver, world.words)}.{written}"
     let result = check_crossings_arguments(state, world, host, key, written, contract, args, found, passed, span)
     state.flow.option_values = []
     state.flow.option_literals = []
+    state.flow.option_integers = []
     state.flow.option_written = []
     state.flow.call_written = ""
     // **What an option keeps, it is given** (#1595): the walk that holds
@@ -1541,6 +1555,31 @@ fn check_core_call_on_described[H: CheckHost](mut state: CheckState, world: ref 
     let shaped = shape_through(contract, on, found, substituted)
     let paused = check_crossings_a_lambda_that_pauses_at_an_entry(state, key, receiver, on, args, lambda_at, shaped, span)
     return state.stamped_through(contract, found, paused)
+}
+
+/// **`NK1171`: code has no methods** (#2113): a value of a `fn` type is
+/// called, `f(…)`, and nothing describes a method on it, so `f.m()` is
+/// refused here rather than by rustc (Part III C.1). A type's constructor
+/// is such a value: `String.with_capacity(64)` names `String`'s, not the
+/// type, whose own functions are written with `::`.
+fn check_core_call_on_code(mut state: CheckState, world: ref CheckWorld, on: ref Ty, receiver: ref Expr, entry: ref String, span: ref Span) sync {
+    let code = match on {
+        Ty::Fn { .. } => true,
+        else => false,
+    }
+    if !code {
+        return
+    }
+    let written = check_walked_written(receiver, world.words)
+    let mut help: String = f"Call it first, `{written}(…).{entry}()`, for a method of what it hands back."
+    let named = match receiver {
+        Expr::Variable(_, _) => state.structs.contains_key(written) || world.own.types.contains_key(written) || world.library.types.contains_key(written) || mem_offered(written),
+        else => false,
+    }
+    if named {
+        help = f"`{written}` here is its constructor: call it, `{written}(…)` with the options it takes, and call `{entry}` on the value it makes, or write `{written}::{entry}(…)` for a function of the type."
+    }
+    state.findings.push(check_refusal("NK1171", span, f"`{written}` is code, and code has no method called `{entry}`.", [f"A value of type `{on.shown()}` is called, `{written}(…)`; no declaration, ledger or description gives it methods."], help))
 }
 
 /// **One method call, whichever way it was spelled** (ADR-278): `x.m()` and
@@ -1616,6 +1655,7 @@ fn check_core_call_on[H: CheckHost](mut state: CheckState, world: ref CheckWorld
         for a in args {
             check_core_expr(state, world, host, a, span)
         }
+        check_core_call_on_code(state, world, on, receiver, entry, span)
         check_core_call_on_reached(state, null)
         state.method_propagates(id_of(receiver) as i64, false)
         state.method_pauses(id_of(receiver) as i64, false)

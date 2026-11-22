@@ -1,0 +1,3 @@
+first: built 0; outside rustc ran; says hi
+an input outside: built 0; outside rustc ran; says hi
+recorded again: built 0; outside rustc reused; says hi

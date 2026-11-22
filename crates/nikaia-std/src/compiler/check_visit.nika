@@ -182,7 +182,7 @@ fn check_visit_stmt(stmt: ref Stmt) -> Vec[ref Expr] {
 /// Every block an expression holds, including the body of a lambda passed as
 /// an argument. A trailing lambda runs during the call it is given to, so what
 /// it calls, the function around it calls; `spawn` is a detached context and is
-/// not walked. An `unsafe` block makes no boundary of its own (ADR-302 D3).
+/// not walked. An `unsafe` block makes no boundary of its own (ADR-c-boundary-v1 D3).
 /// **Through every expression that holds others** (#494).
 fn check_visit_expr_blocks(expr: ref Expr) -> Vec[ref Block] {
     let mut out: Vec[ref Block] = []

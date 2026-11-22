@@ -1,0 +1,15 @@
+// **A pausing step's range is written bare as the argument of
+// `nikaia_std::seq`** (#2103): `then((through(1, 3)), ..)` drew rustc's
+// "unnecessary parentheses around function argument" at both lines.
+use std::time
+
+fn slow(x: i64) -> i64 {
+    time::sleep(1.millis())
+    return x
+}
+
+fn main() throws {
+    let mapped = (1..3).map(fn(x) { slow(x) }).count()
+    let kept = (1..3).filter(fn(x) { slow(x) > 1 }).count()
+    println(f"{mapped} {kept}")
+}

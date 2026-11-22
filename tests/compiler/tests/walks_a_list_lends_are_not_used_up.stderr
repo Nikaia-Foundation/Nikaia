@@ -1,0 +1,28 @@
+error[NK2702]: `v` is a sequence lent by the list this loop walks, and using it up would take it out of that list.
+  --> tests/walks_a_list_lends_are_not_used_up.nika:6:19
+   |
+ 6 |     for v in ws { println(f"{v.count()}") }
+   |                   ^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: A sequence of `?` makes its elements as they're asked for, so walking it uses it up (ADR-105 D2): a `for`, a `collect()`, a `count()` or any other walk, or a `let` that names it.
+   = note: A `for` over a list or a map, or an index into one, only lends the element (ADR-094 D4), and the container would still hold a sequence already used up.
+   = help: Take the sequences out of the container to walk them: `for w in list.drain()`.
+error[NK2702]: `s` is a sequence lent by the list this loop walks, and using it up would take it out of that list.
+  --> tests/walks_a_list_lends_are_not_used_up.nika:9:9
+   |
+ 9 |         let t = s
+   |         ^^^^^^^^^
+   |
+   = note: A sequence of `?` makes its elements as they're asked for, so walking it uses it up (ADR-105 D2): a `for`, a `collect()`, a `count()` or any other walk, or a `let` that names it.
+   = note: A `for` over a list or a map, or an index into one, only lends the element (ADR-094 D4), and the container would still hold a sequence already used up.
+   = help: Take the sequences out of the container to walk them: `for w in list.drain()`.
+error[NK2702]: This element is a sequence lent by `ss`, and using it up would take it out of `ss`.
+   --> tests/walks_a_list_lends_are_not_used_up.nika:12:16
+    |
+ 12 |     println(f"{ss[0].count()}")
+    |                ^^^^^
+    |
+    = note: A sequence of `?` makes its elements as they're asked for, so walking it uses it up (ADR-105 D2): a `for`, a `collect()`, a `count()` or any other walk, or a `let` that names it.
+    = note: A `for` over a list or a map, or an index into one, only lends the element (ADR-094 D4), and the container would still hold a sequence already used up.
+    = help: Take the sequences out of the container to walk them: `for w in list.drain()`.
+3 sequences used up out of a list

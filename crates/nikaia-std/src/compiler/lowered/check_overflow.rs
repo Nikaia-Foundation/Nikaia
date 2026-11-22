@@ -28,7 +28,7 @@ impl CheckState {
         if folded.is_none() && division { return; }
         let beyond = folded.is_none();
         let fallback = integer(18446744073709551615u64, heading);
-        let value = CheckConstant { value: nikaia_std::index::or(folded, || fallback.into()), beyond, pinned: None };
+        let value = CheckConstant { value: nikaia_std::index::or(folded, || fallback), beyond, pinned: None };
         let mut open = self.open_numbers_in(world, lhs);
         for number in self.open_numbers_in(world, rhs) { open.push(number); }
         if !open.is_empty() {
@@ -130,6 +130,12 @@ pub(crate) fn check_wrap_for(found: &Ty, want: &Ty, literal: bool) -> Option<Fac
         _ => String::from(""),
     };
     if !inner_into.is_empty() { return Some(FactWrap::WidenSome(nikaia_std::block::Text::from(inner_into.to_string()))); }
+    let inner_path = match want {
+        Ty::Nullable(inner) => { let inner = nikaia_std::boxed::open(inner); text_as_a_path(found, inner) },
+        _ => -1,
+    };
+    if inner_path == 1 { return Some(FactWrap::PathViewSome); }
+    if inner_path == 0 { return Some(FactWrap::PathSome); }
     if !found.is_unknown() || literal { return Some(FactWrap::Constructor); }
     None
 }

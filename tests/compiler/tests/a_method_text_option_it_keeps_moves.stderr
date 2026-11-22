@@ -1,0 +1,10 @@
+error[NK2105]: You're using `o` again, but it was passed as the option `label` of `kept`, which keeps it.
+   --> tests/a_method_text_option_it_keeps_moves.nika:21:5
+    |
+ 21 |     println(o)
+    |     ^
+    |
+    = note: `o` is a `String`, so it's handed over itself, not a copy. Nikaia never copies behind your back, because a copy costs as much as the value is large.
+    = note: Numbers, `bool`s, `scalar`s and views would be fine: they're copied.
+    = help: If both need it, hand over a copy: `o.clone()`.
+

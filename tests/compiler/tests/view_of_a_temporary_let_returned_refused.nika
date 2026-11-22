@@ -1,0 +1,24 @@
+// #2182: a `let` bound to a view of a call's result views text the statement
+// drops, so handing it back as `String` is refused with NK1104, as the same
+// value handed back directly is (#1287), not left to rustc.
+fn first(s: String) -> String {
+    let rest = s.replace(")", "").trim()
+    return rest
+}
+
+fn tail(s: String) -> String {
+    let rest = s.replace(")", "").trim()
+    rest
+}
+
+fn renamed(s: String) -> String {
+    let rest = s.clone().trim()
+    let again = rest
+    return again
+}
+
+fn main() throws {
+    println(first("(sat) "))
+    println(tail("(sat) "))
+    println(renamed("(sat) "))
+}

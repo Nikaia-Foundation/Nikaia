@@ -15,7 +15,9 @@
 // its digest line) is re-lowered too (#1784), and named once; a round that
 // changed only its `LOWERED_DIGEST` line settles the lowering (#2154). A
 // conflict whose regeneration fails from their side of the lowered files is
-// regenerated from ours (#2253), and escalates only when both fail. Each
+// regenerated from ours (#2253); when ours fails too, with the compiler of
+// their commit (#2432: their emitter change), and it escalates only when all
+// fail. Each
 // step's seconds are logged. A conflict only in the runtime's lowered index
 // `runtime/lowered.rs`, which `lower-std` writes too, is re-lowered, not
 // escalated as a source (#2256).
@@ -67,7 +69,8 @@ fn sh(dir: String, script: String) -> String throws {
 // "both": both also change the same source; "clean": theirs a new source,
 // ours another file; "docs": theirs only a note in `docs/`; "index": both
 // change only the lowered index `lowered.rs`, theirs a new source;
-// "runtime": both change only the runtime's lowered index, theirs a new source.
+// "runtime": both change only the runtime's lowered index, theirs a new source;
+// "emitter": as "lowered" (theirs brings the new emitter, #2432).
 fn setup(tmp: ref fs::Root, name: String, kind: String) -> String throws {
     let base = f"{tmp.path().to_text()}/{name}"
     let low = "crates/nikaia-std/src/compiler/lowered"
@@ -79,7 +82,7 @@ fn setup(tmp: ref fs::Root, name: String, kind: String) -> String throws {
     if kind == "runtime" { sh(work.clone(), f"mkdir -p {rt}; echo index > {rt}.rs; git add -A; git commit -q -m runtime; git push -q origin develop") }
     sh(base.clone(), "git clone -q -b develop origin.git other")
     let other = f"{base}/other"
-    let lowered = kind == "lowered" || kind == "both"
+    let lowered = kind == "lowered" || kind == "both" || kind == "emitter"
     let mut theirs = if kind == "both" { "echo theirs > crates/src/a.nika; " } else { "echo theirs-side > crates/src/b.nika; " }
     if kind == "docs" { theirs = "mkdir -p docs; echo theirs > docs/x.md; " }
     if kind.starts_with("example") { theirs = "mkdir -p examples/a/src; echo theirs > examples/a/src/main.nika; " }
@@ -110,13 +113,22 @@ fn case_built(nikaia: String, repo: String, tmp: ref fs::Root, name: String, kin
         // The stub ledgers script: it rewrites one ledger and says so, run by
         // this compiler as the checkout's `target/fast/nikaia`.
         let stub = "use std::fs\n\nfn main() throws {\n    fs::write(\"examples/a/nikaia.contracts\", fs::Root::Anywhere, \"refreshed\\n\")\n    println(\"refreshed examples/a/nikaia.contracts\")\n}\n"
-        sh(work.clone(), f"mkdir -p scripts target/fast; ln -s {nikaia} target/fast/nikaia; printf 'target/\\nscripts/\\n' > .git/info/exclude")
+        sh(work.clone(), f"mkdir -p scripts target/fast; cp {nikaia} target/fast/nikaia; printf 'target/\\nscripts/\\n' > .git/info/exclude")
         fs::write(f"{name.replace(" ", "-")}/work/scripts/ledgers.nika", tmp, stub)
         // The driver builds the compiler of the tree in a worktree of its own
         // (#1665) with `cargo build`; a stub `cargo` first on PATH makes that
         // compiler this one and puts the stub ledgers script in the worktree
-        // (`scripts/` is not tracked here); it counts its runs.
-        sh(work.clone(), f"mkdir -p bin; printf '#!/bin/sh\\necho run >> {work}/target/cargo-runs\\nmkdir -p scripts \"$CARGO_TARGET_DIR/fast\"\\ncp {work}/scripts/ledgers.nika scripts/\\nln -sf {nikaia} \"$CARGO_TARGET_DIR/fast/nikaia\"\\n' > bin/cargo; chmod +x bin/cargo; echo bin/ >> .git/info/exclude")
+        // (`scripts/` is not tracked here); it counts its runs. A copy, not a
+        // link: drive opens the compiler under fs::Root::Dir("."), which
+        // refuses a link that leaves the checkout (ADR-raw-sinks-1 D11).
+        sh(work.clone(), f"mkdir -p bin; printf '#!/bin/sh\\necho run >> {work}/target/cargo-runs\\nmkdir -p scripts \"$CARGO_TARGET_DIR/fast\"\\ncp {work}/scripts/ledgers.nika scripts/\\nrm -f \"$CARGO_TARGET_DIR/fast/nikaia\"; cp {nikaia} \"$CARGO_TARGET_DIR/fast/nikaia\"\\n' > bin/cargo; chmod +x bin/cargo; echo bin/ >> .git/info/exclude")
+    }
+    if !kind.starts_with("example") {
+        // A conflict both sides fail to regenerate builds the compiler of
+        // their commit with `cargo build` in the tree worktree (drive_tree_exe,
+        // #2432); the stub `cargo` writes as that "compiler" the sources of
+        // the tree it was built from.
+        sh(work.clone(), "mkdir -p bin; printf '#!/bin/sh\\nmkdir -p \"$CARGO_TARGET_DIR/fast\"\\nls crates/src > \"$CARGO_TARGET_DIR/fast/nikaia\"\\n' > bin/cargo; chmod +x bin/cargo; echo bin/ >> .git/info/exclude")
     }
     // The stub badges: the sources of the tree they are measured on.
     let badges = "ls crates/src | tr '\\n' ' ' > assets/badges/self-hosted.svg"
@@ -161,5 +173,13 @@ fn main() throws {
     let refuses_theirs = f"if grep -qx theirs {low}/a.rs; then echo 'error[E0603]: function `file` is private'; false; fi"
     case_built(nikaia.clone(), repo.clone(), tmp, "theirs fails, ours builds", "lowered", theirs_broken, refuses_theirs)
     // Both sides fail to build: one escalation, naming both.
-    case_built(nikaia, repo, tmp, "both sides fail", "lowered", lower, "echo 'error: broken'; false")
+    case_built(nikaia.clone(), repo.clone(), tmp, "both sides fail", "lowered", lower.clone(), "echo 'error: broken'; false")
+    // Their side changed the emitter (#2432): either side's lowered file is
+    // the old emitter's, which the merged Rust refuses, and the lowering
+    // fails unless the compiler in the tree target is the one built from
+    // their commit (which has `b.nika`); with it the merge settles.
+    let target = f"{tmp.path().to_text()}/their-emitter/work/target/ledger-target/fast/nikaia"
+    let their_lower = f"if ! grep -qx b.nika '{target}' 2>/dev/null; then echo 'error: the old emitter'; exit 1; fi; {lower}"
+    let refuses_old = f"if grep -qx -e theirs -e ours {low}/a.rs; then echo 'error[E0433]: failed to resolve: Box'; false; fi"
+    case_built(nikaia, repo, tmp, "their emitter", "emitter", their_lower, refuses_old)
 }

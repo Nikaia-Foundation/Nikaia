@@ -1,0 +1,9 @@
+error[NK1117]: Nothing declares `Op`, so `Op(…)` is no pattern of `cmds`.
+   --> tests/a_bare_variant_in_a_list_pattern_is_refused.nika:10:5
+    |
+ 10 |     let said = match cmds {
+    |     ^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: A variant's pattern names its enum, `Message::Write(text)`; a bare name binds whatever is there.
+    = help: Write the variant with its enum, `Type::Op(…)`, or a name alone to bind the value.
+1 type error

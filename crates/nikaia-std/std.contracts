@@ -462,6 +462,16 @@ touches = ["file(from) read", "file(to) write"]
 throws = ["io::IoError"]
 signature = "(from: ref fs::Path, to: ref fs::Path, root: ref fs::Root) -> u64"
 
+# A file copied from one root into another, its permission bits kept: the
+# first platform primitive (ADR-platform-layer-v1 D4, D7 item 1).
+[fn."fs::copy_between"]
+pub = true
+panics = false
+sync = true
+touches = ["file(from) read", "file(to) write"]
+throws = ["io::IoError"]
+signature = "(from: ref fs::Path, from_root: ref fs::Root, to: ref fs::Path, to_root: ref fs::Root) -> u64"
+
 # A name's length and what it is, a link followed to what it leads to.
 [fn."fs::metadata"]
 pub = true
@@ -2931,6 +2941,135 @@ panics = false
 sync = true
 touches = []
 signature = "(self, u64, u64) -> (u64, u64)?"
+
+# ## A value of twice the width (#2619)
+#
+# **`Wide[T]`** is the exact value of twice the width of `T` (Part I 2.2,
+# ADR-270 D11 as amended 2026-11-21), for `u8`, `u32`, `i32`, `u64` and
+# `i64`: what `widening_mul`, `overflowing_*` and `narrowing_div_rem` give
+# by halves, held as one value, so a program carries no carry, sign or
+# halves' order by hand. Keyed with no module in front, like `Fixed`. No
+# Rust type stands behind it: the emitter writes it as the native type of
+# twice the width (`i128` for an `i64`) and each method as that type's
+# operation (`emit_core_calls.nika`), so it costs what the program wrote.
+# The checker types what the signatures leave open (`?`): the low half of
+# `from_halves` and `halves`, the unsigned type of the same width, and
+# `abs`, a `Wide` of that type (`check_core_wide.nika`).
+#
+# `touches = []` and `sync = true` for the reason the arithmetic entries give.
+[type."Wide"]
+pub = true
+crosses = true
+compares = true
+equates = true
+orders = true
+hashes = true
+copies = true
+
+# A value of `T` as a `Wide[T]`.
+[fn."Wide::of"]
+pub = true
+panics = false
+sync = true
+touches = []
+signature = "[T](value: T) -> Wide[T]"
+
+# The exact product of two `T`s, what `widening_mul` gives as halves.
+[fn."Wide::product"]
+pub = true
+panics = false
+sync = true
+touches = []
+signature = "[T](a: T, b: T) -> Wide[T]"
+
+# The value `high * 2^w + low`, the low half in the unsigned type of `T`'s width.
+[fn."Wide::from_halves"]
+pub = true
+panics = false
+sync = true
+touches = []
+signature = "[T](low: ?, high: T) -> Wide[T]"
+
+# The halves `from_halves` takes: the low one unsigned, the high one a `T`.
+[fn."Wide::halves"]
+pub = true
+panics = false
+sync = true
+touches = []
+signature = "[T](self: Wide[T]) -> (?, T)"
+
+# The value as a `T`, or `null` where a `T` does not hold it.
+[fn."Wide::narrow"]
+pub = true
+panics = false
+sync = true
+touches = []
+signature = "[T](self: Wide[T]) -> T?"
+
+# -1, 0 or 1 as the value is below, at or above zero.
+[fn."Wide::sign"]
+pub = true
+panics = false
+sync = true
+touches = []
+signature = "[T](self: Wide[T]) -> i64"
+
+# The sum, or `null` where it leaves twice the width.
+[fn."Wide::add"]
+pub = true
+panics = false
+sync = true
+touches = []
+signature = "[T](self: Wide[T], other: Wide[T]) -> Wide[T]?"
+
+# The difference, or `null` where it leaves twice the width.
+[fn."Wide::sub"]
+pub = true
+panics = false
+sync = true
+touches = []
+signature = "[T](self: Wide[T], other: Wide[T]) -> Wide[T]?"
+
+# The value negated, or `null` where that leaves twice the width.
+[fn."Wide::neg"]
+pub = true
+panics = false
+sync = true
+touches = []
+signature = "[T](self: Wide[T]) -> Wide[T]?"
+
+# The value times a `T`, or `null` where it leaves twice the width.
+[fn."Wide::mul"]
+pub = true
+panics = false
+sync = true
+touches = []
+signature = "[T](self: Wide[T], k: T) -> Wide[T]?"
+
+# Quotient and rest by a `T`, rounded as `/` and `%`, or `null` for a divisor
+# of 0 or a quotient past twice the width.
+[fn."Wide::div_rem"]
+pub = true
+panics = false
+sync = true
+touches = []
+signature = "[T](self: Wide[T], d: T) -> (Wide[T], T)?"
+
+# The rest by a `T`, as `%` gives it, or `null` for a divisor of 0.
+[fn."Wide::rem"]
+pub = true
+panics = false
+sync = true
+touches = []
+signature = "[T](self: Wide[T], d: T) -> T?"
+
+# The magnitude of a signed `T`'s value, a `Wide` of the unsigned type of its width.
+[fn."Wide::abs"]
+pub = true
+panics = false
+sync = true
+touches = []
+signature = "[T](self: Wide[T]) -> ?"
 
 # **A conversion that asks whether it fits** (ADR-315): the number in the
 # destination type, or `null` where that type does not hold it. One entry per
@@ -5643,7 +5782,7 @@ signature = "(text: ref String) -> f64?"
 # `touches` line above bought it (ADR-292). The claim is a promise about a
 # Rust type, written here and reviewed like code, exactly as `sync = true` is.
 # **Text a C library owns**
-# ([ADR-302](../../docs/specification/adr/adr-302.md) D8). An opaque handle with
+# ([ADR-c-boundary-v1](../../docs/specification/adr/adr-c-boundary-v1.md) D8). An opaque handle with
 # **no cleanup**, which is what tells it from that record's D3: a `FILE` is ours
 # to close and a C string is not ours at all, so nothing here frees anything.
 #
@@ -5666,7 +5805,7 @@ pub = true
 #
 # `throws` in the one way this can fail - bytes that are not UTF-8 - which is
 # what `fs::read_to_string` fails on for the same reason. *There is no text* was
-# the second until [ADR-302](../../docs/specification/adr/adr-302.md) D13 made it
+# the second until [ADR-c-boundary-v1](../../docs/specification/adr/adr-c-boundary-v1.md) D13 made it
 # a **value**: a declaration says `-> CStr?` where the library may find nothing,
 # and `getenv` finding nothing is an ordinary Tuesday rather than an error.
 # A copy of the text, owned by whoever asked for it.
@@ -6356,11 +6495,21 @@ panics = false
 sync = true
 signature = "[T](self: TaskHandle[T])"
 
+# **A deferred free task's start** (ADR-async-5 D12, D13): the handle of
+# `async(detached, deferred) fn { … }` runs its task only from here. A second
+# `start()` panics at run time; at compile time it is `NK2121` (#2512).
+# Start a deferred task; the handle stays.
+[fn."TaskHandle::start"]
+pub = true
+panics = false
+sync = true
+signature = "[T](mut self: ref TaskHandle[T])"
+
 # **The handle of a child task** (ADR-async-5 D11): bound to its group, which
 # waits for it if nobody joins it; its failure is then the group's, as an
 # unread one (D21). No `detach`: it does not outlive its group (`NK2122`, #986).
 # The runtime is `nikaia_std::task::ChildHandle`; the forms that make one,
-# `async(handle)` and `async(deferred)`, are lowered onto it by #988.
+# `async(handle)` and `async(deferred)`, are lowered onto it (#988, #2512).
 # The handle of a task started in a group, which waits for it.
 [type."task::ChildHandle"]
 pub = true
@@ -6412,7 +6561,7 @@ sync = true
 signature = "[T](self: task::ChildHandle[T])"
 
 # **A deferred handle's start** (ADR-async-5 D12): the task runs only from here.
-# A second `start()` panics at run time; at compile time it is `NK2121` (#986).
+# A second `start()` panics at run time; at compile time it is `NK2121` (#2512).
 # Start a deferred task; the handle stays.
 [fn."task::ChildHandle::start"]
 pub = true
@@ -6456,6 +6605,7 @@ pub = true
 pub = true
 crosses = true
 compares = true
+orders = true
 copies = true
 constant = "time::Duration::new(secs: u64, nanos: u32)"
 
@@ -6682,6 +6832,7 @@ signature = "(self, other: time::Duration) -> time::Duration"
 pub = true
 crosses = true
 compares = true
+orders = true
 copies = true
 
 # **No `touches`**, the fail-closed answer: what a clock read orders against is

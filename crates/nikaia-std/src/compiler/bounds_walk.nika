@@ -50,6 +50,9 @@ pub struct BoundsContext {
 	/// The method calls on a type `std`'s ledger describes, by node, with the
 	/// type's name as the ledger keys it (ADR-314 D3, ADR-375 D5).
 	pub std_receivers: collections::BTreeMap[i64, String],
+	/// [`CheckFacts::wide_calls`]: each call of `std`'s `Wide[T]`, by the
+	/// method call's node or the maker's callee, as `"entry T"` (#2647).
+	pub wide_calls: collections::BTreeMap[i64, String],
 	/// [`CheckFacts::simd_loads`]: a vector's load, by the called path's
 	/// node, with the bytes it reads (minus the most, for a `Lanes`).
 	pub simd_loads: collections::BTreeMap[i64, i64],
@@ -318,6 +321,22 @@ struct BoundsWalk {
 	/// not, never taken back by `bounding_back`: what a walk of
 	/// `rules_check` read of `context.around.field_bounds` (#2396).
 	assumed_read: collections::BTreeSet[String],
+	/// **The methods a call `self.m(…)` asked a result summary of**, each
+	/// with the key of `context.ensured` it found under `context.owner`,
+	/// or "" where none: what a walk of `rules_check` read of the owner
+	/// (#2396).
+	self_read: collections::BTreeMap[String, String],
+	/// **The found returns asked for where a pending entry reads otherwise
+	/// than an absent one** (#2464): `bounding_found_whole` and
+	/// `bounding_returned_below`, found or not. At every other read a
+	/// pending entry adds what an absent one does, so a walk of
+	/// `rules_check` read the pending state only of these.
+	found_asked: collections::BTreeSet[String],
+	/// **The found returns any read asked for** (#2464), found or not, by
+	/// key, and `callee#` where every entry of a struct result's fields was
+	/// looked through: what a walk of `rules_check` read of
+	/// `context.returns`.
+	found_read: collections::BTreeSet[String],
 	/// The join of what this pass saw written, by key.
 	written: collections::BTreeMap[String, Range],
 	/// Keys a write this pass put something unbounded in.
@@ -615,6 +634,23 @@ fn bounds_rounds(
 ) -> BoundsProven {
 	let mut found_checked: collections::BTreeMap[String, RulesChecked] = collections::BTreeMap()
 	let found_held = rules_settle(walk, args, body, context, program, words, ask, found_checked)
+	return bounds_rounds_settled(walk, found_held, found_checked, args, body, context, program, words, ask)
+}
+
+/// **D7's rounds over one body whose rules `rules_settle` found**:
+/// `found_held` and `found_checked` are what it handed back, for the
+/// bodies after.
+fn bounds_rounds_settled(
+	mut walk: BoundsWalk,
+	found_held: ref collections::BTreeMap[String, Vec[BoundsRule]],
+	found_checked: ref collections::BTreeMap[String, RulesChecked],
+	args: ref Vec[FnArg],
+	body: ref Block,
+	context: ref BoundsContext,
+	program: ref Program,
+	words: ref winnow_grammar::InternerContext,
+	ask: fn(ref logic::TermArena, ref Vec[i64], i64) -> bool sync,
+) -> BoundsProven {
 	let mut settled = false
 	if !walk.shape.roots.is_empty() {
 		walk.collecting = true
@@ -693,8 +729,8 @@ fn bounds_rounds(
 	if !walk.return_params.is_empty() {
 		walk.proven.returned = bounding_returns_found(walk, body, words)
 	}
-	walk.proven.held = found_held
-	walk.proven.checked = found_checked
+	walk.proven.held = found_held.clone()
+	walk.proven.checked = found_checked.clone()
 	return walk.proven.clone()
 }
 
@@ -850,6 +886,9 @@ fn bounding_new(
 		shape: shape,
 		assumed: context.around.field_bounds.clone(),
 		assumed_read: collections::BTreeSet(),
+		self_read: collections::BTreeMap(),
+		found_asked: collections::BTreeSet(),
+		found_read: collections::BTreeSet(),
 		written: collections::BTreeMap(),
 		poisoned: collections::BTreeSet(),
 		assumed_ends: collections::BTreeMap(),
@@ -1208,6 +1247,7 @@ fn bounding_relations_of(
 		return out
 	}
 	let callee = bounding_found_key(walk, value, context, words) ?? return out
+	walk.found_read.insert(callee.clone())
 	let found = context.returns.get(callee) ?? return out
 	if found.each || found.pending {
 		return out
@@ -1254,6 +1294,7 @@ fn bounding_relation_grows(
 		return false
 	}
 	let callee = bounding_found_key(walk, value, context, words) ?? return false
+	walk.found_read.insert(callee.clone())
 	let found = context.returns.get(callee) ?? return false
 	if found.each || found.pending {
 		return false
@@ -2237,6 +2278,7 @@ fn bounding_range_shaped(
 			// to** (ADR-306 D34), as a free function's below.
 			if !bounding_found_options(expr) {
 				let callee = bounding_found_key(walk, expr, context, words) ?? return null
+				walk.found_read.insert(callee.clone())
 				let found = context.returns.get(callee) ?? return null
 				if found.each || found.pending {
 					return null
@@ -2255,6 +2297,7 @@ fn bounding_range_shaped(
 				return null
 			}
 			let callee = bounding_found_key(walk, expr, context, words) ?? return null
+			walk.found_read.insert(callee.clone())
 			let found = context.returns.get(callee) ?? return null
 			if found.each || found.pending {
 				return null
@@ -2638,6 +2681,12 @@ fn bounding_fits(
 		if bounding_proves(walk, facts, goal, ask) {
 			return true
 		}
+		// **What the type of each name read holds** (#2629): `-1 - at as
+		// i64` with `at: u32` fits, which no fact says of `at` but its type.
+		let typed = bounding_typed_goal(walk, t, goal)
+		if typed != null && bounding_proves(walk, facts, typed ?? 0, ask) {
+			return true
+		}
 		// **A difference of two values not below zero** lies in
 		// `-hi..=hi`, inside a signed type (#1516): `n - i` after a loop
 		// whose counter stops at `n` or past its start.
@@ -2758,6 +2807,34 @@ fn bounding_relatives(
 		}
 	}
 	return out
+}
+
+/// **`goal`, or a name `t` reads outside what its type holds** (#2629):
+/// each name of a whole-number type the solver can state, a field `u32`
+/// as a parameter's; `null` where `t` reads none.
+fn bounding_typed_goal(mut walk: BoundsWalk, t: i64, goal: i64) -> i64? {
+	let mut read: collections::BTreeSet[String] = collections::BTreeSet()
+	walk.arena.variables(t, read)
+	let mut parts: Vec[i64] = []
+	for y in read {
+		let ty = walk.typed.get(y) ?? continue
+		let held = Range::held_by_type(ty) ?? continue
+		let lo = held.lo ?? continue
+		let hi = held.hi ?? continue
+		if lo < 0 - solvable() || hi > solvable() {
+			continue
+		}
+		let v = walk.arena.var(y)
+		let low = walk.arena.int(lo)
+		let high = walk.arena.int(hi)
+		parts.push(walk.arena.lt(v, low))
+		parts.push(walk.arena.gt(v, high))
+	}
+	if parts.is_empty() {
+		return null
+	}
+	parts.push(goal)
+	return walk.arena.or(parts)
 }
 
 /// `linear + ranged` (or `linear - ranged` where `subtracts`) inside `lo..=hi`:
@@ -3430,6 +3507,145 @@ fn bounding_division_halves(
 	return walk.arena.and(parts)
 }
 
+/// **The exact value of a `Wide[T]`** (#2647, ADR-270 D11 as amended
+/// 2026-11-21: what fits `T` again is exact), as a term over the `T` values
+/// it was made from: `Wide::of(v)` is `v`, `Wide::product(a, b)` is `a * b`
+/// (a number of its own within the product of the two intervals, where
+/// neither side is a constant), and a name the walk holds is that name.
+/// What `add`, `sub`, `mul` and `neg` give past a `?? return` is in
+/// [`bounding_wide_some`]. Null for any other expression, or one the checker
+/// recorded as no call of `std`'s `Wide`.
+fn bounding_wide(
+	mut walk: BoundsWalk,
+	expr: ref Expr,
+	facts: ref BoundsFacts,
+	context: ref BoundsContext,
+	program: ref Program,
+	words: ref winnow_grammar::InternerContext,
+	ask: fn(ref logic::TermArena, ref Vec[i64], i64) -> bool sync,
+) -> i64? {
+	match expr {
+		Expr::Coalesce { value: inner, fallback, .. } => {
+			if bounding_leaves(fallback) {
+				return bounding_wide_some(walk, inner, facts, context, program, words, ask)
+			}
+		},
+		Expr::Variable(name, _) => {
+			let text = words.resolve(name)
+			if facts.ints.contains(text) {
+				return walk.arena.var(text)
+			}
+		},
+		Expr::Call { func, args, .. } => {
+			let recorded = context.wide_calls[node_key(func)] ?? return null
+			if recorded.starts_with("of ") && args.len() == 1 {
+				return bounding_lin(walk, args[0], facts, context, program, words)
+			}
+			if recorded.starts_with("product ") && args.len() == 2 {
+				let a = bounding_lin(walk, args[0], facts, context, program, words)
+				let b = bounding_lin(walk, args[1], facts, context, program, words)
+				if a != null && b != null {
+					let exact = bounding_product(walk, a ?? 0, b ?? 0)
+					if exact != null {
+						return exact
+					}
+				}
+				let left = bounding_range(walk, args[0], facts, context, program, words, ask) ?? return null
+				let right = bounding_range(walk, args[1], facts, context, program, words, ask) ?? return null
+				let both = left.mul(right)
+				let lo = both.lo ?? return null
+				let hi = both.hi ?? return null
+				if lo < 0 - solvable() || hi > solvable() {
+					return null
+				}
+				let name = f"product#{walk.codes}"
+				walk.codes += 1
+				let v = walk.arena.var(name)
+				let least = walk.arena.int(lo)
+				let most = walk.arena.int(hi)
+				let low = walk.arena.ge(v, least)
+				let high = walk.arena.le(v, most)
+				walk.axioms.insert(name, [low, high])
+				return v
+			}
+		},
+		else => {},
+	}
+	return null
+}
+
+/// **The value of a `Wide[T]` method that may give `null`, where it gives
+/// one** (#2647): `x.add(y)` and `x.sub(y)` are the exact sum and difference,
+/// `x.mul(k)` the product by a constant `k`, `x.neg()` the negation. Read
+/// only under a `?? return` that leaves where the value is missing.
+fn bounding_wide_some(
+	mut walk: BoundsWalk,
+	expr: ref Expr,
+	facts: ref BoundsFacts,
+	context: ref BoundsContext,
+	program: ref Program,
+	words: ref winnow_grammar::InternerContext,
+	ask: fn(ref logic::TermArena, ref Vec[i64], i64) -> bool sync,
+) -> i64? {
+	match expr {
+		Expr::MethodCall { receiver, args, .. } => {
+			let recorded = context.wide_calls[node_key(expr)] ?? return null
+			let (entry, _) = recorded.split_once(" ") ?? return null
+			let on = bounding_wide(walk, receiver, facts, context, program, words, ask) ?? return null
+			if entry == "neg" && args.is_empty() {
+				return walk.arena.neg(on)
+			}
+			if args.len() != 1 {
+				return null
+			}
+			if entry == "mul" {
+				let k = bounding_lin(walk, args[0], facts, context, program, words) ?? return null
+				return bounding_product(walk, on, k)
+			}
+			let other = bounding_wide(walk, args[0], facts, context, program, words, ask) ?? return null
+			return match entry {
+				"add" => walk.arena.add(on, other),
+				"sub" => walk.arena.sub(on, other),
+				else => null,
+			}
+		},
+		else => {},
+	}
+	return null
+}
+
+/// **What `let n = w.narrow() ?? return` binds**: past it the value fits
+/// `T`, and is `w`'s exact value ([`bounding_wide`]), so `n` is that term
+/// (#2647). Null where `value` is no such call.
+fn bounding_narrowed(
+	mut walk: BoundsWalk,
+	value: ref Expr,
+	facts: ref BoundsFacts,
+	context: ref BoundsContext,
+	program: ref Program,
+	words: ref winnow_grammar::InternerContext,
+	ask: fn(ref logic::TermArena, ref Vec[i64], i64) -> bool sync,
+) -> i64? {
+	match value {
+		Expr::Coalesce { value: inner, fallback, .. } => {
+			if !bounding_leaves(fallback) {
+				return null
+			}
+			match inner {
+				Expr::MethodCall { receiver, args, .. } => {
+					let recorded = context.wide_calls[node_key(inner)] ?? return null
+					if recorded.starts_with("narrow ") && args.is_empty() {
+						return bounding_wide(walk, receiver, facts, context, program, words, ask)
+					}
+				},
+				else => {},
+			}
+		},
+		else => {},
+	}
+	return null
+}
+
 /// **`expr` as a linear term**, where it is one.
 fn bounding_lin(
 	mut walk: BoundsWalk,
@@ -3504,10 +3720,16 @@ fn bounding_lin(
 			}
 			// **A call `self.m(…)` to the type's own method has its result
 			// summary** (ADR-359 D14, #1904), as the prover reads it.
-			if !context.owner.is_empty() && bounding_on_self(receiver, words) {
-				let summed = context.ensured[f"{context.owner}::{words.resolve(method)}"]
-				if summed != null {
-					return bounding_ensured(walk, summed ?? return null, args, facts, context, program, words)
+			if bounding_on_self(receiver, words) {
+				let called = words.resolve(method)
+				let asked = f"{context.owner}::{called}"
+				let found = !context.owner.is_empty() && context.ensured.contains_key(asked)
+				walk.self_read.insert(called.clone(), if found { asked.clone() } else { "" })
+				if found {
+					let summed = context.ensured[asked]
+					if summed != null {
+						return bounding_ensured(walk, summed ?? return null, args, facts, context, program, words)
+					}
 				}
 			}
 			// **What `std`'s ledger ensures of a method's result** (ADR-314
@@ -4734,7 +4956,37 @@ fn bounding_claim(
 		},
 		else => {},
 	}
+	let empty = bounding_emptiness(walk, expr, context, words, true)
+	if empty != null {
+		return empty
+	}
 	return bounding_comparison(walk, expr, facts, context, program, words)
+}
+
+/// **`xs.is_empty()` as a fact of `xs.len()`** (#2629): `len <= 0` where it
+/// holds (`empty`), `len > 0` where it does not, of a list `std` counts.
+fn bounding_emptiness(
+	mut walk: BoundsWalk,
+	expr: ref Expr,
+	context: ref BoundsContext,
+	words: ref winnow_grammar::InternerContext,
+	empty: bool,
+) -> i64? {
+	match expr {
+		Expr::MethodCall { receiver, method, args, .. } => {
+			if !args.is_empty() || words.resolve(method) != "is_empty" {
+				return null
+			}
+			let path = path_of(receiver, words) ?? return null
+			let length = bounding_length(walk, receiver, path, context) ?? return null
+			let zero = walk.arena.int(0)
+			if empty {
+				return walk.arena.le(length, zero)
+			}
+			return walk.arena.gt(length, zero)
+		},
+		else => return null,
+	}
 }
 
 /// **What holds where `expr` is false**: a formula `!expr` implies, by the
@@ -4807,7 +5059,7 @@ fn bounding_denial(
 		},
 		else => {},
 	}
-	return null
+	return bounding_emptiness(walk, expr, context, words, false)
 }
 
 /// **A `bool` name as a number** (ADR-361 D4, #1634): `1` where it is
@@ -4976,6 +5228,7 @@ fn bounding_name_call(
 		return
 	}
 	let callee = bounding_found_key(walk, side, context, words) ?? return
+	walk.found_read.insert(callee.clone())
 	let found = context.returns.get(callee) ?? return
 	if found.each || found.pending {
 		return
@@ -5246,7 +5499,9 @@ fn bounding_stmts(
 			Stmt::While { .. } => true,
 			else => false,
 		}
-		if looped && context.through_loops && !walk.collecting {
+		// A rule check keeps only what its rules give (`rules_check`): no
+		// loop of it is asked through (#2464).
+		if looped && context.through_loops && !walk.collecting && !walk.checking {
 			return bounding_past_loop(
 				walk,
 				block,
@@ -5568,7 +5823,11 @@ fn bounding_loop_stmt(
 	let start = walk.at
 	let open = walk.open
 	walk.settled_loops.remove(start)
-	if !context.through_loops || walk.collecting {
+	// **A walk that checks rules asks no goal through a loop** (#2464): it
+	// keeps only which rules a method fails (`rules_check`), and a loop's
+	// rules are carried by their own turns (`rules_turn_end`), so what an
+	// invariant would prove there is never read.
+	if !context.through_loops || walk.collecting || walk.checking {
 		bounding_loop_framed(walk, stmt, facts, context, program, words, ask)
 		return
 	}
@@ -7975,10 +8234,33 @@ fn bounding_let(
 	if names.len() == 2 {
 		halves = bounding_halves(walk, names, value, facts, context, program, words)
 	}
+	// **A `Wide[T]`, and a value `narrow() ?? return` takes out of one, is
+	// the exact value it was made from** (#2647), read before the names move.
+	let mut wide_term: i64? = null
+	if names.len() == 1 {
+		wide_term = bounding_narrowed(walk, value, facts, context, program, words, ask)
+		let named = match value {
+			Expr::Variable(_, _) => true,
+			else => false,
+		}
+		if wide_term == null && !named {
+			wide_term = bounding_wide(walk, value, facts, context, program, words, ask)
+		}
+	}
 	for symbol in names {
 		let name = words.resolve(symbol)
 		bounding_forget(walk, facts, name)
 		facts.ints.remove(name)
+	}
+	if wide_term != null {
+		let exact = wide_term ?? 0
+		let held = words.resolve(names[0])
+		if !walk.arena.mentions(exact, held) {
+			facts.ints.insert(held.clone())
+			let v = walk.arena.var(held)
+			let fact = walk.arena.equal(v, exact)
+			bounding_push(walk, facts, fact)
+		}
 	}
 	if halves != null {
 		facts.ints.insert(words.resolve(names[0]).clone())
@@ -8439,7 +8721,7 @@ fn bounding_unwrapped(value: ref Expr) -> ref Expr {
 /// **Whether a call's whole-number result is found** (ADR-306 D23, #1758):
 /// a nullable one's too, which the checker does not mark a whole number.
 fn bounding_found_whole(
-	walk: ref BoundsWalk,
+	mut walk: BoundsWalk,
 	value: ref Expr,
 	context: ref BoundsContext,
 	words: ref winnow_grammar::InternerContext,
@@ -8453,6 +8735,8 @@ fn bounding_found_whole(
 		return false
 	}
 	let callee = bounding_found_key(walk, value, context, words) ?? return false
+	walk.found_asked.insert(callee.clone())
+	walk.found_read.insert(callee.clone())
 	let found = context.returns.get(callee) ?? return false
 	return !found.each && found.plain
 }
@@ -9880,10 +10164,13 @@ fn bounding_expr(
 			}
 			let frame = called_function_frame(func, context, words)
 			let callee = callee_params(func, context.around, words)
+			// **`std`'s `Wide` makers take their values and change none**
+			// (#2647): `Wide::of(a)` keeps what holds of `a`.
+			let handing = !context.wide_calls.contains_key(node_key(func))
 			if walk.checking && loaded == 0 {
 				let mut handed: Vec[String] = []
 				for at in 0..<args.len() {
-					if hands_on(callee, at) {
+					if hands_on(callee, at) && handing {
 						handed.push(path_of(args[at], words) ?? continue)
 					}
 				}
@@ -9909,7 +10196,7 @@ fn bounding_expr(
 			for at in 0..<args.len() {
 				let handed = path_of(args[at], words) ?? continue
 				// A load reads its bytes and changes nothing.
-				if hands_on(callee, at) && loaded == 0 {
+				if hands_on(callee, at) && handing && loaded == 0 {
 					bounding_forget(walk, facts, handed)
 				}
 			}
@@ -11375,8 +11662,12 @@ fn bounds_returns(
 	// first passes): every candidate's call adds nothing, so a recursive
 	// one's base cases are what its values start from; the rounds below
 	// assume them and keep those proved.
+	// **What each body's last walk found, with what it read** (#2464): a
+	// round walks a body again only where one of those changed.
+	let mut walked: collections::BTreeMap[String, ReturnsWalked] = collections::BTreeMap()
+	let mut measured: collections::BTreeMap[String, ReturnsMeasured] = collections::BTreeMap()
 	context.returns = assumed.clone()
-	let mut collected = bounding_returns_round(context, bodies, keys, assumed, program, words, ask)
+	let mut collected = bounding_returns_round(context, bodies, keys, assumed, program, words, ask, walked, measured)
 	// **A whole number's interval through a chain of calls** (D32): one
 	// found while its callees' were pending is found again with theirs
 	// known. A pending call has none, so what is collected needs no
@@ -11391,7 +11682,7 @@ fn bounds_returns(
 			}
 		}
 		context.returns = known.clone()
-		let again = bounding_returns_round(context, bodies, keys, known, program, words, ask)
+		let again = bounding_returns_round(context, bodies, keys, known, program, words, ask, walked, measured)
 		let before = bounding_returns_ranged(collected)
 		collected = again
 		if bounding_returns_ranged(collected) == before {
@@ -11411,7 +11702,7 @@ fn bounds_returns(
 	let rounds = bounding_returns_count(assumed) + 1
 	for _round in 0..<rounds {
 		context.returns = assumed.clone()
-		let found = bounding_returns_round(context, bodies, keys, assumed, program, words, ask)
+		let found = bounding_returns_round(context, bodies, keys, assumed, program, words, ask, walked, measured)
 		if bounding_returns_count(found) == bounding_returns_count(assumed) {
 			bounding_returns_settle(context, found)
 			return
@@ -11433,11 +11724,69 @@ fn bounding_returns_settle(mut context: BoundsContext, found: collections::BTree
 	context.returns = found
 }
 
+/// **What one body's walk in a round of [`bounds_returns`] found**
+/// (#2464), before what was assumed of it is held against it, with what it
+/// read that a round may change: the part of the bounds asked that the walk
+/// reads (`bounding_returns_asked`), the found returns of the callees it
+/// names (`rules_returns_read`) and the rules held at its start. `returned`
+/// is what `bounds_rounds` found every return below, `sized` those of them
+/// whose length is known, `range` the interval it found, and `related`
+/// whether D31's relations `at_least`, `within` and `under` hold.
+struct ReturnsWalked {
+	asked: BoundsReturns,
+	reads: collections::BTreeMap[String, BoundsReturns],
+	rules: Vec[BoundsRule],
+	returned: collections::BTreeSet[i64]?,
+	sized: collections::BTreeSet[i64],
+	range: Range?,
+	related: bool,
+	at_least: collections::BTreeSet[i64],
+	within: collections::BTreeSet[i64],
+	under: collections::BTreeSet[i64],
+}
+
+/// **What the walk that measures a body's lengths found** (#1756, #2464),
+/// with what it read: the lengths, likenesses and listed parameters asked,
+/// the callees' found returns and the rules held.
+struct ReturnsMeasured {
+	lengths_asked: collections::BTreeMap[String, collections::BTreeSet[i64]],
+	alike_asked: collections::BTreeSet[String],
+	listed: collections::BTreeSet[i64],
+	reads: collections::BTreeMap[String, BoundsReturns],
+	rules: Vec[BoundsRule],
+	lengths: collections::BTreeMap[String, collections::BTreeSet[i64]],
+	reaches: collections::BTreeMap[String, collections::BTreeSet[i64]],
+	alike: collections::BTreeSet[String],
+	guards: collections::BTreeSet[i64],
+}
+
+/// **The part of `wanted` a body's walk reads** (#2464): all but what is
+/// held against its findings after it (`pending`, `range`, `under`) and
+/// what the measuring walk alone reads or hands on.
+fn bounding_returns_asked(wanted: ref BoundsReturns) -> BoundsReturns {
+	let mut asked = wanted.clone()
+	asked.pending = false
+	asked.range = null
+	asked.under = collections::BTreeSet()
+	asked.sized = collections::BTreeSet()
+	asked.measures = []
+	asked.lengths = collections::BTreeMap()
+	asked.reaches = collections::BTreeMap()
+	asked.listed = collections::BTreeSet()
+	asked.alike = collections::BTreeSet()
+	asked.guards = collections::BTreeSet()
+	return asked
+}
+
 /// **One round of [`bounds_returns`]**: each body walked for the bounds
 /// `assumed` asks, with `context.returns` assumed of its calls; of each, the
 /// list parameters every return was proved below, and the range D7 found
 /// on the values of every list returned, held within the assumed one where
-/// one was assumed.
+/// one was assumed. A body whose bounds asked, callees' returns and rules
+/// held are those of its last walk (`walked`, `measured` for the walk that
+/// measures its lengths) is not walked again: that walk's findings are
+/// taken (#2464). Not under `--bounds-trace`, whose lines come from the
+/// walks (#1495).
 fn bounding_returns_round(
 	mut context: BoundsContext,
 	bodies: ref Vec[ref Spanned[Item]],
@@ -11446,6 +11795,8 @@ fn bounding_returns_round(
 	program: ref Program,
 	words: ref winnow_grammar::InternerContext,
 	ask: fn(ref logic::TermArena, ref Vec[i64], i64) -> bool sync,
+	mut walked: collections::BTreeMap[String, ReturnsWalked],
+	mut measured: collections::BTreeMap[String, ReturnsMeasured],
 ) -> collections::BTreeMap[String, BoundsReturns] {
 	let mut found: collections::BTreeMap[String, BoundsReturns] = collections::BTreeMap()
 	// **The rules that hold, found once a round** (#1581): its bodies all
@@ -11503,45 +11854,88 @@ fn bounding_returns_round(
 					walk.return_scalars.push("")
 					walk.return_lens.push(if wanted.within.contains(k) && !taken_mut { f"self.{field}" } else { "" })
 				}
-				let proven = bounds_rounds(walk, args, body, context, program, words, ask)
-				for (of, holding) in proven.held {
+				let mut found_checked: collections::BTreeMap[String, RulesChecked] = collections::BTreeMap()
+				let found_held = rules_settle(walk, args, body, context, program, words, ask, found_checked)
+				for (of, holding) in found_held {
 					context.around.held.insert(of.clone(), holding.clone())
 				}
-				rules_checked_keep(context, proven.checked)
+				rules_checked_keep(context, found_checked)
+				let reads = rules_returns_read(body, context, words)
+				let rules = walk.rules.clone()
+				let fresh = context.trace.is_empty()
+				// **The walk's own findings** (#2464), before what was assumed
+				// (`pending`, `range`, `under`) is held against them: taken
+				// from its last walk where what it read is the same.
+				let asked = bounding_returns_asked(wanted)
+				let mut seen: ReturnsWalked? = null
+				if fresh && walked.contains_key(key) {
+					let got = walked.get(key) ?? continue
+					if got.asked == asked && got.reads == reads && got.rules == rules {
+						seen = got.clone()
+					}
+				}
+				if seen == null {
+					let proven = bounds_rounds_settled(walk, found_held, found_checked, args, body, context, program, words, ask)
+					let returned = proven.returned != null
+					let mut sized_seen: collections::BTreeSet[i64] = collections::BTreeSet()
+					for k in proven.returned?.clone() ?? collections::BTreeSet() {
+						if wanted.below.contains(k) && walk.axioms.contains_key(length_of(walk.return_params[k])) {
+							sized_seen.insert(k)
+						}
+					}
+					let mut range_seen: Range? = null
+					if wanted.each && returned {
+						range_seen = bounding_returned_range(walk)
+					}
+					// **A whole number's interval** (D32): every value handed
+					// back, the body's last one among them, had one.
+					if !wanted.each && !walk.return_unranged && !walk.return_lost
+						&& !seek_block(body, Seek::Unvisited(walk.return_seen.clone()), words) {
+						range_seen = walk.return_range?.clone()
+					}
+					let related = !wanted.each && !walk.return_lost
+						&& !seek_block(body, Seek::Unvisited(walk.return_seen.clone()), words)
+					let made = ReturnsWalked {
+						asked: asked,
+						reads: reads.clone(),
+						rules: rules.clone(),
+						returned: proven.returned?.clone(),
+						sized: sized_seen,
+						range: range_seen,
+						related: related,
+						at_least: walk.return_at_least?.clone() ?? collections::BTreeSet(),
+						within: walk.return_within?.clone() ?? collections::BTreeSet(),
+						under: walk.return_under?.clone() ?? collections::BTreeSet(),
+					}
+					if fresh {
+						walked.insert(key.clone(), made.clone())
+					}
+					seen = made
+				}
+				let last = seen ?? continue
 				let mut held: collections::BTreeSet[i64] = collections::BTreeSet()
 				let mut sized: collections::BTreeSet[i64] = collections::BTreeSet()
-				let returned = proven.returned != null
-				for k in proven.returned ?? collections::BTreeSet() {
+				for k in last.returned ?? collections::BTreeSet() {
 					if wanted.below.contains(k) {
 						held.insert(k)
-						if walk.axioms.contains_key(length_of(walk.return_params[k])) {
+						if last.sized.contains(k) {
 							sized.insert(k)
 						}
 					}
 				}
-				let mut range: Range? = null
-				if wanted.each && returned {
-					range = bounding_returned_range(walk)
-				}
-				// **A whole number's interval** (D32): every value handed
-				// back, the body's last one among them, had one.
-				if !wanted.each && !walk.return_unranged && !walk.return_lost
-					&& !seek_block(body, Seek::Unvisited(walk.return_seen.clone()), words) {
-					range = walk.return_range?.clone()
-				}
+				let mut range = last.range?.clone()
 				let mut at_least: collections::BTreeSet[i64] = collections::BTreeSet()
 				let mut within: collections::BTreeSet[i64] = collections::BTreeSet()
 				let mut under: collections::BTreeSet[i64] = collections::BTreeSet()
-				if !wanted.each && !walk.return_lost
-					&& !seek_block(body, Seek::Unvisited(walk.return_seen.clone()), words) {
-					at_least = walk.return_at_least?.clone() ?? collections::BTreeSet()
-					within = walk.return_within?.clone() ?? collections::BTreeSet()
+				if last.related {
+					at_least = last.at_least.clone()
+					within = last.within.clone()
 					// Only below what was assumed below (#1757).
-					under = bounding_kept(wanted.under, walk.return_under?.clone() ?? collections::BTreeSet())
+					under = bounding_kept(wanted.under, last.under)
 				}
 				if range != null && !wanted.pending {
-					let seen = range ?? Range::open()
-					if !(wanted.range ?? Range::open()).holds(seen) || wanted.range == null {
+					let found_range = range ?? Range::open()
+					if !(wanted.range ?? Range::open()).holds(found_range) || wanted.range == null {
 						range = null
 					} else {
 						range = wanted.range?.clone()
@@ -11549,42 +11943,74 @@ fn bounding_returns_round(
 				}
 				// **The lengths every return was proved to hold** (#1756),
 				// in a walk of their own: it takes the whole-number
-				// parameters at zero or more.
+				// parameters at zero or more. Taken from its last walk where
+				// what it read is the same (#2464).
 				let mut lengths: collections::BTreeMap[String, collections::BTreeSet[i64]] = collections::BTreeMap()
 				let mut reaches: collections::BTreeMap[String, collections::BTreeSet[i64]] = collections::BTreeMap()
 				let mut alike: collections::BTreeSet[String] = collections::BTreeSet()
 				let mut guards: collections::BTreeSet[i64] = collections::BTreeSet()
 				if !wanted.lengths.is_empty() || !wanted.alike.is_empty() {
-					let mut measuring = bounding_new(args, body, bp_names(nonnegative_locals(body), words), context, program, words)
-					measuring.return_wanted = wanted.lengths.clone()
-					measuring.return_wanted_alike = wanted.alike.clone()
-					measuring.return_listed = wanted.listed.clone()
-					for k in 0..<args.len() {
-						let param = words.resolve(args[k].name).clone()
-						let mut stays = !seek_block(body, Seek::Rebound(param.clone()), words)
-						if wanted.listed.contains(k) {
-							// A list not written `mut` changes only where it
-							// is bound again (ADR-094 D3), as D31's above.
-							if args[k].mutable {
-								stays = length_stays(body, param, words)
-							}
-							stays = stays && measuring.lists.contains(param)
-						} else if stays && args[k].ty.generics.is_empty() && is_whole_number(words.resolve(args[k].ty.name)) {
-							guards.insert(k)
-							measuring.return_assumed.push(param.clone())
+					let mut kept: ReturnsMeasured? = null
+					if fresh && measured.contains_key(key) {
+						let got = measured.get(key) ?? continue
+						if got.lengths_asked == wanted.lengths && got.alike_asked == wanted.alike && got.listed == wanted.listed
+							&& got.reads == reads && got.rules == rules {
+							kept = got.clone()
 						}
-						measuring.return_sources.push(if stays { param } else { "" })
 					}
-					bounds_rounds(measuring, args, body, context, program, words, ask)
-					if !seek_block(body, Seek::Unvisited(measuring.return_measured.clone()), words) {
-						lengths = bounding_nonempty(measuring.return_lengths ?? collections::BTreeMap())
-						reaches = bounding_nonempty(measuring.return_reaches ?? collections::BTreeMap())
-						alike = measuring.return_alike?.clone() ?? collections::BTreeSet()
+					if kept == null {
+						let mut measuring = bounding_new(args, body, bp_names(nonnegative_locals(body), words), context, program, words)
+						measuring.return_wanted = wanted.lengths.clone()
+						measuring.return_wanted_alike = wanted.alike.clone()
+						measuring.return_listed = wanted.listed.clone()
+						let mut guards_seen: collections::BTreeSet[i64] = collections::BTreeSet()
+						for k in 0..<args.len() {
+							let param = words.resolve(args[k].name).clone()
+							let mut stays = !seek_block(body, Seek::Rebound(param.clone()), words)
+							if wanted.listed.contains(k) {
+								// A list not written `mut` changes only where it
+								// is bound again (ADR-094 D3), as D31's above.
+								if args[k].mutable {
+									stays = length_stays(body, param, words)
+								}
+								stays = stays && measuring.lists.contains(param)
+							} else if stays && args[k].ty.generics.is_empty() && is_whole_number(words.resolve(args[k].ty.name)) {
+								guards_seen.insert(k)
+								measuring.return_assumed.push(param.clone())
+							}
+							measuring.return_sources.push(if stays { param } else { "" })
+						}
+						bounds_rounds(measuring, args, body, context, program, words, ask)
+						let mut made = ReturnsMeasured {
+							lengths_asked: wanted.lengths.clone(),
+							alike_asked: wanted.alike.clone(),
+							listed: wanted.listed.clone(),
+							reads: reads.clone(),
+							rules: rules.clone(),
+							lengths: collections::BTreeMap(),
+							reaches: collections::BTreeMap(),
+							alike: collections::BTreeSet(),
+							guards: guards_seen,
+						}
+						if !seek_block(body, Seek::Unvisited(measuring.return_measured.clone()), words) {
+							made.lengths = bounding_nonempty(measuring.return_lengths ?? collections::BTreeMap())
+							made.reaches = bounding_nonempty(measuring.return_reaches ?? collections::BTreeMap())
+							made.alike = measuring.return_alike?.clone() ?? collections::BTreeSet()
+						}
+						if fresh {
+							measured.insert(key.clone(), made.clone())
+						}
+						kept = made
 					}
+					let got = kept ?? continue
+					lengths = got.lengths.clone()
+					reaches = got.reaches.clone()
+					alike = got.alike.clone()
+					guards = got.guards.clone()
 				}
 				if !held.is_empty() || range != null || !at_least.is_empty() || !within.is_empty()
 					|| !lengths.is_empty() || !reaches.is_empty() || !alike.is_empty() {
-					found.insert(key, BoundsReturns {
+					found.insert(key.clone(), BoundsReturns {
 						each: wanted.each,
 						below: held,
 						sized: sized,
@@ -12072,6 +12498,7 @@ fn bounding_measured(
 		return out
 	}
 	let callee = bounding_found_key(walk, value, context, words) ?? return out
+	walk.found_read.insert(callee.clone())
 	let found = context.returns.get(callee) ?? return out
 	if found.pending {
 		return out
@@ -12174,7 +12601,7 @@ fn bounding_returns_found(
 /// at its positions that are paths the walk reads, each with whether its
 /// length is a sized one (`BoundsReturns.sized`).
 fn bounding_returned_below(
-	walk: ref BoundsWalk,
+	mut walk: BoundsWalk,
 	value: ref Expr,
 	each: bool,
 	context: ref BoundsContext,
@@ -12182,6 +12609,8 @@ fn bounding_returned_below(
 ) -> collections::BTreeMap[String, bool] {
 	let mut out: collections::BTreeMap[String, bool] = collections::BTreeMap()
 	let callee = bounding_found_key(walk, value, context, words) ?? return out
+	walk.found_asked.insert(callee.clone())
+	walk.found_read.insert(callee.clone())
 	let found = context.returns.get(callee) ?? return out
 	if found.each != each {
 		return out
@@ -12307,7 +12736,7 @@ fn bounding_found_term(
 /// D24), of a callee the walk does not bind again; nothing while the
 /// rounds collect or where none was found.
 fn bounding_returned_values(
-	walk: ref BoundsWalk,
+	mut walk: BoundsWalk,
 	value: ref Expr,
 	context: ref BoundsContext,
 	words: ref winnow_grammar::InternerContext,
@@ -12318,6 +12747,7 @@ fn bounding_returned_values(
 			if walk.shape.bound.contains(callee) {
 				return null
 			}
+			walk.found_read.insert(callee.clone())
 			let found = context.returns.get(callee) ?? return null
 			if !found.each || found.pending {
 				return null
@@ -12345,6 +12775,7 @@ fn bounding_call_root(
 	// **Only a call of a function found to return whole numbers** writes
 	// the root here: `collections::BTreeMap()` of an empty map is a call
 	// too, and its writes come later.
+	walk.found_read.insert(callee.clone())
 	let found = context.returns.get(callee)
 	if found == null || !(found?.each ?? false) || (found?.pending ?? false) {
 		return
@@ -12475,6 +12906,7 @@ fn bounding_fields_found(
 	}
 	let callee = bounding_found_key(walk, value, context, words) ?? return out
 	let prefix = f"{callee}#"
+	walk.found_read.insert(prefix.clone())
 	let mut projected: Vec[String] = []
 	for (key, found) in context.returns {
 		if key.starts_with(prefix) && !found.each && !found.pending {

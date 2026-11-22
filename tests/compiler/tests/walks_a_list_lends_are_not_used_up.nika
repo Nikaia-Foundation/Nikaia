@@ -1,0 +1,14 @@
+// A sequence a list lends is not walked out of it (#1424, ADR-105 D2,
+// ADR-094 D4): a `for` binding, an index, a `let` that names the binding.
+fn main() throws {
+    let xs = [1, 2, 3]
+    let ws = [xs.par_iter().map(fn(x) { x * 2 })]
+    for v in ws { println(f"{v.count()}") }
+    let ss = [xs.iter().map(fn(x) { x + 1 })]
+    for s in ss {
+        let t = s
+        println(f"{t.count()}")
+    }
+    println(f"{ss[0].count()}")
+    println(f"{ws.len()}")
+}

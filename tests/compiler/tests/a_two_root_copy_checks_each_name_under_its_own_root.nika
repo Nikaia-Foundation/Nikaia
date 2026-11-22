@@ -1,0 +1,23 @@
+// `fs::copy_between(from, from_root, to, to_root)` resolves each name under
+// its own root (ADR-platform-layer-v1 D4), so the raw-sink check pairs each
+// root with the name before it (ADR-raw-sinks-1 D11, D15): an outside `from`
+// under a clean `from_root` passes even where `to_root` is `Anywhere`; an
+// outside `to` under `Anywhere` is a write (`untrusted-paths-write`), an
+// outside `from` there a read; a root a function takes at `to_root` is
+// judged where it is passed. `NK1308` is a warning here (`raw-sinks = "warn"`).
+use std::cli
+use std::fs
+
+fn put(dest: ref fs::Root) throws {
+    fs::copy_between("f", fs::scratch(), "h", dest)
+}
+
+fn main() throws {
+    let asked = cli::args().nth(1) ?? ""
+    let scratch = fs::scratch()
+    fs::copy_between(asked, scratch, "f", fs::Root::Anywhere) catch {}
+    fs::copy_between("f", scratch, asked, fs::Root::Anywhere) catch {}
+    fs::copy_between(asked, fs::Root::Anywhere, "g", scratch) catch {}
+    put(fs::Root::Dir(asked)) catch {}
+    println("checked")
+}

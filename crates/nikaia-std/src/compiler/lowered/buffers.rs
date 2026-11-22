@@ -473,7 +473,7 @@ pub(crate) fn made_here(names: &[winnow_grammar::Symbol], value: &Expr, ty: Opti
         Expr::MethodCall { receiver, method, .. } => {
             let receiver = nikaia_std::boxed::open(receiver); let method = *method;
             let called = ask.names.resolve(method);
-            if called == "clone" && copies_text(receiver, ask, walk) { return Buffer::Named(String::from("String")); }
+            if called == "clone" && (copies_text(receiver, ask, walk) || copies_an_element_of_text(receiver, ask, walk)) { return Buffer::Named(String::from("String")); }
             if called == "to_string" && formats(receiver, ask, walk) { return Buffer::Named(String::from("String")); }
             let owned = text_by_every_method(ask, called);
             if owned.is_some() { return Buffer::Named(nikaia_std::index::or(owned, || "".into())); }
@@ -668,6 +668,32 @@ pub(crate) fn copies_text(receiver: &Expr, ask: &BufferAsk<'_, '_, '_, '_, '_, '
         } },
         _ => false,
     }
+}
+
+pub(crate) fn copies_an_element_of_text(receiver: &Expr, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_, '_, '_, '_>, walk: &BufferWalk) -> bool {
+    match receiver {
+        Expr::Index { base, index, .. } => { let base = nikaia_std::boxed::open(base); let index = nikaia_std::boxed::open(index); match index {
+            Expr::Range { .. } => false,
+            _ => match base {
+                Expr::Variable(name, _) => { let name = *name; lists_text(ask.names.resolve(name), ask, walk) },
+                _ => false,
+            },
+        } },
+        Expr::MethodCall { receiver: inner, method, .. } => { let inner = nikaia_std::boxed::open(inner); let method = *method; match buffers_a_trim(ask.names.resolve(method)) {
+            true => copies_an_element_of_text(inner, ask, walk),
+            false => false,
+        } },
+        _ => false,
+    }
+}
+
+pub(crate) fn lists_text(name: &str, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_, '_, '_, '_>, walk: &BufferWalk) -> bool {
+    let local = match local_of(name, walk) { Some(__nikaia_value) => __nikaia_value, None => return false };
+    let ty = match local.ty { Some(__nikaia_value) => __nikaia_value, None => return false };
+    let list = ask.names.resolve(ty.name);
+    if list != "Vec" && list != "Array" || ty.generics.len() != 1 { return false; }
+    let element = ask.names.resolve(unsafe { nikaia_std::proven::read(&ty.generics, (0) as usize) }.name);
+    (element == "String" || element == "str") && unsafe { nikaia_std::proven::read(&ty.generics, (0) as usize) }.generics.is_empty()
 }
 
 pub(crate) fn buffers_a_trim(method: &str) -> bool { nikaia_std::list::contains(&vec!["trim", "trim_start", "trim_end", "trim_matches", "trim_start_matches", "trim_end_matches", "before", "after", "between", "clone"], &method) }
@@ -1336,7 +1362,7 @@ pub(crate) fn method_sources(ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_, '_, '_,
 pub(crate) fn sources_of_a_method(contract: &FnContract, into: &mut collections::BTreeSet<i64>) -> bool {
     if contract.borrows.is_empty() { return false; }
     let signature = match contract.signature.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return false };
-    if signature.params.is_empty() || nikaia_std::index::get(&signature.params, 0).0 != "self" { return false; }
+    if signature.params.is_empty() || unsafe { nikaia_std::proven::read(&signature.params, (0) as usize) }.0 != "self" { return false; }
     for b in contract.borrows.iter() {
         let mut found = false;
         let mut at: i64 = 0;
@@ -1377,6 +1403,7 @@ pub(crate) fn call_origins(func: &Expr, args: &[Expr], ask: &BufferAsk<'_, '_, '
     let mut out: collections::BTreeSet<(i64, String)> = collections::BTreeSet::new();
     let mut by_args: collections::BTreeSet<(i64, String)> = collections::BTreeSet::new();
     let borrowed = borrowed_positions(&named, ask);
+    if callee.is_some() && hands_back_owned_text(func, ask, &walk) { return out; }
     let mut position: i64 = 0;
     for arg in args.iter() {
         let of = lent_origins(arg, ask, &mut &mut *holes_of, &mut &mut *unaliased, walk);
@@ -1400,6 +1427,18 @@ pub(crate) fn call_origins(func: &Expr, args: &[Expr], ask: &BufferAsk<'_, '_, '
     }
     add_all(&by_args, &mut out);
     out
+}
+
+pub(crate) fn hands_back_owned_text(func: &Expr, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_, '_, '_, '_>, walk: &BufferWalk) -> bool {
+    let name = match func {
+        Expr::Variable(name, _) => { let name = *name; ask.names.resolve(name) },
+        _ => return false,
+    };
+    let local = match local_of(name, walk) { Some(__nikaia_value) => __nikaia_value, None => return false };
+    let ty = match local.ty { Some(__nikaia_value) => __nikaia_value, None => return false };
+    let code = match nikaia_std::boxed::open(ty.code) { Some(__nikaia_value) => __nikaia_value, None => return false };
+    let result = match nikaia_std::boxed::open(code.result) { Some(__nikaia_value) => __nikaia_value, None => return false };
+    !result.is_view && result.generics.is_empty() && ask.names.resolve(result.name) == "String"
 }
 
 pub(crate) fn borrowed_positions(named: &str, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_, '_, '_, '_>) -> collections::BTreeSet<i64> {

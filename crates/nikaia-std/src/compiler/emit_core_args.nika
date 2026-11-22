@@ -705,6 +705,7 @@ impl EmitState {
             out.push("))")
             return
         }
+        let arg_start = out.buf.len()
         if i < part_counts.len() {
             walk.hull_count = part_counts[i]
         } else {
@@ -800,7 +801,7 @@ impl EmitState {
         // the checker found it by the entry the call resolved to (`str::repeat`,
         // never a function of the program's own that is called `repeat`), not
         // where the argument is written only in literals, and a `usize` a C
-        // declaration names is one too (ADR-302 D6).
+        // declaration names is one too (ADR-c-boundary-v1 D6).
         let wants_a_size = self.takes_a_size(world, callee, i) || self.facts.count_args.contains(node)
         let count = wants_a_size && !only_literals(arg)
         // **The caller writes no `&`** (ADR-094 D1): where the callee reads this
@@ -834,7 +835,7 @@ impl EmitState {
         let duplicate = shares_a_handle || hands_on_kept || self.facts.stored_handles.contains(node)
         // **A lambda handed to a parameter whose type may pause** (ADR-277 D11).
         let future = emit_arg_is_closure(arg) && self.facts.future_lambdas.contains(node) && !self.facts.kept_lambdas.contains_key(node)
-        // **The pointer a C declaration takes** (ADR-302 D5).
+        // **The pointer a C declaration takes** (ADR-c-boundary-v1 D5).
         let mut pointer = 0
         if self.foreign_params.contains_key(callee) {
             let params = self.foreign_params.get(callee) ?? return
@@ -1016,7 +1017,13 @@ impl EmitState {
             let second = if in_place == 2 { "&__nk_x" } else { "__nk_x" }
             out.push(f"|mut __nk_acc, __nk_x| {{ nikaia_std::par::in_place(&mut __nk_acc, {second}, ")
         }
-        if future {
+        // **A read of a value tasks share, standing alone as the argument**
+        // (ADR-async-5 D8, #986): `*` is enough there, its brackets would be
+        // `unused_parens`.
+        let shared = emit_arg_a_shared_read(world, walk, arg)
+        if shared != "" && out.buf.len() == arg_start && in_place == 0 && !future {
+            out.push(shared)
+        } else if future {
             self.emit_arg_future(world, walk, out, host, arg, i, depth, inside, scope)
         } else {
             self.emit_arg_value(world, walk, out, host, arg, i, depth, inside, scope)
@@ -1188,6 +1195,17 @@ impl EmitState {
             if !out.buf.ends_with("&") && !out.buf.ends_with("&mut ") {
                 out.push("&")
             }
+            // **Where tasks run on threads, the closure owns a clone of the
+            // value** (#2017): one that borrows it, or holds a `dyn` of its
+            // own, makes rustc's `Send` of the future around the call "not
+            // general enough", and the call's future is boxed for the same
+            // reason (`emit_call_sends_a_kept_value`).
+            if host.overlaps_user_code() {
+                out.push("{ let __nikaia_kept = (")
+                self.emit_expr(world, walk, out, host, arg, depth, inside, scope)
+                out.push(f").clone(); async move |{joined}| (*__nikaia_kept)({joined}).await }}")
+                return
+            }
             out.push(f"async |{joined}| (*")
             self.emit_expr(world, walk, out, host, arg, depth, inside, scope)
             out.push(f")({joined}).await")
@@ -1221,13 +1239,12 @@ impl EmitState {
             for n in 0..<never_fails {
                 names.push(f"__nikaia_a{n}")
             }
-            let joined = names.join(", ")
             let key: String = (emit_arg_function_key(world, arg) ?? "").clone()
             let pauses = key != "" && call_pauses(self.own_contracts, key)
             if arity >= 0 || pauses {
                 out.push("async ")
             }
-            out.push(f"|{joined}| Ok(")
+            out.push(f"|{self.emit_arg_closure_params(world, walk, host, arg, names)}| Ok(")
             self.emit_expr(world, walk, out, host, arg, depth, inside, scope)
             out.push(f"({emit_arg_passing(names, lent)})")
             if pauses {
@@ -1242,13 +1259,12 @@ impl EmitState {
             for n in 0..<boxed {
                 names.push(f"__nikaia_a{n}")
             }
-            let joined = names.join(", ")
             let key: String = (emit_arg_function_key(world, arg) ?? "").clone()
             let pauses = key != "" && call_pauses(self.own_contracts, key)
             if arity >= 0 || pauses {
                 out.push("async ")
             }
-            out.push(f"|{joined}| ")
+            out.push(f"|{self.emit_arg_closure_params(world, walk, host, arg, names)}| ")
             self.emit_expr(world, walk, out, host, arg, depth, inside, scope)
             out.push(f"({emit_arg_passing(names, lent)})")
             if pauses {
@@ -1262,8 +1278,7 @@ impl EmitState {
             for n in 0..<lent.len() {
                 names.push(f"__nikaia_a{n}")
             }
-            let joined = names.join(", ")
-            out.push(f"|{joined}| ")
+            out.push(f"|{self.emit_arg_closure_params(world, walk, host, arg, names)}| ")
             self.emit_expr(world, walk, out, host, arg, depth, inside, scope)
             out.push(f"({emit_arg_passing(names, lent)})")
             return
@@ -1279,8 +1294,7 @@ impl EmitState {
         for n in 0..<arity {
             names.push(f"__nikaia_a{n}")
         }
-        let joined = names.join(", ")
-        out.push(f"async |{joined}| ")
+        out.push(f"async |{self.emit_arg_closure_params(world, walk, host, arg, names)}| ")
         self.emit_expr(world, walk, out, host, arg, depth, inside, scope)
         out.push(f"({emit_arg_passing(names, lent)})")
     }
@@ -1321,6 +1335,53 @@ impl EmitState {
             return []
         }
         return lent
+    }
+
+    /// **The parameters of a closure around a named function, typed** (#2018):
+    /// where the parameter of function type takes a type variable, that name
+    /// gets the type the function wrote, behind a `&` where the slot lends it.
+    /// Untyped, the language below reads the type off the function's own view
+    /// (`&str` for `String`, `&[i64]` for `Vec[i64]`) and binds the variable
+    /// to that unsized view. A slot of a written type keeps its names untyped:
+    /// its lent form is the view (`&[u8]` for `Bytes`), which the closure then
+    /// reads off the bound. The names alone where the argument is no function
+    /// of this unit without a receiver or type parameters.
+    fn emit_arg_closure_params[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, host: ref H, arg: ref Expr, names: ref Vec[String]) -> String {
+        let joined = names.join(", ")
+        let wanted = match arg {
+            Expr::Variable(name, _) => emit_text(world, name),
+            else => return joined,
+        }
+        if self.facts.kept_functions.contains_key(node_key(arg)) {
+            return joined
+        }
+        let viewed = self.facts.named_fn_values.get(node_key(arg)) ?? return joined
+        let generic = self.facts.generic_fn_slots.get(node_key(arg)) ?? return joined
+        for item in world.items {
+            match item.node {
+                Item::Fn { name, receiver, generics, args, .. } => {
+                    let declared = name ?? continue
+                    if receiver != null || !generics.is_empty() || emit_text(world, declared) != wanted || args.len() != names.len() {
+                        continue
+                    }
+                    let mut typed: Vec[String] = []
+                    for at in 0..<args.len() {
+                        if at >= generic.len() || !generic[at] {
+                            typed.push(names[at].clone())
+                            continue
+                        }
+                        let mut ty = args[at].ty.clone()
+                        ty.is_view = false
+                        let written = self.emit_core_ty(world, walk, host.crossings_are_possible(), host.overlaps_user_code(), ty, EmitLifetimes::Elided)
+                        let lends = at < viewed.len() && viewed[at]
+                        typed.push(f"{names[at]}: {if lends { "&" } else { "" }}{written}")
+                    }
+                    return typed.join(", ")
+                },
+                else => {}
+            }
+        }
+        return joined
     }
 
     /// **A named function bound by a `let` without a type** (#582): the local
@@ -1493,27 +1554,54 @@ fn emit_async_at(statement: i64) -> i64? {
     return statement
 }
 
+/// **A name of a pending value two tasks or more read** (D8, #986), as the
+/// read without its brackets, `*__task_N.join_now()?`; empty for any other
+/// argument.
+fn emit_arg_a_shared_read(world: ref EmitWorld, walk: ref EmitWalk, arg: ref Expr) -> String {
+    match arg {
+        Expr::Variable(name, _) => {
+            let handle = walk.async_handles.get(emit_text(world, name)) ?? return ""
+            if !handle.starts_with("(*") {
+                return ""
+            }
+            let opened = handle.strip_prefix("(") ?? return ""
+            return (opened.strip_suffix(")") ?? "").clone()
+        },
+        else => return "",
+    }
+}
+
+/// **Where a task's or a group's body goes in the text around it**
+/// (ADR-300 D9, #2199): the text is written with this word in the body's
+/// place, and `EmitOut::push_around` puts the body there with its map, so a
+/// panic in a task still names its `.nika` line. No Rust name starts with it.
+fn emit_async_body_mark() -> String {
+    return "__nikaia_task_body__"
+}
+
 /// **The join of a task that never pauses** (D6), whose handle is `handle`:
 /// its failure leaves with `?` where the group can fail, else its crash is
 /// raised again (`task::unfailing`). A task with a fallback hands its crash
-/// to the fallback with its own failure (D22, D35: `task::fallen`).
-fn emit_async_joined(handle: ref String, channel: ref String, fallback: bool) -> String {
+/// to the fallback with its own failure (D22, D35: `task::fallen`). A failure
+/// that leaves records that it arrived here, at `site` (D23).
+fn emit_async_joined(handle: ref String, channel: ref String, fallback: bool, site: ref String) -> String {
     if fallback {
         return f"nikaia_std::task::fallen({handle}.join_now())"
     }
     if channel == "nikaia_std::task::Crashed" {
         return f"nikaia_std::task::unfailing({handle}.join_now())"
     }
+    let arrived = f"nikaia_std::error::arrived({handle}.join_now(), {site})"
     if emit_async_or_crash(channel) {
-        return f"nikaia_std::task::uncrashed({handle}.join_now())?"
+        return f"nikaia_std::task::uncrashed({arrived})?"
     }
-    return f"{handle}.join_now()?"
+    return f"{arrived}?"
 }
 
 /// **The join of a task that pauses** (D6, D20, #1226): it polls the rest of
 /// the task until it ends; under a gate (`line`, D37) the group's other tasks
 /// run meanwhile, and one waiting for a place starts when it frees.
-fn emit_async_joined_paused(handle: ref String, channel: ref String, fallback: bool, line: ref String) -> String {
+fn emit_async_joined_paused(handle: ref String, channel: ref String, fallback: bool, line: ref String, site: ref String) -> String {
     let joined = emit_async_during(line, f"{handle}.join()")
     if fallback {
         return f"nikaia_std::task::fallen({joined})"
@@ -1521,10 +1609,17 @@ fn emit_async_joined_paused(handle: ref String, channel: ref String, fallback: b
     if channel == "nikaia_std::task::Crashed" {
         return f"nikaia_std::task::unfailing({joined})"
     }
+    let arrived = f"nikaia_std::error::arrived({joined}, {site})"
     if emit_async_or_crash(channel) {
-        return f"nikaia_std::task::uncrashed({joined})?"
+        return f"nikaia_std::task::uncrashed({arrived})?"
     }
-    return f"{joined}?"
+    return f"{arrived}?"
+}
+
+/// **A site of a crossing** (ADR-async-5 D23) as the emitted Rust names it:
+/// the function's own name, written as the raise site is.
+fn emit_async_site(scope: ref EmitScope) -> String {
+    return f"&{rust_string(scope.origin)}"
 }
 
 /// Whether a group's tasks fail in `task::OrCrash` (D35, #1355): the
@@ -1848,6 +1943,10 @@ impl EmitState {
     /// binding's, waited for later) or `spawn` (a statement, its value dropped).
     fn emit_async_task[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, task: ref Expr, id: i64, kind: ref String, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
         let group = self.emit_async_group_of(id)
+        // **A deferred task** (`async(deferred)`, ADR-async-5 D12): its
+        // handle is made here, and its `start()` starts it.
+        let deferred = walk.async_deferred
+        walk.async_deferred = false
         if !walk.async_groups.contains(group) {
             throw EmitRefused { message: "The compiler can't translate `async e` yet where its group is a block inside the function (#988): put it in `async { … }` or in the function's own body.", at: emit_async_at(flow.statement) }
         }
@@ -1907,6 +2006,7 @@ impl EmitState {
         let gates = walk.async_gates.clone()
         walk.async_gates = []
         let mut body = EmitOut::empty()
+        let mark = emit_async_body_mark()
         let mut ran = false
         match task {
             Expr::Closure { params, body: block, .. } => {
@@ -1933,28 +2033,40 @@ impl EmitState {
         // A panic in it is its failure, for the fallback alone: it cancels no
         // sibling and is not the group's (D36, #1355: `task::fell`).
         if fallback {
-            let text = body.buf.clone()
+            let inner = body
             body = EmitOut::empty()
             if bound {
-                body.push(f"{deadline}.bound(nikaia_std::task::fell_paused(async || -> {self.rust_result()}<_, {boxed}> {{ Ok({text}) }})).await")
+                body.push_around(f"{deadline}.bound(nikaia_std::task::fell_paused(async || -> {self.rust_result()}<_, {boxed}> {{ Ok({mark}) }})).await", mark, inner)
             } else if walk.async_pausing {
-                body.push(f"nikaia_std::task::fell_paused(async || -> {self.rust_result()}<_, {boxed}> {{ Ok({text}) }}).await")
+                body.push_around(f"nikaia_std::task::fell_paused(async || -> {self.rust_result()}<_, {boxed}> {{ Ok({mark}) }}).await", mark, inner)
             } else {
-                body.push(f"nikaia_std::task::fell(|| -> {self.rust_result()}<_, {boxed}> {{ Ok({text}) }})")
+                body.push_around(f"nikaia_std::task::fell(|| -> {self.rust_result()}<_, {boxed}> {{ Ok({mark}) }})", mark, inner)
             }
         }
         if bound && !fallback {
-            let text = body.buf.clone()
+            let inner = body
             body = EmitOut::empty()
-            body.push(f"{deadline}.bound(async {{ let __nikaia_value = {text}; Ok::<_, {own}>(__nikaia_value) }}).await?")
+            body.push_around(f"{deadline}.bound(async {{ let __nikaia_value = {mark}; Ok::<_, {own}>(__nikaia_value) }}).await?", mark, inner)
         }
+        // **Its failure leaves it with where it was started** (D23,
+        // `error::started`): the body's own result, so the success path
+        // costs nothing; a fallback takes the failure inside the task.
+        let site = emit_async_site(scope)
         if raised && !fallback {
-            let text = body.buf.clone()
+            let inner = body
             body = EmitOut::empty()
             if walk.async_pausing {
-                body.push(f"(async || -> {self.rust_result()}<_, {outer}> {{ Ok({text}) }})().await.map_err(nikaia_std::task::OrCrash::Failed)?")
+                body.push_around(f"nikaia_std::error::started((async || -> {self.rust_result()}<_, {outer}> {{ Ok({mark}) }})().await, {site}).map_err(nikaia_std::task::OrCrash::Failed)?", mark, inner)
             } else {
-                body.push(f"(|| -> {self.rust_result()}<_, {outer}> {{ Ok({text}) }})().map_err(nikaia_std::task::OrCrash::Failed)?")
+                body.push_around(f"nikaia_std::error::started((|| -> {self.rust_result()}<_, {outer}> {{ Ok({mark}) }})(), {site}).map_err(nikaia_std::task::OrCrash::Failed)?", mark, inner)
+            }
+        } else if !fallback {
+            let inner = body
+            body = EmitOut::empty()
+            if inner.buf.contains(".await") {
+                body.push_around(f"nikaia_std::error::started((async || -> {self.rust_result()}<_, {own}> {{ let __nikaia_value = {mark}; Ok(__nikaia_value) }})().await, {site})?", mark, inner)
+            } else {
+                body.push_around(f"nikaia_std::error::started((|| -> {self.rust_result()}<_, {own}> {{ let __nikaia_value = {mark}; Ok(__nikaia_value) }})(), {site})?", mark, inner)
             }
         }
         let name = emit_async_group_name(group)
@@ -1968,6 +2080,34 @@ impl EmitState {
         // pauses or not.
         let line = emit_async_line(gates)
         let gated = line != "" && walk.async_pausing
+        let paused = body.buf.contains(".await") || gated
+        if deferred && (kind != "handle" || (paused && !walk.async_keeps)) {
+            throw EmitRefused { message: "The compiler can't translate `async(deferred)` here yet: bind its handle with a `let`, and start it at a later statement.", at: emit_async_at(flow.statement) }
+        }
+        if paused && deferred {
+            // **A deferred task's rest lives in a cell of its block** (D12,
+            // D37): nothing runs here; `start()` queues the task there, and
+            // the gate, or the wait for it, starts it where the main line
+            // next pauses or waits. Its own strategy is asked then.
+            let cell = f"__rest_{id}"
+            let mut made = f"deferred_kept(&{cell}, "
+            if line != "" {
+                made = f"deferred_kept_gated(&{cell}, &{line}, "
+                if admission != "" {
+                    made = f"deferred_kept_admitted(&{cell}, &{line}, nikaia_std::task::admitted({admission}), "
+                }
+            } else if admission != "" {
+                throw EmitRefused { message: "The compiler can't translate `async(deferred, admission: s)` outside a group's gate yet.", at: emit_async_at(flow.statement) }
+            }
+            walk.async_kept.push(cell)
+            let made_text = f"{name}.{made}async || -> {self.rust_result()}<_, {channel}> {{ let __value = {mark}; Ok(__value) }})"
+            if line != "" {
+                out.push_around(f"{line}.keep({made_text})", mark, body)
+            } else {
+                out.push_around(made_text, mark, body)
+            }
+            return
+        }
         if body.buf.contains(".await") || gated {
             // **A statement task under a gate queues as any task does**
             // (D9, D37): its rest lives in a cell of its block, which waits
@@ -1979,7 +2119,7 @@ impl EmitState {
                 if admission != "" {
                     kept = f"start_kept_admitted(&{cell}, &{line}, nikaia_std::task::admitted({admission}), "
                 }
-                out.push(f"{{ let _ = {line}.keep({name}.{kept}async || -> {self.rust_result()}<(), {channel}> {{ let _ = {body.buf}; Ok(()) }}).await); }}")
+                out.push_around(f"{{ let _ = {line}.keep({name}.{kept}async || -> {self.rust_result()}<(), {channel}> {{ let _ = {mark}; Ok(()) }}).await); }}", mark, body)
                 walk.async_kept.push(cell)
                 return
             }
@@ -1991,11 +2131,11 @@ impl EmitState {
                 asked = f"nikaia_std::task::asked(nikaia_std::task::admitted({admission})); "
             }
             if kind == "spawn" {
-                let spawned = f"{name}.spawn_paused_here(async || -> {self.rust_result()}<(), {channel}> {{ let _ = {body.buf}; Ok(()) }}).await"
+                let spawned = f"{name}.spawn_paused_here(async || -> {self.rust_result()}<(), {channel}> {{ let _ = {mark}; Ok(()) }}).await"
                 if asked != "" {
-                    out.push(f"async {{ {asked}{spawned} }}.await")
+                    out.push_around(f"async {{ {asked}{spawned} }}.await", mark, body)
                 } else {
-                    out.push(spawned)
+                    out.push_around(spawned, mark, body)
                 }
                 return
             }
@@ -2010,7 +2150,7 @@ impl EmitState {
                     start = f"start_paused_admitted(&{line}, nikaia_std::task::admitted({admission}), "
                 }
             }
-            let mut held = f"{name}.{start}async || -> {self.rust_result()}<_, {channel}> {{ let __value = {body.buf}; Ok(__value) }}).await"
+            let mut held = f"{name}.{start}async || -> {self.rust_result()}<_, {channel}> {{ let __value = {mark}; Ok(__value) }}).await"
             // **A handle named later keeps its rest in a cell of its block**
             // (Part I 8.2, #987): dropped live, the task is waited for at
             // the block's end instead of cancelled at its pause.
@@ -2023,7 +2163,7 @@ impl EmitState {
                         kept = f"start_kept_admitted(&{cell}, &{line}, nikaia_std::task::admitted({admission}), "
                     }
                 }
-                held = f"{name}.{kept}async || -> {self.rust_result()}<_, {channel}> {{ let __value = {body.buf}; Ok(__value) }}).await"
+                held = f"{name}.{kept}async || -> {self.rust_result()}<_, {channel}> {{ let __value = {mark}; Ok(__value) }}).await"
                 walk.async_kept.push(cell)
             }
             // The gate keeps its rest, to poll it, or start it, where the
@@ -2035,9 +2175,9 @@ impl EmitState {
                 held = f"async {{ {asked}{held} }}.await"
             }
             if kind == "join" {
-                out.push(emit_async_joined_paused(held, channel, fallback, line))
+                out.push_around(emit_async_joined_paused(held, channel, fallback, line, emit_async_site(scope)), mark, body)
             } else {
-                out.push(held)
+                out.push_around(held, mark, body)
             }
             return
         }
@@ -2048,22 +2188,31 @@ impl EmitState {
             enter = f"nikaia_std::task::asked(nikaia_std::task::admitted({admission})); {enter}"
         }
         if kind == "spawn" {
-            let spawned = f"{name}.spawn_here(|| -> {self.rust_result()}<(), {channel}> {{ let _ = {body.buf}; Ok(()) }})"
+            let spawned = f"{name}.spawn_here(|| -> {self.rust_result()}<(), {channel}> {{ let _ = {mark}; Ok(()) }})"
             if enter != "" {
-                out.push(f"{{ {enter}{spawned} }}")
+                out.push_around(f"{{ {enter}{spawned} }}", mark, body)
             } else {
-                out.push(spawned)
+                out.push_around(spawned, mark, body)
             }
             return
         }
-        let mut started = f"{name}.start_here(|| -> {self.rust_result()}<_, {channel}> {{ let __value = {body.buf}; Ok(__value) }})"
+        if deferred {
+            // A deferred task that never pauses runs at its `start()`, to
+            // its end there (D12).
+            if enter != "" {
+                throw EmitRefused { message: "The compiler can't translate `async(deferred)` under `limit:` or `admission:` in a function that never pauses yet.", at: emit_async_at(flow.statement) }
+            }
+            out.push_around(f"{name}.deferred(|| -> {self.rust_result()}<_, {channel}> {{ let __value = {mark}; Ok(__value) }})", mark, body)
+            return
+        }
+        let mut started = f"{name}.start_here(|| -> {self.rust_result()}<_, {channel}> {{ let __value = {mark}; Ok(__value) }})"
         if enter != "" {
             started = f"{{ {enter}{started} }}"
         }
         if kind == "join" {
-            out.push(emit_async_joined(started, channel, fallback))
+            out.push_around(emit_async_joined(started, channel, fallback, emit_async_site(scope)), mark, body)
         } else {
-            out.push(started)
+            out.push_around(started, mark, body)
         }
     }
 
@@ -2182,6 +2331,7 @@ impl EmitState {
             walk.async_gates.push(id)
         }
         let mut body = EmitOut::empty()
+        let mark = emit_async_body_mark()
         walk.async_groups.push(id)
         if channel == "nikaia_std::task::Crashed" && !plain {
             self.emit_core_block(world, walk, body, host, block, depth, flow, scope, EmitTail::Value)
@@ -2198,7 +2348,7 @@ impl EmitState {
         }
         if options != "" {
             walk.async_gates.pop()
-            let text = body.buf.clone()
+            let inner = body
             body = EmitOut::empty()
             // A gated group inside another of the same function is under
             // both gates (D15).
@@ -2207,7 +2357,7 @@ impl EmitState {
             if outer != "" {
                 waiting = f"nikaia_std::task::Waiting::nested(&{outer}, &{name}_gate)"
             }
-            body.push(f"{{ let {name}_gate = nikaia_std::task::Gate::new({name}_limit, {name}_admission); let {name}_waiting = {waiting}; {text} }}")
+            body.push_around(f"{{ let {name}_gate = nikaia_std::task::Gate::new({name}_limit, {name}_admission); let {name}_waiting = {waiting}; {mark} }}", mark, inner)
         }
         if body.buf.contains("return ") || (body.buf.contains(".await") && !walk.async_pausing) {
             throw EmitRefused { message: "The compiler can't translate `async { … }` yet where it holds a `return` or a pause (#988).", at: emit_async_at(flow.statement) }
@@ -2216,25 +2366,25 @@ impl EmitState {
         // a future over the group, which its tasks borrow.
         if walk.async_pausing {
             if plain {
-                out.push(f"{{ {opened}let {name} = &nikaia_std::task::Scope::new(); nikaia_std::task::group_paused_raised({name}, (async || -> {self.rust_result()}<_, {outer}> {{ let __value = {body.buf}; Ok(__value) }})()).await? }}")
+                out.push_around(f"{{ {opened}let {name} = &nikaia_std::task::Scope::new(); nikaia_std::error::arrived(nikaia_std::task::group_paused_raised({name}, (async || -> {self.rust_result()}<_, {outer}> {{ let __value = {mark}; Ok(__value) }})()).await, {emit_async_site(scope)})? }}", mark, body)
                 return
             }
             if channel == "nikaia_std::task::Crashed" {
-                out.push(f"{{ {opened}let {name} = &nikaia_std::task::Scope::new(); nikaia_std::task::group_paused_plain({name}, async {body.buf}).await }}")
+                out.push_around(f"{{ {opened}let {name} = &nikaia_std::task::Scope::new(); nikaia_std::task::group_paused_plain({name}, async {mark}).await }}", mark, body)
                 return
             }
-            out.push(f"{{ {opened}let {name} = &nikaia_std::task::Scope::new(); nikaia_std::task::group_paused::<_, {channel}>({name}, (async || -> {self.rust_result()}<_, {channel}> {{ let __value = {body.buf}; Ok(__value) }})()).await? }}")
+            out.push_around(f"{{ {opened}let {name} = &nikaia_std::task::Scope::new(); nikaia_std::error::arrived(nikaia_std::task::group_paused::<_, {channel}>({name}, (async || -> {self.rust_result()}<_, {channel}> {{ let __value = {mark}; Ok(__value) }})()).await, {emit_async_site(scope)})? }}", mark, body)
             return
         }
         if opened != "" {
             out.push(f"{{ {opened}")
         }
         if plain {
-            out.push(f"nikaia_std::task::group_raised(|{name}| -> {self.rust_result()}<_, {outer}> {{ let __value = {body.buf}; Ok(__value) }})?")
+            out.push_around(f"nikaia_std::error::arrived(nikaia_std::task::group_raised(|{name}| -> {self.rust_result()}<_, {outer}> {{ let __value = {mark}; Ok(__value) }}), {emit_async_site(scope)})?", mark, body)
         } else if channel == "nikaia_std::task::Crashed" {
-            out.push(f"nikaia_std::task::group_plain(|{name}| {body.buf})")
+            out.push_around(f"nikaia_std::task::group_plain(|{name}| {mark})", mark, body)
         } else {
-            out.push(f"nikaia_std::task::group::<_, {channel}>(|{name}| -> {self.rust_result()}<_, {channel}> {{ let __value = {body.buf}; Ok(__value) }})?")
+            out.push_around(f"nikaia_std::error::arrived(nikaia_std::task::group::<_, {channel}>(|{name}| -> {self.rust_result()}<_, {channel}> {{ let __value = {mark}; Ok(__value) }}), {emit_async_site(scope)})?", mark, body)
         }
         if opened != "" {
             out.push(" }")
@@ -2259,6 +2409,9 @@ impl EmitState {
             Stmt::Let { names, value, .. } => {
                 match value {
                     Expr::TryCatch { expr: guarded, .. } => match guarded {
+                        // Nothing names it: a statement's task, whose fallback
+                        // runs in it (D21, D22).
+                        Expr::Async(_, id, _, _) if self.emit_async_kind(id.get()) == "spawn" => return false,
                         Expr::Async(inner, id, within, admission) => {
                             if names.len() == 1 {
                                 tasks.push((inner.clone(), id.get() as i64))
@@ -2329,7 +2482,13 @@ impl EmitState {
                 out.push(" ")
             }
             first = false
+            // **Read by two tasks or more** (D8, a diamond, #986): the value is
+            // kept for all of them, each mention a read of it.
+            let shared = self.facts.async_shared.contains(each.1)
             out.push(f"let {handle} = ")
+            if shared {
+                out.push("nikaia_std::task::Read::new(")
+            }
             let mut started = EmitOut::empty()
             walk.async_fallback = fallback
             walk.async_within = deadlines[index].clone()
@@ -2337,14 +2496,20 @@ impl EmitState {
             index = index + 1
             self.emit_async_task(world, walk, started, host, each.0, each.1, "handle", depth, here, scope)
             walk.async_fallback = false
-            let mut joined = emit_async_joined(handle, channel, fallback)
+            let mut joined = emit_async_joined(handle, channel, fallback, emit_async_site(scope))
             let mut alone = joined.clone()
             if started.buf.ends_with(".await") {
-                joined = emit_async_joined_paused(handle, channel, fallback, emit_async_line(walk.async_gates))
-                alone = emit_async_joined_paused(handle, channel, fallback, "")
+                joined = emit_async_joined_paused(handle, channel, fallback, emit_async_line(walk.async_gates), emit_async_site(scope))
+                alone = emit_async_joined_paused(handle, channel, fallback, "", emit_async_site(scope))
+            }
+            if shared {
+                alone = f"(*{alone})"
             }
             inside.push(alone)
             out.append(started)
+            if shared {
+                out.push(")")
+            }
             out.push(";")
             walk.async_joining.insert(each.1, joined.clone())
             joins.push(joined)

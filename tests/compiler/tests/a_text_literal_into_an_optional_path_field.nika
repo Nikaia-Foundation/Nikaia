@@ -1,0 +1,34 @@
+// A text literal where an `fs::Path?` is asked is the `Path` made from it, in
+// its `Some` (ADR-319 D2, Part I 2.3, #1986): a field lowered to
+// `Some("data")` and rustc refused it (NK1343); a `let`, a `return` and an
+// assignment were refused as a mismatch.
+use std::fs
+
+struct Place { root: fs::Path? }
+
+fn given(path: fs::Path?) -> bool {
+    return path != null
+}
+
+fn back() -> fs::Path? {
+    return "r"
+}
+
+fn tail() -> fs::Path? {
+    "t"
+}
+
+fn main() throws {
+    let place = Place { root: "data" }
+    println(f"{place.root != null}")
+    println(f"{given("y")}")
+    let name = "n"
+    println(f"{given(name)}")
+    let p: fs::Path? = "x"
+    println(f"{p != null}")
+    println(f"{back() != null}")
+    println(f"{tail() != null}")
+    let mut q: fs::Path? = null
+    q = "z"
+    println(f"{q != null}")
+}

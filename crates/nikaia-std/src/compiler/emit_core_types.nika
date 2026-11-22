@@ -60,7 +60,7 @@ fn emit_counted_turn(counts_steps: bool, opening: String?) -> String? {
 
 impl EmitState {
     /// Which shape a declared parameter takes at the C boundary, or `null`
-    /// where it is an ordinary value (ADR-302 D5, D7).
+    /// where it is an ordinary value (ADR-c-boundary-v1 D5, D7).
     fn pointer_for(ref self, world: ref EmitWorld, callee: ref String, ty: ref Type) -> EmitPointer? {
         let name = world.words.resolve(ty.name)
         if self.opaque_handles.contains_key(name) && !ty.is_view && !ty.is_slice {
@@ -373,6 +373,17 @@ impl EmitState {
             let held = self.emit_core_ty_counted(world, walk, crossings, overlaps, ty.generics[0], lifetimes, count)
             out.push_str(f"{shared}<{locked}<{held}>>")
             return out
+        }
+        // **`std`'s `Wide[T]` is the native type of twice the width** (Part
+        // I 2.2, #2619, `emit_core_wide.nika`), unless the program declares
+        // its own `Wide`.
+        if name == "Wide" && ty.generics.len() == 1 && !self.structs.contains("Wide") && !self.structs_beside.contains("Wide") {
+            let element = world.words.resolve(ty.generics[0].name).clone()
+            let (wide, _, bits) = emit_wide_native(if element == "int" { "i64" } else { element })
+            if bits != 0 {
+                out.push_str(wide)
+                return out
+            }
         }
         // **`simd::Mask[T]`** compares two `Lanes[T]`, whose count is the
         // build's (ADR-377 D1, D5).

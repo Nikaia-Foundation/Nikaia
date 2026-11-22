@@ -88,6 +88,11 @@ impl CheckState {
         if found.is_unknown() { self.literal_receivers_take(want); }
         if self.fits_through_deref(world, found, want) { return; }
         if text_as_a_path(found, want) >= 0 { return; }
+        let path_some = match want {
+            Ty::Nullable(inner) => { let inner = nikaia_std::boxed::open(inner); text_as_a_path(found, inner) >= 0 },
+            _ => false,
+        };
+        if path_some { return; }
         if mapped_as_bytes(found, want) { return; }
         if widened_into(found, want).is_some() { return; }
         let key = span.start as i64;

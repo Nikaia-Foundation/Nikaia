@@ -460,7 +460,9 @@ fn the_std_ledger_names_only_known_resources() {
 /// the handler below would be invisible: the pair would meet on nothing and
 /// overlap, and the overlapped program could print its two lines in either
 /// order. A handler is code that runs, so what it reaches counts (D2), and
-/// where it cannot be read D4 says the statement reaches everything.
+/// where it cannot be read D4 says the statement reaches everything. Its
+/// `println` can fail too (ADR-392), and a handler's own failure leaves the
+/// statement (Part I 7.1, #1370), so that is the reason named first.
 #[test]
 fn a_handlers_own_effects_are_part_of_the_statement() {
     const HANDLER_WRITES_STDOUT: &str = "use std::fs\n\
@@ -476,8 +478,8 @@ fn a_handlers_own_effects_are_part_of_the_statement() {
     );
     let reason = why(HANDLER_WRITES_STDOUT);
     assert!(
-        reason.contains("stdout") && reason.contains("println"),
-        "and the refusal must name what they meet on: {reason}"
+        reason.contains("println") && reason.contains("can fail"),
+        "and the refusal must name the handler's failing call: {reason}"
     );
 }
 

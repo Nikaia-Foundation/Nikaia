@@ -1,0 +1,10 @@
+error[NK2104]: This lambda can't run beside its own other runs.
+  --> tests/par_iter_lambda_printing_meets_itself.nika:6:25
+   |
+ 6 | 	xs.par_iter().for_each(fn(x) { println(f"{x}") catch {} })
+   |                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: Both touch stdout, and one writes to it.
+   = note: `par_iter()` runs the lambda once for every element, and those runs happen at the same time.
+   = help: To run it one element at a time, write `par_iter(limit: 1)`, or walk with `iter()`.
+1 branch that cannot run beside the others

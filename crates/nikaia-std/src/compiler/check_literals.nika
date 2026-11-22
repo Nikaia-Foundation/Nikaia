@@ -47,7 +47,7 @@ impl CheckState {
     /// [Part III C.4](../../docs/specification/30-nikaia-tooling.md)'s rule.
     ///
     /// **Found by writing `sqlite3` end to end**
-    /// ([ADR-302](../../docs/specification/adr/adr-302.md) step 5), which is
+    /// ([ADR-c-boundary-v1](../../docs/specification/adr/adr-c-boundary-v1.md) step 5), which is
     /// what that step is for: `throw "no database"` read like a program and
     /// `rustc` answered *the trait bound `str: Error` is not satisfied* about a
     /// file nobody wrote. It had been writable since `throw` existed and no
@@ -85,7 +85,7 @@ impl CheckState {
     }
 
     /// `NK1160`: a field or an index reached on an **opaque handle**
-    /// ([ADR-302](../../docs/specification/adr/adr-302.md) D7).
+    /// ([ADR-c-boundary-v1](../../docs/specification/adr/adr-c-boundary-v1.md) D7).
     ///
     /// A handle is an address this language never dereferences. It is moved and
     /// stored like any value, and that is all it is — there is nothing inside
@@ -102,7 +102,7 @@ impl CheckState {
     }
 
     /// `NK1160`, the third shape: a **handle** written as a call
-    /// ([ADR-302](../../docs/specification/adr/adr-302.md) D7).
+    /// ([ADR-c-boundary-v1](../../docs/specification/adr/adr-c-boundary-v1.md) D7).
     ///
     /// An opaque handle is an address a C function hands back. There is no
     /// value of one this language can make, so a constructor would have to
@@ -120,7 +120,7 @@ impl CheckState {
     }
 
     /// `NK1159`: a length handed to a C declaration beside a buffer it cannot be
-    /// shown to fit ([ADR-302](../../docs/specification/adr/adr-302.md) D6).
+    /// shown to fit ([ADR-c-boundary-v1](../../docs/specification/adr/adr-c-boundary-v1.md) D6).
     ///
     /// **The help names both ways out**, because D2 accepts exactly two: the
     /// buffer's own `len()`, and a constant a known length covers. Anything

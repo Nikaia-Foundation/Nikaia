@@ -1,0 +1,38 @@
+this program writes no `overlap { … }` block.
+main: 7 tasks an `async` form starts, 3 of them started first
+    task 1, line 13: `let a = async slow(1)`
+        window      lines 13-15
+        waited for  before line 16
+        group ends  after line 28
+        starts      first: it pauses (ADR-292 D6)
+    task 2, line 14: `let b = async double(2)`
+        window      lines 14-15
+        waited for  before line 16
+        group ends  after line 28
+        starts      after the tasks before it that pause: it never pauses (ADR-292 D6)
+    task 3, line 17: `let d = async double(4) + double(5)`
+        window      line 17
+        waited for  before the call or operation it is part of, line 17
+        group ends  after line 28
+        starts      after the tasks before it that pause: it never pauses (ADR-292 D6)
+    task 4, line 20: `async double(6)`
+        window      lines 20-22
+        waited for  at its group's end
+        group ends  after line 22
+        starts      after the tasks before it that pause: it never pauses (ADR-292 D6)
+    task 5, line 21: `async slow(7)`
+        window      lines 21-22
+        waited for  at its group's end
+        group ends  after line 22
+        starts      first: it pauses (ADR-292 D6)
+    task 6, line 24: `let h = async(handle) fn { slow(8) }`
+        window      lines 24-28 at most
+        waited for  where its handle is joined, else at its group's end
+        group ends  after line 28
+        starts      first: it pauses (ADR-292 D6)
+    task 7, line 27: `let f = async(detached) fn { double(10) }`
+        window      from line 27, past its group
+        waited for  where its handle is joined, if it is
+        group ends  none: it may outlive its group (ADR-async-5 D13)
+        starts      after the tasks before it that pause: it never pauses (ADR-292 D6)
+Checked main.nika

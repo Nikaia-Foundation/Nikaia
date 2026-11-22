@@ -288,8 +288,8 @@ fn a_build_with_nowhere_to_build_says_so() {
 /// running tests above are the half that counts.
 #[test]
 fn the_decoder_reads_every_shape_the_dumper_writes() {
-    use nikaia::build_time::Value;
     use nikaia::grammar_run::decode;
+    use nikaia_std::compiler::build_values::BuildValue as Value;
 
     assert_eq!(
         decode("(i 42)").expect("an integer"),

@@ -96,8 +96,7 @@ pub(crate) fn sv_row_combine_exact(a: i64, r: &SvRow, b: i64, s: &SvRow) -> Opti
 pub(crate) fn sv_row_combine_wide(a: i64, r: &SvRow, b: i64, s: &SvRow) -> Option<SvRow> {
     let room = unsafe { nikaia_std::proven::add::<i64>(nikaia_std::proven::add::<i64>(r.cols.len() as i64, s.cols.len() as i64), 1) };
     let mut cols: Vec<u32> = Vec::with_capacity(nikaia_std::count::of(room));
-    let mut lows: Vec<u64> = Vec::with_capacity(nikaia_std::count::of(room));
-    let mut highs: Vec<i64> = Vec::with_capacity(nikaia_std::count::of(room));
+    let mut wides: Vec<i128> = Vec::with_capacity(nikaia_std::count::of(room));
     let mut i: i64 = 0;
     let mut j: i64 = 0;
     while ((i) as usize) < r.cols.len() || ((j) as usize) < s.cols.len() {
@@ -119,17 +118,14 @@ pub(crate) fn sv_row_combine_wide(a: i64, r: &SvRow, b: i64, s: &SvRow) -> Optio
             i = unsafe { nikaia_std::proven::add::<i64>(i, 1) };
             j = unsafe { nikaia_std::proven::add::<i64>(j, 1) };
         }
-        let (low, high) = match sv_wide_mul_add(a, x, b, y) { Some(__nikaia_value) => __nikaia_value, None => return None };
-        if low != 0u64 || high != 0 {
+        let entry = match sv_wide_mul_add(a, x, b, y) { Some(__nikaia_value) => __nikaia_value, None => return None };
+        if { let __wide: i128 = entry; __wide.signum() as i64 } != 0 {
             cols.push(col);
-            lows.push(low);
-            highs.push(high);
+            wides.push(entry);
         }
     }
-    let (low, high) = match sv_wide_mul_add(a, r.constant, b, s.constant) { Some(__nikaia_value) => __nikaia_value, None => return None };
-    lows.push(low);
-    highs.push(high);
-    let mut ks = match sv_wide_reduced(&lows, &highs) { Some(__nikaia_value) => __nikaia_value, None => return None };
+    wides.push(match sv_wide_mul_add(a, r.constant, b, s.constant) { Some(__nikaia_value) => __nikaia_value, None => return None });
+    let mut ks = match sv_wide_reduced(&wides) { Some(__nikaia_value) => __nikaia_value, None => return None };
     let constant = match ks.pop() { Some(__nikaia_value) => __nikaia_value, None => return None };
     Some(SvRow { cols, ks, constant })
 }
@@ -354,9 +350,9 @@ pub(crate) fn __nikaia_test_0() -> Result<(), std::boxed::Box<dyn std::error::Er
     let minus = nikaia_std::index::or(sv_row_of(vec![sv_row_test_term(0u32, 2)], -3), || sv_row_constant(0).into());
     out = nikaia_std::block::Text::from(nikaia_std::concat::plus(out, format!("{} tightened: {}\n", sv_row_text(&minus), sv_row_text(&sv_row_tightened(&minus)))));
     out = nikaia_std::block::Text::from(nikaia_std::concat::plus(out, "== evaluating\n"));
-    let values: Vec<SvRat> = vec![nikaia_std::index::or(sv_rat(1, 2), || sv_int(0).into()), sv_int(3), sv_int(-1)];
+    let values: Vec<SvRat> = vec![nikaia_std::index::or(sv_rat(1, 2), || sv_int(0)), sv_int(3), sv_int(-1)];
     let e = nikaia_std::index::or(sv_row_of(vec![sv_row_test_term(0u32, 4), sv_row_test_term(1u32, -1), sv_row_test_term(2u32, 2)], 1), || sv_row_constant(0).into());
-    out = nikaia_std::block::Text::from(nikaia_std::concat::plus(out, format!("{} at x0 = 1/2, x1 = 3, x2 = -1: {}\n", sv_row_text(&e), sv_rat_text(&nikaia_std::index::or(sv_row_eval(&e, &values), || sv_int(99).into())))));
+    out = nikaia_std::block::Text::from(nikaia_std::concat::plus(out, format!("{} at x0 = 1/2, x1 = 3, x2 = -1: {}\n", sv_row_text(&e), sv_rat_text(&nikaia_std::index::or(sv_row_eval(&e, &values), || sv_int(99))))));
     let missing = sv_row_eval(&r, &values);
     out = nikaia_std::block::Text::from(nikaia_std::concat::plus(out, format!("{} there: {}\n", sv_row_text(&r), if missing.is_none() { "refused, x5 has no value" } else { "?" })));
     out = nikaia_std::block::Text::from(nikaia_std::concat::plus(out, "== from logic_lia's LgLin\n"));

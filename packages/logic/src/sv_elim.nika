@@ -284,25 +284,6 @@ fn sv_extended(mut held: Vec[SvHeld], lo: i64, hi: i64, mut book: SvBook) -> u32
 	return col
 }
 
-/// The products `N_u·N_v` and `N_v·N_v` of two columns' vectors over the
-/// rows of `held`; `null` where one leaves `i64`.
-struct SvDots {
-	uv: i64,
-	vv: i64,
-}
-
-fn sv_dots(held: ref Vec[SvHeld], u: u32, v: u32) -> SvDots? {
-	let mut uv: i64 = 0
-	let mut vv: i64 = 0
-	for h in held {
-		let a = sv_row_coef(h.row, u)
-		let b = sv_row_coef(h.row, v)
-		uv = sv_mul_add(1, uv, a, b) ?? return null
-		vv = sv_mul_add(1, vv, b, b) ?? return null
-	}
-	return SvDots { uv: uv, vv: vv }
-}
-
 /// One step of a pairwise (Lagrange) reduction of `held`'s columns, the
 /// vectors of their coefficients over the rows: the first pair `u`, `v`
 /// where `N_u - k·N_v` is shorter than `N_u` for `k` the nearest integer to
@@ -317,23 +298,110 @@ fn sv_reduce_step(
 	mut solved: Vec[SvSolved],
 	mut book: SvBook,
 ) -> bool {
-	let mut cols: Vec[u32] = []
+	// The columns of `held`, ascending, and each one's place among them.
+	let mut top: i64 = -1
 	for h in held {
 		for c in h.row.cols {
-			if !cols.contains(c) {
-				cols.push(c)
+			if (c as i64) > top {
+				top = c as i64
 			}
 		}
 	}
-	cols.sort()
-	for u in cols {
-		for v in cols {
-			if u == v {
+	let mut place: Vec[i64] = []
+	while place.len() <= top {
+		place.push(-1)
+	}
+	for h in held {
+		for c in h.row.cols {
+			place[c as i64] = 0
+		}
+	}
+	let mut cols: Vec[u32] = []
+	let mut c: i64 = 0
+	while c <= top {
+		if place[c] >= 0 {
+			place[c] = cols.len()
+			cols.push(c as u32)
+		}
+		c += 1
+	}
+	let n = cols.len()
+	// The rows that hold each column, in their order, and `N_v·N_v` of each
+	// column summed in that order, so it leaves `i64` where a walk of every
+	// row would. A pair `u`, `v` is then summed over the rows that hold `u`
+	// alone: a row without `u` adds 0 to `N_u·N_v`, and a pair no row holds
+	// both of has `k = 0` and never shortens. A walk of every row for each
+	// of the n² pairs was almost all of SharedMemory-PT-000020-RF-00's
+	// time (#2086).
+	let mut rows_of: Vec[Vec[i64]] = []
+	let mut squares: Vec[i64] = []
+	let mut square_over: Vec[bool] = []
+	while rows_of.len() < n {
+		rows_of.push([])
+		squares.push(0)
+		square_over.push(false)
+	}
+	let mut r = 0
+	while r < held.len() {
+		let mut t = 0
+		while t < held[r].row.cols.len() {
+			let p = place[held[r].row.cols[t] as i64]
+			rows_of[p].push(r)
+			let b = held[r].row.ks[t]
+			if !square_over[p] {
+				let s = sv_mul_add(1, squares[p], b, b)
+				if s == null {
+					square_over[p] = true
+				} else {
+					squares[p] = s ?? 0
+				}
+			}
+			t += 1
+		}
+		r += 1
+	}
+	let mut products: Vec[i64] = []
+	let mut product_over: Vec[bool] = []
+	while products.len() < n {
+		products.push(0)
+		product_over.push(false)
+	}
+	let mut ui = 0
+	while ui < n {
+		let u = cols[ui]
+		let mut z = 0
+		while z < n {
+			products[z] = 0
+			product_over[z] = false
+			z += 1
+		}
+		for at in rows_of[ui] {
+			let a = sv_row_coef(held[at].row, u)
+			let mut t = 0
+			while t < held[at].row.cols.len() {
+				let p = place[held[at].row.cols[t] as i64]
+				if !product_over[p] {
+					let s = sv_mul_add(1, products[p], a, held[at].row.ks[t])
+					if s == null {
+						product_over[p] = true
+					} else {
+						products[p] = s ?? 0
+					}
+				}
+				t += 1
+			}
+		}
+		ui += 1
+		let mut vi = 0
+		while vi < n {
+			let here = vi
+			vi += 1
+			if here == ui - 1 || product_over[here] || square_over[here] {
 				continue
 			}
-			let dots = sv_dots(held, u, v) ?? continue
-			let uv = dots.uv
-			let vv = dots.vv
+			let v = cols[here]
+			let uv = products[here]
+			let vv = squares[here]
 			if vv == 0 {
 				continue
 			}

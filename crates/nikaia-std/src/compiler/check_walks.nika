@@ -94,6 +94,13 @@ fn check_walks_tasks_in(state: ref CheckState, block: ref Block, group: i64, mut
                         out.push(each)
                     }
                 },
+                // A child task (D11, D12) runs beside the main line too.
+                Expr::Spawn { child, .. } if child => {
+                    let wait = state.facts.async_waits.get(id_of(each) as i64) ?? continue
+                    if wait.group == group {
+                        out.push(each)
+                    }
+                },
                 else => {},
             }
         }
@@ -103,6 +110,118 @@ fn check_walks_tasks_in(state: ref CheckState, block: ref Block, group: i64, mut
             }
         }
     }
+}
+
+/// **Where a child task runs beside the main line** (ADR-async-5 D11,
+/// D12): from where it starts - an `async(handle)` where it stands, an
+/// `async(deferred)` at its `h.start()` - until the first later statement of
+/// its block that names the handle (its `join()` or `cancel()`), or its
+/// group's end where none does.
+struct CheckWalksWindow {
+    span: Span,
+    until: i64,
+}
+
+/// Whether `expr`, or the task a `catch` guards in it, is the child task
+/// `id`: whether it is deferred, `null` where it is not that task.
+fn check_walks_the_child(expr: ref Expr, id: u32) -> bool? {
+    return match expr {
+        Expr::Spawn { child, deferred, .. } if child && id_of(expr) == id => deferred,
+        Expr::TryCatch { expr: guarded, .. } => check_walks_the_child(guarded, id),
+        else => null,
+    }
+}
+
+/// The first statement of `block` after `at` that names one of `names`, the
+/// block's length where none does.
+fn check_walks_named_after(world: ref CheckWorld, block: ref Block, at: i64, names: ref Vec[String]) -> i64 {
+    let count = block.stmts.len() as i64
+    let mut index = 0
+    for stmt in block.stmts {
+        if index > at {
+            let mut seen: collections::BTreeSet[String] = collections::BTreeSet()
+            names_in_statement(stmt.node, world.words, seen)
+            for name in names {
+                if seen.contains(name) {
+                    return index
+                }
+            }
+        }
+        index += 1
+    }
+    return count
+}
+
+/// Whether a statement is the plain `h.start()` of the handle `names` binds.
+fn check_walks_starts_the_handle(world: ref CheckWorld, stmt: ref Stmt, names: ref Vec[String]) -> bool {
+    if names.len() != 1 {
+        return false
+    }
+    return match stmt {
+        Stmt::Expr(value) => match value {
+            Expr::MethodCall { receiver, method, args, .. } if args.len() == 0 && f"{world.words.resolve(method)}" == "start" => match receiver {
+                Expr::Variable(word, _) => f"{world.words.resolve(word)}" == names[0],
+                else => false,
+            },
+            else => false,
+        },
+        else => false,
+    }
+}
+
+/// The window of the child task `id` (`CheckWalksWindow`), looked for in
+/// `block` and the blocks nested in it; `null` where it cannot be told - a
+/// handle not bound by a statement of its own, a deferred one whose next
+/// mention is not a plain `h.start()` - and the task is then not refused
+/// (Part III C.4).
+fn check_walks_child_window(world: ref CheckWorld, block: ref Block, id: u32) -> CheckWalksWindow? {
+    let count = block.stmts.len() as i64
+    let mut at = 0
+    for stmt in block.stmts {
+        let mut names: Vec[String] = []
+        let mut deferred: bool? = null
+        match stmt.node {
+            Stmt::Let { names: bound, value, .. } => {
+                deferred = check_walks_the_child(value, id)
+                for name in bound {
+                    names.push(world.words.resolve(name).clone())
+                }
+            },
+            Stmt::Expr(value) => {
+                deferred = check_walks_the_child(value, id)
+            },
+            else => {},
+        }
+        if deferred == null {
+            for nested in check_visit_stmt_blocks(stmt.node) {
+                let found = check_walks_child_window(world, nested, id)
+                if found != null {
+                    return found
+                }
+            }
+            at += 1
+            continue
+        }
+        let late = check_walks_named_after(world, block, at, names)
+        if !(deferred ?? false) {
+            let here = world.here.spans.get(id) ?? return null
+            let mut until: i64 = 4611686018427387904
+            if late < count {
+                until = block.stmts[late].span.start as i64
+            }
+            return CheckWalksWindow { span: Span { start: here.start, end: here.end }, until: until }
+        }
+        if late >= count || !check_walks_starts_the_handle(world, block.stmts[late].node, names) {
+            return null
+        }
+        let after = check_walks_named_after(world, block, late, names)
+        let mut until: i64 = 4611686018427387904
+        if after < count {
+            until = block.stmts[after].span.start as i64
+        }
+        return CheckWalksWindow { span: block.stmts[late].span.clone(), until: until }
+    }
+    return null
 }
 
 /// One task, the `async` node `id` with the expression `inner` it runs.
@@ -220,6 +339,45 @@ fn check_walks_door_on(state: ref CheckState, value: ref Expr, receiver: ref Exp
         }
     }
     return CheckWalksDoor::Door(Operation { binds: null, mentions: mentions, reaches: reaches, callee: f"{lock}::{door}" })
+}
+
+/// **A `par_iter` lambda meets its own other runs** (ADR-async-5 D26, Part
+/// II 12.6): it runs once per element, beside its runs for the others, so
+/// what it reaches is asked of itself as two tasks are (`NK2104`), at the
+/// lambda. A lock is left out: a `SharedMut` changed through `update` is the
+/// way a parallel lambda combines (ADR-235 D2, which D24 left standing). A
+/// lambda that cannot be accounted for is not refused (Part III C.4), and
+/// a walk made by `par_iter(limit: 1)`, the literal, exempts it (D15): its
+/// type carries that through `map`, `filter` and a `let` (`walk` is the
+/// type of the walk the lambda is handed to, #2610).
+fn check_walks_a_lambda_against_itself(mut state: CheckState, world: ref CheckWorld, walk: ref Ty, lambda: ref Expr, span: ref Span) sync {
+    match lambda {
+        Expr::Closure { .. } => {},
+        else => return,
+    }
+    if shape_one_at_a_time(walk) {
+        return
+    }
+    let walking = Walking { own: world.own, library: world.library, into: Going::Ours }
+    let operations = check_walks_task_operations(state, lambda, world.words, walking) ?? return
+    let mut reaches: Vec[Reached] = []
+    for operation in operations {
+        for reached in operation.reaches {
+            if reached.kind != "lock" {
+                reaches.push(reached.clone())
+            }
+        }
+    }
+    let own = Operation { binds: null, mentions: collections::BTreeSet(), reaches: reaches, callee: "" }
+    let found = verdict(own, own)
+    if found.is_overlap() {
+        return
+    }
+    let why = capitalised(found.why())
+    let start = world.here.spans.get(id_of(lambda))?.start ?? span.start
+    let end = world.here.spans.get(id_of(lambda))?.end ?? span.end
+    let at = Span { start: start, end: end }
+    state.findings.push(check_refusal("NK2104", at, "This lambda can't run beside its own other runs.", [f"{why}.", "`par_iter()` runs the lambda once for every element, and those runs happen at the same time."], "To run it one element at a time, write `par_iter(limit: 1)`, or walk with `iter()`."))
 }
 
 /// Whether two tasks meet on a resource one of them writes, and the verdict
@@ -413,6 +571,10 @@ impl CheckState {
                 Expr::Async(inner, _, _, _) => {
                     let task = check_walks_task(self, world, walking, id_of(each), inner) ?? continue
                     tasks.push(task)
+                },
+                Expr::Spawn { body, .. } => {
+                    let window = check_walks_child_window(world, block, id_of(each)) ?? continue
+                    tasks.push(CheckWalksTask { span: window.span, until: window.until, operations: check_walks_task_operations(self, body, world.words, walking) })
                 },
                 else => {},
             }

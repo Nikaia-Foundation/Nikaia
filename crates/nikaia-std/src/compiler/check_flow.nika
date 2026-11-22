@@ -124,6 +124,8 @@ pub struct CheckFlow {
     pub option_values: Vec[i64],
     /// Which of them is a text literal, in the same order.
     pub option_literals: Vec[bool],
+    /// Which of them is an integer literal, in the same order (#1452).
+    pub option_integers: Vec[bool],
     /// Each of them as the author wrote it (`check_walked_written`), in the
     /// same order, and the callee as written before its `(`: what `NK1101`
     /// shows as the corrected call when the names belong to positional
@@ -132,9 +134,10 @@ pub struct CheckFlow {
     pub call_written: String,
     /// **The options a method call names after its `;`** (#1446), by its
     /// receiver's node, until the call resolves: each one's name, type,
-    /// address, whether it is a text literal and how it is written. A witness (`within:`,
+    /// address, whether it is a text literal, whether an integer literal
+    /// (#1452) and how it is written. A witness (`within:`,
     /// `after:`), `on_timeout:` and a DSL driver's options are not among them.
-    pub method_passed: collections::BTreeMap[i64, Vec[(String, Ty, i64, bool, String)]],
+    pub method_passed: collections::BTreeMap[i64, Vec[(String, Ty, i64, bool, bool, String)]],
     /// **The options a resolved method call moves** (#1595), by its
     /// receiver's node, for the walk that holds their values to hand over:
     /// each one's name, type and what the refusal says it was passed to.
@@ -185,6 +188,10 @@ pub struct CheckFlow {
     pub async_group: i64?,
     /// The `async { }` whose own block the next `check_core_block` walks.
     pub async_group_block: i64?,
+    /// The frame of the innermost `async { }`'s own block: a name bound in a
+    /// frame above it lives in a block that ends before the group (async-3
+    /// D2, #986).
+    pub async_group_frame: i64,
     /// How many tasks the innermost `async { }` started so far (`NK2111`).
     pub async_started: i64,
     /// The groups written `limit: 1` with the literal (ADR-async-5 D15): their
@@ -434,6 +441,10 @@ pub struct CheckFlow {
     pub reached: String?,
     /// The names this function's body gives text of its own later on.
     pub grown_text: collections::BTreeSet[String],
+    /// **The names this body keeps** (ADR-views-v4 D23, #1994): returned,
+    /// stored into a place that is not a local, or put into a container. A
+    /// `let` over a part of a `mut` place that binds one takes the part.
+    pub kept_names: collections::BTreeSet[String],
     /// **The names of those that are also assigned a field read** (ADR-282
     /// D13, #840): views and text of their own flow into them, so a name that
     /// started as a literal holds `EitherText`.
@@ -474,9 +485,10 @@ pub struct CheckFlow {
     /// #1988), asked where the body ends.
     pub place_clones: Vec[CheckPlaceClone],
     /// **Each name a change reached**, with how many reads the walk had
-    /// recorded when it did: a change of a place clone's root between the
-    /// `let` and its last read keeps the clone needed.
-    pub changes_seen: Vec[(String, i64)],
+    /// recorded when it did and how many loops and lambdas stood around it: a
+    /// change of a place clone's root between the `let` and its last read,
+    /// or in a loop the `let` stands outside of, keeps the clone needed.
+    pub changes_seen: Vec[(String, i64, i64)],
     /// **Each change with the binding it reached** (`-1` for none), in
     /// order: a kept lambda that changes a binding older than itself changes
     /// only its own copy (`NK2101`, Part I 5.4 C, #2047).
@@ -494,6 +506,9 @@ pub struct CheckPlaceClone {
     pub binding: i64?,
     /// The name the place starts from: `self` in `self.lower[v]`.
     pub root: String,
+    /// The root's binding where this body owns it: a read of the whole root
+    /// after the `let` needs the copy (#2009).
+    pub whole: i64?,
     /// The walk's read order and its count of reads where the `let` stands.
     pub seq: i64,
     pub reads: i64,
@@ -530,6 +545,7 @@ impl CheckFlow {
             computes: computes,
             option_values: Vec(),
             option_literals: Vec(),
+            option_integers: Vec(),
             option_written: Vec(),
             call_written: "",
             method_passed: collections::BTreeMap(),
@@ -551,6 +567,7 @@ impl CheckFlow {
             barrier: null,
             async_group: null,
             async_group_block: null,
+            async_group_frame: 0,
             async_started: 0,
             async_one_at_a_time: collections::BTreeSet(),
             async_depth: 0,
@@ -640,6 +657,7 @@ impl CheckFlow {
             reaching: null,
             reached: null,
             grown_text: collections::BTreeSet(),
+            kept_names: collections::BTreeSet(),
             mixed_text: collections::BTreeSet(),
             widening_casts: collections::BTreeSet(),
             unsigned_slots: collections::BTreeMap(),

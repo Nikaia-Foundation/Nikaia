@@ -42,7 +42,7 @@ pub enum Ty {
     /// `(A, B)`: a fixed number of parts and no name.
     Tuple(Vec[Ty]),
     /// **What the C boundary lends**
-    /// ([ADR-302](../../../docs/specification/adr/adr-302.md) D5): `ref mut T`,
+    /// ([ADR-c-boundary-v1](../../../docs/specification/adr/adr-c-boundary-v1.md) D5): `ref mut T`,
     /// `ref Array[u8]` and `ref mut Array[u8]`, each a view that lives for the
     /// call. A plain `ref T` is **not** this: it is `Named` with `view`.
     Pointed {
@@ -146,13 +146,18 @@ pub struct Shape {
     /// the step that ends it throws `task::TimedOut` once the deadline ran
     /// out. Not a word a program writes.
     pub timed: bool,
+    /// **A walk whose elements run one at a time** (`par_iter(limit: 1)`,
+    /// the literal, ADR-async-5 D15): a lambda handed to it never meets its
+    /// own other runs (D26), wherever the walk was bound. Not a word a
+    /// program writes.
+    pub one_at_a_time: bool,
 }
 
 impl Shape {
     /// None of the three: what a sequence is when nobody said. Named rather
     /// than a `Default`, for ADR-294 D9.4's reason.
     pub fn none() -> Shape {
-        return Shape { ends: false, sized: false, replays: false, timed: false }
+        return Shape { ends: false, sized: false, replays: false, timed: false, one_at_a_time: false }
     }
 
     /// Whether a sequence of this shape can go where `wanted` is demanded.
@@ -280,7 +285,7 @@ fn unlent_each(params: ref Array[Ty]) -> Vec[Ty] {
 
 /// `ref mut Array[T]`, and not the pointer it lowers to. The `?` a nullable
 /// pointee carries comes out after the brackets, which is the spelling
-/// `Ty::parse` reads back (ADR-302 D14).
+/// `Ty::parse` reads back (ADR-c-boundary-v1 D14).
 fn pointed(item: ref Ty, slice: bool, mutable: bool) -> String {
     let mut out: String = "ref "
     if mutable {
@@ -645,6 +650,15 @@ pub fn spoken(ty: ref Ty, other: ref Ty?) -> String {
         }
         return out
     }
+    // **A walk with a deadline says so** (#1424): `timed` is no word of the
+    // type's text, so `par_iter()` and `par_iter(within: d)` printed alike.
+    let timed = match ty {
+        Ty::Seq { shape, .. } => shape.timed,
+        else => false,
+    }
+    if timed {
+        return f"`{written}` with a deadline (`within:`)"
+    }
     let against = other ?? return f"`{written}`"
     if !holds_a_view(against) || ty_shown(against) != written {
         return f"`{written}`"
@@ -752,7 +766,7 @@ pub fn parse(written: ref String) -> Ty {
     let viewed = a_view_of(trimmed)
     let is_a_view = viewed != null
     let marked: String = viewed ?? ""
-    // **The two boundary shapes are read before the `?`** (ADR-302 D14): on a
+    // **The two boundary shapes are read before the `?`** (ADR-c-boundary-v1 D14): on a
     // `ref mut T` or a `ref Array[T]` the trailing `?` is the pointee's.
     if is_a_view {
         let pointer = pointed_at(marked)
@@ -921,10 +935,10 @@ fn word_off(tail: ref String, word: ref String) -> String? {
     return null
 }
 
-/// **What the C boundary lends, read out of its text** (ADR-302 D5):
+/// **What the C boundary lends, read out of its text** (ADR-c-boundary-v1 D5):
 /// `ref mut T`, `ref Array[T]` and the two together. A plain `ref T` is not
 /// one: it is the view every other declaration writes. The `?` at the end is
-/// the pointee's (ADR-302 D14).
+/// the pointee's (ADR-c-boundary-v1 D14).
 fn pointed_at(viewed: ref String) -> Ty? {
     let mut rest: String = viewed.clone()
     let mut mutable = false
@@ -1084,7 +1098,7 @@ fn a_sequence(written: ref String, word: ref String, parallel: bool) -> Ty? {
         return null
     }
     let item = parse(between(c, 1, close))
-    let shape = Shape { ends: ends, sized: sized, replays: replays, timed: false }
+    let shape = Shape { ends: ends, sized: sized, replays: replays, timed: false, one_at_a_time: false }
     return Ty::Seq { item: item, is_sync: is_sync, pauses: pauses, can_throw: can_throw, parallel: parallel, shape: shape }
 }
 
@@ -2055,9 +2069,9 @@ impl Ty {
     ///
     /// * a stamp passes through (ADR-281 D23);
     /// * tuples part by part, a count only the same count (ADR-152 D4);
-    /// * what the C boundary lends fits the same shape (ADR-302 D5);
+    /// * what the C boundary lends fits the same shape (ADR-c-boundary-v1 D5);
     /// * an `Array[T, N]` fits an `Array[T]` and not back (ADR-184 D3);
-    /// * what a caller may hand to a boundary type (ADR-302 D5);
+    /// * what a caller may hand to a boundary type (ADR-c-boundary-v1 D5);
     /// * a lambda that does less fits a type that allows more (ADR-277 D7);
     /// * two sequences when their items do, read as a lambda's words are
     ///   (ADR-105 D1, ADR-172 D1, ADR-293 D16);
@@ -2266,7 +2280,7 @@ fn count_fits(n: i64, expected: ref Ty) -> bool {
 }
 
 // A `ref mut Array[u8]` is not a `ref Array[u8]`, which promises not to
-// write, and a run is not one element (ADR-302 D5).
+// write, and a run is not one element (ADR-c-boundary-v1 D5).
 fn pointed_fits(found: ref Ty, run: bool, writes: bool, expected: ref Ty) -> bool {
     return match expected {
         Ty::Pointed { item, slice, mutable } => found.fits(item) && run == slice && writes == mutable,
@@ -2290,7 +2304,7 @@ fn array_fits(given: ref Array[Ty], expected: ref Ty) -> bool {
 }
 
 // Whether a value of this type lends a **run** of `item` laid out in memory
-// (ADR-302 D5): a list, an array and - where the item is `u8` - text, which
+// (ADR-c-boundary-v1 D5): a list, an array and - where the item is `u8` - text, which
 // is a run of bytes. A slice is a run already (ADR-293 D23).
 fn lends_a_run_of(found: ref Ty, item: ref Ty) -> bool {
     return match found {

@@ -1,0 +1,50 @@
+// A grammar arm makes the empty collection of the field's own type with
+// `T()` (ADR-grammar-typed-read-v1 D14, #2626): one `Map` arm reads a
+// `HashMap` field and a `BTreeMap` field, one `List` arm a `Vec` field.
+use std::collections
+
+struct Doc {
+	a: collections::HashMap[String, String],
+	b: collections::BTreeMap[String, String],
+	c: Vec[String],
+}
+
+grammar M {
+	rule WS = "" -> { }
+	entry rule read[T] -> T = v:Value[T] eof -> { v }
+	rule Ch -> i64 = x:any if(x != '=' && x != ':' && x != ';' && x != ',' && x != '|') -> { 1 }
+	rule Key -> String = s:text(Ch+) ":" -> { s }
+	rule Value[T] -> T = match T::kind {
+		Text => s:text(Ch+) -> { s }
+		Map(K, V) => es:list(Entry[V], ";") -> {
+			let mut m: T = T()
+			for (k, v) in es {
+				m.insert(k.clone(), v.clone())
+			}
+			m
+		}
+		List(E) => es:list(Value[E], ",") -> {
+			let mut l: T = T()
+			for e in es {
+				l.push(e.clone())
+			}
+			l
+		}
+		Struct(_) => m:members[T](Key, Value[_], "|") -> { m }
+	}
+	rule Entry[V] -> (String, V) = k:text(Ch+) "=" v:Value[V] -> { (k, v) }
+}
+
+fn main() throws {
+	let d: Doc = M::read[Doc]("a:x=1;y=2|b:q=3;p=4;r=5|c:u,v") catch {
+		println(f"error: {error}")
+		return
+	}
+	println(f"{d.a.len()} {d.a.get("x")?.clone() ?? "-"}")
+	let mut keys = ""
+	for (k, v) in d.b {
+		keys += f"{k}={v} "
+	}
+	println(keys.trim())
+	println(f"{d.c.len()} {d.c[0]} {d.c[1]}")
+}

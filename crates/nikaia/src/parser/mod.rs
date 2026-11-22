@@ -1100,7 +1100,7 @@ grammar! {
             KW_TEST title:STRING body:block -> { Item::Test { name: title, body } }
 
         // Part III 15.1: `extern { fn getpid() -> i32 }`
-        // ([ADR-302](../../../../docs/specification/adr/adr-302.md) D1), and
+        // ([ADR-c-boundary-v1](../../../../docs/specification/adr/adr-c-boundary-v1.md) D1), and
         // `extern(library: "sqlite3") { … }` naming the system library the
         // functions come from (13.4,
         // [ADR-324](../../../../docs/specification/adr/adr-324.md) D2, D6).
@@ -1116,7 +1116,7 @@ grammar! {
         // say `NK1227` with the way out rather than a parse error at a quote.
         //
         // **A block holds two shapes since**
-        // ([ADR-302](../../../../docs/specification/adr/adr-302.md) D7): a
+        // ([ADR-c-boundary-v1](../../../../docs/specification/adr/adr-c-boundary-v1.md) D7): a
         // signature, and an `opaque type … released by …`. They may interleave
         // freely in the source and are taken apart here, so nothing downstream
         // has to walk a list of two kinds.
@@ -1143,7 +1143,7 @@ grammar! {
           | d:trait_method -> { ExternMember::Declared(d) }
 
         // **`opaque type T released by f`**
-        // ([ADR-302](../../../../docs/specification/adr/adr-302.md) D7): an
+        // ([ADR-c-boundary-v1](../../../../docs/specification/adr/adr-c-boundary-v1.md) D7): an
         // address the language never dereferences, whose release is a `cleanup`
         // the compiler runs at the end of its scope (Part I 6.4).
         //
@@ -1829,7 +1829,7 @@ grammar! {
         rule generic_bound_tail -> Symbol = "+" n:type_name -> { n }
 
         // **`&[u8]` and `&mut [u8]`, what the C boundary lends**
-        // ([ADR-302](../../../../docs/specification/adr/adr-302.md) D5): a run of
+        // ([ADR-c-boundary-v1](../../../../docs/specification/adr/adr-c-boundary-v1.md) D5): a run of
         // elements whose length the caller knows and the type does not.
         //
         // **Always behind a `&`**, which is the record's own shape: a bare `[T]`
@@ -1975,7 +1975,7 @@ grammar! {
             }
 
         // **The `&`, and whether a `mut` followed it**
-        // ([ADR-302](../../../../docs/specification/adr/adr-302.md) D5). `&mut T`
+        // ([ADR-c-boundary-v1](../../../../docs/specification/adr/adr-c-boundary-v1.md) D5). `&mut T`
         // is a view the callee may write through, and the C boundary is the one
         // place this language writes one: a parameter's mutability is otherwise
         // the word in front of its *name*
@@ -3648,7 +3648,7 @@ grammar! {
           // which a PEG would read as a struct literal called `select`.
           | s:select_expr -> { s }
           // Part III 15.1's other half, and it sits here for `overlap`'s reason
-          // ([ADR-302](../../../../docs/specification/adr/adr-302.md) D3): a
+          // ([ADR-c-boundary-v1](../../../../docs/specification/adr/adr-c-boundary-v1.md) D3): a
           // keyword and a block, which a PEG would otherwise read as a struct
           // literal called `unsafe`. `unsafe` is a reserved word now, so it
           // could not be one - but the ordering is the rule and not the
@@ -4061,8 +4061,10 @@ grammar! {
         // `Expr::TryCatch` around the form, which the checker and the
         // lowering read as the fallback. `async(handle) fn { … }` is `Expr::Spawn`
         // with `child` set (D11): the checker binds it to its group. `within: d`
-        // (D16) is the deadline each of the three forms carries. The deferred
-        // form, the options not built yet and a `catch` after `async { }` are refused here, by name - the
+        // (D16) is the deadline each of the three forms carries. `deferred`
+        // (D12) sets `deferred` beside either: alone it is a child handle,
+        // with `detached`, in either order, a free one. A misplaced
+        // `deferred` and a `catch` after `async { }` are refused here, by name - the
         // way `immutable_item` refuses (ADR-389 D4): a reader gets the
         // sentence, not a parse error at the word.
         //
@@ -4072,13 +4074,25 @@ grammar! {
         // A list of several options not built yet names the first. The task of
         // `async e` is a unary operand, so `async a() + async b()` is two tasks.
         rule async_expr -> Expr =
-            KW_ASYNC "(" h:async_task_head* OPT_DETACHED t:async_task_tail* ")" body:trailing_lambda -> {
+            KW_ASYNC "(" h:async_task_head* OPT_DETACHED "," m:async_task_head* OPT_DEFERRED t:async_task_tail* ")" body:trailing_lambda -> {
+                let [within, admission] = async_task_options(h.into_iter().chain(m).collect(), t);
+                Expr::Spawn { body: nikaia_std::block::Boxed::new(body), written_async: true, child: false, deferred: true, within: nikaia_std::block::Boxed::new(within), admission: nikaia_std::block::Boxed::new(admission), id: NodeId::parsed() }
+            }
+          | KW_ASYNC "(" h:async_task_head* OPT_DEFERRED "," m:async_task_head* OPT_DETACHED t:async_task_tail* ")" body:trailing_lambda -> {
+                let [within, admission] = async_task_options(h.into_iter().chain(m).collect(), t);
+                Expr::Spawn { body: nikaia_std::block::Boxed::new(body), written_async: true, child: false, deferred: true, within: nikaia_std::block::Boxed::new(within), admission: nikaia_std::block::Boxed::new(admission), id: NodeId::parsed() }
+            }
+          | KW_ASYNC "(" h:async_task_head* OPT_DEFERRED t:async_task_tail* ")" body:trailing_lambda -> {
                 let [within, admission] = async_task_options(h, t);
-                Expr::Spawn { body: nikaia_std::block::Boxed::new(body), written_async: true, child: false, within: nikaia_std::block::Boxed::new(within), admission: nikaia_std::block::Boxed::new(admission), id: NodeId::parsed() }
+                Expr::Spawn { body: nikaia_std::block::Boxed::new(body), written_async: true, child: true, deferred: true, within: nikaia_std::block::Boxed::new(within), admission: nikaia_std::block::Boxed::new(admission), id: NodeId::parsed() }
+            }
+          | KW_ASYNC "(" h:async_task_head* OPT_DETACHED t:async_task_tail* ")" body:trailing_lambda -> {
+                let [within, admission] = async_task_options(h, t);
+                Expr::Spawn { body: nikaia_std::block::Boxed::new(body), written_async: true, child: false, deferred: false, within: nikaia_std::block::Boxed::new(within), admission: nikaia_std::block::Boxed::new(admission), id: NodeId::parsed() }
             }
           | KW_ASYNC "(" h:async_task_head* OPT_HANDLE t:async_task_tail* ")" body:trailing_lambda -> {
                 let [within, admission] = async_task_options(h, t);
-                Expr::Spawn { body: nikaia_std::block::Boxed::new(body), written_async: true, child: true, within: nikaia_std::block::Boxed::new(within), admission: nikaia_std::block::Boxed::new(admission), id: NodeId::parsed() }
+                Expr::Spawn { body: nikaia_std::block::Boxed::new(body), written_async: true, child: true, deferred: false, within: nikaia_std::block::Boxed::new(within), admission: nikaia_std::block::Boxed::new(admission), id: NodeId::parsed() }
             }
           | KW_ASYNC "(" head:async_group_option tail:async_group_option_tail* ")" peek("{") b:block not(KW_CATCH) -> {
                 let mut options: [Option<Expr>; 3] = [None, None, None];
@@ -4173,8 +4187,8 @@ grammar! {
 
         rule async_unbuilt_option -> Expr =
             peek(OPT_DEFERRED) fail(
-                "`async(deferred) fn { … }` isn't built yet (#986). Start the task where it \
-                 should run, with `async(detached) fn { … }`."
+                "`deferred` takes a lambda and implies `handle`, beside `detached` and the task's \
+                 options. Write `async(deferred) fn { … }` or `async(detached, deferred) fn { … }`."
             ) -> { Expr::ListLit { items: Vec::new(), id: NodeId::parsed() } }
 
         rule OPT_HANDLE = "handle" not(ident)
@@ -4197,7 +4211,7 @@ grammar! {
         // rather than *"expected `fn`"*.
         rule spawn_expr -> Expr =
             KW_SPAWN body:trailing_lambda -> {
-                Expr::Spawn { body: nikaia_std::block::Boxed::new(body), written_async: false, child: false, within: nikaia_std::block::Boxed::new(None), admission: nikaia_std::block::Boxed::new(None), id: NodeId::parsed() }
+                Expr::Spawn { body: nikaia_std::block::Boxed::new(body), written_async: false, child: false, deferred: false, within: nikaia_std::block::Boxed::new(None), admission: nikaia_std::block::Boxed::new(None), id: NodeId::parsed() }
             }
           | KW_SPAWN "(" fail("`spawn` takes a lambda. Write `spawn fn { … }`.") -> {
                 Expr::Spawn {
@@ -4206,7 +4220,7 @@ grammar! {
                         mutable: Vec::new(),
                         body: Block { stmts: Vec::new() }, id: NodeId::parsed()
                     }),
-                    written_async: false, child: false, within: nikaia_std::block::Boxed::new(None), admission: nikaia_std::block::Boxed::new(None), id: NodeId::parsed()
+                    written_async: false, child: false, deferred: false, within: nikaia_std::block::Boxed::new(None), admission: nikaia_std::block::Boxed::new(None), id: NodeId::parsed()
                 }
             }
 
@@ -4514,7 +4528,7 @@ grammar! {
         rule KW_KEEP = "keep" not(ident)
 
         // The four words of `opaque type T released by f`
-        // ([ADR-302](../../../../docs/specification/adr/adr-302.md) D7). They
+        // ([ADR-c-boundary-v1](../../../../docs/specification/adr/adr-c-boundary-v1.md) D7). They
         // are **not** in `RESERVED`: each is a name everywhere else, and this
         // position is the only one that asks for it.
         rule KW_OPAQUE = "opaque" not(ident)
@@ -4626,7 +4640,7 @@ grammar! {
           | KW_TRAIT -> { 0 }
           | KW_WITH -> { 0 }
           // **Reserved with their constructs**
-          // ([ADR-302](../../../../docs/specification/adr/adr-302.md) D1), which
+          // ([ADR-c-boundary-v1](../../../../docs/specification/adr/adr-c-boundary-v1.md) D1), which
           // is what tells them from the four above: a word reserved so that a
           // reader can be told something is one `NK1117`'s help can tell them
           // about instead ([ADR-298](../../../../docs/specification/adr/adr-298.md)).
@@ -4792,7 +4806,7 @@ grammar! {
           | n:NAME -> { Some(n) }
 
         // Part III 15.1: `unsafe { … }`, the one place a call to an `extern`
-        // name may stand ([ADR-302](../../../../docs/specification/adr/adr-302.md)
+        // name may stand ([ADR-c-boundary-v1](../../../../docs/specification/adr/adr-c-boundary-v1.md)
         // D3). A block with a value and no other rule - what is inside is
         // checked exactly as anything else is, and what the word buys is that
         // the boundary is visible *at the call*.

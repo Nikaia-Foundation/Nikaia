@@ -1,0 +1,13 @@
+// An `access` block that ends in its view of a text would take the text out
+// of the lock: `NK1131`, not a rustc error (#1454).
+fn make() -> String {
+    let mut g = String()
+    g.push_str("hi")
+    return g
+}
+
+fn main() throws {
+    let n = SharedMut(make())
+    let m = n.access fn(c) { c }
+    println(f"{m}")
+}

@@ -445,6 +445,13 @@ impl CheckState {
         if self.structs.contains_key(name) || world.own.types.contains_key(name) {
             key = f"{name}::new"
         }
+        // **A `std` type's name is its constructor too** (#2113): `String`
+        // is `String()`, keyed `String::new`, where no function is called
+        // `String` itself.
+        let direct = ledger_function(world, name) != null
+        if !direct && (world.library.types.contains_key(name) || a_part_one_type(name)) {
+            key = f"{name}::new"
+        }
         let contract = ledger_function(world, key) ?? return null
         let signature = contract.signature ?? return null
         let mut params: Vec[Ty] = []

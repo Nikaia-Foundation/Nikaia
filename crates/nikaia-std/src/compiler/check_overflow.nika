@@ -197,6 +197,19 @@ fn check_wrap_for(found: ref Ty, want: ref Ty, literal: bool) -> FactWrap? sync 
     if !inner_into.is_empty() {
         return FactWrap::WidenSome(inner_into.clone())
     }
+    // **Text into an `fs::Path?` is the `Path` made from it, in its `Some`**
+    // (ADR-319 D2, Part I 2.3, #1986): `Some(PathBuf::from("data"))`, and
+    // a view of one where the slot lends it, `Option<&Path>`.
+    let inner_path = match want {
+        Ty::Nullable(inner) => text_as_a_path(found, inner),
+        else => -1,
+    }
+    if inner_path == 1 {
+        return FactWrap::PathViewSome
+    }
+    if inner_path == 0 {
+        return FactWrap::PathSome
+    }
     if !found.is_unknown() || literal {
         return FactWrap::Constructor
     }

@@ -1,0 +1,37 @@
+// #1253, ADR-raw-sinks-1 D2, D3, D4: the markup of `html::Raw` is a raw sink.
+// A part read from stdin and handed to it is `NK1308` (a warning under the
+// default `raw-sinks = "warn"`); after the guard `html::is_plain` it is
+// proved and passes, and so does a literal; `[allow] untrusted-markup = true`
+// admits it unproved.
+use std::env
+use std::fs
+use std::process
+
+// The running `nikaia` (`env::current_exe`, ADR-program-path-1 D3).
+fn toolchain() -> String throws {
+    return env::current_exe()?.display() ?? "target/fast/nikaia"
+}
+
+fn said(nikaia: String, label: String, manifest: String, body: String) throws {
+    let root = fs::scratch()
+    let tmp = f"{root.path().display()}"
+    fs::create_dir("src", root)
+    fs::write("nikaia.toml", root, f"[package]\nname = \"p\"\nversion = \"0.1.0\"\n{manifest}")
+    fs::write("src/main.nika", root, f"use std::html\nuse std::io\n\nfn main() throws {{\n    let name = io::read_line() ?? \"\"\n{body}}}\n")
+    let out = process::run(nikaia, ["check", "src/main.nika"]; dir: tmp.clone(), env: [("RUST_BACKTRACE", "0")])
+    println(f"-- {label}")
+    println(f"exit {out.code}")
+    for line in f"{out.stdout}{out.stderr}".lines() {
+        if line.contains("NK13") || line.contains(" --> ") || line.contains("= help") || line.contains("lets this build through") {
+            println(line.replace(tmp, "TMP").trim())
+        }
+    }
+}
+
+fn main() throws {
+    let nikaia = toolchain()
+    said(nikaia, "stdin in the markup", "", "    let page = html::Raw(f\"<p>{name}</p>\")\n")
+    said(nikaia, "a literal markup", "", "    let page = html::Raw(\"<p>hello</p>\")\n")
+    said(nikaia, "after the guard html::is_plain", "", "    if !html::is_plain(name) {\n        return\n    }\n    let page = html::Raw(f\"<p>{name}</p>\")\n")
+    said(nikaia, "[allow] untrusted-markup", "[allow]\nuntrusted-markup = true\n", "    let page = html::Raw(f\"<p>{name}</p>\")\n")
+}

@@ -1,12 +1,12 @@
 // `nikaia bind java` against the C library's own example (ADR-284 D34, #1337).
 //
-//     nikaia run scripts/java_binding.nika -- [--exe PATH]
+//     nikaia run scripts/java_binding.nika
 //
 // Copies `examples/c-library` into a slot of target/java-binding, emptied
 // first (scripts/slot.nika: a fixed place, so its build hits ADR-021 D14's
 // rustc store, #2015), writes its Java binding
-// there with `nikaia bind java` (the compiler at PATH, default
-// `target/release/nikaia`, else `target/fast/nikaia`), runs `use.c` against
+// there with `nikaia bind java` (the compiler `target/release/nikaia`, else
+// `target/fast/nikaia`: a literal path, ADR-raw-sinks-1 D11), runs `use.c` against
 // the library, compiles the binding and `java/Use.java` with
 // `javac --release 22 -Xlint:all -Werror`, runs `Use` and checks that it
 // prints what `use.c` prints. The binding is written against Java 22's
@@ -50,36 +50,33 @@ fn java_binding_major(said: String) -> i64 {
 }
 
 // Runs this script again in a slot of target/java-binding (scripts/slot.nika,
-// ADR-021 D14), with `--exe EXE --in <slot>`, and ends with its exit code.
+// ADR-021 D14), with `--in <slot>`, and ends with its exit code.
 fn java_binding_in_slot(exe: String) throws {
 	let runs = env::current_exe()?.display() ?? exe.clone()
 	let main = env::current_main()?.display() ?? "scripts/java_binding.nika"
 	let ran = process::run(
 		runs.clone(),
-		["run", "scripts/slot.nika", "--", "target/java-binding", runs, "run", main, "--", "--exe", exe, "--in", "{slot}"]; stdout: process::Stream::Inherited,
+		["run", "scripts/slot.nika", "--", "target/java-binding", runs, "run", main, "--", "--in", "{slot}"]; stdout: process::Stream::Inherited,
 		stderr: process::Stream::Inherited,
 	)
 	process::exit(ran.code)
 }
 
 fn main() throws {
-	let mut exe: String = "target/release/nikaia"
-	if !fs::exists(exe, fs::Root::Anywhere) {
-		exe = "target/fast/nikaia"
+	// The compiler is the checkout's own build, named by a literal path below
+	// the working directory, which every run below keeps.
+	let release = fs::exists("target/release/nikaia", fs::Root::Anywhere)
+	let exe = match release {
+		true => "target/release/nikaia",
+		false => "target/fast/nikaia",
 	}
 	let mut slot: String = ""
 	let mut named: String = ""
 	for arg in cli::args() {
-		if named == "--exe" {
-			exe = arg.clone()
-		} else if named == "--in" {
+		if named == "--in" {
 			slot = arg.clone()
 		}
 		named = arg
-	}
-	let here = process::run("pwd", []).stdout.trim().clone()
-	if !exe.starts_with("/") {
-		exe = f"{here}/{exe}"
 	}
 	if slot == "" {
 		java_binding_in_slot(exe)
@@ -88,7 +85,7 @@ fn main() throws {
 	let copy = f"{slot}/c-library"
 	process::run("cp", ["-r", "examples/c-library", copy.clone()])
 	process::run("rm", ["-rf", f"{copy}/target"])
-	let bound = process::run(exe, ["bind", "java"]; dir: copy.clone())
+	let bound = process::run(exe, ["bind", "java", "--project", copy.clone()])
 	if bound.code != 0 {
 		java_binding_fail("nikaia bind java", bound)
 	}
@@ -109,8 +106,9 @@ fn main() throws {
 	if cc.code != 0 {
 		java_binding_fail("cc use.c", cc)
 	}
+	// `./use` is started in `copy`, the child's directory.
 	let c_ran = process::run(
-		f"{copy}/use",
+		"./use",
 		[]; dir: copy.clone(),
 		env: [("LD_LIBRARY_PATH", made.clone())],
 	)

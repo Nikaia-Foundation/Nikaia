@@ -1,0 +1,33 @@
+exit 0
+Instructions per checker analysis per file, in each file's check walk (`check_walked_walk`), 2 files
+
+| File | Lines | handles (ADR-312) | outside data (ADR-396) | bounds (ADR-385) | proofs (ADR-269 D4, ADR-396 D5) | views (NK2302, NK2305, NK2303) | lints (NK1261, NK1350) | rest of the walk | the walk | walk per line |
+| :--- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| big.nika | 1 | 0 | 200 | 0 | 0 | 0 | 0 | 800 | 1,000 | 1,000 |
+| small.nika | 3 | 0 | 30 | 0 | 0 | 0 | 0 | 270 | 300 | 100 |
+
+Instructions per line, the files by size in quarters (each quarter's instructions over its lines)
+
+| Analysis | 1-1 lines | 3-3 lines |
+| :--- | ---: | ---: |
+| handles (ADR-312) | 0 | 0 |
+| outside data (ADR-396) | 200 | 10 |
+| bounds (ADR-385) | 0 | 0 |
+| proofs (ADR-269 D4, ADR-396 D5) | 0 | 0 |
+| views (NK2302, NK2305, NK2303) | 0 | 0 |
+| lints (NK1261, NK1350) | 0 | 0 |
+| rest of the walk | 800 | 90 |
+| the walk | 1,000 | 100 |
+
+A fixed cost per file and the instructions per added line (least squares; the slope over the smaller and the larger half of the files by lines)
+
+| Analysis | Fixed per file | Per line | Per line, smaller half | Per line, larger half |
+| :--- | ---: | ---: | ---: | ---: |
+| handles (ADR-312) | 0 | 0 | - | - |
+| outside data (ADR-396) | 285 | -85 | - | - |
+| bounds (ADR-385) | 0 | 0 | - | - |
+| proofs (ADR-269 D4, ADR-396 D5) | 0 | 0 | - | - |
+| views (NK2302, NK2305, NK2303) | 0 | 0 | - | - |
+| lints (NK1261, NK1350) | 0 | 0 | - | - |
+| rest of the walk | 1,065 | -265 | - | - |
+| the walk | 1,350 | -350 | - | - |

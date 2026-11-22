@@ -13,29 +13,22 @@ fn text_key(expr: ref Expr) -> i64 sync {
     return id_of(expr) as i64
 }
 
-/// The `char` code an ASCII byte has, and nothing above: a `'…'` is a byte only
-/// where it is one character of ASCII.
-fn ascii_scalar(n: i64) -> scalar? sync {
-    if n < 0 || n > 127 {
-        return null
-    }
-    return (n as u8) as scalar
-}
-
 /// Whether a `'…'` written as `written` can be a byte: one ASCII character, or
 /// a `'\xNN'` above `\x7F`, which is only one.
 fn literal_is_a_byte(written: ref String) -> bool sync {
     if a_high_byte(written) != null {
         return true
     }
-    let text = decoded(written) fn(n) { ascii_scalar(n) } ?? return false
+    let text = decoded(written) ?? return false
+    // One byte of text is one character of ASCII: an escape naming a scalar
+    // above `\x7F` decodes to several.
     return text.scalars.count() == 1 && text.len() == 1
 }
 
 /// A `'…'` that is a byte, as the language below writes it: `b'x'`, with `\`
 /// and `'` escaped and anything not printable as `\xNN`.
 fn check_byte_literal(written: ref String) -> String sync {
-    let text = decoded(written) fn(n) { ascii_scalar(n) } ?? ""
+    let text = decoded(written) ?? ""
     let mut byte: i64 = a_high_byte(written) ?? -1
     for b in text.bytes() {
         if byte < 0 {
@@ -780,6 +773,20 @@ fn check_texts_text_for(element: ref Ty, item: ref Expr) -> bool sync {
     }
     if a_plain_string(element) {
         return a_text_literal_expr(item)
+    }
+    // **A list of lists of text written out is too** (#2184): `[["b"],
+    // ["c"]]` kept as a `Vec[Vec[String]]` of its own builds each `String`,
+    // as `[[';'], ['\n']]` is a list of lists of bytes.
+    match element {
+        Ty::Named { name, args, view } => {
+            if !view && name == "Vec" && args.len() == 1 {
+                return match item {
+                    Expr::ListLit { items: nested, .. } => nested.len() > 0 && check_texts_all_text(args[0], nested),
+                    else => false,
+                }
+            }
+        },
+        else => {},
     }
     let each: Vec[Ty] = match element {
         Ty::Tuple(each) => each.clone(),

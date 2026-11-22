@@ -28,6 +28,9 @@ pub enum CompareStrength {
     Totally,
     /// ...and the values have an order: Rust's `Ord`.
     Orders,
+    /// ...or `<` reads an order of them: Rust's `PartialOrd`, which is `Ord`
+    /// with the floats let in (#2123).
+    Ranks,
     /// ...or equal values hash alike: Rust's `Hash + Eq` (ADR-010 D13).
     Hashes,
 }
@@ -65,6 +68,13 @@ impl CheckComparable {
     pub fn orders(ref self, ty: ref Ty) -> bool {
         let mut seen: collections::BTreeSet[String] = collections::BTreeSet()
         return self.asking(ty, CompareStrength::Orders, seen)
+    }
+
+    /// **Whether `<` works on the type** (#2123): what has an order, and the
+    /// floats, which have one except at `NaN`.
+    pub fn ranks(ref self, ty: ref Ty) -> bool {
+        let mut seen: collections::BTreeSet[String] = collections::BTreeSet()
+        return self.asking(ty, CompareStrength::Ranks, seen)
     }
 
     /// **Whether it hashes (`Hash`)** (ADR-010 D11-D13): an `Eq` type of the
@@ -204,11 +214,11 @@ impl CheckComparable {
     }
 
     fn named(ref self, name: ref String, args: ref Vec[Ty], how: CompareStrength, mut seen: collections::BTreeSet[String]) -> bool {
-        if (how == CompareStrength::Orders || how == CompareStrength::Hashes) && COMPARE_UNORDERED.contains(name) {
+        if (how == CompareStrength::Orders || how == CompareStrength::Ranks || how == CompareStrength::Hashes) && COMPARE_UNORDERED.contains(name) {
             return false
         }
         if name == "f32" || name == "f64" {
-            return how == CompareStrength::Compares
+            return how == CompareStrength::Compares || how == CompareStrength::Ranks
         }
         if COMPARE_PLAIN.contains(name) {
             return true
@@ -253,7 +263,7 @@ impl CheckComparable {
                 if self.implements("Eq", name) {
                     return false
                 }
-            } else if how == CompareStrength::Orders {
+            } else if how == CompareStrength::Orders || how == CompareStrength::Ranks {
                 return self.implements("Ord", name)
             } else if self.implements("Eq", name) {
                 return true
@@ -313,7 +323,7 @@ impl CheckComparable {
             if self.implements("Eq", name) {
                 return false
             }
-        } else if how == CompareStrength::Orders {
+        } else if how == CompareStrength::Orders || how == CompareStrength::Ranks {
             if self.implements("Ord", name) {
                 return true
             }
@@ -326,6 +336,7 @@ impl CheckComparable {
             let claimed = match how {
                 CompareStrength::Compares => contract.compares,
                 CompareStrength::Orders => contract.orders,
+                CompareStrength::Ranks => contract.orders,
                 CompareStrength::Totally => contract.equates,
                 CompareStrength::Hashes => contract.hashes,
             }
@@ -444,6 +455,24 @@ fn compare_refusal(asking: ref CheckComparable, left: ref Ty, right: ref Ty, spa
     }
     let note: String = "A `struct` or an `enum` can be compared when all of its parts can. Locks, mapped files, sockets and task handles can't be compared."
     return check_refusal("NK1188", span, f"You can't compare two `{found}` values with `==`.", [note], "Compare the parts that matter, or give the type a method that says what being equal means for it.")
+}
+
+/// **`NK1188`: `<`, `<=`, `>` or `>=` on a type with no order** (Part I,
+/// *`Eq` and `Ord`*, #2123): a declared `struct` or `enum` has one only through
+/// `impl Ord`, a library type only where its ledger says `orders`. Asked as
+/// `compare_refusal` is, of one side and only where its type is known.
+fn compare_order_refusal(asking: ref CheckComparable, op: ref String, left: ref Ty, right: ref Ty, span: ref Span) -> CheckFinding? {
+    let mut found: String = ""
+    if !asking.ranks(left) {
+        found = left.shown()
+    } else if !asking.ranks(right) {
+        found = right.shown()
+    }
+    if found == "" {
+        return null
+    }
+    let note: String = "A number, a `String`, a `bool`, a `scalar`, and a tuple, list or option of those have an order. A `struct` or an `enum` you declare has one only through `impl Ord`, and a type from a library only where its ledger says `orders = true`."
+    return check_refusal("NK1188", span, f"You can't order two `{found}` values with `{op}`.", [note], f"Compare the parts that matter, or write `impl Ord for {found} {{ … }}` where it is your type.")
 }
 
 /// What `compare_declared` found: the declared types that compare, and those

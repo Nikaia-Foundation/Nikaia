@@ -79,7 +79,7 @@ pub fn panics_of_graph(graph: &PanicsGraph, own: &Ledger) -> collections::BTreeM
                 }, || nikaia_std::index::or(match (*nikaia_std::index::get(&own.functions, callee)).as_ref().map(|__nikaia_it| &__nikaia_it.panics) {
                     Some(__nikaia_it) => Some(__nikaia_it.copy_owned()),
                     None => None,
-                }, || Panics::Unknown).into());
+                }, || Panics::Unknown));
                 after = after.or(&theirs);
             }
             if after != before {
