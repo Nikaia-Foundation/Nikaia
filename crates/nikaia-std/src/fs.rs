@@ -495,6 +495,11 @@ pub fn read_dir(path: impl AsRef<FilePath>, root: &Root) -> Result<DirEntries, c
 /// D3): the pages are held in an `Arc`, so a `Bytes` made from a mapping
 /// ([`Mapped::bytes`], `Bytes::from`) is the mapping at one more count, and
 /// the file stays mapped while any of them lives.
+///
+/// **A copy is the same mapping at one more count**, as a `Bytes`'s is: a
+/// struct that holds one (Part III's `State[fs::Mapped]`) is written with the
+/// `Debug, Clone` every struct is lowered with (#2218).
+#[derive(Clone)]
 pub struct Mapped {
     pages: std::sync::Arc<Pages>,
 }
@@ -571,6 +576,17 @@ impl From<Mapped> for crate::bytes::Bytes {
 }
 
 /// A mapping handed to a parameter that keeps a `Bytes`: at a count.
+/// The file it maps and its length, never its bytes: a mapping may be larger
+/// than memory, and it is read as the program reads it, not when it is shown.
+impl std::fmt::Debug for Mapped {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Mapped")
+            .field("path", &self.pages.asked)
+            .field("len", &self.pages.len())
+            .finish()
+    }
+}
+
 impl crate::bytes::KeptBytes for Mapped {
     fn kept_bytes(&self) -> std::borrow::Cow<'_, crate::bytes::Bytes> {
         std::borrow::Cow::Owned(self.bytes())
