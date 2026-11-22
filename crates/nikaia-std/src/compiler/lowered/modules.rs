@@ -148,10 +148,57 @@ pub fn lost_sync_all(contracts: &Ledger, theirs: &collections::BTreeMap<String, 
 pub fn lost_sync_against(all: &[SyncLost], committed: &Ledger) -> String {
     let mut out: String = String::from("");
     for lost in all.iter() {
-        let before = match *nikaia_std::index::get(&committed.functions, &lost.key) { Some(__nikaia_value) => __nikaia_value, None => continue };
-        if inferred_sync(&before.sync_claim) { out.push_str(&lost.said); }
+        match nikaia_std::text::find_first(&lost.key, &par_site_mark()) {
+            None => {
+                let before = match *nikaia_std::index::get(&committed.functions, &lost.key) { Some(__nikaia_value) => __nikaia_value, None => continue };
+                if inferred_sync(&before.sync_claim) { out.push_str(&lost.said); }
+            },
+            Some(at) => {
+                let found = at;
+                let function = lost.key.before(found.start);
+                let number = match text::parse_i64(lost.key.after(found.end)) { Some(__nikaia_value) => __nikaia_value, None => continue };
+                let before = match *nikaia_std::index::get(&committed.functions, function) { Some(__nikaia_value) => __nikaia_value, None => continue };
+                if number >= 1 && number <= before.par_iter.len() as i64 && *unsafe { nikaia_std::proven::read(&before.par_iter, (nikaia_std::proven::sub::<i64>(number, 1)) as usize) } == "pieces" { out.push_str(&lost.said); }
+            },
+        }
     }
     out
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn par_site_mark() -> &'static str { "#par_iter " }
+
+pub fn lost_pieces_all(sites: &[ParSite], pauses: &collections::BTreeMap<String, ModulesPause>, render: &mut impl FnMut(&CheckFinding) -> String) -> Vec<SyncLost> {
+    let mut out: Vec<SyncLost> = vec![];
+    out.reserve(sites.iter().size_hint().0); for site in sites.iter() {
+        let pause = match site.pausing.as_ref() { Some(__nikaia_value) => __nikaia_value, None => continue };
+        let message = format!("`par_iter` {} of `{}` ran in pieces on the cores, and now runs one task per element: a lambda of it can pause.", site.number, site.function);
+        let help = format!("If the walk should use the cores, move the call of `{}` out of the lambda; if it may pause, commit `nikaia.contracts`, and this is not said again.", pause.callee);
+        let mut notes: Vec<String> = vec![format!("Its call of `{}` can pause, so the lambda does.", pause.callee)];
+        match pauses.get(&pause.callee) {
+            None => { },
+            Some(why) => {
+                let way = why;
+                if way.chain.len() > 1 { notes.push(format!("{}, which pauses here.", pause_path(&way.chain))); }
+                match way.site {
+                    None => { },
+                    Some(ref at) => { notes.push(format!("{} can pause.", at.what)); },
+                }
+            },
+        }
+        let finding = CheckFinding { severity: CheckSeverity::Warning, span: Span { start: pause.span.start, end: pause.span.end }, code: String::from("NK2119"), message, notes, help: Some(help), labels: vec![], edit: None };
+        out.push(SyncLost { key: format!("{}{}{}", site.function, par_site_mark(), site.number), said: render(&finding) });
+    }
+    out
+}
+
+pub fn par_iter_column(ledger: &mut Ledger, sites: &[ParSite]) {
+    for site in sites.iter() {
+        let contract = match nikaia_std::index::get_mut(&mut ledger.functions, &site.function) { Some(__nikaia_value) => __nikaia_value, None => continue };
+        let runs = if site.pausing.is_none() { "pieces" } else { "tasks" };
+        contract.par_iter.push(nikaia_std::block::Text::from(runs.to_string()));
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]

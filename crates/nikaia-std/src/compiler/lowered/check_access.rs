@@ -4,7 +4,7 @@
 impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn a_task_takes_no_arguments(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, params: &[winnow_grammar::Symbol], span: &Span) {
+    pub(crate) fn a_task_takes_no_arguments(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, params: &[winnow_grammar::Symbol], span: &Span) {
         if params.is_empty() { return; }
         #[allow(unused_mut)] let mut named: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         named.reserve(params.iter().size_hint().0); for param in params.iter() {
@@ -60,7 +60,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn a_struct_nothing_declares(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, name: &str, span: &Span) {
+    pub(crate) fn a_struct_nothing_declares(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, name: &str, span: &Span) {
         let is_a_function = world.own.functions.contains_key(name) || world.library.functions.contains_key(name) || world.own.functions.contains_key(&format!("{}::new", name));
         let mut note: String = String::from("Braces after a name build a struct, and no struct of that name is declared here or in a package you use.");
         let mut help: String = String::from("Declare the `struct`, or fix the name.");
@@ -72,14 +72,14 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn a_literal_written_like_a_call(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, name: &str, config: &[ConfigArg], span: &Span) {
+    pub(crate) fn a_literal_written_like_a_call(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, name: &str, config: &[ConfigArg], span: &Span) {
         let mut fields: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         fields.reserve(config.iter().size_hint().0); for setting in config.iter() { fields.push(nikaia_std::block::Text::from(world.words.resolve(setting.name).to_string())); }
         self.findings.push(check_refusal("NK1146", span, format!("Build a `{}` with braces, not parentheses.", name), vec![String::from("Parentheses after a type call its constructor; a struct literal with field names uses braces.")], Some(format!("Write `{} {{ {}: … }}`.", name, nikaia_std::block::Text::from(fields.join(": …, "))))));
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn an_or_pattern_that_binds_unevenly(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, pattern: &MatchPattern, span: &Span) {
+    pub(crate) fn an_or_pattern_that_binds_unevenly(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, pattern: &MatchPattern, span: &Span) {
         match pattern {
             MatchPattern::Or(alternatives) => {
                 let mut first: collections::BTreeSet<String> = collections::BTreeSet::new();
@@ -113,7 +113,7 @@ impl CheckState {
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn names_the_argument(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, expr: &Expr, at: i64) -> (String, Option<String>) {
+pub(crate) fn names_the_argument(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, expr: &Expr, at: i64) -> (String, Option<String>) {
     let prose: String = match expr {
         Expr::Variable(name, _) => { let name = *name; format!("`{}`", world.words.resolve(name)) },
         Expr::Field { name, .. } => { let name = *name; format!("the `{}` this passes", world.words.resolve(name)) },
@@ -124,7 +124,7 @@ pub(crate) fn names_the_argument(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>,
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn dotted_path(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, expr: &Expr) -> Option<String> {
+pub(crate) fn dotted_path(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, expr: &Expr) -> Option<String> {
     match expr {
         Expr::Variable(name, _) => { let name = *name; Some(nikaia_std::block::Text::from(world.words.resolve(name).to_string())) },
         Expr::Field { base, name, .. } => { let base = nikaia_std::boxed::open(base); let name = *name; dotted_field(world, base, name) },
@@ -134,14 +134,14 @@ pub(crate) fn dotted_path(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, expr: 
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn dotted_field(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, base: &Expr, name: winnow_grammar::Symbol) -> Option<String> {
+pub(crate) fn dotted_field(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, base: &Expr, name: winnow_grammar::Symbol) -> Option<String> {
     let held = match dotted_path(world, base) { Some(__nikaia_value) => __nikaia_value, None => return None };
     Some(format!("{}.{}", held, world.words.resolve(name)))
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn variants_named(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, pattern: &MatchPattern, out: &mut collections::BTreeSet<String>) {
+pub(crate) fn variants_named(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, pattern: &MatchPattern, out: &mut collections::BTreeSet<String>) {
     match pattern {
         MatchPattern::Path(path) => { a_last_segment(world, path, out); },
         MatchPattern::Tuple { path, .. } => { a_last_segment(world, path, out); },
@@ -153,7 +153,7 @@ pub(crate) fn variants_named(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, pat
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn a_last_segment(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, path: &[winnow_grammar::Symbol], out: &mut collections::BTreeSet<String>) { if !path.is_empty() { out.insert(nikaia_std::block::Text::from(world.words.resolve(*unsafe { nikaia_std::proven::read(&path, (nikaia_std::proven::sub::<i64>(path.len() as i64, 1)) as usize) }).to_string())); } }
+pub(crate) fn a_last_segment(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, path: &[winnow_grammar::Symbol], out: &mut collections::BTreeSet<String>) { if !path.is_empty() { out.insert(nikaia_std::block::Text::from(world.words.resolve(*unsafe { nikaia_std::proven::read(&path, (nikaia_std::proven::sub::<i64>(path.len() as i64, 1)) as usize) }).to_string())); } }
 
 pub fn check_access_inside_std(findings: &[CheckFinding], reached: &collections::BTreeSet<i64>) -> Vec<CheckFinding> {
     let mut kept: Vec<CheckFinding> = vec![];

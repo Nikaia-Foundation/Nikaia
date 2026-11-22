@@ -3230,7 +3230,10 @@ pub mod check_core_ops {
 }
 pub mod check_core_pilot {}
 pub mod check_core_places {}
-pub mod check_core_stmt {}
+pub mod check_core_stmt {
+    #[allow(unused_imports)]
+    pub use super::{check_core_names_read};
+}
 pub mod check_core_wide {
     #[allow(unused_imports)]
     pub use super::{wide_unsigned_of};
@@ -3268,7 +3271,10 @@ pub mod check_flow {
     #[allow(unused_imports)]
     pub use super::{CheckConstant, CheckOpenNumber, CheckOpenChar, CheckUnsignedSlot, CheckUnrolling, CheckLambdaReturn, CheckFlow, CheckPlaceClone, CheckClone};
 }
-pub mod check_function {}
+pub mod check_function {
+    #[allow(unused_imports)]
+    pub use super::{check_function_field_walks};
+}
 pub mod check_glue {
     #[allow(unused_imports)]
     pub use super::{check_char_literal, check_accepted_dump_name};
@@ -3282,7 +3288,7 @@ pub mod check_host {
 pub mod check_imports {}
 pub mod check_items {
     #[allow(unused_imports)]
-    pub use super::{fields_by_base, ItemGeneric};
+    pub use super::{fields_by_base, ItemGeneric, item_contain_themselves};
 }
 pub mod check_keep_marks {
     #[allow(unused_imports)]
@@ -3321,7 +3327,10 @@ pub mod check_pauses {
     pub use super::{CheckPause};
 }
 pub mod check_places {}
-pub mod check_program {}
+pub mod check_program {
+    #[allow(unused_imports)]
+    pub use super::{check_program_package};
+}
 pub mod check_reads {}
 pub mod check_references {}
 pub mod check_refusals {}
@@ -3349,7 +3358,7 @@ pub mod check_simd {
 }
 pub mod check_state {
     #[allow(unused_imports)]
-    pub use super::{CheckKind, CheckImmutable, CheckTextPosition, CheckLocal, CheckPromises, CheckHanded, CheckGuarded, CheckTaken, CheckRead, CheckPartOut, CheckGive, CheckPendingCleanup, CheckWayOut, CheckPendingCoalesce, CheckPendingConcat, CheckPendingHandle, CheckRepeats, CheckHeldTaking, CheckSeverity, CheckLabel, CheckFinding, CheckEdit, CheckWorld, CheckCallsInATask, CheckMethodCalls, CheckCodeArg, CheckStoredCode, CheckState};
+    pub use super::{CheckKind, CheckImmutable, CheckTextPosition, CheckLocal, CheckPromises, CheckHanded, CheckGuarded, CheckTaken, CheckRead, CheckPartOut, CheckGive, CheckPendingCleanup, CheckWayOut, CheckPendingCoalesce, CheckPendingConcat, CheckPendingHandle, CheckRepeats, CheckHeldTaking, CheckSeverity, CheckLabel, CheckFinding, CheckEdit, CheckWorld, CheckPackage, CheckNamesRead, CheckCallsInATask, CheckMethodCalls, CheckCodeArg, CheckStoredCode, CheckState};
 }
 pub mod check_takes {
     #[allow(unused_imports)]
@@ -3659,7 +3668,7 @@ pub mod migrate_views3 {
 }
 pub mod modules {
     #[allow(unused_imports)]
-    pub use super::{declared_at, a_use_refused, could_promise, lost_sync, SyncLost, lost_sync_all, lost_sync_against, ModulesPause, declared_once, groups, contracts_as_promised, dependency_ledgers, shown_paths, package_names, is_single_file, test_function, test_dispatcher, modules_test_count, modules_cli_word, modules_dispatcher_as_main, modules_tests_as_functions, modules_test_wrappers, ModulesReach, modules_reach_of, modules_only_tests_package, modules_mark_test_only, modules_names_in, ModulesHost, ModulesRefusal, ModulesUnit, ModulesStanding, modules_qualify, modules_collect_with, modules_collect_program_test, modules_collect_one, modules_project_root, ModulesLedgerHost, modules_sources_of, modules_believed, ModulesProgramHost, ModulesProgramParts, modules_program_of, ModulesEmitHost, modules_emit_reading};
+    pub use super::{declared_at, a_use_refused, could_promise, lost_sync, SyncLost, lost_sync_all, lost_sync_against, lost_pieces_all, par_iter_column, ModulesPause, declared_once, groups, contracts_as_promised, dependency_ledgers, shown_paths, package_names, is_single_file, test_function, test_dispatcher, modules_test_count, modules_cli_word, modules_dispatcher_as_main, modules_tests_as_functions, modules_test_wrappers, ModulesReach, modules_reach_of, modules_only_tests_package, modules_mark_test_only, modules_names_in, ModulesHost, ModulesRefusal, ModulesUnit, ModulesStanding, modules_qualify, modules_collect_with, modules_collect_program_test, modules_collect_one, modules_project_root, ModulesLedgerHost, modules_sources_of, modules_believed, ModulesProgramHost, ModulesProgramParts, modules_program_of, ModulesEmitHost, modules_emit_reading};
 }
 pub mod names {
     #[allow(unused_imports)]
@@ -3671,7 +3680,7 @@ pub mod node_numbers {
 }
 pub mod order {
     #[allow(unused_imports)]
-    pub use super::{Operation, Accounted, Verdict, verdict, group_verdict, group_of, accounted, OneCall, overlap_report, task_report, par_report};
+    pub use super::{Operation, Accounted, Verdict, verdict, group_verdict, group_of, accounted, OneCall, overlap_report, task_report, par_report, ParSite, ParPause, par_sites, par_sites_checked};
 }
 pub mod panics {
     #[allow(unused_imports)]
@@ -3906,7 +3915,7 @@ pub mod view_changes {
 }
 pub mod views {
     #[allow(unused_imports)]
-    pub use super::{Stored, Destination, Asked, ResultPackage, result_package, views_stored, views_checked, FieldsHeld, carrying, ResultSource, result_sources, result_sources_in, result_sources_inferred, PlacesStored, places_stored, places_stored_in};
+    pub use super::{Stored, Destination, Asked, ResultPackage, result_package, views_stored, views_stored_in, views_checked, views_checked_in, FieldsHeld, carrying, ResultSource, result_sources, result_sources_in, result_sources_inferred, result_sources_inferred_in, PlacesStored, places_stored, places_stored_in};
 }
 pub mod written {
     #[allow(unused_imports)]
@@ -3979,4 +3988,4 @@ pub fn nikaia_run_tests(filters: &[std::string::String], list: bool, more: std::
 /// **The digest of this lowered set** (#1610): every file `lower-std` wrote
 /// beside this index, and the index above this line. Compiled into the same
 /// crate as the code it names, it is the compiler's identity for its caches.
-pub const LOWERED_DIGEST: &str = "d4036ad4f5d89ee8976ba40ac0571e7fc2afc3c13e2203e206222e7040d0fd55";
+pub const LOWERED_DIGEST: &str = "91c116889a002d2fc121807e8b59e50df297ed96512e98196ae8f517916da587";

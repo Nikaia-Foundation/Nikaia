@@ -71,13 +71,13 @@ pub enum CheckProved {
     No,
 }
 
-pub(crate) fn check_narrow_tested(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, side: &Expr, other: &Expr) -> Option<String> {
+pub(crate) fn check_narrow_tested(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, side: &Expr, other: &Expr) -> Option<String> {
     let null_other = matches!(other, Expr::LitNull(_));
     if !null_other { return None; }
     dotted_path(world, side)
 }
 
-pub fn check_narrow_proved_names(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, cond: &Expr, holds: bool) -> Vec<String> {
+pub fn check_narrow_proved_names(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, cond: &Expr, holds: bool) -> Vec<String> {
     let mut names: Vec<String> = vec![];
     match cond {
         Expr::Binary { op, lhs, rhs, .. } => {
@@ -152,7 +152,7 @@ pub fn check_narrow_proofs_for(state: &mut CheckState, names: &[String], frame: 
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn check_narrow_proved_here(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, cond: &Expr, holds: bool) -> Vec<CheckLocal> {
+pub fn check_narrow_proved_here(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, cond: &Expr, holds: bool) -> Vec<CheckLocal> {
     let names = check_narrow_proved_names(world, cond, holds);
     let frame = state.scope.len() as i64;
     check_narrow_proofs_for(state, &names, frame)
@@ -160,7 +160,7 @@ pub fn check_narrow_proved_here(state: &mut CheckState, world: &CheckWorld<'_, '
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn check_narrow_proved_from_here(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, cond: &Expr, holds: bool) {
+pub fn check_narrow_proved_from_here(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, cond: &Expr, holds: bool) {
     let names = check_narrow_proved_names(world, cond, holds);
     if state.scope.is_empty() { return; }
     let frame = unsafe { nikaia_std::proven::sub::<i64>(state.scope.len() as i64, 1) };
@@ -312,7 +312,7 @@ pub(crate) fn check_narrow_as_proved(state: &mut CheckState, node: i64, ty: &Ty,
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn check_narrow_path_read(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, expr: &Expr, ty: &Ty, span: &Span) -> Ty {
+pub fn check_narrow_path_read(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, expr: &Expr, ty: &Ty, span: &Span) -> Ty {
     let inner: Ty = match ty {
         Ty::Nullable(inner) => { let inner = nikaia_std::boxed::open(inner); inner.clone() },
         _ => return ty.clone(),
@@ -353,7 +353,7 @@ pub(crate) fn check_narrow_not_a_path(expr: &Expr) -> Option<String> {
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn check_narrow_handed(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, expr: &Expr, at: i64) {
+pub fn check_narrow_handed(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, expr: &Expr, at: i64) {
     let path: String = match dotted_path(world, check_peeled(expr)) { Some(__nikaia_value) => __nikaia_value, None => return };
     state.narrowing.handed_at.push((path, at));
 }

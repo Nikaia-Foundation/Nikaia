@@ -149,8 +149,10 @@ pub(crate) enum Root {
     Elsewhere,
 }
 
-pub fn views_stored(asked: &Asked<'_, '_, '_>, items: &[Spanned<Item>], own_buffer: &mut impl FnMut(&Expr) -> bool) -> Vec<Stored> {
-    let mut unit = plain_unit(&result_package(asked), borrowing_types(asked.names, items), view_fields(asked.names, items));
+pub fn views_stored(asked: &Asked<'_, '_, '_>, items: &[Spanned<Item>], own_buffer: &mut impl FnMut(&Expr) -> bool) -> Vec<Stored> { views_stored_in(asked, &result_package(asked), items, &mut *own_buffer) }
+
+pub fn views_stored_in(asked: &Asked<'_, '_, '_>, package: &ResultPackage, items: &[Spanned<Item>], own_buffer: &mut impl FnMut(&Expr) -> bool) -> Vec<Stored> {
+    let mut unit = plain_unit(package, borrowing_types(asked.names, items), view_fields(asked.names, items));
     method_table(asked, items, &mut unit);
     let mut round: Vec<Stored> = vec![];
     let mut growing = true;
@@ -184,10 +186,12 @@ pub fn views_stored(asked: &Asked<'_, '_, '_>, items: &[Spanned<Item>], own_buff
     in_source_order(&round)
 }
 
-pub fn views_checked(asked: &Asked<'_, '_, '_>, items: &[Spanned<Item>], own_buffer: &mut impl FnMut(&Expr) -> bool) -> Vec<Finding> {
+pub fn views_checked(asked: &Asked<'_, '_, '_>, items: &[Spanned<Item>], own_buffer: &mut impl FnMut(&Expr) -> bool) -> Vec<Finding> { views_checked_in(asked, &result_package(asked), items, &mut *own_buffer) }
+
+pub fn views_checked_in(asked: &Asked<'_, '_, '_>, package: &ResultPackage, items: &[Spanned<Item>], own_buffer: &mut impl FnMut(&Expr) -> bool) -> Vec<Finding> {
     let mut out: Vec<Finding> = vec![];
-    for stored in views_stored(asked, items, &mut *own_buffer) { if !stored.carried { out.push(finding(&stored)); } }
-    rsrc_findings(asked, items, &mut *own_buffer, &mut out);
+    for stored in views_stored_in(asked, package, items, &mut *own_buffer) { if !stored.carried { out.push(finding(&stored)); } }
+    rsrc_findings(asked, package, items, &mut *own_buffer, &mut out);
     out
 }
 
@@ -2637,7 +2641,7 @@ pub fn result_sources_in(asked: &Asked<'_, '_, '_>, package: &ResultPackage, ite
 
 pub fn result_sources_inferred(asked: &Asked<'_, '_, '_>, items: &[Spanned<Item>], own_buffer: &mut impl FnMut(&Expr) -> bool) -> Vec<ResultSource> { result_sources_inferred_in(asked, &result_package(asked), items, &mut *own_buffer) }
 
-pub(crate) fn result_sources_inferred_in(asked: &Asked<'_, '_, '_>, package: &ResultPackage, items: &[Spanned<Item>], own_buffer: &mut impl FnMut(&Expr) -> bool) -> Vec<ResultSource> {
+pub fn result_sources_inferred_in(asked: &Asked<'_, '_, '_>, package: &ResultPackage, items: &[Spanned<Item>], own_buffer: &mut impl FnMut(&Expr) -> bool) -> Vec<ResultSource> {
     let unit = plain_unit(package, package_borrowing_types(asked, items), view_fields(asked.names, items));
     let mut known: collections::BTreeMap<String, ResultSrcKnown> = collections::BTreeMap::new();
     let mut ignored: Vec<Finding> = vec![];
@@ -2771,9 +2775,8 @@ pub(crate) fn rsrc_returns_text(params: &[String], reach: &collections::BTreeSet
     nikaia_std::block::Text::from(parts.join(", "))
 }
 
-pub(crate) fn rsrc_findings(asked: &Asked<'_, '_, '_>, items: &[Spanned<Item>], own_buffer: &mut impl FnMut(&Expr) -> bool, out: &mut Vec<Finding>) {
-    let package = result_package(asked);
-    let unit = plain_unit(&package, package_borrowing_types(asked, items), view_fields(asked.names, items));
+pub(crate) fn rsrc_findings(asked: &Asked<'_, '_, '_>, package: &ResultPackage, items: &[Spanned<Item>], own_buffer: &mut impl FnMut(&Expr) -> bool, out: &mut Vec<Finding>) {
+    let unit = plain_unit(package, package_borrowing_types(asked, items), view_fields(asked.names, items));
     let mut known: collections::BTreeMap<String, ResultSrcKnown> = collections::BTreeMap::new();
     rsrc_solve(&unit, asked, items, &mut *own_buffer, &mut known, out);
 }

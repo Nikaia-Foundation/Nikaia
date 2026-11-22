@@ -84,7 +84,7 @@ fn check_program_program[H: CheckHost](mut state: CheckState, world: ref CheckWo
     // (ADR-287): a `comptime` at item level is in scope for the whole file, so
     // the name has to be there before the first `fn` is entered.
     check_defaults_item_constants(state, world, host)
-    state.types_that_contain_themselves(world.here, world.beside)
+    state.types_that_contain_themselves(world)
     // **Attributes** (ADR-331), before the bodies: they are about the
     // declarations.
     check_attributes_all(state, world, host)
@@ -435,4 +435,18 @@ fn check_program_declares(world: ref CheckWorld, name: ref String) -> bool {
         }
     }
     return false
+}
+
+/// **The facts each file check of a package asks the same, worked out once**
+/// (#2685): `files` are the package's every file, and each check is handed
+/// the result (`CheckWorld::package`) instead of working it out again over
+/// the files beside it.
+pub fn check_program_package(files: ref Vec[ParsedView]) -> CheckPackage {
+    let mut walks_fields: collections::BTreeMap[String, String] = collections::BTreeMap()
+    for file in files {
+        check_function_field_walks(file, walks_fields)
+    }
+    let mut boxed_members: collections::BTreeMap[String, collections::BTreeSet[String]] = collections::BTreeMap()
+    item_contain_themselves(files, boxed_members)
+    return CheckPackage { names_read: check_core_names_read(files, true), walks_fields: walks_fields, boxed_members: boxed_members }
 }

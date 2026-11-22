@@ -152,7 +152,7 @@ pub(crate) fn check_simd_literal(value: &Expr) -> i64 {
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn check_simd_constant_indices(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, of: &Expr) -> Option<Vec<i64>> {
+pub(crate) fn check_simd_constant_indices(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, of: &Expr) -> Option<Vec<i64>> {
     let (func, args) = match of {
         Expr::Call { func, args, .. } => { let func = nikaia_std::boxed::open(func); (func, args) },
         _ => return None,
@@ -183,7 +183,7 @@ pub(crate) fn check_simd_constant_indices(world: &CheckWorld<'_, '_, '_, '_, '_,
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn check_simd_a_call(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, value: &Expr) -> bool {
+pub(crate) fn check_simd_a_call(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, value: &Expr) -> bool {
     let func = match value {
         Expr::Call { func, .. } => { let func = nikaia_std::boxed::open(func); func },
         _ => return false,
@@ -196,7 +196,7 @@ pub(crate) fn check_simd_a_call(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, 
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn check_simd_wanted(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, value: &Expr, want: Option<&Ty>) -> Option<Ty> {
+pub fn check_simd_wanted(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, value: &Expr, want: Option<&Ty>) -> Option<Ty> {
     let ty: Ty = match match want {
         Some(__nikaia_it) => Some(__nikaia_it.copy_owned()),
         None => None,
@@ -301,7 +301,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn a_shuffle_out_of_lanes(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, on: &Ty, method: &str, args: &[Expr], span: &Span) {
+    pub(crate) fn a_shuffle_out_of_lanes(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, on: &Ty, method: &str, args: &[Expr], span: &Span) {
         if method != "shuffle" || args.len() != 1 || check_simd_kind(on) != "Fixed" { return; }
         let count = check_simd_count_of(on);
         let indices = check_simd_constant_indices(world, unsafe { nikaia_std::proven::read(&args, (0) as usize) });

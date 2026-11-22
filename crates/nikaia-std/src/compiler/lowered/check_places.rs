@@ -82,7 +82,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn an_owned_place(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, value: &Expr, on: &Ty) -> bool {
+    pub(crate) fn an_owned_place(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, value: &Expr, on: &Ty) -> bool {
         let a_name = matches!(on, Ty::Named { .. });
         if on.is_a_view() || !a_name { return false; }
         let mut root = value;
@@ -133,7 +133,7 @@ impl CheckState {
     pub(crate) fn decided_by_this_argument(&self, signature: &Signature, wanted: &[(String, Ty)], at: i64) -> bool { if !((0i128) <= (at.clone() as i128)) { nikaia_std::abort::assertion_failed("precondition of `CheckState::decided_by_this_argument`: `0 <= at`", None, &[("at", (&&nikaia_std::abort::Operand(&(at.clone() as i128))).shown()), ]) } self.decided_by_this_argument__unchecked(signature, wanted, at) }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn kept_arguments_are_its_own(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, args: &[Expr], params: &[Ty]) {
+    pub(crate) fn kept_arguments_are_its_own(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, args: &[Expr], params: &[Ty]) {
         let mut at: i64 = 0;
         while at < args.len() as i64 && at < params.len() as i64 {
             let built = self.text_literal(world, unsafe { nikaia_std::proven::read(&params, (at) as usize) }, unsafe { nikaia_std::proven::read(&args, (at) as usize) }, true);
@@ -142,7 +142,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn a_match_over_several_error_types(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, on: &Ty, value: &Expr, arms: &[MatchArm], span: &Span) {
+    pub(crate) fn a_match_over_several_error_types(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, on: &Ty, value: &Expr, arms: &[MatchArm], span: &Span) {
         if !self.flow.caught_several || !several_errors_of(on).is_empty() { return; }
         let is_error = match value {
             Expr::Variable(name, _) => { let name = *name; world.words.resolve(name) == "error" },

@@ -11,10 +11,10 @@ pub enum CheckDepth {
 impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn a_pattern_inside_a_box(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, pattern: &MatchPattern, span: &Span) { self.a_pattern_inside_a_box_at(world, pattern, span, &CheckDepth::Arm); }
+    pub(crate) fn a_pattern_inside_a_box(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, pattern: &MatchPattern, span: &Span) { self.a_pattern_inside_a_box_at(world, pattern, span, &CheckDepth::Arm); }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn a_pattern_inside_a_box_at(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, pattern: &MatchPattern, span: &Span, at: &CheckDepth) {
+    pub(crate) fn a_pattern_inside_a_box_at(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, pattern: &MatchPattern, span: &Span, at: &CheckDepth) {
         match pattern {
             MatchPattern::Tuple { path, parts } => {
                 let mut written: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
@@ -48,7 +48,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn boxed_names(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, pattern: &MatchPattern) -> Vec<String> {
+    pub(crate) fn boxed_names(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, pattern: &MatchPattern) -> Vec<String> {
         let mut out: Vec<String> = vec![];
         match pattern {
             MatchPattern::Tuple { path, parts } => {
@@ -67,7 +67,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn typed_inside_boxes(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, pattern: &MatchPattern, out: &mut collections::BTreeMap<String, Ty>) {
+    pub(crate) fn typed_inside_boxes(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, pattern: &MatchPattern, out: &mut collections::BTreeMap<String, Ty>) {
         match pattern {
             MatchPattern::Tuple { path, parts } => {
                 for at in 0..parts.len() as i64 {
@@ -93,7 +93,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn names_inside_boxes(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, pattern: &MatchPattern, out: &mut Vec<String>) {
+    pub(crate) fn names_inside_boxes(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, pattern: &MatchPattern, out: &mut Vec<String>) {
         match pattern {
             MatchPattern::Tuple { path, parts } => {
                 for at in 0..parts.len() as i64 {
@@ -107,7 +107,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn boxed_part(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, path: &[winnow_grammar::Symbol], at: i64) -> bool {
+    pub(crate) fn boxed_part(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, path: &[winnow_grammar::Symbol], at: i64) -> bool {
         if path.len() < 2 { return false; }
         let owner = nikaia_std::block::Text::from(world.words.resolve(*unsafe { nikaia_std::proven::read(&path, (nikaia_std::proven::sub::<i64>(path.len() as i64, 2)) as usize) }).to_string());
         let variant = nikaia_std::block::Text::from(world.words.resolve(*unsafe { nikaia_std::proven::read(&path, (nikaia_std::proven::sub::<i64>(path.len() as i64, 1)) as usize) }).to_string());
@@ -120,7 +120,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn looks_inside_a_box(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, pattern: &MatchPattern) -> bool {
+    pub(crate) fn looks_inside_a_box(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, pattern: &MatchPattern) -> bool {
         match pattern {
             MatchPattern::Tuple { path, parts } => {
                 for at in 0..parts.len() as i64 {
@@ -136,7 +136,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn a_match_that_misses_a_case(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, on: &Ty, arms: &[MatchArm], over_error: bool, span: &Span) {
+    pub(crate) fn a_match_that_misses_a_case(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, on: &Ty, arms: &[MatchArm], over_error: bool, span: &Span) {
         match on {
             Ty::Nullable(inner) => {
                 let inner = nikaia_std::boxed::open(inner);
@@ -157,7 +157,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn a_match_that_misses_a_case_of(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, on: &Ty, arms: &[MatchArm], over_error: bool, span: &Span) {
+    pub(crate) fn a_match_that_misses_a_case_of(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, on: &Ty, arms: &[MatchArm], over_error: bool, span: &Span) {
         for arm in arms.iter() {
             let a_type = over_error && self.a_type_named_whole(world, &arm.pattern).is_some();
             if arm.guard.is_none() && catches_everything(&arm.pattern) && !a_type { return; }
@@ -221,7 +221,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn a_type_named_whole(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, pattern: &MatchPattern) -> Option<String> {
+    pub(crate) fn a_type_named_whole(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, pattern: &MatchPattern) -> Option<String> {
         let mut parts: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         match pattern {
             MatchPattern::Path(path) => {
@@ -239,7 +239,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn a_closed_set_that_misses_a_case(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, members: &[Ty], arms: &[MatchArm], span: &Span) {
+    pub(crate) fn a_closed_set_that_misses_a_case(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, members: &[Ty], arms: &[MatchArm], span: &Span) {
         let mut named: collections::BTreeSet<String> = collections::BTreeSet::new();
         for arm in arms.iter() { if arm.guard.is_none() { check_boxes_qualified(world, &arm.pattern, &mut named); } }
         let mut missing: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
@@ -268,7 +268,7 @@ impl CheckState {
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn check_boxes_qualified(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, pattern: &MatchPattern, out: &mut collections::BTreeSet<String>) {
+pub(crate) fn check_boxes_qualified(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, pattern: &MatchPattern, out: &mut collections::BTreeSet<String>) {
     match pattern {
         MatchPattern::Path(path) => { check_boxes_path(world, path, out); },
         MatchPattern::Tuple { path, .. } => { check_boxes_path(world, path, out); },
@@ -280,7 +280,7 @@ pub(crate) fn check_boxes_qualified(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn check_boxes_path(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, path: &[winnow_grammar::Symbol], out: &mut collections::BTreeSet<String>) {
+pub(crate) fn check_boxes_path(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, path: &[winnow_grammar::Symbol], out: &mut collections::BTreeSet<String>) {
     let n = path.len() as i64;
     if n == 1 { out.insert(nikaia_std::block::Text::from(world.words.resolve(*unsafe { nikaia_std::proven::read(&path, (0) as usize) }).to_string())); } else if n >= 2 {
         out.insert(format!("{}::{}", world.words.resolve(*unsafe { nikaia_std::proven::read(&path, (nikaia_std::proven::sub::<i64>(n, 2)) as usize) }), world.words.resolve(*unsafe { nikaia_std::proven::read(&path, (nikaia_std::proven::sub::<i64>(n, 1)) as usize) })));
@@ -295,7 +295,7 @@ pub(crate) fn check_boxes_path(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, p
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn check_boxes_a_whole_struct(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, pattern: &MatchPattern, name: &str) -> bool {
+pub(crate) fn check_boxes_a_whole_struct(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, pattern: &MatchPattern, name: &str) -> bool {
     match pattern {
         MatchPattern::Named { path, fields, .. } => {
             if path.len() != 1 || ::core::convert::identity(match (AsRef::<str>::as_ref(&(world.words.resolve(*unsafe { nikaia_std::proven::read(&path, (0) as usize) }))), AsRef::<str>::as_ref(&(name)), ) { (__nikaia_f0, __nikaia_t, ) => !(__nikaia_t.len() == __nikaia_f0.len() && __nikaia_t.strip_prefix(__nikaia_f0).is_some()) }) { return false; }

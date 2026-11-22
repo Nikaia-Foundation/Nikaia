@@ -11,7 +11,7 @@ pub(crate) struct RoomSource {
 impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn a_text_without_room(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, block: &Block) {
+    pub(crate) fn a_text_without_room(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, block: &Block) {
         let mut at: i64 = 0;
         for stmt in block.stmts.iter() {
             let out = nikaia_std::index::or(room_empty_text(world, &stmt.node), || "".into());
@@ -21,7 +21,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn a_text_without_room_at(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, block: &Block, at: i64, out: &str, span: &Span) {
+    pub(crate) fn a_text_without_room_at(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, block: &Block, at: i64, out: &str, span: &Span) {
         let count = block.stmts.len() as i64;
         let mut loop_at: i64 = -1;
         let mut later = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
@@ -49,7 +49,7 @@ impl CheckState {
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn room_empty_text(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, stmt: &Stmt) -> Option<String> {
+pub(crate) fn room_empty_text(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, stmt: &Stmt) -> Option<String> {
     match stmt {
         Stmt::Let { names, mutable, value, .. } => {
             let mutable = *mutable;
@@ -78,14 +78,14 @@ pub(crate) fn stmt_value(stmt: &Stmt) -> Option<&Expr> {
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn room_edit(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, value: Option<&Expr>, room: &str) -> Option<CheckEdit> {
+pub(crate) fn room_edit(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, value: Option<&Expr>, room: &str) -> Option<CheckEdit> {
     let at = match world.here.spans.get(&id_of(match value { Some(__nikaia_value) => __nikaia_value, None => return None })) { Some(__nikaia_value) => __nikaia_value, None => return None };
     Some(CheckEdit { span: Span { start: at.start, end: at.end }, text: nikaia_std::block::Text::from(room.to_string()) })
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn room_named(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, expr: &Expr) -> String {
+pub(crate) fn room_named(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, expr: &Expr) -> String {
     match expr {
         Expr::Variable(symbol, _) => { let symbol = *symbol; return nikaia_std::block::Text::from(world.words.resolve(symbol).to_string()); },
         Expr::Path(segments, _) => { if segments.len() == 1 { return nikaia_std::block::Text::from(world.words.resolve(*unsafe { nikaia_std::proven::read(&segments, (0) as usize) }).to_string()); } },
@@ -96,7 +96,7 @@ pub(crate) fn room_named(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, expr: &
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn room_binds(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, stmt: &Stmt, name: &str) -> bool {
+pub(crate) fn room_binds(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, stmt: &Stmt, name: &str) -> bool {
     match stmt {
         Stmt::Let { names, .. } => {
             for one in names.iter() {
@@ -111,7 +111,7 @@ pub(crate) fn room_binds(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, stmt: &
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn room_handed_back(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, stmt: &Stmt, out: &str) -> bool {
+pub(crate) fn room_handed_back(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, stmt: &Stmt, out: &str) -> bool {
     match stmt {
         Stmt::Return(value) => room_named(world, match value { Some(__nikaia_value) => __nikaia_value, None => return false }) == out,
         Stmt::Expr(value) => room_named(world, value) == out,
@@ -132,7 +132,7 @@ pub(crate) fn room_loop_body(stmt: &Stmt) -> Option<&Block> {
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn room_loop_source(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, block: &Block, upto: i64, stmt: &Stmt) -> Option<RoomSource> {
+pub(crate) fn room_loop_source(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, block: &Block, upto: i64, stmt: &Stmt) -> Option<RoomSource> {
     match stmt {
         Stmt::For { bindings, iter, .. } => {
             match iter {
@@ -169,7 +169,7 @@ pub(crate) fn room_loop_source(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, b
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn room_length_of(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, block: &Block, upto: i64, expr: &Expr) -> Option<String> {
+pub(crate) fn room_length_of(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, block: &Block, upto: i64, expr: &Expr) -> Option<String> {
     match expr {
         Expr::Cast { expr, .. } => { let expr = nikaia_std::boxed::open(expr); return room_length_of(world, block, upto, expr); },
         Expr::MethodCall { receiver, method, args, .. } => {
@@ -189,7 +189,7 @@ pub(crate) fn room_length_of(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, blo
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn room_view_of(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, block: &Block, upto: i64, expr: &Expr) -> Option<String> {
+pub(crate) fn room_view_of(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, block: &Block, upto: i64, expr: &Expr) -> Option<String> {
     match expr {
         Expr::Field { base, name, .. } => {
             let base = nikaia_std::boxed::open(base); let name = *name;
@@ -211,7 +211,7 @@ pub(crate) fn room_view_of(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, block
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn room_source_name(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, block: &Block, upto: i64, expr: &Expr) -> Option<String> {
+pub(crate) fn room_source_name(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, block: &Block, upto: i64, expr: &Expr) -> Option<String> {
     let name = room_named(world, expr);
     if name == "" { return None; }
     Some(name)
@@ -219,7 +219,7 @@ pub(crate) fn room_source_name(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, b
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn room_let_at(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, block: &Block, upto: i64, name: &str) -> i64 {
+pub(crate) fn room_let_at(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, block: &Block, upto: i64, name: &str) -> i64 {
     let mut found: i64 = -1;
     let mut at: i64 = 0;
     for stmt in block.stmts.iter() {
@@ -238,7 +238,7 @@ pub(crate) fn room_let_at(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, block:
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn room_pushes(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, block: &Block, upto: i64, body: &Block, out: &str, source: &RoomSource) -> i64 {
+pub(crate) fn room_pushes(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, block: &Block, upto: i64, body: &Block, out: &str, source: &RoomSource) -> i64 {
     let mut count: i64 = 0;
     for stmt in body.stmts.iter() {
         let mut named: collections::BTreeSet<String> = collections::BTreeSet::new();
@@ -256,7 +256,7 @@ pub(crate) fn room_pushes(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, block:
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn room_pushes_in(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, block: &Block, upto: i64, value: &Expr, out: &str, source: &RoomSource) -> i64 {
+pub(crate) fn room_pushes_in(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, block: &Block, upto: i64, value: &Expr, out: &str, source: &RoomSource) -> i64 {
     match value {
         Expr::MethodCall { receiver, method, args, config, .. } => {
             let receiver = nikaia_std::boxed::open(receiver); let method = *method;
@@ -285,7 +285,7 @@ pub(crate) fn room_pushes_in(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, blo
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn room_part_of(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, block: &Block, upto: i64, expr: &Expr, source: &RoomSource) -> bool {
+pub(crate) fn room_part_of(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, block: &Block, upto: i64, expr: &Expr, source: &RoomSource) -> bool {
     match expr {
         Expr::Variable(..) => { return source.item != "" && room_named(world, expr) == source.item; },
         Expr::Try(inner, _) => { let inner = nikaia_std::boxed::open(inner); return room_part_of(world, block, upto, inner, source); },
@@ -308,7 +308,7 @@ pub(crate) fn room_part_of(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, block
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn room_rooted(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, block: &Block, upto: i64, expr: &Expr, source: &RoomSource) -> bool {
+pub(crate) fn room_rooted(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, block: &Block, upto: i64, expr: &Expr, source: &RoomSource) -> bool {
     if room_named(world, expr) == source.name { return true; }
     let viewed = match room_view_of(world, block, upto, expr) { Some(__nikaia_value) => __nikaia_value, None => return false };
     viewed == source.name
