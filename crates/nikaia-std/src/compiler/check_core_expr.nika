@@ -275,6 +275,11 @@ fn check_core_value_of[H: CheckHost](mut state: CheckState, world: ref CheckWorl
             if args.len() == 0 && world.words.resolve(method) == "len" {
                 state.a_collect_only_counted(world, expr, receiver, span)
             }
+            // A cut at a `text::Pos` or a trim pushed as text of its own
+            // (ADR-text-reuse-1 D2, #1589), as an index cut is.
+            if world.here.given_pushes.contains(node_key(expr)) && read.is_a_view() && check_core_expr_pushed_cut(state, world, expr, span) {
+                return a_string_type()
+            }
             read
         },
         Expr::SafeMethod { receiver, method, args, config, .. } => {

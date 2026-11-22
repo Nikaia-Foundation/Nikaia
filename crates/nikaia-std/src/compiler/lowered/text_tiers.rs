@@ -3721,9 +3721,10 @@ pub(crate) fn late_expr(expr: &Expr, leaf: bool, ask: &TierAsk<'_, '_, '_, '_, '
         Expr::MethodCall { receiver, method, args, .. } => {
             let receiver = nikaia_std::boxed::open(receiver); let method = *method;
             late_expr(receiver, false, ask, late);
+            let beside = late.temporaries.copy_owned();
             late_all(args, ask, late);
             late_temporary(expr, ask, late);
-            late_pushed_cut(receiver, ask.names.resolve(method), args, ask, late);
+            late_pushed_cut(receiver, ask.names.resolve(method), args, &beside, ask, late);
         },
         Expr::SafeMethod { receiver, args, .. } => {
             let receiver = nikaia_std::boxed::open(receiver);
@@ -3838,7 +3839,7 @@ pub(crate) fn late_argument(arg: &Expr, ask: &TierAsk<'_, '_, '_, '_, '_, '_, '_
     late_defer(TierLateArm { at: node_key(arg), name: nikaia_std::block::Text::from(word.to_string()), serial, loops, argument: true }, late);
 }
 
-pub(crate) fn late_pushed_cut(receiver: &Expr, method: &str, args: &[Expr], ask: &TierAsk<'_, '_, '_, '_, '_, '_, '_>, late: &mut TierLate) {
+pub(crate) fn late_pushed_cut(receiver: &Expr, method: &str, args: &[Expr], beside: &collections::BTreeSet<String>, ask: &TierAsk<'_, '_, '_, '_, '_, '_, '_>, late: &mut TierLate) {
     if late.leaving > 0 || args.len() != 1 { return; }
     if method != "push" && method != "push_back" && method != "push_front" { return; }
     let list = match receiver {
@@ -3847,17 +3848,7 @@ pub(crate) fn late_pushed_cut(receiver: &Expr, method: &str, args: &[Expr], ask:
     };
     let held = late_serial(&list, &late);
     if held <= late.params_from || held > late.params_upto { return; }
-    let word = match unsafe { nikaia_std::proven::read(&args, (0) as usize) } {
-        Expr::Index { base, index, .. } => {
-            let base = nikaia_std::boxed::open(base); let index = nikaia_std::boxed::open(index);
-            if !a_range(index) { return; }
-            match base {
-                Expr::Variable(name, _) => { let name = *name; nikaia_std::block::Text::from(ask.names.resolve(name).to_string()) },
-                _ => return,
-            }
-        },
-        _ => return,
-    };
+    let word = match given_cut_source(unsafe { nikaia_std::proven::read(&args, (0) as usize) }, ask.names) { Some(__nikaia_value) => __nikaia_value, None => return };
     let serial = late_serial(&word, &late);
     if serial <= late.params_upto { return; }
     let key = format!("{} {}", word, serial);
@@ -3865,7 +3856,7 @@ pub(crate) fn late_pushed_cut(receiver: &Expr, method: &str, args: &[Expr], ask:
     pushed.push(node_key(unsafe { nikaia_std::proven::read(&args, (0) as usize) }));
     late.cut_pushes.insert(nikaia_std::block::Text::from(key.to_string()), pushed);
     let loops = late_loops(&word, &late);
-    if late.loops > loops || late.temporaries.contains(&format!("{} {}", word, serial)) || !late.made.contains(&format!("{} {}", word, serial)) { return; }
+    if late.loops > loops || beside.contains(&format!("{} {}", word, serial)) || !late.made.contains(&format!("{} {}", word, serial)) { return; }
     if late.viewers.contains_key(&format!("{} {}", word, serial)) { return; }
     late.cuts.insert(node_key(unsafe { nikaia_std::proven::read(&args, (0) as usize) }));
     late_defer(TierLateArm { at: node_key(unsafe { nikaia_std::proven::read(&args, (0) as usize) }), name: nikaia_std::block::Text::from(word.to_string()), serial, loops, argument: true }, late);
@@ -4206,6 +4197,18 @@ pub(crate) fn tier_expr(expr: &Expr, ask: &TierAsk<'_, '_, '_, '_, '_, '_, '_>, 
             let receiver = nikaia_std::boxed::open(receiver); let method = *method;
             let kinds = method_kinds(receiver, ask.names.resolve(method), args, ask, walk);
             own_method_options(ask.names.resolve(method), config, ask, walk);
+            if walk.late_cuts.contains(&node_key(expr)) {
+                match receiver {
+                    Expr::Variable(name, _) => {
+                        let name = *name;
+                        if only_own_text(&kinds_of_local(ask.names.resolve(name), &walk)) {
+                            walk.flows.given_cuts.insert(node_key(expr));
+                            return owned_kinds();
+                        }
+                    },
+                    _ => { },
+                }
+            }
             kinds
         },
         Expr::SafeMethod { receiver, method, args, config, .. } => {
