@@ -9,9 +9,12 @@
 // The walk that finds what each body reaches and whom it calls is here too
 // (ADR-288 D22): the calls are `tools/foreign.nika`'s walk, what each goes to
 // is `callee_named`, and a method call is the type checker's answer, handed
-// in. What stays Rust is reading a `touches` entry back, the list of kinds
-// this compiler knows, handing in each unit, and the order a set is written
-// in.
+// in, and so is the answer written into the ledger, in the order a set is
+// kept (`touches_infer`). The fixpoint has two entries (ADR-100 D7): one
+// function's column, or its recursive group's, from its callees' stored
+// columns (`touches_of_unit`), which the package runs callees first, and the
+// whole package at once (`touches_of_graph`), the reference. What stays Rust
+// is building each unit's view and the holes the emitter reads in it.
 
 use std::collections
 
@@ -151,13 +154,13 @@ pub struct TouchGraph {
 /// Every function, method and `pub` grammar rule of one unit, into `graph`.
 /// What a call by name goes to is `callee_named`, the one resolution every
 /// analysis shares (ADR-288); a method call is the type checker's answer.
-pub fn unit_touches(program: ref Program, names: ref winnow_grammar::InternerContext, unaliased: fn(ref String) -> String sync, holes_of: fn(ref Expr) -> Vec[Expr] sync, own: ref Ledger, library: ref Ledger, mut graph: TouchGraph) {
-    for item in program.items {
+pub fn unit_touches(items: ref Vec[Spanned[Item]], names: ref winnow_grammar::InternerContext, unaliased: fn(ref String) -> String sync, holes_of: fn(ref Expr) -> Vec[Expr] sync, own: ref Ledger, library: ref Ledger, mut graph: TouchGraph) {
+    for item in items {
         match item.node {
             Item::Fn { name, body, .. } => {
                 let key = key_of_function(name, "", names)
                 let mut reach = Reach { unknown: false, outside: [], calls: collections::BTreeSet() }
-                reached_by(seen_in(body, names, unaliased, holes_of, no_root, false), program, names, own, library, reach)
+                reached_by(seen_in(body, names, unaliased, holes_of, no_root, false), items, names, own, library, reach)
                 methods_reach(graph.methods[key], own, library, reach)
                 graph.reaches.insert(key, reach)
             }
@@ -168,7 +171,7 @@ pub fn unit_touches(program: ref Program, names: ref winnow_grammar::InternerCon
                         Item::Fn { name, body, .. } => {
                             let key = key_of_function(name, owner, names)
                             let mut reach = Reach { unknown: false, outside: [], calls: collections::BTreeSet() }
-                            reached_by(seen_in(body, names, unaliased, holes_of, no_root, false), program, names, own, library, reach)
+                            reached_by(seen_in(body, names, unaliased, holes_of, no_root, false), items, names, own, library, reach)
                             methods_reach(graph.methods[key], own, library, reach)
                             graph.reaches.insert(key, reach)
                         }
@@ -186,7 +189,7 @@ pub fn unit_touches(program: ref Program, names: ref winnow_grammar::InternerCon
                 for rule in def.rules {
                     for alt in rule.alts {
                         let action = alt.action ?? continue
-                        reached_by(seen_in(action, names, unaliased, holes_of, no_root, false), program, names, own, library, whole)
+                        reached_by(seen_in(action, names, unaliased, holes_of, no_root, false), items, names, own, library, whole)
                     }
                 }
                 rules_into(def, names, whole, own, library, graph)
@@ -196,7 +199,8 @@ pub fn unit_touches(program: ref Program, names: ref winnow_grammar::InternerCon
     }
 }
 
-/// The fixpoint over a graph the walk built (`touches_of`).
+/// The fixpoint over a graph the walk built (`touches_of`), the whole package
+/// at once: the reference the callees-first route is held to (ADR-100 D7).
 pub fn touches_of_graph(graph: ref TouchGraph) -> collections::BTreeMap[String, Vec[Touch]] {
     let mut unknown: collections::BTreeMap[String, bool] = collections::BTreeMap()
     let mut outside: collections::BTreeMap[String, Vec[Touch]] = collections::BTreeMap()
@@ -207,6 +211,293 @@ pub fn touches_of_graph(graph: ref TouchGraph) -> collections::BTreeMap[String, 
         calls.insert(name.clone(), reach.calls.clone())
     }
     return touches_of(unknown, outside, calls)
+}
+
+/// **The `touches` column of a package's ledger** (ADR-288 D22): the walk over
+/// each unit's view, the fixpoint callees first, and the answer written only
+/// where nobody said - a hand-written entry is what its author wrote, the way
+/// `sync` leaves an assertion alone - in the order a set is kept, once each.
+/// `resolved` is the type checker's method answers by the ledger's key, and
+/// `holes_of(unit, expr)` what unit `unit` wrote in a hole of `expr`.
+pub fn touches_infer(mut ledger: Ledger, units: ref Vec[ParsedView], library: ref Ledger, resolved: ref collections::BTreeMap[String, CheckMethodCalls], holes_of: fn(i64, ref Expr) -> Vec[Expr] sync) {
+    let mut graph = TouchGraph { methods: collections::BTreeMap(), reaches: collections::BTreeMap() }
+    for (key, calls) in resolved {
+        let called = MethodsCalled { resolved: calls.resolved.clone(), unseen: calls.unresolved, fields: collections::BTreeSet(), swallowed: collections::BTreeMap() }
+        graph.methods.insert(key.clone(), called)
+    }
+    for unit in 0..<units.len() {
+        let view = units[unit]
+        unit_touches(view.items, view.words, fn(name) { view.unaliased(name) }, fn(expr) { holes_of(unit, expr) }, ledger, library, graph)
+    }
+    let answer = touches_callees_first(graph)
+    for (name, touches) in answer {
+        let mut contract = ledger.functions.get(name) ?? continue
+        if contract.touches_known {
+            continue
+        }
+        contract.touches = in_ledger_order(touches)
+        contract.touches_known = true
+    }
+}
+
+/// **The order a set of touches is kept and written in**: the kind, then the
+/// parameter (none first), then the resource a literal named (none first),
+/// then read before write - the order the derive gave while `Touch` was Rust
+/// (ADR-204 §4), so a ledger written before and after reads the same. A touch
+/// twice is kept once.
+pub fn in_ledger_order(touches: ref Vec[Touch]) -> Vec[Touch] {
+    let mut found: collections::BTreeMap[(String, String?, String?, bool), Touch] = collections::BTreeMap()
+    for touch in touches {
+        found.insert((touch.kind.clone(), touch.parameter?.clone(), touch.named?.clone(), touch.write), touch.clone())
+    }
+    let mut kept: Vec[Touch] = []
+    for (_, touch) in found {
+        kept.push(touch.clone())
+    }
+    return kept
+}
+
+/// **One function's final column, or its recursive group's** (ADR-100 D7):
+/// `unit` is the function, or the strongly connected component it is a part
+/// of, `reaches` what each body reaches, and `stored` the final columns of the
+/// callees outside the unit, where their claim holds. The greatest fixpoint
+/// runs inside the unit only: a member keeps its claim while everything it
+/// calls keeps one, and a callee neither in the unit nor stored has none. A
+/// member whose claim holds touches what the unit's bodies it reaches touch
+/// and what its stored callees do; one whose claim falls is left out, as
+/// `touches_of` leaves it out.
+pub fn touches_of_unit(unit: ref Vec[String], reaches: ref collections::BTreeMap[String, Reach], stored: ref collections::BTreeMap[String, Vec[Touch]]) -> collections::BTreeMap[String, Vec[Touch]] {
+    let mut members: collections::BTreeSet[String] = collections::BTreeSet()
+    let mut known: collections::BTreeMap[String, bool] = collections::BTreeMap()
+    for name in unit {
+        members.insert(name.clone())
+        let lost = reaches[name]?.unknown ?? true
+        known.insert(name.clone(), !lost)
+    }
+    let mut changed = true
+    while changed {
+        changed = false
+        for name in unit {
+            let holds = known[name] ?? false
+            if !holds {
+                continue
+            }
+            let reach = reaches[name] ?? continue
+            let mut reaches_unknown = false
+            for callee in reach.calls {
+                let theirs = if members.contains(callee) { known[callee] ?? false } else { stored.contains_key(callee) }
+                if !theirs {
+                    reaches_unknown = true
+                }
+            }
+            if reaches_unknown {
+                known.insert(name.clone(), false)
+                changed = true
+            }
+        }
+    }
+    let mut settled: collections::BTreeMap[String, Vec[Touch]] = collections::BTreeMap()
+    for name in unit {
+        let holds = known[name] ?? false
+        if !holds {
+            continue
+        }
+        let mut found: Vec[Touch] = []
+        let mut seen: collections::BTreeSet[String] = collections::BTreeSet()
+        let mut todo: Vec[String] = [name.clone()]
+        while todo.len() > 0 {
+            let here = todo.pop() ?? break
+            if seen.contains(here) {
+                continue
+            }
+            seen.insert(here.clone())
+            if !members.contains(here) {
+                for touch in stored[here]?.clone() ?? [] {
+                    found.push(touch)
+                }
+                continue
+            }
+            let reach = reaches[here] ?? continue
+            for touch in reach.outside {
+                found.push(touch.clone())
+            }
+            for callee in reach.calls {
+                todo.push(callee.clone())
+            }
+        }
+        settled.insert(name.clone(), found)
+    }
+    return settled
+}
+
+/// **The whole package, callees first** (ADR-100 D7): the graph's strongly
+/// connected components in reverse topological order, each derived by
+/// `touches_of_unit` from the columns its callees already have. The greatest
+/// fixpoint is unique, so this answers what `touches_of_graph` answers, each
+/// set the same touches (the order a set is kept in is `in_ledger_order`'s).
+pub fn touches_callees_first(graph: ref TouchGraph) -> collections::BTreeMap[String, Vec[Touch]] {
+    let mut stored: collections::BTreeMap[String, Vec[Touch]] = collections::BTreeMap()
+    for unit in touch_units(graph.reaches) {
+        let column = touches_of_unit(unit, graph.reaches, stored)
+        stored.extend(column)
+    }
+    return stored
+}
+
+/// Tarjan's walk over the touch graph: each node's visit number and lowest
+/// reachable one, the nodes still open, and the components in the order they
+/// close, which is callees first.
+struct TouchComponents {
+    index: collections::BTreeMap[String, i64],
+    low: collections::BTreeMap[String, i64],
+    open: collections::BTreeSet[String],
+    stack: Vec[String],
+    units: Vec[Vec[String]],
+    next: i64,
+}
+
+/// The graph's recursive groups, each a unit, in reverse topological order: a
+/// unit comes after every unit it calls into. A call that leaves the graph is
+/// no edge.
+pub fn touch_units(reaches: ref collections::BTreeMap[String, Reach]) -> Vec[Vec[String]] {
+    let mut walk = TouchComponents { index: collections::BTreeMap(), low: collections::BTreeMap(), open: collections::BTreeSet(), stack: [], units: [], next: 0 }
+    for (name, _) in reaches {
+        if !walk.index.contains_key(name) {
+            touch_connect(reaches, name, walk)
+        }
+    }
+    return walk.units
+}
+
+fn touch_connect(reaches: ref collections::BTreeMap[String, Reach], name: ref String, mut walk: TouchComponents) {
+    walk.index.insert(name.clone(), walk.next)
+    walk.low.insert(name.clone(), walk.next)
+    walk.next = walk.next + 1
+    walk.stack.push(name.clone())
+    walk.open.insert(name.clone())
+    let reach = reaches[name] ?? return
+    for to in reach.calls {
+        if !reaches.contains_key(to) {
+            continue
+        }
+        let mut reached = -1
+        if !walk.index.contains_key(to) {
+            touch_connect(reaches, to, walk)
+            reached = walk.low[to] ?? -1
+        } else if walk.open.contains(to) {
+            reached = walk.index[to] ?? -1
+        }
+        let mine = walk.low[name] ?? 0
+        if reached >= 0 && reached < mine {
+            walk.low.insert(name.clone(), reached)
+        }
+    }
+    if (walk.low[name] ?? -1) != (walk.index[name] ?? -2) {
+        return
+    }
+    let mut unit: Vec[String] = []
+    while true {
+        let top = walk.stack.pop() ?? break
+        walk.open.remove(top)
+        let last = top == name
+        unit.push(top)
+        if last {
+            break
+        }
+    }
+    walk.units.push(unit)
+}
+
+/// Every resource a `touches` entry may name (ADR-292 D3): `KNOWN_KINDS` in
+/// `order.nika`, moved here with the check from the compiler's `contracts::touch`.
+///
+/// It grows when a function needs it and never before - ADR-288 D11's rule,
+/// which is the same rule the rest of the ledger lives under. What is here is
+/// what `std`'s own entries reach:
+///
+/// | kind | the resource | who asked |
+/// | :--- | :--- | :--- |
+/// | `file(path)` | the file that parameter names | `fs::read`, `fs::write`, `fs::map` |
+/// | `stdout` | the program's standard output | `print`, `println` |
+/// | `stderr` | the program's standard error | `eprint`, `eprintln` |
+/// | `args` | the arguments the program was started with | `cli::args` |
+///
+/// **What is deliberately not here**, and each for the same reason. ADR-292
+/// D2's table names `endpoint(url)` for `net::post` and a lock for
+/// `counter.access fn { … }`, and §3 rests Part II 12.2's
+/// no-pausing-while-locked rule on the second - neither function exists. And
+/// **standard input**, which is the near miss: `io::read`, `io::lines` and
+/// `io::read_to_string` are all in `std`'s ledger already and none of them
+/// says what it reaches, so all three order against everything. Nothing in
+/// `examples/` asks - the two programs that read a pipe do it inside a `for`
+/// or behind a handler that `return`s, so no pair reaches the question - and
+/// ADR-288 D11 is the rule that keeps a word out until a program asks for it.
+///
+/// When one does, the entry is `stdin` **write** and not `stdin read`, and the
+/// reason is worth leaving here rather than being rediscovered. `write` in a
+/// touch set means *it changes the resource*, and reading a stream consumes
+/// it: two `io::read_to_string()` calls do not both get the bytes, so the
+/// read/read rule that lets two file reads overlap would be exactly wrong.
+///
+/// **And the clock, which is the one that is asked about before it is needed.**
+/// `std` has no function that reads one - `Instant::now` appears in the runtime's
+/// own executor and nowhere a program can reach - so the rule above keeps it out,
+/// and the rule is the same one that let `lock` in the day the doors existed.
+///
+/// What to write when the day comes: **`clock read`**, and the read is right,
+/// because two calls genuinely conflict over nothing and neither changes
+/// anything - the opposite of `stdin`, whose read is a write. The reason it is
+/// worth a paragraph anyway is the **second consumer**
+/// ([ADR-288](../../../../docs/specification/adr/adr-288.md)): to
+/// `contracts::order` an empty touch set is a *speed*, and to a repetition it
+/// would be a *permission*. A clock left out of an entry would read as "repeat me
+/// freely" and the repetition would see a different time. Naming it at all is
+/// enough to stop that - any named resource makes the set non-empty - which is
+/// why the note is here and not a special case somewhere.
+/// | `lock` | **a** lock, never which one | `get`, `set`, `access`, `update`, and the two doors over several |
+///
+/// **`lock` joined the list the day the doors existed**
+/// ([ADR-288](../../../../docs/specification/adr/adr-288.md) D23). It was named in
+/// [ADR-292](../../../../docs/specification/adr/adr-292.md) D3's own table and
+/// kept out of this one under the rule the paragraph above states - a word waits
+/// until a program asks for it - and until [ADR-281](../../../../docs/specification/adr/adr-281.md)
+/// and [ADR-281](../../../../docs/specification/adr/adr-281.md) no program could.
+///
+/// **It names no parameter, and that is [ADR-281](../../../../docs/specification/adr/adr-281.md)
+/// D4's decision rather than a limit here**: the property says *a lock* and never
+/// *which* lock, because telling two handles apart would make whether a program
+/// compiles depend on whether that proof happened to succeed. Two `access`
+/// calls are two **reads** and do not conflict; two doors that write do, whether
+/// or not they are the same lock.
+/// | `socket` | **a** socket, never which one | `net::listen`, `accept`, `read`, `write`, `close` |
+///
+/// **`socket` joined the list the day `std` had one**
+/// ([ADR-289](../../../../docs/specification/adr/adr-289.md) D6), under the same
+/// rule `lock` joined it under: a word waits until a program can ask for it.
+/// [ADR-292](../../../../docs/specification/adr/adr-292.md) D3 named it in the
+/// same breath as a file - *a file, a socket, `stdout` and a `Locked` value are
+/// not in the set of things that can be pointed at* - and it waited until one
+/// existed.
+///
+/// **It names no parameter**, for `lock`'s reason rather than for want of a
+/// name: a *listener* could be named by the address it is bound to, and a
+/// **connection** is what a program actually touches, and telling two of those
+/// apart is the alias analysis
+/// [ADR-281](../../../../docs/specification/adr/adr-281.md) D30 refuses to make
+/// a program's compilation depend on. So two reads of two different sockets do
+/// not conflict - reads never do - and a write orders against every socket
+/// touch, which is the safe direction and the one a server's two writes want
+/// anyway.
+///
+/// **Whether this compiler knows what a touch's resource *is*** (ADR-292 D3):
+/// `order.nika`'s list of kinds. Kept apart from reading a touch back on
+/// purpose: a ledger that names a kind from a newer vocabulary is not
+/// malformed, it is a file this compiler is too old to read, and refusing it
+/// would turn a library's forward step into a build failure. D4 answers an
+/// effect that cannot be read the same way here as everywhere else: it reaches
+/// everything, so the statement stays put.
+pub fn touch_kind_is_known(touch: ref Touch) -> bool {
+    return known_kind(touch.kind)
 }
 
 // Each `entry` rule of a grammar reaches what the whole grammar does, and the
@@ -227,10 +518,10 @@ fn rules_into(def: ref GrammarDef, names: ref winnow_grammar::InternerContext, w
 // What the calls the walk met reach: a function of this package is a call, a
 // library's brings its touch set, and a `spawn`, a `dsl` statement and a call
 // of something that is not a name are calls nobody can name.
-fn reached_by(seen: ref Vec[Seen], program: ref Program, names: ref winnow_grammar::InternerContext, own: ref Ledger, library: ref Ledger, mut reach: Reach) {
+fn reached_by(seen: ref Vec[Seen], items: ref Vec[Spanned[Item]], names: ref winnow_grammar::InternerContext, own: ref Ledger, library: ref Ledger, mut reach: Reach) {
     for one in seen {
         match one {
-            Seen::Call { name, literals, .. } => reached_call(callee_named(names, name.clone(), own, library, program.items), literals, library, reach),
+            Seen::Call { name, literals, .. } => reached_call(callee_named(names, name.clone(), own, library, items), literals, library, reach),
             Seen::Spawn { .. } => {
                 reach.unknown = true
             }
@@ -426,6 +717,93 @@ test "two named resources are compared by name" {
     let a = touch_test_reached("file", "a.txt", true)
     let b = touch_test_reached("file", "b.txt", true)
     assert(!a.conflicts_with(b))
+}
+
+/// Every kind the vocabulary names is known, and nothing else is: an unknown
+/// kind differs from every kind there is, so a misspelled resource would be
+/// disjoint from everything and buy an overlap (moved from the compiler's
+/// `contracts::touch`).
+test "a kind outside the vocabulary is not known" {
+    for kind in KNOWN_KINDS {
+        let touch = touch_of(f"{kind} read") catch {
+            assert(false)
+            return
+        }
+        assert(touch_kind_is_known(touch))
+    }
+    for written in ["stdoutt write", "stdin write", "endpoint(url) write"] {
+        let touch = touch_of(written) catch {
+            assert(false)
+            return
+        }
+        assert(!touch_kind_is_known(touch))
+    }
+}
+
+fn touch_test_node(mut graph: TouchGraph, name: String, unknown: bool, outside: Vec[String], calls: Vec[String]) {
+    let mut reach = Reach { unknown: unknown, outside: [], calls: collections::BTreeSet() }
+    for kind in outside {
+        reach.outside.push(Touch { kind: kind.clone(), parameter: null, named: null, write: true })
+    }
+    for callee in calls {
+        reach.calls.insert(callee.clone())
+    }
+    graph.reaches.insert(name, reach)
+}
+
+fn touch_test_texts(touches: ref Vec[Touch]) -> Vec[String] {
+    let mut texts: Vec[String] = []
+    for touch in in_ledger_order(touches) {
+        texts.push(touch.text())
+    }
+    return texts
+}
+
+/// **The per-function entry answers what the whole-package entry answers**
+/// (ADR-100 D7, ADR-403 D3): on a call chain into a body that writes standard
+/// output, a recursive pair each of which writes something, a recursive pair
+/// one of whose members reaches something unaccounted for, a caller of that
+/// pair, and a call that leaves the graph. The chain's head is derived from
+/// its callee's stored column alone, each pair as one unit.
+test "the per-function touches entry gives the whole-package column" {
+    let mut graph = TouchGraph { methods: collections::BTreeMap(), reaches: collections::BTreeMap() }
+    touch_test_node(graph, "a", false, ["stderr"], ["b"])
+    touch_test_node(graph, "b", false, [], ["c"])
+    touch_test_node(graph, "c", false, ["stdout"], [])
+    touch_test_node(graph, "p", false, ["args"], ["q", "c"])
+    touch_test_node(graph, "q", false, ["lock"], ["p"])
+    touch_test_node(graph, "x", false, [], ["y"])
+    touch_test_node(graph, "y", true, [], ["x"])
+    touch_test_node(graph, "w", false, [], ["x"])
+    touch_test_node(graph, "r", false, [], ["gone"])
+    let whole = touches_of_graph(graph)
+    let first = touches_callees_first(graph)
+    assert(whole.len() == first.len())
+    for (name, touches) in whole {
+        let mine = first[name] ?? {
+            assert(false)
+            continue
+        }
+        assert(touch_test_texts(touches) == touch_test_texts(mine))
+    }
+    assert(touch_test_texts(first["a"]?.clone() ?? []) == ["stderr write", "stdout write"])
+    assert(touch_test_texts(first["q"]?.clone() ?? []) == ["args write", "lock write", "stdout write"])
+    for lost in ["x", "y", "w", "r"] {
+        assert(!first.contains_key(lost))
+    }
+    let mut pair = 0
+    for unit in touch_units(graph.reaches) {
+        if unit.len() > 1 {
+            pair = pair + 1
+        }
+    }
+    // `p, q` and `x, y` are the recursive groups.
+    assert(pair == 2)
+    let mut stored: collections::BTreeMap[String, Vec[Touch]] = collections::BTreeMap()
+    stored.insert("b", [Touch { kind: "stdout", parameter: null, named: null, write: true }])
+    let alone: Vec[String] = ["a"]
+    let head = touches_of_unit(alone, graph.reaches, stored)
+    assert(touch_test_texts(head["a"]?.clone() ?? []) == touch_test_texts(whole["a"]?.clone() ?? []))
 }
 
 /// A resource the compiler could not name might be any of them: the

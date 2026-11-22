@@ -24,114 +24,18 @@ use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 // write`, and a typo in a hand-maintained ledger bought an overlap instead of
 // failing to buy one. A vocabulary whose *mistakes* are permissions is a
 // vocabulary in the wrong polarity. [`Touch::kind_is_known`] is what says
-// which names mean something, and `contracts::order` answers a `touches` entry
-// naming anything else the way ADR-292 D3 answers every other thing it cannot
-// read: it reaches everything, and stays where it was written.
+// which names mean something (`touch_kind_is_known` in
+// `nikaia-std/src/compiler/touch.nika`, with the list of kinds), and
+// `contracts::order` answers a `touches` entry naming anything else the way
+// ADR-292 D3 answers every other thing it cannot read: it reaches
+// everything, and stays where it was written.
 
 use anyhow::{Result, anyhow};
 pub use nikaia_std::compiler::ty::Touch;
 
-/// **The order a set of touches is kept and written in**: the kind, then the
-/// parameter (none first), then the resource a literal named (none first),
-/// then read before write - the order the derive gave
-/// while `Touch` was Rust, spelled out now that it is Nikaia's, which has no
-/// order of its own (ADR-204 §4). A ledger written before and after reads the
-/// same.
-type TouchKey = (String, Option<String>, Option<String>, bool);
-
-fn order_of(touch: &Touch) -> TouchKey {
-    (
-        touch.kind.clone(),
-        touch.parameter.clone(),
-        touch.named.clone(),
-        touch.write,
-    )
-}
-
-/// Every resource a `touches` entry may name (ADR-292 D3).
-///
-/// It grows when a function needs it and never before - ADR-288 D11's rule,
-/// which is the same rule the rest of the ledger lives under. What is here is
-/// what `std`'s own entries reach:
-///
-/// | kind | the resource | who asked |
-/// | :--- | :--- | :--- |
-/// | `file(path)` | the file that parameter names | `fs::read`, `fs::write`, `fs::map` |
-/// | `stdout` | the program's standard output | `print`, `println` |
-/// | `stderr` | the program's standard error | `eprint`, `eprintln` |
-/// | `args` | the arguments the program was started with | `cli::args` |
-///
-/// **What is deliberately not here**, and each for the same reason. ADR-292
-/// D2's table names `endpoint(url)` for `net::post` and a lock for
-/// `counter.access fn { … }`, and §3 rests Part II 12.2's
-/// no-pausing-while-locked rule on the second - neither function exists. And
-/// **standard input**, which is the near miss: `io::read`, `io::lines` and
-/// `io::read_to_string` are all in `std`'s ledger already and none of them
-/// says what it reaches, so all three order against everything. Nothing in
-/// `examples/` asks - the two programs that read a pipe do it inside a `for`
-/// or behind a handler that `return`s, so no pair reaches the question - and
-/// ADR-288 D11 is the rule that keeps a word out until a program asks for it.
-///
-/// When one does, the entry is `stdin` **write** and not `stdin read`, and the
-/// reason is worth leaving here rather than being rediscovered. `write` in a
-/// touch set means *it changes the resource*, and reading a stream consumes
-/// it: two `io::read_to_string()` calls do not both get the bytes, so the
-/// read/read rule that lets two file reads overlap would be exactly wrong.
-///
-/// **And the clock, which is the one that is asked about before it is needed.**
-/// `std` has no function that reads one - `Instant::now` appears in the runtime's
-/// own executor and nowhere a program can reach - so the rule above keeps it out,
-/// and the rule is the same one that let `lock` in the day the doors existed.
-///
-/// What to write when the day comes: **`clock read`**, and the read is right,
-/// because two calls genuinely conflict over nothing and neither changes
-/// anything - the opposite of `stdin`, whose read is a write. The reason it is
-/// worth a paragraph anyway is the **second consumer**
-/// ([ADR-288](../../../../docs/specification/adr/adr-288.md)): to
-/// `contracts::order` an empty touch set is a *speed*, and to a repetition it
-/// would be a *permission*. A clock left out of an entry would read as "repeat me
-/// freely" and the repetition would see a different time. Naming it at all is
-/// enough to stop that - any named resource makes the set non-empty - which is
-/// why the note is here and not a special case somewhere.
-/// | `lock` | **a** lock, never which one | `get`, `set`, `access`, `update`, and the two doors over several |
-///
-/// **`lock` joined the list the day the doors existed**
-/// ([ADR-288](../../../../docs/specification/adr/adr-288.md) D23). It was named in
-/// [ADR-292](../../../../docs/specification/adr/adr-292.md) D3's own table and
-/// kept out of this one under the rule the paragraph above states - a word waits
-/// until a program asks for it - and until [ADR-281](../../../../docs/specification/adr/adr-281.md)
-/// and [ADR-281](../../../../docs/specification/adr/adr-281.md) no program could.
-///
-/// **It names no parameter, and that is [ADR-281](../../../../docs/specification/adr/adr-281.md)
-/// D4's decision rather than a limit here**: the property says *a lock* and never
-/// *which* lock, because telling two handles apart would make whether a program
-/// compiles depend on whether that proof happened to succeed. Two `access`
-/// calls are two **reads** and do not conflict; two doors that write do, whether
-/// or not they are the same lock.
-/// | `socket` | **a** socket, never which one | `net::listen`, `accept`, `read`, `write`, `close` |
-///
-/// **`socket` joined the list the day `std` had one**
-/// ([ADR-289](../../../../docs/specification/adr/adr-289.md) D6), under the same
-/// rule `lock` joined it under: a word waits until a program can ask for it.
-/// [ADR-292](../../../../docs/specification/adr/adr-292.md) D3 named it in the
-/// same breath as a file - *a file, a socket, `stdout` and a `Locked` value are
-/// not in the set of things that can be pointed at* - and it waited until one
-/// existed.
-///
-/// **It names no parameter**, for `lock`'s reason rather than for want of a
-/// name: a *listener* could be named by the address it is bound to, and a
-/// **connection** is what a program actually touches, and telling two of those
-/// apart is the alias analysis
-/// [ADR-281](../../../../docs/specification/adr/adr-281.md) D30 refuses to make
-/// a program's compilation depend on. So two reads of two different sockets do
-/// not conflict - reads never do - and a write orders against every socket
-/// touch, which is the safe direction and the one a server's two writes want
-/// anyway.
-pub const KINDS: &[&str] = &["file", "stdout", "stderr", "args", "lock", "socket"];
-
-/// What stays Rust of a [`Touch`] (ADR-294 step (b)): reading one back, and
-/// the list of kinds this compiler knows. The declaration and `text` are
-/// `tools/ty.nika`'s.
+/// What stays Rust of a [`Touch`]: reading one back and asking whether its
+/// kind is known, as methods for the Rust callers. Both answers are
+/// `tools/touch.nika`'s and `tools/ledger.nika`'s (ADR-294 step (b)).
 pub trait TouchOps: Sized {
     fn parse(text: &str) -> Result<Self>;
     fn kind_is_known(&self) -> bool;
@@ -144,24 +48,13 @@ impl TouchOps for Touch {
     }
 
     /// Whether this compiler knows what the named resource *is* (ADR-292 D3).
-    ///
-    /// Kept separate from [`Touch::parse`] on purpose. A ledger that names a
-    /// kind from a newer vocabulary is not malformed - it is a file this
-    /// compiler is too old to read, and refusing to parse it would turn a
-    /// library's forward step into a build failure. D4 already says what to do
-    /// with an effect that cannot be read, and it is the same answer here as
-    /// everywhere else: it reaches everything, so the statement stays put.
     fn kind_is_known(&self) -> bool {
-        KINDS.contains(&self.kind.as_str())
+        nikaia_std::compiler::touch::touch_kind_is_known(self)
     }
 }
 
 /// Which resource a *call* reaches, with the parameter filled in, and when
-/// two of them force an order: `tools/touch.nika`'s (#125). It compares
-/// **families** and not kinds - `stdout` and `stderr` are two handles and one
-/// destination the moment anybody types `2>&1`, so `println` / `eprintln` /
-/// `println` stays a group in order - and the kinds stay separate in the
-/// ledger, because `eprintln` genuinely does not write standard output.
+/// two of them force an order: `tools/touch.nika`'s (#125).
 pub use nikaia_std::compiler::touch::Reached;
 
 // --- what a body reaches (ADR-288 D22) ---------------------------------------
@@ -172,98 +65,29 @@ use crate::ast::Expr;
 use crate::check::MethodCalls;
 use crate::contracts::Ledger;
 use crate::parser::Parsed;
-use nikaia_std::compiler::throws::MethodsCalled;
-use nikaia_std::compiler::touch::{self as nika, TouchGraph};
+use nikaia_std::compiler::touch as nika;
 
 /// Give every function in the ledger the `touches` its body earns
-/// ([ADR-288](../../../../docs/specification/adr/adr-288.md) D22).
-///
-/// **The fourth derived column, and the one that was specified without one.**
-/// `sync`, `throws` and `sharing` are each read off a body over the call graph;
-/// `touches` was written with the same fail-closed polarity
-/// ([ADR-292](../../../../docs/specification/adr/adr-292.md) D3) and only ever
-/// hand-written in `std`'s ledger — so every function a `.nika` file declared
-/// said *"nobody said"*, which means *"it touches everything"*.
-///
-/// **The walk, the graph and the fixpoint are Nikaia** (`tools/touch.nika`,
-/// #125): the greatest fixpoint, for `sync::infer`'s reason, and a resource
-/// named by a parameter does not travel. What stays here is handing in each
-/// unit and the checker's method calls, and writing the answer - only where
-/// nobody said, in the order a set is kept.
+/// ([ADR-288](../../../../docs/specification/adr/adr-288.md) D22): the walk,
+/// the fixpoint (callees first, ADR-100 D7) and the answer written only where
+/// nobody said are `touch.nika`'s `touches_infer`. What stays here is building
+/// each unit's view from the Rust `Parsed` and the holes the emitter reads in
+/// a unit's expression, both Rust until `Parsed` itself is Nikaia's.
 pub fn infer(
     ledger: &mut Ledger,
     units: &[&Parsed],
     library: &Ledger,
     resolved: &BTreeMap<String, MethodCalls>,
 ) {
-    let mut graph = TouchGraph {
-        methods: resolved
-            .iter()
-            .map(|(key, calls)| {
-                let called = MethodsCalled {
-                    resolved: calls.resolved.clone(),
-                    unseen: calls.unresolved,
-                    fields: Default::default(),
-                    swallowed: Default::default(),
-                };
-                (key.clone(), called)
-            })
-            .collect(),
-        reaches: BTreeMap::new(),
-    };
-    for parsed in units.iter().copied() {
-        nika::unit_touches(
-            &parsed.program,
-            &parsed.interner,
-            &mut |name: &str| parsed.unaliased(name),
-            &mut |expr: &Expr| crate::emit::literal_expressions(parsed, expr),
-            ledger,
-            library,
-            &mut graph,
-        );
-    }
-    for (name, touches) in nika::touches_of_graph(&graph) {
-        if let Some(contract) = ledger.functions.get_mut(&name) {
-            // **Only where nobody said.** A hand-written entry is what its
-            // author wrote, the way `sync::infer` leaves an assertion alone.
-            if !contract.touches_known {
-                // Kept and written in one order, and once each.
-                let found: BTreeMap<TouchKey, Touch> = touches
-                    .into_iter()
-                    .map(|touch| (order_of(&touch), touch))
-                    .collect();
-                contract.touches = found.into_values().collect();
-                contract.touches_known = true;
-            }
-        }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    #[allow(unused_imports)]
-    use nikaia_std::block::names::{format, vec};
-
-    // The other tests of this module moved to `tools/touch.nika` (ADR-294,
-    // #125); this one reads `KINDS`, which only Rust holds.
-
-    /// Every kind [`KINDS`] names is known, and nothing else is.
-    ///
-    /// The half that matters is the second. An unknown kind differs from every
-    /// kind there is, so `might_be_same` says no to all of them - which would
-    /// make a misspelled resource *disjoint from everything* and buy an
-    /// overlap. `contracts::order` refuses an entry that holds one (D4), and
-    /// this is the question it asks.
-    #[test]
-    fn a_kind_outside_the_vocabulary_is_not_known() {
-        for kind in KINDS {
-            let touch = Touch::parse(&format!("{kind} read")).expect("parses");
-            assert!(touch.kind_is_known(), "{kind}");
-        }
-        for text in ["stdoutt write", "stdin write", "endpoint(url) write"] {
-            let touch = Touch::parse(text).expect("parses");
-            assert!(!touch.kind_is_known(), "{text}");
-        }
-    }
+    let views: Vec<_> = units
+        .iter()
+        .map(|parsed| crate::check::parsed_view_of(parsed))
+        .collect();
+    nika::touches_infer(
+        ledger,
+        &views,
+        library,
+        resolved,
+        &mut |unit: i64, expr: &Expr| crate::emit::literal_expressions(units[unit as usize], expr),
+    );
 }

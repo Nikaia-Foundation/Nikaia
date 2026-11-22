@@ -3883,7 +3883,7 @@ pub mod toml {
 }
 pub mod touch {
     #[allow(unused_imports)]
-    pub use super::{Reached, Reach, TouchGraph, unit_touches, touches_of_graph};
+    pub use super::{Reached, Reach, TouchGraph, unit_touches, touches_of_graph, touches_infer, in_ledger_order, touches_of_unit, touches_callees_first, touch_units, touch_kind_is_known};
 }
 pub mod traits {
     #[allow(unused_imports)]
@@ -3990,4 +3990,4 @@ pub fn nikaia_run_tests(filters: &[std::string::String], list: bool, more: std::
 /// **The digest of this lowered set** (#1610): every file `lower-std` wrote
 /// beside this index, and the index above this line. Compiled into the same
 /// crate as the code it names, it is the compiler's identity for its caches.
-pub const LOWERED_DIGEST: &str = "c5dd85ce59ac8317231ad1910ada5c1046b25851daee103c4454014669c515ee";
+pub const LOWERED_DIGEST: &str = "8a03b0d2c73f6a4a890cee9e8a5b7c51cd0d4cf8e0afa27dc42144344e8d473d";
