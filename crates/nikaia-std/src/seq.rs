@@ -218,6 +218,30 @@ impl<S: Step> Paused<S> {
         out
     }
 
+    /// **`fold(init, step, merge; order:, limit:)` after a step that pauses**
+    /// (ADR-async-5 D29, `xs.par_iter().map fn(u) { http::get(u) }.fold(…)`):
+    /// one accumulator, the items in order as they come, `merge` never
+    /// called. The options are checked and do nothing else.
+    #[track_caller]
+    pub fn fold_merged<A, M: Fn() -> A, G: FnMut(A, S::Item) -> A, J: Fn(A, A) -> A>(
+        mut self,
+        init: M,
+        mut step: G,
+        merge: J,
+        order: crate::par::Order,
+        limit: i64,
+    ) -> impl Future<Output = A> {
+        crate::par::FoldOptions::new(order, Some(limit), None);
+        drop(merge);
+        async move {
+            let mut acc = init();
+            while let Some(item) = self.next().await {
+                acc = step(acc, item);
+            }
+            acc
+        }
+    }
+
     /// How many items the sequence produces.
     pub async fn count(mut self) -> i64 {
         let mut n = 0_i64;
@@ -569,6 +593,137 @@ pub fn then_filter<I: IntoIterator, F: AsyncFnMut(&I::Item) -> bool>(
         inner: Ready(items.into_iter()),
         f,
     })
+}
+
+/// **A `par_iter` step whose lambda pauses runs one task per element**
+/// (ADR-async-5 D24, D25): every element's lambda is started, at most the
+/// walk's `limit:` at once, and the call polls them all until each has ended;
+/// the results come back in input order, whatever order they end in (D26).
+/// The call is their group (D4): it returns when every one has ended. The
+/// tasks are polled on the thread that waits for the call, so
+/// `user_parallelism` changes the duration only (D25).
+async fn fanned<T, U>(
+    items: impl Iterator<Item = T>,
+    limit: Option<usize>,
+    f: &impl AsyncFn(T) -> U,
+) -> std::collections::VecDeque<U> {
+    let cap = limit.unwrap_or(usize::MAX).max(1);
+    let mut items = items;
+    let mut more = true;
+    let mut out: Vec<Option<U>> = Vec::new();
+    let mut running = Vec::new();
+    std::future::poll_fn(|cx| {
+        loop {
+            while more && running.len() < cap {
+                match items.next() {
+                    Some(item) => {
+                        running.push((out.len(), Box::pin(f(item))));
+                        out.push(None);
+                    }
+                    None => more = false,
+                }
+            }
+            let before = running.len();
+            let mut at = 0;
+            while at < running.len() {
+                let (slot, task) = &mut running[at];
+                if let std::task::Poll::Ready(value) = task.as_mut().poll(cx) {
+                    out[*slot] = Some(value);
+                    drop(running.swap_remove(at));
+                } else {
+                    at += 1;
+                }
+            }
+            if running.is_empty() && !more {
+                return std::task::Poll::Ready(());
+            }
+            // A task that ended makes room: start the next ones at once.
+            if running.len() == before || !more {
+                return std::task::Poll::Pending;
+            }
+        }
+    })
+    .await;
+    out.into_iter().flatten().collect()
+}
+
+/// The results of a `par_iter` step's tasks, handed out in input order once
+/// every task has ended ([`fanned`]).
+pub struct Fan<I, F, U> {
+    walk: Option<(I, Option<usize>)>,
+    f: F,
+    done: std::collections::VecDeque<U>,
+}
+
+impl<I: Iterator, U, F: AsyncFn(I::Item) -> U> Step for Fan<I, F, U> {
+    type Item = U;
+    async fn step(&mut self) -> Option<U> {
+        if let Some((walk, limit)) = self.walk.take() {
+            self.done = fanned(walk, limit, &self.f).await;
+        }
+        self.done.pop_front()
+    }
+}
+
+/// Only the elements a `par_iter` step's pausing lambda says yes to, each
+/// asked in a task of its own ([`fanned`]).
+pub struct FanFilter<I: Iterator, F> {
+    walk: Option<(I, Option<usize>)>,
+    f: F,
+    done: std::collections::VecDeque<Option<I::Item>>,
+}
+
+impl<I: Iterator, F: AsyncFn(&I::Item) -> bool> Step for FanFilter<I, F> {
+    type Item = I::Item;
+    async fn step(&mut self) -> Option<I::Item> {
+        if let Some((walk, limit)) = self.walk.take() {
+            let f = &self.f;
+            let kept = async |item: I::Item| -> Option<I::Item> {
+                if f(&item).await { Some(item) } else { None }
+            };
+            self.done = fanned(walk, limit, &kept).await;
+        }
+        loop {
+            if let Some(item) = self.done.pop_front()? {
+                return Some(item);
+            }
+        }
+    }
+}
+
+/// **`map` of a `par_iter` walk with a lambda that pauses** (ADR-async-5
+/// D25): one task per element, results in input order.
+pub fn fan_map<W: crate::par::Fanned, U, F: AsyncFn(W::Item) -> U>(
+    walk: W,
+    f: F,
+) -> Paused<Fan<W::IntoIter, F, U>> {
+    let limit = walk.task_limit();
+    Paused(Fan {
+        walk: Some((walk.into_iter(), limit)),
+        f,
+        done: std::collections::VecDeque::new(),
+    })
+}
+
+/// **`filter` of a `par_iter` walk with a lambda that pauses** (ADR-async-5
+/// D25).
+pub fn fan_filter<W: crate::par::Fanned, F: AsyncFn(&W::Item) -> bool>(
+    walk: W,
+    f: F,
+) -> Paused<FanFilter<W::IntoIter, F>> {
+    let limit = walk.task_limit();
+    Paused(FanFilter {
+        walk: Some((walk.into_iter(), limit)),
+        f,
+        done: std::collections::VecDeque::new(),
+    })
+}
+
+/// **`for_each` of a `par_iter` walk with a lambda that pauses** (ADR-async-5
+/// D25): one task per element, and the call returns when every one has ended.
+pub async fn fan_for_each<W: crate::par::Fanned, F: AsyncFn(W::Item)>(walk: W, f: F) {
+    let limit = walk.task_limit();
+    fanned(walk.into_iter(), limit, &f).await;
 }
 
 /// **A list's own `map` with a lambda that pauses** (ADR-233 D2): the list,

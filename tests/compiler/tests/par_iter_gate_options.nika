@@ -2,7 +2,7 @@
 // D15, D27, #986): the walk carries them to the step that ends it. `limit: n`
 // runs at most n elements at once, `limit: 1` one at a time; `within: d`
 // makes that step throw `task::TimedOut` once d ran out; `admission:` is read
-// and ignored, since a `par_iter` lambda never pauses.
+// and ignored, since these lambdas never pause.
 use std::task
 use std::time
 

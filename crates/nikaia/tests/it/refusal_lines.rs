@@ -38,7 +38,8 @@ fn a_file(name: &str) -> PathBuf {
 }
 
 /// **A lambda that pauses where it runs on several cores** — `NK2209`
-/// ([ADR-235](../../../docs/specification/adr/adr-235.md) D2), and the case
+/// ([ADR-235](../../../docs/specification/adr/adr-235.md) D2; a `fold`'s,
+/// since a `map`'s may pause, ADR-async-5 D24, D29), and the case
 /// that sent this looking, because the refusal it replaced named a callee and
 /// no place.
 #[test]
@@ -48,8 +49,8 @@ fn a_pausing_lambda_is_refused_on_its_line() {
          \n\
          fn main() throws {\n\
          \x20   let names = Vec()\n\
-         \x20   let sizes = names.par_iter().map fn(n) { fs::read_to_string(n, fs::Root::Anywhere) catch { \"\" } }\n\
-         \x20   println(f\"{sizes.len()}\")\n\
+         \x20   let sizes = names.par_iter().fold(fn { 0 }, fn(acc, n) { acc + (fs::read_to_string(n, fs::Root::Anywhere) catch { \"\" }).len() }, fn(a, b) { a + b })\n\
+         \x20   println(f\"{sizes}\")\n\
          }\n",
         "pausing",
     );

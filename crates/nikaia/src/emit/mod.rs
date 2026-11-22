@@ -1101,13 +1101,30 @@ pub fn task_report(
         None,
         None,
     );
-    nikaia_std::compiler::order::task_report(
+    let tasks = nikaia_std::compiler::order::task_report(
         &parsed.program.items,
         &parsed.interner,
         source,
         &emitter.s.facts.async_waits,
         &mut |task: &Expr| emitter.s.task_pauses(&emitter.world, task),
-    )
+    );
+    // Every `par_iter` call and the execution chosen for it (ADR-async-5
+    // D25, D32): the lambdas the checker handed to a `fan_*` entry.
+    let fanned = &emitter.s.facts.pausing_lambdas;
+    tasks
+        + &nikaia_std::compiler::order::par_report(
+            &parsed.program.items,
+            &parsed.interner,
+            source,
+            &mut |lambda: i64| {
+                matches!(
+                    fanned.get(&lambda),
+                    Some(nikaia_std::compiler::check_facts::FactPausing::Function(entry))
+                        if entry.starts_with("fan_")
+                )
+            },
+            &mut |call: &Expr| emitter.s.task_pauses(&emitter.world, call),
+        )
 }
 
 pub(crate) fn visit_block<'a>(block: &'a Block, f: &mut impl FnMut(&'a Expr)) {

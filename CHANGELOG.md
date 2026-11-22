@@ -8,6 +8,12 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1537] — 2026-11-22
+
+**Builders' changes (#2500, #2653)**
+- A `par_iter()` chain's `map`, `filter` and `for_each` take a lambda that pauses: it runs one task per element under `limit:`, the results in input order, and `nikaia check --overlaps` names each `par_iter` call's execution
+- A task bound in a block inside a gated `async { … }` of a function that pauses, while a task bound before that block is still open, builds and runs: its cell lives in the group's block and it takes the names of the inner block (ADR-async-5 D2, D37).
+
 ## [0.0.1536] — 2026-11-22
 
 **Builders' changes (#2069, #2070)**

@@ -1290,6 +1290,7 @@ fn check_core_call_on_described[H: CheckHost](mut state: CheckState, world: ref 
     // once** (Part II 12.6, ADR-235 D2).
     let outer_parallel: i64? = state.in_parallel
     let outer_scoped = state.scoped_task
+    let outer_pausing = state.pausing_walk
     let parallel = match on {
         Ty::Seq { parallel, .. } => parallel,
         else => false,
@@ -1298,6 +1299,9 @@ fn check_core_call_on_described[H: CheckHost](mut state: CheckState, world: ref 
         let depth = state.scope.len() as i64
         state.in_parallel = state.in_parallel ?? depth
         state.scoped_task = false
+        // **`map`, `filter` and `for_each` take a lambda that may pause**
+        // (ADR-async-5 D24); `fold`'s never does (D29).
+        state.pausing_walk = key == "Seq::map" || key == "Seq::filter" || key == "Seq::for_each"
     }
     // **A task of `task::scope` runs beside the others** (Part II 12.7): the
     // task work's (#605), asked of the host.
@@ -1431,6 +1435,7 @@ fn check_core_call_on_described[H: CheckHost](mut state: CheckState, world: ref 
     state.flow.walk_lent = state.a_walk_that_lends(contract, receiver)
     state.in_parallel = outer_parallel
     state.scoped_task = outer_scoped
+    state.pausing_walk = outer_pausing
     // **A key looked up is a use of a map's open keys** (ADR-285 D43).
     if (entry == "get" || entry == "contains_key" || entry == "remove" || entry == "entry") && args.len() == 1 {
         check_core_call_on_key_read(state, world, receiver, args[0], span)
