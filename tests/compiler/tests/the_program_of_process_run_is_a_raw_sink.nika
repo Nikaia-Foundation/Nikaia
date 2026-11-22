@@ -40,7 +40,7 @@ fn main() throws {
     let nikaia = toolchain()
     let check: Vec[String] = ["check"]
     said(nikaia, "stdin names the program", "", "    process::run(name, [])\n", check)
-    said(nikaia, "a literal program", "", "    process::run(\"vi\", [\"--\", name])\n", check)
+    said(nikaia, "a literal program", "", "    process::run(\"vi\", [\"./\" + name])\n", check)
     said(nikaia, "a match whose arms are literals", "", "    let p = match name { \"vim\" => \"vim\", \"nano\" => \"nano\", else => \"vi\", }\n    process::run(p, [])\n", check)
     said(nikaia, "a match with an arm that is no literal", "", "    let p = match name { \"vim\" => \"vim\", else => name, }\n    process::run(p, [])\n", check)
     said(nikaia, "[allow] untrusted-program", "[allow]\nuntrusted-program = true\n", "    process::run(name, [])\n", check)

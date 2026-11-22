@@ -1,8 +1,9 @@
 // #2694, ADR-raw-sinks-1 D18: the start of an argument of `process::run` is
 // a raw sink, since a program reads an argument that starts with `-` as an
 // option. A name read from stdin as an argument is `NK1308`; it passes where
-// `process::is_operand` proves it, behind a literal `"--"`, or behind a
-// literal piece the program wrote (`"--output=" + name`, `f"-I{name}"`). A
+// `process::is_operand` proves it, or behind a literal piece the program
+// wrote (`"--output=" + name`, `f"-I{name}"`), but not behind a literal
+// `"--"`, which ends only the `-` options (D18 item 6, #2722). A
 // list filled from outside is followed through its pushes, a parameter
 // carries the sink to its caller, and `[allow] untrusted-option = true`
 // admits the call, which `--trust` lists.

@@ -592,6 +592,8 @@ pub trait ComptimeComputeHost {
     fn value_fn_names(&self, unit: i64) -> collections::BTreeSet<String>;
     fn unit_package(&self, unit: i64) -> Option<String>;
     fn by_package(&self, units: &[i64]) -> collections::BTreeMap<String, Ledger>;
+    fn shipped_ledger(&self, package: &str) -> Option<String>;
+    fn trace(&self, said: &str);
     fn derived(&self, units: &[i64], packages: &collections::BTreeMap<String, Ledger>) -> Ledger;
     fn lowered_alone(&self, unit: i64, derived: &Ledger) -> Option<ComptimeLowered>;
     fn lowered_units(&self, units: &[i64], here: i64, derived: &Ledger, packages: &collections::BTreeMap<String, Ledger>) -> Option<ComptimeLowered>;
@@ -706,6 +708,11 @@ pub fn comptime_computed<H: ComptimeComputeHost>(host: &H, here: i64, bound: &st
     let home = host.unit_package(*nikaia_std::index::get(&units, nikaia_std::index::at(here)));
     let others: Vec<i64> = units.iter().copied().filter(|&u| { host.unit_package(u).is_some() && host.unit_package(u) != home }).collect::<Vec<_>>();
     let packages = host.by_package(&others);
+    for name in packages.keys() { host.trace(&format!("{} derived for a build-time run", name)); }
+    match comptime_shipped_disagreement(host, &packages) {
+        None => { },
+        Some((callee, because)) => { return CheckComputed::Forbidden { callee, because }; },
+    }
     let unit_refs: Vec<i64> = units.iter().copied().filter(|&u| { host.unit_package(u) == home }).collect::<Vec<_>>();
     let derived = host.derived(&unit_refs, &packages);
     match comptime_forbidden_because(&derived) {
@@ -746,6 +753,46 @@ pub fn comptime_computed<H: ComptimeComputeHost>(host: &H, here: i64, bound: &st
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 pub(crate) fn comptime_callee_nothing_declares<H: ComptimeComputeHost>(host: &H, here: i64, value: &Expr) -> Option<String> { comptime_undeclared_callee(host.file_words(here), value, host.library(), &mut |name| { (nikaia_std::range::span(0, host.file_count())).any(|at| { comptime_declares(host.file_items(at), host.file_words(at), name) }) }) }
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn comptime_shipped_disagreement<H: ComptimeComputeHost>(host: &H, packages: &collections::BTreeMap<String, Ledger>) -> Option<(String, String)> {
+    for (name, derived) in packages.iter() {
+        let text = match host.shipped_ledger(name) { Some(__nikaia_value) => __nikaia_value, None => continue };
+        let shipped = match read(&text) {
+            Ok(value) => value,
+            Err(error) => {
+                let (error, __nikaia_site) = error.split();
+                return Some((nikaia_std::block::Text::from(name.to_string()), format!("The ledger `{}` shipped (`nikaia.contracts`) does not read ({}), and its functions run at build time only on entries that agree with what this build derives from its sources.", name, error)));
+            },
+        };
+        for (function, contract) in derived.functions.iter() {
+            if !contract.touches_known { continue; }
+            let ours = comptime_rule_answer(contract);
+            let said = match shipped.functions.get(nikaia_std::index::as_text(&function)) {
+                None => format!("has no entry for `{}`", function),
+                Some(found) => {
+                    let theirs = comptime_rule_answer(found);
+                    if theirs == ours { continue; }
+                    format!("says `{}` {}", function, theirs)
+                },
+            };
+            return Some((format!("{}::{}", name, function), format!("`{}`'s shipped ledger (`nikaia.contracts`) {}, and this build derives from its sources that it {}; a package's functions run at build time only on entries that agree.", name, said, ours)));
+        }
+    }
+    None
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn comptime_rule_answer(contract: &FnContract) -> String {
+    let pauses = if contract.sync_claim.is_sync() { "never pauses" } else { "can pause" };
+    if !contract.touches_known { return format!("{} and touches what nothing says", pauses); }
+    let mut touched: Vec<String> = contract.touches.iter().map(|t| { format!("`{}`", t.text()) }).collect::<Vec<_>>();
+    touched.sort();
+    if touched.is_empty() { return format!("{} and touches nothing", pauses); }
+    format!("{} and touches {}", pauses, nikaia_std::block::Text::from(touched.join(", ")))
+}
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.

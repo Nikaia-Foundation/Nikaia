@@ -35,12 +35,16 @@ pub fn is_plain(part: ref String) -> bool sync {
     return true
 }
 
-/// Whether `text` is read as an operand, not as an option: it does not start
-/// with `-` (ADR-raw-sinks-1 D18, the precondition of the start of each
-/// argument of `process::run`). The empty text is one. A guard
+/// Whether `text` is read as an operand, not as an option: it starts with
+/// neither `-` nor `/` (ADR-raw-sinks-1 D18, the precondition of the start of
+/// each argument of `process::run`). A program reads a word that starts with
+/// `-` as an option, and a Windows program one that starts with `/`
+/// (`findstr /G:file`); a program is built once for every target, so both
+/// are refused on every target (D18 item 6). A path that is meant passes as
+/// `"./" + name` or under a root. The empty text is one. A guard
 /// `if !process::is_operand(name) { process::exit(2) }` makes it a fact.
 pub fn is_operand(text: ref String) -> bool sync {
-    return !text.starts_with("-")
+    return !text.starts_with("-") && !text.starts_with("/")
 }
 
 /// The safe way in: escape first, and the result is markup by construction,
@@ -51,12 +55,16 @@ test "escaped text becomes markup" {
     assert(html::Raw(markup.as_str()).as_str() == "a &lt; b &amp; c")
 }
 
-/// A word that starts with `-` is an option, anything else an operand
-/// (ADR-raw-sinks-1 D18).
-test "an operand does not start with a dash" {
+/// A word that starts with `-` or `/` is an option, anything else an
+/// operand (ADR-raw-sinks-1 D18, item 6).
+test "an operand starts with neither a dash nor a slash" {
     assert(is_operand("file.txt"))
     assert(is_operand(""))
     assert(is_operand("a-b"))
+    assert(is_operand("a/b"))
+    assert(is_operand("./x"))
     assert(!is_operand("-rf"))
     assert(!is_operand("--checkpoint-action=exec=sh"))
+    assert(!is_operand("/G:secrets.txt"))
+    assert(!is_operand("/etc/passwd"))
 }
