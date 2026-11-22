@@ -4,7 +4,7 @@
 impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn a_task_holds_these_across_a_pause<H: CheckHost>(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, body: &Block, bound: &[(String, Ty, i64)], span: &Span) {
+    pub(crate) fn a_task_holds_these_across_a_pause<H: CheckHost>(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, host: &H, body: &Block, bound: &[(String, Ty, i64)], span: &Span) {
         if bound.is_empty() { return; }
         let mut pauses: Vec<i64> = vec![];
         let mut named: collections::BTreeMap<String, i64> = collections::BTreeMap::new();
@@ -30,7 +30,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn walk_the_body<H: CheckHost>(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, body: &Block, pauses: &mut Vec<i64>, named: &mut collections::BTreeMap<String, i64>) {
+    pub(crate) fn walk_the_body<H: CheckHost>(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, host: &H, body: &Block, pauses: &mut Vec<i64>, named: &mut collections::BTreeMap<String, i64>) {
         for stmt in body.stmts.iter() {
             let at = stmt.span.start as i64;
             for each in check_visit_stmt(&stmt.node) { self.a_task_looks_at(world, host, each, at, pauses, named); }
@@ -39,7 +39,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn a_task_looks_at<H: CheckHost>(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, expr: &Expr, at: i64, pauses: &mut Vec<i64>, named: &mut collections::BTreeMap<String, i64>) {
+    pub(crate) fn a_task_looks_at<H: CheckHost>(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, host: &H, expr: &Expr, at: i64, pauses: &mut Vec<i64>, named: &mut collections::BTreeMap<String, i64>) {
         if self.pauses_here(world, expr, at) { pauses.push(at); }
         let mut used: collections::BTreeSet<String> = collections::BTreeSet::new();
         names_in(expr, world.words, &mut used);
@@ -51,7 +51,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn pauses_here(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, expr: &Expr, at: i64) -> bool {
+    pub(crate) fn pauses_here(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, expr: &Expr, at: i64) -> bool {
         let callee = match callee_of(world.words, expr, world.own, world.library, world.here.items) { Some(__nikaia_value) => __nikaia_value, None => return false };
         match callee {
             Callee::Method => match expr {

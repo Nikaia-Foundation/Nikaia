@@ -39,7 +39,7 @@ impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    pub fn tuple_let(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, names: &[winnow_grammar::Symbol], shape: &[i64], mutable: bool, mut_names: &[bool], written: bool, found: &Ty, value: &Expr, span: &Span) -> Ty {
+    pub fn tuple_let(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, names: &[winnow_grammar::Symbol], shape: &[i64], mutable: bool, mut_names: &[bool], written: bool, found: &Ty, value: &Expr, span: &Span) -> Ty {
         if written { self.findings.push(check_refusal("NK1136", span, String::from("A `let` that binds several names can't have a type."), vec![String::from("The names are taken apart by position, and one type can't say which name it belongs to.")], Some(String::from("Remove the type, or bind one name and read the parts from it.")))); }
         let what = match value {
             Expr::Variable(name, _) => { let name = *name; if world.words.resolve(name).starts_with("__nikaia_tuple") { "A lambda's parameter" } else { "A `let`" } },
@@ -97,7 +97,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn nested_pattern_parts(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, top: &[Ty], shape: &[i64], count: i64, site: &str, span: &Span) -> Vec<Ty> {
+    pub(crate) fn nested_pattern_parts(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, top: &[Ty], shape: &[i64], count: i64, site: &str, span: &Span) -> Vec<Ty> {
         let mut out: Vec<Ty> = vec![];
         if shape.len() == 1 && *unsafe { nikaia_std::proven::read(&shape, (0) as usize) } == -1 {
             self.findings.push(check_refusal("NK1259", span, format!("{} can't take a variant apart.", site), vec![String::from("A variant may not be the one the value holds, and a binding has no other branch to go to.")], Some(String::from("Take the value apart with a `match`, which has an arm for each case."))));
@@ -130,7 +130,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn lent_walk_params(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, contract: &FnContract, entry: &str, receiver: &Expr, args: &[Expr]) -> collections::BTreeSet<String> {
+    pub(crate) fn lent_walk_params(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, contract: &FnContract, entry: &str, receiver: &Expr, args: &[Expr]) -> collections::BTreeSet<String> {
         let mut out: collections::BTreeSet<String> = collections::BTreeSet::new();
         let signature = match contract.signature.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return out };
         let held = match open_walk_variable(signature) { Some(__nikaia_value) => __nikaia_value, None => return out };
@@ -159,7 +159,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn a_tuple_over_a_lent_name(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, value: &Expr) -> bool {
+    pub(crate) fn a_tuple_over_a_lent_name(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, value: &Expr) -> bool {
         match value {
             Expr::Variable(name, _) => { let name = *name; self.lent_here(world.words.resolve(name)) },
             _ => false,
@@ -167,7 +167,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn a_tuple_got_past_a_jump(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, value: &Expr) -> bool {
+    pub(crate) fn a_tuple_got_past_a_jump(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, value: &Expr) -> bool {
         match value {
             Expr::Coalesce { value: read, fallback, .. } => { let read = nikaia_std::boxed::open(read); let fallback = nikaia_std::boxed::open(fallback); self.flow.std_gets.contains(&(id_of(read) as i64)) && self.jumps(world, fallback) },
             _ => false,
@@ -254,7 +254,7 @@ pub(crate) fn binds_hands_a_view(method: &str) -> bool { method == "filter" || m
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn binds_item_params(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, arg: &Expr, ty: &Ty, held: &str) -> Vec<(String, bool)> {
+pub(crate) fn binds_item_params(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, arg: &Expr, ty: &Ty, held: &str) -> Vec<(String, bool)> {
     let mut out: Vec<(String, bool)> = vec![];
     let types: Vec<Ty> = match ty {
         Ty::Fn { params, .. } => params.copy_owned(),

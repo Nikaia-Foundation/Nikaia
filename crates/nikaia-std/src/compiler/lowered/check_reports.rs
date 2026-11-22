@@ -36,7 +36,7 @@ pub(crate) fn a_named_type(ty: &Ty) -> Option<String> {
 impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn bounds_wanted(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, key: &str) -> Option<collections::BTreeMap<String, Vec<String>>> {
+    pub(crate) fn bounds_wanted(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, key: &str) -> Option<collections::BTreeMap<String, Vec<String>>> {
         if self.declared_bounds.contains_key(key) {
             return match *nikaia_std::index::get(&self.declared_bounds, key) {
                 Some(__nikaia_it) => Some(__nikaia_it.clone()),
@@ -47,7 +47,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn a_bound_the_argument_does_not_meet(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, key: &str, bound: &collections::BTreeMap<String, Ty>, span: &Span) {
+    pub(crate) fn a_bound_the_argument_does_not_meet(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, key: &str, bound: &collections::BTreeMap<String, Ty>, span: &Span) {
         let wanted = match self.bounds_wanted(world, key) { Some(__nikaia_value) => __nikaia_value, None => return };
         for (parameter, traits) in wanted.iter() {
             let held = match bound.get(parameter) { Some(__nikaia_value) => __nikaia_value, None => continue };
@@ -122,7 +122,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn a_for_mut_that_cannot_write(&mut self, why: &str, iter: &Expr, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, span: &Span) {
+    pub(crate) fn a_for_mut_that_cannot_write(&mut self, why: &str, iter: &Expr, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, span: &Span) {
         let mut message: String = String::from("");
         let mut note: String = String::from("");
         let mut help: String = String::from("");
@@ -157,7 +157,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn a_for_mut_over_a_place(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, iter: &Expr, over: &Ty, span: &Span) { self.findings.push(check_refusal("NK1139", span, String::from("`for mut` over a list isn't supported yet."), vec![], None)); }
+    pub(crate) fn a_for_mut_over_a_place(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, iter: &Expr, over: &Ty, span: &Span) { self.findings.push(check_refusal("NK1139", span, String::from("`for mut` over a list isn't supported yet."), vec![], None)); }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     pub(crate) fn a_grammar_that_did_not_run(&mut self, owner: &str, rule: &str, why: &CheckWall, span: &Span) {
@@ -235,7 +235,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn a_std_name_without_its_module(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, name: &str, span: &Span) {
+    pub(crate) fn a_std_name_without_its_module(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, name: &str, span: &Span) {
         if name.contains("::") { return; }
         let known = self.binding(name).is_some() || resolve_call(world, name).is_some() || self.structs.contains_key(name) || self.enums.contains_key(name) || world.own.types.contains_key(name) || self.modules.contains(name) || self.grammars.contains_key(name) || name == "access_all" || name == "update_all" || is_hull(name);
         if known { return; }

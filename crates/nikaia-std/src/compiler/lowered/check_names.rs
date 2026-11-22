@@ -35,7 +35,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn a_prelude_name_with_a_module_in_front(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, name: &str, span: &Span) {
+    pub(crate) fn a_prelude_name_with_a_module_in_front(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, name: &str, span: &Span) {
         let at = match nikaia_std::text::find_first(&name, &"::") { Some(__nikaia_value) => __nikaia_value, None => return };
         let module = nikaia_std::block::Text::from(name.before(at.start).to_string());
         let last = nikaia_std::block::Text::from(name.after(at.end).to_string());

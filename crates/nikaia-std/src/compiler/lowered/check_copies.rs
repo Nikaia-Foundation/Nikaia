@@ -68,7 +68,7 @@ pub(crate) fn copies_dropped_in(view: &ParsedView<'_, '_, '_, '_, '_, '_, '_>, d
 impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn collect_copies(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>) {
+    pub(crate) fn collect_copies(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>) {
         let declared = copies_declared_in(&world.here);
         #[allow(unused_mut)] let mut package: Vec<String> = declared.copy_owned();
         let mut at: i64 = 0;

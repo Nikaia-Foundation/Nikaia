@@ -310,7 +310,7 @@ pub struct CheckEdit {
 pub(crate) fn check_refusal(code: &str, span: &Span, message: String, notes: Vec<String>, help: Option<String>) -> CheckFinding { CheckFinding { severity: CheckSeverity::Error, span: span.clone(), code: nikaia_std::block::Text::from(code.to_string()), message, notes, help, labels: vec![], edit: None } }
 
 #[derive(Debug, Clone)]
-pub struct CheckWorld<'a, 'a1, 'a2, 'a3, 'a4, 'a5, 'a6> {
+pub struct CheckWorld<'a, 'a1, 'a2, 'a3, 'a4, 'a5, 'a6, 'a7> {
     pub words: &'a winnow_grammar::InternerContext,
     pub own: &'a1 Ledger,
     pub library: &'a2 Ledger,
@@ -324,6 +324,21 @@ pub struct CheckWorld<'a, 'a1, 'a2, 'a3, 'a4, 'a5, 'a6> {
     pub newly_throws: collections::BTreeMap<String, Vec<String>>,
     pub newly_keeps: collections::BTreeMap<String, Vec<(String, bool, String)>>,
     pub keepers: collections::BTreeMap<String, collections::BTreeMap<String, Vec<String>>>,
+    pub package: Option<&'a7 CheckPackage>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct CheckPackage {
+    pub names_read: CheckNamesRead,
+    pub walks_fields: collections::BTreeMap<String, String>,
+    pub boxed_members: collections::BTreeMap<String, collections::BTreeSet<String>>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct CheckNamesRead {
+    pub named: collections::BTreeMap<String, i64>,
+    pub grammars: i64,
+    pub with_here: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]

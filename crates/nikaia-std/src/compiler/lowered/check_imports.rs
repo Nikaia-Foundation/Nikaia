@@ -26,7 +26,7 @@ pub(crate) fn not_a_module(name: &str) -> bool { name == "f64" || name == "i32" 
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn something_public_in(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, module: &str) -> bool {
+pub(crate) fn something_public_in(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, module: &str) -> bool {
     let prefix = format!("{}::", module);
     for (key, contract) in world.library.functions.iter() { if contract.public && key.starts_with(AsRef::<str>::as_ref(&prefix)) { return true; } }
     for (key, contract) in world.library.types.iter() { if contract.public && key.starts_with(AsRef::<str>::as_ref(&prefix)) { return true; } }
@@ -36,7 +36,7 @@ pub(crate) fn something_public_in(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>
 impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn an_import_that_brings_a_name_in(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, path: &[winnow_grammar::Symbol], span: &Span) {
+    pub(crate) fn an_import_that_brings_a_name_in(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, path: &[winnow_grammar::Symbol], span: &Span) {
         let mut segments: Vec<String> = vec![];
         segments.reserve(path.iter().size_hint().0); for part in path.iter() {
             let part = *part;
@@ -71,7 +71,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn a_std_module_nobody_declared(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, module: &str, segments: &[String], span: &Span) {
+    pub(crate) fn a_std_module_nobody_declared(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, module: &str, segments: &[String], span: &Span) {
         if is_promised(module) || self.offers_as_a_module(module) && something_public_in(world, module) { return; }
         let mut offered: Vec<String> = vec![];
         for name in self.std_modules.iter() { if self.offers_as_a_module(name) && something_public_in(world, name) { offered.push(nikaia_std::block::Text::from(name.to_string())); } }
@@ -93,7 +93,7 @@ impl CheckState {
     pub(crate) fn offers_as_a_module(&self, name: &str) -> bool { self.std_modules.contains(name) && !starts_with_a_capital(name) && !not_a_module(name) }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn a_name_the_page_does_not_have(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, pattern: &Spanned<Pattern>) {
+    pub(crate) fn a_name_the_page_does_not_have(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, pattern: &Spanned<Pattern>) {
         match &pattern.node {
             Pattern::Ref { name, args, .. } => {
                 let name = *name;
@@ -119,7 +119,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn a_lambda_the_promise_names(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, key: &str, named: &str, args: &[FnArg], at: &Span) {
+    pub(crate) fn a_lambda_the_promise_names(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, key: &str, named: &str, args: &[FnArg], at: &Span) {
         let mut why: Option<String> = None;
         let mut found = false;
         for arg in args.iter() {
