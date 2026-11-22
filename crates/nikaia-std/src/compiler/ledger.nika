@@ -378,7 +378,13 @@ fn function_key(mut entry: FnContract, name: ref String, key: ref String, value:
     } else if key == "sync" {
         entry.sync_claim = sync_of(value, n)
     } else if key == "throws" {
-        entry.fails_with = throws_of(value, n)
+        // `"throws(f)"`: the lambda decides (#2692), as `sync`'s twin says.
+        let through = throws_through(value)
+        if through.len() > 0 {
+            entry.throws_from = through
+        } else {
+            entry.fails_with = throws_of(value, n)
+        }
     } else if key == "returns" {
         let written = unquoted(value, n)
         if written.contains(":") {
@@ -403,6 +409,8 @@ fn function_key(mut entry: FnContract, name: ref String, key: ref String, value:
         entry.keeps = entries(value, n)
     } else if key == "at_once" {
         entry.at_once = entries(value, n)
+    } else if key == "par_iter" {
+        entry.par_iter = entries(value, n)
     } else if key == "os_text" {
         entry.os_text = entries(value, n)
     } else if key == "mutates" {
@@ -640,6 +648,28 @@ fn throws_of(value: ref String, n: i64) -> Vec[String] throws {
         return [unnamed]
     }
     return entries(value, n)
+}
+
+/// **`"throws(f)"`: a lambda parameter decides** (#2692), the twin of
+/// `"sync(f)"` (ADR-288 D15): the names inside, comma-separated; empty for
+/// any other value, which `throws_of` reads.
+fn throws_through(value: ref String) -> Vec[String] {
+    let mut names: Vec[String] = []
+    if !value.starts_with("\"throws(") || !value.ends_with(")\"") {
+        return names
+    }
+    let c: Vec[scalar] = value.scalars.collect()
+    if c.len() < 11 {
+        return names
+    }
+    let inside = slice(c, 8, c.len() - 2)
+    for part in inside.split(",") {
+        let name = part.trim()
+        if name.len() > 0 {
+            names.push(name.clone())
+        }
+    }
+    return names
 }
 
 // **A per-view `returns` names its parameters in the order of its paths**;
