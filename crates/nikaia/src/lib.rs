@@ -19,7 +19,7 @@ pub mod ast;
 pub(crate) mod baton;
 pub mod bounds;
 pub mod bounds_report;
-pub mod build_time;
+pub mod build_eval_host;
 pub mod cexport;
 pub mod check;
 pub mod comptime_run;
