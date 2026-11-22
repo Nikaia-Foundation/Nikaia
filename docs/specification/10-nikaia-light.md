@@ -642,6 +642,31 @@ let n = q.narrow() ?? return                                    // back in T whe
   `T` and taken into `Wide` only for the step that may leave it
   ([ADR-270](adr/adr-270.md) D11).
 
+**A computation that may outgrow any fixed width holds a `BigInt`** (owner,
+2026-11-22, [ADR-270](adr/adr-270.md) D11): std's exact signed integer of
+any size, a sign and a list of 64-bit digits, written in Nikaia on the
+methods above (`widening_mul` for a digit's product, `overflowing_add` for
+the carry, `narrowing_div_rem` for a digit's quotient).
+
+```nika
+let t = BigInt::of(a).mul(BigInt::of(x)).add(BigInt::of(b).mul(BigInt::of(y)))
+let g = t.gcd(BigInt::of(d))
+let (q, _) = t.div_rem(g) ?? return   // (BigInt, BigInt), null for a zero divisor
+let small = q.narrow()                 // i64? where it fits
+```
+
+* **Made** with `BigInt::of(v)` from any integer type of Part I 2.2 and
+  `BigInt::from_wide(w)`; read back with `narrow() -> i64?`, `sign() -> i64`,
+  `bits() -> i64` and its decimal text.
+* **Exact, never wrapped, never `null` for size**: `add`, `sub`, `neg`, `mul`,
+  `abs` and `gcd` give a `BigInt`; `div_rem` and `rem` round as `/` and `%`
+  round and give `null` only for a zero divisor. `==` and the comparisons are
+  a `BigInt`'s with another.
+* **Not a number type**, as `Wide[T]`: no literal, no operator, no `as`
+  ([ADR-294](adr/adr-294.md)). A program pays nothing for it unless it names
+  it; a value that fits `i64` is held in `i64`, and a `BigInt` is taken only
+  where a fixed width has already overflowed.
+
 Two conversions lose digits without anything failing:
 
 * **An `f64` to an `f32`** rounds to the nearest `f32` where it is within the
