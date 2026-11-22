@@ -724,7 +724,7 @@ pub(crate) fn summed_notes(arena: &mut logic::TermArena, scope: &ProverScope, re
         if alts.is_empty() { continue; }
         let mut whys: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         whys.reserve(alts.iter().size_hint().0); for alt in alts.iter() { whys.push(nikaia_std::block::Text::from(alt.why.to_string())); }
-        let call = nikaia_std::block::Text::from(nikaia_std::index::get(&alts, 0).call.to_string());
+        let call = nikaia_std::block::Text::from(unsafe { nikaia_std::proven::read(&alts, (0) as usize) }.call.to_string());
         let how = nikaia_std::block::Text::from(whys.join("; "));
         let mut said = format!("`{}`: {}.", call, how);
         let value = *nikaia_std::index::get(&values, bound);

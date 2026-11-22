@@ -1,0 +1,16 @@
+// What `Wide::product(a, b)` tells the bounds walk (#2647, ADR-270 D11): with
+// both factors bounded the product lies in the product of their intervals,
+// so `narrow()` of it bounds the index.
+fn pick(xs: ref Vec[i64], a: i64, b: i64) -> i64? {
+	if a < 0 || a >= 3 || b < 0 || b >= 4 || xs.len() < 10 {
+		return null
+	}
+	let n = Wide::product(a, b).narrow() ?? return null
+	return xs[n]
+}
+
+fn main() throws {
+	let xs: Vec[i64] = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+	println(pick(xs, 2, 3) ?? 0)
+	println(pick(xs, 2, 4) ?? 0)
+}

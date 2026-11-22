@@ -1,0 +1,91 @@
+// ADR-359 D14: a summary is over a list parameter's `.len()`, keeps the
+// exits it reads (an exit it cannot read, `t[0] + 1`, gives no fact on its
+// own path), and a method of the program's own `impl` has one however it
+// is called: on `self`, on another receiver, by its path without a
+// receiver, and inside a value or an `if`'s condition (#2618).
+fn need(n: i64) -> i64 {
+    assert(n >= 1)
+    return n
+}
+
+fn kind(t: ref Vec[i64]) -> i64 {
+    if t.len() != 1 {
+        return 0
+    }
+    return t[0] + 1
+}
+
+pub fn free(t: ref Vec[i64]) -> i64 {
+    let k = kind(t)
+    if k == 0 {
+        return 0
+    }
+    return need(t.len() as i64)
+}
+
+pub fn free_in_a_condition(t: ref Vec[i64]) -> i64 {
+    if kind(t) == 0 {
+        return 0
+    }
+    return need(t.len() as i64)
+}
+
+pub struct Reader {
+    base: i64,
+}
+
+impl Reader {
+    fn kind(ref self, t: ref Vec[i64]) -> i64 {
+        if t.len() != 1 {
+            return 0
+        }
+        return self.base + 1
+    }
+
+    fn sized(t: ref Vec[i64]) -> i64 {
+        if t.len() != 2 {
+            return 0
+        }
+        return 5
+    }
+
+    pub fn own(ref self, t: ref Vec[i64]) -> i64 {
+        let k = self.kind(t)
+        if k == 0 {
+            return 0
+        }
+        return need(t.len() as i64)
+    }
+
+    pub fn in_a_value(ref self, t: ref Vec[i64]) -> i64 {
+        if self.kind(t) == 0 {
+            return 0
+        }
+        return need(t.len() as i64)
+    }
+}
+
+pub fn other(r: ref Reader, t: ref Vec[i64]) -> i64 {
+    let k = r.kind(t)
+    if k == 0 {
+        return 0
+    }
+    return need(t.len() as i64)
+}
+
+pub fn by_path(t: ref Vec[i64]) -> i64 {
+    let k = Reader::sized(t) + 0
+    if k == 0 {
+        return 0
+    }
+    return need(t.len() as i64 - 1)
+}
+
+fn main() throws {
+    let r = Reader { base: 9 }
+    let one: Vec[i64] = [4]
+    let two: Vec[i64] = [4, 5]
+    println(f"{free(one)} {free(two)} {free_in_a_condition(one)} {free_in_a_condition(two)}")
+    println(f"{r.own(one)} {r.in_a_value(one)} {other(r, one)} {other(r, two)}")
+    println(f"{by_path(two)} {by_path(one)}")
+}

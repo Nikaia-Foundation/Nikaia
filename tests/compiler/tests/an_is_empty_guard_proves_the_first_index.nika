@@ -1,0 +1,19 @@
+/// `xs.is_empty()` says what `xs.len() == 0` says to the bounds walk
+/// (#2629): returned on, or denied, it proves `xs[0]`.
+pub fn first_after_return(xs: ref Vec[i64]) -> i64 {
+	if xs.is_empty() {
+		return 0
+	}
+	return xs[0]
+}
+
+pub fn first_where_not_empty(xs: ref Vec[i64]) -> i64 {
+	if !xs.is_empty() {
+		return xs[0]
+	}
+	return 0
+}
+
+fn main() throws {
+	println(f"{first_after_return([4, 5])} {first_where_not_empty([])}")
+}

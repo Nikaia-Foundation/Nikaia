@@ -284,7 +284,7 @@ pub(crate) fn sv_fast(book: &mut SvBook, cnf: &SvCnf, ids: &[u32]) -> SvFastRun 
     }
     let mut dists: Vec<i64> = vec![];
     let mut preds: Vec<i64> = vec![];
-    for _ in 0..cnf.query.columns as i64 + 1 {
+    for _ in 0..unsafe { nikaia_std::proven::add::<i64>(cnf.query.columns as i64, 1) } {
         dists.push(0);
         preds.push(-1);
     }

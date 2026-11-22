@@ -1,0 +1,32 @@
+/// A whole-number part of a tuple bound without a written type is a number
+/// of the bounds walk (#2629), as `let row: i64 = ...` is: its guard bounds
+/// the result, and the caller's `row + 1` and `lines[row]` are proved.
+fn line_at(lines: ref Vec[String], offset: i64) -> (i64, i64) {
+	let mut line = 0
+	let mut start = 0
+	while line + 1 < lines.len() && start + lines[line].len() < offset {
+		start += lines[line].len() + 1
+		line += 1
+	}
+	return (line, start)
+}
+
+fn row_of(lines: ref Vec[String], at: i64) -> i64 {
+	let row = line_at(lines, at).0
+	if row < 0 || row >= lines.len() {
+		return -1
+	}
+	return row
+}
+
+pub fn numbered(lines: ref Vec[String], at: i64) -> String {
+	let row = row_of(lines, at)
+	if row < 0 {
+		return ""
+	}
+	return f"{row + 1} {lines[row]}"
+}
+
+fn main() throws {
+	println(numbered(["ab", "cd"], 3))
+}

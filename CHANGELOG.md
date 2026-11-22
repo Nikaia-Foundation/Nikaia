@@ -8,6 +8,15 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1527] — 2026-11-22
+
+**Builders' changes (#2618, #2629, #2647, #2661)**
+- none (test only)
+- Prover: a method's result summary holds on any receiver (`r.kind(t)`), for an impl function called by its path (`Reader::sized(t)`), and a call's summary inside a value or an `if` condition (`if kind(t) == 0`, `self.kind(t) + 0`) (ADR-359 D14, #2618)
+- Bounds walk: is_empty guards, tuple parts and small-type casts are proved - if xs.is_empty() { return } proves xs[0], let row = f().0 is bounded by its guards like let row: i64, and -1 - s.start as i64 with a u32 field fits (#2629).
+- The prover reads a Wide exactly: a value past `Wide::of(a).narrow() ?? return` (and past add, sub, mul by a constant, and product of bounded factors) keeps the range of the values it was made from, so an index by it is proved.
+- The prover no longer asks the solver whether a checked i64 operation overflows where the facts' own bounds keep it inside the type.
+
 ## [0.0.1526] — 2026-11-22
 
 **Builders' changes (#1933)**

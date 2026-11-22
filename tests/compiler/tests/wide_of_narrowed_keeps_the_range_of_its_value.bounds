@@ -1,0 +1,5 @@
+bounds in tests/wide_of_narrowed_keeps_the_range_of_its_value.nika: 2 indexes, 2 proved; 0 operations, 0 proved
+     9  xs[n]    proved
+    19  xs[…]    proved
+  derived  pick: 0 <= a, a <= xs.len(), a < xs.len(), proved at the calls on lines 24
+  derived  pick_held: a <= xs.len(), a < xs.len(), proved at the calls on lines 25
