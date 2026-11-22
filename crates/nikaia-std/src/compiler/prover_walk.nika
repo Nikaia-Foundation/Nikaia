@@ -2885,7 +2885,21 @@ fn prover_raw_sink(mut walk: ProverWalk, callee: ref String, args: ref Vec[Expr]
         if args.len() > 1 {
             raw_sink_options(walk, args[1], "", span, scope, at, program, words, library, holes_of, ask, written_of)
         }
-    } else if callee.starts_with("fs::") && library.functions.contains_key(callee) {
+    } else if callee == "process::Stream::File" && !args.is_empty() {
+        // ADR-243 D11: the file a child's stream goes to is opened by this
+        // program for writing, under no root, so it may name any file, as a
+        // path under `fs::Root::Anywhere` (ADR-raw-sinks-1 D11, D14).
+        let mut parts: Vec[Expr] = []
+        raw_sink_parts(args[0], holes_of, parts)
+        let mut guard = String()
+        if raw_sink_clean_lead(args[0], scope, words, library, walk.state, holes_of) {
+            guard.push_str("path")
+        }
+        let sink = ParamSink { index: -1, kind: "path", sink: "the file `process::Stream::File` opens for a program's output, which may name any file", operation: "write", root_part: false, guard: guard }
+        for part in parts {
+            raw_sink_part(walk, sink, sink.sink, part, span, scope, at, program, words, library, holes_of, ask, written_of)
+        }
+    } else if callee.starts_with("fs::")&& library.functions.contains_key(callee) {
         for (i, written) in args.iter().enumerate() {
             let mut joins: Vec[Expr] = []
             let arg = raw_sink_root(written, scope, words, written_of, joins)

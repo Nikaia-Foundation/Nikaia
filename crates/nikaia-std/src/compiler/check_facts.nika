@@ -578,6 +578,12 @@ pub struct CheckFacts {
     /// element's `Result`; with what the walk fails with, read off its type
     /// (#2742), for a `catch` around the walk to open.
     pub failing_item_receivers: collections::BTreeMap[i64, Vec[String]],
+    /// **A step that ends a `par_iter` walk whose elements or lambda can
+    /// fail** (ADR-async-5 D26, #2681), by its receiver's node: every element
+    /// runs, the first failure in input order is the call's and the others its
+    /// `secondary` list (`par::kept_failures`), where a sequence stops at the
+    /// first.
+    pub kept_failure_ends: collections::BTreeSet[i64],
     /// A lambda where the function type hands back nothing (#1321): its
     /// body's last value is dropped, as a named function's is that declares
     /// no result.
@@ -1112,6 +1118,7 @@ impl CheckFacts {
             failing_through_lambdas: collections::BTreeMap(),
             failing_through_calls: collections::BTreeMap(),
             failing_item_receivers: collections::BTreeMap(),
+            kept_failure_ends: collections::BTreeSet(),
             valueless_lambdas: collections::BTreeSet(),
             run_code_fails: collections::BTreeSet(),
             changing_lambdas: collections::BTreeMap(),
