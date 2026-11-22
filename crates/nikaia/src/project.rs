@@ -1346,11 +1346,14 @@ pub struct PendingRecord {
     reads: BTreeMap<std::string::String, std::string::String>,
     choices: Choices,
     artifacts: Artifacts,
-    /// Whether the warnings stored say something, and the committed
-    /// `nikaia.contracts` they were said against: a warning that narrates a
-    /// change to that ledger (`NK2403`) is not repeated once the build has
-    /// written it (ADR-297 D12), so an entry holding one is not recorded
-    /// when the file changed.
+    /// Whether the warnings stored narrate a change to the committed
+    /// `nikaia.contracts` (`NK2402`, `NK2403`), and the file they were said
+    /// against: such a warning is not repeated once the build has written
+    /// it (ADR-297 D12), so an entry holding one is not recorded when the
+    /// file changed. Any other warning is replayed by a cache hit as said,
+    /// so it keeps the entry (#1949: a dependency's `NK1261` kept the
+    /// binary's lowering out of the cache, and the build's `rustc` wrapper
+    /// inferred its ledger a second time).
     warned: bool,
     committed: Option<std::string::String>,
 }
@@ -1815,7 +1818,7 @@ impl project_lower::ProjectLowerHost for LowerHost<'_> {
             reads: self.reads_taken(),
             choices: self.choices().clone(),
             artifacts: self.artifacts_of(made),
-            warned: !made.warnings.is_empty(),
+            warned: made.warnings.contains("[NK2402]") || made.warnings.contains("[NK2403]"),
             committed: std::fs::read_to_string(self.layout.root.join("nikaia.contracts")).ok(),
         });
     }
