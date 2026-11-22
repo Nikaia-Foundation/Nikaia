@@ -783,6 +783,8 @@ pub struct CheckFacts {
     /// The declared types whose `Hash` is derived from their fields (ADR-010 D11).
     pub hashes: collections::BTreeSet[String],
     pub copies: collections::BTreeSet[String],
+    /// The declared types that do not copy, so derive no `Clone` (#2238).
+    pub uncloned: collections::BTreeSet[String],
     pub viewed_numbers: collections::BTreeSet[(i64, String)],
     pub array_literals: collections::BTreeSet[i64],
     pub byte_literals: collections::BTreeSet[i64],
@@ -1160,6 +1162,7 @@ impl CheckFacts {
             compares_totally: collections::BTreeSet(),
             hashes: collections::BTreeSet(),
             copies: collections::BTreeSet(),
+            uncloned: collections::BTreeSet(),
             viewed_numbers: collections::BTreeSet(),
             array_literals: collections::BTreeSet(),
             byte_literals: collections::BTreeSet(),

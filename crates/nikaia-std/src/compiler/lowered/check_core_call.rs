@@ -491,9 +491,10 @@ pub(crate) fn check_core_call_unresolved<H: CheckHost>(state: &mut CheckState, w
     if is_variable && state.run_code.contains(name) {
         let looked: Ty = nikaia_std::index::or(state.lookup(name), || Ty::Unknown);
         match looked {
-            Ty::Fn { ref params, ref result, can_throw, .. } => {
+            Ty::Fn { ref params, ref result, is_sync, can_throw, .. } => {
                 let result = nikaia_std::boxed::open(result);
                 check_core_call_lent(state, world, args, params, found, name, span);
+                state.a_call_that_may_pause(name, !is_sync, false, span);
                 let current: String = nikaia_std::index::or(match state.current.as_ref() {
                     Some(__nikaia_it) => Some(__nikaia_it.clone()),
                     None => None,

@@ -2214,6 +2214,16 @@ impl EmitState {
             out.push("__nikaia_site.full_of(&error)")
             return
         }
+        // **`error.message()` in a handler the box reached** (#2219): the
+        // box has no `message`, and an error's message is what it displays
+        // (an `impl Error` writes its `Display` from `message`), so it is
+        // asked that way. On the block types (#490) `String` is a block's text.
+        let boxed_catch = (scope.caught_sum ?? "-") == ""
+        if boxed_catch && name == "message" && args.len() == 0 && emit_call_named(world, receiver, "error") {
+            let into = if self.on_block_types() { ".into()" } else { "" }
+            out.push(f"error.to_string(){into}")
+            return
+        }
         // **`x.rotate_left(n)` turns by `n` modulo the width** (#776), and
         // **`x.wrapping_shl(n)` shifts by `n` modulo the width** (#765): any
         // integer `n`, handed to Rust's as a `u32`, which Rust takes modulo the

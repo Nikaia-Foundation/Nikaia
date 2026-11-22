@@ -1,0 +1,27 @@
+// `fs::Mapped`, the type `fs::map` hands back, is written with its module like
+// every other `std` type in a module (ADR-313 D3, Part III's `State[fs::Mapped]`):
+// a parameter, a `let` and a field of that type take what `fs::map` gives.
+use std::fs
+
+struct Holder {
+    m: fs::Mapped
+}
+
+fn length(m: fs::Mapped) -> i64 {
+    return m.len()
+}
+
+fn text_of(m: ref fs::Mapped) -> String throws {
+    return m.text() + ""
+}
+
+fn main() throws {
+    let root = fs::scratch()
+    fs::write("a", root, "hello")
+    println(f"parameter: {length(fs::map("a", root))}")
+    let b: fs::Mapped = fs::map("a", root)
+    println(f"let: {b.len()} {b.text()}")
+    println(f"lent: {text_of(b)}")
+    let h = Holder { m: fs::map("a", root) }
+    println(f"field: {h.m.len()} {h.m[0]}")
+}

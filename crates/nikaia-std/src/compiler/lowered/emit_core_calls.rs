@@ -1477,6 +1477,12 @@ impl EmitState {
             out.push("__nikaia_site.full_of(&error)");
             return Ok(());
         }
+        let boxed_catch = nikaia_std::index::or(scope.caught_sum.as_deref(), || "-") == "";
+        if boxed_catch && name == "message" && args.is_empty() && emit_call_named(world, receiver, "error") {
+            let into = if self.on_block_types() { ".into()" } else { "" };
+            out.push(&format!("error.to_string(){}", into));
+            return Ok(());
+        }
         let rotation = world.words.resolve(method);
         let counted = rotation == "rotate_left" || rotation == "rotate_right" || rotation == "wrapping_shl" || rotation == "wrapping_shr";
         if counted && args.len() == 1 {
@@ -1568,8 +1574,8 @@ pub(crate) fn emit_tuple_part_copy(i: i64, word: &str) -> String {
 }
 
 pub(crate) fn emit_tuple_part_copies(parts: &[String]) -> String {
-    let copies: Vec<String> = parts.iter().enumerate().map(|(at, item)| (at as i64, item)).map(|__nikaia_tuple117105| {
-        let (i, word) = __nikaia_tuple117105;
+    let copies: Vec<String> = parts.iter().enumerate().map(|(at, item)| (at as i64, item)).map(|__nikaia_tuple117732| {
+        let (i, word) = __nikaia_tuple117732;
         emit_tuple_part_copy(i, word)
     }).collect::<Vec<_>>();
     if copies.len() == 1 { return format!("({},)", *unsafe { nikaia_std::proven::read(&copies, (0) as usize) }); }
