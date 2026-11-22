@@ -2071,6 +2071,7 @@ pub(crate) fn check_core_stmt<H: CheckHost>(state: &mut CheckState, world: &Chec
             let deep = *deep; let mutable = *mutable;
             let typed = check_core_stmt_let(state, world, host, names, shape, mutable, mut_names, deep, (ty).as_ref(), value, span);
             check_core_stmt_a_stream_let(state, world, names, shape, mutable, (ty).as_ref(), value, span);
+            check_core_stmt_a_pending_task(state, world, names, value);
             typed
         },
         Stmt::Comptime { name, ty, value, bounds } => { let name = *name; check_core_comptime_binding(state, world, host, name, (ty).as_ref(), value, bounds, span) },
@@ -2082,6 +2083,23 @@ pub(crate) fn check_core_stmt<H: CheckHost>(state: &mut CheckState, world: &Chec
         Stmt::Continue => check_core_stmt_jump(state, "continue", span),
         Stmt::Expr(expr) => check_core_expr(state, world, host, expr, span),
         Stmt::Emit(value) => check_core_stmt_emit(state, world, host, value, span),
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn check_core_stmt_a_pending_task(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, names: &[winnow_grammar::Symbol], value: &Expr) {
+    if names.len() != 1 { return; }
+    match value {
+        Expr::Async(inner, _, _, _) if state.flow.fallible_tasks.contains(&(id_of(value) as i64)) => {
+            let inner = nikaia_std::boxed::open(inner);
+            let name = nikaia_std::block::Text::from(world.words.resolve(*unsafe { nikaia_std::proven::read(&names, (0) as usize) }).to_string());
+            match state.binding(&name) {
+                Some(ref bound) => { state.flow.pending_tasks.insert(bound.id, format!("let {} = async {}", name, written_expression(world.words, inner))); },
+                None => { },
+            }
+        },
+        _ => { },
     }
 }
 

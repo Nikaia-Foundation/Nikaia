@@ -74,7 +74,7 @@ impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     pub(crate) fn newly_reaches_a_handler(&mut self, key: &str, gained: &[String], span: &Span) {
-        if self.flow.guarded.is_none() || gained.is_empty() { return; }
+        if self.flow.guarded.is_none() || self.flow.task_probe || gained.is_empty() { return; }
         let named = names_listed(gained);
         let notes: Vec<String> = vec![format!("`{}` couldn't throw {} when this handler was written. A `catch` takes everything that reaches it, so it handles the new error the same way as the others.", key, named), String::from("Nothing is wrong: this is just to let you know. Once the updated `nikaia.contracts` is committed, you won't see this note again.")];
         self.findings.push(CheckFinding { severity: CheckSeverity::Warning, span: span.clone(), code: String::from("NK2402"), message: format!("This `catch` now also receives {} from `{}`.", named, key), notes, help: Some(String::from("Check that the handler does the right thing for it. Adding an arm and leaving it as it is are both fine; `nikaia build` without `--locked` records the change.")), labels: vec![], edit: None });

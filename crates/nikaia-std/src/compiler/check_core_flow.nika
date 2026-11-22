@@ -1918,7 +1918,11 @@ pub fn check_core_flow_try_catch[H: CheckHost](mut state: CheckState, world: ref
     // **A guard of its own, and the enclosing one set aside** (ADR-308).
     let enclosing: CheckGuarded? = state.flow.guarded?.clone()
     state.flow.guarded = CheckGuarded::nothing()
+    // A `catch` inside a task's walk is a handler again (`NK2402`).
+    let probing = state.flow.task_probe
+    state.flow.task_probe = false
     let answers = check_core_expr(state, world, host, guarded_expr, span)
+    state.flow.task_probe = probing
     let held: CheckGuarded? = state.flow.guarded?.clone()
     state.flow.guarded = enclosing
     // **A nested `catch` fails the enclosing one only by what passes it**
@@ -1939,7 +1943,22 @@ pub fn check_core_flow_try_catch[H: CheckHost](mut state: CheckState, world: ref
     let guarded: CheckGuarded = held ?? CheckGuarded::nothing()
     state.a_fatal_error_passes(world, guarded, handler, span)
     let caught = check_core_flow_caught_type(guarded)
-    state.nothing_here_can_fail(guarded, span)
+    // **A pending binding named in it** (ADR-async-5 D22): its task's
+    // failure arrives before the statement, where this `catch` is not.
+    let mut named: collections::BTreeSet[String] = collections::BTreeSet()
+    names_in(guarded_expr, world.words, named)
+    let mut task: String? = null
+    for name in named {
+        if task == null {
+            match state.binding(name) {
+                bound => {
+                    task = state.flow.pending_tasks.get(bound.id)?.clone()
+                },
+                null => {},
+            }
+        }
+    }
+    state.nothing_here_can_fail(guarded, task, span)
     let id = state.a_new_binding()
     state.scope.push([CheckLocal::free("error", caught, id)])
     // **A set that cannot be named is open** (ADR-351 D4): a `match` over it

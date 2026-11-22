@@ -61,8 +61,15 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn nothing_here_can_fail(&mut self, guarded: &CheckGuarded, span: &Span) {
+    pub(crate) fn nothing_here_can_fail(&mut self, guarded: &CheckGuarded, task: Option<&str>, span: &Span) {
         if guarded.fallible || guarded.unanswered { return; }
+        match task {
+            Some(written) => {
+                self.findings.push(check_refusal("NK1134", span, String::from("Nothing here can fail, so the `catch` has nothing to handle."), vec![format!("`{}` starts a task; its failure arrives where the task is waited for, before this whole statement, so no `catch` inside the statement meets it (ADR-async-5 D22).", written), String::from("Nothing else here is declared with `throws`.")], Some(format!("Handle the task's failure with a fallback after the `async` expression, `{} catch {{ … }}`, and remove this `catch`.", written))));
+                return;
+            },
+            None => { },
+        }
         self.findings.push(check_refusal("NK1134", span, String::from("Nothing here can fail, so the `catch` has nothing to handle."), vec![String::from("Only a call to a function declared with `throws` can fail."), String::from("None of the calls here is declared with `throws`."), String::from("(A call the compiler knows nothing about would not be reported here.)")], Some(String::from("Remove the `catch` and its handler."))));
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
