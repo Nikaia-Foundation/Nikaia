@@ -255,6 +255,8 @@ impl CheckState {
         if args.len() != 1 || found.len() != 1 { return; }
         let given = unsafe { nikaia_std::proven::read(&args, (0) as usize) };
         let ty = unsafe { nikaia_std::proven::read(&found, (0) as usize) };
+        let a_list = key.starts_with("Vec::") || key.starts_with("Array::");
+        if !a_list && self.a_pending_coalesce_is_lent(given) { return; }
         let a_string = matches!(given, Expr::LitStr { .. });
         if !a_string && names_text(ty) && check_reads_keyed_by_views(on) {
             self.facts.map_keys.insert((id_of(given) as i64, false), FactKeyForm::Viewed);

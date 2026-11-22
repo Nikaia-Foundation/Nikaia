@@ -387,6 +387,14 @@ impl CheckState {
         }
         let given = args[0]
         let ty = found[0]
+        // **A `??` looked up in a map or a set is only read** (ADR-279 D5,
+        // #2372): its left side is lent, `index::or(o.as_deref(), || "")`,
+        // which is the reference the lookup takes, and the option stays the
+        // caller's. A list's `contains` wants `&T` itself and is left out.
+        let a_list = key.starts_with("Vec::") || key.starts_with("Array::")
+        if !a_list && self.a_pending_coalesce_is_lent(given) {
+            return
+        }
         let a_string = match given {
             Expr::LitStr { .. } => true,
             else => false,
