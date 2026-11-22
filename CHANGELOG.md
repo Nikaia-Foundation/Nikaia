@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1528] — 2026-11-22
+
+**escape_scalar in escapes.nika answers which numbers name a character; the char_of parameters and BtHost::char_of go (#2672)**
+- The build-time folder finds a `comptime`, an `enum` variant and a grammar's entry rule in Nikaia (build_eval.nika over ParsedViews), and a `comptime` may now fold a `comptime` declared in another file of the package; `crates/nikaia/src/build_time.rs` is gone, and the `char_of` callback is gone from every escape walk (`escape_scalar` in escapes.nika).
+
 ## [0.0.1527] — 2026-11-22
 
 **Builders' changes (#2618, #2629, #2647, #2661)**
