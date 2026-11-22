@@ -3684,7 +3684,7 @@ pub mod order {
 }
 pub mod panics {
     #[allow(unused_imports)]
-    pub use super::{PanicFacts, PanicReach, PanicsGraph, unit_panics, panics_of_graph, places_of_graph, panics_worth_proving, panics_of_task, places_of_task};
+    pub use super::{PanicFacts, PanicReach, PanicsGraph, unit_panics, panics_of_graph, places_of_graph, panics_of_unit, places_of_unit, panics_callees_first, places_callees_first, panics_settle, panics_worth, panics_units, panics_worth_proving, panics_of_task, places_of_task};
 }
 pub mod parse_errors {
     #[allow(unused_imports)]
@@ -3941,6 +3941,7 @@ pub fn nikaia_tests() -> std::vec::Vec<(std::string::String, fn() -> Result<(), 
     all.extend(locks_nikaia_tests().into_iter().map(|(name, run)| (name.to_string(), run)));
     all.extend(manifest_nikaia_tests().into_iter().map(|(name, run)| (name.to_string(), run)));
     all.extend(modules_nikaia_tests().into_iter().map(|(name, run)| (name.to_string(), run)));
+    all.extend(panics_nikaia_tests().into_iter().map(|(name, run)| (name.to_string(), run)));
     all.extend(paths_nikaia_tests().into_iter().map(|(name, run)| (name.to_string(), run)));
     all.extend(signature_nikaia_tests().into_iter().map(|(name, run)| (name.to_string(), run)));
     all.extend(threads_nikaia_tests().into_iter().map(|(name, run)| (name.to_string(), run)));
@@ -3988,4 +3989,4 @@ pub fn nikaia_run_tests(filters: &[std::string::String], list: bool, more: std::
 /// **The digest of this lowered set** (#1610): every file `lower-std` wrote
 /// beside this index, and the index above this line. Compiled into the same
 /// crate as the code it names, it is the compiler's identity for its caches.
-pub const LOWERED_DIGEST: &str = "91c116889a002d2fc121807e8b59e50df297ed96512e98196ae8f517916da587";
+pub const LOWERED_DIGEST: &str = "3f177d5e3af885b6d762719860dd88862ff0de316b380f0cfcd9ac9c36b4bd56";

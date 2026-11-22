@@ -157,6 +157,197 @@ pub fn places_of_graph(graph: ref PanicsGraph, own: ref Ledger) -> collections::
     return placing
 }
 
+/// **One function's final `panics` column, or its recursive group's**
+/// (ADR-100 D7): `unit` is the function, or the strongly connected component
+/// it is a part of, and `stored` the final columns of the callees outside
+/// it. The fixpoint runs inside the unit only; a callee neither in it nor
+/// stored answers what its ledger entry says, as in `panics_of_graph`.
+pub fn panics_of_unit(unit: ref Vec[String], graph: ref PanicsGraph, stored: ref collections::BTreeMap[String, Panics], own: ref Ledger) -> collections::BTreeMap[String, Panics] {
+    let mut answers: collections::BTreeMap[String, Panics] = collections::BTreeMap()
+    for name in unit {
+        let reach = graph.reaches[name] ?? continue
+        answers.insert(name.clone(), panics_own(reach))
+    }
+    let mut changed = true
+    while changed {
+        changed = false
+        for name in unit {
+            let reach = graph.reaches[name] ?? continue
+            let before: Panics = answers[name]?.clone() ?? Panics::Unknown
+            if before == Panics::Yes {
+                continue
+            }
+            let mut after: Panics = before.clone()
+            for callee in reach.calls {
+                let theirs: Panics = answers[callee]?.clone() ?? stored[callee]?.clone() ?? (own.functions[callee]?.panics?.clone() ?? Panics::Unknown)
+                after = after.or(theirs)
+            }
+            if after != before {
+                answers.insert(name.clone(), after)
+                changed = true
+            }
+        }
+    }
+    return answers
+}
+
+/// **One function's final `places` column, or its recursive group's**
+/// (ADR-100 D7, ADR-327 D13): which of the unit's functions build a list in
+/// their task's block, from the callees' stored columns (`stored` holds those
+/// that do, `settled` every callee already derived); a callee neither in the
+/// unit nor derived answers what its ledger entry says, as in
+/// `places_of_graph`.
+pub fn places_of_unit(unit: ref Vec[String], graph: ref PanicsGraph, stored: ref collections::BTreeSet[String], settled: ref collections::BTreeSet[String], own: ref Ledger) -> collections::BTreeSet[String] {
+    let mut placing: collections::BTreeSet[String] = collections::BTreeSet()
+    let mut members: collections::BTreeSet[String] = collections::BTreeSet()
+    for name in unit {
+        members.insert(name.clone())
+        let reach = graph.reaches[name] ?? continue
+        if reach.places {
+            placing.insert(name.clone())
+        }
+    }
+    let mut changed = true
+    while changed {
+        changed = false
+        for name in unit {
+            if placing.contains(name) {
+                continue
+            }
+            let reach = graph.reaches[name] ?? continue
+            for callee in reach.calls {
+                let theirs = if members.contains(callee) { placing.contains(callee) } else if settled.contains(callee) { stored.contains(callee) } else { own.functions[callee]?.places ?? false }
+                if theirs {
+                    placing.insert(name.clone())
+                    changed = true
+                    break
+                }
+            }
+        }
+    }
+    return placing
+}
+
+/// **The `panics` column of the whole package, callees first** (ADR-100 D7):
+/// each recursive group derived by `panics_of_unit` from the columns its
+/// callees already have. The least fixpoint is unique, so this answers what
+/// `panics_of_graph`, the reference, answers.
+pub fn panics_callees_first(graph: ref PanicsGraph, own: ref Ledger) -> collections::BTreeMap[String, Panics] {
+    let mut stored: collections::BTreeMap[String, Panics] = collections::BTreeMap()
+    for unit in panics_units(graph) {
+        let column = panics_of_unit(unit, graph, stored, own)
+        stored.extend(column)
+    }
+    return stored
+}
+
+/// **The `places` column of the whole package, callees first** (ADR-100 D7):
+/// what `places_of_graph`, the reference, answers.
+pub fn places_callees_first(graph: ref PanicsGraph, own: ref Ledger) -> collections::BTreeSet[String] {
+    let mut stored: collections::BTreeSet[String] = collections::BTreeSet()
+    let mut settled: collections::BTreeSet[String] = collections::BTreeSet()
+    for unit in panics_units(graph) {
+        let column = places_of_unit(unit, graph, stored, settled, own)
+        stored.extend(column)
+        for name in unit {
+            settled.insert(name.clone())
+        }
+    }
+    return stored
+}
+
+/// **The answer written into the ledger**: each function of this package
+/// its `panics` and whether it builds a list in its task's block (ADR-327
+/// D13), both derived callees first.
+pub fn panics_settle(graph: ref PanicsGraph, mut ledger: Ledger) {
+    for name in places_callees_first(graph, ledger) {
+        let mut contract = ledger.functions.get(name) ?? continue
+        contract.places = true
+    }
+    for (name, panics) in panics_callees_first(graph, ledger) {
+        let mut contract = ledger.functions.get(name) ?? continue
+        contract.panics = panics
+    }
+}
+
+/// The units whose checks are worth asking the bounds walk about, by their
+/// place in `walked` (each unit's keys, in the units' order).
+pub fn panics_worth(graph: ref PanicsGraph, answers: ref collections::BTreeMap[String, Panics], walked: ref Vec[Vec[String]]) -> Vec[i64] {
+    let mut worth: Vec[i64] = []
+    let mut at = 0
+    for keys in walked {
+        if panics_worth_proving(graph, answers, keys) {
+            worth.push(at)
+        }
+        at = at + 1
+    }
+    return worth
+}
+
+/// Tarjan's walk over the graph's calls: each node's visit number and lowest
+/// reachable one, the nodes still open, and the components in the order they
+/// close, which is callees first.
+struct PanicsComponents {
+    index: collections::BTreeMap[String, i64],
+    low: collections::BTreeMap[String, i64],
+    open: collections::BTreeSet[String],
+    stack: Vec[String],
+    units: Vec[Vec[String]],
+    next: i64,
+}
+
+/// The graph's recursive groups, each a unit, in reverse topological order:
+/// a unit comes after every unit it calls into. A call to a function the
+/// graph does not hold leaves it.
+pub fn panics_units(graph: ref PanicsGraph) -> Vec[Vec[String]] {
+    let mut walk = PanicsComponents { index: collections::BTreeMap(), low: collections::BTreeMap(), open: collections::BTreeSet(), stack: [], units: [], next: 0 }
+    for (name, _) in graph.reaches {
+        if !walk.index.contains_key(name) {
+            panics_connect(graph, name, walk)
+        }
+    }
+    return walk.units
+}
+
+fn panics_connect(graph: ref PanicsGraph, name: ref String, mut walk: PanicsComponents) {
+    walk.index.insert(name.clone(), walk.next)
+    walk.low.insert(name.clone(), walk.next)
+    walk.next = walk.next + 1
+    walk.stack.push(name.clone())
+    walk.open.insert(name.clone())
+    let reach = graph.reaches[name] ?? return
+    for callee in reach.calls {
+        if !graph.reaches.contains_key(callee) {
+            continue
+        }
+        let mut reached = -1
+        if !walk.index.contains_key(callee) {
+            panics_connect(graph, callee, walk)
+            reached = walk.low[callee] ?? -1
+        } else if walk.open.contains(callee) {
+            reached = walk.index[callee] ?? -1
+        }
+        let mine = walk.low[name] ?? 0
+        if reached >= 0 && reached < mine {
+            walk.low.insert(name.clone(), reached)
+        }
+    }
+    if (walk.low[name] ?? -1) != (walk.index[name] ?? -2) {
+        return
+    }
+    let mut unit: Vec[String] = []
+    while true {
+        let top = walk.stack.pop() ?? break
+        walk.open.remove(top)
+        let last = top == name
+        unit.push(top)
+        if last {
+            break
+        }
+    }
+    walk.units.push(unit)
+}
+
 /// Whether a unit's checks are worth asking the bounds walk about: one of
 /// its functions answers `No` with its checks left out, and has some.
 pub fn panics_worth_proving(graph: ref PanicsGraph, answers: ref collections::BTreeMap[String, Panics], walked: ref Vec[String]) -> bool {
@@ -474,4 +665,60 @@ fn panics_call(expr: ref Expr, func: ref Expr, items: ref Vec[Spanned[Item]], na
         }
         Callee::Method => {}
     }
+}
+
+fn panics_test_node(mut graph: PanicsGraph, name: String, sure: bool, places: bool, callees: Vec[String]) {
+    let mut reach = PanicReach { sure: sure, unknown: false, checks: false, places: places, calls: collections::BTreeSet() }
+    for callee in callees {
+        reach.calls.insert(callee.clone())
+    }
+    graph.reaches.insert(name, reach)
+}
+
+/// **The per-function entry answers what the whole-package entry answers**
+/// (ADR-100 D7, ADR-403 D3): on a call chain into a panic that places a list,
+/// a recursive pair that panics nowhere, a recursive group of three one of
+/// whose members panics, and a call nothing describes. The chain's head is
+/// derived from its callee's stored column alone, each group as one unit.
+test "the per-function panics entry gives the whole-package column" {
+    let mut graph = PanicsGraph { methods: collections::BTreeMap(), reaches: collections::BTreeMap() }
+    panics_test_node(graph, "a", false, false, ["b"])
+    panics_test_node(graph, "b", false, false, ["c"])
+    panics_test_node(graph, "c", true, true, [])
+    panics_test_node(graph, "p", false, false, ["q"])
+    panics_test_node(graph, "q", false, false, ["p"])
+    panics_test_node(graph, "s", false, false, ["t"])
+    panics_test_node(graph, "t", false, false, ["s", "u"])
+    panics_test_node(graph, "u", true, false, ["t"])
+    panics_test_node(graph, "r", false, false, ["mystery"])
+    let mut own = Ledger::blank()
+    for name in ["a", "b", "c", "p", "q", "s", "t", "u", "r"] {
+        own.functions.insert(name.clone(), FnContract::empty())
+    }
+    let whole = panics_of_graph(graph, own)
+    let first = panics_callees_first(graph, own)
+    assert(whole == first)
+    assert(places_of_graph(graph, own) == places_callees_first(graph, own))
+    assert((first["a"] ?? Panics::No) == Panics::Yes)
+    assert((first["s"] ?? Panics::No) == Panics::Yes)
+    assert((first["p"] ?? Panics::Yes) == Panics::No)
+    assert((first["r"] ?? Panics::No) == Panics::Unknown)
+    assert(places_callees_first(graph, own).contains("a"))
+    let mut groups = 0
+    for unit in panics_units(graph) {
+        if unit.len() > 1 {
+            groups = groups + 1
+        }
+    }
+    // `p, q` and `s, t, u` are the recursive groups.
+    assert(groups == 2)
+    let mut stored: collections::BTreeMap[String, Panics] = collections::BTreeMap()
+    stored.insert("b", Panics::Yes)
+    let alone: Vec[String] = ["a"]
+    let head = panics_of_unit(alone, graph, stored, own)
+    assert((head["a"] ?? Panics::No) == (whole["a"] ?? Panics::No))
+    let mut placing: collections::BTreeSet[String] = collections::BTreeSet()
+    placing.insert("b")
+    let placed = places_of_unit(alone, graph, placing, placing, own)
+    assert(placed.contains("a"))
 }

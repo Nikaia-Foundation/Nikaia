@@ -96,16 +96,14 @@ pub fn infer(
     for at in 0..units.len() {
         walked.push(walk(&mut graph, at, &facts_of(at, None), ledger));
     }
-    let first = nika::panics_of_graph(&graph, ledger);
+    let first = nika::panics_callees_first(&graph, ledger);
     // The second: each check a site, but where the walk proved it. The units
     // worth proving are proved on every core (#1277), in a project's build as
     // in `lower-std`'s (#1949): `proofs::in_parallel` carries the build's
     // thread-local state to the workers.
-    let worth: Vec<usize> = walked
-        .iter()
-        .enumerate()
-        .filter(|(_, keys)| nika::panics_worth_proving(&graph, &first, keys))
-        .map(|(at, _)| at)
+    let worth: Vec<usize> = nika::panics_worth(&graph, &first, &walked)
+        .into_iter()
+        .map(|at| at as usize)
         .collect();
     let own: &Ledger = ledger;
     let prove = |at: usize| {
@@ -140,17 +138,9 @@ pub fn infer(
         let proven = proofs.remove(&at).unwrap_or_default();
         walk(&mut graph, at, &facts_of(at, Some(proven)), ledger);
     }
-    // **Whether it builds a list in its task's block** (ADR-327 D13).
-    for name in nika::places_of_graph(&graph, ledger) {
-        if let Some(contract) = ledger.functions.get_mut(&name) {
-            contract.places = true;
-        }
-    }
-    for (name, panics) in nika::panics_of_graph(&graph, ledger) {
-        if let Some(contract) = ledger.functions.get_mut(&name) {
-            contract.panics = panics;
-        }
-    }
+    // **Whether it builds a list in its task's block** (ADR-327 D13) and
+    // its `panics`, callees first (ADR-100 D7).
+    nika::panics_settle(&graph, ledger);
 }
 
 /// **The unit's facts with the result summaries its check proves** (ADR-359
