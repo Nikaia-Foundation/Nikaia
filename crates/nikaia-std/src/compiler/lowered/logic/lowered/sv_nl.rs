@@ -224,8 +224,8 @@ pub(crate) fn sv_nl_candidates(defs: &[SvNl], values: &collections::BTreeMap<Str
                 z.sa = k;
                 out.push(z);
             }
-            for sa in [1, -1] {
-                for sb in [1, -1] {
+            for sa in [1i64, -1i64] {
+                for sb in [1i64, -1i64] {
                     let mut sg = sv_lemma(String::from("sign"), i);
                     sg.sa = sa;
                     sg.sb = sb;

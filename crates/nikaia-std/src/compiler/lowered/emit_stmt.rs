@@ -17,6 +17,8 @@ pub(crate) fn emit_stmt_makes_a_map(world: &EmitWorld<'_, '_, '_, '_>, node: &Ex
     }
 }
 
+pub(crate) fn emit_stmt_an_int_literal(item: &Expr) -> bool { matches!(item, Expr::LitInt { .. }) }
+
 pub(crate) fn emit_stmt_first(buf: &str, what: &str, from: i64) -> i64 {
     let tail = match nikaia_std::bytes::text_of_a_cut(&*buf, nikaia_std::index::get(&buf.as_bytes(), nikaia_std::index::at(from..))) {
         Ok(value) => value,
@@ -1188,11 +1190,13 @@ impl EmitState {
             },
             Expr::ListLit { items, .. } => {
                 if !lends && !items.is_empty() {
+                    let all_ints = items.iter().all(|item| { emit_stmt_an_int_literal(item) });
+                    let each = if all_ints { flow.widened() } else { flow };
                     out.push("[");
                     let mut i = 0;
                     for item in items.iter() {
                         if i > 0 { out.push(", "); }
-                        self.emit_expr(world, walk, out, host, item, depth, flow, scope)?;
+                        self.emit_expr(world, walk, out, host, item, depth, each, scope)?;
                         i += 1;
                     }
                     out.push("]");

@@ -291,7 +291,7 @@ pub(crate) fn sv_smt_congruences(cnf: &SvCnf, ids: &[u32], book: &mut SvBook, un
     while ((c) as usize) < cnf.query.clauses.len() {
         let clause = unsafe { nikaia_std::proven::read(&cnf.query.clauses, (c) as usize) };
         if clause.len() == 2 {
-            for k in [0, 1] {
+            for k in [0i64, 1i64] {
                 let d = *nikaia_std::index::get(&clause, nikaia_std::index::at(k));
                 let a = (d / 2u32) as i64;
                 if d % 2u32 == 0u32 && *nikaia_std::index::get(&cnf.definition, nikaia_std::index::at(a)) {

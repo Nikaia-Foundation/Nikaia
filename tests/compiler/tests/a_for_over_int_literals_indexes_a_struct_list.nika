@@ -1,0 +1,29 @@
+// A `for` over a list literal of integers binds an `i64` (ADR-285 D21): an
+// index by it reads a field of a struct element, which rustc refused as
+// "type annotations needed" while the literals carried no type.
+struct W {
+    n: i64,
+}
+
+enum E {
+    A(String),
+    B,
+}
+
+struct H {
+    node: E,
+}
+
+fn main() throws {
+    let items: Vec[W] = [W { n: 1 }, W { n: 2 }]
+    for at in [1, 0] {
+        println(items[at].n)
+    }
+    let held: Vec[H] = [H { node: E::A("a") }, H { node: E::B }]
+    for at in [1, 0] {
+        match held[at].node {
+            E::A(s) => println(s),
+            else => println("b"),
+        }
+    }
+}

@@ -25,6 +25,14 @@ fn emit_stmt_makes_a_map(world: ref EmitWorld, node: ref Expr) -> bool {
     }
 }
 
+/// Whether `item` is an integer literal as written.
+fn emit_stmt_an_int_literal(item: ref Expr) -> bool {
+    return match item {
+        Expr::LitInt { .. } => true,
+        else => false,
+    }
+}
+
 /// Where `what` first occurs in `buf` from `from`, or a number past any end.
 fn emit_stmt_first(buf: ref String, what: ref String, from: i64) -> i64 {
     let tail = buf.bytes[from..].text() catch { return 9223372036854775807 }
@@ -1656,13 +1664,20 @@ impl EmitState {
             // element type nothing would say.
             Expr::ListLit { items, .. } => {
                 if !lends && items.len() != 0 {
+                    // **Integer literals there carry their `i64`** (ADR-285
+                    // D21): the binding has no other place that says its
+                    // type, and an index by it (`index::at`) is generic, so
+                    // rustc cannot settle it before a field read on the
+                    // element.
+                    let all_ints = items.iter().all(fn(item) { emit_stmt_an_int_literal(item) })
+                    let each = if all_ints { flow.widened() } else { flow }
                     out.push("[")
                     let mut i = 0
                     for item in items {
                         if i > 0 {
                             out.push(", ")
                         }
-                        self.emit_expr(world, walk, out, host, item, depth, flow, scope)
+                        self.emit_expr(world, walk, out, host, item, depth, each, scope)
                         i += 1
                     }
                     out.push("]")

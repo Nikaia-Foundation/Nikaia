@@ -219,7 +219,7 @@ pub(crate) fn fb_invariant_checked<H: FbHost>(host: &H, k: u64, k0: u64, merged:
     let goal = fb_invariant_term(&mut a, k, k0, after, next, p);
     if !host.ask(&a, &facts, goal) { return false; }
     if !merged { return true; }
-    for kept in [-1, 0, 1] {
+    for kept in [-1i64, 0i64, 1i64] {
         let mut a = logic::TermArena::empty();
         let fa = a.var("f_a");
         let sa = a.var("steps_a");
