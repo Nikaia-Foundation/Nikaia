@@ -5353,9 +5353,12 @@ fn late_expr(expr: ref Expr, leaf: bool, ask: ref TierAsk, mut late: TierLate) {
         }
         Expr::MethodCall { receiver, method, args, .. } => {
             late_expr(receiver, false, ask, late)
+            // What the pushed value hands back itself (`line.trim()`) is the
+            // cut, not a view beside it (#1589).
+            let beside = late.temporaries.clone()
             late_all(args, ask, late)
             late_temporary(expr, ask, late)
-            late_pushed_cut(receiver, ask.names.resolve(method), args, ask, late)
+            late_pushed_cut(receiver, ask.names.resolve(method), args, beside, ask, late)
         }
         Expr::SafeMethod { receiver, args, .. } => {
             late_expr(receiver, false, ask, late)
@@ -5476,7 +5479,7 @@ fn late_argument(arg: ref Expr, ask: ref TierAsk, mut late: TierLate) {
 /// made, a view bound to `line` may outlive the push, or a second cut of
 /// `line` is pushed; else `line` dies at the push, and the cut may take its
 /// buffer.
-fn late_pushed_cut(receiver: ref Expr, method: ref String, args: ref Vec[Expr], ask: ref TierAsk, mut late: TierLate) {
+fn late_pushed_cut(receiver: ref Expr, method: ref String, args: ref Vec[Expr], beside: ref collections::BTreeSet[String], ask: ref TierAsk, mut late: TierLate) {
     if late.leaving > 0 || args.len() != 1 {
         return
     }
@@ -5491,18 +5494,9 @@ fn late_pushed_cut(receiver: ref Expr, method: ref String, args: ref Vec[Expr], 
     if held <= late.params_from || held > late.params_upto {
         return
     }
-    let word = match args[0] {
-        Expr::Index { base, index, .. } => {
-            if !a_range(index) {
-                return
-            }
-            match base {
-                Expr::Variable(name, _) => ask.names.resolve(name).clone(),
-                else => return,
-            }
-        },
-        else => return,
-    }
+    // An index cut (`line[a..]`), a cut at a `text::Pos` (`line.after(m.end)`,
+    // ADR-374 D3) or a trim of a name (`given_cut_source`, #1589).
+    let word = given_cut_source(args[0], ask.names) ?? return
     let serial = late_serial(word, late)
     if serial <= late.params_upto {
         return
@@ -5512,7 +5506,7 @@ fn late_pushed_cut(receiver: ref Expr, method: ref String, args: ref Vec[Expr], 
     pushed.push(node_key(args[0]))
     late.cut_pushes.insert(key.clone(), pushed)
     let loops = late_loops(word, late)
-    if late.loops > loops || late.temporaries.contains(f"{word} {serial}") || !late.made.contains(f"{word} {serial}") {
+    if late.loops > loops || beside.contains(f"{word} {serial}") || !late.made.contains(f"{word} {serial}") {
         return
     }
     // A view bound to the local may outlive the push: the local stays.
@@ -6019,6 +6013,20 @@ fn tier_expr(expr: ref Expr, ask: ref TierAsk, mut walk: TierWalk) -> Kinds {
         Expr::MethodCall { receiver, method, args, config, .. } => {
             let kinds = method_kinds(receiver, ask.names.resolve(method), args, ask, walk)
             own_method_options(ask.names.resolve(method), config, ask, walk)
+            // **A cut at a `text::Pos` or a trim of a local that dies at its
+            // push into a parameter's list is given the local's buffer**, as
+            // an index cut is (ADR-text-reuse-1 D2, #1589).
+            if walk.late_cuts.contains(node_key(expr)) {
+                match receiver {
+                    Expr::Variable(name, _) => {
+                        if only_own_text(kinds_of_local(ask.names.resolve(name), walk)) {
+                            walk.flows.given_cuts.insert(node_key(expr))
+                            return owned_kinds()
+                        }
+                    },
+                    else => {},
+                }
+            }
             kinds
         },
         Expr::SafeMethod { receiver, method, args, config, .. } => {
