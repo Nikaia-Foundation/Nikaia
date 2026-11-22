@@ -7547,9 +7547,6 @@ fn walk_grammar(def: ref GrammarDef, ask: ref TierAsk, mut walk: TierWalk) {
             walk_action(alt.action, ask, walk)
             close_tier_scope(walk)
         }
-        if rule.stream && def.public && rule.args.len() == 0 && rule.config.len() == 0 {
-            own_stream_items(rule.ret_type, ask, walk)
-        }
     }
 }
 
@@ -7578,48 +7575,6 @@ fn bind_rule_value(name: winnow_grammar::Symbol, ty: ref Type, ask: ref TierAsk,
     let mut local = plain_local(no_kinds())
     local.of = of
     bind_tier_local(ask.names.resolve(name).clone(), local, walk)
-}
-
-/// **A stream entry a Rust reader may read hands over owned items**
-/// (ADR-grammar-typed-read-v1 D7, #2708): the reader a package offered to
-/// Rust writes (`emit_stream_readers`) parses frames of a `std::io::Read`, so
-/// the item outlives the frame it was read from, and the text its type holds
-/// is text of its own. That is an entry of a `pub grammar` that takes no
-/// values; this pass runs before the build's settings are known, so it is
-/// every such entry. Any other entry's items view the input as the action
-/// that builds them does (ADR-views-v4 D5): its type is tethered, and a walk
-/// that would carry one off the input's loan is `NK1359`
-/// (`emit_stream_thread_refused`).
-fn own_stream_items(ret_type: ref Type?, ask: ref TierAsk, mut walk: TierWalk) {
-    let ty = ret_type ?? return
-    let item = ask.names.resolve(ty.name).clone()
-    let mut owners: Vec[(TextOwner, Type)] = []
-    let prefix = f"{item}::"
-    for (key, field) in walk.declared.fields {
-        if key.0 == item {
-            owners.push((TextOwner::Field(key.0.clone(), key.1.clone()), field.ty.clone()))
-        }
-    }
-    // A named variant's field is a field of `E::V`.
-    for (key, ty) in walk.declared.variant_fields {
-        if key.0.starts_with(prefix) {
-            owners.push((TextOwner::Field(key.0.clone(), key.1.clone()), ty.clone()))
-        }
-    }
-    for (key, parts) in walk.declared.variants {
-        if key.starts_with(prefix) {
-            let (of, variant) = variant_named(key)
-            let mut at = 0
-            for part in parts {
-                owners.push((TextOwner::Variant(of.clone(), variant.clone(), at), part.clone()))
-                at += 1
-            }
-        }
-    }
-    for (owner, part) in owners {
-        flow_type(owner, part, [], owned_kinds(), ask, walk)
-        unlinked_inside(owner, part, [], ask, walk)
-    }
 }
 
 fn flow_pattern_result(key: ref String, ret_type: ref Type?, kinds: ref Kinds, ask: ref TierAsk, mut walk: TierWalk) {

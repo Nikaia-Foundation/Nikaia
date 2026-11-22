@@ -5360,7 +5360,6 @@ pub(crate) fn walk_grammar(def: &GrammarDef, ask: &TierAsk<'_, '_, '_, '_, '_, '
             walk_action((alt.action).as_ref(), ask, walk);
             close_tier_scope(walk);
         }
-        if rule.stream && def.public && rule.args.is_empty() && rule.config.is_empty() { own_stream_items((rule.ret_type).as_ref(), ask, walk); }
     }
 }
 
@@ -5376,29 +5375,6 @@ pub(crate) fn bind_rule_value(name: winnow_grammar::Symbol, ty: &Type, ask: &Tie
     let mut local = plain_local(no_kinds());
     local.of = Some(of);
     bind_tier_local(nikaia_std::block::Text::from(ask.names.resolve(name).to_string()), local, walk);
-}
-
-pub(crate) fn own_stream_items(ret_type: Option<&Type>, ask: &TierAsk<'_, '_, '_, '_, '_, '_, '_>, walk: &mut TierWalk) {
-    let ty = match ret_type { Some(__nikaia_value) => __nikaia_value, None => return };
-    let item = nikaia_std::block::Text::from(ask.names.resolve(ty.name).to_string());
-    let mut owners: Vec<(TextOwner, Type)> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-    let prefix = format!("{}::", item);
-    for (key, field) in walk.declared.fields.iter() { if key.0 == item { owners.push((TextOwner::Field(nikaia_std::block::Text::from(key.0.to_string()), nikaia_std::block::Text::from(key.1.to_string())), field.ty.clone())); } }
-    for (key, ty) in walk.declared.variant_fields.iter() { if key.0.starts_with(&*prefix) { owners.push((TextOwner::Field(nikaia_std::block::Text::from(key.0.to_string()), nikaia_std::block::Text::from(key.1.to_string())), ty.clone())); } }
-    for (key, parts) in walk.declared.variants.iter() {
-        if key.starts_with(&*prefix) {
-            let (of, variant) = variant_named(key);
-            let mut at = 0;
-            owners.reserve(parts.iter().size_hint().0); for part in parts.iter() {
-                owners.push((TextOwner::Variant(nikaia_std::block::Text::from(of.to_string()), nikaia_std::block::Text::from(variant.to_string()), at), part.clone()));
-                at += 1;
-            }
-        }
-    }
-    for (owner, part) in owners.iter() {
-        flow_type(owner, part, &mut vec![], &owned_kinds(), ask, walk);
-        unlinked_inside(owner, part, &mut vec![], ask, walk);
-    }
 }
 
 pub(crate) fn flow_pattern_result(key: &str, ret_type: Option<&Type>, kinds: &Kinds, ask: &TierAsk<'_, '_, '_, '_, '_, '_, '_>, walk: &mut TierWalk) {

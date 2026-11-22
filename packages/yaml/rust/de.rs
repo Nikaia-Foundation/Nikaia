@@ -418,7 +418,7 @@ fn load(input: &[u8]) -> Result<Vec<Document<'_>>> {
                     continue;
                 }
                 match event.kind {
-                    native::EventKind::Alias => match anchors.get(event.value.as_str()) {
+                    native::EventKind::Alias => match anchors.get(text_of(&event.value)) {
                         Some(id) => Event::Alias(*id),
                         None => {
                             document.error = Some(Arc::new(ErrorImpl::UnknownAnchor(mark)));
@@ -442,7 +442,7 @@ fn load(input: &[u8]) -> Result<Vec<Document<'_>>> {
         };
         if let Some(anchor) = &event.anchor {
             let id = anchors.len();
-            anchors.insert(anchor.as_str().to_owned(), id);
+            anchors.insert(text_of(anchor).to_owned(), id);
             document.aliases.insert(id, document.events.len());
         }
         document.events.push((converted, mark));
@@ -465,8 +465,9 @@ fn load(input: &[u8]) -> Result<Vec<Document<'_>>> {
 }
 
 /// A scalar event: its text decoded, borrowed where the input holds it as
-/// it reads. The event owns its text (ADR-grammar-typed-read-v1 D7), so
-/// the scalar as written is borrowed from its span of the
+/// it reads. The event's text may be its own or a view (`text_of`,
+/// ADR-grammar-typed-read-v1 D7), and it lives only as long as the walk of
+/// the events, so the scalar as written is borrowed from its span of the
 /// input, where that span reads as the event's text.
 fn scalar<'de>(event: &native::Event, input: &'de [u8]) -> Scalar<'de> {
     let (style, literal) = match event.style {
@@ -475,10 +476,10 @@ fn scalar<'de>(event: &native::Event, input: &'de [u8]) -> Scalar<'de> {
         native::Style::Literal => (Style::Block, true),
         native::Style::Folded => (Style::Block, false),
     };
-    let written = event.value.as_str();
+    let written = text_of(&event.value);
     let Some(raw) = written_in(input, event, written) else {
         let value = match &event.text {
-            Some(text) => text.as_str().to_owned(),
+            Some(text) => text_of(text).to_owned(),
             None if style == Style::Block => written.trim().to_owned(),
             None => written.to_owned(),
         };
@@ -492,13 +493,13 @@ fn scalar<'de>(event: &native::Event, input: &'de [u8]) -> Scalar<'de> {
     let value = match &event.text {
         // A block scalar's text is folded and chomped; one a core tag reads
         // as a number, a `bool` or null has no text, and is its trimmed raw.
-        Some(text) if style == Style::Block => Cow::Owned(text.as_str().to_owned()),
+        Some(text) if style == Style::Block => Cow::Owned(text_of(text).to_owned()),
         None if style == Style::Block => Cow::Borrowed(raw.trim()),
         None => Cow::Borrowed(raw),
-        Some(text) if text.as_str() == raw => Cow::Borrowed(raw),
-        Some(text) => match borrowed_inside(raw, text.as_str(), style) {
+        Some(text) if text_of(text) == raw => Cow::Borrowed(raw),
+        Some(text) => match borrowed_inside(raw, text_of(text), style) {
             Some(borrowed) => Cow::Borrowed(borrowed),
-            None => Cow::Owned(text.as_str().to_owned()),
+            None => Cow::Owned(text_of(text).to_owned()),
         },
     };
     Scalar {
@@ -507,6 +508,13 @@ fn scalar<'de>(event: &native::Event, input: &'de [u8]) -> Scalar<'de> {
         style,
         literal,
     }
+}
+
+/// The text of an event's field, read alike where the event owns it and
+/// where it views the input the events were read from (the owned or the
+/// viewing form of `native::Event`, ADR-grammar-typed-read-v1 D7, #2735).
+fn text_of<T: AsRef<str> + ?Sized>(field: &T) -> &str {
+    field.as_ref()
 }
 
 /// The scalar as written, `written`, borrowed from the event's span of the

@@ -1,0 +1,13 @@
+# The package of `tests/a_rust_reader_hands_out_viewing_items_owned.nika`
+# (ADR-grammar-typed-read-v1 D7, #2735): the items of `Words::items` view the
+# input in Nikaia, and the feature `stream` offers `Words::items_reader`,
+# which yields their owned form.
+[package]
+name = "lines"
+version = "0.1.0"
+
+[build]
+artifact = "rust-library"
+
+[features]
+stream = ["lines::Words::items"]

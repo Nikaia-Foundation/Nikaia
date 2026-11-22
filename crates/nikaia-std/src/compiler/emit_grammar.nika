@@ -317,8 +317,9 @@ impl EmitState {
             }
         }
         let readers = emit_stream_readers(def, self.offered_to_rust)
+        let mut owned_forms: collections::BTreeSet[String] = collections::BTreeSet()
         for rule in readers {
-            self.emit_stream_reader(world, walk, out, host, name, rule)
+            self.emit_stream_reader(world, walk, out, host, name, rule, owned_forms)
         }
         for rule in emit_stream_walks(def, self.offered_to_rust) {
             self.emit_stream_walk(world, walk, out, host, name, rule)
@@ -343,7 +344,8 @@ impl EmitState {
 
     /// **The Rust user's reader of a `@stream` entry** (ADR-grammar-typed-read-v1 D7 and
     /// ADR-393 D4, both amended 2026-11-08): `G::<rule>_reader(r)` takes
-    /// `impl std::io::Read + Send + 'static` and hands back the items, owned,
+    /// `impl std::io::Read + Send + 'static` and hands back the items, owned
+    /// (an item that views the input as its owned form `ItemOwned`, #2735),
     /// as an iterator of `Result<Item, ParseError>`, the shape of the Nikaia
     /// walk: the engine's `parse_<rule>_reader_each` on a thread of its own,
     /// each item through a channel that holds none. The function is a
@@ -352,13 +354,25 @@ impl EmitState {
     /// (`emit_grammar`). The build of a feature that roots the entry
     /// keeps it under that feature's `#[cfg]`, and every other build blanks
     /// it (`features_applied`, `features_readers_dropped`).
-    fn emit_stream_reader[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, name: ref String, rule: ref GrammarRule) sync throws {
+    fn emit_stream_reader[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, name: ref String, rule: ref GrammarRule, mut owned_forms: collections::BTreeSet[String]) sync throws {
         let rule_name = emit_text(world, rule.name)
         let ty = rule.ret_type ?? return
-        let item = host.ty_named(walk, ty)
-        out.push(f"\n#[allow(non_snake_case)]\npub fn {emit_stream_reader_name(name, rule_name)}(reader: impl ::std::io::Read + Send + 'static) -> impl Iterator<Item = {self.rust_result()}<{item}, nikaia_std::grammar::ParseError>> {{ ")
+        let item = emit_renamed_lifetime(host.ty_named(walk, ty), "'a", "'_")
+        // **An item that views the input is handed out in its owned form**
+        // (#2735, `emit_stream_owned_form`): the frame it was read from is gone
+        // by the time the caller holds it.
+        let mut yielded = item.clone()
+        let mut made = "__wg_one.clone()"
+        if !ty.is_nullable && ty.generics.is_empty() {
+            let owned = self.emit_stream_owned_form(world, walk, out, host, emit_text(world, ty.name), owned_forms)
+            if owned != null {
+                yielded = owned ?? ""
+                made = f"{yielded}::of(__wg_one)"
+            }
+        }
+        out.push(f"\n#[allow(non_snake_case)]\npub fn {emit_stream_reader_name(name, rule_name)}(reader: impl ::std::io::Read + Send + 'static) -> impl Iterator<Item = {self.rust_result()}<{yielded}, nikaia_std::grammar::ParseError>> {{ ")
         out.push("let (__wg_tx, __wg_rx) = ::std::sync::mpsc::sync_channel(0); ::std::thread::spawn(move || { ")
-        let each = emit_stream_each(item, self.facts.emitting_entries.contains(f"{name}::{rule_name}"), false)
+        let each = emit_stream_each(item, self.facts.emitting_entries.contains(f"{name}::{rule_name}"), false, made)
         out.push(f"let __wg_parsed = {name}::parse_{rule_name}_reader_each(reader, &mut winnow_grammar::ParseContext::<()>::default(), winnow_grammar::rt::Reading::default(), {each}); ")
         out.push("if let Err(__wg_error) = __wg_parsed { let _ = __wg_tx.send(Err(nikaia_std::grammar::ParseError::of(__wg_error.render_excerpt()))); } }); __wg_rx.into_iter() }\n")
     }
@@ -407,7 +421,7 @@ impl EmitState {
             }
             out.push(emit_stream_batched_start())
             out.push("let mut __wg_context = match __wg_words { ::std::option::Option::Some(__wg_table) => winnow_grammar::ParseContext::<()>::with_state_and_interner((), __wg_table), ::std::option::Option::None => winnow_grammar::ParseContext::<()>::default() }; ")
-            let each = emit_stream_each(item, self.facts.emitting_entries.contains(f"{name}::{rule_name}"), true)
+            let each = emit_stream_each(item, self.facts.emitting_entries.contains(f"{name}::{rule_name}"), true, "__wg_one.clone()")
             out.push(f"let __wg_parsed = {name}::parse_{rule_name}_slice_each(&__wg_source[..], &mut __wg_context, {handed}{each}); ")
             out.push(emit_stream_batched_end("__wg_error.render(&__wg_source[..])"))
             out.push(" }\n")
@@ -975,10 +989,10 @@ fn stream_item_rule(world: ref EmitWorld, pattern: ref Pattern) -> String? {
 /// each item, owned, through the walk's channel, and answers `Break` once the
 /// walk dropped its end. An entry whose items are emitted (`emit_stream_rule`)
 /// shows it `Option<Item>`, and only a `Some` is an item.
-fn emit_stream_each(item: ref String, emitting: bool, batched: bool) -> String {
-    let mut send = "match __wg_tx.send(Ok(__wg_one.clone())) { Ok(()) => ::std::ops::ControlFlow::Continue(()), Err(_) => ::std::ops::ControlFlow::Break(()) }"
+fn emit_stream_each(item: ref String, emitting: bool, batched: bool, made: ref String) -> String {
+    let mut send = f"match __wg_tx.send(Ok({made})) {{ Ok(()) => ::std::ops::ControlFlow::Continue(()), Err(_) => ::std::ops::ControlFlow::Break(()) }}"
     if batched {
-        send = "{ __wg_batch.push(Ok(__wg_one.clone())); if __wg_batch.len() < 256 { ::std::ops::ControlFlow::Continue(()) } else { match __wg_tx.send(::std::mem::replace(&mut __wg_batch, ::std::vec::Vec::with_capacity(256))) { Ok(()) => ::std::ops::ControlFlow::Continue(()), Err(_) => ::std::ops::ControlFlow::Break(()) } } }"
+        send = f"{{ __wg_batch.push(Ok({made})); if __wg_batch.len() < 256 {{ ::std::ops::ControlFlow::Continue(()) }} else {{ match __wg_tx.send(::std::mem::replace(&mut __wg_batch, ::std::vec::Vec::with_capacity(256))) {{ Ok(()) => ::std::ops::ControlFlow::Continue(()), Err(_) => ::std::ops::ControlFlow::Break(()) }} }} }}"
     }
     if emitting {
         return f"|__wg_item: &::std::option::Option<{item}>| match __wg_item {{ ::std::option::Option::Some(__wg_one) => {send}, ::std::option::Option::None => ::std::ops::ControlFlow::Continue(()) }}"
@@ -1048,6 +1062,150 @@ impl EmitState {
         return self.borrowing.contains(item) || self.tethered.contains(item) || self.borrowing.contains(bare) || self.tethered.contains(bare)
     }
 
+    /// **The owned form of an item a Rust reader hands out**
+    /// (ADR-grammar-typed-read-v1 D7, #2735): a struct or enum `name` of this
+    /// file whose values view the input gets a twin `<name>Owned` beside it,
+    /// written once (`written`), with each text as a `String` of its own, each
+    /// nested type that views as its own twin and every other part as it is,
+    /// and `<name>Owned::of(&item)` (and `From<&item>`) that copies an item
+    /// into it. The Nikaia type stays one type (D5 keeps view and owned out
+    /// of it); only the Rust reader, whose frames are gone when the caller
+    /// holds the item, needs the twin. The Rust name of the twin, or null
+    /// where `name` views nothing (the reader hands out the item itself) or
+    /// is not a struct or enum this file declares without type parameters.
+    fn emit_stream_owned_form[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, name: ref String, mut written: collections::BTreeSet[String]) -> String? sync throws {
+        if !self.emit_stream_item_views(name) {
+            return null
+        }
+        let twin = f"{name}Owned"
+        if written.contains(twin) {
+            return escaped_name(twin)
+        }
+        for item in world.items {
+            match item.node {
+                Item::Struct { name: declared, generics, fields, .. } => {
+                    if emit_text(world, declared) != name || !generics.is_empty() {
+                        continue
+                    }
+                    written.insert(twin.clone())
+                    let mut body = EmitOut::empty()
+                    let mut copied: Vec[String] = []
+                    for field in fields {
+                        let field_name = escaped_name(emit_text(world, field.name))
+                        let (ty, made) = self.emit_owned_part(world, walk, out, host, field.ty, f"__wg_from.{field_name}", written)
+                        body.push(f"    pub {field_name}: {ty},\n")
+                        copied.push(f"{field_name}: {made}")
+                    }
+                    out.push(f"\n{emit_owned_derives(self.derives(world, declared))}pub struct {escaped_name(twin)} {{\n")
+                    out.append(body)
+                    out.push("}\n")
+                    self.emit_owned_conversion(out, name, twin, f"Self {{ {copied.join(", ")} }}", self.emit_item_slots(name).len())
+                    return escaped_name(twin)
+                },
+                Item::Enum { name: declared, variants, .. } => {
+                    if emit_text(world, declared) != name {
+                        continue
+                    }
+                    written.insert(twin.clone())
+                    let mut body = EmitOut::empty()
+                    let mut arms: Vec[String] = []
+                    let me = escaped_name(name)
+                    for variant in variants {
+                        let vname = escaped_name(emit_text(world, variant.name))
+                        match variant.fields {
+                            VariantFields::Unit => {
+                                body.push(f"    {vname},\n")
+                                arms.push(f"{me}::{vname} => Self::{vname}")
+                            },
+                            VariantFields::Tuple(types) => {
+                                let mut parts: Vec[String] = []
+                                let mut bound: Vec[String] = []
+                                let mut made: Vec[String] = []
+                                for i in 0..<types.len() {
+                                    let (ty, one) = self.emit_owned_part(world, walk, out, host, types[i], f"__wg_p{i}", written)
+                                    parts.push(ty)
+                                    bound.push(f"__wg_p{i}")
+                                    made.push(one)
+                                }
+                                body.push(f"    {vname}({parts.join(", ")}),\n")
+                                arms.push(f"{me}::{vname}({bound.join(", ")}) => Self::{vname}({made.join(", ")})")
+                            },
+                            VariantFields::Named(fields) => {
+                                let mut parts: Vec[String] = []
+                                let mut bound: Vec[String] = []
+                                let mut made: Vec[String] = []
+                                for i in 0..<fields.len() {
+                                    let field_name = escaped_name(emit_text(world, fields[i].name))
+                                    let (ty, one) = self.emit_owned_part(world, walk, out, host, fields[i].ty, f"__wg_p{i}", written)
+                                    parts.push(f"{field_name}: {ty}")
+                                    bound.push(f"{field_name}: __wg_p{i}")
+                                    made.push(f"{field_name}: {one}")
+                                }
+                                body.push(f"    {vname} {{ {parts.join(", ")} }},\n")
+                                arms.push(f"{me}::{vname} {{ {bound.join(", ")} }} => Self::{vname} {{ {made.join(", ")} }}")
+                            },
+                        }
+                    }
+                    out.push(f"\n{emit_owned_derives(self.derives(world, declared))}pub enum {escaped_name(twin)} {{\n")
+                    out.append(body)
+                    out.push("}\n")
+                    self.emit_owned_conversion(out, name, twin, f"match __wg_from {{ {arms.join(", ")} }}", 1)
+                    return escaped_name(twin)
+                },
+                else => {},
+            }
+        }
+        return null
+    }
+
+    /// The owned Rust type of a part of an item's owned form, and the
+    /// expression that copies it out of `from`, a place of the viewing item
+    /// or a reference to the part (`emit_stream_owned_form`).
+    fn emit_owned_part[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, ty: ref Type, from: ref String, mut written: collections::BTreeSet[String]) -> (String, String) sync throws {
+        if ty.is_nullable {
+            let mut inner = ty.clone()
+            inner.is_nullable = false
+            let (owned, made) = self.emit_owned_part(world, walk, out, host, inner, "__wg_v", written)
+            return (f"::std::option::Option<{owned}>", f"{from}.as_ref().map(|__wg_v| {made})")
+        }
+        if !ty.is_tuple && ty.code == null && ty.count == null {
+            let named = emit_text(world, ty.name)
+            if named == "String" && ty.generics.is_empty() {
+                return ("::std::string::String", f"<str as ::std::borrow::ToOwned>::to_owned(&{from})")
+            }
+            if named == "Vec" && ty.generics.len() == 1 {
+                let (owned, made) = self.emit_owned_part(world, walk, out, host, ty.generics[0], "__wg_v", written)
+                return (f"::std::vec::Vec<{owned}>", f"{from}.iter().map(|__wg_v| {made}).collect()")
+            }
+            if ty.generics.is_empty() {
+                let twin = self.emit_stream_owned_form(world, walk, out, host, named, written)
+                if twin != null {
+                    let owned = twin ?? ""
+                    return (owned.clone(), f"{owned}::of(&{from})")
+                }
+            }
+        }
+        return (host.ty_named(walk, ty), f"{from}.clone()")
+    }
+
+    /// `<twin>::of(&item)` and `From<&item>` for an owned form, `made` the
+    /// value built from `__wg_from`; the viewing type has `lifetimes` of its
+    /// own where it borrows (one per view field of a struct, ADR-views-v4
+    /// D8), which an `impl`'s header names.
+    fn emit_owned_conversion(ref self, mut out: EmitOut, name: ref String, twin: ref String, made: ref String, lifetimes: i64) sync {
+        let mut me = escaped_name(name)
+        if self.borrowing.contains(name) {
+            let mut elided: Vec[String] = ["'_"]
+            while elided.len() < lifetimes {
+                elided.push("'_")
+            }
+            me = f"{me}<{elided.join(", ")}>"
+        }
+        let owned = escaped_name(twin)
+        out.push(f"impl {owned} {{\n    /// The item copied out of the input it views.\n    #[allow(clippy::clone_on_copy, clippy::redundant_clone)]\n    pub fn of(__wg_from: &{me}) -> Self {{\n        {made}\n    }}\n}}\n")
+        out.push(f"impl ::std::convert::From<&{me}> for {owned} {{\n    fn from(__wg_from: &{me}) -> Self {{\n        Self::of(__wg_from)\n    }}\n}}\n")
+    }
+
     /// **`NK1359`: a walk that keeps the parser's thread, of items that view
     /// the input** (ADR-grammar-typed-read-v1 D7, #2708): the thread owns a
     /// copy of the input and hands items over a channel, which a view of the
@@ -1058,6 +1216,12 @@ impl EmitState {
         let used = if walk.stream_use == "" { "is used as a value (passed to a call, stored, combined or given to a task)" } else { walk.stream_use.clone() }
         throw EmitRefused { message: f"[NK1359] `{entry}` {used}, so it would be walked on a thread of its own, but its items view the input they are parsed from (`{item}` holds a view), and a view can't leave the walk over that input. Walk the call with a `for` right where it is made, or bound by a `let` that one `for` walks, in a function that throws, outside a `catch`, with a body that doesn't pause. The other ways to walk such a stream are \"The other methods of a `@stream` walk\" (#2709).", at: at }
     }
+}
+
+/// The derives of an owned form (`emit_stream_owned_form`): the viewing
+/// type's, less `Copy`, which a type of owned text cannot have.
+fn emit_owned_derives(derives: ref String) -> String {
+    return derives.replace(", Copy", "")
 }
 
 /// The function beside grammar `book` another package walks its `@stream`
