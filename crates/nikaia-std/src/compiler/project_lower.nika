@@ -122,6 +122,13 @@ pub trait ProjectLowerHost {
     /// dependency's against its own package's (issue #159): its warnings, or
     /// its refusal. Any other failure is thrown, and kept by the host.
     fn check_unit(ref self, at: i64) -> UnitSaid sync throws
+    /// **Checks the dependencies' units `ats` ahead** (#1949), as
+    /// [`check_unit`] checks each, on every core where the host can, and
+    /// keeps what each said: [`check_unit`] of one of them then says it and
+    /// hands it back, so the program's order is kept. A dependency's unit
+    /// asks from its own package's `nikaia.proofs` and keeps nothing for
+    /// the emitter, so the checks are independent.
+    fn check_ahead(ref self, ats: ref Vec[i64]) sync
     /// **Checks what belongs to the package and to none of its units**: the
     /// entries of `contracts/crate.contracts` that say `pub = true`
     /// (ADR-rust-boundary-1 D26, #2297), each refused once at its line;
@@ -297,10 +304,25 @@ fn project_lower_made[H: ProjectLowerHost](host: ref H) -> ProjectLowerArtifacts
 /// path and source, which is all a dependency's ledger is inferred from
 /// (ADR-100 D5: the dependencies first, the program's own package last).
 /// What it said, warnings or refusal, is said again for each program.
+///
+/// **Alone, the dependencies' files are checked ahead** (#1949), on every
+/// core (`check_ahead`); each still says what it found in its place in the
+/// program's order.
 pub fn project_lower_check[H: ProjectLowerHost](host: ref H) -> String throws {
     let units = host.check_open()
     let mut digest = String()
     let batch = host.in_a_batch()
+    if !batch {
+        let mut ats: Vec[i64] = []
+        for (at, unit) in units.iter().enumerate() {
+            if unit.dependency {
+                ats.push(at as i64)
+            }
+        }
+        if ats.len() > 1 {
+            host.check_ahead(ats)
+        }
+    }
     if batch {
         let mut all = ""
         for (at, unit) in units.iter().enumerate() {

@@ -838,10 +838,33 @@ fn ran() -> std::sync::MutexGuard<'static, Option<Ran>> {
 /// record (#2421): a run that finds its program built says it again from
 /// there, as the build cache replays a warning (`project_lower_reading`).
 pub(crate) fn say(text: &str) {
+    if SAID_HERE
+        .with(|here| here.borrow_mut().as_mut().map(|kept| kept.push_str(text)))
+        .is_some()
+    {
+        return;
+    }
     eprint!("{text}");
     if let Some(ran) = ran().as_mut() {
         ran.said.push_str(text);
     }
+}
+
+thread_local! {
+    /// Set while a worker checks a unit beside others (#1949): what [`say`]
+    /// says is kept here, and said in the units' order after.
+    static SAID_HERE: std::cell::RefCell<Option<std::string::String>> =
+        const { std::cell::RefCell::new(None) };
+}
+
+/// `run`, with what it would [`say`] kept and handed back instead.
+fn said_aside<R>(run: impl FnOnce() -> R) -> (R, std::string::String) {
+    let outer = SAID_HERE.with(|here| here.replace(Some(std::string::String::new())));
+    let out = run();
+    let said = SAID_HERE
+        .with(|here| here.replace(outer))
+        .unwrap_or_default();
+    (out, said)
 }
 
 /// The files the program of this run was made from; `None` makes no record.
@@ -1279,6 +1302,7 @@ fn with_lower_host<R>(
         checking: RefCell::new(None),
         checked_facts: RefCell::new(BTreeMap::new()),
         unit_facts: RefCell::new(BTreeMap::new()),
+        ahead: RefCell::new(BTreeMap::new()),
         published: RefCell::new(BTreeMap::new()),
         proofs: RefCell::new(None),
         pending: RefCell::new(None),
@@ -1322,6 +1346,10 @@ struct LowerHost<'a> {
     /// Each unit's facts, by its place in the program, for `nikaia lsp`'s
     /// [`definition`] (#1396): empty for every other build.
     unit_facts: RefCell<BTreeMap<usize, check::CheckFacts>>,
+    /// The dependencies' units `check_ahead` checked on every core (#1949),
+    /// by their place: what each check gave and said, until `check_unit`
+    /// says it in the program's order.
+    ahead: RefCell<BTreeMap<usize, (Result<String>, std::string::String)>>,
     published: RefCell<BTreeMap<String, crate::prove::Published>>,
     /// The book as the lowering left it, in a project.
     proofs: RefCell<Option<crate::proofs::Book>>,
@@ -1411,6 +1439,57 @@ struct Checking {
 }
 
 type HostResult<T> = std::result::Result<T, Box<dyn std::error::Error>>;
+
+/// **One unit of `program` checked** (ADR-286), its questions placed in its
+/// file, a dependency's asked from its own package's `nikaia.proofs`
+/// (`proofs::for_unit`): what it warned, or its refusal.
+fn check_unit_of(
+    unit: &modules::Unit,
+    program: &modules::Program,
+    checking: &Checking,
+    around: Around<'_>,
+    settings: &Settings,
+    facts: Option<&mut Option<check::CheckFacts>>,
+) -> Result<String> {
+    // **A dependency's unit is checked as its own package writes it**
+    // (issue #159). The program's
+    // contracts are the right ledger for the program's own files and the
+    // wrong one for a package's: absorbing qualified its keys *and the
+    // types inside them*, and the package's file writes the bare word.
+    // `Program::as_its_own` is the ledger that package was inferred
+    // with, kept rather than reconstructed.
+    let contracts = match &unit.package {
+        Some(package) => program
+            .as_its_own
+            .get(package)
+            .unwrap_or(&program.contracts),
+        None => &checking.promised,
+    };
+    crate::proofs::for_unit(&unit.path, &unit.source, unit.package.is_some(), || {
+        check(
+            &unit.parsed,
+            contracts,
+            &checking.modules,
+            around,
+            &unit.path,
+            &unit.source,
+            &settings.words.user_parallelism,
+            &settings.words.refuted_claims,
+            &settings.words.unproved_claims,
+            // A dependency is built at `allow` (ADR-306 D29).
+            if unit.package.is_none() {
+                &settings.words.unproved_checks
+            } else {
+                "allow"
+            },
+            &settings.words.raw_sinks,
+            &settings.words.allow,
+            unit.package.as_deref().unwrap_or(""),
+            settings.library(),
+            facts,
+        )
+    })
+}
 
 impl LowerHost<'_> {
     /// The artifacts `made` is stored as in the cache.
@@ -1519,6 +1598,20 @@ impl LowerHost<'_> {
             exported.java = java;
         }
         Ok(())
+    }
+
+    /// What a unit's check said, for the Nikaia side: its warnings, or the
+    /// refusal it tallied; any other failure kept to be handed back.
+    fn unit_said(&self, checked: Result<String>) -> HostResult<project_lower::UnitSaid> {
+        match checked {
+            Ok(said) => Ok(project_lower::UnitSaid::Warned(said)),
+            Err(e) => match e.downcast_ref::<diagnostics::Refused>() {
+                Some(tally) if tally.at.is_none() && tally.finding.is_none() => {
+                    Ok(project_lower::UnitSaid::Refused(tally.message.clone()))
+                }
+                _ => self.held(Err(e)),
+            },
+        }
     }
 
     /// `result` for the Nikaia side, its error kept to be handed back.
@@ -1913,6 +2006,11 @@ impl project_lower::ProjectLowerHost for LowerHost<'_> {
     }
 
     fn check_unit(&self, at: i64) -> HostResult<project_lower::UnitSaid> {
+        // **Checked ahead** (#1949): said now, in the program's order.
+        if let Some((checked, said)) = self.ahead.borrow_mut().remove(&(at as usize)) {
+            say(&said);
+            return self.unit_said(checked);
+        }
         let settings = self.settings;
         let program = self.program();
         let at = at as usize;
@@ -1933,20 +2031,6 @@ impl project_lower::ProjectLowerHost for LowerHost<'_> {
             reads: self.reads,
             tested: &checking.tested,
         };
-        // **A dependency's unit is checked as its own package writes it**
-        // (issue #159). The program's
-        // contracts are the right ledger for the program's own files and the
-        // wrong one for a package's: absorbing qualified its keys *and the
-        // types inside them*, and the package's file writes the bare word.
-        // `Program::as_its_own` is the ledger that package was inferred
-        // with, kept rather than reconstructed.
-        let contracts = match &unit.package {
-            Some(package) => program
-                .as_its_own
-                .get(package)
-                .unwrap_or(&program.contracts),
-            None => &checking.promised,
-        };
         let lsp = diagnostics::is_collecting();
         let mut facts = None;
         let keep = checking.facts_reusable && unit.package.is_none();
@@ -1962,48 +2046,73 @@ impl project_lower::ProjectLowerHost for LowerHost<'_> {
         // **`nikaia lsp` asks where a name is declared** (#1396): every
         // unit's facts, a refused unit's too, kept apart from the emitter's.
         let (checked, book) = crate::proofs::with_book(book, || {
-            crate::proofs::for_unit(&unit.path, &unit.source, unit.package.is_some(), || {
-                check(
-                    &unit.parsed,
-                    contracts,
-                    &checking.modules,
-                    around,
-                    &unit.path,
-                    &unit.source,
-                    &settings.words.user_parallelism,
-                    &settings.words.refuted_claims,
-                    &settings.words.unproved_claims,
-                    // A dependency is built at `allow` (ADR-306 D29).
-                    if unit.package.is_none() {
-                        &settings.words.unproved_checks
-                    } else {
-                        "allow"
-                    },
-                    &settings.words.raw_sinks,
-                    &settings.words.allow,
-                    unit.package.as_deref().unwrap_or(""),
-                    settings.library(),
-                    (keep || lsp).then_some(&mut facts),
-                )
-            })
+            check_unit_of(
+                unit,
+                &program,
+                checking,
+                around,
+                settings,
+                (keep || lsp).then_some(&mut facts),
+            )
         });
         *self.book.borrow_mut() = Some(book);
         if lsp && let Some(facts) = &facts {
             self.unit_facts.borrow_mut().insert(at, facts.clone());
         }
-        match checked {
-            Ok(said) => {
-                if keep && let Some(facts) = facts {
-                    self.checked_facts.borrow_mut().insert(at, facts);
-                }
-                Ok(project_lower::UnitSaid::Warned(said))
-            }
-            Err(e) => match e.downcast_ref::<diagnostics::Refused>() {
-                Some(tally) if tally.at.is_none() && tally.finding.is_none() => {
-                    Ok(project_lower::UnitSaid::Refused(tally.message.clone()))
-                }
-                _ => self.held(Err(e)),
-            },
+        if let Ok(_) = &checked
+            && keep
+            && let Some(facts) = facts
+        {
+            self.checked_facts.borrow_mut().insert(at, facts);
+        }
+        self.unit_said(checked)
+    }
+
+    fn check_ahead(&self, ats: &[i64]) {
+        // **`nikaia lsp` keeps every unit's facts** and says nothing: each
+        // unit is checked in its turn, as `check_unit` checks it.
+        if diagnostics::is_collecting() {
+            return;
+        }
+        let settings = self.settings;
+        let program = self.program();
+        let checking = self.checking.borrow();
+        let checking = checking.as_ref().expect("the check is open");
+        let foreign = self.foreign.borrow();
+        let foreign = foreign.as_ref().expect("the check is open");
+        let beside: Vec<&crate::parser::Parsed> =
+            program.units.iter().map(|unit| &unit.parsed).collect();
+        let around = Around {
+            foreign,
+            newly: &checking.newly,
+            beside: &beside,
+            reads: self.reads,
+            tested: &checking.tested,
+        };
+        let program = &*program;
+        // A dependency's unit only: its own package's book answers it
+        // (ADR-270 D23, `proofs::for_unit`), so the workers need none of the
+        // build's, and it keeps no facts.
+        let ats: Vec<usize> = ats
+            .iter()
+            .map(|at| *at as usize)
+            .filter(|at| {
+                program
+                    .units
+                    .get(*at)
+                    .is_some_and(|unit| unit.package.is_some())
+            })
+            .collect();
+        // The largest first, so no core is left with a long file at the end.
+        let mut order: Vec<usize> = (0..ats.len()).collect();
+        order.sort_by_key(|k| std::cmp::Reverse(program.units[ats[*k]].parsed.program.items.len()));
+        let done = crate::proofs::in_parallel(&order, None, |k| {
+            let unit = &program.units[ats[k]];
+            said_aside(|| check_unit_of(unit, program, checking, around, settings, None))
+        });
+        let mut ahead = self.ahead.borrow_mut();
+        for (at, checked) in ats.into_iter().zip(done) {
+            ahead.insert(at, checked);
         }
     }
 
