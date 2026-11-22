@@ -113,13 +113,15 @@ fn case_built(nikaia: String, repo: String, tmp: ref fs::Root, name: String, kin
         // The stub ledgers script: it rewrites one ledger and says so, run by
         // this compiler as the checkout's `target/fast/nikaia`.
         let stub = "use std::fs\n\nfn main() throws {\n    fs::write(\"examples/a/nikaia.contracts\", fs::Root::Anywhere, \"refreshed\\n\")\n    println(\"refreshed examples/a/nikaia.contracts\")\n}\n"
-        sh(work.clone(), f"mkdir -p scripts target/fast; ln -s {nikaia} target/fast/nikaia; printf 'target/\\nscripts/\\n' > .git/info/exclude")
+        sh(work.clone(), f"mkdir -p scripts target/fast; cp {nikaia} target/fast/nikaia; printf 'target/\\nscripts/\\n' > .git/info/exclude")
         fs::write(f"{name.replace(" ", "-")}/work/scripts/ledgers.nika", tmp, stub)
         // The driver builds the compiler of the tree in a worktree of its own
         // (#1665) with `cargo build`; a stub `cargo` first on PATH makes that
         // compiler this one and puts the stub ledgers script in the worktree
-        // (`scripts/` is not tracked here); it counts its runs.
-        sh(work.clone(), f"mkdir -p bin; printf '#!/bin/sh\\necho run >> {work}/target/cargo-runs\\nmkdir -p scripts \"$CARGO_TARGET_DIR/fast\"\\ncp {work}/scripts/ledgers.nika scripts/\\nln -sf {nikaia} \"$CARGO_TARGET_DIR/fast/nikaia\"\\n' > bin/cargo; chmod +x bin/cargo; echo bin/ >> .git/info/exclude")
+        // (`scripts/` is not tracked here); it counts its runs. A copy, not a
+        // link: drive opens the compiler under fs::Root::Dir("."), which
+        // refuses a link that leaves the checkout (ADR-raw-sinks-1 D11).
+        sh(work.clone(), f"mkdir -p bin; printf '#!/bin/sh\\necho run >> {work}/target/cargo-runs\\nmkdir -p scripts \"$CARGO_TARGET_DIR/fast\"\\ncp {work}/scripts/ledgers.nika scripts/\\nrm -f \"$CARGO_TARGET_DIR/fast/nikaia\"; cp {nikaia} \"$CARGO_TARGET_DIR/fast/nikaia\"\\n' > bin/cargo; chmod +x bin/cargo; echo bin/ >> .git/info/exclude")
     }
     if !kind.starts_with("example") {
         // A conflict both sides fail to regenerate builds the compiler of
