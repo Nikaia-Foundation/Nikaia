@@ -1,0 +1,23 @@
+// The path `NK1152` names (ADR-321 D7) is shown whole up to 12 calls, and
+// past that by its first and last 6 with `…` between them
+// (`runtime/build_time.nika`, #2069): `TWELVE` stops 12 calls deep, `THIRTEEN`
+// one deeper.
+fn spin(n: int) -> int {
+    let mut total = 0
+    for i in 0..<n { total += i }
+    total
+}
+
+fn down(n: int) -> int {
+    if n == 0 {
+        return spin(1000)
+    }
+    return down(n - 1)
+}
+
+comptime(steps: 100) TWELVE = down(9)
+comptime(steps: 100) THIRTEEN = down(10)
+
+fn main() throws {
+    println(TWELVE + THIRTEEN)
+}
