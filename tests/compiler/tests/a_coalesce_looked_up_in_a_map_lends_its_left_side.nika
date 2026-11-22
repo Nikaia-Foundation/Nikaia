@@ -1,0 +1,54 @@
+// A `??` handed to a map's or a set's lookup is only read (ADR-279 D5,
+// #2372): its left side is lent, and the option is the caller's still.
+// `has(o ?? "")` after `m.contains_key(o ?? "")` reads it again, where the
+// lookup used to move it (rustc E0382 behind an accepted program).
+
+use std::collections
+
+struct Outside {
+    results: collections::BTreeMap[String, String],
+    returning: collections::BTreeSet[String],
+}
+
+impl Outside {
+    fn literal(self, key: String) -> bool {
+        return self.returning.contains(key)
+    }
+}
+
+fn named(n: i64) -> String? {
+    if n > 0 {
+        let mut s = String()
+        s.push_str("f")
+        return s
+    }
+    return null
+}
+
+fn from_outside(n: i64, outside: Outside) -> bool {
+    let source = named(n)
+    if source != null && outside.results.contains_key(source ?? "") {
+        return true
+    }
+    if source != null && outside.literal(source ?? "") {
+        return false
+    }
+    return source == null
+}
+
+fn main() throws {
+    let mut o = Outside { results: collections::BTreeMap(), returning: collections::BTreeSet() }
+    o.returning.insert("f")
+    println(f"{from_outside(1, o)} {from_outside(0, o)}")
+    let mut hm: collections::HashMap[String, i64] = collections::HashMap()
+    hm.insert("f", 2)
+    let mut hs: collections::HashSet[String] = collections::HashSet()
+    hs.insert("f")
+    let source = named(1)
+    let a = o.results.contains_key(source ?? "")
+    let b = o.returning.contains(source ?? "")
+    let c = hm.contains_key(source ?? "")
+    let d = hm.get(source ?? "") ?? 0
+    let e = hs.contains(source ?? "")
+    println(f"{a} {b} {c} {d} {e} {source ?? "-"}")
+}

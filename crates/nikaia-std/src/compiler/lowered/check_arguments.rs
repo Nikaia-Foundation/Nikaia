@@ -397,7 +397,7 @@ pub(crate) fn check_arguments<H: CheckHost>(state: &mut CheckState, world: &Chec
         if kept && state.decided_by_this_argument(signature, &wanted, at) { literal_wants = Ty::Named { name: String::from("String"), args: vec![], view: false }; }
         let literal_var = check_arguments_var_name(&declared);
         if kept && literal_var.is_some() && !declared.is_a_view() {
-            match bound_by_others.get(&nikaia_std::index::or(literal_var, || "".into())) {
+            match bound_by_others.get(nikaia_std::index::or(literal_var.as_deref(), || "")) {
                 None => { },
                 Some(other) => { if *other == string_ty() { literal_wants = string_ty(); } },
             }
