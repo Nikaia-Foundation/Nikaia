@@ -65,7 +65,10 @@ pub(crate) fn check_core_expr<H: CheckHost>(state: &mut CheckState, world: &Chec
     state.flow.reached = reaching;
     check_narrow_reads_of_the_maybe(state, expr);
     let said_before = state.flow.unknown_said;
-    let walked = check_core_value_of(state, world, host, expr, span);
+    let walked = match expr {
+        Expr::Async(_, _, _, _) => check_core_task_walked(state, world, host, expr, span),
+        _ => check_core_value_of(state, world, host, expr, span),
+    };
     let said_inside = state.flow.unknown_said > said_before;
     let opened = check_core_expr_open_receiver(state, expr, walked);
     let ty = check_core_expr_flat_get(state, world, expr, opened);
@@ -76,6 +79,36 @@ pub(crate) fn check_core_expr<H: CheckHost>(state: &mut CheckState, world: &Chec
     if check_core_expr_makes_a_value(expr) { check_crossings_a_value_with_a_cleanup_made(state, world, &ty); }
     state.a_member_of_an_unknown_lambda_parameter(world, expr, span);
     if ty.is_unknown() && !said_inside { state.a_value_of_no_known_type(world, expr, span); }
+    ty
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn check_core_task_walked<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, host: &H, expr: &Expr, span: &Span) -> Ty {
+    let enclosing: Option<CheckGuarded> = match state.flow.guarded.as_ref() {
+        Some(__nikaia_it) => Some(__nikaia_it.clone()),
+        None => None,
+    };
+    let probing = state.flow.task_probe;
+    state.flow.guarded = Some(CheckGuarded::nothing());
+    state.flow.task_probe = enclosing.is_none() || probing;
+    let ty = check_core_value_of(state, world, host, expr, span);
+    let found: CheckGuarded = nikaia_std::index::or(match state.flow.guarded.as_ref() {
+        Some(__nikaia_it) => Some(__nikaia_it.clone()),
+        None => None,
+    }, || CheckGuarded::nothing());
+    state.flow.task_probe = probing;
+    if found.fallible { state.flow.fallible_tasks.insert(id_of(expr) as i64); }
+    match enclosing {
+        Some(ref outer) => {
+            let mut merged = outer.clone();
+            merged.fallible = merged.fallible || found.fallible;
+            merged.unanswered = merged.unanswered || found.unanswered;
+            merged.thrown.extend(found.thrown);
+            state.flow.guarded = Some(merged);
+        },
+        None => { state.flow.guarded = None; },
+    }
     ty
 }
 

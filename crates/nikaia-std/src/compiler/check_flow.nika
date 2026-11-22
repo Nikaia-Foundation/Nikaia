@@ -194,6 +194,17 @@ pub struct CheckFlow {
     pub async_group_frame: i64,
     /// How many tasks the innermost `async { }` started so far (`NK2111`).
     pub async_started: i64,
+    /// **The bindings a bare `let x = async e` holds**, by the binding's id,
+    /// with the `let` written up to its `catch` (ADR-async-5 D22 step 3): a
+    /// `catch` around a mention of one does not handle the task's failure,
+    /// and `NK1134`'s help writes the fallback where it does.
+    pub pending_tasks: collections::BTreeMap[i64, String],
+    /// **The `async e` whose walk met a failure**, by its node (D22): its
+    /// guarded walk said `fallible`.
+    pub fallible_tasks: collections::BTreeSet[i64],
+    /// **The guard is a probe of a task's walk, not a `catch`'s** (D22): no
+    /// handler stands there, so `NK2402` says nothing.
+    pub task_probe: bool,
     /// The groups written `limit: 1` with the literal (ADR-async-5 D15): their
     /// tasks run one at a time and are not checked against each other (D7).
     pub async_one_at_a_time: collections::BTreeSet[i64],
@@ -576,6 +587,9 @@ impl CheckFlow {
             async_group_block: null,
             async_group_frame: 0,
             async_started: 0,
+            pending_tasks: collections::BTreeMap(),
+            fallible_tasks: collections::BTreeSet(),
+            task_probe: false,
             async_one_at_a_time: collections::BTreeSet(),
             async_depth: 0,
             fallible_methods: collections::BTreeSet(),

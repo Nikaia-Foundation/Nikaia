@@ -1257,7 +1257,7 @@ impl EmitState {
             Some(__nikaia_it) => Some(__nikaia_it.clone()),
             None => None,
         }, || "Seq::collect".into()) != "Seq::collect";
-        let failing_items = self.facts.failing_item_receivers.contains(&on_node);
+        let failing_items = self.facts.failing_item_receivers.contains_key(&on_node);
         if name == "collect" && args.is_empty() && !own && !self.method_pauses(on_node) && failing_items { out.push(&if declared { format!("::<{}<_, _>>", self.rust_result()) } else { format!("::<{}<Vec<_>, _>>", self.rust_result()) }); } else if name == "collect" && args.is_empty() && !declared && !own && !self.method_pauses(on_node) { out.push("::<Vec<_>>"); }
         if name == "sum" && args.is_empty() && receiver.is_some() {
             let summed = nikaia_std::index::or(*nikaia_std::index::get(&self.facts.summed, &on_node), || "");
@@ -1336,7 +1336,7 @@ impl EmitState {
     // this was written - see `contracts::sync`.
     pub(crate) fn emit_call_failing_through(&self, on_node: i64, name: &str, flow: &EmitFlow) -> Result<(&'static str, &'static str, &'static str), nikaia_std::error::Thrown<EmitRefused>> {
         let through = nikaia_std::index::or(self.facts.failing_through_calls.get(&on_node), || 0);
-        if self.facts.failing_item_receivers.contains(&on_node) {
+        if self.facts.failing_item_receivers.contains_key(&on_node) {
             if through != 0 { return Err(nikaia_std::error::throwing(EmitRefused { message: format!("`{}` is given a lambda that can fail, over a sequence whose elements can already fail; only one step of a chain can fail so far. Collect the sequence first, with `… .collect() catch {{ … }}`, and walk the list.", name), at: Some(flow.statement) }, &"emit_call_failing_through")); }
             if name == "map" { return Ok(("", "|__nikaia_item| __nikaia_item.map(", ")")); }
             if name == "filter" { return Ok(("", "|__nikaia_item| match __nikaia_item { Ok(__nikaia_kept) => (", ")(__nikaia_kept), Err(_) => true }")); }
@@ -1624,8 +1624,8 @@ pub(crate) fn emit_tuple_part_copy(i: i64, word: &str) -> String {
 }
 
 pub(crate) fn emit_tuple_part_copies(parts: &[String]) -> String {
-    let copies: Vec<String> = parts.iter().enumerate().map(|(at, item)| (at as i64, item)).map(|__nikaia_tuple123403| {
-        let (i, word) = __nikaia_tuple123403;
+    let copies: Vec<String> = parts.iter().enumerate().map(|(at, item)| (at as i64, item)).map(|__nikaia_tuple123411| {
+        let (i, word) = __nikaia_tuple123411;
         emit_tuple_part_copy(i, word)
     }).collect::<Vec<_>>();
     if copies.len() == 1 { return format!("({},)", *unsafe { nikaia_std::proven::read(&copies, (0) as usize) }); }

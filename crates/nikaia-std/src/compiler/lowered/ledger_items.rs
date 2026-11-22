@@ -87,7 +87,7 @@ pub(crate) fn declared_grammar(words: &winnow_grammar::InternerContext, aliases:
         }
         if rule.stream && result.is_some() {
             let item = nikaia_std::index::or(result, || Ty::Unknown);
-            result = Some(Ty::Seq { item: nikaia_std::block::Boxed::new(item), is_sync: true, pauses: false, can_throw: true, parallel: false, shape: Shape::none() });
+            result = Some(Ty::Seq { item: nikaia_std::block::Boxed::new(item), is_sync: true, pauses: false, fails: unnamed_failure(), parallel: false, shape: Shape::none() });
         }
         let mut params: Vec<(String, Ty)> = vec![(String::from("input"), Ty::Unknown)];
         params.reserve(rule.args.iter().size_hint().0); for arg in rule.args.iter() { params.push((nikaia_std::block::Text::from(words.resolve(arg.name).to_string()), written_ty(words, aliases, &arg.ty))); }

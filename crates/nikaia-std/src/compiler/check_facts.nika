@@ -575,8 +575,9 @@ pub struct CheckFacts {
     pub failing_through_calls: collections::BTreeMap[i64, i64],
     /// **A method called on a walk of failing elements** (#2736), by its
     /// receiver's node: what it does with each element is done inside the
-    /// element's `Result`.
-    pub failing_item_receivers: collections::BTreeSet[i64],
+    /// element's `Result`; with what the walk fails with, read off its type
+    /// (#2742), for a `catch` around the walk to open.
+    pub failing_item_receivers: collections::BTreeMap[i64, Vec[String]],
     /// A lambda where the function type hands back nothing (#1321): its
     /// body's last value is dropped, as a named function's is that declares
     /// no result.
@@ -1110,7 +1111,7 @@ impl CheckFacts {
             failing_lambdas: collections::BTreeSet(),
             failing_through_lambdas: collections::BTreeMap(),
             failing_through_calls: collections::BTreeMap(),
-            failing_item_receivers: collections::BTreeSet(),
+            failing_item_receivers: collections::BTreeMap(),
             valueless_lambdas: collections::BTreeSet(),
             run_code_fails: collections::BTreeSet(),
             changing_lambdas: collections::BTreeMap(),

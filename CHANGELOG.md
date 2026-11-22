@@ -8,6 +8,12 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1544] — 2026-11-22
+
+**Builders' changes (#2742, #2752)**
+- A walk whose step can fail keeps what it fails with when bound to a name: `let w = xs.iter().map(fn(x) { f(x) }); w.collect() catch { error.message() }` works as the chained form does. Was NK1343.
+- NK1134 explains a `catch` around a pending task value: the help writes the fallback after the `async` expression, `let a = async work(7) catch { … }` (ADR-async-5 D22 step 3).
+
 ## [0.0.1543] — 2026-11-22
 
 **Builders' changes (#2483, #2516, #2720)**
