@@ -393,9 +393,9 @@ pub(crate) fn check_core_method_summed(name: &str, on: &Ty, value: &Ty) -> Strin
         Ty::Seq { .. } => { },
         _ => { return String::from(""); },
     }
-    match value {
-        Ty::Named { name: number, args, view } => {
-            let view = *view;
+    let plain = value.unseen();
+    match plain {
+        Ty::Named { name: ref number, ref args, view } => {
             if args.is_empty() && !view && a_number_name(number) { return nikaia_std::block::Text::from(number.to_string()); }
             return String::from("");
         },
@@ -570,7 +570,11 @@ pub(crate) fn check_core_method_called<H: CheckHost>(state: &mut CheckState, wor
     state.flow.walk_lent = false;
     state.flow.text_slot = false;
     state.flow.text_walk = false;
-    let value: Ty = check_core_call_on(state, world, host, &on.clone(), receiver, method, args, written, span);
+    let answered: Ty = check_core_call_on(state, world, host, &on.clone(), receiver, method, args, written, span);
+    let restamp = state.flow.stamped_receivers.contains(&(id_of(receiver) as i64)) && answered.is_seen();
+    let on: Ty = on.unseen();
+    let mut value: Ty = answered.clone();
+    if restamp { value = answered.unseen(); }
     if state.flow.text_slot { state.flow.text_slot_views.insert(id_of(expr) as i64); }
     if state.flow.text_walk { state.flow.text_walks.insert(id_of(expr) as i64); }
     state.flow.text_slot = false;
@@ -705,10 +709,17 @@ pub(crate) fn check_core_method_called<H: CheckHost>(state: &mut CheckState, wor
     state.a_lane_method_not_offered(&lanes, &name, span);
     state.a_shuffle_out_of_lanes(world, &lanes, &name, args, span);
     let widened: Option<Ty> = state.wide_method(world, expr, &on, &name, span);
-    if widened.is_some() { return nikaia_std::index::or(widened, || Ty::Unknown); }
+    if widened.is_some() { return check_core_method_restamped(nikaia_std::index::or(widened, || Ty::Unknown), restamp); }
     let changed: Option<Ty> = check_simd_method_result(&lanes, &name);
-    if changed.is_some() { return nikaia_std::index::or(changed, || Ty::Unknown); }
-    walked
+    if changed.is_some() { return check_core_method_restamped(nikaia_std::index::or(changed, || Ty::Unknown), restamp); }
+    check_core_method_restamped(walked, restamp)
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn check_core_method_restamped(ty: Ty, restamp: bool) -> Ty {
+    if restamp { return stamped_type(&ty); }
+    ty
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before

@@ -2024,6 +2024,13 @@ pub fn check_core_flow_try_catch[H: CheckHost](mut state: CheckState, world: ref
         state.facts.nullable_catches.insert(node_key(guarded_expr))
         return Ty::Nullable(answers.clone())
     }
+    // **A view of text beside text of its own is owned** (ADR-282 D4, Part
+    // I 7.1, #2353), as the two arms of an `if` are: `bad.text() catch {
+    // error.message() }` copies the view the guarded call hands back.
+    if !state.block_leaves(world, handler) && a_plain_str_view(answers) && a_plain_string(value) {
+        state.facts.owned_catches.insert(node_key(guarded_expr))
+        return value
+    }
     if state.block_leaves(world, handler) || value.is_unknown() || value.fits(answers) {
         // **A type not yet known beside text of its own** (ADR-282 D4): the
         // body of a `task::scope` ending in a text literal is a view, the

@@ -128,6 +128,9 @@ struct LowerHost<'a> {
     build: crate::emit::Build,
     provenance: crate::contracts::Provenance,
     map: RefCell<crate::emit::SourceMap>,
+    /// What the emitter said where it refused a unit (#2294), the unit by
+    /// its place among `units`.
+    refused: RefCell<Option<tree::ComptimeRefusal>>,
 }
 
 impl<'a> LowerHost<'a> {
@@ -141,6 +144,7 @@ impl<'a> LowerHost<'a> {
             build,
             provenance,
             map: RefCell::new(crate::emit::SourceMap::default()),
+            refused: RefCell::new(None),
         }
     }
 
@@ -191,6 +195,7 @@ impl tree::ComptimeLowerHost for LowerHost<'_> {
             None,
             BTreeMap::new(),
         )
+        .map_err(|error| *self.refused.borrow_mut() = Some(refusal_of(&error, at)))
         .ok()?;
         if let Some(placed_at) = placed_at {
             self.map
@@ -219,7 +224,7 @@ pub(crate) fn lowered_units(
     // The checked units of the ledger's pass over the entry's package
     // against `library`, where the caller ran it (#2150).
     checked: Option<&[crate::check::Checked]>,
-) -> Option<crate::emit::Lowered> {
+) -> Result<crate::emit::Lowered, Option<tree::ComptimeRefusal>> {
     let home = &units[entry].package;
     let beside: Vec<&Parsed> = units
         .iter()
@@ -233,8 +238,10 @@ pub(crate) fn lowered_units(
         None => crate::contracts::trust::analyse_package(&beside, library).provenance,
     };
     let host = LowerHost::new(units, build, provenance);
-    let rust = tree::comptime_lowered_units(&host, entry as i64, contracts, packages)?;
-    Some(crate::emit::Lowered {
+    let Some(rust) = tree::comptime_lowered_units(&host, entry as i64, contracts, packages) else {
+        return Err(host.refused.into_inner());
+    };
+    Ok(crate::emit::Lowered {
         rust,
         map: host.map.into_inner(),
         published: Default::default(),
@@ -319,6 +326,7 @@ pub(crate) fn compute(
                 program: std::cell::OnceCell::new(),
                 sources: std::cell::OnceCell::new(),
                 derived_checked: RefCell::new(None),
+                refused: RefCell::new(None),
             };
             block_on(tree::comptime_value_computed(
                 &host,
@@ -352,6 +360,8 @@ struct ComputeHost<'a> {
     /// package absorbed), and the checked units of that pass: what the
     /// lowering would infer again (#2150).
     derived_checked: RefCell<Option<(Vec<i64>, Vec<crate::check::Checked>)>>,
+    /// What the emitter said where the last lowering refused a unit (#2294).
+    refused: RefCell<Option<tree::ComptimeRefusal>>,
 }
 
 /// **`what` as `Debug` prints it, each `Symbol(N)` written as the name it
@@ -567,6 +577,7 @@ impl tree::ComptimeComputeHost for ComputeHost<'_> {
             }
             None => crate::emit::emit_program(parsed, counted()),
         }
+        .map_err(|error| *self.refused.borrow_mut() = Some(refusal_of(&error, unit)))
         .ok()
         .map(rows_of)
     }
@@ -602,20 +613,54 @@ impl tree::ComptimeComputeHost for ComputeHost<'_> {
             self.library,
             checked.as_ref().map(|(_, checked)| checked.as_slice()),
         )
+        .map_err(|refused| {
+            // **The refused unit by its file** (#2294), not its place here.
+            *self.refused.borrow_mut() = refused.map(|refused| tree::ComptimeRefusal {
+                unit: units[refused.unit as usize],
+                ..refused
+            });
+        })
+        .ok()
         .map(rows_of)
+    }
+
+    fn lowering_refused(&self) -> Option<tree::ComptimeRefusal> {
+        self.refused.borrow_mut().take()
     }
 
     fn dump(&self, unit: i64, ty: &Ty, out: &mut String) -> Option<Wall> {
         let held = self.units.borrow();
         let unit = &held[unit as usize];
-        nikaia_std::compiler::grammar_run::grammar_run_dump(
+        use nikaia_std::compiler::grammar_run as run;
+        // **The types of the files beside it too** (#2255): a file of the
+        // same package under the names it writes, a dependency's under
+        // `package::Name`, as the program names them.
+        let mut shapes = run::grammar_run_shapes(
             &unit.interner,
             &unit.aliases,
             &unit.program,
             crate::contracts::std_ledger(),
-            ty,
-            out,
-        )
+        );
+        let mut packages = BTreeMap::new();
+        for file in self.files {
+            if file.package == unit.package {
+                run::grammar_run_shapes_add(
+                    &file.interner,
+                    &file.aliases,
+                    &file.program,
+                    &mut shapes,
+                );
+            } else if let Some(package) = &file.package {
+                let into = packages
+                    .entry(package.clone())
+                    .or_insert_with(run::grammar_run_shapes_empty);
+                run::grammar_run_shapes_add(&file.interner, &file.aliases, &file.program, into);
+            }
+        }
+        for (package, beside) in &packages {
+            run::grammar_run_shapes_qualified(beside, package, &mut shapes);
+        }
+        run::grammar_run_dump_shaped(&shapes, ty, out)
     }
 
     fn bounds(&self) -> (u64, u64) {
@@ -753,6 +798,23 @@ fn counted() -> crate::emit::Build {
 
 /// `lowered`'s text and its source map's rows, as `comptime_driven` reads
 /// them.
+/// **What the emitter said** where it refused unit `unit` (#2294): its
+/// words and the byte it named.
+fn refusal_of(error: &anyhow::Error, unit: i64) -> tree::ComptimeRefusal {
+    match crate::diagnostics::refusal_at(error) {
+        Some((at, message)) => tree::ComptimeRefusal {
+            message,
+            at: at as i64,
+            unit,
+        },
+        None => tree::ComptimeRefusal {
+            message: error.to_text(),
+            at: -1,
+            unit,
+        },
+    }
+}
+
 fn rows_of(lowered: crate::emit::Lowered) -> tree::ComptimeLowered {
     let rows = lowered
         .map

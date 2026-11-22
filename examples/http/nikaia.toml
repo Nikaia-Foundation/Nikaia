@@ -21,3 +21,10 @@ user-parallelism = "no"
 # A library: `build` makes it a Rust library and compares its ledgers
 # (Part III 13.3, #1591); `examples/hello-http/` builds it as a dependency.
 artifact = "rust-library"
+
+# `File::new` hands the root its caller chose to `fs::metadata` and `fs::read`:
+# a `pub` function's parameter at a raw sink is outside data (ADR-raw-sinks-1
+# D6), and a root is no text a guard can prove, so the package says it takes
+# paths from outside (D4, D15).
+[allow]
+untrusted-paths-read = true

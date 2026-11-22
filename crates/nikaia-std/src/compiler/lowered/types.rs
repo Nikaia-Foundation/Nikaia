@@ -162,8 +162,8 @@ pub(crate) fn item_types(names: &winnow_grammar::InternerContext, item: &Item, k
                 written_at(names, &arg.ty, known, true, span, out);
                 widths_written(names, &arg.ty, is_extern, span, out);
                 if !is_extern {
-                    types_word_by_ref(names, &arg.ty, plain, "parameter", span, out);
-                    types_text_by_ref(names, &arg.ty, "parameter", views, &format!("param {} {}", key, at), span, out);
+                    types_word_by_ref(names, &arg.ty, plain, "parameter", span, &arg.span, &nikaia_std::block::Text::from(names.resolve(arg.name).to_string()), out);
+                    types_text_by_ref(names, &arg.ty, "parameter", views, &format!("param {} {}", key, at), span, &arg.span, &nikaia_std::block::Text::from(names.resolve(arg.name).to_string()), out);
                 }
                 at += 1;
             }
@@ -171,15 +171,15 @@ pub(crate) fn item_types(names: &winnow_grammar::InternerContext, item: &Item, k
                 written_at(names, &option.ty, known, true, span, out);
                 widths_written(names, &option.ty, is_extern, span, out);
                 if !is_extern {
-                    types_word_by_ref(names, &option.ty, plain, "parameter", span, out);
-                    types_text_by_ref(names, &option.ty, "parameter", views, "", span, out);
+                    types_word_by_ref(names, &option.ty, plain, "parameter", span, span, &nikaia_std::block::Text::from(names.resolve(option.name).to_string()), out);
+                    types_text_by_ref(names, &option.ty, "parameter", views, "", span, span, &nikaia_std::block::Text::from(names.resolve(option.name).to_string()), out);
                 }
             }
             maybe_written(names, (ret_type).as_ref(), known, span, out);
             widths_written_maybe(names, (ret_type).as_ref(), is_extern, span, out);
             if !is_extern {
-                types_word_by_ref_maybe(names, (ret_type).as_ref(), plain, span, out);
-                types_text_by_ref_maybe(names, (ret_type).as_ref(), "result", views, &format!("result {}", key), span, out);
+                types_word_by_ref_maybe(names, (ret_type).as_ref(), plain, span, span, "", out);
+                types_text_by_ref_maybe(names, (ret_type).as_ref(), "result", views, &format!("result {}", key), span, span, "", out);
             }
             block_types(names, body, known, views, plain, out);
         },
@@ -189,8 +189,8 @@ pub(crate) fn item_types(names: &winnow_grammar::InternerContext, item: &Item, k
             for field in fields.iter() {
                 written_at(names, &field.ty, known, false, span, out);
                 widths_written(names, &field.ty, is_extern, span, out);
-                types_word_by_ref(names, &field.ty, plain, "field", span, out);
-                if !is_extern { types_text_by_ref(names, &field.ty, "field", views, &format!("field {} {}", of, names.resolve(field.name)), span, out); }
+                types_word_by_ref(names, &field.ty, plain, "field", span, &field.span, &nikaia_std::block::Text::from(names.resolve(field.name).to_string()), out);
+                if !is_extern { types_text_by_ref(names, &field.ty, "field", views, &format!("field {} {}", of, names.resolve(field.name)), span, &field.span, &nikaia_std::block::Text::from(names.resolve(field.name).to_string()), out); }
             }
         },
         Item::Enum { name, variants, is_extern, .. } => {
@@ -204,7 +204,7 @@ pub(crate) fn item_types(names: &winnow_grammar::InternerContext, item: &Item, k
                         for ty in parts.iter() {
                             written_at(names, ty, known, false, span, out);
                             widths_written(names, ty, false, span, out);
-                            if !is_extern { types_text_by_ref(names, ty, "payload", views, &format!("variant {} {} {}", of, names.resolve(variant.name), at), span, out); }
+                            if !is_extern { types_text_by_ref(names, ty, "payload", views, &format!("variant {} {} {}", of, names.resolve(variant.name), at), span, span, "", out); }
                             at += 1;
                         }
                     },
@@ -234,12 +234,12 @@ pub(crate) fn item_types(names: &winnow_grammar::InternerContext, item: &Item, k
                 for arg in method.node.args.iter() {
                     written_at(names, &arg.ty, &here, true, &method.span, out);
                     widths_written(names, &arg.ty, false, &method.span, out);
-                    types_word_by_ref(names, &arg.ty, plain, "parameter", &method.span, out);
-                    types_text_by_ref(names, &arg.ty, "parameter", views, "", &method.span, out);
+                    types_word_by_ref(names, &arg.ty, plain, "parameter", &method.span, &arg.span, &nikaia_std::block::Text::from(names.resolve(arg.name).to_string()), out);
+                    types_text_by_ref(names, &arg.ty, "parameter", views, "", &method.span, &arg.span, &nikaia_std::block::Text::from(names.resolve(arg.name).to_string()), out);
                 }
                 maybe_written(names, (method.node.ret_type).as_ref(), &here, &method.span, out);
                 widths_written_maybe(names, (method.node.ret_type).as_ref(), false, &method.span, out);
-                types_word_by_ref_maybe(names, (method.node.ret_type).as_ref(), plain, &method.span, out);
+                types_word_by_ref_maybe(names, (method.node.ret_type).as_ref(), plain, &method.span, &method.span, "", out);
             }
         },
         Item::Impl { target, methods, .. } => {
@@ -253,8 +253,8 @@ pub(crate) fn item_types(names: &winnow_grammar::InternerContext, item: &Item, k
         Item::Grammar(def) => {
             for rule in def.rules.iter() {
                 for arg in rule.args.iter() {
-                    types_word_by_ref(names, &arg.ty, plain, "parameter", &arg.span, out);
-                    types_text_by_ref(names, &arg.ty, "parameter", views, "", &arg.span, out);
+                    types_word_by_ref(names, &arg.ty, plain, "parameter", &arg.span, &arg.span, &nikaia_std::block::Text::from(names.resolve(arg.name).to_string()), out);
+                    types_text_by_ref(names, &arg.ty, "parameter", views, "", &arg.span, &arg.span, &nikaia_std::block::Text::from(names.resolve(arg.name).to_string()), out);
                 }
             }
         },
@@ -262,16 +262,18 @@ pub(crate) fn item_types(names: &winnow_grammar::InternerContext, item: &Item, k
     }
 }
 
-pub(crate) fn types_word_by_ref(names: &winnow_grammar::InternerContext, ty: &Type, plain: &collections::BTreeSet<String>, position: &str, span: &Span, out: &mut Vec<Finding>) {
-    for inner in ty.generics.iter() { types_word_by_ref(names, inner, plain, "type argument", span, out); }
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn types_word_by_ref(names: &winnow_grammar::InternerContext, ty: &Type, plain: &collections::BTreeSet<String>, position: &str, span: &Span, at: &Span, word: &str, out: &mut Vec<Finding>) {
+    for inner in ty.generics.iter() { types_word_by_ref(names, inner, plain, "type argument", span, at, &nikaia_std::block::Text::from(word.to_string()), out); }
     if (*ty.code).is_some() {
         let code = match (*ty.code).as_ref() { Some(__nikaia_value) => __nikaia_value, None => return };
-        types_word_by_ref_maybe(names, (*code.result).as_ref(), plain, span, out);
+        types_word_by_ref_maybe(names, (*code.result).as_ref(), plain, span, at, &nikaia_std::block::Text::from(word.to_string()), out);
     }
-    types_word_by_ref_here(names, ty, plain, position, span, out);
+    types_word_by_ref_here(names, ty, plain, position, span, at, word, out);
 }
 
-pub(crate) fn types_word_by_ref_here(names: &winnow_grammar::InternerContext, ty: &Type, plain: &collections::BTreeSet<String>, position: &str, span: &Span, out: &mut Vec<Finding>) {
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn types_word_by_ref_here(names: &winnow_grammar::InternerContext, ty: &Type, plain: &collections::BTreeSet<String>, position: &str, span: &Span, at: &Span, word: &str, out: &mut Vec<Finding>) {
     if !ty.is_view || ty.is_mut || ty.is_slice || ty.is_tuple || !ty.generics.is_empty() { return; }
     let name = nikaia_std::block::Text::from(names.resolve(ty.name).to_string());
     let words = vec!["int", "i8", "i16", "i32", "i64", "i128", "u8", "u16", "u32", "u64", "u128", "isize", "usize", "f32", "f64", "bool", "scalar"];
@@ -283,13 +285,21 @@ pub(crate) fn types_word_by_ref_here(names: &winnow_grammar::InternerContext, ty
     if !a_word { return; }
     let mut written = nikaia_std::block::Text::from(name.to_string());
     if ty.is_nullable { written = format!("{}?", name); }
-    out.push(refusal("NK1257", span.clone(), format!("A `{}` is copied at a read, so a {} can't be a `ref {}`.", name, position, written), vec![String::from("A number, a `bool`, a `scalar` and an enum whose variants hold nothing are copied at a read (ADR-279 D8): the copy is never dearer than a pointer, so `ref` on one says nothing. Only an `extern \"C\"` declaration writes it, as the pointer C expects.")], format!("Write `{}` without `ref`; a parameter the function changes is `mut name: {}`.", written, written)));
+    let mut found = refusal("NK1257", span.clone(), format!("A `{}` is copied at a read, so a {} can't be a `ref {}`.", name, position, written), vec![String::from("A number, a `bool`, a `scalar` and an enum whose variants hold nothing are copied at a read (ADR-279 D8): the copy is never dearer than a pointer, so `ref` on one says nothing. Only an `extern \"C\"` declaration writes it, as the pointer C expects.")], format!("Write `{}` without `ref`; a parameter the function changes is `mut name: {}`.", written, written));
+    found.labels = declared_label(at, word, &format!("written `ref {}`", written));
+    out.push(found);
 }
 
-pub(crate) fn types_word_by_ref_maybe(names: &winnow_grammar::InternerContext, ty: Option<&Type>, plain: &collections::BTreeSet<String>, span: &Span, out: &mut Vec<Finding>) { types_word_by_ref(names, match ty { Some(__nikaia_value) => __nikaia_value, None => return }, plain, "result", span, out); }
+pub(crate) fn types_word_by_ref_maybe(names: &winnow_grammar::InternerContext, ty: Option<&Type>, plain: &collections::BTreeSet<String>, span: &Span, at: &Span, word: &str, out: &mut Vec<Finding>) { types_word_by_ref(names, match ty { Some(__nikaia_value) => __nikaia_value, None => return }, plain, "result", span, at, word, out); }
 
+pub(crate) fn declared_label(at: &Span, word: &str, text: &str) -> Vec<CheckLabel> {
+    if word.is_empty() { return vec![]; }
+    vec![CheckLabel { span: at.clone(), word: nikaia_std::block::Text::from(word.to_string()), text: nikaia_std::block::Text::from(text.to_string()), main: true }]
+}
+
+#[allow(clippy::too_many_arguments)]
 #[inline(never)]
-pub(crate) fn types_text_by_ref(names: &winnow_grammar::InternerContext, ty: &Type, position: &str, views: &collections::BTreeSet<String>, key: &str, span: &Span, out: &mut Vec<Finding>) {
+pub(crate) fn types_text_by_ref(names: &winnow_grammar::InternerContext, ty: &Type, position: &str, views: &collections::BTreeSet<String>, key: &str, span: &Span, at: &Span, word: &str, out: &mut Vec<Finding>) {
     if views.contains(key) { return; }
     if !ty.is_view || ty.is_mut || ty.is_slice || ty.is_tuple || !ty.generics.is_empty() { return; }
     if names.resolve(ty.name) != "String" { return; }
@@ -297,10 +307,11 @@ pub(crate) fn types_text_by_ref(names: &winnow_grammar::InternerContext, ty: &Ty
     if ty.is_nullable { written = "String?"; }
     let mut help = format!("Write `{}` without `ref`.", written);
     if position == "`let`" { help = format!("Write `{}` without `ref` where the value is text of its own, and leave the type out where it is a view.", written); }
-    out.push(Finding { code: String::from("NK1261"), span: span.clone(), message: format!("`ref` is redundant here: a {} written `ref {}` says what `{}` already says.", position, written, written), notes: vec![String::from("Text is a view wherever a view suffices, and the ledger records whether a published parameter is lent or kept and what a result points into (ADR-282 D2). Only an `extern \"C\"` declaration and a `pub extern fn` write `ref String`, as the pointer C expects.")], help: Some(help), warning: true, labels: vec![] });
+    out.push(Finding { code: String::from("NK1261"), span: span.clone(), message: format!("`ref` is redundant here: a {} written `ref {}` says what `{}` already says.", position, written, written), notes: vec![String::from("Text is a view wherever a view suffices, and the ledger records whether a published parameter is lent or kept and what a result points into (ADR-282 D2). Only an `extern \"C\"` declaration and a `pub extern fn` write `ref String`, as the pointer C expects.")], help: Some(help), warning: true, labels: declared_label(at, word, &format!("written `ref {}`", written)) });
 }
 
-pub(crate) fn types_text_by_ref_maybe(names: &winnow_grammar::InternerContext, ty: Option<&Type>, position: &str, views: &collections::BTreeSet<String>, key: &str, span: &Span, out: &mut Vec<Finding>) { types_text_by_ref(names, match ty { Some(__nikaia_value) => __nikaia_value, None => return }, position, views, key, span, out); }
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn types_text_by_ref_maybe(names: &winnow_grammar::InternerContext, ty: Option<&Type>, position: &str, views: &collections::BTreeSet<String>, key: &str, span: &Span, at: &Span, word: &'static str, out: &mut Vec<Finding>) { types_text_by_ref(names, match ty { Some(__nikaia_value) => __nikaia_value, None => return }, position, views, key, span, at, word, out); }
 
 pub(crate) fn types_plain_enums(names: &winnow_grammar::InternerContext, items: &[Spanned<Item>]) -> collections::BTreeSet<String> {
     let mut plain: collections::BTreeSet<String> = collections::BTreeSet::new();
@@ -353,11 +364,11 @@ pub(crate) fn block_types(names: &winnow_grammar::InternerContext, block: &Block
         match &stmt.node {
             Stmt::Let { ty, value, .. } => {
                 maybe_written(names, (ty).as_ref(), known, &stmt.span, out);
-                types_text_by_ref_maybe(names, (ty).as_ref(), "`let`", views, &format!("let {}", stmt.span.start), &stmt.span, out);
+                types_text_by_ref_maybe(names, (ty).as_ref(), "`let`", views, &format!("let {}", stmt.span.start), &stmt.span, &stmt.span, "", out);
                 widths_written_maybe(names, (ty).as_ref(), false, &stmt.span, out);
                 if ty.is_some() {
                     let annotated: &Type = match ty { Some(__nikaia_value) => __nikaia_value, None => continue };
-                    for inner in annotated.generics.iter() { types_word_by_ref(names, inner, plain, "type argument", &stmt.span, out); }
+                    for inner in annotated.generics.iter() { types_word_by_ref(names, inner, plain, "type argument", &stmt.span, &stmt.span, "", out); }
                 }
                 blocks_types(names, value, known, views, plain, out);
             },

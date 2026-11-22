@@ -552,7 +552,9 @@ fn check_core_method_summed(name: ref String, on: ref Ty, value: ref Ty) -> Stri
         Ty::Seq { .. } => {},
         else => return "",
     }
-    match value {
+    // A `sum` of a seen list is seen, and its number the same (#2334).
+    let plain = value.unseen()
+    match plain {
         Ty::Named { name: number, args, view } => {
             if args.len() == 0 && !view && a_number_name(number) {
                 return number.clone()
@@ -800,7 +802,16 @@ fn check_core_method_called[H: CheckHost](mut state: CheckState, world: ref Chec
     state.flow.walk_lent = false
     state.flow.text_slot = false
     state.flow.text_walk = false
-    let value: Ty = check_core_call_on(state, world, host, on.clone(), receiver, method, args, written, span)
+    let answered: Ty = check_core_call_on(state, world, host, on.clone(), receiver, method, args, written, span)
+    // **A method of a seen value is the held value's** (ADR-281 D23, #2334):
+    // what follows reads the receiver and the result unstamped, and the
+    // stamp goes back on what the call hands back.
+    let restamp = state.flow.stamped_receivers.contains(id_of(receiver) as i64) && answered.is_seen()
+    let on: Ty = on.unseen()
+    let mut value: Ty = answered.clone()
+    if restamp {
+        value = answered.unseen()
+    }
     // **A view of a `String` slot is told by where it comes from** (#1388):
     // its type is the one text view (ADR-184 D2).
     if state.flow.text_slot {
@@ -1006,13 +1017,22 @@ fn check_core_method_called[H: CheckHost](mut state: CheckState, world: ref Chec
     // magnitude in the unsigned type of `T`'s width.
     let widened: Ty? = state.wide_method(world, expr, on, name, span)
     if widened != null {
-        return widened ?? Ty::Unknown
+        return check_core_method_restamped(widened ?? Ty::Unknown, restamp)
     }
     let changed: Ty? = check_simd_method_result(lanes, name)
     if changed != null {
-        return changed ?? Ty::Unknown
+        return check_core_method_restamped(changed ?? Ty::Unknown, restamp)
     }
-    return walked
+    return check_core_method_restamped(walked, restamp)
+}
+
+/// What a method of a seen value hands back, stamped again (ADR-281 D23,
+/// #2334).
+fn check_core_method_restamped(ty: Ty, restamp: bool) -> Ty sync {
+    if restamp {
+        return stamped_type(ty)
+    }
+    return ty
 }
 
 /// **What `or_default` puts in is `V()`** (ADR-384 D1): a collection,

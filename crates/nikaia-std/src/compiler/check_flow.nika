@@ -305,6 +305,10 @@ pub struct CheckFlow {
     /// The method calls that hand back views of slots that hold text, owned
     /// or views, by their id (#1388).
     pub text_walks: collections::BTreeSet[i64],
+    /// **The receivers of a method call that hold a `Seen[T]`**, by their id
+    /// (ADR-281 D23, #2334): the method is asked of the `T`, and its result
+    /// is stamped as an argument's would be.
+    pub stamped_receivers: collections::BTreeSet[i64],
     /// **The `.collect()`s of a `std` sequence that build a list**, by their
     /// id (`NK1354`, #1975): only these may be counted or walked instead.
     pub listed_collects: collections::BTreeSet[i64],
@@ -621,6 +625,7 @@ impl CheckFlow {
             text_slot: false,
             text_walk: false,
             text_walks: collections::BTreeSet(),
+            stamped_receivers: collections::BTreeSet(),
             listed_collects: collections::BTreeSet(),
             text_slot_views: collections::BTreeSet(),
             text_slot_bindings: collections::BTreeSet(),

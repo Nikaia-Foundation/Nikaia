@@ -1,0 +1,21 @@
+// Each `ref String` declaration is its own `NK1261` (#2719): two parameters
+// of one signature, an option beside them, two fields of one struct and two
+// parameters of a trait method are each warned, each labelled at its name,
+// though a finding is said once where it would print the same (#2247).
+struct Named {
+    first: ref String?,
+    last: ref String?,
+}
+
+trait Joined {
+    fn joined(self, a: ref String, b: ref String) -> String
+}
+
+fn join(a: ref String, b: ref String; sep: ref String = ",") -> String {
+    return f"{a}{sep}{b}"
+}
+
+fn main() throws {
+    let n = Named { first: null, last: null }
+    println(f"{join("x", "y")}{n.first ?? "-"}{n.last ?? "-"}")
+}
