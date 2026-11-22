@@ -2705,6 +2705,13 @@ touches = []
 views = ["op: borrowed", "arena: borrowed"]
 signature = "(op: ref String, arena: ref TermArena, a: i64, b: i64, shape: bool, mut out: String)"
 
+[fn."lg_write_int"]
+pub = true
+sync = "inferred"
+panics = false
+touches = []
+signature = "(value: i64, mut out: String)"
+
 [fn."lg_write_joined"]
 sync = "inferred"
 panics = true

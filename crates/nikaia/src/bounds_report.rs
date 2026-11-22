@@ -138,15 +138,24 @@ pub fn report_checked(
     let trace = asked
         .map(|asked| bounds_report_trace(source, path, asked))
         .unwrap_or_default();
-    let proven = crate::bounds::proven_traced(
-        parsed,
-        beside,
-        &checked.facts,
-        &[&published, library],
-        &std::collections::BTreeSet::new(),
-        through_loops,
-        &trace,
-    );
+    // **The ledger's proof where it answered the same question** (#2711):
+    // through loops, no trace, the same facts and contracts; else a walk.
+    let ledgers = [&published, library];
+    let kept = match through_loops && trace.is_empty() {
+        true => crate::bounds::proven_kept(parsed, beside, &checked.facts, &ledgers),
+        false => None,
+    };
+    let proven = kept.unwrap_or_else(|| {
+        crate::bounds::proven_traced(
+            parsed,
+            beside,
+            &checked.facts,
+            &ledgers,
+            &std::collections::BTreeSet::new(),
+            through_loops,
+            &trace,
+        )
+    });
     let traced = match asked {
         Some(asked) if !trace.is_empty() => bounds_report_trace_rows(asked, &proven.trace),
         _ => String::new(),
