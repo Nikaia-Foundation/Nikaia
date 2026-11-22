@@ -917,8 +917,13 @@ fn check_core_method_called[H: CheckHost](mut state: CheckState, world: ref Chec
     }
     // **`filter` is handed a reference to the item** (ADR-231 D2), and so
     // are its kin's (`binds_hands_a_view`).
-    // An item that is an open number copies (#594).
-    let open_items = state.open_items_of(world, receiver) != null
+    // An item that is an open number copies (#594), and so does a range's
+    // item, a number or a `char` (#2103): `(1..3).filter(fn(x) { x > 1 })`.
+    let a_range = match receiver {
+        Expr::Range { .. } => true,
+        else => false,
+    }
+    let open_items = a_range || state.open_items_of(world, receiver) != null
     if binds_hands_a_view(name) && args.len() == 1 {
         match on {
             Ty::Seq { item, .. } => {

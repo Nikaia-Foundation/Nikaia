@@ -1,0 +1,40 @@
+// A task that reads a FIFO nobody has opened for writing yet does not stop
+// the program (#2137): the read side of a FIFO waits in `open` for a writer,
+// so the idle shortcut (ADR-263 D1, `rt::io::read_here`) and the ring
+// (`file_ring::Ring::begin_read`) open the path `O_NONBLOCK`, see that it is
+// no regular file, and hand the read to an I/O worker, where waiting is
+// allowed. `main` then goes on, prints, and is the writer the task waits for.
+// The child runs on both I/O paths: the blocking one, pinned by a runtime
+// config named by `NIKAIA_RUNTIME_CONFIG` (ADR-303 D5), and the default.
+// Before the fix the child waited in `open` on its main thread and never
+// printed "main ends"; `timeout` turns that hang into exit 124.
+use std::env
+use std::fs
+use std::process
+
+fn toolchain() -> String throws {
+	let exe = env::current_exe()?.display() ?? ""
+	if exe.len() > 0 { return exe }
+	return "target/fast/nikaia"
+}
+
+fn main() throws {
+	let tmp = fs::scratch()
+	let dir = tmp.path().to_text()
+	process::run("mkfifo", ["-m", "600", f"{dir}/fifo"])
+	fs::write("blocking.toml", tmp, "io-method = \"blocking\"\n")
+	fs::write("auto.toml", tmp, "io-method = \"auto\"\n")
+	fs::write(
+		"child.nika",
+		tmp,
+		"use std::fs\n\nfn main() throws {\n\tasync fn {\n\t\tlet bytes = fs::read(\"fifo\", fs::Root::Anywhere) catch { return }\n\t\tprintln(f\"read {bytes.len()}\")\n\t}\n\tprintln(\"main ends\")\n\tfs::write(\"fifo\", fs::Root::Anywhere, \"hello\")\n}\n",
+	)
+	for method in ["blocking", "auto"] {
+		let out = process::run(
+			"timeout",
+			["60", toolchain(), "run", "child.nika"]; dir: dir,
+			env: [("NIKAIA_RUNTIME_CONFIG", f"{dir}/{method}.toml")],
+		)
+		println(f"{method}: {out.stdout.trim().replace("\n", ", ")}; exit {out.code}")
+	}
+}

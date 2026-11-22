@@ -499,6 +499,7 @@ impl EmitState {
             }
         }
         let mut shares_a_lifetime = false;
+        let mut awaits_code = false;
         #[allow(unused_mut)] let mut params: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block); #[allow(unused_mut, clippy::redundant_locals)] let mut from_names = from_names;
         let mut at: i64 = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut from_names = from_names; #[allow(unused_mut, clippy::redundant_locals)] let mut params = params;
         if method.receiver.is_some() {
@@ -533,6 +534,7 @@ impl EmitState {
                     reference = "&mut ";
                 }
                 if walk_runs && !arg.ty.is_nullable && host.overlaps_user_code() && self.emit_fn_code_at_once(&key, &emit_text(world, arg.name)) { written = emit_fn_code_that_crosses(&written); }
+                if written.contains("AsyncFn") { awaits_code = true; }
             } else if !arg.mutable && !arg.keep && !arg.ty.is_view && self.emit_fn_lends(world, &key, at) {
                 let mut viewed = arg.ty.clone();
                 viewed.is_view = true;
@@ -563,7 +565,7 @@ impl EmitState {
         if method.can_throw { outcome = format!("{}<{}, std::boxed::Box<dyn std::error::Error>>", self.rust_result(), returned); }
         let mut ret: String = String::from(""); #[allow(unused_mut, clippy::redundant_locals)] let mut params = params;
         if !is_sync {
-            let send = if host.user_parallelism() { " + Send" } else { "" };
+            let send = if host.user_parallelism() && !awaits_code { " + Send" } else { "" };
             ret = format!(" -> impl std::future::Future<Output = {}>{}", outcome, send);
         } else if method.ret_type.is_some() || method.can_throw { ret = format!(" -> {}", outcome); }
         let mut generics: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut params = params;

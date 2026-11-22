@@ -1,0 +1,25 @@
+// A trait method that runs code it is handed, code that may pause, builds
+// at both user-parallelism settings and means the same at each (Part I 1.2,
+// ADR-269 D12, #2054).
+trait Walk {
+    fn each(ref self, f: fn(i64))
+}
+
+struct S {
+    n: i64,
+}
+
+impl Walk for S {
+    fn each(ref self, f: fn(i64)) {
+        f(self.n)
+        f(self.n)
+    }
+}
+
+fn main() throws {
+    let s = S { n: 4 }
+    let mut seen = 0
+    s.each(fn(v) { seen += v })
+    s.each(fn(v) { let _w = v + 1 })
+    println(f"{s.n} {seen}")
+}
