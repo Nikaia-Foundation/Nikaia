@@ -1196,6 +1196,17 @@ mod check_result_from_lowered {
 pub use check_result_from_lowered::*;
 
 #[allow(unsafe_code)]
+mod check_room_ahead_lowered {
+    #[allow(unused_imports)]
+    use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
+    include!("lowered/check_room_ahead.rs");
+}
+#[allow(unused_imports)]
+pub use check_room_ahead_lowered::*;
+
+#[allow(unsafe_code)]
 mod check_scope_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -3311,6 +3322,7 @@ pub mod check_result_from {
     #[allow(unused_imports)]
     pub use super::{result_from_check};
 }
+pub mod check_room_ahead {}
 pub mod check_scope {
     #[allow(unused_imports)]
     pub use super::{CheckResolved};
@@ -3951,4 +3963,4 @@ pub fn nikaia_run_tests(filters: &[std::string::String], list: bool, more: std::
 /// **The digest of this lowered set** (#1610): every file `lower-std` wrote
 /// beside this index, and the index above this line. Compiled into the same
 /// crate as the code it names, it is the compiler's identity for its caches.
-pub const LOWERED_DIGEST: &str = "4648f652caa0643890baa4baaf14fd7c141f9dfc0234f2903b5d348ae457b299";
+pub const LOWERED_DIGEST: &str = "d15289ef9f754ed327c8e984c781417e271224393b8d9a549a9bb703a61a9403";

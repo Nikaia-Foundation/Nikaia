@@ -1,0 +1,57 @@
+/// A method's check of the found rules keeps its own verdict where a later
+/// round is given other rules (#2396): `skew` breaks `len(a) == len(b)` in
+/// the first round, and `mark`, which kept `c`'s values positions of `b`
+/// only through that rule, is walked again without it and fails. So
+/// `self.b[self.c[k]]` stays checked while `self.a[self.c[k]]`, which needs
+/// no rule `skew` breaks, is proved; a check reused across the two rounds
+/// would prove both.
+struct Pool {
+	a: Vec[i64],
+	b: Vec[i64],
+	c: Vec[i64],
+}
+
+impl Pool {
+	fn add(mut self) sync {
+		self.a.push(0)
+		self.b.push(0)
+	}
+
+	fn skew(mut self) sync {
+		self.a.push(0)
+		self.b.push(0)
+		self.b.push(0)
+	}
+
+	fn mark(mut self) sync {
+		if self.a.len() > 0 {
+			self.c.push(self.a.len() - 1)
+		}
+	}
+
+	pub fn of_a(self, k: i64) -> i64 sync {
+		if k < 0 || k >= self.c.len() {
+			return 0
+		}
+		return self.a[self.c[k]]
+	}
+
+	pub fn of_b(self, k: i64) -> i64 sync {
+		if k < 0 || k >= self.c.len() {
+			return 0
+		}
+		return self.b[self.c[k]]
+	}
+}
+
+fn pool() -> Pool {
+	return Pool { a: [], b: [], c: [] }
+}
+
+fn main() throws {
+	let mut p = pool()
+	p.add()
+	p.skew()
+	p.mark()
+	println(f"{p.of_a(0)} {p.of_b(0)}")
+}

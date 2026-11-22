@@ -118,6 +118,17 @@ before. No second method: one way to say it.
 "`rest` takes the buffer of `line`", "`replace` works in the buffer of `x`"
 (ADR-views-v4 D6 / D10); the language server shows each as a hint.
 
+Where it is written (decided November 22, 2026, issue #2278): a give or a
+reuse is inside one body, and a caller never needs it, so it is no key and no
+row of the borrow-contract ledger (`nikaia.contracts`, which carries no prose,
+ADR-251 D2). The narration is the output of `--tethers` on `nikaia build` and
+`nikaia lower`, which already prints where each buffer lives and why: one line
+per site, with the file and line of the cut or the call, e.g.
+`main.nika:7: rest takes the buffer of line` and
+`main.nika:9: replace works in the buffer of x`. The language server reads the
+same analysis and shows the same text as an inlay hint at that site. Nothing
+is written in the source, and nothing changes what the program does.
+
 ## 5. Consequences
 
 `.to_string()` leaves code on text; a program that wrote it drops it, which

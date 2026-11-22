@@ -127,7 +127,7 @@ impl CheckState {
                 if open_numbers_a_slice(index) { return None; }
                 let outer = match self.open_list_of(world, base) { Some(__nikaia_value) => __nikaia_value, None => return None };
                 if outer.1 < 2 { return None; }
-                return Some((outer.0, outer.1 - 1));
+                return Some((outer.0, unsafe { nikaia_std::proven::sub::<i64>(outer.1, 1) }));
             },
             _ => { return None; },
         }

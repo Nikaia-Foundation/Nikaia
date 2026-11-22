@@ -1321,6 +1321,14 @@ fn check_core_method_walked[H: CheckHost](mut state: CheckState, world: ref Chec
             state.facts.sized_lengths.insert(id_of(receiver) as i64)
         }
     }
+    // **So does `is_empty`** (#2629): `if xs.is_empty() { return }` says
+    // what `xs.len() == 0` says, to the bounds walk.
+    if args.len() == 0 && name == "is_empty" && check_core_method_counted(on) {
+        state.facts.std_lengths.insert(id_of(receiver) as i64)
+        if state.elements_take_space(on) {
+            state.facts.sized_lengths.insert(id_of(receiver) as i64)
+        }
+    }
     // **`m.get(k)` reads the map as `m[k]` does** (#297).
     // **So does a list's**, an `Option<&T>` as well (#1609).
     if name == "get" && (check_core_method_a_map(on) || check_core_method_a_list(on)) {

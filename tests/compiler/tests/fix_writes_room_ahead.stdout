@@ -1,0 +1,22 @@
+dry run: TMP/main.nika:2: NK1385: replaced `String()` with `String(capacity: s.len())`
+--- TMP/main.nika
++++ TMP/main.nika
+@@ -2,1 +2,1 @@
+-    let mut out = String()
++    let mut out = String(capacity: s.len())
+unchanged after the dry run: true
+fix: TMP/main.nika:2: NK1385: replaced `String()` with `String(capacity: s.len())`
+fn copied(s: String) -> String {
+    let mut out = String(capacity: s.len())
+    for c in s.scalars {
+        out.push(c)
+    }
+    return out
+}
+
+fn main() throws {
+    println(copied("abc"))
+}
+check: Checked TMP/main.nika
+same output: true
+abc

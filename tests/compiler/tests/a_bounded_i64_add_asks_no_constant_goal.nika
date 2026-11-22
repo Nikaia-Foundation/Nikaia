@@ -1,0 +1,32 @@
+// #2661: a checked `i64` operation whose operands the facts bound inside
+// the type asks no question with a constant goal. `forced_overflow_values`
+// (prover_solver.nika, #1810) asked a model of the facts alone,
+// `(assert (not false))`, for each such add; the bounds the facts state
+// now decide it without a solver call or a `nikaia.proofs` entry.
+use std::env
+use std::fs
+use std::process
+use std::text
+
+fn toolchain() -> String throws {
+	let exe = env::current_exe()?.display() ?? ""
+	if exe.len() == 0 {
+		eprintln("no running nikaia among this program's ancestors: run it with `nikaia test` (#1305)")
+		process::exit(2)
+	}
+	return exe
+}
+
+fn main() throws {
+	let tmp = fs::scratch()
+	let nikaia = toolchain()
+	process::run("mkdir", ["-p", f"{tmp.path().to_text()}/src"])
+	fs::write("nikaia.toml", tmp, "[package]\nname = \"dumped\"\nversion = \"0.1.0\"\n")
+	fs::write("src/main.nika", tmp, "fn step(n: i64, m: i64) -> i64 sync {\n\tif n > 0 && n < 10 && m >= -5 && m <= 5 {\n\t\tassert(n + 1 > 1)\n\t\tassert(n - m < 20)\n\t\tassert(n * 2 + m < 30)\n\t}\n\treturn 0\n}\n\nfn main() throws {\n\tprintln(step(3, 1))\n}\n")
+	let built = process::run(nikaia, ["build", "--no-cache"]; dir: tmp.path().to_text(), env: [("NIKAIA_DUMP_QUERIES", f"{tmp.path().to_text()}/dump")])
+	println(f"built: {built.stderr.contains("error") == false}")
+	// Each question's goal is its last `assert`: count those that are a
+	// constant.
+	let shown = process::run("sh", ["-c", "n=0; c=0; for f in dump/*.smt2; do n=$((n+1)); if grep -qE '^\\(assert \\(not (true|false)\\)\\)$' $f; then c=$((c+1)); fi; done; echo \"questions: $([ $n -gt 0 ] && echo some)\"; echo \"with a constant goal: $c\""]; dir: tmp.path().to_text())
+	print(shown.stdout)
+}

@@ -1,0 +1,43 @@
+/// An implication between two lengths crosses a loop only while it holds
+/// (ADR-361 D15, #2617): `at` grows only under a guard that bounds `args`,
+/// so past the loop a non-empty `at` gives `args.len() >= 1`, whether the
+/// guard is `i < args.len()` with `i` from 0 or `args.len() > 0` itself.
+/// The refused forms are in `a_length_guard_proves_nothing_when_the_list_shrinks`.
+fn need(n: i64) -> i64 {
+	assert(n >= 1)
+	return n
+}
+
+pub fn under_index(args: ref Vec[i64], m: i64) -> i64 {
+	let mut at: Vec[i64] = []
+	let mut i = 0
+	while i < m {
+		if i < args.len() as i64 {
+			at.push(i)
+		}
+		i += 1
+	}
+	if at.len() == 0 {
+		return 0
+	}
+	return need(args.len() as i64)
+}
+
+pub fn under_length(args: ref Vec[i64], m: i64) -> i64 {
+	let mut at: Vec[i64] = []
+	let mut i = 0
+	while i < m {
+		if args.len() > 0 {
+			at.push(i)
+		}
+		i += 1
+	}
+	if at.len() == 0 {
+		return 0
+	}
+	return need(args.len() as i64)
+}
+
+fn main() throws {
+	println(f"{under_index([1], 2)} {under_index([], 2)} {under_length([4, 5], 3)} {under_length([], 3)}")
+}

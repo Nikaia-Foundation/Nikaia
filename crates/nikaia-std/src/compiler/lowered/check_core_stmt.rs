@@ -1039,7 +1039,7 @@ pub(crate) fn check_core_stmt_let<H: CheckHost>(state: &mut CheckState, world: &
                 part_opens.reserve(parts.iter().size_hint().0); for part in parts.iter() {
                     let mut at: i64 = -1;
                     if ((i) as usize) < unknowns.len() && *unsafe { nikaia_std::proven::read(&unknowns, (i) as usize) } && state.number_shaped(world, part) {
-                        at = span.start as i64 + i + 1;
+                        at = unsafe { nikaia_std::proven::add::<i64>(nikaia_std::proven::add::<i64>(span.start as i64, i), 1) };
                         let named = format!("{}.{}", name, i);
                         state.flow.open_numbers.insert(at, check_core_stmt_open_number(&named, false, &Span { start: span.start + u32::try_from(i).unwrap_or_else(|_| panic!("the value does not fit in an `u32`")) + 1u32, end: span.end }));
                         state.open_number_given(world, at, part, span);
@@ -1844,9 +1844,9 @@ pub(crate) fn check_core_stmt_for<H: CheckHost>(state: &mut CheckState, world: &
                 state.facts.copied_loop_bindings.insert((span.start as i64, nikaia_std::block::Text::from(unsafe { nikaia_std::proven::read(&frame, (0) as usize) }.name.to_string())));
                 (*unsafe { nikaia_std::proven::slot(&mut frame, (0) as usize) }).lent = false;
             }
-        } else if list.1 >= 2 && check_core_stmt_unknown_list_levels(&unsafe { nikaia_std::proven::read(&frame, (0) as usize) }.ty.unseen()) == list.1 - 1 {
+        } else if list.1 >= 2 && check_core_stmt_unknown_list_levels(&unsafe { nikaia_std::proven::read(&frame, (0) as usize) }.ty.unseen()) == unsafe { nikaia_std::proven::sub::<i64>(list.1, 1) } {
             state.flow.open_elements.insert(unsafe { nikaia_std::proven::read(&frame, (0) as usize) }.id, list.0);
-            if list.1 > 2 { state.flow.open_levels.insert(unsafe { nikaia_std::proven::read(&frame, (0) as usize) }.id, list.1 - 1); }
+            if list.1 > 2 { state.flow.open_levels.insert(unsafe { nikaia_std::proven::read(&frame, (0) as usize) }.id, unsafe { nikaia_std::proven::sub::<i64>(list.1, 1) }); }
         }
     }
     if bindings.len() == 1 && !frame.is_empty() && unsafe { nikaia_std::proven::read(&frame, (0) as usize) }.ty.is_unknown() {
@@ -2122,6 +2122,7 @@ pub(crate) fn check_core_block<H: CheckHost>(state: &mut CheckState, world: &Che
     check_core_view_lists_end(state, world, block);
     check_core_place_in_block(state, world, block);
     check_core_place_boxes(state, world, block);
+    state.a_text_without_room(world, block);
     state.scope.pop();
     tail
 }
@@ -2917,7 +2918,7 @@ pub(crate) fn check_async_group_ended(state: &CheckState, block: &Block) -> Opti
     if block.stmts.is_empty() { return None; }
     if state.flow.async_group_block.is_some() { return std::convert::identity(state.flow.async_group_block); }
     if state.flow.async_group.is_some() { return None; }
-    Some(-1 - unsafe { nikaia_std::proven::read(&block.stmts, (0) as usize) }.span.start as i64)
+    Some(unsafe { nikaia_std::proven::sub::<i64>(-1, nikaia_std::proven::read(&block.stmts, (0) as usize).span.start as i64) })
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -2927,7 +2928,7 @@ pub(crate) fn check_async_block(state: &mut CheckState, world: &CheckWorld<'_, '
     state.flow.async_group_block = None;
     let count = block.stmts.len() as i64;
     if count == 0 { return; }
-    let mut group = -1 - unsafe { nikaia_std::proven::read(&block.stmts, (0) as usize) }.span.start as i64;
+    let mut group = unsafe { nikaia_std::proven::sub::<i64>(-1, nikaia_std::proven::read(&block.stmts, (0) as usize).span.start as i64) };
     let mut ends_group = true;
     if own.is_some() { group = nikaia_std::index::or(own, || group); } else if state.flow.async_group.is_some() {
         group = nikaia_std::index::or(state.flow.async_group, || group);

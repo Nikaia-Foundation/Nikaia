@@ -1,0 +1,24 @@
+warning[NK1385]: `out` starts with no room and grows by a push of a part of `s` in the `for` loop over `s`: it asks for memory again as it grows.
+  --> tests/a_text_pushed_from_its_source_is_warned.nika:6:5
+   |
+ 6 |     let mut out = String()
+   |     ^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: Every change to `out` pushes a part of `s`, so it ends at most `s.len()` bytes long; a capacity is a promise about memory, and programs say their promises (ADR-149 D5).
+   = help: Give it the room ahead: `String(capacity: s.len())`; `nikaia fix` writes it.
+warning[NK1385]: `out` starts with no room and grows by a push of a part of `s` in the `for` loop over `s`: it asks for memory again as it grows.
+   --> tests/a_text_pushed_from_its_source_is_warned.nika:14:5
+    |
+ 14 |     let mut out = ""
+    |     ^^^^^^^^^^^^^^^^
+    |
+    = note: Every change to `out` pushes a part of `s`, so it ends at most `s.len()` bytes long; a capacity is a promise about memory, and programs say their promises (ADR-149 D5).
+    = help: Give it the room ahead: `String(capacity: s.len())`; `nikaia fix` writes it.
+warning[NK1385]: `out` starts with no room and grows by a push of a part of `s` in the `for` loop over `s`: it asks for memory again as it grows.
+   --> tests/a_text_pushed_from_its_source_is_warned.nika:24:5
+    |
+ 24 |     let mut out = String()
+    |     ^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: Every change to `out` pushes a part of `s`, so it ends at most `s.len()` bytes long; a capacity is a promise about memory, and programs say their promises (ADR-149 D5).
+    = help: Give it the room ahead: `String(capacity: s.len())`; `nikaia fix` writes it.
