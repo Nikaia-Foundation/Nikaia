@@ -4,7 +4,8 @@
 // `if` twin, and a function that hands back its own argument or `""` after
 // asking a program, pass a raw sink. An outside value in a branch, or at the
 // end of a block, makes the whole value outside: `NK1308` (here a warning,
-// `raw-sinks = "warn"`).
+// `raw-sinks = "warn"`), and checked where it runs as under `Dir(".")`
+// (D7): the empty `branch` names that directory itself, which exists.
 use std::cli
 use std::fs
 use std::process

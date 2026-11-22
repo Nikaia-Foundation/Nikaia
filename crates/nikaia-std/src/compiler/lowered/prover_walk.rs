@@ -15,6 +15,7 @@ pub struct ProverWalk {
     pub claims: collections::BTreeSet<(i64, i64)>,
     pub std_claims: collections::BTreeMap<(i64, i64), String>,
     pub outside: collections::BTreeMap<(i64, String), OutsideIndex>,
+    pub raw_paths: collections::BTreeMap<i64, RawPathCheck>,
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -2109,6 +2110,7 @@ pub(crate) fn prover_raw_sink(walk: &mut ProverWalk, callee: &str, args: &[Expr]
                 }
             }
             if !anywhere && !root_outside { continue; }
+            let before = walk.findings.len() as i64;
             for j in first..i {
                 let mut parts: Vec<Expr> = vec![];
                 raw_sink_parts(nikaia_std::index::get(&args, nikaia_std::index::at(j)), &mut *holes_of, &mut parts);
@@ -2118,6 +2120,12 @@ pub(crate) fn prover_raw_sink(walk: &mut ProverWalk, callee: &str, args: &[Expr]
                 let operation = raw_sink_operation(callee, j, config, words, &mut *written_of);
                 let sink = ParamSink { index: -1, kind: String::from("path"), sink: format!("the path `{}` opens under `{}`, which may name any file", callee, root), operation, root_part: false, guard };
                 for part in parts.iter() { raw_sink_part(walk, &sink, &sink.sink, part, span, scope, at, program, words, library, &mut *holes_of, &mut *ask, &mut *written_of); }
+            }
+            if anywhere && (walk.findings.len() as i64) > before {
+                let call = node_key(written);
+                let mut kept = nikaia_std::index::or(walk.raw_paths.remove(&call), || RawPathCheck { root: i, helps: vec![] });
+                for one in nikaia_std::index::get(&walk.findings, nikaia_std::index::at(before..)).iter() { if one.code == "NK1308" { kept.helps.push(nikaia_std::block::Text::from(nikaia_std::index::or(one.help.as_deref(), || "").to_string())); } }
+                walk.raw_paths.insert(call, kept);
             }
         }
     } else { raw_sink_through(walk, callee, args, config, span, scope, at, program, words, library, &mut *holes_of, &mut *ask, &mut *written_of); }

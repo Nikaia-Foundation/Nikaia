@@ -1,0 +1,16 @@
+// #2508: a `par_iter` chain's `fold` step may not pause (ADR-async-5 D29),
+// unlike its `map`, `filter` and `for_each` lambdas (D24): the step is
+// refused with `NK2209`, and the help names the chain that does it, a
+// pausing `map` followed by the `fold`.
+use std::time
+
+fn slow(x: i64) -> i64 {
+    time::sleep(1.millis())
+    return x
+}
+
+fn main() throws {
+    let xs = [1, 2, 3]
+    let sum = xs.par_iter().fold(fn() { 0 }, fn(acc, x) { acc + slow(x) }, fn(a, b) { a + b })
+    println(f"{sum}")
+}

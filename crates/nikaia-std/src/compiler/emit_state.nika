@@ -177,6 +177,11 @@ pub struct EmitState {
     /// (`[build] environment = "untrusted"`, ADR-397 D4): a privileged start
     /// reaches `main`, so the entry does not stop it (D3).
     pub environment_untrusted: bool,
+    /// **The calls whose path from outside is checked where they run**
+    /// (ADR-raw-sinks-1 D7), by the id of the root the call writes, which it
+    /// opens as `Dir(".")` instead, what `raw-sinks = "warn"` lets
+    /// through; empty for every other build.
+    pub raw_path_checks: collections::BTreeMap[i64, i64],
     /// Some function in the file can throw.
     pub fails: bool,
     /// The whole input is trusted.

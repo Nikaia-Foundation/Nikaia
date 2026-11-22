@@ -492,6 +492,12 @@ impl EmitState {
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn emit_core_argument<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, callee: &str, method_callee: Option<&str>, arg: &Expr, i: i64, boxed_mask: &[bool], boxed_built: &str, part_counts: &[Count], takes_a_handle: &[bool], depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
+        if self.raw_path_checks.contains_key(&node_key(arg)) {
+            out.push("&nikaia_std::runtime::root_confined(&(");
+            self.emit_expr(world, walk, out, host, arg, depth, flow, scope)?;
+            out.push("))");
+            return Ok(());
+        }
         if self.escaped_wholes.contains(&node_key(arg)) {
             out.push("nikaia_std::text::escape_control(&format!(\"{}\", ");
             self.emit_expr(world, walk, out, host, arg, depth, flow, scope)?;

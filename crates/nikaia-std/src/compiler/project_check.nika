@@ -285,36 +285,8 @@ fn project_check_let_raw_sinks_through(findings: Vec[CheckFinding], raw_sinks: S
             continue
         }
         let help = finding.help ?? ""
-        let mut key: String = ""
-        for known in raw_sinks_allow_keys() {
-            if help.contains(f"`{known} = ") {
-                key = known.clone()
-            }
-        }
-        let mut source: String = ""
-        match help.split_once(f"`{key} = [\"") {
-            (_, rest) => {
-                match rest.split_once("\"") {
-                    (named, _) => {
-                        source = named.clone()
-                    },
-                    null => {}
-                }
-            },
-            null => {}
-        }
-        let mut keys: Vec[String] = [key.clone()]
-        if key.starts_with("untrusted-paths-") && key != "untrusted-paths-anywhere" {
-            keys.push("untrusted-paths-anywhere")
-        }
-        let mut allowed = false
-        for one in keys {
-            let word = if package.is_empty() { one.clone() } else { f"{package}:{one}" }
-            if allow.iter().any(fn(given) { given == word || (!source.is_empty() && given == f"{word}={source}") }) {
-                allowed = true
-            }
-        }
-        if allowed {
+        let (key, source) = project_check_raw_sink_key(help)
+        if project_check_raw_sink_allowed(help, allow, package) {
             continue
         }
         let value = if source.is_empty() { "true" } else { f"[\"{source}\"]" }
@@ -331,6 +303,70 @@ fn project_check_let_raw_sinks_through(findings: Vec[CheckFinding], raw_sinks: S
         kept.push(said)
     }
     return kept
+}
+
+/// **The `[allow]` key and source a raw sink's `NK1308` names**
+/// (ADR-raw-sinks-1 D15), read from its help: `untrusted-paths-read` and
+/// `args` from ``untrusted-paths-read = ["args"]``; the source empty where
+/// the help says `true`.
+fn project_check_raw_sink_key(help: ref String) -> (String, String) {
+    let mut key: String = ""
+    for known in raw_sinks_allow_keys() {
+        if help.contains(f"`{known} = ") {
+            key = known.clone()
+        }
+    }
+    let mut source: String = ""
+    match help.split_once(f"`{key} = [\"") {
+        (_, rest) => {
+            match rest.split_once("\"") {
+                (named, _) => {
+                    source = named.clone()
+                },
+                null => {}
+            }
+        },
+        null => {}
+    }
+    return (key, source)
+}
+
+/// **Whether the build allows the raw sink whose `NK1308` has this help**
+/// (ADR-raw-sinks-1 D4, D5, D15): its key alone or with its source;
+/// `untrusted-paths-anywhere` stands for each path key; a dependency's
+/// (`package` is its name) by the application's `NAME:key` alone.
+fn project_check_raw_sink_allowed(help: ref String, allow: ref Vec[String], package: ref String) -> bool {
+    let (key, source) = project_check_raw_sink_key(help)
+    let mut keys: Vec[String] = [key.clone()]
+    if key.starts_with("untrusted-paths-") && key != "untrusted-paths-anywhere" {
+        keys.push("untrusted-paths-anywhere")
+    }
+    for one in keys {
+        let word = if package.is_empty() { one.clone() } else { f"{package}:{one}" }
+        if allow.iter().any(fn(given) { given == word || (!source.is_empty() && given == f"{word}={source}") }) {
+            return true
+        }
+    }
+    return false
+}
+
+/// **The calls whose path from outside is checked where they run**
+/// (ADR-raw-sinks-1 D7): under `raw-sinks = "warn"`, each call that hands
+/// `fs::Root::Anywhere` a path from outside it does not prove, and the
+/// build does not allow, by the id of the root it writes, with the root's
+/// index, which the call opens as `Dir(".")` instead. None under `error`,
+/// which refuses each.
+pub fn project_check_raw_path_checks(sites: ref collections::BTreeMap[i64, RawPathCheck], raw_sinks: ref String, allow: ref Vec[String], package: ref String) -> collections::BTreeMap[i64, i64] {
+    let mut out: collections::BTreeMap[i64, i64] = collections::BTreeMap()
+    if raw_sinks != "warn" {
+        return out
+    }
+    for (call, site) in sites {
+        if site.helps.iter().any(fn(help) { !project_check_raw_sink_allowed(help, allow, package) }) {
+            out.insert(call.clone(), site.root)
+        }
+    }
+    return out
 }
 
 /// **`std` and the toolchain are built at the default, `raw-sinks =

@@ -1301,6 +1301,7 @@ fn with_lower_host<R>(
         book: RefCell::new(None),
         checking: RefCell::new(None),
         checked_facts: RefCell::new(BTreeMap::new()),
+        raw_path_checks: RefCell::new(BTreeMap::new()),
         unit_facts: RefCell::new(BTreeMap::new()),
         ahead: RefCell::new(BTreeMap::new()),
         published: RefCell::new(BTreeMap::new()),
@@ -1343,6 +1344,9 @@ struct LowerHost<'a> {
     /// What the check of the units reads once for all of them, while it runs.
     checking: RefCell<Option<Checking>>,
     checked_facts: RefCell<BTreeMap<usize, check::CheckFacts>>,
+    /// The calls of each unit whose path from outside is checked where they
+    /// run (ADR-raw-sinks-1 D7), for the emitter.
+    raw_path_checks: RefCell<BTreeMap<usize, BTreeMap<i64, i64>>>,
     /// Each unit's facts, by its place in the program, for `nikaia lsp`'s
     /// [`definition`] (#1396): empty for every other build.
     unit_facts: RefCell<BTreeMap<usize, check::CheckFacts>>,
@@ -1443,6 +1447,22 @@ type HostResult<T> = std::result::Result<T, Box<dyn std::error::Error>>;
 /// **One unit of `program` checked** (ADR-286), its questions placed in its
 /// file, a dependency's asked from its own package's `nikaia.proofs`
 /// (`proofs::for_unit`): what it warned, or its refusal.
+/// **The calls of a checked unit whose path from outside is checked where
+/// they run** ([ADR-raw-sinks-1](../../docs/specification/adr/adr-raw-sinks-1.md)
+/// D7): what `raw-sinks = "warn"` lets through, for the emitter.
+fn raw_path_checks_of(
+    facts: &check::CheckFacts,
+    unit: &modules::Unit,
+    settings: &Settings,
+) -> BTreeMap<i64, i64> {
+    project_check::project_check_raw_path_checks(
+        &facts.raw_paths,
+        &settings.words.raw_sinks,
+        &settings.words.allow,
+        unit.package.as_deref().unwrap_or(""),
+    )
+}
+
 fn check_unit_of(
     unit: &modules::Unit,
     program: &modules::Program,
@@ -1997,6 +2017,7 @@ impl project_lower::ProjectLowerHost for LowerHost<'_> {
             facts_reusable,
         });
         *self.checked_facts.borrow_mut() = BTreeMap::new();
+        *self.raw_path_checks.borrow_mut() = BTreeMap::new();
         *self.foreign.borrow_mut() = Some(foreign);
         units
     }
@@ -2052,12 +2073,22 @@ impl project_lower::ProjectLowerHost for LowerHost<'_> {
                 checking,
                 around,
                 settings,
-                (keep || lsp).then_some(&mut facts),
+                // Asked of every unit: the calls `raw-sinks = "warn"`
+                // checks where they run are read off them (ADR-raw-sinks-1 D7).
+                Some(&mut facts),
             )
         });
         *self.book.borrow_mut() = Some(book);
         if lsp && let Some(facts) = &facts {
             self.unit_facts.borrow_mut().insert(at, facts.clone());
+        }
+        if let Ok(_) = &checked
+            && let Some(facts) = &facts
+        {
+            let checks = raw_path_checks_of(facts, unit, settings);
+            if !checks.is_empty() {
+                self.raw_path_checks.borrow_mut().insert(at, checks);
+            }
         }
         if let Ok(_) = &checked
             && keep
@@ -2108,10 +2139,24 @@ impl project_lower::ProjectLowerHost for LowerHost<'_> {
         order.sort_by_key(|k| std::cmp::Reverse(program.units[ats[*k]].parsed.program.items.len()));
         let done = crate::proofs::in_parallel(&order, None, |k| {
             let unit = &program.units[ats[k]];
-            said_aside(|| check_unit_of(unit, program, checking, around, settings, None))
+            // Its facts only for the calls `raw-sinks = "warn"` checks
+            // where they run (ADR-raw-sinks-1 D7).
+            let mut facts = None;
+            let (checked, said) = said_aside(|| {
+                check_unit_of(unit, program, checking, around, settings, Some(&mut facts))
+            });
+            let checks = match (&checked, &facts) {
+                (Ok(_), Some(facts)) => raw_path_checks_of(facts, unit, settings),
+                _ => BTreeMap::new(),
+            };
+            ((checked, said), checks)
         });
         let mut ahead = self.ahead.borrow_mut();
-        for (at, checked) in ats.into_iter().zip(done) {
+        let mut raw = self.raw_path_checks.borrow_mut();
+        for (at, (checked, checks)) in ats.into_iter().zip(done) {
+            if !checks.is_empty() {
+                raw.insert(at, checks);
+            }
             ahead.insert(at, checked);
         }
     }
@@ -2190,6 +2235,7 @@ impl project_lower::ProjectLowerHost for LowerHost<'_> {
             .descriptions
             .clone();
         program.checked_facts = std::mem::take(&mut *self.checked_facts.borrow_mut());
+        program.raw_path_checks = std::mem::take(&mut *self.raw_path_checks.borrow_mut());
         let book = self
             .book
             .borrow_mut()

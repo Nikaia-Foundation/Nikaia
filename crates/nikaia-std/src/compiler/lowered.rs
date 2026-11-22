@@ -3716,7 +3716,7 @@ pub mod project_batch {
 }
 pub mod project_check {
     #[allow(unused_imports)]
-    pub use super::{project_check_summary, project_check_raw_sinks_in_std, project_check_lint_where_nothing_crosses, ProjectCheckHost, ProjectCheckSaid, project_check_check, project_check_gained, ProjectCheckKept, project_check_keeps_that_moved, ProjectCheckExplainHost, project_check_explain, project_check_explain_kinds};
+    pub use super::{project_check_summary, project_check_raw_path_checks, project_check_raw_sinks_in_std, project_check_lint_where_nothing_crosses, ProjectCheckHost, ProjectCheckSaid, project_check_check, project_check_gained, ProjectCheckKept, project_check_keeps_that_moved, ProjectCheckExplainHost, project_check_explain, project_check_explain_kinds};
 }
 pub mod project_drive {
     #[allow(unused_imports)]
@@ -3772,7 +3772,7 @@ pub mod prover_calls {
 }
 pub mod prover_claims {
     #[allow(unused_imports)]
-    pub use super::{UnwrittenCheck, ParamSink, OutsideIndex, PreClaim, CarriedFrom, Precondition, PostClaim, SummaryExit, SummaryAlt, Foreign, ForeignShape};
+    pub use super::{UnwrittenCheck, ParamSink, RawPathCheck, OutsideIndex, PreClaim, CarriedFrom, Precondition, PostClaim, SummaryExit, SummaryAlt, Foreign, ForeignShape};
 }
 pub mod prover_loops {
     #[allow(unused_imports)]
@@ -3979,4 +3979,4 @@ pub fn nikaia_run_tests(filters: &[std::string::String], list: bool, more: std::
 /// **The digest of this lowered set** (#1610): every file `lower-std` wrote
 /// beside this index, and the index above this line. Compiled into the same
 /// crate as the code it names, it is the compiler's identity for its caches.
-pub const LOWERED_DIGEST: &str = "cc2975c03022de2d89ca3f0be523380dd5531802f421c875ba13cddff725e85a";
+pub const LOWERED_DIGEST: &str = "378d4d194b343535f76a25becbe685e5e0bb27ac379a1d78e95b9f71e8a8a281";

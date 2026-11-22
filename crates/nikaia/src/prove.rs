@@ -66,6 +66,9 @@ pub struct Proved {
     /// **Each function's result summary, as the bounds walk asks it**
     /// (ADR-359 D14, #1904), by the ledger's key.
     pub summaries: BTreeMap<String, nikaia_std::compiler::bounds_walk::Ensured>,
+    /// **Each call that hands a path from outside to `fs::Root::Anywhere`
+    /// unproved** (ADR-raw-sinks-1 D7), by the id of the root it writes.
+    pub raw_paths: BTreeMap<i64, nikaia_std::compiler::prover_claims::RawPathCheck>,
 }
 
 /// Read off the checker's `comptime_values` (the type below and the literal,
@@ -290,6 +293,7 @@ fn finished(walked: prove_run::ProveWalked) -> Proved {
         std_claims: walk.std_claims,
         outside: walk.outside,
         summaries,
+        raw_paths: walk.raw_paths,
     }
 }
 
