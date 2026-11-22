@@ -1891,7 +1891,7 @@ impl EmitState {
         let own = (self.facts.method_callees[on_node]?.clone() ?? "Seq::collect") != "Seq::collect"
         // **A walk of failing elements is collected into a `Result`**
         // (#2736): the first failure ends it, and nothing after is computed.
-        let failing_items = self.facts.failing_item_receivers.contains(on_node)
+        let failing_items = self.facts.failing_item_receivers.contains_key(on_node)
         if name == "collect" && args.len() == 0 && !own && !self.method_pauses(on_node) && failing_items {
             out.push(if declared { f"::<{self.rust_result()}<_, _>>" } else { f"::<{self.rust_result()}<Vec<_>, _>>" })
         } else if name == "collect" && args.len() == 0 && !declared && !own && !self.method_pauses(on_node) {
@@ -2051,7 +2051,7 @@ impl EmitState {
     /// it is refused with a line, as a walk of a pausing one is.
     fn emit_call_failing_through(ref self, on_node: i64, name: ref String, flow: EmitFlow) -> (String, String, String) sync throws {
         let through = self.facts.failing_through_calls.get(on_node) ?? 0
-        if self.facts.failing_item_receivers.contains(on_node) {
+        if self.facts.failing_item_receivers.contains_key(on_node) {
             if through != 0 {
                 throw EmitRefused { message: f"`{name}` is given a lambda that can fail, over a sequence whose elements can already fail; only one step of a chain can fail so far. Collect the sequence first, with `… .collect() catch {{ … }}`, and walk the list.", at: flow.statement }
             }

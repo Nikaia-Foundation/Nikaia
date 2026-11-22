@@ -112,9 +112,9 @@ impl CheckState {
                 if !self.iterates_fallibly(world, written) { return; }
                 name = format!("`{}`", written);
             },
-            Ty::Seq { can_throw, item, .. } => {
-                let item = nikaia_std::boxed::open(item); let can_throw = *can_throw;
-                if !can_throw { return; }
+            Ty::Seq { fails, item, .. } => {
+                let item = nikaia_std::boxed::open(item);
+                if fails.is_empty() { return; }
                 name = match item {
                     Ty::Unknown => String::from("a sequence"),
                     _ => format!("a sequence of `{}`", item.shown()),
@@ -134,7 +134,7 @@ impl CheckState {
     // this was written - see `contracts::sync`.
     pub(crate) fn walks_a_failing_sequence(&self, on: &Ty, contract: &FnContract) -> bool {
         let can_fail = match on {
-            Ty::Seq { can_throw, .. } => { let can_throw = *can_throw; can_throw },
+            Ty::Seq { fails, .. } => !fails.is_empty(),
             _ => false,
         };
         if !can_fail || !walks_by_value(contract) { return false; }

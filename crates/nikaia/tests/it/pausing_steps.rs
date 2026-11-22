@@ -44,10 +44,10 @@ fn a_sequence_says_whether_its_step_pauses() {
             &pausing,
             Ty::Seq {
                 pauses: true,
-                can_throw: true,
+                fails,
                 is_sync: false,
                 ..
-            }
+            } if fails == &["?"]
         ),
         "{pausing:?}"
     );

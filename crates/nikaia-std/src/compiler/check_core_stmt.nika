@@ -2947,6 +2947,7 @@ fn check_core_stmt[H: CheckHost](mut state: CheckState, world: ref CheckWorld, h
         Stmt::Let { names, shape, mutable, mut_names, deep, ty, value } => {
             let typed = check_core_stmt_let(state, world, host, names, shape, mutable, mut_names, deep, ty, value, span)
             check_core_stmt_a_stream_let(state, world, names, shape, mutable, ty, value, span)
+            check_core_stmt_a_pending_task(state, world, names, value)
             typed
         },
         // **`comptime` is a `let` that has to fold** (ADR-287 D4, D5).
@@ -2960,6 +2961,27 @@ fn check_core_stmt[H: CheckHost](mut state: CheckState, world: ref CheckWorld, h
         // **One site, not two.**
         Stmt::Expr(expr) => check_core_expr(state, world, host, expr, span),
         Stmt::Emit(value) => check_core_stmt_emit(state, world, host, value, span),
+    }
+}
+
+/// **A binding that holds a task's value**, `let x = async e` with no
+/// fallback and a task that can fail (ADR-async-5 D22): kept by its id, with the `let` as written, for
+/// `NK1134`'s help where a `catch` around a mention of it handles nothing.
+fn check_core_stmt_a_pending_task(mut state: CheckState, world: ref CheckWorld, names: ref Vec[winnow_grammar::Symbol], value: ref Expr) sync {
+    if names.len() != 1 {
+        return
+    }
+    match value {
+        Expr::Async(inner, _, _, _) if state.flow.fallible_tasks.contains(id_of(value) as i64) => {
+            let name = world.words.resolve(names[0]).clone()
+            match state.binding(name) {
+                bound => {
+                    state.flow.pending_tasks.insert(bound.id, f"let {name} = async {written_expression(world.words, inner)}")
+                },
+                null => {},
+            }
+        },
+        else => {},
     }
 }
 

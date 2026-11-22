@@ -83,7 +83,10 @@ fn check_core_expr[H: CheckHost](mut state: CheckState, world: ref CheckWorld, h
     state.flow.reached = reaching
     check_narrow_reads_of_the_maybe(state, expr)
     let said_before = state.flow.unknown_said
-    let walked = check_core_value_of(state, world, host, expr, span)
+    let walked = match expr {
+        Expr::Async(_, _, _, _) => check_core_task_walked(state, world, host, expr, span),
+        else => check_core_value_of(state, world, host, expr, span),
+    }
     let said_inside = state.flow.unknown_said > said_before
     let opened = check_core_expr_open_receiver(state, expr, walked)
     let ty = check_core_expr_flat_get(state, world, expr, opened)
@@ -103,6 +106,37 @@ fn check_core_expr[H: CheckHost](mut state: CheckState, world: ref CheckWorld, h
     state.a_member_of_an_unknown_lambda_parameter(world, expr, span)
     if ty.is_unknown() && !said_inside {
         state.a_value_of_no_known_type(world, expr, span)
+    }
+    return ty
+}
+
+/// **`async e`, walked under a guard of its own** (ADR-async-5 D22): whether
+/// the task can fail is kept by its node, for `NK1134`'s help where a `catch`
+/// around a mention of its binding has nothing to handle. What the walk found
+/// goes on to the enclosing guard, as it would have walked there; without one
+/// the guard is a probe, which no handler's note reads (`NK2402`).
+fn check_core_task_walked[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, expr: ref Expr, span: ref Span) -> Ty sync {
+    let enclosing: CheckGuarded? = state.flow.guarded?.clone()
+    let probing = state.flow.task_probe
+    state.flow.guarded = CheckGuarded::nothing()
+    state.flow.task_probe = enclosing == null || probing
+    let ty = check_core_value_of(state, world, host, expr, span)
+    let found: CheckGuarded = state.flow.guarded?.clone() ?? CheckGuarded::nothing()
+    state.flow.task_probe = probing
+    if found.fallible {
+        state.flow.fallible_tasks.insert(id_of(expr) as i64)
+    }
+    match enclosing {
+        outer => {
+            let mut merged = outer.clone()
+            merged.fallible = merged.fallible || found.fallible
+            merged.unanswered = merged.unanswered || found.unanswered
+            merged.thrown.extend(found.thrown)
+            state.flow.guarded = merged
+        },
+        null => {
+            state.flow.guarded = null
+        },
     }
     return ty
 }

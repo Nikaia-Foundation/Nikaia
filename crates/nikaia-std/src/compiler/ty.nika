@@ -94,7 +94,13 @@ pub enum Ty {
         is_sync: bool,
         /// A positive claim, and not the absence of `sync`.
         pauses: bool,
-        can_throw: bool,
+        /// **What a step of it fails with** (#2742, supervisor decision of
+        /// 2026-11-22): empty where it cannot fail; the error types a
+        /// failing lambda's step throws, so that a binding, a parameter or a
+        /// return of the walk keeps them and a `catch` around any walk of
+        /// it opens them; `["?"]` where nobody named them (a written
+        /// `throws`). In place of a `can_throw` flag.
+        fails: Vec[String],
         parallel: bool,
         shape: Shape,
     },
@@ -233,7 +239,7 @@ pub fn text(ty: ref Ty) -> String {
         // `T?` and never `Option[T]`: the program cannot write the second.
         Ty::Nullable(inner) => f"{text(inner)}?",
         Ty::Named { name, args, view } => named_text(name, args, view),
-        Ty::Seq { item, is_sync, pauses, can_throw, parallel, shape } => sequence(text(item), is_sync, pauses, can_throw, parallel, shape),
+        Ty::Seq { item, is_sync, pauses, fails, parallel, shape } => sequence(text(item), is_sync, pauses, fails.len() > 0, parallel, shape),
     }
 }
 
@@ -386,7 +392,7 @@ pub fn ty_shown(ty: ref Ty) -> String {
         Ty::Tuple(parts) => f"({shown_listed(parts)})",
         Ty::Nullable(inner) => f"{ty_shown(inner)}?",
         Ty::Fn { params, result, is_sync, can_throw, spelled } => shown_code(params, result, is_sync, can_throw, spelled),
-        Ty::Seq { item, is_sync, pauses, can_throw, parallel, shape } => sequence(ty_shown(item), is_sync, pauses, can_throw, parallel, shape),
+        Ty::Seq { item, is_sync, pauses, fails, parallel, shape } => sequence(ty_shown(item), is_sync, pauses, fails.len() > 0, parallel, shape),
         else => text(ty),
     }
 }
@@ -1104,7 +1110,7 @@ fn a_sequence(written: ref String, word: ref String, parallel: bool) -> Ty? {
     }
     let item = parse(between(c, 1, close))
     let shape = Shape { ends: ends, sized: sized, replays: replays, timed: false, one_at_a_time: false, failing_items: false }
-    return Ty::Seq { item: item, is_sync: is_sync, pauses: pauses, can_throw: can_throw, parallel: parallel, shape: shape }
+    return Ty::Seq { item: item, is_sync: is_sync, pauses: pauses, fails: if can_throw { unnamed_failure() } else { [] }, parallel: parallel, shape: shape }
 }
 
 /// A name, its arguments and whether it is a view, or a variable: `ref $V`
@@ -2142,9 +2148,9 @@ impl Ty {
                     return function_fits(params, result, is_sync, can_throw, expected)
                 }
             }
-            Ty::Seq { item, is_sync, pauses, can_throw, parallel, shape } => {
+            Ty::Seq { item, is_sync, pauses, fails, parallel, shape } => {
                 if a_sequence_type(expected) {
-                    return sequence_fits(item, is_sync, pauses, can_throw, parallel, shape, expected)
+                    return sequence_fits(item, is_sync, pauses, fails.len() > 0, parallel, shape, expected)
                 }
             }
             Ty::Var { .. } => {
@@ -2177,7 +2183,7 @@ impl Ty {
             Ty::Pointed { item, slice, mutable } => Ty::Pointed { item: item.erase(parameters), slice: slice, mutable: mutable },
             Ty::Tuple(parts) => Ty::Tuple(erased_each(parts, parameters)),
             Ty::Fn { params, result, is_sync, can_throw, spelled } => Ty::Fn { params: erased_each(params, parameters), result: result?.erase(parameters), is_sync: is_sync, can_throw: can_throw, spelled: spelled.clone() },
-            Ty::Seq { item, is_sync, pauses, can_throw, parallel, shape } => Ty::Seq { item: item.erase(parameters), is_sync: is_sync, pauses: pauses, can_throw: can_throw, parallel: parallel, shape: shape.clone() },
+            Ty::Seq { item, is_sync, pauses, fails, parallel, shape } => Ty::Seq { item: item.erase(parameters), is_sync: is_sync, pauses: pauses, fails: fails.clone(), parallel: parallel, shape: shape.clone() },
             Ty::Nullable(inner) => Ty::Nullable(inner.erase(parameters)),
             Ty::Named { name, args, view } => erased_name(name, args, view, parameters),
             else => self.clone(),
@@ -2193,7 +2199,7 @@ impl Ty {
             Ty::Pointed { item, slice, mutable } => Ty::Pointed { item: item.parameterise(parameters), slice: slice, mutable: mutable },
             Ty::Tuple(parts) => Ty::Tuple(parameterised_each(parts, parameters)),
             Ty::Fn { params, result, is_sync, can_throw, spelled } => Ty::Fn { params: parameterised_each(params, parameters), result: result?.parameterise(parameters), is_sync: is_sync, can_throw: can_throw, spelled: spelled.clone() },
-            Ty::Seq { item, is_sync, pauses, can_throw, parallel, shape } => Ty::Seq { item: item.parameterise(parameters), is_sync: is_sync, pauses: pauses, can_throw: can_throw, parallel: parallel, shape: shape.clone() },
+            Ty::Seq { item, is_sync, pauses, fails, parallel, shape } => Ty::Seq { item: item.parameterise(parameters), is_sync: is_sync, pauses: pauses, fails: fails.clone(), parallel: parallel, shape: shape.clone() },
             Ty::Nullable(inner) => Ty::Nullable(inner.parameterise(parameters)),
             Ty::Named { name, args, view } => parameterised_name(name, args, view, parameters),
             else => self.clone(),
@@ -2369,9 +2375,9 @@ fn results_fit(found: ref Ty?, wanted: ref Ty?) -> bool {
 // Two sequences fit when their items do (ADR-105 D1). `pauses` fits as
 // `throws` does and the other way round from `sync` (ADR-172 D1); `Par` fits
 // `Seq` and not back (D3); a demanded shape is met by the word (ADR-293 D16).
-fn sequence_fits(found: ref Ty, never_pauses: bool, may_pause: bool, fails: bool, at_once: bool, has: ref Shape, expected: ref Ty) -> bool {
+fn sequence_fits(found: ref Ty, never_pauses: bool, may_pause: bool, fails_found: bool, at_once: bool, has: ref Shape, expected: ref Ty) -> bool {
     return match expected {
-        Ty::Seq { item, is_sync, pauses, can_throw, parallel, shape } => found.fits(item) && (never_pauses || !is_sync) && (!may_pause || pauses) && (!fails || can_throw) && (at_once || !parallel) && has.meets(shape),
+        Ty::Seq { item, is_sync, pauses, fails, parallel, shape } => found.fits(item) && (never_pauses || !is_sync) && (!may_pause || pauses) && (!fails_found || fails.len() > 0) && (at_once || !parallel) && has.meets(shape),
         else => false,
     }
 }
@@ -2522,7 +2528,7 @@ pub fn substitute(ty: ref Ty, bound: ref collections::BTreeMap[String, Ty]) -> T
         Ty::Tuple(parts) => Ty::Tuple(substituted_each(parts, bound)),
         Ty::Pointed { item, slice, mutable } => Ty::Pointed { item: substitute(item, bound), slice: slice, mutable: mutable },
         Ty::Fn { params, result, is_sync, can_throw, spelled } => Ty::Fn { params: substituted_each(params, bound), result: substituted_result(result, bound), is_sync: is_sync, can_throw: can_throw, spelled: spelled.clone() },
-        Ty::Seq { item, is_sync, pauses, can_throw, parallel, shape } => Ty::Seq { item: substitute(item, bound), is_sync: is_sync, pauses: pauses, can_throw: can_throw, parallel: parallel, shape: shape.clone() },
+        Ty::Seq { item, is_sync, pauses, fails, parallel, shape } => Ty::Seq { item: substitute(item, bound), is_sync: is_sync, pauses: pauses, fails: fails.clone(), parallel: parallel, shape: shape.clone() },
         Ty::Nullable(inner) => Ty::Nullable(substitute(inner, bound)),
         else => ty.clone(),
     }
@@ -2595,7 +2601,7 @@ pub fn qualify(ty: ref Ty, module: ref String, declared: ref collections::BTreeS
         // as the package does, and a caller's walk reads `a::Item`.
         Ty::Nullable(inner) => Ty::Nullable(qualify(inner, module, declared)),
         Ty::Pointed { item, slice, mutable } => Ty::Pointed { item: qualify(item, module, declared), slice: slice, mutable: mutable },
-        Ty::Seq { item, is_sync, pauses, can_throw, parallel, shape } => Ty::Seq { item: qualify(item, module, declared), is_sync: is_sync, pauses: pauses, can_throw: can_throw, parallel: parallel, shape: shape.clone() },
+        Ty::Seq { item, is_sync, pauses, fails, parallel, shape } => Ty::Seq { item: qualify(item, module, declared), is_sync: is_sync, pauses: pauses, fails: fails.clone(), parallel: parallel, shape: shape.clone() },
         else => ty.clone(),
     }
 }
@@ -2629,7 +2635,7 @@ pub fn renamed(ty: ref Ty, renames: ref collections::BTreeMap[String, String]) -
         Ty::Fn { params, result, is_sync, can_throw, spelled } => Ty::Fn { params: renamed_each(params, renames), result: renamed_result(result, renames), is_sync: is_sync, can_throw: can_throw, spelled: spelled.clone() },
         Ty::Nullable(inner) => Ty::Nullable(renamed(inner, renames)),
         Ty::Pointed { item, slice, mutable } => Ty::Pointed { item: renamed(item, renames), slice: slice, mutable: mutable },
-        Ty::Seq { item, is_sync, pauses, can_throw, parallel, shape } => Ty::Seq { item: renamed(item, renames), is_sync: is_sync, pauses: pauses, can_throw: can_throw, parallel: parallel, shape: shape.clone() },
+        Ty::Seq { item, is_sync, pauses, fails, parallel, shape } => Ty::Seq { item: renamed(item, renames), is_sync: is_sync, pauses: pauses, fails: fails.clone(), parallel: parallel, shape: shape.clone() },
         else => ty.clone(),
     }
 }
@@ -2848,4 +2854,29 @@ test "the chain from a map to a lambda parameter" {
 test "a view binds against a value" {
     let bound = ty_test_bound("&Vec[$T]", "Vec[i64]")
     assert((bound["T"]?.clone() ?? Ty::Unknown) == ty_test_name("i64"))
+}
+
+/// **Two failure sets in one** (#2742): what a walk made of two fails with,
+/// each error type once, in the order met.
+pub fn failures_joined(first: ref Vec[String], second: ref Vec[String]) -> Vec[String] {
+    let mut out: Vec[String] = []
+    for name in first {
+        if !out.contains(name) {
+            out.push(name.clone())
+        }
+    }
+    for name in second {
+        if !out.contains(name) {
+            out.push(name.clone())
+        }
+    }
+    return out
+}
+
+/// **A failure nobody named** (#2742): what a written `Seq[T] throws` fails
+/// with, as a function's `throws` without a set does.
+pub fn unnamed_failure() -> Vec[String] {
+    let mut name = String()
+    name.push_str("?")
+    return [name]
 }
