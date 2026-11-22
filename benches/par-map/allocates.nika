@@ -1,0 +1,24 @@
+// ADR-async-5 D28's second row: `par_iter().map(…).collect()` over 10^6
+// elements with a lambda that allocates, its text form, so each element's
+// result is memory of its own kept past the element. `par_map.nika` builds it
+// beside its Rayon twin, `src/bin/par_map_allocates.rs`, and counts both.
+//
+// The list is made before the chain and the lengths summed after it, the same
+// on both sides, so the output pins every element and the difference between
+// the two counts is the chain's.
+use std::cli
+use std::text
+
+fn main() throws {
+    let n = text::parse_i64(cli::args().nth(1) ?? "1000000") ?? 1000000
+    let mut xs: Vec[i64] = []
+    for i in 0..<n {
+        xs.push(i)
+    }
+    let ys: Vec[String] = xs.par_iter().map(fn(x) { f"{x}" }).collect()
+    let mut total = 0
+    for y in ys {
+        total += y.len()
+    }
+    println(f"{ys.len()} {total}")
+}

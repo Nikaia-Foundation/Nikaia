@@ -152,6 +152,7 @@ impl CheckState {
         if !(found.fits(want) || self.fits_through_deref(world, found, want) || viewed && unviewed_type(found).fits(want) || hands_a_run(found, want)) { return false; }
         if !viewed && self.a_name_that_changes(world, given_expr) {
             check_narrow_written_through(&mut *self, given_expr);
+            self.facts.relent_args.insert(id_of(given_expr) as i64);
             return true;
         }
         let root: Option<String> = self.rooted_at(world, given_expr);

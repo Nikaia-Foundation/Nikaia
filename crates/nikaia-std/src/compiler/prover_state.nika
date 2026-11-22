@@ -97,6 +97,13 @@ pub struct ProverState {
     /// **The `std` entry each method call resolved to**, by its receiver's
     /// node, as the checker's `method_callees` keys it (#1446).
     pub method_callees: collections::BTreeMap[i64, String],
+    /// **The lists of the function walked that fill the arguments of
+    /// `process::run`** (ADR-raw-sinks-1 D18), by name: 0 where every
+    /// value from outside pushed into one starts with a part that is not
+    /// outside or is proved `process::is_operand`, 1 where a literal `"--"`
+    /// was pushed before any that is not, 2 where one that is not came
+    /// first. A list bound otherwise is not here, and is judged as a whole.
+    pub option_lists: collections::BTreeMap[String, i64],
     /// **The `std` methods a named property may call** (ADR-381 D1, D5),
     /// by their ledger keys: `Vec::is_sorted`, `Vec::is_sorted_by_key`.
     pub std_properties: collections::BTreeSet[String],
@@ -190,6 +197,7 @@ impl ProverState {
             unfit_numbers: collections::BTreeSet(),
             map_indices: collections::BTreeSet(),
             method_callees: collections::BTreeMap(),
+            option_lists: collections::BTreeMap(),
             std_properties: collections::BTreeSet(),
             std_ensured: collections::BTreeMap(),
             call_sites: collections::BTreeMap(),

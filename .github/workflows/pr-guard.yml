@@ -1,0 +1,172 @@
+name: PR guard
+
+# Marks a pull request that touches what keeps programs safe, so that a person
+# reads it with that in mind before it is taken. It decides nothing and
+# blocks nothing by itself: it lists what it found in the job summary, sets
+# the label `security-review`, and fails the check for an author outside the
+# project, so the finding cannot be missed.
+#
+# What it looks for:
+#   * files of the safety checks and the code generator (prover, bounds,
+#     raw sinks, borrows, `unsafe` emitters), the generated `lowered/` files,
+#     the runtime's Rust and the `unsafe` crate;
+#   * CI, build scripts, dependencies, and the instructions agents read
+#     (`CLAUDE.md`, `.claude/`, the builder docs);
+#   * expected output of a test (`.stdout`, `.stderr`, `.bounds`, `.stops`)
+#     changed or removed, or a test program removed;
+#   * added lines with `unsafe`, or with invisible or direction-changing
+#     characters (text a reviewer does not see);
+#   * the same characters and HTML comments in the description, and the
+#     `Model:` / `Effort:` lines CONTRIBUTING.md asks of outside authors.
+#
+# It runs as `pull_request_target` so that it can label forks' pull requests;
+# for that reason no code of the pull request is checked out or run, and no
+# text of it is put into a script: names, patches and the description are
+# read as data through the API.
+#
+# Started by hand with a pull request's number, it looks at that pull request
+# as it stands (for one opened before the guard existed). The label and the
+# summary are the same; the failed check then belongs to this run, not to the
+# pull request's checks.
+on:
+  pull_request_target:
+    types: [opened, reopened, synchronize, edited, ready_for_review]
+  workflow_dispatch:
+    inputs:
+      pr:
+        description: "Number of the pull request to look at"
+        required: true
+
+concurrency:
+  group: pr-guard-${{ github.event.pull_request.number || inputs.pr }}
+  cancel-in-progress: true
+
+jobs:
+  guard:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: write
+    steps:
+      - name: Look at the changes
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { owner, repo } = context.repo;
+            let pr = context.payload.pull_request;
+            if (context.eventName === 'workflow_dispatch') {
+              const raw = String(context.payload.inputs.pr || '').trim();
+              if (!/^\d+$/.test(raw)) { core.setFailed(`not a pull request number: ${raw}`); return; }
+              pr = (await github.rest.pulls.get({ owner, repo, pull_number: Number(raw) })).data;
+            }
+            const inside = ['OWNER', 'MEMBER', 'COLLABORATOR'].includes(pr.author_association);
+
+            const compiler = 'crates/nikaia-std/src/compiler/';
+            const areas = [
+              { why: 'safety check (prover, bounds, raw sinks, borrows, trust)',
+                test: f => f.startsWith(compiler) && /^(prover_|prove_|proofs_|bounds_|trust|escapes|lends|sharing|keeps?\.|crossing|foreign|check_(refusals|doors|boundary|claims|facts|places|references|takes|send|handed|copies|reads|access|overflow|arith))/.test(f.slice(compiler.length)) },
+              { why: 'code generator (emits the Rust, including `unsafe`)',
+                test: f => f.startsWith(compiler) && /^(emit_|cexport|rust\.)/.test(f.slice(compiler.length)) },
+              { why: 'generated file (lowered/): change the .nika it comes from',
+                test: f => f.startsWith(compiler + 'lowered/') },
+              { why: 'Rust of the compiler or runtime',
+                test: f => f.startsWith('crates/') && f.endsWith('.rs') && !f.startsWith(compiler + 'lowered/') },
+              { why: 'the `unsafe` crate', test: f => f.startsWith('crates/unsafe/') },
+              { why: 'CI or repository settings', test: f => f.startsWith('.github/') },
+              { why: 'build script, toolchain or dependencies',
+                test: f => /(^|\/)(build\.rs|Cargo\.toml|Cargo\.lock|rust-toolchain(\.toml)?)$/.test(f) || f.startsWith('.cargo/') },
+              { why: 'scripts the driver or CI runs', test: f => f.startsWith('scripts/') || f.startsWith('tools/') },
+              { why: 'instructions agents read',
+                test: f => /^(CLAUDE\.md|CONTRIBUTING\.md|AGENTS\.md)$/.test(f) || f.startsWith('.claude/') || /^docs\/(supervisor|builder-facts.*|issues)\.md$/.test(f) },
+            ];
+
+            // Invisible, zero-width, direction-changing and tag characters.
+            const hidden = /[­͏؜ᅟᅠ឴឵᠎​-‏‪-‮⁠-⁤⁦-⁯ㅤ﻿ﾠ]|\uDB40[\uDC00-\uDC7F]/u;
+            const codepoints = s => [...s].filter(c => hidden.test(c))
+              .map(c => 'U+' + c.codePointAt(0).toString(16).toUpperCase().padStart(4, '0'));
+
+            const files = await github.paginate(github.rest.pulls.listFiles,
+              { owner, repo, pull_number: pr.number, per_page: 100 });
+
+            const found = [];
+            const add = (what, where) => found.push({ what, where });
+
+            for (const f of files) {
+              const name = f.filename;
+              for (const a of areas) if (a.test(name)) add(a.why, name);
+              if (f.previous_filename) {
+                for (const a of areas) if (a.test(f.previous_filename)) add(a.why + ' (renamed away)', f.previous_filename);
+              }
+
+              const expected = /^tests\/.*\.(stdout|stderr|bounds|stops)$/.test(name)
+                || /\/tests\/.*\.(stdout|stderr|bounds|stops)$/.test(name);
+              if (expected && f.status !== 'added') add(`expected test output ${f.status}`, name);
+              if (/\.nika$/.test(name) && /(^|\/)tests\//.test(name) && f.status === 'removed') add('test program removed', name);
+              if (f.status === 'renamed' && /(^|\/)tests\//.test(f.previous_filename || '')) add('test renamed', `${f.previous_filename} → ${name}`);
+
+              if (f.patch === undefined) {
+                if (f.status !== 'removed') add('diff too large or binary: not scanned, read it by hand', name);
+                continue;
+              }
+              let line = 0;
+              for (const l of f.patch.split('\n')) {
+                const hunk = /^@@ -\d+(?:,\d+)? \+(\d+)/.exec(l);
+                if (hunk) { line = Number(hunk[1]); continue; }
+                if (l.startsWith('-')) continue;
+                if (l.startsWith('+')) {
+                  const text = l.slice(1);
+                  if (/\bunsafe\b/.test(text) && /\.(rs|nika)$/.test(name)) add('`unsafe` added', `${name}:${line}`);
+                  const cps = codepoints(text);
+                  if (cps.length) add(`invisible characters ${[...new Set(cps)].join(' ')}`, `${name}:${line}`);
+                }
+                line++;
+              }
+              const cpsName = codepoints(name);
+              if (cpsName.length) add(`invisible characters in a file name ${cpsName.join(' ')}`, name);
+            }
+
+            const text = `${pr.title}\n${pr.body || ''}`;
+            const cpsBody = codepoints(text);
+            if (cpsBody.length) add(`invisible characters ${[...new Set(cpsBody)].join(' ')}`, 'title or description');
+            if (/<!--[\s\S]*?-->/.test(pr.body || '')) add('HTML comment (hidden when rendered)', 'description');
+            if (!inside) {
+              if (!/^\s*Model:\s*\S/m.test(pr.body || '')) add('no `Model:` line (CONTRIBUTING.md)', 'description');
+              if (!/^\s*Effort:\s*\S/m.test(pr.body || '')) add('no `Effort:` line (CONTRIBUTING.md)', 'description');
+            }
+
+            // One line per finding and place; the same finding over many lines of a file collapses.
+            const grouped = new Map();
+            for (const { what, where } of found) {
+              const file = where.replace(/:\d+$/, '');
+              const key = `${what}\u0000${file}`;
+              if (!grouped.has(key)) grouped.set(key, { what, file, lines: [] });
+              const m = /:(\d+)$/.exec(where);
+              if (m) grouped.get(key).lines.push(m[1]);
+            }
+            const cell = s => String(s).replace(/[|`<>]/g, c => ({ '|': '\\|', '`': "'", '<': '&lt;', '>': '&gt;' })[c]);
+            const rows = [...grouped.values()].map(g =>
+              `| ${g.what.replace(/\|/g, '\\|')} | \`${cell(g.file)}\`${g.lines.length ? (g.lines.length > 1 ? ' lines ' : ' line ') + g.lines.slice(0, 10).join(', ') + (g.lines.length > 10 ? ', …' : '') : ''} |`);
+
+            const summary = core.summary.addHeading(`PR guard: #${pr.number}`, 2)
+              .addRaw(`Author: ${inside ? 'project' : 'outside the project'} (${pr.author_association}); ${files.length} files.\n\n`);
+            if (rows.length === 0) {
+              summary.addRaw('Nothing that needs a security review was found.\n');
+            } else {
+              summary.addRaw('Read these with the security rules of CONTRIBUTING.md in mind:\n\n| Finding | Where |\n|---|---|\n' + rows.join('\n') + '\n');
+            }
+            await summary.write();
+
+            const label = 'security-review';
+            const has = (pr.labels || []).some(l => l.name === label);
+            if (rows.length && !has) {
+              try {
+                await github.rest.issues.addLabels({ owner, repo, issue_number: pr.number, labels: [label] });
+              } catch (e) { core.warning(`could not set the label: ${e.message}`); }
+            }
+
+            if (rows.length && !inside) {
+              core.setFailed(`${rows.length} findings need a security review by a maintainer (see the summary).`);
+            } else if (rows.length) {
+              core.notice(`${rows.length} findings for a security review (see the summary).`);
+            }

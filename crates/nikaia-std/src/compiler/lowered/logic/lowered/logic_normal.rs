@@ -68,7 +68,7 @@ pub(crate) fn lg_write(arena: &TermArena, id: i64, shape: bool, turn: bool, out:
     }
     match node {
         SolverTerm::Bool(b) => { let b = *b; out.push_str(if b { "true" } else { "false" }); },
-        SolverTerm::Int(n) => { let n = *n; { use ::core::fmt::Write as _; let _ = out.write_fmt(format_args!("{}", n)); }; },
+        SolverTerm::Int(n) => { let n = *n; lg_write_int(n, out); },
         SolverTerm::Var(name) => { out.push_str(if shape { "?" } else { name }); },
         SolverTerm::Neg(a) => {
             let a = *a;
@@ -89,7 +89,9 @@ pub(crate) fn lg_write(arena: &TermArena, id: i64, shape: bool, turn: bool, out:
             let a = *a; let k = *k;
             out.push_str("(quot ");
             lg_write(arena, a, shape, false, out);
-            { use ::core::fmt::Write as _; let _ = out.write_fmt(format_args!(" {})", k)); };
+            out.push_str(" ");
+            lg_write_int(k, out);
+            out.push_str(")");
         },
         SolverTerm::Le(a, b) => { let a = *a; let b = *b; lg_write_binary("<=", arena, a, b, shape, out); },
         SolverTerm::Lt(a, b) => { let a = *a; let b = *b; lg_write_binary("<", arena, a, b, shape, out); },
@@ -100,6 +102,24 @@ pub(crate) fn lg_write(arena: &TermArena, id: i64, shape: bool, turn: bool, out:
         SolverTerm::And(parts) => { lg_write_joined("and", arena, parts, shape, false, out); },
         SolverTerm::Or(parts) => { lg_write_joined("or", arena, parts, shape, false, out); },
         SolverTerm::Other => { out.push_str("false"); },
+    }
+}
+
+pub fn lg_write_int(value: i64, out: &mut String) {
+    if value < 0 { out.push('-'); }
+    let mut digits: [u8; 20] = [0; _];
+    let mut v = value;
+    let mut n: i64 = 0;
+    while n < 20 {
+        let d = v % 10;
+        { let __nikaia_stored = u8::try_from(if d < 0 { unsafe { nikaia_std::proven::sub::<i64>(0, d) } } else { d }).unwrap_or_else(|_| panic!("the value does not fit in an `u8`")); unsafe { nikaia_std::proven::write(&mut digits, (n) as usize, __nikaia_stored) }; }
+        n = unsafe { nikaia_std::proven::add::<i64>(n, 1) };
+        v = v / 10;
+        if v == 0 { break; }
+    }
+    while n > 0 {
+        n = unsafe { nikaia_std::proven::sub::<i64>(n, 1) };
+        out.push((unsafe { nikaia_std::proven::add::<u8>(48, *nikaia_std::proven::read(&digits, (n) as usize)) }) as char);
     }
 }
 

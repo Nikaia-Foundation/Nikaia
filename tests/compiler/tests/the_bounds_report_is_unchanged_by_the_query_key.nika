@@ -1,0 +1,21 @@
+// The bounds walk asks its questions by a key written without the
+// formatter (#2696): the same questions, the same answers, so the report
+// is the one before, three counters left checked by ADR-361 D13.
+pub fn loops(a: ref Vec[i64], lo: i64, hi: i64) -> Vec[i64] {
+	assert(0 <= lo)
+	assert(lo <= hi)
+	assert(hi <= a.len())
+	let mut out: Vec[i64] = []
+	let mut i1 = lo
+	for j in lo..<hi { if a[j] < 1 { i1 = i1 + 1 } }
+	out.push(a[i1])
+	let mut i2 = lo
+	for j in lo..<hi { if a[j] < 2 { i2 = i2 + 1 } }
+	out.push(a[i2])
+	let mut i3 = lo
+	for j in lo..<hi { if a[j] < 3 { i3 = i3 + 1 } }
+	out.push(a[i3])
+	return out
+}
+
+fn main() {}

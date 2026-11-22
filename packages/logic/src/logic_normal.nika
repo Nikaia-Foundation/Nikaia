@@ -103,7 +103,7 @@ fn lg_write(arena: ref TermArena, id: i64, shape: bool, turn: bool, mut out: Str
     }
     match node {
         SolverTerm::Bool(b) => out.push_str(if b { "true" } else { "false" }),
-        SolverTerm::Int(n) => out.push_str(f"{n}"),
+        SolverTerm::Int(n) => lg_write_int(n, out),
         SolverTerm::Var(name) => out.push_str(if shape { "?" } else { name }),
         SolverTerm::Neg(a) => {
             out.push_str("(- ")
@@ -121,7 +121,9 @@ fn lg_write(arena: ref TermArena, id: i64, shape: bool, turn: bool, mut out: Str
         SolverTerm::Quot(a, k) => {
             out.push_str("(quot ")
             lg_write(arena, a, shape, false, out)
-            out.push_str(f" {k})")
+            out.push_str(" ")
+            lg_write_int(k, out)
+            out.push_str(")")
         },
         SolverTerm::Le(a, b) => lg_write_binary("<=", arena, a, b, shape, out),
         SolverTerm::Lt(a, b) => lg_write_binary("<", arena, a, b, shape, out),
@@ -132,6 +134,30 @@ fn lg_write(arena: ref TermArena, id: i64, shape: bool, turn: bool, mut out: Str
         SolverTerm::And(parts) => lg_write_joined("and", arena, parts, shape, false, out),
         SolverTerm::Or(parts) => lg_write_joined("or", arena, parts, shape, false, out),
         SolverTerm::Other => out.push_str("false"),
+    }
+}
+
+/// `value` in decimal, appended to `out`: the text `f"{value}"` writes,
+/// without a text of its own or the formatter (#2696).
+pub fn lg_write_int(value: i64, mut out: String) {
+    if value < 0 {
+        out.push('-')
+    }
+    let mut digits: Array[u8, 20] = [0; 20]
+    let mut v = value
+    let mut n = 0
+    while n < 20 {
+        let d = v % 10
+        digits[n] = (if d < 0 { 0 - d } else { d }) as u8
+        n += 1
+        v = v / 10
+        if v == 0 {
+            break
+        }
+    }
+    while n > 0 {
+        n -= 1
+        out.push((48 + digits[n]) as char)
     }
 }
 
