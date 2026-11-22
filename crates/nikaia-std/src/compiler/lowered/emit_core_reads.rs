@@ -306,8 +306,13 @@ impl EmitState {
                     self.emit_core_hold_base(world, walk, out, host, at, depth, flow, scope)?;
                     return Ok(());
                 }
-                let views = viewed || views_what_it_is_called_on(&name);
+                let views = viewed || views_what_it_is_called_on(&name) || name == "first" || name == "last" || name == "get";
                 self.emit_core_hold_chain_base(world, walk, out, host, receiver, whole, views, depth, flow, scope)?;
+            },
+            Expr::Coalesce { value, .. } => {
+                let value = nikaia_std::boxed::open(value);
+                self.emit_core_hold_chain_base(world, walk, out, host, value, whole, false, depth, flow, scope)?;
+                if viewed && node_key(at) != whole && self.emit_core_made_at_base(value) { self.emit_core_hold_base(world, walk, out, host, at, depth, flow, scope)?; }
             },
             Expr::Field { base, .. } => { let base = nikaia_std::boxed::open(base); self.emit_core_hold_chain_base(world, walk, out, host, base, whole, viewed, depth, flow, scope)?; },
             Expr::Index { base, .. } => { let base = nikaia_std::boxed::open(base); self.emit_core_hold_chain_base(world, walk, out, host, base, whole, viewed, depth, flow, scope)?; },
@@ -317,6 +322,14 @@ impl EmitState {
             },
         }
         Ok(())
+    }
+    pub(crate) fn emit_core_made_at_base(&self, at: &Expr) -> bool {
+        match at {
+            Expr::MethodCall { receiver, .. } => { let receiver = nikaia_std::boxed::open(receiver); self.emit_core_made_at_base(receiver) },
+            Expr::Field { base, .. } => { let base = nikaia_std::boxed::open(base); self.emit_core_made_at_base(base) },
+            Expr::Index { base, .. } => { let base = nikaia_std::boxed::open(base); self.emit_core_made_at_base(base) },
+            _ => emit_read_a_call(at) || self.emit_core_a_concatenation(at),
+        }
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.

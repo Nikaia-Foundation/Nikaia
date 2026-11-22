@@ -504,8 +504,10 @@ pub(crate) fn __nikaia_test_0() -> Result<(), std::boxed::Box<dyn std::error::Er
 }
 
 pub(crate) fn __nikaia_test_1() -> Result<(), std::boxed::Box<dyn std::error::Error>> {
-    let first = node_id::NodeId::fresh().get();
-    let second = node_id::NodeId::fresh().get();
+    let __nikaia_held_0 = node_id::NodeId::fresh();
+    let first = __nikaia_held_0.get();
+    let __nikaia_held_1 = node_id::NodeId::fresh();
+    let second = __nikaia_held_1.get();
     if !(first >= 2147483648u32) { nikaia_std::abort::assertion_failed("assert(first >= 2147483648)", None, &[("first", (&&nikaia_std::abort::Operand(&(first))).shown()), ]) };
     if !(first != second) { nikaia_std::abort::assertion_failed("assert(first != second)", None, &[("first", (&&nikaia_std::abort::Operand(&(first))).shown()), ("second", (&&nikaia_std::abort::Operand(&(second))).shown()), ]) };
     Ok(())

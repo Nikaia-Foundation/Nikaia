@@ -138,6 +138,8 @@ pub trait SvTh {
     fn real_values(&self) -> collections::BTreeMap<String, SvRat>;
     fn shared(&self) -> Vec<u32>;
     fn pivots(&self) -> i64;
+    fn overflows(&self) -> i64;
+    fn resumed(&self) -> i64;
 }
 
 impl SvTh for SvTheory {
@@ -261,6 +263,8 @@ impl SvTh for SvTheory {
     fn real_values(&self) -> collections::BTreeMap<String, SvRat> { sv_rat_values(&self.values) }
     fn shared(&self) -> Vec<u32> { vec![] }
     fn pivots(&self) -> i64 { 0 }
+    fn overflows(&self) -> i64 { 0 }
+    fn resumed(&self) -> i64 { 0 }
 }
 
 pub(crate) fn sv_back_substituted(values: &collections::BTreeMap<String, i64>, solved: &[SvSolved], names: &[String]) -> Option<collections::BTreeMap<String, i64>> {

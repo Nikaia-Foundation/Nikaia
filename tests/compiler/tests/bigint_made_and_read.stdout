@@ -1,0 +1,14 @@
+0: 0 sign 0 bits 0 narrow 0
+1: 1 sign 1 bits 1 narrow 1
+-1: -1 sign -1 bits 1 narrow -1
+i64::MIN: -9223372036854775808 sign -1 bits 64 narrow -9223372036854775808
+i64::MAX: 9223372036854775807 sign 1 bits 63 narrow 9223372036854775807
+u64::MAX: 18446744073709551615 sign 1 bits 64 narrow null
+2^64: 18446744073709551616 sign 1 bits 65 narrow null
+-2^127: -170141183460469231731687303715884105728 sign -1 bits 128 narrow null
+10^19: 10000000000000000000 sign 1 bits 64 narrow null
+true
+true
+true
+true
+true

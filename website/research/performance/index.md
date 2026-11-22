@@ -15,7 +15,7 @@ show is a fact no optimisation can use. Those are under
 [open questions about the prover](../prover/), which also explains the two
 bars under each question.
 
-## Where it stands
+## Where safe and fast code stands today
 
 The [1BRC study](/fast/against-tuned-rust.html) counts Nikaia's programs for
 the One Billion Row Challenge against Rust written by people and by an AI
@@ -55,7 +55,7 @@ whether programs written plainly and the compiler's own code reach the same
 league once their checks are proved, and how much of a program's speed comes
 from proofs, from the language's other guarantees, and from the backend.
 
-### Would we act on a proof, and how is that trust earned?
+### Should the compiler drop a check because a proof says it cannot fail, and how does a proof earn that trust?
 
 <div class="rq-bars">
 <div class="rq-row"><span>Built</span><div class="rq-build" role="img" aria-label="Built: about 20 % of the estimated whole, 30 % held back for what is not yet known"><span class="rq-known" style="width: 70%"><span class="rq-done" style="width: 29%"></span></span><span class="rq-unknown" style="width: 30%"></span></div></div>
@@ -109,7 +109,7 @@ kernel a factor of 3.3 against hand-written Rust
 The question is which facts open which optimisations, how much each one is
 worth, and so which of the prover's open questions matter most for speed.
 
-### Can our own optimiser over a fast backend beat every combination?
+### Can Nikaia's own optimiser over a fast backend beat every combination of existing optimisers and backends?
 
 <div class="rq-bars">
 <div class="rq-row"><span>Built</span><div class="rq-build" role="img" aria-label="Built: about 2 % of the estimated whole, 35 % held back for what is not yet known"><span class="rq-known" style="width: 65%"><span class="rq-done" style="width: 3%"></span></span><span class="rq-unknown" style="width: 35%"></span></div></div>
@@ -137,7 +137,7 @@ whose steps are proved independent. The first steps are measurements of
 where each combination stands today and of how much of `rustc`'s time the
 bodies of Nikaia's functions cost.
 
-## Ideas this rests on
+## Ideas the performance work rests on
 
 | Idea | Recorded in |
 | :--- | :--- |

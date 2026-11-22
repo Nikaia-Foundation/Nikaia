@@ -406,7 +406,7 @@ pub(crate) fn type_key(entry: &mut TypeContract, key: &str, value: &str, n: i64)
         let mut fields: Vec<FieldContract> = vec![];
         for one in entries(value, n)? { fields.push(field_of(&one)); }
         entry.fields = fields;
-    } else if key == "attributes" { entry.attributes = entries(value, n)?; } else if key == "variant_attributes" {
+    } else if key == "attributes" { entry.attributes = entries(value, n)?; } else if key == "rules" { entry.rules = entries(value, n)?; } else if key == "variant_attributes" {
         for one in entries(value, n)? {
             let c: Vec<scalar> = nikaia_std::list::scalars(one.chars());
             let colon = find(&c, 0, ':');

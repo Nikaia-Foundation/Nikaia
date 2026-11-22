@@ -403,8 +403,21 @@ impl EmitState {
                     self.emit_core_hold_base(world, walk, out, host, at, depth, flow, scope)
                     return
                 }
-                let views = viewed || views_what_it_is_called_on(name)
+                // **An element read out of a list is a view of it too** (#2391):
+                // `gather().first()` is Rust's `Option<&String>` into the list.
+                let views = viewed || views_what_it_is_called_on(name) || name == "first" || name == "last" || name == "get"
                 self.emit_core_hold_chain_base(world, walk, out, host, receiver, whole, views, depth, flow, scope)
+            },
+            // **A `??` makes its value of the parts it has** (#2391): the
+            // chain inside it is held as anywhere, and a view cut from the
+            // whole, `(maybe() ?? "").split(" ")`, holds the whole where its
+            // value starts from something made.
+            Expr::Coalesce { value, .. } => {
+                // What the value's own chain views is its methods' to say.
+                self.emit_core_hold_chain_base(world, walk, out, host, value, whole, false, depth, flow, scope)
+                if viewed && node_key(at) != whole && self.emit_core_made_at_base(value) {
+                    self.emit_core_hold_base(world, walk, out, host, at, depth, flow, scope)
+                }
             },
             // **A field or an element of a call's result dies with it** (#1894):
             // `mk().out.split(" ")` holds `mk()`, and the chain reads its field.
@@ -416,6 +429,17 @@ impl EmitState {
                 }
                 self.emit_core_hold_base(world, walk, out, host, at, depth, flow, scope)
             }
+        }
+    }
+
+    /// Whether the base of the chain `at` is a call or a concatenation, a
+    /// value made for the statement rather than a place that outlives it.
+    fn emit_core_made_at_base(ref self, at: ref Expr) -> bool {
+        return match at {
+            Expr::MethodCall { receiver, .. } => self.emit_core_made_at_base(receiver ?? return false),
+            Expr::Field { base, .. } => self.emit_core_made_at_base(base),
+            Expr::Index { base, .. } => self.emit_core_made_at_base(base),
+            else => emit_read_a_call(at) || self.emit_core_a_concatenation(at),
         }
     }
 
