@@ -16,3 +16,28 @@ pub fn indented(full: String) -> String sync {
     }
     return out
 }
+
+/// **The head of an error's long form** (ADR-280 D3): the message, then the
+/// line that says where it was raised. An envelope with no site says so in
+/// the sentence that already existed: since ADR-292 D8 a library's error may
+/// be enveloped for the sake of the **list**, and *raised at (below Nikaia)*
+/// would be this compiler inventing a place. `origin` is the site the
+/// compiler wrote, or `(below Nikaia)`, the marker `src/error.rs` puts in an
+/// envelope no `throw` of this program made (`BELOW_SITE` there).
+pub fn long_head(message: String, origin: String) -> String sync {
+    if origin == "(below Nikaia)" {
+        return message + "\n  (raised below Nikaia; no site recorded)"
+    }
+    return message + "\n  raised at " + origin
+}
+
+/// **The note that there is no trace** (ADR-292 D8), under the head of a
+/// long form whose process captured none. Said once, at the top: a secondary
+/// passes `note_trace` false, since the note is about how this *process* was
+/// started, and repeating it under every joined failure buries the failures.
+pub fn trace_note(captured: bool, note_trace: bool) -> String sync {
+    if captured || !note_trace {
+        return ""
+    }
+    return "\n  (no trace; set NIKAIA_TRACE=1 to capture one)"
+}

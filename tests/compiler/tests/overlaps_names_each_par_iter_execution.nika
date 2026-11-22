@@ -1,0 +1,22 @@
+// #2500: `check --overlaps` names, per `par_iter` call, the execution the
+// compiler chose (ADR-async-5 D25, D32): in pieces on the cores where no
+// lambda of it pauses, one task per element where one does, with the call
+// that makes it pause.
+use std::env
+use std::fs
+use std::process
+
+fn toolchain() -> String throws {
+    let exe = env::current_exe()?.display() ?? ""
+    if exe.len() > 0 { return exe }
+    return "target/fast/nikaia"
+}
+
+fn main() throws {
+    let tmp = fs::scratch()
+    let nikaia = toolchain()
+    let program = "use std::time\n\nfn slow(n: i64) -> i64 {\n    time::sleep(1.millis())\n    return n\n}\n\nfn main() throws {\n    let xs = [1, 2, 3]\n    let quick: Vec[i64] = xs.par_iter().map(fn(x) { x * 2 }).collect()\n    let paused: Vec[i64] = xs.par_iter(limit: 2).map(fn(x) { slow(x) + 1 }).collect()\n    println(quick.len() + paused.len())\n}\n"
+    fs::write("main.nika", tmp, program)
+    let ran = process::run(nikaia, ["check", "--overlaps", "main.nika"]; dir: tmp.path().to_text())
+    print(ran.stdout)
+}

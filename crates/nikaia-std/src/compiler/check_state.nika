@@ -891,6 +891,10 @@ pub struct CheckState {
     /// **The parallel context is a task of `task::scope`** (Part II 12.7)
     /// rather than a `par_iter()` walk: the same rules, said of a task.
     pub scoped_task: bool,
+    /// **The parallel context is a `par_iter` chain's `map`, `filter` or
+    /// `for_each`**, whose lambda may pause (ADR-async-5 D24): `NK2209` is
+    /// not asked there, and a pausing lambda runs one task per element.
+    pub pausing_walk: bool,
     /// Whether what is being walked stands inside one.
     ///
     /// It reaches inward the way `caught` and `in_lambda` do, and it stops at

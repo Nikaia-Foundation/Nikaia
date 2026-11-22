@@ -29,7 +29,7 @@ impl CheckState {
         if unpromised {
             because = callee.clone()
         }
-        let pause = CheckPause { what: f"`{callee}`", unpromised: because, before_walk: f"Call `{callee}` before the walk and pass the values in, or walk with `iter()`, whose lambda may pause.", before_door: f"Call `{callee}` before taking the lock and pass its value in, or after it with what the block returned." }
+        let pause = CheckPause { what: f"`{callee}`", unpromised: because, before_walk: f"Call `{callee}` in a `map` before this step, whose lambda may pause: `xs.par_iter().map(…).fold(…)`. Or call it before the walk and pass the values in.", before_door: f"Call `{callee}` before taking the lock and pass its value in, or after it with what the block returned." }
         self.a_pause(pause, span)
     }
 
@@ -72,9 +72,11 @@ impl CheckState {
         // **`NK2209` in a lambda that runs on several cores at once** (Part II
         // 12.6, ADR-235 D2): a core is not given up, so a pause there holds one
         // for as long as the wait takes. **A pausing task of `task::scope` is
-        // polled by the scope itself** (ADR-328 D10), so it is not refused here.
-        if self.in_parallel != null && !self.scoped_task {
-            let mut parallel: Vec[String] = ["A `par_iter()` lambda runs on every core at once, and a core that waits holds up its share of the work, so the lambda must never pause."]
+        // polled by the scope itself** (ADR-328 D10), so it is not refused here,
+        // **nor is a `par_iter` chain's `map`, `filter` or `for_each`**, which
+        // runs one task per element when its lambda pauses (ADR-async-5 D24).
+        if self.in_parallel != null && !self.scoped_task && !self.pausing_walk {
+            let mut parallel: Vec[String] = ["Only the lambda of a `par_iter()` chain's `map`, `filter` or `for_each` may pause, and runs one task per element; this one runs on every core at once, and a core that waits holds up its share of the work, so it must never pause (ADR-async-5 D29)."]
             if pause.unpromised != null {
                 parallel.push(why.clone())
             }

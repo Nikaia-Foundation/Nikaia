@@ -173,20 +173,29 @@ impl CheckState {
     /// it borrows a name bound outside its group, which outlives it, and takes
     /// one bound in a block inside the group, which ends before the task
     /// does; a later mention is `NK2105`. Numbers, views and handles are
-    /// copied.
-    fn a_task_takes_inner_names(ref mut self, world: ref CheckWorld, body: ref Expr, span: ref Span) sync {
+    /// copied. Every such name but a handle is recorded for the lowering
+    /// (`task_takes`), which moves it into the task (#2653).
+    fn a_task_takes_inner_names(ref mut self, world: ref CheckWorld, body: ref Expr, id: i64, span: ref Span) sync {
         let mut named: collections::BTreeSet[String] = collections::BTreeSet()
         names_in(body, world.words, named)
+        let mut inner: Vec[String] = []
         for name in named {
             if self.frame_of(name) <= self.flow.async_group_frame {
                 continue
             }
             let local = self.binding(name) ?? continue
-            if is_a_handle(local.ty) || !self.takes_away(world, local.ty) {
+            if is_a_handle(local.ty) {
+                continue
+            }
+            inner.push(name.clone())
+            if !self.takes_away(world, local.ty) {
                 continue
             }
             let taken = self.taken(name.clone(), local.ty.clone(), self.read_seq, "taken by a task, which runs on to its group's end, past the block that declared it", span)
             self.handed.push(taken)
+        }
+        if inner.len() > 0 {
+            self.facts.task_takes.insert(id, inner)
         }
     }
 

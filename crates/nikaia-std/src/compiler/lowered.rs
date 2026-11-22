@@ -3671,7 +3671,7 @@ pub mod node_numbers {
 }
 pub mod order {
     #[allow(unused_imports)]
-    pub use super::{Operation, Accounted, Verdict, verdict, group_verdict, group_of, accounted, OneCall, overlap_report, task_report};
+    pub use super::{Operation, Accounted, Verdict, verdict, group_verdict, group_of, accounted, OneCall, overlap_report, task_report, par_report};
 }
 pub mod panics {
     #[allow(unused_imports)]
@@ -3979,4 +3979,4 @@ pub fn nikaia_run_tests(filters: &[std::string::String], list: bool, more: std::
 /// **The digest of this lowered set** (#1610): every file `lower-std` wrote
 /// beside this index, and the index above this line. Compiled into the same
 /// crate as the code it names, it is the compiler's identity for its caches.
-pub const LOWERED_DIGEST: &str = "4760a3c0005208d99bcca6542c1a0fc9dade4fcca679951da91059da263735d2";
+pub const LOWERED_DIGEST: &str = "abfa1ab773dce58f9bb8e1490ca6c123fec40a317a8cecda7f531f77cc5399ad";
