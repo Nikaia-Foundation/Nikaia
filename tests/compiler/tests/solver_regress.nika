@@ -20,7 +20,14 @@
 // 4 s (#2012). Referendum-PT-0200-RF-00 took about 20 s while each
 // combination looked every assumed literal up in the other set, in the
 // engine and in the certificate checker; since the two sorted sets are
-// merged, about 2 s (#2012).
+// merged, about 2 s (#2012). RwMutex-PT-r0100w0010-RF-00 ran past 10 s on
+// 4c891b92 while each bound carried the literals it assumes; since a Farkas
+// lemma walks its sources' steps (dd6a788ff) and the elimination reads
+// them in place (5a15299ba), about 1 s (#2086). SharedMemory-PT-000020-RF-00
+// ran past 60 s while each reduction step of the elimination walked every
+// row for each pair of columns; since it sums each pair over the rows of
+// one column, about 2.5 s (#2086). Both are costs per step, not more steps:
+// on the unfixed tree this test ran past its 300 s.
 // QF_LRA sal carpark-Carpark2-ausgabe-6 (#1967) took about 6 s on the rod
 // until 310f645c6 (the simplex's propagation scanned the trail for each
 // atom), and QF_LRA spider_benchmarks current_frame.base (#1968) about 8 s;

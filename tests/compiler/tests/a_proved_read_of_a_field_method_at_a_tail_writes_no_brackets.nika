@@ -1,0 +1,14 @@
+// A proved read of a list with a field and a method read off it, cast at a
+// function's tail, is written `unsafe { … }.name.len() as i64` with no
+// brackets around it: they drew rustc's `unused_parens` warning, put on the
+// `return` line, which has none (#2021).
+struct P { name: String }
+
+fn eat(keep a: P) -> i64 {
+	let v: Vec[P] = [a]
+	return v[0].name.len()
+}
+
+fn main() throws {
+	println(eat(P { name: "abc" }))
+}

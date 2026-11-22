@@ -1228,8 +1228,9 @@ pub(crate) struct ProjectDriveRustcStore {
 
 pub(crate) async fn project_drive_rustc_store<H: ProjectDriveWrapperHost>(host: &H, rust: &str, generated: &std::path::Path) -> Option<ProjectDriveRustcStore> {
     let args = host.args();
-    let (out_dir, outputs) = match project_drive_rustc_outputs(&args) { Some(__nikaia_value) => __nikaia_value, None => return None };
-    let key = match project_drive_rustc_key(&host.rustc(), &args, rust).await { Some(__nikaia_value) => __nikaia_value, None => return None };
+    let toolchain = match project_drive_rustc_toolchain(&host.rustc()).await { Some(__nikaia_value) => __nikaia_value, None => return None }; #[allow(clippy::redundant_locals)] let args = args;
+    let (out_dir, outputs) = match project_drive_rustc_outputs(&args, &toolchain) { Some(__nikaia_value) => __nikaia_value, None => return None };
+    let key = match project_drive_rustc_key(&toolchain, &args, rust).await { Some(__nikaia_value) => __nikaia_value, None => return None };
     if !path::is_component(&key) { return None; }
     let gen_dir = match env::var("NIKAIA_GEN_DIR") { Some(__nikaia_value) => __nikaia_value, None => return None };
     if gen_dir == "" { return None; }
@@ -1242,10 +1243,11 @@ pub(crate) async fn project_drive_rustc_store<H: ProjectDriveWrapperHost>(host: 
     Some(ProjectDriveRustcStore { entry: nikaia_std::fs::path::clone(&(entry)), at: fs::Root::Dir(entry), out_dir, outputs, generated: nikaia_std::fs::path::clone(&(generated)), within, sources: fs::Root::Dir(std::path::PathBuf::from(gen_dir)) })
 }
 
-pub(crate) fn project_drive_rustc_outputs(args: &[String]) -> Option<(fs::Path, Vec<String>)> {
+pub(crate) fn project_drive_rustc_outputs(args: &[String], toolchain: &str) -> Option<(fs::Path, Vec<String>)> {
     let mut out_dir: nikaia_std::either_text::EitherText<'_> = "".into_either();
     let mut name: String = String::from("");
     let mut extra: &str = "";
+    let mut target: nikaia_std::either_text::EitherText<'_> = "".into_either();
     #[allow(unused_mut)] let mut kinds: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     #[allow(unused_mut)] let mut types: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block); #[allow(unused_mut, clippy::redundant_locals)] let mut kinds = kinds;
     let mut k: i64 = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut kinds = kinds; #[allow(unused_mut, clippy::redundant_locals)] let mut types = types;
@@ -1253,24 +1255,58 @@ pub(crate) fn project_drive_rustc_outputs(args: &[String]) -> Option<(fs::Path, 
         let arg = unsafe { nikaia_std::proven::read(&args, (k) as usize) };
         let next = if unsafe { nikaia_std::proven::add::<i64>(k, 1) } < args.len() as i64 { unsafe { nikaia_std::proven::read(&args, (nikaia_std::proven::add::<i64>(k, 1)) as usize) } } else { "" };
         if arg == "-o" || arg.starts_with('@') || arg.contains("windows") { return None; }
-        if arg == "--out-dir" { out_dir = nikaia_std::block::Text::from(next.to_string()).into_either(); } else if arg == "--crate-name" { name = nikaia_std::block::Text::from(next.to_string()); } else if arg == "--crate-type" { types.push(nikaia_std::block::Text::from(next.to_string())); } else if arg == "--emit" { for kind in next.split(',') { kinds.push(nikaia_std::block::Text::from(kind.to_string())); } } else if arg == "-C" && next.starts_with("extra-filename=") { extra = nikaia_std::index::or(next.strip_prefix("extra-filename="), || ""); } else if arg.starts_with("--out-dir=") { out_dir = nikaia_std::index::or(arg.strip_prefix("--out-dir="), || "").into_either(); } else if arg.starts_with("--emit=") { for kind in nikaia_std::index::or(arg.strip_prefix("--emit="), || "").split(',') { kinds.push(nikaia_std::block::Text::from(kind.to_string())); } } else if arg.starts_with("-Cextra-filename=") { extra = nikaia_std::index::or(arg.strip_prefix("-Cextra-filename="), || ""); }
+        if arg == "--out-dir" { out_dir = nikaia_std::block::Text::from(next.to_string()).into_either(); } else if arg == "--crate-name" { name = nikaia_std::block::Text::from(next.to_string()); } else if arg == "--target" { target = nikaia_std::block::Text::from(next.to_string()).into_either(); } else if arg == "--crate-type" { for kind in next.split(',') { types.push(nikaia_std::block::Text::from(kind.to_string())); } } else if arg == "--emit" { for kind in next.split(',') { kinds.push(nikaia_std::block::Text::from(kind.to_string())); } } else if arg == "-C" && next.starts_with("extra-filename=") { extra = nikaia_std::index::or(next.strip_prefix("extra-filename="), || ""); } else if arg.starts_with("--out-dir=") { out_dir = nikaia_std::index::or(arg.strip_prefix("--out-dir="), || "").into_either(); } else if arg.starts_with("--target=") { target = nikaia_std::index::or(arg.strip_prefix("--target="), || "").into_either(); } else if arg.starts_with("--crate-type=") { for kind in nikaia_std::index::or(arg.strip_prefix("--crate-type="), || "").split(',') { types.push(nikaia_std::block::Text::from(kind.to_string())); } } else if arg.starts_with("--emit=") { for kind in nikaia_std::index::or(arg.strip_prefix("--emit="), || "").split(',') { kinds.push(nikaia_std::block::Text::from(kind.to_string())); } } else if arg.starts_with("-Cextra-filename=") { extra = nikaia_std::index::or(arg.strip_prefix("-Cextra-filename="), || ""); }
         k = unsafe { nikaia_std::proven::add::<i64>(k, 1) };
     }
-    if out_dir == "" || name == "" || kinds.is_empty() || types.len() != 1 { return None; }
+    if out_dir == "" || name == "" || kinds.is_empty() || types.is_empty() { return None; }
+    if target == "" { target = match project_drive_rustc_host(toolchain) { Some(__nikaia_value) => __nikaia_value, None => return None }.into_either(); }
     let made = format!("{}{}", name, extra); #[allow(unused_mut, clippy::redundant_locals)] let mut kinds = kinds; #[allow(unused_mut, clippy::redundant_locals)] let mut types = types;
     let mut outputs: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut kinds = kinds; #[allow(unused_mut, clippy::redundant_locals)] let mut types = types;
-    for kind in kinds.iter() { if kind == "dep-info" { outputs.push(format!("{}.d", made)); } else if kind == "metadata" { outputs.push(format!("lib{}.rmeta", made)); } else if kind == "link" && *unsafe { nikaia_std::proven::read(&types, (0) as usize) } == "bin" { outputs.push(nikaia_std::block::Text::from(made.to_string())); } else if kind == "link" && (*unsafe { nikaia_std::proven::read(&types, (0) as usize) } == "lib" || *unsafe { nikaia_std::proven::read(&types, (0) as usize) } == "rlib") { outputs.push(format!("lib{}.rlib", made)); } else { return None; } }
+    for kind in kinds.iter() {
+        if kind == "dep-info" { outputs.push(format!("{}.d", made)); } else if kind == "metadata" { outputs.push(format!("lib{}.rmeta", made)); } else if kind == "link" {
+            for crate_type in types.iter() {
+                let file = match project_drive_rustc_linked(crate_type, &made, &target) { Some(__nikaia_value) => __nikaia_value, None => return None };
+                if !nikaia_std::list::contains(&outputs, &file) { outputs.push(file); }
+            }
+        } else { return None; }
+    }
     let dir: fs::Path = std::path::PathBuf::from(out_dir);
     Some((dir, outputs))
 }
 
-pub(crate) async fn project_drive_rustc_key(rustc: &str, args: &[String], rust: &str) -> Option<String> {
+pub(crate) fn project_drive_rustc_linked(crate_type: &str, made: &str, target: &str) -> Option<String> {
+    if target.contains("windows") || target.contains("wasm") { return None; }
+    if crate_type == "bin" { return Some(nikaia_std::block::Text::from(made.to_string())); }
+    if crate_type == "lib" || crate_type == "rlib" { return Some(format!("lib{}.rlib", made)); }
+    if crate_type == "staticlib" { return Some(format!("lib{}.a", made)); }
+    if crate_type == "cdylib" || crate_type == "dylib" {
+        if target.contains("apple") { return Some(format!("lib{}.dylib", made)); }
+        return Some(format!("lib{}.so", made));
+    }
+    None
+}
+
+pub(crate) async fn project_drive_rustc_toolchain(rustc: &str) -> Option<String> {
     let told = match process::run(rustc, vec![String::from("-vV")], ".", vec![], vec![], false, None, process::Input::Closed, process::Stream::Captured, process::Stream::Captured).await {
         Ok(value) => value,
         Err(_error) => { return None; },
     };
     if !told.ok { return None; }
-    let mut text: String = format!("toolchain\n{}\n", told.stdout);
+    Some(told.stdout)
+}
+
+pub(crate) fn project_drive_rustc_host(toolchain: &str) -> Option<String> {
+    for line in toolchain.lines() {
+        match line.strip_prefix("host: ") {
+            None => { },
+            Some(triple) => { return Some(nikaia_std::block::Text::from(triple.trim().to_string())); },
+        }
+    }
+    None
+}
+
+pub(crate) async fn project_drive_rustc_key(toolchain: &str, args: &[String], rust: &str) -> Option<String> {
+    let mut text: String = format!("toolchain\n{}\n", toolchain);
     let mut k: i64 = 0;
     while k < args.len() as i64 {
         let arg = unsafe { nikaia_std::proven::read(&args, (k) as usize) };
@@ -1425,8 +1461,8 @@ pub(crate) async fn project_drive_rustc_inputs(depends: &str, store: &ProjectDri
     for word in nikaia_std::block::Text::from(listed.replace("\\ ", "\u{1f}")).split(' ') {
         let path: fs::Path = std::path::PathBuf::from(nikaia_std::block::Text::from(word.replace("\u{1f}", " ")));
         if word.is_empty() || nikaia_std::fs::path::same(&(path), &(store.generated)) { continue; }
-        let __keep_93888 = nikaia_std::tether::Keep::new();
-        let below = match project_drive_rustc_below((&__keep_93888).put(nikaia_std::fs::path::display(&(path))), &store.within) { Some(__nikaia_value) => __nikaia_value, None => return None };
+        let __keep_96291 = nikaia_std::tether::Keep::new();
+        let below = match project_drive_rustc_below((&__keep_96291).put(nikaia_std::fs::path::display(&(path))), &store.within) { Some(__nikaia_value) => __nikaia_value, None => return None };
         let bytes = match fs::read(std::path::Path::new(&(below)), &store.sources).await {
             Ok(value) => value,
             Err(_error) => { return None; },

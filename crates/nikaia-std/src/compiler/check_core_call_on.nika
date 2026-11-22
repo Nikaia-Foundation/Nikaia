@@ -1562,6 +1562,31 @@ fn check_core_call_on_described[H: CheckHost](mut state: CheckState, world: ref 
     return state.stamped_through(contract, found, paused)
 }
 
+/// **`NK1171`: code has no methods** (#2113): a value of a `fn` type is
+/// called, `f(…)`, and nothing describes a method on it, so `f.m()` is
+/// refused here rather than by rustc (Part III C.1). A type's constructor
+/// is such a value: `String.with_capacity(64)` names `String`'s, not the
+/// type, whose own functions are written with `::`.
+fn check_core_call_on_code(mut state: CheckState, world: ref CheckWorld, on: ref Ty, receiver: ref Expr, entry: ref String, span: ref Span) sync {
+    let code = match on {
+        Ty::Fn { .. } => true,
+        else => false,
+    }
+    if !code {
+        return
+    }
+    let written = check_walked_written(receiver, world.words)
+    let mut help: String = f"Call it first, `{written}(…).{entry}()`, for a method of what it hands back."
+    let named = match receiver {
+        Expr::Variable(_, _) => state.structs.contains_key(written) || world.own.types.contains_key(written) || world.library.types.contains_key(written) || mem_offered(written),
+        else => false,
+    }
+    if named {
+        help = f"`{written}` here is its constructor: call it, `{written}(…)` with the options it takes, and call `{entry}` on the value it makes, or write `{written}::{entry}(…)` for a function of the type."
+    }
+    state.findings.push(check_refusal("NK1171", span, f"`{written}` is code, and code has no method called `{entry}`.", [f"A value of type `{on.shown()}` is called, `{written}(…)`; no declaration, ledger or description gives it methods."], help))
+}
+
 /// **One method call, whichever way it was spelled** (ADR-278): `x.m()` and
 /// `x?.m()` differ in whether the call happens, never in what it is. `on` is
 /// the receiver's type, for a `?.` the type inside; `entry` is the name the
@@ -1635,6 +1660,7 @@ fn check_core_call_on[H: CheckHost](mut state: CheckState, world: ref CheckWorld
         for a in args {
             check_core_expr(state, world, host, a, span)
         }
+        check_core_call_on_code(state, world, on, receiver, entry, span)
         check_core_call_on_reached(state, null)
         state.method_propagates(id_of(receiver) as i64, false)
         state.method_pauses(id_of(receiver) as i64, false)

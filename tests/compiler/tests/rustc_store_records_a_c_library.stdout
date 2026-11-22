@@ -1,0 +1,2 @@
+first: built 0; tally rustc ran; libraries a so
+same Rust, another compiler: built 0; tally rustc reused; libraries a so

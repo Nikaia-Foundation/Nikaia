@@ -528,6 +528,23 @@ fn check_crossings_a_type_that_does_not_compare(mut state: CheckState, world: re
     state.findings.push(finding)
 }
 
+/// **`NK1188` for `<`: a type with no order** (#2123), asked as `==`'s is.
+/// A type parameter is `NK1248`'s, which `an_operator_needs_a_bound` asks.
+fn check_crossings_a_type_with_no_order(mut state: CheckState, world: ref CheckWorld, op: ref String, left: ref Ty, right: ref Ty, span: ref Span) sync {
+    for side in [left, right] {
+        match side {
+            Ty::Named { name, .. } => if state.type_parameters.contains_key(name) {
+                return
+            },
+            else => {},
+        }
+    }
+    let asking = CheckComparable { beside: world.parts_beside, structs: state.structs, enums: state.enums, payloads: state.enum_payloads, parameters: state.struct_parameters, own: world.own, library: world.library }
+    let refused: CheckFinding? = compare_order_refusal(asking, op, left, right, span)
+    let finding = refused ?? return
+    state.findings.push(finding)
+}
+
 /// `NK1164`'s question, asked of what the state collected.
 fn check_crossings_bounds(beside: ref collections::BTreeMap[String, Vec[Ty]], structs: ref collections::BTreeMap[String, Vec[FieldContract]], enums: ref collections::BTreeMap[String, collections::BTreeSet[String]], payloads: ref collections::BTreeMap[String, Vec[Ty]], parameters: ref collections::BTreeMap[String, Vec[String]], world: ref CheckWorld, type_parameters: ref collections::BTreeMap[String, Vec[String]], key: ref String, wanted: ref collections::BTreeMap[String, Vec[String]], bound: ref collections::BTreeMap[String, Ty], span: ref Span) -> Vec[CheckFinding] {
     let asking = CheckComparable { beside: beside, structs: structs, enums: enums, payloads: payloads, parameters: parameters, own: world.own, library: world.library }

@@ -304,6 +304,11 @@ fn statement_blocks(stmt: ref Stmt, names: ref winnow_grammar::InternerContext, 
 // Every block an expression holds, the body of a lambda passed as an argument
 // included: a trailing lambda runs during the call it is given to.
 fn expression_blocks(expr: ref Expr, names: ref winnow_grammar::InternerContext, unaliased: fn(ref String) -> String sync, holes_of: fn(ref Expr) -> Vec[Expr] sync, root_at: fn(ref String) -> i64 sync, mut found: Walked) {
+    // **A literal's holes hold blocks too** (#2103): the lambda of
+    // `f"{xs.map(fn(x) { slow(x) }).count()}"` pauses its function.
+    for hole in holes_of(expr) {
+        expression_blocks(hole, names, unaliased, holes_of, root_at, found)
+    }
     match expr {
         Expr::Block(block, _) => block_names(block, names, unaliased, holes_of, root_at, found),
         Expr::AsyncGroup(block, _, _, _, _) => block_names(block, names, unaliased, holes_of, root_at, found),

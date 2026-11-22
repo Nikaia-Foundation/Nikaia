@@ -1583,12 +1583,13 @@ struct ProjectDriveRustcStore {
 /// **The store's view of an invocation, where it has one** (ADR-021 D14):
 /// null where the outputs cannot be named from the arguments alone (an
 /// `-o`, an argument file, an `--emit` that names a path, a crate type
-/// other than a program or a library, a Windows target), or the key cannot
-/// be taken. Each null is a build without the store, never a failed one.
+/// whose files are not named for the target, a Windows target), or the key
+/// cannot be taken. Each null is a build without the store, never a failed one.
 fn project_drive_rustc_store[H: ProjectDriveWrapperHost](host: ref H, rust: ref String, generated: ref fs::Path) -> ProjectDriveRustcStore? {
     let args = host.args()
-    let (out_dir, outputs) = project_drive_rustc_outputs(args) ?? return null
-    let key = project_drive_rustc_key(host.rustc(), args, rust) ?? return null
+    let toolchain = project_drive_rustc_toolchain(host.rustc()) ?? return null
+    let (out_dir, outputs) = project_drive_rustc_outputs(args, toolchain) ?? return null
+    let key = project_drive_rustc_key(toolchain, args, rust) ?? return null
     // A digest is one name, so the entry stays in the store
     // (ADR-raw-sinks-1 D14); what is in it is opened under it (D13).
     if !path::is_component(key) {
@@ -1607,12 +1608,16 @@ fn project_drive_rustc_store[H: ProjectDriveWrapperHost](host: ref H, rust: ref 
 }
 
 /// **What `rustc` writes for `args`**: the `--out-dir` and the names of
-/// the files the `--emit` kinds and the one `--crate-type` make there, as
-/// Cargo names them (`-C extra-filename`). Null where that cannot be told.
-fn project_drive_rustc_outputs(args: ref Vec[String]) -> (fs::Path, Vec[String])? {
+/// the files the `--emit` kinds make there for each `--crate-type`, as
+/// Cargo names them (`-C extra-filename`), all under the one key (ADR-021
+/// D14, #2037). A shared library or archive is named as `rustc` names it
+/// for the target (`--target`, else the host `toolchain` names). Null
+/// where any of them cannot be told: the run is then a miss.
+fn project_drive_rustc_outputs(args: ref Vec[String], toolchain: ref String) -> (fs::Path, Vec[String])? {
     let mut out_dir: String = ""
     let mut name: String = ""
     let mut extra: String = ""
+    let mut target: String = ""
     let mut kinds: Vec[String] = []
     let mut types: Vec[String] = []
     let mut k = 0
@@ -1626,8 +1631,12 @@ fn project_drive_rustc_outputs(args: ref Vec[String]) -> (fs::Path, Vec[String])
             out_dir = next.clone()
         } else if arg == "--crate-name" {
             name = next.clone()
+        } else if arg == "--target" {
+            target = next.clone()
         } else if arg == "--crate-type" {
-            types.push(next.clone())
+            for kind in next.split(",") {
+                types.push(kind.clone())
+            }
         } else if arg == "--emit" {
             for kind in next.split(",") {
                 kinds.push(kind.clone())
@@ -1636,6 +1645,12 @@ fn project_drive_rustc_outputs(args: ref Vec[String]) -> (fs::Path, Vec[String])
             extra = next.strip_prefix("extra-filename=") ?? ""
         } else if arg.starts_with("--out-dir=") {
             out_dir = arg.strip_prefix("--out-dir=") ?? ""
+        } else if arg.starts_with("--target=") {
+            target = arg.strip_prefix("--target=") ?? ""
+        } else if arg.starts_with("--crate-type=") {
+            for kind in (arg.strip_prefix("--crate-type=") ?? "").split(",") {
+                types.push(kind.clone())
+            }
         } else if arg.starts_with("--emit=") {
             for kind in (arg.strip_prefix("--emit=") ?? "").split(",") {
                 kinds.push(kind.clone())
@@ -1645,8 +1660,11 @@ fn project_drive_rustc_outputs(args: ref Vec[String]) -> (fs::Path, Vec[String])
         }
         k = k + 1
     }
-    if out_dir == "" || name == "" || kinds.len() == 0 || types.len() != 1 {
+    if out_dir == "" || name == "" || kinds.len() == 0 || types.len() == 0 {
         return null
+    }
+    if target == "" {
+        target = project_drive_rustc_host(toolchain) ?? return null
     }
     let made = f"{name}{extra}"
     let mut outputs: Vec[String] = []
@@ -1655,10 +1673,13 @@ fn project_drive_rustc_outputs(args: ref Vec[String]) -> (fs::Path, Vec[String])
             outputs.push(f"{made}.d")
         } else if kind == "metadata" {
             outputs.push(f"lib{made}.rmeta")
-        } else if kind == "link" && types[0] == "bin" {
-            outputs.push(made.clone())
-        } else if kind == "link" && (types[0] == "lib" || types[0] == "rlib") {
-            outputs.push(f"lib{made}.rlib")
+        } else if kind == "link" {
+            for crate_type in types {
+                let file = project_drive_rustc_linked(crate_type, made, target) ?? return null
+                if !outputs.contains(file) {
+                    outputs.push(file)
+                }
+            }
         } else {
             return null
         }
@@ -1667,17 +1688,61 @@ fn project_drive_rustc_outputs(args: ref Vec[String]) -> (fs::Path, Vec[String])
     return (dir, outputs)
 }
 
+/// **The file `rustc` links for one crate type** on `target`, as its
+/// target specifications name it: `lib<made>.so` (`.dylib` on an Apple
+/// target) for a shared library, `lib<made>.a` for an archive. Null where
+/// the target names them otherwise (Windows, WebAssembly) or the type is
+/// none of these.
+fn project_drive_rustc_linked(crate_type: ref String, made: ref String, target: ref String) -> String? {
+    if target.contains("windows") || target.contains("wasm") {
+        return null
+    }
+    if crate_type == "bin" {
+        return made.clone()
+    }
+    if crate_type == "lib" || crate_type == "rlib" {
+        return f"lib{made}.rlib"
+    }
+    if crate_type == "staticlib" {
+        return f"lib{made}.a"
+    }
+    if crate_type == "cdylib" || crate_type == "dylib" {
+        if target.contains("apple") {
+            return f"lib{made}.dylib"
+        }
+        return f"lib{made}.so"
+    }
+    return null
+}
+
+/// **The toolchain as `rustc -vV` names it**, read once for the key and
+/// the outputs. Null where `rustc` cannot be asked.
+fn project_drive_rustc_toolchain(rustc: String) -> String? {
+    let told = process::run(rustc, ["-vV"]) catch { return null }
+    if !told.ok {
+        return null
+    }
+    return told.stdout
+}
+
+/// The host triple of a `rustc -vV` text, its `host: ` line.
+fn project_drive_rustc_host(toolchain: ref String) -> String? {
+    for line in toolchain.lines() {
+        match line.strip_prefix("host: ") {
+            null => {},
+            triple => return triple.trim().clone(),
+        }
+    }
+    return null
+}
+
 /// **The key of D14**: SHA256 over the toolchain (`rustc -vV`), every
 /// argument but the paths `rustc` writes to (`--out-dir`, `-C
 /// incremental`), the bytes of every `--extern` file and the emitted Rust.
 /// The compiler's identity is no part of it: it reaches the key only
 /// through the Rust it wrote. Null where a part cannot be read.
-fn project_drive_rustc_key(rustc: String, args: ref Vec[String], rust: ref String) -> String? {
-    let told = process::run(rustc, ["-vV"]) catch { return null }
-    if !told.ok {
-        return null
-    }
-    let mut text: String = f"toolchain\n{told.stdout}\n"
+fn project_drive_rustc_key(toolchain: ref String, args: ref Vec[String], rust: ref String) -> String? {
+    let mut text: String = f"toolchain\n{toolchain}\n"
     let mut k = 0
     while k < args.len() {
         let arg = args[k]
