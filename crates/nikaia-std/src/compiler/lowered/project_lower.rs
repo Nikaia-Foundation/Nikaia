@@ -55,6 +55,7 @@ pub trait ProjectLowerHost {
     fn check_open(&self) -> Vec<CheckUnit>;
     fn unit_source(&self, at: i64) -> String;
     fn check_unit(&self, at: i64) -> Result<UnitSaid, std::boxed::Box<dyn std::error::Error>>;
+    fn check_ahead(&self, ats: &[i64]);
     fn check_package(&self) -> Option<UnitSaid>;
     fn check_close(&self, refused: &[String]) -> Result<(), std::boxed::Box<dyn std::error::Error>>;
     fn in_a_batch(&self) -> bool;
@@ -137,6 +138,11 @@ pub fn project_lower_check<H: ProjectLowerHost>(host: &H) -> Result<String, std:
     let units = host.check_open();
     let mut digest = nikaia_std::block::Text::new_in(nikaia_std::block::Place::Block);
     let batch = host.in_a_batch();
+    if !batch {
+        let mut ats: Vec<i64> = vec![];
+        for (at, unit) in units.iter().enumerate().map(|(at, item)| (at as i64, item)) { if unit.dependency { ats.push(at as i64); } }
+        if ats.len() > 1 { host.check_ahead(&ats); }
+    }
     if batch {
         let mut all = String::from("");
         for (at, unit) in units.iter().enumerate().map(|(at, item)| (at as i64, item)) {

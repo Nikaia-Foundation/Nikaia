@@ -8,6 +8,16 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1535] — 2026-11-22
+
+**A dependency's warning no longer keeps a binary's lowering out of the build cache**
+- A build whose dependency says warnings reuses its binary's lowering in the rustc wrapper instead of checking and lowering it a second time (#1949).
+
+## [0.0.1534] — 2026-11-22
+
+**drive.nika proves the lane directory where it arrives: guards in main and the hooks, every helper under drive_here (ADR-raw-sinks-1 D11-D14) (#2475)**
+- drive.nika opens every lane path under the checkout root and refuses a lane directory that is not a relative path below it (exit 2), so `nikaia check scripts/drive.nika` reports no NK1308.
+
 ## [0.0.1533] — 2026-11-22
 
 **drive.nika: lock, merge, tree and brief helpers open their paths under the checkout root (ADR-raw-sinks-1 D11) (#2470)**
