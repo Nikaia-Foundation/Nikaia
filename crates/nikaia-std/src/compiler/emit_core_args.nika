@@ -1505,6 +1505,43 @@ fn emit_async_line(gates: ref Vec[i64]) -> String {
     return f"{emit_async_group_name(gates[gates.len() - 1])}_waiting"
 }
 
+/// **What a gated task takes from a block inside its group goes into it**
+/// (ADR-async-5 D2, #2653): its gate polls its rest to the group's end, past
+/// that block, so the task holds those names itself. A `Cell` around them is
+/// taken whole by its `into_inner`, which carries a number in by value too,
+/// where the closure would borrow it. The opening before the closure, the
+/// line its body starts with, and the closing after it; empty where it takes
+/// nothing. A pending name of the group (D8) is its handle, not a value.
+fn emit_async_taken(walk: ref EmitWalk, takes: ref Vec[String]?, id: i64, line: ref String) -> (String, String, String) {
+    if line == "" {
+        return ("", "", "")
+    }
+    let taken = takes ?? return ("", "", "")
+    let mut names: Vec[String] = []
+    for name in taken {
+        if walk.async_handles.contains_key(name) {
+            continue
+        }
+        let mut pending = false
+        for each in walk.async_pending {
+            if each.0 == name {
+                pending = true
+            }
+        }
+        if !pending {
+            names.push(escaped_name(name))
+        }
+    }
+    if names.len() == 0 {
+        return ("", "", "")
+    }
+    let mut tuple = names.join(", ")
+    if names.len() == 1 {
+        tuple = f"{tuple},"
+    }
+    return (f"{{ let __taken_{id} = std::cell::Cell::new(({tuple})); ", f"let ({tuple}) = __taken_{id}.into_inner(); ", " }")
+}
+
 /// **A pause of a gated group's main line** (D37): the group's running tasks
 /// are polled meanwhile, and those waiting for a place start as places free,
 /// as where it waits for one of them. Inside a task's body no gate is in the
@@ -2072,6 +2109,7 @@ impl EmitState {
         let line = emit_async_line(gates)
         let gated = line != "" && walk.async_pausing
         let paused = body.buf.contains(".await") || gated
+        let (open, unpack, close) = emit_async_taken(walk, self.facts.task_takes.get(id), id, line)
         if deferred && (kind != "handle" || (paused && !walk.async_keeps)) {
             throw EmitRefused { message: "The compiler can't translate `async(deferred)` here yet: bind its handle with a `let`, and start it at a later statement.", at: emit_async_at(flow.statement) }
         }
@@ -2090,8 +2128,11 @@ impl EmitState {
             } else if admission != "" {
                 throw EmitRefused { message: "The compiler can't translate `async(deferred, admission: s)` outside a group's gate yet.", at: emit_async_at(flow.statement) }
             }
-            walk.async_kept.push(cell)
-            let made_text = f"{name}.{made}async || -> {self.rust_result()}<_, {channel}> {{ let __value = {body.buf}; Ok(__value) }})"
+            walk.async_kept.push(cell.clone())
+            if line != "" {
+                walk.async_gated.insert(cell)
+            }
+            let made_text = f"{name}.{made}{open}async || -> {self.rust_result()}<_, {channel}> {{ {unpack}let __value = {body.buf}; Ok(__value) }}{close})"
             if line != "" {
                 out.push(f"{line}.keep({made_text})")
             } else {
@@ -2110,8 +2151,9 @@ impl EmitState {
                 if admission != "" {
                     kept = f"start_kept_admitted(&{cell}, &{line}, nikaia_std::task::admitted({admission}), "
                 }
-                out.push(f"{{ let _ = {line}.keep({name}.{kept}async || -> {self.rust_result()}<(), {channel}> {{ let _ = {body.buf}; Ok(()) }}).await); }}")
-                walk.async_kept.push(cell)
+                out.push(f"{{ let _ = {line}.keep({name}.{kept}{open}async || -> {self.rust_result()}<(), {channel}> {{ {unpack}let _ = {body.buf}; Ok(()) }}{close}).await); }}")
+                walk.async_kept.push(cell.clone())
+                walk.async_gated.insert(cell)
                 return
             }
             // **A task with a strategy of its own outside a gate** (D15,
@@ -2141,7 +2183,7 @@ impl EmitState {
                     start = f"start_paused_admitted(&{line}, nikaia_std::task::admitted({admission}), "
                 }
             }
-            let mut held = f"{name}.{start}async || -> {self.rust_result()}<_, {channel}> {{ let __value = {body.buf}; Ok(__value) }}).await"
+            let mut held = f"{name}.{start}{open}async || -> {self.rust_result()}<_, {channel}> {{ {unpack}let __value = {body.buf}; Ok(__value) }}{close}).await"
             // **A handle named later keeps its rest in a cell of its block**
             // (Part I 8.2, #987): dropped live, the task is waited for at
             // the block's end instead of cancelled at its pause.
@@ -2154,8 +2196,11 @@ impl EmitState {
                         kept = f"start_kept_admitted(&{cell}, &{line}, nikaia_std::task::admitted({admission}), "
                     }
                 }
-                held = f"{name}.{kept}async || -> {self.rust_result()}<_, {channel}> {{ let __value = {body.buf}; Ok(__value) }}).await"
-                walk.async_kept.push(cell)
+                held = f"{name}.{kept}{open}async || -> {self.rust_result()}<_, {channel}> {{ {unpack}let __value = {body.buf}; Ok(__value) }}{close}).await"
+                walk.async_kept.push(cell.clone())
+                if line != "" {
+                    walk.async_gated.insert(cell)
+                }
             }
             // The gate keeps its rest, to poll it, or start it, where the
             // main line waits. Its text still ends in `.await`, which tells
@@ -2323,6 +2368,12 @@ impl EmitState {
         }
         let mut body = EmitOut::empty()
         walk.async_groups.push(id)
+        // **Its own block holds the cells of its gated tasks** (#2653): one
+        // asked for in a block inside it is declared there.
+        let top = walk.async_top
+        if options != "" {
+            walk.async_top = walk.statements_open
+        }
         if channel == "nikaia_std::task::Crashed" && !plain {
             self.emit_core_block(world, walk, body, host, block, depth, flow, scope, EmitTail::Value)
         } else {
@@ -2333,6 +2384,7 @@ impl EmitState {
             self.emit_call_scope_body(world, walk, body, host, block, depth, flow, scope, outer, owner, walk.async_pausing)
         }
         walk.async_groups.pop()
+        walk.async_top = top
         if deadline != "" {
             walk.async_deadlines.pop()
         }

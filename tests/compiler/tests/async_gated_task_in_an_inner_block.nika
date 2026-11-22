@@ -1,0 +1,54 @@
+// A gated group in a function that pauses: a bound task started in a block
+// inside the group while one bound before that block is still open. Its cell
+// lives in the group's own block, which the gate polls to the group's end,
+// and it takes the names of the inner block, a number among them; a name of
+// the group's block or from outside it is borrowed (ADR-async-5 D2, D37,
+// #2653).
+
+use std::time
+
+fn double(n: i64) -> i64 {
+    return n * 2
+}
+
+fn size(s: String) -> i64 {
+    return s.len() as i64
+}
+
+fn make(t: String) -> String {
+    let mut g = String()
+    g.push_str(t)
+    return g
+}
+
+fn main() throws {
+    time::sleep(1.millis())
+    async {
+        let a = async double(1)
+        if true {
+            let n = 21
+            let d = async double(n)
+            let e = n + 1
+            println(f"{e} {d}")
+        }
+        println(f"{a}")
+    }
+    let o = make("abc")
+    let r = async {
+        let g = make("group")
+        let a = async size(g)
+        if true {
+            let t = make("hello")
+            let n = 2
+            let b = async size(o)
+            let c = async size(g)
+            let d = async size(t)
+            let p = async double(n)
+            let q = async double(p)
+            let z = n + 1
+            println(f"{b} {c} {d} {q} {z}")
+        }
+        a + 1
+    }
+    println(f"{r} {o}")
+}

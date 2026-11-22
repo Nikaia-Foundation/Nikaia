@@ -297,7 +297,7 @@ pub(crate) fn check_core_value_of<H: CheckHost>(state: &mut CheckState, world: &
             state.flow.loops = loops;
             state.flow.barrier = barrier;
             check_core_async_crash(state, world, host, inner, span);
-            if state.flow.async_group.is_some() { state.a_task_takes_inner_names(world, inner, span); }
+            if state.flow.async_group.is_some() { state.a_task_takes_inner_names(world, inner, id_of(expr) as i64, span); }
             let mut at = changed_from;
             while at < state.changed.len() as i64 {
                 let name = nikaia_std::block::Text::from((*nikaia_std::index::get(&state.changed, nikaia_std::index::at(at))).to_string());
