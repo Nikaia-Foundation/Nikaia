@@ -621,10 +621,12 @@ fn check_core_lambda[H: CheckHost](mut state: CheckState, world: ref CheckWorld,
     state.scope.pop()
     state.repeats.pop()
     state.flow.last_lambda_first = first
+    state.flow.last_lambda_fails = false
     let mut paused = false
     if seen != null {
         let handed = seen ?? return (tail, false)
         paused = handed.pauses
+        state.flow.last_lambda_fails = handed.fails
         state.a_handler_that_does_more_than_the_type_allows(promised, handed, span)
     }
     return (tail, paused)

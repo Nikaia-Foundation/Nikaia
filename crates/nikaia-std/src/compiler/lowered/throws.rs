@@ -321,8 +321,14 @@ pub(crate) fn thrown_in_block(block: &Block, names: &winnow_grammar::InternerCon
             _ => { },
         }
         match &stmt.node {
-            Stmt::For { body, .. } => { thrown_in_block(body, names, &mut &mut *holes_of, &mut &mut *contribution_of, in_a_handler, out); },
-            Stmt::While { body, .. } => { thrown_in_block(body, names, &mut &mut *holes_of, &mut &mut *contribution_of, in_a_handler, out); },
+            Stmt::For { iter, body, .. } => {
+                thrown_in_blocks(iter, names, &mut &mut *holes_of, &mut &mut *contribution_of, in_a_handler, out);
+                thrown_in_block(body, names, &mut &mut *holes_of, &mut &mut *contribution_of, in_a_handler, out);
+            },
+            Stmt::While { cond, body, .. } => {
+                thrown_in_blocks(cond, names, &mut &mut *holes_of, &mut &mut *contribution_of, in_a_handler, out);
+                thrown_in_block(body, names, &mut &mut *holes_of, &mut &mut *contribution_of, in_a_handler, out);
+            },
             Stmt::Let { value, .. } => { thrown_in_blocks(value, names, &mut &mut *holes_of, &mut &mut *contribution_of, in_a_handler, out); },
             Stmt::Comptime { value, .. } => { thrown_in_blocks(value, names, &mut &mut *holes_of, &mut &mut *contribution_of, in_a_handler, out); },
             Stmt::Expr(value) => { thrown_in_blocks(value, names, &mut &mut *holes_of, &mut &mut *contribution_of, in_a_handler, out); },
