@@ -1,0 +1,6 @@
+bounds in tests/a_list_a_call_shrinks_inside_its_counted_loop_keeps_the_check.nika: 2 indexes, 0 proved; 3 operations, 0 proved
+    14  self.count += 1  checked: a field no rule of its type bounds: the walk finds `a <= b` only of two private fields a method compares (ADR-369 D4, #1681), and a count of work done has none (#1531)
+    31  total += ys[k]   checked: a counter the loop on line 26 changes, with no bound tied to its turns or to another counter (ADR-361 D13, #1634)
+    31  ys[k]            checked: no fact bounds what it reads - a counter, a loop, a length, or one list as long as another (#432, #383, #388)
+    38  total += xs[k]   checked: a counter the loop on line 26 changes, with no bound tied to its turns or to another counter (ADR-361 D13, #1634)
+    38  xs[k]            checked: no fact bounds what it reads - a counter, a loop, a length, or one list as long as another (#432, #383, #388)
