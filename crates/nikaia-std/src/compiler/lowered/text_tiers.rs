@@ -1664,6 +1664,11 @@ pub(crate) fn still_sources(value: &Expr, ask: &TierAsk<'_, '_, '_, '_, '_, '_, 
             still_sources(first, ask, walk, out);
             still_sources(fallback, ask, walk, out);
         },
+        Expr::TryCatch { expr: guarded, handler, .. } => {
+            let guarded = nikaia_std::boxed::open(guarded);
+            still_sources(guarded, ask, walk, out);
+            still_tail(handler, ask, walk, out);
+        },
         _ => {
             let read_from = match text_source_word(Some(value), ask, walk) { Some(__nikaia_value) => __nikaia_value, None => return };
             out.push(read_from);
@@ -4356,10 +4361,12 @@ pub(crate) fn tier_expr(expr: &Expr, ask: &TierAsk<'_, '_, '_, '_, '_, '_, '_>, 
             }
             out
         },
-        Expr::TryCatch { expr, handler, .. } => {
-            let expr = nikaia_std::boxed::open(expr);
-            let out = tier_expr(expr, ask, walk);
-            kinds_joined(&out, &tier_block(handler, ask, walk))
+        Expr::TryCatch { expr: guarded, handler, .. } => {
+            let guarded = nikaia_std::boxed::open(guarded);
+            let first = tier_expr(guarded, ask, walk);
+            let out = kinds_joined(&first, &tier_block(handler, ask, walk));
+            if beside_its_own(&out) { kept_unseen(expr, ask, walk); }
+            out
         },
         Expr::Try(inner, _) => { let inner = nikaia_std::boxed::open(inner); tier_expr(inner, ask, walk) },
         Expr::Async(inner, _, _, _) => { let inner = nikaia_std::boxed::open(inner); tier_expr(inner, ask, walk) },

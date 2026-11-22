@@ -52,6 +52,19 @@ pub struct Receiver<T> {
     shared: Arc<Shared<T>>,
 }
 
+/// What a struct that holds an end prints for `Debug` (#2238).
+impl<T> std::fmt::Debug for Sender<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("channel::Sender")
+    }
+}
+
+impl<T> std::fmt::Debug for Receiver<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("channel::Receiver")
+    }
+}
+
 /// **A channel of `capacity` values** (D1, D5).
 ///
 /// A capacity below one is refused rather than quietly turned into something

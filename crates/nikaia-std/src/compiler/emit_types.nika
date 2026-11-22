@@ -260,7 +260,12 @@ impl EmitState {
     /// The `#[derive]` line of a struct or an enum.
     pub fn derives(ref self, world: ref EmitWorld, name: winnow_grammar::Symbol) -> String {
         let text = world.words.resolve(name).clone()
-        let mut parts: Vec[String] = ["Debug", "Clone"]
+        let mut parts: Vec[String] = ["Debug"]
+        // **A type holding a handle that does not copy is no `Clone`**
+        // (Part I 4.7, #2238): a `net::Connection` field has none to derive.
+        if !self.facts.uncloned.contains(text) {
+            parts.push("Clone")
+        }
         if self.facts.copies.contains(text) {
             parts.push("Copy")
         }

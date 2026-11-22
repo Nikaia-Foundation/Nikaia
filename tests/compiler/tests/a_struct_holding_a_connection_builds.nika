@@ -1,0 +1,37 @@
+// A struct may hold a handle that does not copy (#2238): a `net::Connection`,
+// a `net::Listener`, a `fs::File`, a task's handle, a channel's end. Such a
+// struct copies no more than the handle does (Part I 4.7), so it is built
+// without a copy, and it builds.
+use std::net
+use std::fs
+use std::channel
+
+struct Peer {
+	connection: net::Connection,
+	sent: i64,
+}
+
+impl Peer {
+	fn greet(mut self) throws {
+		self.connection.write("hello")
+		self.sent = self.sent + 1
+	}
+}
+
+struct Served {
+	listener: net::Listener,
+	log: fs::File,
+}
+
+struct Worker {
+	task: TaskHandle[i64],
+	results: channel::Sender[i64],
+	name: String,
+}
+
+fn main() throws {
+	let (send, receive) = channel::bounded[i64](1)
+	let worker = Worker { task: spawn fn { 41 }, results: send, name: "w" }
+	worker.results.send(worker.task.join() + 1)
+	println(f"{worker.name}: {receive.recv() ?? 0}")
+}

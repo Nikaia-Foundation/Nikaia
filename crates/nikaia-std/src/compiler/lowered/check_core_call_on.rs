@@ -241,6 +241,12 @@ pub(crate) fn check_core_call_on_compares(beside: &collections::BTreeMap<String,
 }
 
 #[allow(clippy::too_many_arguments)]
+pub(crate) fn check_core_call_on_clones(beside: &collections::BTreeMap<String, Vec<Ty>>, structs: &collections::BTreeMap<String, Vec<FieldContract>>, enums: &collections::BTreeMap<String, collections::BTreeSet<String>>, payloads: &collections::BTreeMap<String, Vec<Ty>>, parameters: &collections::BTreeMap<String, Vec<String>>, bounds: &collections::BTreeMap<String, Vec<String>>, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, on: &Ty) -> bool {
+    let asking = CheckComparable { beside, structs, enums, payloads, parameters, own: world.own, library: world.library };
+    asking.clones(on, bounds)
+}
+
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn check_core_call_on_unhashed(beside: &collections::BTreeMap<String, Vec<Ty>>, structs: &collections::BTreeMap<String, Vec<FieldContract>>, enums: &collections::BTreeMap<String, collections::BTreeSet<String>>, payloads: &collections::BTreeMap<String, Vec<Ty>>, parameters: &collections::BTreeMap<String, Vec<String>>, bounds: &collections::BTreeMap<String, Vec<String>>, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, on: &Ty) -> Option<Ty> {
     match on {
         Ty::Named { name, args, .. } => {
@@ -1252,7 +1258,11 @@ pub(crate) fn check_core_call_on<H: CheckHost>(state: &mut CheckState, world: &C
     }
     let mut found: Option<CheckResolved<'_>> = resolve_method(world, &format!("{}::{}", type_name, entry));
     if found.is_none() { found = check_core_call_on_fallback(&state, world, &on, entry); }
-    if found.is_none() && entry == "clone" && args.is_empty() && (state.structs.contains_key(&type_name) || state.enums.contains_key(&type_name) || world.own.types.contains_key(&type_name)) { return check_core_call_on_owned(&on); }
+    if found.is_none() && entry == "clone" && args.is_empty() && (state.structs.contains_key(&type_name) || state.enums.contains_key(&type_name) || world.own.types.contains_key(&type_name)) {
+        if check_core_call_on_clones(&world.parts_beside, &state.structs, &state.enums, &state.enum_payloads, &state.struct_parameters, &state.type_parameters, world, &on) { return check_core_call_on_owned(&on); }
+        state.findings.push(CheckFinding { severity: CheckSeverity::Error, span: span.clone(), code: String::from("NK1171"), message: format!("`{}` has no method called `clone`.", type_name), notes: vec![format!("`{}` holds a value that does not copy - a task's handle, a lock, a socket, a file, a child process or a channel's end - so it has no copy either.", type_name)], help: Some(String::from("Hand the value itself on, or keep the handle in a `Shared` that both places reach.")), labels: vec![], edit: None });
+        return Ty::Unknown;
+    }
     if found.is_none() { return check_core_call_on_undescribed(state, world, host, &on, receiver, method, args, entry, &type_name, span); }
     let resolved: CheckResolved<'_> = match found { Some(__nikaia_value) => __nikaia_value, None => return Ty::Unknown };
     check_core_call_on_described(state, world, host, &on, receiver, method, args, entry, &resolved.key, resolved.contract, span)

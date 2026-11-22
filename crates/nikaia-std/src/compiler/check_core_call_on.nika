@@ -306,6 +306,13 @@ fn check_core_call_on_compares(beside: ref collections::BTreeMap[String, Vec[Ty]
     return asking.totally(on)
 }
 
+/// **Whether `on` copies** (Part I 4.7, #2238), asked of what the state
+/// collected; a type parameter copies by its `Clone` bound.
+fn check_core_call_on_clones(beside: ref collections::BTreeMap[String, Vec[Ty]], structs: ref collections::BTreeMap[String, Vec[FieldContract]], enums: ref collections::BTreeMap[String, collections::BTreeSet[String]], payloads: ref collections::BTreeMap[String, Vec[Ty]], parameters: ref collections::BTreeMap[String, Vec[String]], bounds: ref collections::BTreeMap[String, Vec[String]], world: ref CheckWorld, on: ref Ty) -> bool {
+    let asking = CheckComparable { beside: beside, structs: structs, enums: enums, payloads: payloads, parameters: parameters, own: world.own, library: world.library }
+    return asking.clones(on, bounds)
+}
+
 /// **The part of `on` that does not hash** (ADR-010 D12), for what an
 /// `impl Hash` feeds `into.add`; `null` where all of it hashes. A type
 /// parameter hashes by its `Hash` bound.
@@ -1665,9 +1672,15 @@ fn check_core_call_on[H: CheckHost](mut state: CheckState, world: ref CheckWorld
     if found == null {
         found = check_core_call_on_fallback(state, world, on, entry)
     }
-    // **A copy of a type this program declares is the derived one.**
+    // **A copy of a type this program declares is the derived one**, where
+    // its parts copy: one holding a handle `.clone()` does not reach has none
+    // (Part I 4.7, #2238), as the handle itself has none.
     if found == null && entry == "clone" && args.len() == 0 && (state.structs.contains_key(type_name) || state.enums.contains_key(type_name) || world.own.types.contains_key(type_name)) {
-        return check_core_call_on_owned(on)
+        if check_core_call_on_clones(world.parts_beside, state.structs, state.enums, state.enum_payloads, state.struct_parameters, state.type_parameters, world, on) {
+            return check_core_call_on_owned(on)
+        }
+        state.findings.push(CheckFinding { severity: CheckSeverity::Error, span: span.clone(), code: "NK1171", message: f"`{type_name}` has no method called `clone`.", notes: [f"`{type_name}` holds a value that does not copy - a task's handle, a lock, a socket, a file, a child process or a channel's end - so it has no copy either."], help: "Hand the value itself on, or keep the handle in a `Shared` that both places reach.", labels: [], edit: null })
+        return Ty::Unknown
     }
     if found == null {
         return check_core_call_on_undescribed(state, world, host, on, receiver, method, args, entry, type_name, span)

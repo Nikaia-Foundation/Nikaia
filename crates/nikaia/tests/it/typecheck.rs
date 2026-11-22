@@ -1148,7 +1148,7 @@ fn a_transparent_container_does_not_fit_just_anything() {
          fn probe() -> i64 throws { let m = fs::map(\"x\", fs::Root::Anywhere)\n return count(ref m) }",
     );
     assert_eq!(code, "NK1102");
-    assert!(message.contains("a view of a `Mapped`"), "{message}");
+    assert!(message.contains("a view of a `fs::Mapped`"), "{message}");
 }
 
 /// A view of a view is the view. `&&str` is not a type this language has.
