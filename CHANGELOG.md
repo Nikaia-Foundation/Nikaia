@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1532] — 2026-11-22
+
+**suite: build the solver by its absolute path, lowered once, not twice**
+- none (CI only)
+
 ## [0.0.1531] — 2026-11-22
 
 **ledger: prove a unit's bounds with the result summaries its check proves (#2684)**
