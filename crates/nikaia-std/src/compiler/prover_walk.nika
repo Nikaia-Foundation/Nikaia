@@ -774,9 +774,10 @@ fn prover_let(mut walk: ProverWalk, names: ref Vec[winnow_grammar::Symbol], muta
             },
             // **A call `self.m(…)` to the type's own method has its summary**
             // (ADR-359 D14), as a call by name has: the method is resolved
-            // statically (ADR-269 D5).
+            // statically (ADR-269 D5); so has `x.m(…)` on any receiver of a
+            // type of this program.
             Expr::MethodCall { receiver, method, args, config, .. } => {
-                let callee = prover_own_method_callee(receiver, method, nested, words)
+                let callee = prover_own_method_callee(receiver, method, nested, words) ?? prover_method_callee(walk, receiver)
                 if callee != null {
                     let c = callee ?? ""
                     let target = prover_summed_function(program, words, c)
@@ -1165,8 +1166,39 @@ fn prover_call_results(mut walk: ProverWalk, expr: ref Expr, top: bool, mut scop
                 scope.summed.insert(name.clone(), alts ?? [])
             }
         },
+        // **A method of this program's own `impl` in a value** (ADR-359
+        // D14): its result a name of its own with the method's summary, as
+        // a call by name's, `self.kind(t) == 0` as `kind(t) == 0`.
+        Expr::MethodCall { args, config, receiver, .. } => {
+            for arg in args {
+                prover_call_results(walk, arg, false, scope, program, words, own, unaliased, condition, written_of)
+            }
+            if top {
+                return
+            }
+            let callee = prover_method_callee(walk, receiver) ?? return
+            let target = prover_summed_function(program, words, callee) ?? return
+            if !target.whole_result {
+                return
+            }
+            let name = call_result_name(expr)
+            scope.rebind(walk.arena, name)
+            scope.ints.insert(name.clone())
+            scope.loose.insert(name.clone())
+            let alts = prover_summed(walk, callee, args, config, name, scope, program, words, written_of(expr))
+            if alts != null {
+                scope.summed.insert(name.clone(), alts ?? [])
+            }
+        },
         else => {},
     }
+}
+
+/// **The method a call `x.m(…)` reaches, as the checker resolved it**
+/// (`method_callees`, ADR-269 D20): `T::m`, the key of its summary where it
+/// is a method of this program's own `impl` (ADR-359 D14).
+fn prover_method_callee(walk: ref ProverWalk, receiver: ref Expr) -> String? {
+    return walk.state.method_callees.get(id_of(receiver) as i64)?.clone()
 }
 
 /// **Each divisor in `expr` that what is known pins to one value** (ADR-359
@@ -1294,7 +1326,8 @@ fn prover_summed(mut walk: ProverWalk, callee: ref String, written: ref Vec[Expr
 }
 
 /// **The function a summary's key names**: a free function, or `T::m`, the
-/// method `m` of `T`'s own `impl` (ADR-359 D14).
+/// method `m` of `T`'s own `impl` or the function `m` there that takes no
+/// receiver (ADR-359 D14).
 fn prover_summed_function(program: ref Program, words: ref winnow_grammar::InternerContext, callee: ref String) -> FreeFunction? {
     let free = free_function(program, words, callee)
     if free != null {
@@ -1303,7 +1336,7 @@ fn prover_summed_function(program: ref Program, words: ref winnow_grammar::Inter
     let cut = callee.rfind("::") ?? return null
     let owner = callee.before(cut.start).clone()
     let name = callee.after(cut.end).clone()
-    return own_method(program, words, owner, name)
+    return own_method(program, words, owner, name) ?? own_associated(program, words, owner, name)
 }
 
 /// **`T::m` for a call `self.m(…)` in a method of `T`** (ADR-269 D5, #776),
@@ -1848,6 +1881,12 @@ fn prover_expr_stmt(mut walk: ProverWalk, expr: ref Expr, span: Span, mut scope:
 fn prover_if(mut walk: ProverWalk, cond: ref Expr, then_branch: ref Block, else_branch: ref Block?, span: Span, mut scope: ProverScope, at: ref ProverWhere, nested: ref ProverWhere, program: ref Program, words: ref winnow_grammar::InternerContext, own: ref Ledger, library: ref Ledger, ask: fn(ref logic::TermArena, ref Vec[i64], i64) -> SolverAnswer sync, model: fn(ref logic::TermArena, ref Vec[i64], i64) -> collections::BTreeMap[String, i64]? sync, escape: fn(ref String) -> String sync, holes_of: fn(ref Expr) -> Vec[Expr] sync, unaliased: fn(ref String) -> String sync, written_of: fn(ref Expr) -> String sync, condition: fn(ref String, ref collections::BTreeSet[String]) -> Vec[logic::SolverTerm] sync) -> bool {
     prover_expr(walk, cond, span, scope, nested, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition)
     prover_condition_lengths(walk, cond, scope, words)
+    // **A call in the condition is a whole number of its own** (ADR-314
+    // D3), as in a `let`'s value: `if kind(t) == 0` reads `kind`'s summary
+    // as `let k = kind(t)` then `if k == 0` does (ADR-359 D14).
+    if !walk.state.in_test {
+        prover_call_results(walk, cond, false, scope, program, words, own, unaliased, condition, written_of)
+    }
     // **A guard on a named property makes it known** (ADR-381 D2): `return
     // if !p(xs)` leaves `p(xs)` after it, as a comparison's guard does.
     prover_read_properties(cond, scope, walk.state, program, words)
@@ -4024,7 +4063,7 @@ fn prover_postconditions_of(mut walk: ProverWalk, callee: ref String, args: ref 
 
 /// Whether a function hands back a whole number.
 fn prover_returns_whole(mut walk: ProverWalk, callee: ref String, program: ref Program, words: ref winnow_grammar::InternerContext, own: ref Ledger, condition: fn(ref String, ref collections::BTreeSet[String]) -> Vec[logic::SolverTerm] sync) -> bool {
-    let function = free_function(program, words, callee)
+    let function = prover_summed_function(program, words, callee)
     if function != null {
         let found = function ?? return false
         return found.whole_result

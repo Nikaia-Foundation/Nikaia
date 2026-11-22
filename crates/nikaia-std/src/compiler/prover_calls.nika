@@ -49,6 +49,18 @@ fn free_function(program: ref Program, words: ref winnow_grammar::InternerContex
 /// `self.wanted(…)` in a method of `owner` reaches it: its parameters without
 /// the receiver (#776).
 fn own_method(program: ref Program, words: ref winnow_grammar::InternerContext, owner: ref String, wanted: ref String) -> FreeFunction? {
+    return own_impl_function(program, words, owner, wanted, true)
+}
+
+/// The function `wanted` of `owner`'s own `impl` that takes no receiver, as
+/// a call by its path `owner::wanted(…)` reaches it (ADR-359 D14): a method
+/// is never called by its path (NK1101), so the two do not meet.
+fn own_associated(program: ref Program, words: ref winnow_grammar::InternerContext, owner: ref String, wanted: ref String) -> FreeFunction? {
+    return own_impl_function(program, words, owner, wanted, false)
+}
+
+/// `own_method` with `with_receiver`, else `own_associated`.
+fn own_impl_function(program: ref Program, words: ref winnow_grammar::InternerContext, owner: ref String, wanted: ref String, with_receiver: bool) -> FreeFunction? {
     for item in program.items {
         match item.node {
             Item::Impl { methods, target, trait_name } => {
@@ -56,7 +68,7 @@ fn own_method(program: ref Program, words: ref winnow_grammar::InternerContext, 
                     for method in methods {
                         match method.node {
                             Item::Fn { name, receiver, args, config, ret_type, can_throw, .. } => {
-                                if receiver != null && named_as(name, words, wanted) {
+                                if (receiver != null) == with_receiver && named_as(name, words, wanted) {
                                     let mut params: Vec[String] = []
                                     for arg in args {
                                         params.push(words.resolve(arg.name).clone())

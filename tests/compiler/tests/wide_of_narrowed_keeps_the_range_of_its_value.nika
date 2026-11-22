@@ -1,0 +1,26 @@
+// What `let n = Wide::of(a).narrow() ?? return` tells the bounds walk
+// (#2647, ADR-270 D11): the value narrowed is the one the `Wide` was made
+// from, so a bounded `a` bounds `n` and `xs[n]` is proved.
+fn pick(xs: ref Vec[i64], a: i64) -> i64? {
+	if a < 0 || a >= 10 || xs.len() < 10 {
+		return null
+	}
+	let n = Wide::of(a).narrow() ?? return null
+	return xs[n]
+}
+
+// Through a name holding the `Wide`, and as a `u32`.
+fn pick_held(xs: ref Vec[i64], a: u32) -> i64? {
+	if a >= 10 || xs.len() < 10 {
+		return null
+	}
+	let w = Wide::of(a)
+	let n = w.narrow() ?? return null
+	return xs[n as i64]
+}
+
+fn main() throws {
+	let xs: Vec[i64] = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+	println(pick(xs, 3) ?? 0)
+	println(pick_held(xs, 9) ?? 0)
+}

@@ -939,7 +939,7 @@ pub(crate) fn project_tests_blessed_line(label: &str, blessed: &ProjectTestsBles
 pub(crate) async fn project_tests_bless_program(program: &ProgramTest, outcomes: &[(String, ProjectTestsOutcome)], stderr: bool) -> Result<ProjectTestsBlessed, nikaia_std::error::Thrown<nikaia_std::io::IoError>> {
     if outcomes.is_empty() { return Ok(ProjectTestsBlessed::Unchanged); }
     if !project_tests_agree(outcomes) { return Ok(ProjectTestsBlessed::Refused(String::from("the settings disagree"))); }
-    let first = &nikaia_std::index::get(&outcomes, 0).1;
+    let first = &unsafe { nikaia_std::proven::read(&outcomes, (0) as usize) }.1;
     let refused = !first.ended_well && !first.stopped && is_refusal(&first.stderr);
     let stops = first.stopped && program.stops.is_some();
     if refused && program.stderr.is_none() && !stderr { return Ok(ProjectTestsBlessed::Refused(String::from("the program is refused, no .stderr expects it and --bless-stderr was not given"))); }
@@ -1005,7 +1005,7 @@ pub(crate) fn project_tests_explain_output(output: &OutputTest, outcome: &Projec
 pub(crate) async fn project_tests_bless(output: &OutputTest, outcomes: &[(String, ProjectTestsOutcome)]) -> Result<ProjectTestsBlessed, nikaia_std::error::Thrown<nikaia_std::io::IoError>> {
     if outcomes.is_empty() { return Ok(ProjectTestsBlessed::Unchanged); }
     if !project_tests_agree(outcomes) { return Ok(ProjectTestsBlessed::Refused(String::from("the settings disagree"))); }
-    let first = &nikaia_std::index::get(&outcomes, 0).1;
+    let first = &unsafe { nikaia_std::proven::read(&outcomes, (0) as usize) }.1;
     let stops = first.stopped && output.stops.is_some();
     if !first.ended_well && !stops { return Ok(ProjectTestsBlessed::Refused(String::from("the program did not end successfully"))); }
     if !stops && output.stops.is_some() { return Ok(ProjectTestsBlessed::Refused(String::from("the program did not stop, as its .stops expects"))); }

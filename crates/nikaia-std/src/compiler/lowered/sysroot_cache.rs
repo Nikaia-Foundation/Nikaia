@@ -315,7 +315,7 @@ pub async fn sysroot_committed(dir: &std::path::Path) -> Vec<(String, String)> {
 // this was written - see `contracts::sync`.
 pub fn sysroot_inlined(files: &[(String, String)]) -> String {
     if files.is_empty() { return String::from(""); }
-    let mut text: String = nikaia_std::block::Text::from(nikaia_std::index::get(&files, 0).1.to_string());
+    let mut text: String = nikaia_std::block::Text::from(unsafe { nikaia_std::proven::read(&files, (0) as usize) }.1.to_string());
     for at in 1..files.len() as i64 {
         let replaced = nikaia_std::block::Text::from(text.replace(&*format!("include!(\"{}\");", unsafe { nikaia_std::proven::read(&files, (at) as usize) }.0), &*unsafe { nikaia_std::proven::read(&files, (at) as usize) }.1));
         text = replaced;
@@ -397,7 +397,7 @@ pub fn sysroot_unpack(packed: &str) -> Option<Vec<(String, String)>> {
         if line.starts_with(AsRef::<str>::as_ref(SYSROOT_PACKED)) { files.push((nikaia_std::block::Text::from(nikaia_std::index::or(line.strip_prefix(AsRef::<str>::as_ref(SYSROOT_PACKED)), || "").trim_end().to_string()), String::from(""))); } else {
             if files.is_empty() { return None; }
             let last = unsafe { nikaia_std::proven::sub::<i64>(files.len() as i64, 1) };
-            files[nikaia_std::index::at(last)].1.push_str(&line);
+            (*unsafe { nikaia_std::proven::slot(&mut files, (last) as usize) }).1.push_str(&line);
         }
     }
     if files.is_empty() { return None; }

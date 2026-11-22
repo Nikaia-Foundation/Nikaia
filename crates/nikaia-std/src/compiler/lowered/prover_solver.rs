@@ -33,6 +33,13 @@ pub(crate) fn forced_overflow_values(arena: &mut logic::TermArena, facts: &[i64]
         arena.variables(fact, &mut tied);
     }
     for name in names.iter() { if !tied.contains(name) { return None; } }
+    let mut lows: collections::BTreeMap<String, i64> = collections::BTreeMap::new();
+    let mut highs: collections::BTreeMap<String, i64> = collections::BTreeMap::new();
+    for fact in facts.iter() {
+        let fact = nikaia_std::num::value(fact);
+        fact_bounds(&arena, fact, false, &mut lows, &mut highs);
+    }
+    if facts_range(&arena, term, &lows, &highs).is_some() { return None; }
     let falsum = arena.boolean(false);
     let found = match model(&arena, facts, falsum) { Some(__nikaia_value) => __nikaia_value, None => return None };
     let values = values_of(names, &found);
@@ -48,6 +55,110 @@ pub(crate) fn forced_overflow_values(arena: &mut logic::TermArena, facts: &[i64]
         }
     }
     Some(values)
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn fact_bounds(arena: &logic::TermArena, fact: i64, negated: bool, lows: &mut collections::BTreeMap<String, i64>, highs: &mut collections::BTreeMap<String, i64>) {
+    match arena.at(fact) {
+        logic::SolverTerm::And(ref parts) => {
+            if !negated {
+                for part in parts.iter() {
+                    let part = nikaia_std::num::value(part);
+                    fact_bounds(arena, part, false, lows, highs);
+                }
+            }
+        },
+        logic::SolverTerm::Not(a) => { fact_bounds(arena, a, !negated, lows, highs); },
+        logic::SolverTerm::Le(a, b) => { if negated { bound_below(arena, b, a, true, lows, highs); } else { bound_below(arena, a, b, false, lows, highs); } },
+        logic::SolverTerm::Lt(a, b) => { if negated { bound_below(arena, b, a, false, lows, highs); } else { bound_below(arena, a, b, true, lows, highs); } },
+        logic::SolverTerm::Ge(a, b) => { if negated { bound_below(arena, a, b, true, lows, highs); } else { bound_below(arena, b, a, false, lows, highs); } },
+        logic::SolverTerm::Gt(a, b) => { if negated { bound_below(arena, a, b, false, lows, highs); } else { bound_below(arena, b, a, true, lows, highs); } },
+        logic::SolverTerm::Eq(a, b) => {
+            if !negated {
+                bound_below(arena, a, b, false, lows, highs);
+                bound_below(arena, b, a, false, lows, highs);
+            }
+        },
+        _ => { },
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn bound_below(arena: &logic::TermArena, a: i64, b: i64, strict: bool, lows: &mut collections::BTreeMap<String, i64>, highs: &mut collections::BTreeMap<String, i64>) {
+    let step: i64 = if strict { 1 } else { 0 };
+    match arena.at(a) {
+        logic::SolverTerm::Var(ref name) => {
+            let c = match arena.constant(b) { Some(__nikaia_value) => __nikaia_value, None => return };
+            let high = match c.checked_sub(step) { Some(__nikaia_value) => __nikaia_value, None => return };
+            let known = nikaia_std::index::or(*nikaia_std::index::get(&highs, name), || high);
+            highs.insert(nikaia_std::block::Text::from(name.to_string()), if high < known { high } else { known });
+            return;
+        },
+        _ => { },
+    }
+    match arena.at(b) {
+        logic::SolverTerm::Var(ref name) => {
+            let c = match arena.constant(a) { Some(__nikaia_value) => __nikaia_value, None => return };
+            let low = match c.checked_add(step) { Some(__nikaia_value) => __nikaia_value, None => return };
+            let known = nikaia_std::index::or(*nikaia_std::index::get(&lows, name), || low);
+            lows.insert(nikaia_std::block::Text::from(name.to_string()), if low > known { low } else { known });
+        },
+        _ => { },
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn facts_range(arena: &logic::TermArena, id: i64, lows: &collections::BTreeMap<String, i64>, highs: &collections::BTreeMap<String, i64>) -> Option<(i64, i64)> {
+    match arena.at(id) {
+        logic::SolverTerm::Int(n) => Some((n, n)),
+        logic::SolverTerm::Var(ref name) => {
+            let lo = match *nikaia_std::index::get(&lows, name) { Some(__nikaia_value) => nikaia_std::num::value(__nikaia_value), None => return None };
+            let hi = match *nikaia_std::index::get(&highs, name) { Some(__nikaia_value) => nikaia_std::num::value(__nikaia_value), None => return None };
+            Some((lo, hi))
+        },
+        logic::SolverTerm::Neg(a) => {
+            let (lo, hi) = match facts_range(arena, a, lows, highs) { Some(__nikaia_value) => __nikaia_value, None => return None };
+            let low = match hi.checked_neg() { Some(__nikaia_value) => __nikaia_value, None => return None };
+            let high = match lo.checked_neg() { Some(__nikaia_value) => __nikaia_value, None => return None };
+            Some((low, high))
+        },
+        logic::SolverTerm::Add(a, b) => {
+            let (alo, ahi) = match facts_range(arena, a, lows, highs) { Some(__nikaia_value) => __nikaia_value, None => return None };
+            let (blo, bhi) = match facts_range(arena, b, lows, highs) { Some(__nikaia_value) => __nikaia_value, None => return None };
+            let low = match alo.checked_add(blo) { Some(__nikaia_value) => __nikaia_value, None => return None };
+            let high = match ahi.checked_add(bhi) { Some(__nikaia_value) => __nikaia_value, None => return None };
+            Some((low, high))
+        },
+        logic::SolverTerm::Sub(a, b) => {
+            let (alo, ahi) = match facts_range(arena, a, lows, highs) { Some(__nikaia_value) => __nikaia_value, None => return None };
+            let (blo, bhi) = match facts_range(arena, b, lows, highs) { Some(__nikaia_value) => __nikaia_value, None => return None };
+            let low = match alo.checked_sub(bhi) { Some(__nikaia_value) => __nikaia_value, None => return None };
+            let high = match ahi.checked_sub(blo) { Some(__nikaia_value) => __nikaia_value, None => return None };
+            Some((low, high))
+        },
+        logic::SolverTerm::Mul(a, b) => {
+            let (alo, ahi) = match facts_range(arena, a, lows, highs) { Some(__nikaia_value) => __nikaia_value, None => return None };
+            let (blo, bhi) = match facts_range(arena, b, lows, highs) { Some(__nikaia_value) => __nikaia_value, None => return None };
+            let p = match alo.checked_mul(blo) { Some(__nikaia_value) => __nikaia_value, None => return None };
+            let q = match alo.checked_mul(bhi) { Some(__nikaia_value) => __nikaia_value, None => return None };
+            let r = match ahi.checked_mul(blo) { Some(__nikaia_value) => __nikaia_value, None => return None };
+            let t = match ahi.checked_mul(bhi) { Some(__nikaia_value) => __nikaia_value, None => return None };
+            let low = if p < q { p } else { q };
+            let high = if p < q { q } else { p };
+            let low2 = if r < t { r } else { t };
+            let high2 = if r < t { t } else { r };
+            Some((if low < low2 { low } else { low2 }, if high > high2 { high } else { high2 }))
+        },
+        logic::SolverTerm::Quot(a, k) => {
+            if k <= 0 { return None; }
+            let (lo, hi) = match facts_range(arena, a, lows, highs) { Some(__nikaia_value) => __nikaia_value, None => return None };
+            Some((lo / k, hi / k))
+        },
+        _ => None,
+    }
 }
 
 pub(crate) fn breaking_values(arena: &mut logic::TermArena, scope: &ProverScope, claim: i64, model: &mut impl FnMut(&logic::TermArena, &[i64], i64) -> Option<collections::BTreeMap<String, i64>>) -> Option<collections::BTreeMap<String, i64>> {

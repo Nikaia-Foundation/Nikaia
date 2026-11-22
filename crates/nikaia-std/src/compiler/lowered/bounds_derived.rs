@@ -146,9 +146,9 @@ pub(crate) fn derived_candidate(derived: &mut Derived, item: &Item, position: i6
 }
 
 pub(crate) fn derived_key(args: &[FnArg], body: &Block) -> Option<i64> {
-    if !args.is_empty() { return Some(nikaia_std::index::get(&args, 0).span.start as i64); }
+    if !args.is_empty() { return Some(unsafe { nikaia_std::proven::read(&args, (0) as usize) }.span.start as i64); }
     if body.stmts.is_empty() { return None; }
-    Some(nikaia_std::index::get(&body.stmts, 0).span.start as i64)
+    Some(unsafe { nikaia_std::proven::read(&body.stmts, (0) as usize) }.span.start as i64)
 }
 
 pub(crate) fn derived_body(args: &[FnArg], config: &[ConfigParam], body: &Block, words: &winnow_grammar::InternerContext, scan: &mut DerivedScan) -> collections::BTreeSet<String> {
@@ -519,7 +519,7 @@ pub(crate) fn derived_step(expr: &Expr, ints: &[String], lets: &collections::BTr
             };
             let found = match *nikaia_std::index::get(&steps, &callee) { Some(__nikaia_value) => __nikaia_value, None => return None };
             if found.0 < 0 || found.0 >= args.len() as i64 { return None; }
-            let inner = match derived_step(nikaia_std::index::get(&args, nikaia_std::index::at(found.0)), ints, lets, steps, words) { Some(__nikaia_value) => __nikaia_value, None => return None };
+            let inner = match derived_step(unsafe { nikaia_std::proven::read(&args, (found.0) as usize) }, ints, lets, steps, words) { Some(__nikaia_value) => __nikaia_value, None => return None };
             if inner.scale != 1 || inner.steps != 0 { return None; }
             return Some(DerivedStep { param: nikaia_std::block::Text::from(inner.param.to_string()), scale: found.1.scale, steps: found.1.steps });
         },
