@@ -68,7 +68,7 @@ pub(crate) fn check_core_grammar_call<H: CheckHost>(state: &mut CheckState, worl
             _ => false,
         };
         let over_text = match given {
-            Ty::Named { ref name, args: ref inner, .. } => (name == "String" || name == "str" || name == "Mapped") && inner.is_empty(),
+            Ty::Named { ref name, args: ref inner, .. } => (name == "String" || name == "str" || name == "Mapped" || name == "fs::Mapped") && inner.is_empty(),
             _ => false,
         };
         if !over_bytes && !over_text && !given.is_unknown() { state.findings.push(check_core_grammar_input_refused(key, &given, span)); }

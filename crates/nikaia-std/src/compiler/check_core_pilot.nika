@@ -104,7 +104,7 @@ fn check_core_grammar_call[H: CheckHost](mut state: CheckState, world: ref Check
             else => false,
         }
         let over_text = match given {
-            Ty::Named { name, args: inner, .. } => (name == "String" || name == "str" || name == "Mapped") && inner.len() == 0,
+            Ty::Named { name, args: inner, .. } => (name == "String" || name == "str" || name == "Mapped" || name == "fs::Mapped") && inner.len() == 0,
             else => false,
         }
         if !over_bytes && !over_text && !given.is_unknown() {

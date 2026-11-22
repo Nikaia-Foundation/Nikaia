@@ -1,0 +1,21 @@
+// `error.message()` in a handler the box reached (#2219): a guarded
+// expression with a failing call nested in it (`f().clone()`), and a call
+// through a function field, hand the handler the boxed error.
+
+enum Bad { Neg }
+
+impl Error for Bad {
+    fn message(ref self) -> String { "neg" }
+}
+
+struct H { run: fn() -> String throws }
+
+fn f() -> String throws { throw Bad::Neg }
+
+fn main() throws {
+    let t = f().clone() catch { error.message() }
+    println(t)
+    let h = H { run: f }
+    let u = h.run() catch { error.message() }
+    println(u)
+}

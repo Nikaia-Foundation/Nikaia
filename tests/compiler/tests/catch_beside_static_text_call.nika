@@ -1,0 +1,23 @@
+// A `catch` whose handler calls a function that hands back static text,
+// beside a guarded value of its own (#2220): the function's result stays
+// text of its own (ADR-282 D29), as beside an `if`'s other branch, and the
+// two arms meet in one type.
+use std::fs
+
+fn named(n: i64) -> String {
+    return "x"
+}
+
+fn read_it() -> String throws {
+    let t = fs::read_to_string("missing.txt", fs::scratch())
+    let mut s = String()
+    s.push_str(t)
+    return s
+}
+
+fn main() throws {
+    let t = fs::read_to_string("missing.txt", fs::scratch()) catch { named(1) }
+    println(t)
+    let u = read_it() catch { named(2) }
+    println(u)
+}

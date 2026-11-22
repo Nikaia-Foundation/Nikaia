@@ -14,7 +14,23 @@ fn check_program_body[H: CheckHost](mut state: CheckState, world: ref CheckWorld
     let outer: Ty? = state.expected?.clone()
     state.expected = null
     state.scope.push([])
+    // **The names the block grows, keeps, mixes and only reads**, asked of
+    // its own body as a function's are (`check_function_fn`): a `test`
+    // block `lower-std` checks before it becomes a function holds a grown
+    // literal as text of its own too (ADR-282 D31, #2229).
+    let outer_grown = state.flow.grown_text.clone()
+    state.flow.grown_text = check_function_grown_text(world.here, body)
+    let outer_kept = state.flow.kept_names.clone()
+    state.flow.kept_names = check_function_kept_names(world.here.words, body)
+    let outer_mixed = state.flow.mixed_text.clone()
+    state.flow.mixed_text = check_function_mixed_text(world.here, body, state.flow.grown_text)
+    let outer_lone = state.flow.lone_texts.clone()
+    state.flow.lone_texts = lone_texts_of(world.here.words, body)
     check_core_block(state, world, host, body)
+    state.flow.grown_text = outer_grown
+    state.flow.kept_names = outer_kept
+    state.flow.mixed_text = outer_mixed
+    state.flow.lone_texts = outer_lone
     state.scope.pop()
     state.expected = outer
 }
