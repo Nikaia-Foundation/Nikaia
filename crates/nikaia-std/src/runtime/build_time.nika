@@ -1,0 +1,20 @@
+// crates/nikaia-std/src/runtime/build_time.nika
+//
+// **The call path a build-time stop prints** (ADR-321, #2069), written in
+// Nikaia: `src/build_time.rs` calls `shown_path` from `stop`. Reading the
+// thread-local path, writing to standard error and the exit stay in Rust.
+
+/// **The path, as a reader takes it in**: the calls joined with ` > `. A path
+/// deeper than a reader can take in (more than 12 calls) is shown by its first
+/// and last 6 calls, with `…` between them.
+pub fn shown_path(path: ref Array[String]) -> String sync {
+    if path.len() <= 12 {
+        return path.iter().join(" > ")
+    }
+    // The ends are copied (ADR-collections-v3 D4): a list keeps what it is
+    // given, and a part of `path` is only lent.
+    let mut shown: Vec[String] = path[..<6].clone()
+    shown.push("…")
+    shown.extend(path[path.len() - 6..].clone())
+    return shown.join(" > ")
+}
