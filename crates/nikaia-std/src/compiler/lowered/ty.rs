@@ -11,7 +11,7 @@ pub enum Ty {
     Var { name: String, view: bool },
     Fn { params: Vec<Ty>, result: nikaia_std::block::Boxed<Option<Ty>>, is_sync: bool, can_throw: bool, spelled: CodeNames },
     Nullable(nikaia_std::block::Boxed<Ty>),
-    Seq { item: nikaia_std::block::Boxed<Ty>, is_sync: bool, pauses: bool, can_throw: bool, parallel: bool, shape: Shape },
+    Seq { item: nikaia_std::block::Boxed<Ty>, is_sync: bool, pauses: bool, fails: Vec<String>, parallel: bool, shape: Shape },
 }
 
 #[derive(Debug, Clone)]
@@ -101,7 +101,7 @@ pub fn text(ty: &Ty) -> String {
         Ty::Var { name, view } => { let view = *view; if view { format!("ref ${}", name) } else { format!("${}", name) } },
         Ty::Nullable(inner) => { let inner = nikaia_std::boxed::open(inner); format!("{}?", text(inner)) },
         Ty::Named { name, args, view } => { let view = *view; named_text(name, args, view) },
-        Ty::Seq { item, is_sync, pauses, can_throw, parallel, shape } => { let item = nikaia_std::boxed::open(item); let can_throw = *can_throw; let is_sync = *is_sync; let parallel = *parallel; let pauses = *pauses; sequence(&text(item), is_sync, pauses, can_throw, parallel, shape) },
+        Ty::Seq { item, is_sync, pauses, fails, parallel, shape } => { let item = nikaia_std::boxed::open(item); let is_sync = *is_sync; let parallel = *parallel; let pauses = *pauses; sequence(&text(item), is_sync, pauses, !fails.is_empty(), parallel, shape) },
     }
 }
 
@@ -201,7 +201,7 @@ pub fn ty_shown(ty: &Ty) -> String {
         Ty::Tuple(parts) => format!("({})", shown_listed(parts)),
         Ty::Nullable(inner) => { let inner = nikaia_std::boxed::open(inner); format!("{}?", ty_shown(inner)) },
         Ty::Fn { params, result, is_sync, can_throw, spelled } => { let result = nikaia_std::boxed::open(result); let can_throw = *can_throw; let is_sync = *is_sync; shown_code(params, (result).as_ref(), is_sync, can_throw, spelled) },
-        Ty::Seq { item, is_sync, pauses, can_throw, parallel, shape } => { let item = nikaia_std::boxed::open(item); let can_throw = *can_throw; let is_sync = *is_sync; let parallel = *parallel; let pauses = *pauses; sequence(&ty_shown(item), is_sync, pauses, can_throw, parallel, shape) },
+        Ty::Seq { item, is_sync, pauses, fails, parallel, shape } => { let item = nikaia_std::boxed::open(item); let is_sync = *is_sync; let parallel = *parallel; let pauses = *pauses; sequence(&ty_shown(item), is_sync, pauses, !fails.is_empty(), parallel, shape) },
         _ => text(ty),
     }
 }
@@ -692,7 +692,7 @@ pub(crate) fn a_sequence(written: &str, word: &str, parallel: bool) -> Option<Ty
     if !tail.is_empty() { return None; }
     let item = parse(&between(&c, 1, close));
     let shape = Shape { ends, sized, replays, timed: false, one_at_a_time: false, failing_items: false };
-    Some(Ty::Seq { item: nikaia_std::block::Boxed::new(item), is_sync, pauses, can_throw, parallel, shape })
+    Some(Ty::Seq { item: nikaia_std::block::Boxed::new(item), is_sync, pauses, fails: if can_throw { unnamed_failure() } else { vec![] }, parallel, shape })
 }
 
 pub(crate) fn a_name(rest: &str, view: bool) -> Ty {
@@ -1199,9 +1199,9 @@ impl Ty {
                 let result = nikaia_std::boxed::open(result); let can_throw = *can_throw; let is_sync = *is_sync;
                 if a_function_type(expected) { return function_fits(params, (result).as_ref(), is_sync, can_throw, expected); }
             },
-            Ty::Seq { item, is_sync, pauses, can_throw, parallel, shape } => {
-                let item = nikaia_std::boxed::open(item); let can_throw = *can_throw; let is_sync = *is_sync; let parallel = *parallel; let pauses = *pauses;
-                if a_sequence_type(expected) { return sequence_fits(item, is_sync, pauses, can_throw, parallel, shape, expected); }
+            Ty::Seq { item, is_sync, pauses, fails, parallel, shape } => {
+                let item = nikaia_std::boxed::open(item); let is_sync = *is_sync; let parallel = *parallel; let pauses = *pauses;
+                if a_sequence_type(expected) { return sequence_fits(item, is_sync, pauses, !fails.is_empty(), parallel, shape, expected); }
             },
             Ty::Var { .. } => { return true; },
             _ => { },
@@ -1228,7 +1228,7 @@ impl Ty {
                 Some(__nikaia_it) => Some(__nikaia_it.erase(parameters)),
                 None => None,
             }), is_sync, can_throw, spelled: spelled.clone() } },
-            Ty::Seq { item, is_sync, pauses, can_throw, parallel, shape } => { let item = nikaia_std::boxed::open(item); let can_throw = *can_throw; let is_sync = *is_sync; let parallel = *parallel; let pauses = *pauses; Ty::Seq { item: nikaia_std::block::Boxed::new(item.erase(parameters)), is_sync, pauses, can_throw, parallel, shape: shape.clone() } },
+            Ty::Seq { item, is_sync, pauses, fails, parallel, shape } => { let item = nikaia_std::boxed::open(item); let is_sync = *is_sync; let parallel = *parallel; let pauses = *pauses; Ty::Seq { item: nikaia_std::block::Boxed::new(item.erase(parameters)), is_sync, pauses, fails: fails.copy_owned(), parallel, shape: shape.clone() } },
             Ty::Nullable(inner) => { let inner = nikaia_std::boxed::open(inner); Ty::Nullable(nikaia_std::block::Boxed::new(inner.erase(parameters))) },
             Ty::Named { name, args, view } => { let view = *view; erased_name(name, args, view, parameters) },
             _ => self.clone(),
@@ -1242,7 +1242,7 @@ impl Ty {
                 Some(__nikaia_it) => Some(__nikaia_it.parameterise(parameters)),
                 None => None,
             }), is_sync, can_throw, spelled: spelled.clone() } },
-            Ty::Seq { item, is_sync, pauses, can_throw, parallel, shape } => { let item = nikaia_std::boxed::open(item); let can_throw = *can_throw; let is_sync = *is_sync; let parallel = *parallel; let pauses = *pauses; Ty::Seq { item: nikaia_std::block::Boxed::new(item.parameterise(parameters)), is_sync, pauses, can_throw, parallel, shape: shape.clone() } },
+            Ty::Seq { item, is_sync, pauses, fails, parallel, shape } => { let item = nikaia_std::boxed::open(item); let is_sync = *is_sync; let parallel = *parallel; let pauses = *pauses; Ty::Seq { item: nikaia_std::block::Boxed::new(item.parameterise(parameters)), is_sync, pauses, fails: fails.copy_owned(), parallel, shape: shape.clone() } },
             Ty::Nullable(inner) => { let inner = nikaia_std::boxed::open(inner); Ty::Nullable(nikaia_std::block::Boxed::new(inner.parameterise(parameters))) },
             Ty::Named { name, args, view } => { let view = *view; parameterised_name(name, args, view, parameters) },
             _ => self.clone(),
@@ -1355,9 +1355,9 @@ pub(crate) fn results_fit(found: Option<&Ty>, wanted: Option<&Ty>) -> bool {
     }, || true)
 }
 
-pub(crate) fn sequence_fits(found: &Ty, never_pauses: bool, may_pause: bool, fails: bool, at_once: bool, has: &Shape, expected: &Ty) -> bool {
+pub(crate) fn sequence_fits(found: &Ty, never_pauses: bool, may_pause: bool, fails_found: bool, at_once: bool, has: &Shape, expected: &Ty) -> bool {
     match expected {
-        Ty::Seq { item, is_sync, pauses, can_throw, parallel, shape } => { let item = nikaia_std::boxed::open(item); let can_throw = *can_throw; let is_sync = *is_sync; let parallel = *parallel; let pauses = *pauses; found.fits(item) && (never_pauses || !is_sync) && (!may_pause || pauses) && (!fails || can_throw) && (at_once || !parallel) && has.meets(shape) },
+        Ty::Seq { item, is_sync, pauses, fails, parallel, shape } => { let item = nikaia_std::boxed::open(item); let is_sync = *is_sync; let parallel = *parallel; let pauses = *pauses; found.fits(item) && (never_pauses || !is_sync) && (!may_pause || pauses) && (!fails_found || !fails.is_empty()) && (at_once || !parallel) && has.meets(shape) },
         _ => false,
     }
 }
@@ -1475,7 +1475,7 @@ pub fn substitute(ty: &Ty, bound: &collections::BTreeMap<String, Ty>) -> Ty {
         Ty::Tuple(parts) => Ty::Tuple(substituted_each(parts, bound)),
         Ty::Pointed { item, slice, mutable } => { let item = nikaia_std::boxed::open(item); let mutable = *mutable; let slice = *slice; Ty::Pointed { item: nikaia_std::block::Boxed::new(substitute(item, bound)), slice, mutable } },
         Ty::Fn { params, result, is_sync, can_throw, spelled } => { let result = nikaia_std::boxed::open(result); let can_throw = *can_throw; let is_sync = *is_sync; Ty::Fn { params: substituted_each(params, bound), result: nikaia_std::block::Boxed::new(substituted_result((result).as_ref(), bound)), is_sync, can_throw, spelled: spelled.clone() } },
-        Ty::Seq { item, is_sync, pauses, can_throw, parallel, shape } => { let item = nikaia_std::boxed::open(item); let can_throw = *can_throw; let is_sync = *is_sync; let parallel = *parallel; let pauses = *pauses; Ty::Seq { item: nikaia_std::block::Boxed::new(substitute(item, bound)), is_sync, pauses, can_throw, parallel, shape: shape.clone() } },
+        Ty::Seq { item, is_sync, pauses, fails, parallel, shape } => { let item = nikaia_std::boxed::open(item); let is_sync = *is_sync; let parallel = *parallel; let pauses = *pauses; Ty::Seq { item: nikaia_std::block::Boxed::new(substitute(item, bound)), is_sync, pauses, fails: fails.copy_owned(), parallel, shape: shape.clone() } },
         Ty::Nullable(inner) => { let inner = nikaia_std::boxed::open(inner); Ty::Nullable(nikaia_std::block::Boxed::new(substitute(inner, bound))) },
         _ => ty.clone(),
     }
@@ -1536,7 +1536,7 @@ pub fn qualify(ty: &Ty, module: &str, declared: &collections::BTreeSet<String>) 
         Ty::Fn { params, result, is_sync, can_throw, spelled } => { let result = nikaia_std::boxed::open(result); let can_throw = *can_throw; let is_sync = *is_sync; Ty::Fn { params: qualified_each(params, module, declared), result: nikaia_std::block::Boxed::new(qualified_result((result).as_ref(), module, declared)), is_sync, can_throw, spelled: spelled.clone() } },
         Ty::Nullable(inner) => { let inner = nikaia_std::boxed::open(inner); Ty::Nullable(nikaia_std::block::Boxed::new(qualify(inner, module, declared))) },
         Ty::Pointed { item, slice, mutable } => { let item = nikaia_std::boxed::open(item); let mutable = *mutable; let slice = *slice; Ty::Pointed { item: nikaia_std::block::Boxed::new(qualify(item, module, declared)), slice, mutable } },
-        Ty::Seq { item, is_sync, pauses, can_throw, parallel, shape } => { let item = nikaia_std::boxed::open(item); let can_throw = *can_throw; let is_sync = *is_sync; let parallel = *parallel; let pauses = *pauses; Ty::Seq { item: nikaia_std::block::Boxed::new(qualify(item, module, declared)), is_sync, pauses, can_throw, parallel, shape: shape.clone() } },
+        Ty::Seq { item, is_sync, pauses, fails, parallel, shape } => { let item = nikaia_std::boxed::open(item); let is_sync = *is_sync; let parallel = *parallel; let pauses = *pauses; Ty::Seq { item: nikaia_std::block::Boxed::new(qualify(item, module, declared)), is_sync, pauses, fails: fails.copy_owned(), parallel, shape: shape.clone() } },
         _ => ty.clone(),
     }
 }
@@ -1566,7 +1566,7 @@ pub fn renamed(ty: &Ty, renames: &collections::BTreeMap<String, String>) -> Ty {
         Ty::Fn { params, result, is_sync, can_throw, spelled } => { let result = nikaia_std::boxed::open(result); let can_throw = *can_throw; let is_sync = *is_sync; Ty::Fn { params: renamed_each(params, renames), result: nikaia_std::block::Boxed::new(renamed_result((result).as_ref(), renames)), is_sync, can_throw, spelled: spelled.clone() } },
         Ty::Nullable(inner) => { let inner = nikaia_std::boxed::open(inner); Ty::Nullable(nikaia_std::block::Boxed::new(renamed(inner, renames))) },
         Ty::Pointed { item, slice, mutable } => { let item = nikaia_std::boxed::open(item); let mutable = *mutable; let slice = *slice; Ty::Pointed { item: nikaia_std::block::Boxed::new(renamed(item, renames)), slice, mutable } },
-        Ty::Seq { item, is_sync, pauses, can_throw, parallel, shape } => { let item = nikaia_std::boxed::open(item); let can_throw = *can_throw; let is_sync = *is_sync; let parallel = *parallel; let pauses = *pauses; Ty::Seq { item: nikaia_std::block::Boxed::new(renamed(item, renames)), is_sync, pauses, can_throw, parallel, shape: shape.clone() } },
+        Ty::Seq { item, is_sync, pauses, fails, parallel, shape } => { let item = nikaia_std::boxed::open(item); let is_sync = *is_sync; let parallel = *parallel; let pauses = *pauses; Ty::Seq { item: nikaia_std::block::Boxed::new(renamed(item, renames)), is_sync, pauses, fails: fails.copy_owned(), parallel, shape: shape.clone() } },
         _ => ty.clone(),
     }
 }
@@ -1782,6 +1782,19 @@ pub(crate) fn __nikaia_test_13() -> Result<(), std::boxed::Box<dyn std::error::E
         None => None,
     }, || Ty::Unknown)))).shown()), ("ty_test_name(\"i64\")", (&&nikaia_std::abort::Operand(&(ty_test_name(String::from("i64"))))).shown()), ]) };
     Ok(())
+}
+
+pub fn failures_joined(first: &[String], second: &[String]) -> Vec<String> {
+    let mut out: Vec<String> = vec![];
+    for name in first.iter() { if !nikaia_std::list::contains(&out, &name) { out.push(nikaia_std::block::Text::from(name.to_string())); } }
+    for name in second.iter() { if !nikaia_std::list::contains(&out, &name) { out.push(nikaia_std::block::Text::from(name.to_string())); } }
+    out
+}
+
+pub fn unnamed_failure() -> Vec<String> {
+    let mut name = String::new();
+    name.push_str("?");
+    vec![name]
 }
 
 

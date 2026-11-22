@@ -3195,7 +3195,10 @@ pub mod check_boxes {
 }
 pub mod check_buildtime {}
 pub mod check_buildtime2 {}
-pub mod check_calls {}
+pub mod check_calls {
+    #[allow(unused_imports)]
+    pub use super::{sequence_failures};
+}
 pub mod check_claims {
     #[allow(unused_imports)]
     pub use super::{check_claims_unproved, check_claims_assumes_in_std};
@@ -3899,7 +3902,7 @@ pub mod trust {
 }
 pub mod ty {
     #[allow(unused_imports)]
-    pub use super::{Ty, CodeNames, Shape, ENDS, SIZED, REPLAYS, SEQ, PAR, PAUSES, ARRAY, TEXT, TEXT_VIEW, text, ty_shown, spoken, spoken_in, shown_in, parse, split_args, Provenance, Sync, Lock, Panics, Crosses, Threads, Touch, State, Held, Count, Class, FieldContract, VariantContract, ConfigContract, Signature, FnContract, TypeContract, Ledger, Notes, SEEN, a_named_ty, a_view_ty, a_seen_ty, bind, substitute, qualify, renamed, MethodIndex, method_index};
+    pub use super::{Ty, CodeNames, Shape, ENDS, SIZED, REPLAYS, SEQ, PAR, PAUSES, ARRAY, TEXT, TEXT_VIEW, text, ty_shown, spoken, spoken_in, shown_in, parse, split_args, Provenance, Sync, Lock, Panics, Crosses, Threads, Touch, State, Held, Count, Class, FieldContract, VariantContract, ConfigContract, Signature, FnContract, TypeContract, Ledger, Notes, SEEN, a_named_ty, a_view_ty, a_seen_ty, bind, substitute, qualify, renamed, MethodIndex, method_index, failures_joined, unnamed_failure};
 }
 pub mod type_rules {
     #[allow(unused_imports)]
@@ -3991,4 +3994,4 @@ pub fn nikaia_run_tests(filters: &[std::string::String], list: bool, more: std::
 /// **The digest of this lowered set** (#1610): every file `lower-std` wrote
 /// beside this index, and the index above this line. Compiled into the same
 /// crate as the code it names, it is the compiler's identity for its caches.
-pub const LOWERED_DIGEST: &str = "f886e23ff9781a73f7c8e47696f76c6f52809519e96c4db4c6b7ea78ae3c1d6d";
+pub const LOWERED_DIGEST: &str = "6a9c97f0b707a5977df85398cd6ef1383925e8645ccf8446fe42666e3bbbca20";

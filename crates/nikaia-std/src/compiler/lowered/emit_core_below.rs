@@ -314,7 +314,11 @@ impl EmitState {
                     }
                     return None;
                 }
-                if self.facts.failing_item_receivers.contains(&on) { return self.emit_failing_through_set(receiver); }
+                let set: Option<Vec<String>> = match self.facts.failing_item_receivers.get(&on) {
+                    Some(__nikaia_it) => Some(__nikaia_it.clone()),
+                    None => None,
+                };
+                if set.is_some() { return std::convert::identity(set); }
                 return None;
             },
             _ => None,
