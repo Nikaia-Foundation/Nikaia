@@ -367,7 +367,7 @@ pub mod logic_lia {
 }
 pub mod logic_normal {
     #[allow(unused_imports)]
-    pub use super::{LgNormal, lg_normal_of, lg_certificate_text, lg_certificate_of, lg_model_text, lg_model_of};
+    pub use super::{LgNormal, lg_normal_of, lg_write_int, lg_certificate_text, lg_certificate_of, lg_model_text, lg_model_of};
 }
 pub mod logic_search {
     #[allow(unused_imports)]
@@ -522,4 +522,4 @@ pub fn nikaia_run_tests(filters: &[std::string::String], list: bool, more: std::
 /// **The digest of this lowered set** (#1610): every file `lower-std` wrote
 /// beside this index, and the index above this line. Compiled into the same
 /// crate as the code it names, it is the compiler's identity for its caches.
-pub const LOWERED_DIGEST: &str = "5e401381acaa9667898c2697c6858daf75ede768d0ced61232225fcd69679720";
+pub const LOWERED_DIGEST: &str = "396d36df3796b1408c36c829c535b88911a5dad9c27f22a6580e00b8d9a69854";

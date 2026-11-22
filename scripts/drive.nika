@@ -5468,6 +5468,7 @@ fn drive_queue(dir: String, area: String) throws {
 			println(line.clone())
 			let words: Vec[String] = line.split(" ").collect()
 			let m = (words[1].strip_prefix("#") ?? "").clone()
+			if !process::is_operand(m.clone()) { continue }
 			drive_label_remove(m.clone(), "ready")
 			drive_label_add(m.clone(), "decision")
 			drive_comment(m.clone(), drive_untrusted_comment(m.clone(), line.clone()))
