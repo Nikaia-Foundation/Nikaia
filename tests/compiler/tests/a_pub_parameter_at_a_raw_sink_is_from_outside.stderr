@@ -15,9 +15,9 @@ warning[NK1308]: `dir` reaches the start of an argument of `process::run`, which
     |     ^^^^^^^^^^^^^^^^^^^^^^^^^
     |
     = note: `dir` is a parameter of the `pub` function `list_raw`: a caller the compiler cannot see chooses the value, so nothing here says what it holds.
-    = note: A program reads an argument that starts with `-` as an option, and an option can name a program to run or a file to write: `-rf`, `--checkpoint-action=exec=sh`.
+    = note: A program reads an argument that starts with `-` as an option, and a Windows program one that starts with `/`; an option can name a program to run or a file to write: `-rf`, `--checkpoint-action=exec=sh`, `/G:secrets.txt`. A literal `"--"` before it ends only the `-` options.
     = note: `raw-sinks = "warn"` lets this build through.
-    = help: Check it where it arrives: `if !process::is_operand(dir) { process::exit(2) }`, after which it is proved; or put a literal `"--"` before it in the list, which ends the options: `["--", dir]`. If the program means to pass options from outside, `untrusted-option = true` under `[allow]` in the manifest builds it.
+    = help: Check it where it arrives: `if !process::is_operand(dir) { process::exit(2) }` refuses a leading `-` and `/`, after which it is proved; or, where it names a file, pass it as `"./" + dir` or as the path of a root it is joined under (`dir.join(dir).path().to_text()`), which start with text the program wrote. If the program means to pass options from outside, `untrusted-option = true` under `[allow]` in the manifest builds it.
 warning: Type `__NikaiaThrows_io_IoError__process_Exit` is more private than the item `list_guarded`.
    --> tests/a_pub_parameter_at_a_raw_sink_is_from_outside.nika:20:1
     |

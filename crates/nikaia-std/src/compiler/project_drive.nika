@@ -94,11 +94,13 @@ pub trait ProjectDriveHost {
     /// `rustc --version`, as the build already asked it; empty where there
     /// is no `rustc`.
     fn rustc_version(ref self) -> String sync
-    /// `project_drive_fresh` of the record at `record` and the digest of
-    /// what Cargo is handed (#1750).
-    fn cargo_fresh(ref self, record: ref fs::Path, handed: ref String) -> String? sync
-    /// `project_drive_record` after a build that succeeded (#1750).
-    fn record_cargo(ref self, record: ref fs::Path, handed: ref String, messages: ref String, generated: ref fs::Path) sync
+    /// The project's root, absolute: a root of the build's record
+    /// (ADR-raw-sinks-1 D17 item 7, ADR-platform-layer-v1 D2, D7 item 3).
+    fn project_root(ref self) -> fs::Path sync
+    /// The sysroot that holds `std`'s sources and the crates it depends on
+    /// by path: a root of the build's record (ADR-raw-sinks-1 D17 item 7,
+    /// ADR-platform-layer-v1 D2, D7 item 3).
+    fn std_sources(ref self) -> fs::Path sync
     /// The triple this build is for.
     fn target_triple(ref self) -> String sync
     /// The machine this compiler runs on, null where it is none it knows.
@@ -199,7 +201,12 @@ impl Error for ProjectDriveRefusal {
 /// where it is what `rustc` is actually handed. Both go through `lower` and
 /// the second is a cache hit, so the work is done once even though the
 /// decision is made in two places.
-pub fn project_drive_drive_to[H: ProjectDriveHost](host: ref H, subcommand: String, no_cache: bool, locked: bool) -> (i32, fs::Path?) sync throws {
+///
+/// It is not `sync`: it reads and writes the build's record itself
+/// (`project_drive_fresh`, `project_drive_record`), through roots on the
+/// outer build's directories (ADR-raw-sinks-1 D17 item 7), where it once
+/// asked the Rust host to do it.
+pub fn project_drive_drive_to[H: ProjectDriveHost](host: ref H, subcommand: String, no_cache: bool, locked: bool) -> (i32, fs::Path?) throws {
     // **A package offered to Rust** (ADR-393 D1, Part III 15.2) is built as
     // a lib crate and has no entry point: what it offers is its `pub` items.
     let rust_library = project_drive_artifact(host) == "rust-library"
@@ -494,8 +501,31 @@ pub fn project_drive_drive_to[H: ProjectDriveHost](host: ref H, subcommand: Stri
     let record = manifest.parent()?.join("cargo-fresh") ?? host.gen_dir().join("cargo-fresh")
     let recorded = verb == "build" && !no_cache
     let handed = project_drive_handed(host, verb, build_args, env, unset, shared, manifest, rust, switched)
+    // Every path of the record lies below one of the outer build's roots
+    // (ADR-raw-sinks-1 D17 item 7): the project's root and the root of each
+    // package of the build (a test program's place depends on the package it
+    // tests by path, and Cargo's dependency file names that package's
+    // sources), the sysroot of `std`'s sources and the target directory; for
+    // a batch of test programs, the batch's directory, which holds its list,
+    // its carrier and its programs (`project_tests_batches`).
+    let mut roots: Vec[fs::Path] = [host.project_root(), host.std_sources(), host.target_dir(manifest, shared)]
+    for member in members {
+        if !roots.contains(member.root) {
+            roots.push(member.root.clone())
+        }
+    }
+    match env::var(project_batch_var()) {
+        null => {},
+        list => {
+            let named: fs::Path = list
+            match named.parent() {
+                null => {},
+                dir => roots.push(dir.clone()),
+            }
+        },
+    }
     let fresh: String? = match recorded {
-        true => host.cargo_fresh(record, handed),
+        true => project_drive_fresh(record, handed, roots),
         false => null,
     }
     let (built_code, messages) = match fresh {
@@ -507,7 +537,7 @@ pub fn project_drive_drive_to[H: ProjectDriveHost](host: ref H, subcommand: Stri
     // Cargo has written since.
     if fresh == null {
         let said = if recorded && built_code == 0 { messages.clone() } else { "" }
-        host.record_cargo(record, handed, said, host.gen_dir())
+        project_drive_record(record, handed, said, host.gen_dir(), roots)
     }
     let mut code = built_code
     // Cargo is done with what this build added to the user cache, so its
@@ -615,14 +645,14 @@ fn project_drive_handed[H: ProjectDriveHost](host: ref H, verb: ref String, args
 /// **The key of a build**: what Cargo is handed (`handed`) and the generated
 /// workspace beside the record, its manifest, its lock and each member's
 /// manifest. Read again after a build, since Cargo writes the lock.
-fn project_drive_cargo_key(record: ref fs::Path, handed: ref String) -> String {
+fn project_drive_cargo_key(record: ref ProjectDriveRooted, handed: ref String) -> String {
     let mut text = f"{handed}\n"
-    let dir = record.parent() ?? return handed.clone()
-    text.push_str(fs::read_to_string(dir.join("Cargo.toml"), fs::Root::Anywhere) catch { "" })
-    text.push_str(fs::read_to_string(dir.join("Cargo.lock"), fs::Root::Anywhere) catch { "" })
+    let dir = record.below.parent() ?? return handed.clone()
+    text.push_str(fs::read_to_string(dir.join("Cargo.toml"), record.at) catch { "" })
+    text.push_str(fs::read_to_string(dir.join("Cargo.lock"), record.at) catch { "" })
     // Each name is opened under the directory it was read from
     // (ADR-raw-sinks-1 D13).
-    let members = fs::Root::Dir(dir.clone())
+    let members = record.at.join(dir)
     let mut names: Vec[String] = (fs::read_dir(".", members) catch { [] }).iter().map(fn(name) { name.display() }).collect()
     names.sort()
     for name in names {
@@ -655,8 +685,8 @@ fn project_drive_source_dirs(sources: ref Vec[fs::Path]) -> Vec[fs::Path] {
 /// **What a directory holds, as a digest**: the names in it, sorted, so a
 /// listed directory (`project_drive_source_dirs`) counts as changed only
 /// where a file came or went, not where one was written again.
-fn project_drive_listing(dir: ref fs::Path) -> String? {
-    let mut names: Vec[String] = (fs::read_dir(dir, fs::Root::Anywhere) catch { return null }).iter().map(fn(name) { name.display() }).collect()
+fn project_drive_listing(dir: ref ProjectDriveRooted) -> String? {
+    let mut names: Vec[String] = (fs::read_dir(dir.below, dir.at) catch { return null }).iter().map(fn(name) { name.display() }).collect()
     names.sort()
     return hash::sha256_hex(names.join("\n").bytes().collect())
 }
@@ -664,11 +694,42 @@ fn project_drive_listing(dir: ref fs::Path) -> String? {
 /// The digest `project_drive_record` keeps of a listed `path`: a file's
 /// bytes, a directory's names.
 fn project_drive_digest(path: ref fs::Path, a_dir: bool) -> String? {
+    return project_drive_digest_at(ProjectDriveRooted { at: fs::Root::Anywhere, below: path.clone() }, a_dir)
+}
+
+/// `project_drive_digest` of a path read through its root
+/// (ADR-raw-sinks-1 D17 item 7).
+fn project_drive_digest_at(path: ref ProjectDriveRooted, a_dir: bool) -> String? {
     if a_dir {
         return project_drive_listing(path)
     }
-    let bytes = fs::read(path, fs::Root::Anywhere) catch { return null }
+    let bytes = fs::read(path.below, path.at) catch { return null }
     return hash::sha256_hex(bytes.iter().collect())
+}
+
+/// **A path of the build's record, proved below one of the outer build's
+/// roots** (ADR-raw-sinks-1 D17 item 7): the root, as a `fs::Root` on it,
+/// and the part of the path below it, which every read goes through.
+struct ProjectDriveRooted {
+    at: fs::Root,
+    below: fs::Path,
+}
+
+/// **`path` below the first of `roots` it lies under** (`path::is_below`,
+/// ADR-raw-sinks-1 D14); null for a path below none of them, which leaves
+/// the build without a record, and Cargo runs (D17 items 3 and 7).
+fn project_drive_rooted(path: ref fs::Path, roots: ref Vec[fs::Path]) -> ProjectDriveRooted? {
+    let named = path.display()
+    for root in roots {
+        let shown = root.display()
+        if shown == "" {
+            continue
+        }
+        let bare = shown.strip_suffix("/")?.clone() ?? shown.clone()
+        let below = project_drive_rustc_below(named, f"{bare}/") ?? continue
+        return ProjectDriveRooted { at: fs::Root::Dir(root.clone()), below: below }
+    }
+    return null
 }
 
 /// **What the last build of this key said, where it would build nothing
@@ -677,16 +738,21 @@ fn project_drive_digest(path: ref fs::Path, a_dir: bool) -> String? {
 /// dependency, `std`'s among them) with its length, time and digest. A file
 /// whose length or time moved is read, and counts as changed only where its
 /// digest did: a test program copied in again is the same program. Null
-/// where anything differs or is gone.
-pub fn project_drive_fresh(record: ref fs::Path, handed: ref String) -> String? {
-    let key = project_drive_cargo_key(record, handed)
-    let held = fs::read_to_string(record, fs::Root::Anywhere) catch { return null }
+/// where anything differs or is gone, or where the record, the program or a
+/// file it names lies below none of `roots`, the project's root, the
+/// sysroot of `std`'s sources and the target directory, each read through a
+/// root on the one it lies below (ADR-raw-sinks-1 D17 item 7).
+pub fn project_drive_fresh(record: ref fs::Path, handed: ref String, roots: ref Vec[fs::Path]) -> String? {
+    let kept = project_drive_rooted(record, roots) ?? return null
+    let key = project_drive_cargo_key(kept, handed)
+    let held = fs::read_to_string(kept.below, kept.at) catch { return null }
     let lines: Vec[String] = held.lines().map(fn(line) { line.clone() }).collect()
     if lines.len() < 2 || lines[0] != key {
         return null
     }
-    let binary: fs::Path = lines[1].clone()
-    if !(fs::metadata(binary, fs::Root::Anywhere) catch { return null }).is_file() {
+    let named: fs::Path = lines[1].clone()
+    let binary = project_drive_rooted(named, roots) ?? return null
+    if !(fs::metadata(binary.below, binary.at) catch { return null }).is_file() {
         return null
     }
     for line in lines.iter().skip(2) {
@@ -694,28 +760,36 @@ pub fn project_drive_fresh(record: ref fs::Path, handed: ref String) -> String? 
         if parts.len() != 4 {
             return null
         }
-        let path: fs::Path = parts[3].clone()
-        let meta = fs::metadata(path, fs::Root::Anywhere) catch { return null }
+        let listed: fs::Path = parts[3].clone()
+        let path = project_drive_rooted(listed, roots) ?? return null
+        let meta = fs::metadata(path.below, path.at) catch { return null }
         if f"{meta.len()}" == parts[0] && f"{meta.modified().in_nanos()}" == parts[1] {
             continue
         }
-        if (project_drive_digest(path, meta.is_dir()) ?? return null) != parts[2] {
+        if (project_drive_digest_at(path, meta.is_dir()) ?? return null) != parts[2] {
             return null
         }
     }
-    return fs::read_to_string(record.with_extension("messages"), fs::Root::Anywhere) catch { null }
+    return fs::read_to_string(kept.below.with_extension("messages"), kept.at) catch { null }
 }
 
 /// **The record a build leaves** for `project_drive_fresh`: none where it
-/// failed (`messages` empty), Cargo named no program, or its dependency file
-/// cannot be read. The Rust under `generated` is left out of it.
-pub fn project_drive_record(record: ref fs::Path, handed: ref String, messages: ref String, generated: ref fs::Path) {
-    fs::remove(record, fs::Root::Anywhere) catch {}
+/// failed (`messages` empty), Cargo named no program, its dependency file
+/// cannot be read, or the record, the program, its dependency file or a file
+/// it lists lies below none of `roots` (ADR-raw-sinks-1 D17 item 7). The
+/// Rust under `generated` is left out of it.
+pub fn project_drive_record(record: ref fs::Path, handed: ref String, messages: ref String, generated: ref fs::Path, roots: ref Vec[fs::Path]) {
+    let kept = project_drive_rooted(record, roots) ?? return
+    fs::remove(kept.below, kept.at) catch {}
     let binary = diagnostics_executable_in(messages.clone()) ?? return
-    let key = project_drive_cargo_key(record, handed)
+    let key = project_drive_cargo_key(kept, handed)
     let named = binary.display()
     let dep_info: fs::Path = f"{named}.d"
-    let depends = fs::read_to_string(dep_info, fs::Root::Anywhere) catch { return }
+    let depends_at = project_drive_rooted(dep_info, roots) ?? return
+    if project_drive_rooted(binary, roots) == null {
+        return
+    }
+    let depends = fs::read_to_string(depends_at.below, depends_at.at) catch { return }
     let first = depends.lines().next() ?? return
     let listed = (first.strip_prefix(f"{named}:") ?? return).replace("\\ ", "\u{1f}")
     let mut text = f"{key}\n{named}\n"
@@ -728,12 +802,13 @@ pub fn project_drive_record(record: ref fs::Path, handed: ref String, messages: 
             continue
         }
         let path: fs::Path = word.replace("\u{1f}", " ")
-        let meta = fs::metadata(path, fs::Root::Anywhere) catch { return }
-        let digest = project_drive_digest(path, meta.is_dir()) ?? return
+        let at = project_drive_rooted(path, roots) ?? return
+        let meta = fs::metadata(at.below, at.at) catch { return }
+        let digest = project_drive_digest_at(at, meta.is_dir()) ?? return
         text.push_str(f"{meta.len()}:{meta.modified().in_nanos()}:{digest}:{path.display()}\n")
     }
-    fs::write(record.with_extension("messages"), fs::Root::Anywhere, messages.clone()) catch { return }
-    fs::write(record, fs::Root::Anywhere, text) catch {}
+    fs::write(kept.below.with_extension("messages"), kept.at, messages.clone()) catch { return }
+    fs::write(kept.below, kept.at, text) catch {}
 }
 
 /// Where the wrapper writes the generated Rust of package `name`: the

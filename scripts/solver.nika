@@ -126,7 +126,16 @@ fn solver_toolchain(repo: String) -> String throws {
 		// `$NIKAIA` first: a copy of the repository (a `git archive` tree for
 		// an instrumented solver) has no build of its own (#2006).
 		let named = env::var("NIKAIA") ?? ""
-		if named != "" { return named }
+		// A path from outside, where it reaches `process::run` as an
+		// argument: refused where it starts with `-` or `/` (ADR-raw-sinks-1
+		// D18 item 6, #2722); a relative one passes.
+		if named != "" {
+			if !process::is_operand(named.clone()) {
+				eprintln(f"$NIKAIA starts with `-` or `/`: {named}; name the build relative to the working directory (ADR-raw-sinks-1 D18, #2722)")
+				process::exit(2)
+			}
+			return named
+		}
 		// Run as a built program, not by `nikaia run`: the repository's own
 		// build, only where it exists (#1305).
 		for built in [f"{repo}/target/fast/nikaia", f"{repo}/target/release/nikaia"] {
@@ -150,25 +159,6 @@ fn solver_root() -> String throws {
 }
 
 // --- Assembling and building the program ---
-
-// The files the kept binary is built from, for its key: the package
-// `logic`'s manifest and sources (ADR-270 D26, #2020), sorted by name, and
-// the rod's driver `packages/logic/rod/src/main.nika`. Empty where the
-// package cannot be listed.
-fn solver_program_files(repo: String) -> Vec[String] throws {
-	let listed = process::run(
-		"sh",
-		["-c", "ls \"$1\"/packages/logic/src/*.nika | LC_ALL=C sort", "sh", repo.clone()],
-	)
-	let mut paths: Vec[String] = []
-	if !listed.ok { return paths }
-	paths.push(f"{repo}/packages/logic/nikaia.toml")
-	for line in listed.stdout.lines() {
-		if line != "" { paths.push(line) }
-	}
-	paths.push(f"{solver_rod_dir(repo)}/src/main.nika")
-	return paths
-}
 
 // The rod's package, `packages/logic/rod`: its `main.nika` depends on the
 // package `logic`, which holds the logic layer and the engine.
@@ -217,21 +207,19 @@ fn solver_build_env() -> Vec[(String, String)] {
 // and age). "" where it cannot be taken.
 fn solver_key(repo: String, nikaia: String) -> String throws {
 	let manifest = solver_manifest(repo.clone())
-	if !process::is_operand(nikaia.clone()) { return "" }
-	if !process::is_operand(manifest.clone()) { return "" }
-	let mut args: Vec[String] = [
+	// The files it is built from, listed by the shell under `repo`: the
+	// package `logic`'s manifest and sources (ADR-270 D26, #2020), sorted by
+	// name, and the rod's driver `packages/logic/rod/src/main.nika`. Each
+	// argument starts with a value the compiler trusts, none with a name
+	// `ls` printed (ADR-raw-sinks-1 D18, #2722).
+	let args: Vec[String] = [
 		"-c",
-		"n=$1; m=$2; shift 2; { for f in \"$@\"; do echo \"== ${f##*/}\"; cat \"$f\" || exit 1; done; echo '== nikaia.toml'; printf '%s' \"$m\"; stat -L -c '%s %Y %n' \"$n\" || exit 1; } | sha256sum | cut -c1-16",
+		"n=$1; m=$2; r=$3; export LC_ALL=C; set -- \"$r/packages/logic/nikaia.toml\" \"$r\"/packages/logic/src/*.nika \"$r/packages/logic/rod/src/main.nika\"; { for f in \"$@\"; do echo \"== ${f##*/}\"; cat \"$f\" || exit 1; done; echo '== nikaia.toml'; printf '%s' \"$m\"; stat -L -c '%s %Y %n' \"$n\" || exit 1; } | sha256sum | cut -c1-16",
 		"sh",
 		nikaia,
 		manifest,
+		repo,
 	]
-	let files = solver_program_files(repo)
-	if files.len() == 0 { return "" }
-	for f in files {
-		if !process::is_operand(f.clone()) { return "" }
-		args.push(f.clone())
-	}
 	let out = process::run("sh", args)
 	if !out.ok { return "" }
 	return out.stdout.trim().clone()
@@ -268,10 +256,10 @@ fn solver_cache_dir() -> String {
 // the rustc store and skips rustc. This script, run again in the slot as
 // `--build-in KEY`, writes and builds it there.
 fn solver_build(repo: String, nikaia: String) -> String throws {
-	if !process::is_operand(repo.clone()) { process::exit(2) }
 	let key = solver_key(repo.clone(), nikaia.clone())
 	// The key is a hash `sha256sum` printed, one component by this guard
 	// (ADR-raw-sinks-1 D14), so the paths built from it are not outside.
+	if !process::is_operand(key.clone()) { return "" }
 	if key == "" || !path::is_component(key) {
 		println("the solver program did not build: its files could not be read")
 		return ""
@@ -286,7 +274,6 @@ fn solver_build(repo: String, nikaia: String) -> String throws {
 	if fs::exists(f"{key}/solver_rod", store) { return kept }
 	let main = env::current_main()?.display() ?? f"{repo}/scripts/solver.nika"
 	// Under the lock: built only where no run before this one kept it.
-	if !process::is_operand(kept.clone()) { process::exit(2) }
 	let built = process::run(
 		"flock",
 		[

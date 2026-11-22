@@ -1,0 +1,5 @@
+build: 0, Cargo started: 1
+build again: 0, Cargo started: 0
+record names a path outside the roots: 0
+build with that record: 0, Cargo started: 1
+build after the new record: 0, Cargo started: 0

@@ -145,6 +145,10 @@ impl ModulesHost for Parsing {
         match parser::parse_unrefined(source) {
             Ok(mut parsed) => {
                 parsed.package = package.map(String::from);
+                // A package's files are its `src/*.nika` (`modules_package_at`).
+                parsed.package_root = package
+                    .and_then(|_| path.parent()?.parent())
+                    .map(Path::to_path_buf);
                 let mut kept = self.parsed.borrow_mut();
                 kept.push(Some(parsed));
                 Some(kept.len() as i64 - 1)
