@@ -3874,7 +3874,7 @@ pub mod threads {
 }
 pub mod throws {
     #[allow(unused_imports)]
-    pub use super::{AS_VALUE, MethodsCalled, ThrowsGraph, unit_throws, stored_throws, params_as_places, throws_given, throws_published, error_sets, error_type, Thrown, Contribution};
+    pub use super::{AS_VALUE, MethodsCalled, ThrowsGraph, throws_graph, fatal_types, throws_places, throws_record, unit_throws, stored_throws, params_as_places, throws_given, throws_published, error_sets, throws_of_unit, error_sets_callees_first, throws_callees_first, error_type, Thrown, Contribution};
 }
 pub mod tiers {}
 pub mod toml {
@@ -3946,6 +3946,7 @@ pub fn nikaia_tests() -> std::vec::Vec<(std::string::String, fn() -> Result<(), 
     all.extend(paths_nikaia_tests().into_iter().map(|(name, run)| (name.to_string(), run)));
     all.extend(signature_nikaia_tests().into_iter().map(|(name, run)| (name.to_string(), run)));
     all.extend(threads_nikaia_tests().into_iter().map(|(name, run)| (name.to_string(), run)));
+    all.extend(throws_nikaia_tests().into_iter().map(|(name, run)| (name.to_string(), run)));
     all.extend(toml_nikaia_tests().into_iter().map(|(name, run)| (name.to_string(), run)));
     all.extend(touch_nikaia_tests().into_iter().map(|(name, run)| (name.to_string(), run)));
     all.extend(ty_nikaia_tests().into_iter().map(|(name, run)| (name.to_string(), run)));
@@ -3990,4 +3991,4 @@ pub fn nikaia_run_tests(filters: &[std::string::String], list: bool, more: std::
 /// **The digest of this lowered set** (#1610): every file `lower-std` wrote
 /// beside this index, and the index above this line. Compiled into the same
 /// crate as the code it names, it is the compiler's identity for its caches.
-pub const LOWERED_DIGEST: &str = "5613c89f437944267713c7cf619846db15aa32c3ddc12f8e63f3eeb6f0a04b36";
+pub const LOWERED_DIGEST: &str = "ad9c6bc997310d1de5a5e5985f7e6fbc01e1e9cac356f48aa89731641a4d763f";
