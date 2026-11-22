@@ -553,6 +553,19 @@ pub struct CheckFacts {
     /// A lambda run in place by a parameter whose type says `throws` (#1360):
     /// its body hands back a `Result`, as a kept one's does.
     pub failing_lambdas: collections::BTreeSet[i64],
+    /// **A lambda that fails where the callee says `throws(f)`** (#2736),
+    /// with what it fails with (`"?"` for what nothing names): its closure
+    /// names the `Result` it hands back, which nothing else says below.
+    pub failing_through_lambdas: collections::BTreeMap[i64, Vec[String]],
+    /// **The call such a lambda is handed to**, by its receiver's node: 1 a
+    /// step that makes a walk of failing elements (`Seq::map`), 2 one that
+    /// keeps or drops by it (`Seq::filter`), 3 a walk to its end
+    /// (`Seq::for_each`), 4 a list's own `map`, which fails as it runs.
+    pub failing_through_calls: collections::BTreeMap[i64, i64],
+    /// **A method called on a walk of failing elements** (#2736), by its
+    /// receiver's node: what it does with each element is done inside the
+    /// element's `Result`.
+    pub failing_item_receivers: collections::BTreeSet[i64],
     /// A lambda where the function type hands back nothing (#1321): its
     /// body's last value is dropped, as a named function's is that declares
     /// no result.
@@ -1080,6 +1093,9 @@ impl CheckFacts {
             future_lambdas: collections::BTreeSet(),
             run_lambdas: collections::BTreeSet(),
             failing_lambdas: collections::BTreeSet(),
+            failing_through_lambdas: collections::BTreeMap(),
+            failing_through_calls: collections::BTreeMap(),
+            failing_item_receivers: collections::BTreeSet(),
             valueless_lambdas: collections::BTreeSet(),
             run_code_fails: collections::BTreeSet(),
             changing_lambdas: collections::BTreeMap(),

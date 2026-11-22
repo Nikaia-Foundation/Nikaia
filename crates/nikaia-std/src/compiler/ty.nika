@@ -151,13 +151,18 @@ pub struct Shape {
     /// own other runs (D26), wherever the walk was bound. Not a word a
     /// program writes.
     pub one_at_a_time: bool,
+    /// **Each element carries its step's failure** (#2736): a step whose
+    /// lambda fails (`throws = "throws(f)"`) makes a walk of the language
+    /// below's `Result`s, which the step that ends it unwraps at the first
+    /// failure. Not a word a program writes.
+    pub failing_items: bool,
 }
 
 impl Shape {
     /// None of the three: what a sequence is when nobody said. Named rather
     /// than a `Default`, for ADR-294 D9.4's reason.
     pub fn none() -> Shape {
-        return Shape { ends: false, sized: false, replays: false, timed: false, one_at_a_time: false }
+        return Shape { ends: false, sized: false, replays: false, timed: false, one_at_a_time: false, failing_items: false }
     }
 
     /// Whether a sequence of this shape can go where `wanted` is demanded.
@@ -1098,7 +1103,7 @@ fn a_sequence(written: ref String, word: ref String, parallel: bool) -> Ty? {
         return null
     }
     let item = parse(between(c, 1, close))
-    let shape = Shape { ends: ends, sized: sized, replays: replays, timed: false, one_at_a_time: false }
+    let shape = Shape { ends: ends, sized: sized, replays: replays, timed: false, one_at_a_time: false, failing_items: false }
     return Ty::Seq { item: item, is_sync: is_sync, pauses: pauses, can_throw: can_throw, parallel: parallel, shape: shape }
 }
 
