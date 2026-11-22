@@ -38,7 +38,6 @@ The rules every session and agent needs. What only the main session does
 
 ## Parallel agents share one checkout
 
-* No rebase and no separate worktree with `develop` checked out.
 * **Nobody runs `git reset`, `git stash`, `git checkout .` or `git restore .`**
   in the shared checkout: it throws away the others' work. Restore only your
   own files, by name.
