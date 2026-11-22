@@ -9,5 +9,5 @@ PROVED FELL dddddddd: indexes -0.80 points, operations -1.90 points since 0.0.12
 0.0.13 dddddddd indexes 1490/2000 74.50 % operations 880/1000 88.00 % left 605 reasons 300 no fact for the length | 120 the index comes from a call | 50 a | 20 b | 10 c
 PROVED 0.0.13 dddddddd: indexes 1490/2000 74.50 % (-0.80), left 605; since 0.0.12 cccccccc
 PROVED FELL dddddddd: indexes -0.80 points since 0.0.12 cccccccc, in cccccccc..dddddddd
-WAKE PROVED read=T/proved.log do=find the commit of the range that lowered the proof figure and file it for the prover lane: PROVED FELL dddddddd: indexes -0.80 points since 0.0.12 cccccccc, in cccccccc..dddddddd
+WAKE PROVED read=T/proved.log do=find the commit of the range that lowered the proof figure and file it for the solver lane: PROVED FELL dddddddd: indexes -0.80 points since 0.0.12 cccccccc, in cccccccc..dddddddd
 proved.out left: false
