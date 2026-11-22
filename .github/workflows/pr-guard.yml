@@ -23,12 +23,22 @@ name: PR guard
 # for that reason no code of the pull request is checked out or run, and no
 # text of it is put into a script: names, patches and the description are
 # read as data through the API.
+#
+# Started by hand with a pull request's number, it looks at that pull request
+# as it stands (for one opened before the guard existed). The label and the
+# summary are the same; the failed check then belongs to this run, not to the
+# pull request's checks.
 on:
   pull_request_target:
     types: [opened, reopened, synchronize, edited, ready_for_review]
+  workflow_dispatch:
+    inputs:
+      pr:
+        description: "Number of the pull request to look at"
+        required: true
 
 concurrency:
-  group: pr-guard-${{ github.event.pull_request.number }}
+  group: pr-guard-${{ github.event.pull_request.number || inputs.pr }}
   cancel-in-progress: true
 
 jobs:
@@ -44,7 +54,12 @@ jobs:
         with:
           script: |
             const { owner, repo } = context.repo;
-            const pr = context.payload.pull_request;
+            let pr = context.payload.pull_request;
+            if (context.eventName === 'workflow_dispatch') {
+              const raw = String(context.payload.inputs.pr || '').trim();
+              if (!/^\d+$/.test(raw)) { core.setFailed(`not a pull request number: ${raw}`); return; }
+              pr = (await github.rest.pulls.get({ owner, repo, pull_number: Number(raw) })).data;
+            }
             const inside = ['OWNER', 'MEMBER', 'COLLABORATOR'].includes(pr.author_association);
 
             const compiler = 'crates/nikaia-std/src/compiler/';
