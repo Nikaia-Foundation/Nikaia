@@ -186,6 +186,11 @@ pub struct CheckFacts {
     /// receiver's node (ADR-text-reuse-1 D4): the text is handed to it and
     /// replaced in its own buffer.
     pub replaced_last_uses: collections::BTreeSet[i64],
+    /// **Each give and each reuse, narrated** (ADR-text-reuse-1 D5, #2514):
+    /// the first byte of the site and its line, `rest takes the buffer of
+    /// line` or `replace works in the buffer of x`, which `--tethers` prints
+    /// and the language server shows as an inlay hint.
+    pub narrated: collections::BTreeSet[(i64, String)],
     /// **`into.add(part)` of an `impl Hash`**, by the receiver's node
     /// (ADR-010 D12): the emitter writes the part's own hash.
     pub hasher_adds: collections::BTreeSet[i64],
@@ -940,6 +945,7 @@ impl CheckFacts {
             replaced_in_place: collections::BTreeSet(),
             replaced_assigns: collections::BTreeSet(),
             replaced_last_uses: collections::BTreeSet(),
+            narrated: collections::BTreeSet(),
             hasher_adds: collections::BTreeSet(),
             receiver_views: collections::BTreeSet(),
             bytes_splits: collections::BTreeSet(),

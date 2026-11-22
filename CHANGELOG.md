@@ -8,6 +8,12 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1530] — 2026-11-22
+
+**Builders' changes (#2514, #2649)**
+- `--tethers` names each cut that takes its source's buffer and each `replace` that works in a buffer already there, one `FILE:LINE:` line per site (`rest takes the buffer of line`, `replace works in the buffer of t`), and the language server shows the same text as an inlay hint at the end of that line (ADR-text-reuse-1 D5).
+- Analysis cost per file: `analysis_cost.nika --files` fits each checker analysis as a fixed cost per file plus a cost per line; `docs/analysis-at-scale.md` holds the table for the compiler's 274 files. Every analysis is linear in the lines. A fixed 676 M per file, from package-wide views and returned-place facts, makes up 61 % of the cost.
+
 ## [0.0.1529] — 2026-11-22
 
 **Builders' changes (#2469, #2471, #2472, #2473, #2481, #2482, #2485, #2526, #2577, #2590, #2591)**

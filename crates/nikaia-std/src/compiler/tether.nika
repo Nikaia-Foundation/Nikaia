@@ -325,6 +325,33 @@ fn padded(word: ref String, width: i64) -> String {
     return out
 }
 
+/// **Each give and each reuse a check narrated, by line** (ADR-text-reuse-1
+/// D5, #2514): the first byte of the site, its line from 0 and what it says,
+/// in the order of the file, once per line and text (`x = x.replace(..)` is
+/// narrated as an assignment and as the last use of `x`, which is one site).
+pub fn narrated_lines(narrated: ref collections::BTreeSet[(i64, String)], source: ref String) -> Vec[(i64, i64, String)] {
+    let mut out: Vec[(i64, i64, String)] = []
+    let mut said: collections::BTreeSet[(i64, String)] = collections::BTreeSet()
+    for (at, text) in narrated {
+        let (line, _) = lsp_position(source, at)
+        if said.insert((line, text.clone())) {
+            out.push((at, line, text.clone()))
+        }
+    }
+    return out
+}
+
+/// **`--tethers`' lines of the gives and reuses** (ADR-text-reuse-1 D5,
+/// #2514): one per site, `FILE:LINE: rest takes the buffer of line` or
+/// `FILE:LINE: replace works in the buffer of x`, the line from 1.
+pub fn reuses_report(narrated: ref collections::BTreeSet[(i64, String)], source: ref String, path: ref String) -> String {
+    let mut out = String()
+    for (_, line, text) in narrated_lines(narrated, source) {
+        out.push_str(f"{path}:{line + 1}: {text}\n")
+    }
+    return out
+}
+
 /// What the analysis solved, in the words a reader asks the question in:
 /// first what a `String` field or result is below (`texts`, ADR-282 D26), then
 /// each function of this file that holds a view, and where each buffer lives

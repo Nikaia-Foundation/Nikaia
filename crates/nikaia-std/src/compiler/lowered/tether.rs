@@ -214,6 +214,23 @@ pub(crate) fn padded(word: &str, width: i64) -> String {
     out
 }
 
+pub fn narrated_lines(narrated: &collections::BTreeSet<(i64, String)>, source: &str) -> Vec<(i64, i64, String)> {
+    let mut out: Vec<(i64, i64, String)> = vec![];
+    let mut said: collections::BTreeSet<(i64, String)> = collections::BTreeSet::new();
+    for (at, text) in narrated.iter() {
+        let at = nikaia_std::num::value(at);
+        let (line, _) = lsp_position(source, at);
+        if said.insert((line, nikaia_std::block::Text::from(text.to_string()))) { out.push((at, line, nikaia_std::block::Text::from(text.to_string()))); }
+    }
+    out
+}
+
+pub fn reuses_report(narrated: &collections::BTreeSet<(i64, String)>, source: &str, path: &str) -> String {
+    let mut out = String::new();
+    for (_, line, text) in narrated_lines(narrated, source) { { use ::core::fmt::Write as _; let _ = out.write_fmt(format_args!("{}:{}: {}\n", path, line + 1, text)); }; }
+    out
+}
+
 pub fn tethers_report(texts: &[String], ledger: &Ledger, here: &collections::BTreeSet<String>, plans: &[BufferPlan], library: &Ledger) -> String {
     #[allow(unused_mut)] let mut lines: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     if !texts.is_empty() {
