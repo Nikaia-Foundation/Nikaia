@@ -1,0 +1,32 @@
+// `<` where the type has an order (#2123): a float, text, a tuple and a list
+// of ordered parts, a `time::Duration` and `time::Instant` (their ledger says
+// `orders`), a declared type through `impl Ord`, and a bounded type parameter.
+use std::time
+
+struct K {
+    v: i64,
+}
+
+impl Ord for K {
+    fn compare(self, other: K) -> Ordering sync {
+        return self.v.compare(other.v)
+    }
+}
+
+fn least[T: Ord](a: T, b: T) -> bool {
+    return a < b
+}
+
+fn main() throws {
+    let f = 1.5
+    let s: String = "a"
+    let t = (1, 2.5)
+    let u = (1, 3.5)
+    let v: Vec[i64] = [1, 2]
+    let w: Vec[i64] = [1, 3]
+    let d = 1.seconds()
+    let e = 2.seconds()
+    let now = time::now()
+    println(f"{f < 2.0} {s < "b"} {'a' < 'b'} {false < true} {t < u} {v < w} {d < e} {now <= now}")
+    println(f"{K { v: 1 } < K { v: 2 }} {least(1, 2)}")
+}

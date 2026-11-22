@@ -14,6 +14,7 @@ pub enum CompareStrength {
     Compares,
     Totally,
     Orders,
+    Ranks,
     Hashes,
 }
 
@@ -40,6 +41,10 @@ impl<'a> CheckComparable<'a, 'a, 'a, 'a, 'a, 'a, 'a> {
     pub fn orders(&self, ty: &'a Ty) -> bool {
         let mut seen: collections::BTreeSet<String> = collections::BTreeSet::new();
         self.asking(ty, &CompareStrength::Orders, &mut seen)
+    }
+    pub fn ranks(&self, ty: &'a Ty) -> bool {
+        let mut seen: collections::BTreeSet<String> = collections::BTreeSet::new();
+        self.asking(ty, &CompareStrength::Ranks, &mut seen)
     }
     pub fn hashes(&self, ty: &'a Ty) -> bool {
         let mut seen: collections::BTreeSet<String> = collections::BTreeSet::new();
@@ -127,8 +132,8 @@ impl<'a> CheckComparable<'a, 'a, 'a, 'a, 'a, 'a, 'a> {
         true
     }
     pub(crate) fn named(&self, name: &'a str, args: &'a Vec<Ty>, how: &CompareStrength, seen: &mut collections::BTreeSet<String>) -> bool {
-        if (*how == CompareStrength::Orders || *how == CompareStrength::Hashes) && nikaia_std::list::contains(&COMPARE_UNORDERED, &name) { return false; }
-        if name == "f32" || name == "f64" { return *how == CompareStrength::Compares; }
+        if (*how == CompareStrength::Orders || *how == CompareStrength::Ranks || *how == CompareStrength::Hashes) && nikaia_std::list::contains(&COMPARE_UNORDERED, &name) { return false; }
+        if name == "f32" || name == "f64" { return *how == CompareStrength::Compares || *how == CompareStrength::Ranks; }
         if nikaia_std::list::contains(&COMPARE_PLAIN, &name) { return true; }
         if nikaia_std::list::contains(&COMPARE_CONTAINERS, &name) && !self.structs.contains_key(name) && !self.enums.contains_key(name) { return self.all_of(args, &how, seen); }
         let mut key = nikaia_std::block::Text::from(name.to_string());
@@ -148,7 +153,7 @@ impl<'a> CheckComparable<'a, 'a, 'a, 'a, 'a, 'a, 'a> {
             if *how == CompareStrength::Hashes {
                 if self.implements("Hash", name) { return true; }
                 if self.implements("Eq", name) { return false; }
-            } else if *how == CompareStrength::Orders { return self.implements("Ord", name); } else if self.implements("Eq", name) { return true; }
+            } else if *how == CompareStrength::Orders || *how == CompareStrength::Ranks { return self.implements("Ord", name); } else if self.implements("Eq", name) { return true; }
         }
         if self.structs.contains_key(name) {
             let fields = match self.structs.get(name) { Some(__nikaia_value) => __nikaia_value, None => return true };
@@ -182,12 +187,13 @@ impl<'a> CheckComparable<'a, 'a, 'a, 'a, 'a, 'a, 'a> {
         if *how == CompareStrength::Hashes {
             if self.implements("Hash", name) { return true; }
             if self.implements("Eq", name) { return false; }
-        } else if *how == CompareStrength::Orders { if self.implements("Ord", name) { return true; } } else if self.implements("Eq", name) { return true; }
+        } else if *how == CompareStrength::Orders || *how == CompareStrength::Ranks { if self.implements("Ord", name) { return true; } } else if self.implements("Eq", name) { return true; }
         for ledger in [self.own, self.library] {
             let contract = match ledger.types.get(name) { Some(__nikaia_value) => __nikaia_value, None => continue };
             let claimed = match how {
                 CompareStrength::Compares => contract.compares,
                 CompareStrength::Orders => contract.orders,
+                CompareStrength::Ranks => contract.orders,
                 CompareStrength::Totally => contract.equates,
                 CompareStrength::Hashes => contract.hashes,
             };
@@ -263,6 +269,14 @@ pub(crate) fn compare_refusal(asking: &CheckComparable<'_, '_, '_, '_, '_, '_, '
     if found == "" { return None; }
     let note: String = String::from("A `struct` or an `enum` can be compared when all of its parts can. Locks, mapped files, sockets and task handles can't be compared.");
     Some(check_refusal("NK1188", span, format!("You can't compare two `{}` values with `==`.", found), vec![note], Some(String::from("Compare the parts that matter, or give the type a method that says what being equal means for it."))))
+}
+
+pub(crate) fn compare_order_refusal(asking: &CheckComparable<'_, '_, '_, '_, '_, '_, '_>, op: &str, left: &Ty, right: &Ty, span: &Span) -> Option<CheckFinding> {
+    let mut found: String = String::from("");
+    if !asking.ranks(left) { found = left.shown(); } else if !asking.ranks(right) { found = right.shown(); }
+    if found == "" { return None; }
+    let note: String = String::from("A number, a `String`, a `bool`, a `scalar`, and a tuple, list or option of those have an order. A `struct` or an `enum` you declare has one only through `impl Ord`, and a type from a library only where its ledger says `orders = true`.");
+    Some(check_refusal("NK1188", span, format!("You can't order two `{}` values with `{}`.", found, op), vec![note], Some(format!("Compare the parts that matter, or write `impl Ord for {} {{ … }}` where it is your type.", found))))
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]

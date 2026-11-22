@@ -1,0 +1,25 @@
+error[NK1188]: You can't order two `P` values with `<`.
+   --> tests/an_order_on_a_type_without_one_is_refused.nika:19:18
+    |
+ 19 |     println(f"{a < b} {c >= Colour::Green}")
+    |                  ^^^
+    |
+    = note: A number, a `String`, a `bool`, a `scalar`, and a tuple, list or option of those have an order. A `struct` or an `enum` you declare has one only through `impl Ord`, and a type from a library only where its ledger says `orders = true`.
+    = help: Compare the parts that matter, or write `impl Ord for P { … }` where it is your type.
+error[NK1188]: You can't order two `Colour` values with `>=`.
+   --> tests/an_order_on_a_type_without_one_is_refused.nika:19:26
+    |
+ 19 |     println(f"{a < b} {c >= Colour::Green}")
+    |                          ^^^^^^^^^^^^^^^^
+    |
+    = note: A number, a `String`, a `bool`, a `scalar`, and a tuple, list or option of those have an order. A `struct` or an `enum` you declare has one only through `impl Ord`, and a type from a library only where its ledger says `orders = true`.
+    = help: Compare the parts that matter, or write `impl Ord for Colour { … }` where it is your type.
+error[NK1188]: You can't order two `target::Instruction` values with `<`.
+   --> tests/an_order_on_a_type_without_one_is_refused.nika:21:18
+    |
+ 21 |     println(f"{i < target::Instruction::Bmi2}")
+    |                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: A number, a `String`, a `bool`, a `scalar`, and a tuple, list or option of those have an order. A `struct` or an `enum` you declare has one only through `impl Ord`, and a type from a library only where its ledger says `orders = true`.
+    = help: Compare the parts that matter, or write `impl Ord for target::Instruction { … }` where it is your type.
+3 type errors

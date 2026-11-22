@@ -6595,6 +6595,7 @@ pub = true
 pub = true
 crosses = true
 compares = true
+orders = true
 copies = true
 constant = "time::Duration::new(secs: u64, nanos: u32)"
 
@@ -6821,6 +6822,7 @@ signature = "(self, other: time::Duration) -> time::Duration"
 pub = true
 crosses = true
 compares = true
+orders = true
 copies = true
 
 # **No `touches`**, the fail-closed answer: what a clock read orders against is
