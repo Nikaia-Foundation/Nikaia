@@ -1,4 +1,5 @@
-// scripts/drive.nika --docs-only FILE: the path rule of scripts/ci-changes.sh by
+// scripts/drive.nika --docs-only (the paths on standard input, #2577):
+// the path rule of scripts/ci-changes.sh by
 // which the driver pushes unpushed documentation commits without the suite.
 use std::env
 use std::fs
@@ -15,8 +16,7 @@ fn root() -> String throws {
 }
 
 fn case(nikaia: String, repo: String, tmp: ref fs::Root, name: String, paths: String) throws {
-    fs::write(f"{name}", tmp, paths)
-    let out = process::run(nikaia, ["run", "scripts/drive.nika", "--", "--docs-only", f"{tmp.path().to_text()}/{name}"]; dir: repo)
+    let out = process::run(nikaia, ["run", "scripts/drive.nika", "--", "--docs-only"]; dir: repo, stdin: process::Input::Text(paths))
     println(f"== {name}")
     println(out.stdout.trim())
 }

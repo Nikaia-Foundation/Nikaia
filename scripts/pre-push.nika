@@ -72,8 +72,9 @@ fn page_examples(copy: String) -> bool throws {
     process::run("cp", ["-r", "tests/page-examples/target", f"{dir}/"])
     let bin = pre_push_bin()
     let path = env::var("PATH") ?? ""
-    let exe = if bin == "" { "nikaia" } else { f"{bin}/nikaia" }
-    let out = process::run(exe, ["test"]; dir: dir, env: [("PATH", f"{bin}:{path}")])
+    // Started from the working directory, so that the literal relative path
+    // names the build (ADR-raw-sinks-1 D11); the package goes by `--project`.
+    let out = process::run(pre_push_exe(), ["test", "--project", dir]; env: [("PATH", f"{bin}:{path}")])
     if out.code == 0 {
         println("page-examples green")
         return true
@@ -82,6 +83,18 @@ fn page_examples(copy: String) -> bool throws {
     println(out.stdout.trim_end())
     println(out.stderr.trim_end())
     return false
+}
+
+// The repository's built compiler by its literal path, the order of
+// `pre_push_bin`; `nikaia` on PATH when neither is built.
+fn pre_push_exe() -> String throws {
+    return match fs::exists("target/fast/nikaia", fs::Root::Anywhere) {
+        true => "target/fast/nikaia",
+        false => match fs::exists("target/release/nikaia", fs::Root::Anywhere) {
+            true => "target/release/nikaia",
+            false => "nikaia",
+        },
+    }
 }
 
 // The directory of the repository's built compiler, absolute; "" when

@@ -31,23 +31,36 @@ fn run(repo: String, nikaia: String, script: String, args: Vec[String]) throws {
     println(f"exit {out.code}")
 }
 
+// A lane of this test's own under the checkout's target/drive-test/ (#2577):
+// drive opens every name under fs::Root::Dir("."), the checkout it runs in, so
+// it gets the lane's names relative to it. The scratch directory's name keeps
+// the two runs of `--both-settings` apart.
+fn test_lane(repo: String, name: String) -> String throws {
+    let id = fs::scratch().path().file_name()?.to_text() ?? "run"
+    let lane = f"target/drive-test/{name}/{id}"
+    fs::create_dir(lane, fs::Root::Dir(repo); recursive: true)
+    return lane
+}
+
 fn main() throws {
     let repo = root()
     let nikaia = toolchain()
-    let dir = fs::scratch()
-    let good = f"{dir.path().to_text()}/good.md"
+    let lane = test_lane(repo.clone(), "drive_issue_check")
+    let dir = fs::Root::Dir(f"{repo}/{lane}")
+    let good = f"{lane}/good.md"
     fs::write("good.md", dir, "## Problem\n\nIt breaks.\n\nNeeds #900\nPart of #901\n\n## To build\n\n1. Build on #900, inside #901 (as #902 asked).\n2. A `SKIPPED #903` line is quoted.\n\n## Done when\n\nThe test passes.\n")
     run(repo.clone(), nikaia.clone(), "scripts/issue-check.nika", ["--body", good, "--open", "900", "901", "902", "903"])
-    let bad = f"{dir.path().to_text()}/bad.md"
+    let bad = f"{lane}/bad.md"
     fs::write("bad.md", dir, "## Problem\n\nIt breaks.\n\n**To build**\n\n1. Use the key decided in #904.\n2. Then #905, which is closed.\n\n**Done when:** the test passes.\n")
     run(repo.clone(), nikaia.clone(), "scripts/issue-check.nika", ["--body", bad, "--open", "904"])
-    let none = f"{dir.path().to_text()}/none.md"
+    let none = f"{lane}/none.md"
     fs::write("none.md", dir, "It breaks, see #904.\n")
     run(repo.clone(), nikaia.clone(), "scripts/issue-check.nika", ["--body", none, "--open", "904"])
-    let list = f"{dir.path().to_text()}/issues.txt"
+    let list = f"{lane}/issues.txt"
     fs::write("issues.txt", dir, "=== #30 ===\n## To build\n\n1. Do it.\n\n## Done when\n\nDone.\n=== #31 ===\n## To build\n\n1. Use the key decided in #904.\n\n## Done when\n\nDone.\n=== #32 ===\nNeeds #904\n\n## To build\n\n1. Use #904.\n\n## Done when\n\nDone.\n=== #33 ===\nFound while #904\n\n## To build\n\n1. Fix it beside #904.\n\n## Done when\n\nDone.\n=== #34 ===\nNo form at all.\n")
     run(repo.clone(), nikaia.clone(), "scripts/drive.nika", ["--queue-check", list, "904"])
-    let report = f"{dir.path().to_text()}/report.md"
+    let report = f"{lane}/report.md"
     fs::write("report.md", dir, "Result: done\nIssue: partly wrong I7: the cause was half right\nNeeds: none\nFriction: none\n")
-    run(repo, nikaia, "scripts/drive.nika", ["--improve-plan", "issue-1991", "1991", report, f"{dir.path().to_text()}/none.md"])
+    run(repo.clone(), nikaia, "scripts/drive.nika", ["--improve-plan", "issue-1991", "1991", report, f"{lane}/none.md"])
+    fs::remove(lane, fs::Root::Dir(repo); recursive: true)
 }

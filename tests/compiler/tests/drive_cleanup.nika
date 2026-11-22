@@ -38,6 +38,17 @@ fn unsha(text: String) -> String throws {
     return lines.join("\n")
 }
 
+// A lane of this test's own under the checkout's target/drive-test/ (#2577):
+// drive opens every name under fs::Root::Dir("."), the checkout it runs in, so
+// it gets the lane's names relative to it. The scratch directory's name keeps
+// the two runs of `--both-settings` apart.
+fn test_lane(repo: String, name: String) -> String throws {
+    let id = fs::scratch().path().file_name()?.to_text() ?? "run"
+    let lane = f"target/drive-test/{name}/{id}"
+    fs::create_dir(lane, fs::Root::Dir(repo); recursive: true)
+    return lane
+}
+
 fn main() throws {
     let repo = root()
     let nikaia = toolchain(repo.clone())
@@ -65,16 +76,19 @@ fn main() throws {
     println(f"target/debug with a cargo running: {kept}")
     // Before an agent (a dry run of a NEXT line): under 6 GB free the cleanup
     // runs at once; still under 3 GB after it, the driver escalates.
-    fs::write("b1.md", tmp, "x\n")
-    fs::write("lines", tmp, f"CI aaaa1111 green\nNEXT {tmp.path().to_text()}/b1.md builder sonnet 80 12\n")
+    let lane = test_lane(repo.clone(), "drive_cleanup")
+    let mine = fs::Root::Dir(f"{repo}/{lane}")
+    fs::write("b1.md", mine, "x\n")
+    fs::write("lines", mine, f"CI aaaa1111 green\nNEXT {lane}/b1.md builder sonnet 80 12\n")
     for free in ["5000", "2000"] {
         let faked: Vec[(String, String)] = [("HOME", tmp.path().to_text()), ("NIKAIA_DRIVE_FREE_MB", free.clone())]
-        let dry = process::run(nikaia, ["run", "scripts/drive.nika", "--", tmp.path().to_text(), "--lines", f"{tmp.path().to_text()}/lines", "--dry-run"]; dir: repo.clone(), env: faked, env_remove: ["NIKAIA_SUITE_DIR"])
+        let dry = process::run(nikaia, ["run", "scripts/drive.nika", "--", lane.clone(), "--lines", f"{lane}/lines", "--dry-run"]; dir: repo.clone(), env: faked, env_remove: ["NIKAIA_SUITE_DIR"])
         println(f"== {free} MB free (exit {dry.code})")
         for line in dry.stdout.trim().split("\n") {
-            if line.starts_with("DISK") || line.starts_with("ESCALATE") || line.starts_with("DRY-RUN") || line.contains("cache prune") { println(unsha(line.clone()).replace(tmp.path().to_text(), "T").replace("target/release/nikaia", "target/fast/nikaia")) }
+            if line.starts_with("DISK") || line.starts_with("ESCALATE") || line.starts_with("DRY-RUN") || line.contains("cache prune") { println(unsha(line.clone()).replace(f"{repo}/{lane}", "T").replace(lane.clone(), "T").replace("target/release/nikaia", "target/fast/nikaia")) }
         }
     }
+    fs::remove(lane, fs::Root::Dir(repo.clone()); recursive: true)
     // The old variants in a deps directory (#2318): a name's files of an
     // older hash go when over 3 h old; the newest hash stays at any age, a
     // recent older hash stays, and a file without a hash stays.

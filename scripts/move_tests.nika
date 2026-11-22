@@ -9,6 +9,8 @@
 
 use std::cli
 use std::fs
+use std::path
+use std::process
 
 fn block_end(lines: ref Vec[ref String], from: i64) -> i64 {
     let mut j = from
@@ -46,7 +48,13 @@ fn main() throws {
     for a in cli::args() { args.push(a) }
     let rust_path = args[1].clone()
     let dir = args[2].clone()
-    let text = fs::read_to_string(rust_path.clone(), fs::Root::Anywhere)
+    // The Rust file and the test directory lie below the working directory.
+    if !path::is_below(rust_path) || !path::is_below(dir) {
+        println(f"refused: {rust_path} and {dir} must be relative paths below the working directory")
+        process::exit(2)
+    }
+    let here = fs::Root::Dir(".")
+    let text = fs::read_to_string(rust_path.clone(), here)
     let lines: Vec[String] = text.split("\n").collect()
     let mut kept: Vec[String] = []
     let mut i = 0
@@ -87,9 +95,9 @@ fn main() throws {
             if inside { out.push(line.clone()) }
             if line.trim() == "r#\"" { inside = true }
         }
-        fs::write(f"{dir}/{name}.nika", fs::Root::Anywhere, out.join("\n") + "\n")
+        fs::write(f"{dir}/{name}.nika", here, out.join("\n") + "\n")
         let ext = if refusal { "stderr" } else { "stdout" }
-        fs::write(f"{dir}/{name}.{ext}", fs::Root::Anywhere, "")
+        fs::write(f"{dir}/{name}.{ext}", here, "")
         // Drop the doc comment and blank line already kept.
         let mut drop = i - first
         while drop > 0 {
@@ -99,7 +107,7 @@ fn main() throws {
         moved += 1
         i = end + 1
     }
-    fs::write(rust_path, fs::Root::Anywhere, kept.join("\n"))
+    fs::write(rust_path, here, kept.join("\n"))
     println(f"moved {moved}")
 }
 

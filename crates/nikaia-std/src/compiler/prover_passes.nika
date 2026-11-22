@@ -25,6 +25,15 @@ pub fn prover_passes(mut walk: ProverWalk, program: ref Program, words: ref winn
     walk.state.std_properties = prover_std_properties(library)
     // What a `std` method ensures of them on its receiver (ADR-381 D5).
     walk.state.std_ensured = prover_std_ensured(library, walk.state.std_properties)
+    // And a dependency's free functions, by the path the program calls them
+    // with (ADR-381 D1, D3: `db::is_identifier`, ADR-raw-sinks-1 D2).
+    let theirs = prover_std_properties(own)
+    for (key, contract) in own.functions {
+        let signature = contract.signature ?? continue
+        if key.contains("::") && !signature.takes_a_receiver() && theirs.contains(key) {
+            walk.state.std_properties.insert(key.clone())
+        }
+    }
     // Pass 1: which parameter claims are preconditions (D5) - a function's
     // own `assert`s, and what its calls ask that it cannot show (D15). The
     // second depends on the callees' preconditions, so the pass repeats with

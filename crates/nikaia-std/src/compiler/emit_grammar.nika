@@ -1121,6 +1121,24 @@ impl EmitState {
         return false
     }
 
+    /// **A member's value into its field** (ADR-grammar-typed-read-v1 D3,
+    /// #2602): a value rule hands text back as a view of the input, and the
+    /// field owns it. Text goes in by `IntoMember`, a list of text item by
+    /// item, so a `Vec[String]` or a `Vec[String]?` field takes the list a
+    /// rule read.
+    fn member_into[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, host: ref H, ty: ref Type, value: ref String) -> String sync throws {
+        if !member_lists_text(world, ty) {
+            return f"::nikaia_std::grammar::IntoMember::into_member({value})"
+        }
+        if ty.is_nullable {
+            let mut inner = ty.clone()
+            inner.is_nullable = false
+            return f"{value}.map(|x| -> {host.ty_named(walk, inner)} {{ {self.member_into(world, walk, host, inner, "x")} }})"
+        }
+        let item = ty.generics[0]
+        return f"{value}.into_iter().map(|x| -> {host.ty_named(walk, item)} {{ {self.member_into(world, walk, host, item, "x")} }}).collect::<{host.ty_named(walk, ty)}>()"
+    }
+
     /// **An action that can fail** (Part II 10.8, #557): its body runs as a
     /// `throws` function's does, and its failure is the alternative's, with
     /// the error's message in the `ParseError` (the backend's `external`).
@@ -1159,8 +1177,10 @@ impl EmitState {
                     out.push(f"let mut f{i}: {slots[i]} = None; ")
                 }
                 out.push("for piece in pieces { ")
+                // Each field's check ends in `;`: two `if`s on one line with
+                // nothing between read to clippy as a lost `else` (#2602).
                 for i in 0..<fields.len() {
-                    out.push(f"if let Some(v) = piece.{i} {{ if f{i}.is_some() {{ {fail}::nikaia_std::grammar::member_error({names[i]}, \"is given twice\")))); }} f{i} = Some(v); }} ")
+                    out.push(f"if let Some(v) = piece.{i} {{ if f{i}.is_some() {{ {fail}::nikaia_std::grammar::member_error({names[i]}, \"is given twice\")))); }} f{i} = Some(v); }}; ")
                 }
                 out.push("} ")
                 let defaults = self.field_defaults(world, owner)
@@ -1216,7 +1236,7 @@ impl EmitState {
                         null => {},
                     }
                     let mut one = nothing.clone()
-                    one[i] = "Some(Some(::nikaia_std::grammar::IntoMember::into_member(v)))"
+                    one[i] = f"Some(Some({self.member_into(world, walk, host, fields[i].ty, "v")}))"
                     out.push(f"        {separator}if(i == {i}) v:{emit_text(world, fields[i].value)}\n")
                     out.push(f"            -> {{ Some({emit_members_tuple(one)}) }}\n")
                     separator = "| "
@@ -1270,4 +1290,20 @@ fn emit_named_option(world: ref EmitWorld, spec: ref FoldSpec, wanted: ref Strin
         }
     }
     return -1
+}
+
+/// Whether a field's type is a list whose items are text, or lists of it,
+/// each perhaps `null`: the member's value then goes in item by item.
+fn member_lists_text(world: ref EmitWorld, ty: ref Type) -> bool {
+    return emit_text(world, ty.name) == "Vec" && ty.generics.len() == 1 && !ty.is_view && member_text_inside(world, ty.generics[0])
+}
+
+fn member_text_inside(world: ref EmitWorld, ty: ref Type) -> bool {
+    if ty.is_view || ty.is_tuple || ty.code != null {
+        return false
+    }
+    if emit_text(world, ty.name) == "String" && ty.generics.len() == 0 {
+        return true
+    }
+    return member_lists_text(world, ty)
 }

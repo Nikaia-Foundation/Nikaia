@@ -47,7 +47,9 @@
 // `medium` for a hard one. Another value escalates (`--info` prints it as is).
 
 use std::cli
+use std::env
 use std::fs
+use std::path
 use std::process
 use std::text
 
@@ -116,15 +118,32 @@ fn agent_resume_args(brief: String, body: String, session: String) -> Vec[String
     return v
 }
 
-// Where claude keeps the transcript of a session started in this directory.
+// Where claude keeps the transcripts of sessions started in this directory:
+// `$CLAUDE_CONFIG_DIR` (else `$HOME/.claude`), `projects/`, and the working
+// directory with each scalar but an ASCII letter or digit as `-`. The
+// operator's environment chooses it (ADR-397 D1).
+fn agent_projects() -> String throws {
+    let conf = env::var("CLAUDE_CONFIG_DIR") ?? f"{env::var("HOME") ?? ""}/.claude"
+    let cwd = fs::canonical(".", fs::Root::Dir(".")).display()
+    let mut munged = ""
+    for c in cwd.scalars {
+        if (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') { munged = munged + f"{c}" } else { munged = munged + "-" }
+    }
+    return f"{conf}/projects/{munged}"
+}
+
+// Where claude keeps the transcript of a session started in this directory;
+// "" for a session id that is no single path component.
 fn agent_transcript(session: String) -> String throws {
-    let path = "${CLAUDE_CONFIG_DIR:-$HOME/.claude}/projects/$(pwd | sed 's/[^a-zA-Z0-9]/-/g')/" + session + ".jsonl"
-    return process::run("sh", ["-c", "echo " + path]).stdout.trim().clone()
+    if !path::is_component(session) { return "" }
+    let projects = agent_projects()
+    return f"{projects}/{session}.jsonl"
 }
 
 // The environment claude runs with (#2459): NIKAIA_OLD, the absolute path of
 // HEAD's before-binary target/bins/<sha12>/nikaia, which the driver made
-// (drive_bins); none where it is missing.
+// (drive_bins); none where it is missing. Looked up under Anywhere: `target` may be a
+// symlink out of the working directory (the agent_script test), which a Dir root refuses.
 fn agent_old_env() -> Vec[(String, String)] throws {
     let mut env: Vec[(String, String)] = []
     let sha = process::run("git", ["rev-parse", "--short=12", "HEAD"]).stdout.trim().clone()
@@ -140,7 +159,7 @@ fn agent_old_env() -> Vec[(String, String)] throws {
 fn agent_report(abs: String) -> String throws {
     let report = f"{abs}.report.md"
     let stem = (abs.strip_suffix(".md") ?? "").clone()
-    if !fs::exists(report.clone(), fs::Root::Anywhere) && stem != "" { return f"{stem}.report.md" }
+    if !fs::exists(report.clone(), fs::Root::Dir(".")) && stem != "" { return f"{stem}.report.md" }
     return report
 }
 
@@ -149,7 +168,7 @@ fn agent_report(abs: String) -> String throws {
 fn agent_resumable(abs: String, record: String, sum: String) -> String throws {
     let words = record.trim().split(" ").collect()
     if words.len() != 2 || words[1] != sum || words[0] == "" { return "" }
-    if fs::exists(agent_report(abs), fs::Root::Anywhere) { return "" }
+    if fs::exists(agent_report(abs), fs::Root::Dir(".")) { return "" }
     if !fs::exists(agent_transcript(words[0].clone()), fs::Root::Anywhere) { return "" }
     return words[0].clone()
 }
@@ -241,7 +260,7 @@ fn agent_usd(micro: i64) -> String throws {
 }
 
 fn agent_escalate(dir: String, why: String) throws {
-    fs::write(f"{dir}/ESCALATE", fs::Root::Anywhere, why.clone() + "\n")
+    fs::write(f"{dir}/ESCALATE", fs::Root::Dir("."), why.clone() + "\n")
     println(f"ESCALATE {why}")
     process::exit(2)
 }
@@ -480,8 +499,8 @@ fn agent_exe() -> String throws {
 }
 
 fn agent_read(path: String) -> String throws {
-    if !fs::exists(path.clone(), fs::Root::Anywhere) { return "" }
-    return fs::read_to_string(path, fs::Root::Anywhere)
+    if !fs::exists(path.clone(), fs::Root::Dir(".")) { return "" }
+    return fs::read_to_string(path, fs::Root::Dir("."))
 }
 
 fn main() throws {
@@ -509,9 +528,16 @@ fn main() throws {
         println("usage: nikaia run scripts/agent.nika -- BRIEF [--dir DIR] [--dry-run] [--claude CMD]")
         process::exit(2)
     }
+    // DIR, the brief and the files beside it lie below the working directory;
+    // without --dir it is the brief's own directory, as given.
+    if dir == "" { dir = process::run("dirname", [brief.clone()]).stdout.trim().clone() }
+    if !path::is_below(dir) {
+        println(f"refused: --dir {dir} is not a relative path below the working directory")
+        process::exit(2)
+    }
+    let here = fs::Root::Dir(".")
     let abs = process::run("realpath", [brief]).stdout.trim().clone()
-    if dir == "" { dir = process::run("dirname", [abs.clone()]).stdout.trim().clone() }
-    let text = fs::read_to_string(abs.clone(), fs::Root::Anywhere)
+    let text = fs::read_to_string(abs.clone(), here)
     if info {
         println(agent_front(text.clone(), "agent", "builder") + " " + agent_front(text.clone(), "model", "sonnet") + " " + agent_front(text.clone(), "max_turns", "120") + " " + agent_front(text.clone(), "budget_usd", "20") + " " + agent_effort(text))
         return
@@ -524,7 +550,8 @@ fn main() throws {
         }
         agent_escalate(dir.clone(), f"effort {effort} in {abs} is not low, medium or high")
     }
-    let mut wanted = agent_read("/proc/sys/kernel/random/uuid").trim().clone()
+    let mut wanted: String = ""
+    if fs::exists("/proc/sys/kernel/random/uuid", fs::Root::Anywhere) { wanted = fs::read_to_string("/proc/sys/kernel/random/uuid", fs::Root::Anywhere).trim().clone() }
     let mut claude_args = agent_args(abs.clone(), text.clone(), wanted.clone())
     // Core and the sections of docs/builder-facts-lookup.md the brief names go into its prompt.
     let facts = agent_read("docs/builder-facts.md") + "\n" + agent_read("docs/builder-facts-lookup.md")
@@ -553,7 +580,7 @@ fn main() throws {
         println(claude + " " + claude_args.join(" "))
         return
     }
-    if fs::exists(f"{dir}/ESCALATE", fs::Root::Anywhere) {
+    if fs::exists(f"{dir}/ESCALATE", here) {
         println(f"refused: {dir}/ESCALATE exists")
         process::exit(2)
     }
@@ -570,7 +597,7 @@ fn main() throws {
     let mut out = process::run("true", [])
     let old_env = agent_old_env()
     if resumed != "" {
-        fs::write(record.clone(), fs::Root::Anywhere, f"{resumed} {sum} resumed\n")
+        fs::write(record.clone(), here, f"{resumed} {sum} resumed\n")
         out = process::run(claude.clone(), agent_resume_args(abs.clone(), text.clone(), resumed.clone()); env: old_env.clone(), within: 150.minutes())
         if !out.timed_out && agent_json(out.stdout.clone(), "session_id") == "" {
             println(f"resume of {resumed} failed at once (code {out.code}), starting fresh")
@@ -580,11 +607,11 @@ fn main() throws {
         }
     }
     if resumed == "" {
-        fs::write(record.clone(), fs::Root::Anywhere, f"{wanted} {sum}\n")
+        fs::write(record.clone(), here, f"{wanted} {sum}\n")
         out = process::run(claude.clone(), claude_args; env: old_env, within: 150.minutes())
     }
     let json = out.stdout
-    fs::write(f"{abs}.run.json", fs::Root::Anywhere, json.clone())
+    fs::write(f"{abs}.run.json", here, json.clone())
     let cost = agent_json(json.clone(), "total_cost_usd")
     let session = agent_json(json.clone(), "session_id")
     let exe = agent_exe()
@@ -604,11 +631,11 @@ fn main() throws {
     let stem = (abs.strip_suffix(".md") ?? "").clone()
     let report = agent_report(abs.clone())
     // A report ends the run: nothing left to resume.
-    if fs::exists(report.clone(), fs::Root::Anywhere) { fs::remove(record, fs::Root::Anywhere) }
+    if fs::exists(report.clone(), here) { fs::remove(record, here) }
     // A run cut off by the time limit prints no JSON: no empty cost line.
     if cost != "" {
         let old_cost = agent_read(f"{dir}/cost.txt")
-        fs::write(f"{dir}/cost.txt", fs::Root::Anywhere, old_cost + f"{today} {cost}\n")
+        fs::write(f"{dir}/cost.txt", here, old_cost + f"{today} {cost}\n")
     }
     // A run cut off by the time limit writes no row: its resume reads the same
     // transcript and writes the whole session's.
@@ -621,28 +648,28 @@ fn main() throws {
         let asked = process::run(claude, agent_debrief_args(session.clone(), agent_front(text, "model", "sonnet"), effort); within: 10.minutes())
         let mut debrief = f"{abs}.debrief.md"
         if stem != "" { debrief = f"{stem}.debrief.md" }
-        fs::write(debrief, fs::Root::Anywhere, agent_result(asked.stdout.clone()) + "\n")
+        fs::write(debrief, here, agent_result(asked.stdout.clone()) + "\n")
         // A resumed session's `total_cost_usd` counts the whole session: the
         // debrief costs what it adds to the run's.
         let more = agent_json(asked.stdout.clone(), "total_cost_usd")
         if more != "" {
             let with_run = agent_read(f"{dir}/cost.txt")
             let added = agent_usd(agent_micro(more) - agent_micro(cost.clone()))
-            fs::write(f"{dir}/cost.txt", fs::Root::Anywhere, with_run + f"{today} {added}\n")
+            fs::write(f"{dir}/cost.txt", here, with_run + f"{today} {added}\n")
         }
     }
     if out.timed_out { agent_escalate(dir.clone(), "timed out after 150 minutes") }
     if !out.ok { agent_escalate(dir.clone(), f"claude exited with code {out.code}") }
     if agent_json(json, "is_error") != "false" { agent_escalate(dir.clone(), "is_error") }
     if reason != "completed" { agent_escalate(dir.clone(), f"terminal_reason {reason}") }
-    if !fs::exists(report.clone(), fs::Root::Anywhere) { agent_escalate(dir.clone(), f"no report {report}") }
+    if !fs::exists(report.clone(), here) { agent_escalate(dir.clone(), f"no report {report}") }
     if session != wanted { agent_escalate(dir.clone(), f"session_id {session} differs from {wanted}") }
     let gate = agent_gate(report.clone())
     let before = agent_read(f"{dir}/RED").trim().clone()
     if gate == "" {
-        fs::write(f"{dir}/RED", fs::Root::Anywhere, "")
+        fs::write(f"{dir}/RED", here, "")
     } else {
-        fs::write(f"{dir}/RED", fs::Root::Anywhere, f"{abs}: {gate}\n")
+        fs::write(f"{dir}/RED", here, f"{abs}: {gate}\n")
         if before != "" { agent_escalate(dir, f"two red gates in a row: {before} / {abs}: {gate}") }
     }
     // The run's row for the Runs table of docs/tokenspeed.md (#858), once per agent

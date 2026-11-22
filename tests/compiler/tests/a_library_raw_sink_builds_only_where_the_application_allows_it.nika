@@ -1,0 +1,58 @@
+// #2520, ADR-raw-sinks-1 D5: a library's `[allow]` lets its own build hand
+// data from outside to a raw sink (here the program of `process::run`,
+// `untrusted-program`, D10), but in an application that uses it the call
+// builds only where the application's manifest repeats the key under
+// `[allow.packages.lib]`, or `--allow=lib:untrusted-program` gives it;
+// otherwise it is refused at the library's call with `NK1309`, whose help
+// names the line to add. The library's own `[build] raw-sinks = "warn"` is
+// ignored in the application (ADR-raw-sinks-1 §4, Part III 13.3). The
+// application builds at `raw-sinks = "error"`, since `warn` is the default
+// (Part III) and would let every case through as a warning.
+use std::env
+use std::fs
+use std::process
+
+// The running `nikaia` (`env::current_exe`, ADR-program-path-1 D3).
+fn toolchain() -> String throws {
+    return env::current_exe()?.display() ?? "target/fast/nikaia"
+}
+
+fn said(nikaia: String, label: String, lib_build: String, app_allow: String, flags: Vec[String]) throws {
+    let root = fs::scratch()
+    let tmp = f"{root.path().display()}"
+    process::run("mkdir", ["-p", f"{tmp}/lib/src", f"{tmp}/app/src"])
+    fs::write("lib/nikaia.toml", root, f"[package]\nname = \"lib\"\nversion = \"0.1.0\"\n{lib_build}\n[allow]\nuntrusted-program = true\n")
+    fs::write("lib/src/main.nika", root, "use std::io\nuse std::process\n\npub fn launch() throws {\n    let name = io::read_line() ?? \"\"\n    process::run(name, [])\n}\n")
+    fs::write("app/nikaia.toml", root, f"[package]\nname = \"app\"\nversion = \"0.1.0\"\n\n[dependencies]\nlib = {{ path = \"../lib\" }}\n\n[build]\nraw-sinks = \"error\"\n{app_allow}")
+    fs::write("app/src/main.nika", root, "use lib\n\nfn main() throws {\n    lib::launch()\n}\n")
+    println(f"-- {label}")
+    let mut args: Vec[String] = ["check"]
+    for flag in flags {
+        args.push(flag.clone())
+    }
+    args.push("src/main.nika")
+    let out = process::run(nikaia, args; dir: f"{tmp}/app", env: [("RUST_BACKTRACE", "0")])
+    println(f"exit {out.code}")
+    for line in f"{out.stdout}{out.stderr}".lines() {
+        if line.contains("NK130") || line.contains("help:") || line.contains(" --> ") || line.contains("note:") {
+            println(line.replace(tmp, "TMP").trim())
+        }
+    }
+}
+
+fn main() throws {
+    let nikaia = toolchain()
+    let none: Vec[String] = []
+    // The library's own check builds under its own `[allow]`, at `error`.
+    let root = fs::scratch()
+    let tmp = f"{root.path().display()}"
+    process::run("mkdir", ["-p", f"{tmp}/src"])
+    fs::write("nikaia.toml", root, "[package]\nname = \"lib\"\nversion = \"0.1.0\"\n\n[build]\nraw-sinks = \"error\"\n\n[allow]\nuntrusted-program = true\n")
+    fs::write("src/main.nika", root, "use std::io\nuse std::process\n\npub fn launch() throws {\n    let name = io::read_line() ?? \"\"\n    process::run(name, [])\n}\n")
+    let own = process::run(nikaia, ["check", "src/main.nika"]; dir: tmp.clone(), env: [("RUST_BACKTRACE", "0")])
+    println(f"-- the library alone\nexit {own.code}")
+    said(nikaia, "the application allows nothing", "", "", none)
+    said(nikaia, "[allow.packages.lib]", "", "\n[allow.packages.lib]\nuntrusted-program = true\n", none)
+    said(nikaia, "--allow=lib:untrusted-program", "", "", ["--allow=lib:untrusted-program"])
+    said(nikaia, "the library's raw-sinks = \"warn\" is ignored", "\n[build]\nraw-sinks = \"warn\"\n", "", none)
+}

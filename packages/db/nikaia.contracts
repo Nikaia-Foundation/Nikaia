@@ -85,7 +85,7 @@ sync = true
 panics = false
 touches = []
 views = ["part: borrowed"]
-signature = "(part: ref String) -> bool"
+signature = "(part: String) -> bool"
 
 [fn."raw"]
 pub = true

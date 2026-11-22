@@ -1,0 +1,4 @@
+shared: built 0; build --target-dir given, builds in cache, NIKAIA_TARGET_DIR is it: yes
+CARGO_TARGET_DIR: built 0; build --target-dir none, builds in TMP/own, NIKAIA_TARGET_DIR is it: yes
+Cargo built in it: yes
+the program prints: built

@@ -17,6 +17,8 @@
 use std::cli
 use std::collections
 use std::fs
+use std::path
+use std::process
 use std::text
 
 // `n` of `total` in percent, one decimal, without a float: `54.3`.
@@ -76,7 +78,13 @@ fn main() throws {
         eprintln("usage: nikaia run scripts/proved.nika -- REPORT (the output of `nikaia lower-std --bounds`)")
         return
     }
-    let report = fs::read_to_string(args[1], fs::Root::Anywhere)
+    // REPORT lies below the working directory, the checkout's root.
+    let named = args[1].clone()
+    if !path::is_below(named) {
+        eprintln(f"refused: {named} is not a relative path below the working directory")
+        process::exit(2)
+    }
+    let report = fs::read_to_string(named, fs::Root::Dir("."))
     let mut indexes = 0
     let mut indexes_proved = 0
     let mut operations = 0
@@ -143,10 +151,11 @@ fn main() throws {
     let tools = "crates/nikaia-std/src/compiler"
     let mut panics = 0
     let mut panic_files = 0
-    for entry in fs::read_dir(tools, fs::Root::Anywhere) {
+    let compiler = fs::Root::Dir(".").join(tools)
+    for entry in fs::read_dir(".", compiler) {
         let name = entry.to_text()
         if !name.ends_with(".nika") { continue }
-        let (calls, file) = panics_in(fs::read_to_string(f"{tools}/{name}", fs::Root::Anywhere))
+        let (calls, file) = panics_in(fs::read_to_string(name, compiler))
         panics += calls
         panic_files += file
     }

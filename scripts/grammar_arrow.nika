@@ -8,6 +8,8 @@
 
 use std::cli
 use std::fs
+use std::path
+use std::process
 
 struct Scan {
     cs: Vec[scalar],
@@ -374,16 +376,20 @@ fn rewrite_rust(text: String) -> (String, i64) {
 
 fn main() throws {
     let mut first = true
-    for path in cli::args() {
+    for file in cli::args() {
         if first {
             first = false
             continue
         }
-        let text = fs::read_to_string(path.clone(), fs::Root::Anywhere)
-        let (out, added) = rewrite(text, path.ends_with(".rs"), path.ends_with(".md"))
+        if !path::is_below(file) {
+            println(f"refused: {file} is not a relative path below the working directory")
+            process::exit(2)
+        }
+        let text = fs::read_to_string(file.clone(), fs::Root::Dir("."))
+        let (out, added) = rewrite(text, file.ends_with(".rs"), file.ends_with(".md"))
         if added > 0 {
-            fs::write(path.clone(), fs::Root::Anywhere, out)
-            println(f"{path}: {added}")
+            fs::write(file.clone(), fs::Root::Dir("."), out)
+            println(f"{file}: {added}")
         }
     }
 }

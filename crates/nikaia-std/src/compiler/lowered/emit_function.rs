@@ -527,7 +527,11 @@ impl EmitState {
                     if has_dsl { declared.push(String::from("NikaiaDsl")); }
                     declared.reserve(open.iter().size_hint().0); for each in open.iter() { declared.push(nikaia_std::block::Text::from(each.to_string())); }
                 } else {
-                    declared.reserve(generics.iter().size_hint().0); for each in generics.iter() { declared.push(emit_bounded(world, each)); }
+                    declared.reserve(generics.iter().size_hint().0); for each in generics.iter() {
+                        let mut bounded = emit_bounded(world, each);
+                        if walk.specialising.is_some() && self.facts.constructs_by_kind.contains(&(nikaia_std::block::Text::from(key.to_string()), emit_text(world, each.name))) { if bounded.contains(": ") { bounded = format!("{} + ::core::default::Default", bounded); } else { bounded = format!("{}: ::core::default::Default", bounded); } }
+                        declared.push(bounded);
+                    }
                     if has_dsl { declared.push(String::from("NikaiaDsl")); }
                     declared.reserve(open.iter().size_hint().0); for each in open.iter() { declared.push(nikaia_std::block::Text::from(each.to_string())); }
                 }

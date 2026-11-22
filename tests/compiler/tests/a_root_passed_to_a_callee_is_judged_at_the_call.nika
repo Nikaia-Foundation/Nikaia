@@ -1,0 +1,40 @@
+// A root passed to a function that opens a path under its parameter is
+// judged at the call, as a root written at the operation is
+// (ADR-raw-sinks-1 D2, D11, #2591): `fs::Root::Dir(dir)` with `dir` from the
+// command line is `NK1308` where it is passed to `exists_under`, through a
+// second function that hands the root on, and as a name bound to the root;
+// so is a part from outside that `join` adds under a root passed in (D14).
+// A root of a literal or `fs::scratch()` passed in is no sink, nor a name
+// bound to a guarded part joined under one, passed through a `.clone()`, while
+// the root of a name bound to a root from outside is a sink there too.
+use std::cli
+use std::fs
+use std::path
+
+fn exists_under(root: fs::Root) -> bool throws {
+    return fs::exists("notes.txt", root)
+}
+
+fn handed_on(root: fs::Root) -> bool throws {
+    return exists_under(root)
+}
+
+fn main() throws {
+    let dir = cli::args().nth(1) ?? "."
+    println(exists_under(fs::Root::Dir(dir.clone())))
+    println(handed_on(fs::Root::Dir(dir.clone())))
+    let at = fs::Root::Dir(dir.clone())
+    println(fs::exists("notes.txt", at.clone()))
+    println(exists_under(at))
+    println(exists_under(fs::Root::Dir(".").join(dir)))
+    println(exists_under(fs::Root::Dir(".")))
+    println(handed_on(fs::scratch()))
+    let key = cli::args().nth(2) ?? "k"
+    return if !path::is_below(key)
+    let scratch = fs::scratch()
+    fs::create_dir("k", scratch)
+    let below = scratch.join(key)
+    println(fs::exists("notes.txt", below.clone()))
+    println(exists_under(below.clone()))
+    println(handed_on(below))
+}

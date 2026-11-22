@@ -19,6 +19,7 @@
 use std::cli
 use std::collections
 use std::fs
+use std::path
 use std::process
 use std::text
 
@@ -49,14 +50,15 @@ fn rank(site: String, seed: i64) -> i64 {
 
 // The lines of the file at `path`, 0 where it cannot be read.
 fn lines_of(path: String) -> i64 throws {
-    if !fs::exists(path.clone(), fs::Root::Anywhere) { return 0 }
-    return fs::read_to_string(path, fs::Root::Anywhere).lines().count()
+    let here = fs::Root::Dir(".")
+    if !fs::exists(path.clone(), here) { return 0 }
+    return fs::read_to_string(path, here).lines().count()
 }
 
 // The report saved at `path`, or where `path` is empty, the output of
 // `lower-std --findings` run here.
 fn read_report(path: String) -> String throws {
-    if path.len() > 0 { return fs::read_to_string(path, fs::Root::Anywhere) }
+    if path.len() > 0 { return fs::read_to_string(path, fs::Root::Dir(".")) }
     let out = process::run("sh", ["-c", "NIKAIA_CACHE_LIMIT=2G target/fast/nikaia lower-std --findings"])
     if out.code != 0 {
         eprintln(out.stderr)
@@ -87,6 +89,11 @@ fn main() throws {
         }
         if word.starts_with("-") {
             eprintln("usage: nikaia run scripts/analysis_scale.nika [-- [REPORT] [--seed N] [--per-code N]]")
+            process::exit(2)
+        }
+        // REPORT lies below the working directory.
+        if !path::is_below(word) {
+            eprintln(f"refused: {word} is not a relative path below the working directory")
             process::exit(2)
         }
         report_path = word
