@@ -32,7 +32,7 @@
 // `--focus-next FILE [SKIPPED...]`, `--focus-log DIR AREA BRIEF...` (the
 // block's comment), `--focus-issue FILE NAME|DIR...`, `--blocks DIR`,
 // `--found DIR BRIEF` (drive_found), `--queue-add N...` (drive_queue_add, BATCH on stdin),
-// `--fixed-in N...` (drive_fixed_in) and `--closes-in` (drive_closes_in), LOG on stdin, `--queue-plan LIST [OPEN...]`
+// `--fixed-in N...` (drive_fixed_in) and `--closes-in` (drive_closes_in), LOG on stdin, `--queue-trust LIST` (drive_untrusted_lines, each with its comment), `--queue-plan LIST [OPEN...]`
 // (drive_queue_plan: LIST in drive_queue's `=== #N ===` record form, OPEN the
 // dependencies taken as open), `--queue-check LIST [OPEN...]` (the same with
 // the form check, scripts/issue-check.nika, OPEN the issues taken as open,
@@ -549,7 +549,8 @@ fn drive_run_seconds(json_path: String) -> i64 throws {
 // 60 while DIR has none. The longest run stopped a lane with one long run at
 // every start, after its merges, with most of the task's time left (#2022).
 fn drive_run_minutes(dir: String) -> i64 throws {
-	let lines: Vec[String] = drive_read(f"{dir}/runs.txt").trim().split("\n").collect()
+	let runs = drive_read(f"{dir}/runs.txt")
+	let lines = runs.trim().split("\n").collect()
 	let mut spans: Vec[i64] = []
 	let mut i = lines.len()
 	while i > 0 && spans.len() < 9 {
@@ -3486,7 +3487,8 @@ fn drive_briefs_gone(dir: String) throws {
 	let mut briefs: i64 = 0
 	let mut paths: Vec[String] = []
 	for entry in fs::read_dir(".", drive_here().join(dir.clone())) {
-		let names: Vec[String] = entry.to_text().split("/").collect()
+		let text = entry.to_text()
+		let names = text.split("/").collect()
 		let name = names[names.len() - 1].clone()
 		let n = (name.strip_prefix("issue-") ?? "").strip_suffix(".md") ?? ""
 		let mut digits = n != ""
@@ -4692,7 +4694,7 @@ fn drive_focus_record(
 	let mut costs: Vec[String] = []
 	let lines = drive_read(f"{dir}/cost.txt").trim_end().split("\n").collect()
 	for i in 0..<lines.len() {
-		if i >= cost_from && lines[i].trim() != "" { costs.push(lines[i]) }
+		if i >= cost_from && lines[i].trim() != "" { costs.push(lines[i].clone()) }
 	}
 	return drive_focus_line(stamp, area, reports, tokens, costs, drive_unrun(dir).len())
 }
@@ -5239,8 +5241,9 @@ fn drive_issue_open(n: String) -> bool throws {
 	return got.ok && got.stdout.trim() == "open"
 }
 
-// The `=== #N ===` records of drive_queue's issue list LIST as pairs of the
-// number and the body.
+// The `=== #N ===` records of drive_queue's issue list LIST (`=== #N by LOGIN
+// ASSOCIATION ===` as drive_queue fetches it) as pairs of the number and the
+// body.
 fn drive_queue_records(list: String) -> Vec[(String, String)] {
 	let mut out: Vec[(String, String)] = []
 	let mut n = String()
@@ -5249,7 +5252,9 @@ fn drive_queue_records(list: String) -> Vec[(String, String)] {
 		let t = l.trim()
 		if t.starts_with("=== #") && t.ends_with(" ===") {
 			if n != "" { out.push((n.clone(), body.join("\n"))) }
-			n = (t.strip_prefix("=== #") ?? "").replace(" ===", "").trim().clone()
+			let rest = (t.strip_prefix("=== #") ?? "").replace(" ===", "")
+			let head = rest.trim().split(" ").collect()
+			n = head[0].clone()
 			body = []
 		} else {
 			body.push(l.clone())
@@ -5257,6 +5262,48 @@ fn drive_queue_records(list: String) -> Vec[(String, String)] {
 	}
 	if n != "" { out.push((n, body.join("\n"))) }
 	return out
+}
+
+// Whether GitHub's `author_association` ASSOCIATION is one with write access
+// to the repository (owner, 2026-11-22: a stranger's issue or comment never
+// becomes a builder's task): the owner, a member of the organisation or a
+// collaborator. Anyone else (a contributor, a first-timer, `NONE`) can open
+// an issue and comment, but can neither set a label nor edit another's text.
+fn drive_trusted_association(association: String) -> bool {
+	return association == "OWNER" || association == "MEMBER" || association == "COLLABORATOR"
+}
+
+// The issues of drive_queue's list LIST opened by someone without write
+// access (drive_trusted_association), as `SKIPPED #N opened by LOGIN
+// (ASSOCIATION), who has no write access to this repository` lines; a record
+// whose header names no author counts as such (`opened by an author the list
+// does not name`), so a changed
+// query holds issues back instead of queueing them.
+fn drive_untrusted_lines(list: String) -> Vec[String] {
+	let mut out: Vec[String] = []
+	for l in list.split("\n") {
+		let t = l.trim()
+		if !t.starts_with("=== #") || !t.ends_with(" ===") { continue }
+		let rest = (t.strip_prefix("=== #") ?? "").replace(" ===", "")
+		let head = rest.trim().split(" ").collect()
+		if head.len() == 4 && head[1] == "by" {
+			if !drive_trusted_association(head[3].clone()) {
+				out.push(f"SKIPPED #{head[0]} opened by {head[2]} ({head[3]}), who has no write access to this repository")
+			}
+		} else {
+			out.push(f"SKIPPED #{head[0]} opened by an author the list does not name, so their write access is not known")
+		}
+	}
+	return out
+}
+
+// The comment on issue N that LINE (drive_untrusted_lines) kept out of the
+// queue: only issues of people with write access are built.
+fn drive_untrusted_comment(n: String, line: String) -> String {
+	let why = (line.strip_prefix(f"SKIPPED #{n} ") ?? "").clone()
+	return f"Driver: #{n} is not queued, it was {why} (owner, 2026-11-22: the driver builds only issues of the owner, members and collaborators).\n\n"
+		+ "Label swapped from `ready` to `decision`: a member who takes the task on files it as an issue of their own, in their own words; setting `ready` here again does not queue it."
+		+ drive_footer()
 }
 
 // `SKIPPED #N waits for #A, #B` when any of WAITS is among OPEN, else "".
@@ -5351,6 +5398,18 @@ fn drive_queue_plan(dir: String, list: String, open: Vec[String], check: bool, k
 	return out
 }
 
+// The issue list LIST (drive_queue_records' form) without the records of the
+// numbers in BARRED.
+fn drive_queue_trusted(list: String, barred: Vec[String]) -> String {
+	let mut out: Vec[String] = []
+	for (n, body) in drive_queue_records(list) {
+		if barred.contains(n.clone()) { continue }
+		out.push(f"=== #{n} ===")
+		out.push(body)
+	}
+	return out.join("\n")
+}
+
 // An issue whose form misses a requirement (#2003): `ready` swapped for
 // `decision`, with one comment naming what it misses (drive_check_comment),
 // so its writer fixes it, not a builder.
@@ -5381,7 +5440,12 @@ fn drive_wait_block(n: String, line: String) throws {
 // issue-check: ...`, scripts/issue-check.nika, #2003), whose `ready` is
 // swapped for `decision` with one comment of its findings (drive_check_block);
 // one the script failed to check (`SKIPPED #N issue-check: issue-check failed
-// to run: ...`, #2466) is only held back, its form is not at fault. Closed ones still queued are dropped first
+// to run: ...`, #2466) is only held back, its form is not at fault. One
+// opened by someone without write access (`SKIPPED #N opened by LOGIN
+// (ASSOCIATION), who has no write access to this repository`, drive_untrusted_lines, owner,
+// 2026-11-22) is never queued: a stranger cannot set `ready`, but a member
+// can, by mistake, on a stranger's issue; its `ready` is swapped for
+// `decision` with a comment (drive_untrusted_comment). Closed ones still queued are dropped first
 // (drive_queue_prune), and so are those that wait for an open issue.
 fn drive_queue(dir: String, area: String) throws {
 	drive_queue_prune(dir.clone())
@@ -5392,11 +5456,25 @@ fn drive_queue(dir: String, area: String) throws {
 			"api",
 			f"repos/{repo}/issues?state=open&labels=ready,{area}&per_page=100&sort=created&direction=asc",
 			"--jq",
-			".[] | select(.pull_request == null and ([.labels[].name] | index(\"wip\") | not)) | \"=== #\\(.number) ===\\n\\(.body // \"\")\"",
+			".[] | select(.pull_request == null and ([.labels[].name] | index(\"wip\") | not)) | \"=== #\\(.number) by \\(.user.login) \\(.author_association) ===\\n\\(.body // \"\")\"",
 		],
 	)
 	if !got.ok { return }
-	let list = got.stdout
+	let mut list = got.stdout
+	let untrusted = drive_untrusted_lines(list.clone())
+	if untrusted.len() > 0 {
+		let mut barred: Vec[String] = []
+		for line in untrusted {
+			println(line.clone())
+			let words: Vec[String] = line.split(" ").collect()
+			let m = (words[1].strip_prefix("#") ?? "").clone()
+			drive_label_remove(m.clone(), "ready")
+			drive_label_add(m.clone(), "decision")
+			drive_comment(m.clone(), drive_untrusted_comment(m.clone(), line.clone()))
+			barred.push(m)
+		}
+		list = drive_queue_trusted(list, barred)
+	}
 	let mut open: Vec[String] = []
 	let mut waits: Vec[String] = []
 	for (n, body) in drive_queue_records(list.clone()) {
@@ -5726,6 +5804,17 @@ fn main() throws {
 			i += 1
 		}
 		println(drive_fixed_in(drive_stdin(), numbers).join(" "))
+		return
+	}
+	if args.len() == 3 && args[1] == "--queue-trust" {
+		let list = drive_read(args[2].clone())
+		for line in drive_untrusted_lines(list.clone()) {
+			println(line.clone())
+			let words: Vec[String] = line.split(" ").collect()
+			let m = (words[1].strip_prefix("#") ?? "").clone()
+			print(drive_untrusted_comment(m, line.clone()))
+			println("")
+		}
 		return
 	}
 	if args.len() >= 3 && (args[1] == "--queue-plan" || args[1] == "--queue-check") {

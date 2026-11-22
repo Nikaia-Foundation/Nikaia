@@ -86,7 +86,8 @@ fn refs_records(root: fs::Root, dir: String) -> Vec[String] throws {
 	let here = dir.clone()
 	if !fs::exists(here.clone(), root.clone()) { return out }
 	for entry in fs::read_dir(here, root.clone()) {
-		let parts: Vec[String] = entry.to_text().split("/").collect()
+		let text = entry.to_text()
+		let parts = text.split("/").collect()
 		let name = parts[parts.len() - 1]
 		if name.starts_with("adr-") && name.ends_with(".md") { out.push(f"{dir}/{name}") }
 	}
@@ -126,7 +127,8 @@ fn refs_walk(root: fs::Root, dir: String, mut out: Vec[String]) throws {
 	let mut here: String = "."
 	if dir.len() > 0 { here = dir.clone() }
 	for entry in fs::read_dir(here, root.clone()) {
-		let parts: Vec[String] = entry.to_text().split("/").collect()
+		let text = entry.to_text()
+		let parts = text.split("/").collect()
 		let name = parts[parts.len() - 1]
 		if name.starts_with(".") || name == "target" || name == "__pycache__" { continue }
 		let mut rel = name.clone()
