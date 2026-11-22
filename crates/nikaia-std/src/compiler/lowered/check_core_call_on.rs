@@ -1178,6 +1178,21 @@ pub(crate) fn check_core_call_on_described<H: CheckHost>(state: &mut CheckState,
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
+pub(crate) fn check_core_call_on_code(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, on: &Ty, receiver: &Expr, entry: &str, span: &Span) {
+    let code = matches!(on, Ty::Fn { .. });
+    if !code { return; }
+    let written = check_walked_written(receiver, world.words);
+    let mut help: String = format!("Call it first, `{}(…).{}()`, for a method of what it hands back.", written, entry);
+    let named = match receiver {
+        Expr::Variable(_, _) => state.structs.contains_key(&written) || world.own.types.contains_key(&written) || world.library.types.contains_key(&written) || mem_offered(&written),
+        _ => false,
+    };
+    if named { help = format!("`{}` here is its constructor: call it, `{}(…)` with the options it takes, and call `{}` on the value it makes, or write `{}::{}(…)` for a function of the type.", written, written, entry, written, entry); }
+    state.findings.push(check_refusal("NK1171", span, format!("`{}` is code, and code has no method called `{}`.", written, entry), vec![format!("A value of type `{}` is called, `{}(…)`; no declaration, ledger or description gives it methods.", on.shown(), written)], Some(help)));
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn check_core_call_on<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, on: &Ty, receiver: &Expr, method: winnow_grammar::Symbol, args: &[Expr], entry: &str, span: &Span) -> Ty {
     if entry == "full" && args.is_empty() {
@@ -1229,6 +1244,7 @@ pub(crate) fn check_core_call_on<H: CheckHost>(state: &mut CheckState, world: &C
     }
     if !has_name {
         for a in args.iter() { check_core_expr(state, world, host, a, span); }
+        check_core_call_on_code(state, world, &on, receiver, entry, span);
         check_core_call_on_reached(state, None);
         state.method_propagates(id_of(receiver) as i64, false);
         state.method_pauses(id_of(receiver) as i64, false);
