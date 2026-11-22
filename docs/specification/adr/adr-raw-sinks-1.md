@@ -595,6 +595,20 @@ literal), and the text runs as shell code, which D9 forbids. So:
    element that does not start with `-` (for `timeout` and `nice`, after
    their number). That operand is a program, so D10's rule holds for it: an
    outside one is refused under `untrusted-program` unless proved.
+
+   *Amendment (supervisor, 2026-11-22, #2723, by the obvious-decision rule
+   of `docs/supervisor.md`):* "does not start with `-`" alone lets
+   `process::run("sudo", ["-u", "root", "sh", "-c", text])` through, because
+   `root`, the value of `-u`, is taken for the program. So each runner
+   carries a table of the options it knows, and which of them take a value:
+   the value is skipped with its option, `env`'s `NAME=VALUE` operands are
+   skipped, and `--` ends the options. An option that is not in the runner's
+   table, an option the table marks as running a command line of its own
+   (`env -S`/`--split-string`, `sudo -s`/`-i`), a non-literal element before
+   the first operand, or no operand at all leaves the program unknown, and
+   the call is checked as a shell (this D19): refused under `untrusted-shell`
+   unless every argument is proved. The check fails closed: what the table
+   does not know is never taken for safe.
 5. **A program that is not a literal** is refused by D10 unless proved, so
    the list only has to match literals; a program proved by a `match` over
    literals (D10) is checked for each literal of the match.
