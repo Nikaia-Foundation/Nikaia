@@ -1,0 +1,4 @@
+main.nika:3: rest takes the buffer of line
+main.nika:10: replace works in the buffer of t
+main.nika:15: replace works in the buffer the replace before it made
+exit 0

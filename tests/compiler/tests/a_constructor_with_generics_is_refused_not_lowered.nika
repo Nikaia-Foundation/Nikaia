@@ -1,0 +1,11 @@
+// A type written with its generics before `()` is refused by the checker,
+// naming the type as written, and never reaches rustc (#2635).
+use std::collections
+
+fn main() throws {
+	let mut v = Vec[String]()
+	v.push("a")
+	let mut m = collections::HashMap[String, String]()
+	m.insert("a", "b")
+	println(f"{v.len()} {m.len()}")
+}

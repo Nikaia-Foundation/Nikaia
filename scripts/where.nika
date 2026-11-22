@@ -18,6 +18,7 @@
 
 use std::cli
 use std::fs
+use std::path
 use std::text
 use std::process
 
@@ -42,11 +43,13 @@ fn where_first(s: String) -> String throws {
 
 fn where_load(dir: String, keep: fn(String) -> bool sync) -> Vec[WhereFile] throws {
     let mut out: Vec[WhereFile] = []
-    for p in fs::walk(dir.clone(), fs::Root::Anywhere) {
+    // The names walked are read under the directory they were found in.
+    let here = fs::Root::Dir(".").join(dir.clone())
+    for p in fs::walk(".", here) {
         let rel = p.to_text()
         let path = f"{dir}/{rel}"
         if !keep(path.clone()) { continue }
-        let text = fs::read_to_string(path.clone(), fs::Root::Anywhere)
+        let text = fs::read_to_string(rel, here)
         out.push(WhereFile { path: path, lines: text.split("\n").collect() })
     }
     return out
@@ -355,7 +358,7 @@ fn where_end(shape: ref WhereShape, lines: ref Vec[ref String], start: i64, nika
 }
 
 fn where_outline(path: String) -> Vec[String] throws {
-    let lines = fs::read_to_string(path.clone(), fs::Root::Anywhere).split("\n").collect()
+    let lines = fs::read_to_string(path.clone(), fs::Root::Dir(".")).split("\n").collect()
     let nika = path.ends_with(".nika")
     let shape = where_shape(lines, nika)
     let mut out: Vec[String] = []
@@ -376,7 +379,14 @@ fn main() throws {
         process::exit(2)
     }
     if args[1] == "--outline" {
-        for k in 2..<args.len() { for l in where_outline(args[k].clone()) { println(l) } }
+        for k in 2..<args.len() {
+            let file = args[k]
+            if !path::is_below(file) {
+                println(f"refused: {file} is not a relative path below the working directory")
+                process::exit(2)
+            }
+            for l in where_outline(file.clone()) { println(l) }
+        }
         return
     }
     let files = where_load("crates", where_rust_or_tool)

@@ -15,10 +15,8 @@ fn root() -> String throws {
 }
 
 fn main() throws {
-    let tmp = fs::scratch()
     let repo = root()
     let nikaia = toolchain()
-    fs::write("d1-1252-briefs.md", tmp, "---\nagent: builder\n---\n\n# d1: the brief\n\nTo build.\n\n")
-    let out = process::run(nikaia, ["run", "scripts/drive.nika", "--", "--post-body", f"{tmp.path().to_text()}/d1-1252-briefs.md"]; dir: repo)
+    let out = process::run(nikaia, ["run", "scripts/drive.nika", "--", "--post-body", "d1-1252-briefs.md"]; dir: repo, stdin: process::Input::Text("---\nagent: builder\n---\n\n# d1: the brief\n\nTo build.\n\n"))
     print(out.stdout)
 }

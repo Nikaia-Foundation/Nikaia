@@ -1,0 +1,20 @@
+-- the library alone
+exit 0
+-- the application allows nothing
+exit 1
+error[NK1309]: `name` reaches the program `process::run` runs, and it comes from outside the program. The package `lib` hands it on, and the application does not allow it.
+--> TMP/lib/src/main.nika:6:5
+= note: `name` comes from `io::read_line`: whoever sends it chooses the value, so nothing the compiler can see says what it holds.
+= note: No check makes a stranger's choice of program safe: a name is looked up on `PATH`, a path runs that file.
+= help: If the application means to let `lib` do this, `untrusted-program = true` under `[allow.packages.lib]` in its manifest builds it, or `--allow=lib:untrusted-program` for one build.
+-- [allow.packages.lib]
+exit 0
+-- --allow=lib:untrusted-program
+exit 0
+-- the library's raw-sinks = "warn" is ignored
+exit 1
+error[NK1309]: `name` reaches the program `process::run` runs, and it comes from outside the program. The package `lib` hands it on, and the application does not allow it.
+--> TMP/lib/src/main.nika:6:5
+= note: `name` comes from `io::read_line`: whoever sends it chooses the value, so nothing the compiler can see says what it holds.
+= note: No check makes a stranger's choice of program safe: a name is looked up on `PATH`, a path runs that file.
+= help: If the application means to let `lib` do this, `untrusted-program = true` under `[allow.packages.lib]` in its manifest builds it, or `--allow=lib:untrusted-program` for one build.

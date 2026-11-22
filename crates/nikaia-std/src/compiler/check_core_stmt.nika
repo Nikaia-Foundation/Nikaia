@@ -469,6 +469,20 @@ fn check_core_stmt_an_unchanged_owned_let(state: ref CheckState, name: ref Strin
 /// A bare name.
 /// `x = x.replace(a, b)` (or `replacen`) where neither `a` nor `b` reads
 /// `x` (ADR-text-reuse-1 D4).
+/// **What `x = x.replace(a, b)` narrates** (ADR-text-reuse-1 D5, #2514):
+/// `replace works in the buffer of x`, with the method as written.
+fn check_core_stmt_replaced_said(world: ref CheckWorld, target: ref Expr, value: ref Expr) -> String sync {
+    let named: String = match target {
+        Expr::Variable(name, _) => world.words.resolve(name).clone(),
+        else => "",
+    }
+    let by: String = match value {
+        Expr::MethodCall { method, .. } => world.words.resolve(method).clone(),
+        else => "replace",
+    }
+    return f"{by} works in the buffer of {named}"
+}
+
 fn check_core_stmt_replaces_itself(world: ref CheckWorld, target: ref Expr, value: ref Expr) -> bool sync {
     let named: String = match target {
         Expr::Variable(name, _) => world.words.resolve(name).clone(),
@@ -817,6 +831,7 @@ fn check_core_stmt_given_cut(mut state: CheckState, world: ref CheckWorld, name:
         return
     }
     state.facts.cut_gives.insert(node_key(value))
+    let said = state.facts.narrated.insert((span.start as i64, f"{name} takes the buffer of {source}"))
     state.hands_over_name(world, source, to, span)
 }
 
@@ -2178,6 +2193,7 @@ fn check_core_stmt_assign[H: CheckHost](mut state: CheckState, world: ref CheckW
     // D4): `x` owns its text and is not read by `a` or `b`.
     if op == null && is_text_type(into.unseen()) && !into.is_a_view() && check_core_stmt_replaces_itself(world, target, value) {
         let replaced = state.facts.replaced_assigns.insert(span.start as i64)
+        let said = state.facts.narrated.insert((span.start as i64, check_core_stmt_replaced_said(world, target, value)))
     }
     // **`x += a` over two integer types is `x = x + a`** (ADR-285 D32).
     if op != null && !check_core_stmt_a_shift(op) {

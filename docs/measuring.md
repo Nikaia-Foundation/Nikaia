@@ -143,4 +143,11 @@ quotes a figure.
   `FILE.2`, ... of an earlier run. Callgrind cannot switch its
   instrumentation on at a function (only collection, `--toggle-collect`;
   the client request that switches it is Rust), so the run instruments the
-  whole command and takes as long as the whole-package run.
+  whole command and takes as long as the whole-package run: 3 h 45 min on
+  2026-11-22 (develop `9fe994126`). Read the dumps only after it ends,
+  because they appear one by one while it runs. Dump 1 holds the ledger's
+  walks of every file in one sum. A cost fixed per file makes the quarters'
+  ratio fall with size, so a third table fits each analysis as `fixed + per
+  line × lines`, and gives the slope over the smaller and the larger half
+  of the files. A slope that rises from the smaller half to the larger
+  grows faster than the lines (`docs/analysis-at-scale.md`).

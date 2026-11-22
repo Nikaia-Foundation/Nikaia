@@ -462,6 +462,16 @@ touches = ["file(from) read", "file(to) write"]
 throws = ["io::IoError"]
 signature = "(from: ref fs::Path, to: ref fs::Path, root: ref fs::Root) -> u64"
 
+# A file copied from one root into another, its permission bits kept: the
+# first platform primitive (ADR-platform-layer-v1 D4, D7 item 1).
+[fn."fs::copy_between"]
+pub = true
+panics = false
+sync = true
+touches = ["file(from) read", "file(to) write"]
+throws = ["io::IoError"]
+signature = "(from: ref fs::Path, from_root: ref fs::Root, to: ref fs::Path, to_root: ref fs::Root) -> u64"
+
 # A name's length and what it is, a link followed to what it leads to.
 [fn."fs::metadata"]
 pub = true

@@ -1,6 +1,6 @@
 # Nikaia Language Specification
 **Part II: Advanced Features & Metaprogramming**
-**Version:** 0.0.1528 (Draft)
+**Version:** 0.0.1530 (Draft)
 **Date:** 2026-11-22
 
 ---
@@ -326,7 +326,7 @@ declaration writes it. `T::kind` is a `meta::Type`, whose parts are types:
 | :--- | :--- |
 | `i64`, `i32`, `u8`, `u64`, `u32`, `f64`, `bool` | `I64`, `I32`, `U8`, `U64`, `U32`, `F64`, `Bool` |
 | `String`, `Bytes`, `scalar` | `Text`, `Bytes`, `Scalar` |
-| `A?`, `Vec[A]`, `HashMap[K, V]` | `Maybe(A)`, `List(A)`, `Map(K, V)` |
+| `A?`, `Vec[A]`, `HashMap[K, V]` and `BTreeMap[K, V]` | `Maybe(A)`, `List(A)`, `Map(K, V)` |
 | `Array[A, N]`, `(A, B, …)` | `Array(A, N)`, `Tuple(parts)`, the parts walked as `T::fields` is |
 | a `struct`, an `enum` | `Struct(T)`, `Enum(T)` |
 | a type whose inside the program does not see | `Opaque(T)` |
@@ -350,7 +350,11 @@ reached is `T::access`, a `meta::Access`: `Owned`, `Ref`, `Shared` or
 `Struct(s)`, `s` is a type bound by `Struct`, so `s::fields` is reached; in
 `List(it)`, `it` is the element type. No arm is checked against a type it cannot
 be taken for, and every arm is checked. Each type's copy holds only the arm it
-takes. A `meta::Type` exists only while the program is built: one that would
+takes. In an arm whose pattern names `Map(K, V)` or `List(E)`, `T()` is the
+empty collection of whatever type `T` is, a `HashMap`, a `BTreeMap` or a `Vec`,
+made in each copy; outside such an arm `T()` is refused with `NK1117`
+([ADR-grammar-typed-read-v1](adr/adr-grammar-typed-read-v1.md) D14). A `meta::Type`
+exists only while the program is built: one that would
 reach the running program is refused with `NK1231`.
 
 **An attribute says what a type does not** ([ADR-331](adr/adr-331.md)). It is a

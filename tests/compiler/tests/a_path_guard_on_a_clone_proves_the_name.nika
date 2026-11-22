@@ -1,0 +1,17 @@
+// A guard written on a `.clone()` of the name proves the name, as one
+// written on the name does (ADR-raw-sinks-1 D14, #2590): the clone holds
+// the same value, so `path::is_below(d.clone())` keys its proof under `d`,
+// and `d` joined after a clean part passes a sink under `Anywhere`, for
+// `path::is_below` and `path::is_component`. No `NK1308` here.
+use std::cli
+use std::fs
+use std::path
+
+fn main() throws {
+    let d = cli::args().nth(1) ?? "notes.txt"
+    if !path::is_below(d.clone()) { return }
+    println(fs::exists(f"data/{d}", fs::Root::Anywhere))
+    let c = cli::args().nth(2) ?? "notes.txt"
+    if !path::is_component(c.clone()) { return }
+    println(fs::exists("data/" + c, fs::Root::Anywhere))
+}

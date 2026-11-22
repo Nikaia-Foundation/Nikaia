@@ -1827,12 +1827,13 @@ fn prover_expr_stmt(mut walk: ProverWalk, expr: ref Expr, span: Span, mut scope:
                 return false
             }
             // **`panic(…)` does not come back** (#776): a body that ends in
-            // one has no exit there.
-            let panics = match func {
-                Expr::Variable(name, _) => words.resolve(name) == "panic" && !scope.locals.contains("panic"),
-                else => false,
-            }
-            if panics {
+            // one has no exit there. **Nor does `process::exit(…)`**: it
+            // always throws `Exit` (ADR-345), so a guard whose branch ends in
+            // it refuses as one ending in `return` does (ADR-raw-sinks-1 D14,
+            // #2469). Each by what the call resolves to, not by its spelling:
+            // a function of the program named `panic`, or a package's
+            // `process::exit`, may come back (#2485).
+            if prover_leaving_spelled(func, words) && ProverLeaving::of(program, own, words).leaves(func, scope.locals, words) {
                 prover_expr(walk, expr, span, scope, nested, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition)
                 return true
             }
@@ -2792,7 +2793,8 @@ fn prover_outside_index(mut walk: ProverWalk, expr: ref Expr, base: ref Expr, in
 }
 
 /// **Data from outside at a raw sink** (ADR-raw-sinks-1 D2, D3, D10, D11,
-/// D14, D15): each part of the markup of `html::Raw` and of the program
+/// D14, D15): each part of the markup of `html::Raw`, of the text of
+/// `db::raw` (after the guard `db::is_identifier`), of the program
 /// `process::run` runs, and each part of a path under a root that may name
 /// any file (`fs::Root::Anywhere`, `Dir("/")`, or a `Dir` whose directory
 /// comes from outside, D11) that comes from outside, is not a whole number
@@ -2814,6 +2816,13 @@ fn prover_raw_sink(mut walk: ProverWalk, callee: ref String, args: ref Vec[Expr]
             raw_sink_parts(arg, holes_of, parts)
         }
         let sink = ParamSink { index: -1, kind: "markup", sink: "the markup of `html::Raw`, written to the page as it is", operation: "", root_part: false, guard: "html::is_plain" }
+        for part in parts {
+            raw_sink_part(walk, sink, sink.sink, part, span, scope, at, program, words, library, holes_of, ask, written_of)
+        }
+    } else if callee == "db::raw" && !args.is_empty() {
+        let mut parts: Vec[Expr] = []
+        raw_sink_parts(args[0], holes_of, parts)
+        let sink = ParamSink { index: -1, kind: "sql", sink: "the text of `db::raw`, sent to the database as SQL", operation: "", root_part: false, guard: "db::is_identifier" }
         for part in parts {
             raw_sink_part(walk, sink, sink.sink, part, span, scope, at, program, words, library, holes_of, ask, written_of)
         }
@@ -2841,7 +2850,13 @@ fn prover_raw_sink(mut walk: ProverWalk, callee: ref String, args: ref Vec[Expr]
                 match raw_sink_dir(arg, words) {
                     dir => raw_sink_parts(dir, holes_of, root_parts),
                     null => {
-                        if !raw_sink_scratch(arg, words) {
+                        // #2591: a name at the `root` parameter that reads a
+                        // parameter is one part of the root, carried to the
+                        // callers, where `raw_sink_through` judges the root
+                        // passed in.
+                        if raw_sink_root_param(callee, i, library) && raw_sink_carried_root(arg, scope, words, library, walk.state, holes_of) {
+                            root_parts.push(arg.clone())
+                        } else if !raw_sink_scratch(arg, words) {
                             continue
                         }
                     },
@@ -2858,9 +2873,11 @@ fn prover_raw_sink(mut walk: ProverWalk, callee: ref String, args: ref Vec[Expr]
                 root = written_of(written)
             }
             // D11: the root's own parts, under the call's one operation, or
-            // under all three where it has two (`copy`, `rename`).
-            let mut whole = raw_sink_operation(callee, 0, config, words, written_of)
-            if i > 1 && raw_sink_operation(callee, 1, config, words, written_of) != whole {
+            // under all three where it has two (`copy`, `rename`). The names
+            // a root governs start at `first` (ADR-platform-layer-v1 D4).
+            let first = raw_sink_first_name(callee, i)
+            let mut whole = raw_sink_operation(callee, first, config, words, written_of)
+            if i - first > 1 && raw_sink_operation(callee, first + 1, config, words, written_of) != whole {
                 whole = "anywhere"
             }
             let root_sink = ParamSink { index: -1, kind: "path", sink: f"the root `{root}` of `{callee}`, a directory a stranger may have chosen", operation: whole, root_part: true, guard: "" }
@@ -2891,7 +2908,7 @@ fn prover_raw_sink(mut walk: ProverWalk, callee: ref String, args: ref Vec[Expr]
             if !anywhere && !root_outside {
                 continue
             }
-            for j in 0..<i {
+            for j in first..<i {
                 let mut parts: Vec[Expr] = []
                 raw_sink_parts(args[j], holes_of, parts)
                 // D14: a guarded name is admitted joined after a part that
@@ -2930,13 +2947,92 @@ fn raw_sink_through(mut walk: ProverWalk, callee: ref String, args: ref Vec[Expr
         if sink.index < 0 || sink.index >= all.len() {
             continue
         }
+        let shown = f"{sink.sink}, through `{callee}`"
+        if sink.root_part {
+            raw_sink_root_through(walk, sink, shown, all[sink.index], span, scope, at, program, words, library, holes_of, ask, written_of)
+            continue
+        }
         let mut parts: Vec[Expr] = []
         raw_sink_parts(all[sink.index], holes_of, parts)
-        let shown = f"{sink.sink}, through `{callee}`"
         for part in parts {
             raw_sink_part(walk, sink, shown, part, span, scope, at, program, words, library, holes_of, ask, written_of)
         }
     }
+}
+
+/// **A root passed to a parameter that is a root of a file operation**
+/// (ADR-raw-sinks-1 D11, #2591): the parts of the root the argument names,
+/// as at the operation itself; the directory of a `Dir` and each part
+/// `join` adds under it (D14: a guarded one under a base that is not
+/// outside passes), a name that reads a parameter of the caller as one part,
+/// carried on (`raw_sink_carried_root`). `Anywhere` and
+/// `fs::scratch()` have no part of their own.
+fn raw_sink_root_through(mut walk: ProverWalk, sink: ref ParamSink, shown: ref String, written: ref Expr, span: Span, scope: ref ProverScope, at: ref ProverWhere, program: ref Program, words: ref winnow_grammar::InternerContext, library: ref Ledger, holes_of: fn(ref Expr) -> Vec[Expr] sync, ask: fn(ref logic::TermArena, ref Vec[i64], i64) -> SolverAnswer sync, written_of: fn(ref Expr) -> String sync) {
+    let mut joins: Vec[Expr] = []
+    let arg = raw_sink_root(written, scope, words, written_of, joins)
+    if raw_sink_anywhere(arg, words, written_of) {
+        return
+    }
+    let mut root_parts: Vec[Expr] = []
+    match raw_sink_dir(arg, words) {
+        dir => raw_sink_parts(dir, holes_of, root_parts),
+        null => {
+            if !raw_sink_scratch(arg, words) && raw_sink_carried_root(arg, scope, words, library, walk.state, holes_of) {
+                root_parts.push(arg.clone())
+            }
+        },
+    }
+    let mut root_outside = false
+    for part in root_parts {
+        if raw_sink_outside(part, scope, words, library, walk.state, holes_of) {
+            root_outside = true
+        }
+        raw_sink_part(walk, sink, shown, part, span, scope, at, program, words, library, holes_of, ask, written_of)
+    }
+    let mut guard = String()
+    if !root_outside {
+        guard.push_str("path")
+    }
+    let join_sink = ParamSink { index: sink.index, kind: sink.kind.clone(), sink: sink.sink.clone(), operation: sink.operation.clone(), root_part: false, guard: guard }
+    for join in joins {
+        let mut parts: Vec[Expr] = []
+        raw_sink_parts(join, holes_of, parts)
+        for part in parts {
+            raw_sink_part(walk, join_sink, shown, part, span, scope, at, program, words, library, holes_of, ask, written_of)
+        }
+    }
+}
+
+/// Whether the `i`th argument of the `std` file operation `callee` stands
+/// at its parameter `root`, or `from_root` / `to_root` of a call on two roots
+/// (ADR-raw-sinks-1 D11, #2591; ADR-platform-layer-v1 D4).
+fn raw_sink_root_param(callee: ref String, i: i64, library: ref Ledger) -> bool {
+    let contract = library.functions[callee] ?? return false
+    let signature = contract.signature ?? return false
+    if i < 0 || i >= signature.params.len() {
+        return false
+    }
+    return signature.params[i].0 == "root" || signature.params[i].0.ends_with("_root")
+}
+
+/// **The first name the root at argument `i` of `callee` is resolved for**
+/// (ADR-platform-layer-v1 D4): a call on two names with two roots
+/// (`fs::copy_between(from, from_root, to, to_root)`) pairs each root with
+/// the name just before it; every other call has one root after its names.
+fn raw_sink_first_name(callee: ref String, i: i64) -> i64 {
+    if callee == "fs::copy_between" && i > 0 {
+        return i - 1
+    }
+    return 0
+}
+
+/// Whether a root the walk cannot see is a name that reads a parameter and
+/// is not from outside here (#2591): one part of the root, carried to the
+/// callers, which judge the root they pass. A root of any other name the
+/// walk cannot see stays no sink, as the same root written in the call is.
+fn raw_sink_carried_root(arg: ref Expr, scope: ref ProverScope, words: ref winnow_grammar::InternerContext, library: ref Ledger, state: ref ProverState, holes_of: fn(ref Expr) -> Vec[Expr] sync) -> bool {
+    let name = raw_sink_name(arg, words) ?? return false
+    return scope.carried.contains(name) && !raw_sink_outside(arg, scope, words, library, state, holes_of)
 }
 
 /// **One part of a raw sink's text** (ADR-raw-sinks-1 D2): from outside and
@@ -3029,6 +3125,9 @@ fn raw_sink_finding(mut walk: ProverWalk, sink: ref ParamSink, shown: ref String
     if sink.kind == "markup" {
         notes.push("Markup from outside can carry a script that runs in the page of whoever opens it.")
         help = f"Check it where it arrives: `throw BadInput({first}) if !html::is_plain({first})`, after which it is proved; or write it as text, which `html` escapes. If the program means to write markup from outside, `untrusted-markup = true` under `[allow]` in the manifest builds it."
+    } else if sink.kind == "sql" {
+        notes.push("SQL from outside can carry a statement of its own: `x; DROP TABLE users`.")
+        help = f"Hand it to the statement as a value, a hole `:name` in the text and `{first}` under `\"name\"` in `execute`'s `parameters`; or, where it names a table or a column, check it where it arrives: `throw BadInput({first}) if !db::is_identifier({first})`, after which it is proved. If the program means to send SQL from outside, `untrusted-sql = true` under `[allow]` in the manifest builds it."
     } else {
         notes.push("No check makes a stranger's choice of program safe: a name is looked up on `PATH`, a path runs that file.")
         help = "Name the program with a literal, or choose it with a `match` whose arms are literals: `let editor = match env::var(\"EDITOR\") ?? \"\" { \"vim\" => \"vim\", \"nano\" => \"nano\", else => \"vi\", }`. If the program means to run a program from outside, `untrusted-program = true` under `[allow]` in the manifest builds it."
@@ -3135,7 +3234,7 @@ fn raw_sink_operation(callee: ref String, j: i64, config: ref Vec[ConfigArg], wo
     if callee == "fs::rename" {
         return if j == 0 { "remove" } else { "write" }
     }
-    if callee == "fs::copy" {
+    if callee == "fs::copy" || callee == "fs::copy_between" {
         return if j == 0 { "read" } else { "write" }
     }
     if callee == "fs::open" {
@@ -3164,11 +3263,12 @@ fn raw_sink_root(arg: ref Expr, scope: ref ProverScope, words: ref winnow_gramma
                     joins.push(args[0].clone())
                     return base
                 }
+                return arg.clone()
             }
-            return arg.clone()
         },
         else => {},
     }
+    // A name through a `.clone()` names its root too (D14, #2591).
     let name = raw_sink_name(arg, words) ?? return arg.clone()
     let base = scope.roots[name]?.clone() ?? return arg.clone()
     joins.extend(scope.root_joins[name]?.clone() ?? [])
@@ -3224,12 +3324,7 @@ fn raw_sink_joined(arg: ref Expr, scope: ref ProverScope, words: ref winnow_gram
 /// The name or field path a sink part reads, through a `.clone()`
 /// (ADR-raw-sinks-1 D14): `key` of `key` and of `key.clone()`.
 fn raw_sink_name(part: ref Expr, words: ref winnow_grammar::InternerContext) -> String? {
-    return match part {
-        Expr::MethodCall { receiver, method, args, .. } => {
-            if words.resolve(method) == "clone" && args.is_empty() { path_of(receiver, words) } else { null }
-        },
-        else => path_of(part, words),
-    }
+    return path_through_clone(part, words)
 }
 
 /// Whether a sink part reads a name bound to a guarded name joined after a
@@ -4210,7 +4305,7 @@ fn prover_properties_in(expr: ref Expr, scope: ref ProverScope, state: ref Prove
                 return
             }
             let name = property_name(expr, words) ?? return
-            let on = path_of(args[0], words) ?? return
+            let on = path_through_clone(args[0], words) ?? return
             out.push((name, on))
         },
         Expr::MethodCall { receiver, method, .. } => {

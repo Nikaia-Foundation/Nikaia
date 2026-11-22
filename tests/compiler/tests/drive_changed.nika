@@ -1,4 +1,5 @@
-// scripts/drive.nika --changed OLDFILE: RESTART when the file differs from the script.
+// scripts/drive.nika --changed: RESTART when the old script on standard input
+// differs from the script (#2577).
 use std::env
 use std::fs
 use std::process
@@ -14,17 +15,15 @@ fn root() -> String throws {
 }
 
 fn case(nikaia: String, repo: String, name: String, old: String) throws {
-    let out = process::run(nikaia, ["run", "scripts/drive.nika", "--", "--changed", old]; dir: repo)
+    let out = process::run(nikaia, ["run", "scripts/drive.nika", "--", "--changed"]; dir: repo, stdin: process::Input::Text(old))
     println(f"== {name}")
     println(out.stdout.trim())
 }
 
 fn main() throws {
-    let tmp = fs::scratch()
     let repo = root()
     let nikaia = toolchain()
-    fs::write("old", tmp, "an older script\n")
-    process::run("cp", [f"{repo}/scripts/drive.nika", f"{tmp.path().to_text()}/same"])
-    case(nikaia.clone(), repo.clone(), "changed", f"{tmp.path().to_text()}/old")
-    case(nikaia.clone(), repo.clone(), "same", f"{tmp.path().to_text()}/same")
+    let same = fs::read_to_string("scripts/drive.nika", fs::Root::Dir(repo.clone()))
+    case(nikaia.clone(), repo.clone(), "changed", "an older script\n")
+    case(nikaia.clone(), repo.clone(), "same", same)
 }

@@ -369,6 +369,19 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
+    pub(crate) fn a_constructor_with_generics(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, base: &Expr, index: &Expr, span: &Span) {
+        let named = written_expression(world.words, base);
+        let mut generics: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
+        match index {
+            Expr::Tuple(parts, _) => { generics.reserve(parts.iter().size_hint().0); for part in parts.iter() { generics.push(written_expression(world.words, part)); } },
+            _ => { generics.push(written_expression(world.words, index)); },
+        }
+        let written = arith_shown(&format!("{}[{}]", named, nikaia_std::block::Text::from(generics.join(", "))));
+        self.flow.unknown_said += 1;
+        self.findings.push(check_refusal("NK1245", span, format!("The compiler can't tell what type `{}()` is.", written), vec![format!("`{}` is a type, and a type written with its generics is not read as a call of its constructor.", named)], Some(format!("Write the type down on the `let` and call the constructor without them, such as `let x: {} = {}()`.", written, named))));
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
     pub(crate) fn a_name_of_an_open_comptime(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, expr: &Expr) -> bool {
         match expr {
             Expr::Variable(n, _) => { let n = *n; self.is_an_open_comptime(world.words.resolve(n)) },

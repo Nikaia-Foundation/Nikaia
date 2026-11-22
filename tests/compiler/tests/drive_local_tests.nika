@@ -1,4 +1,5 @@
-// scripts/drive.nika --local-tests FILE: the tests named after the changed
+// scripts/drive.nika --local-tests (the paths on standard input, #2577):
+// the tests named after the changed
 // scripts run with the driver's own copy of the compiler, and a run that
 // loses its compiler to another lane's rebuild runs once more instead of
 // going red (#1722). The compiler here is a stub script in a temp repo.
@@ -21,7 +22,6 @@ fn case(nikaia: String, repo: String, name: String, mode: String) throws {
     let tmp = fs::scratch()
     process::run("mkdir", ["-p", f"{tmp.path().to_text()}/target/fast", f"{tmp.path().to_text()}/tests/compiler/tests"])
     fs::write("tests/compiler/tests/drive_x.nika", tmp, "fn main() {}\n")
-    fs::write("paths", tmp, "scripts/drive.nika\n")
     let stub = "#!/bin/sh\n"
         + f"case \"$0\" in */target/drive-*/nikaia) echo copy >> {tmp.path().to_text()}/ran ;; *) echo shared >> {tmp.path().to_text()}/ran ;; esac\n"
         + f"if [ {mode} = lost ] && [ ! -e {tmp.path().to_text()}/once ]; then touch {tmp.path().to_text()}/once; echo \"Error: running $0 (deleted)\"; echo 'Caused by:'; echo '    No such file or directory (os error 2)'; exit 1; fi\n"
@@ -31,7 +31,7 @@ fn case(nikaia: String, repo: String, name: String, mode: String) throws {
     process::run("chmod", ["+x", f"{tmp.path().to_text()}/target/fast/nikaia"])
     process::run("sh", ["-c", "git init -q && git -c user.name=t -c user.email=t@t commit -q --allow-empty -m x"]; dir: tmp.path().to_text())
     let sha = process::run("git", ["rev-parse", "--short=8", "HEAD"]; dir: tmp.path().to_text()).stdout.trim().clone()
-    let out = process::run(nikaia, ["run", f"{repo}/scripts/drive.nika", "--", "--local-tests", f"{tmp.path().to_text()}/paths"]; dir: tmp.path().to_text())
+    let out = process::run(nikaia, ["run", f"{repo}/scripts/drive.nika", "--", "--local-tests"]; dir: tmp.path().to_text(), stdin: process::Input::Text("scripts/drive.nika\n"))
     println(f"== {name}")
     println(out.stdout.trim().replace(sha, "<sha8>"))
     let ran = process::run("sh", ["-c", f"cat {tmp.path().to_text()}/ran | tr '\\n' ' '"]).stdout.trim().clone()

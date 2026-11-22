@@ -196,7 +196,7 @@ pub(crate) fn property_name(expr: &Expr, words: &winnow_grammar::InternerContext
                 Expr::Path(segments, _) => path_text(segments, words),
                 _ => return None,
             };
-            let on = match path_of(unsafe { nikaia_std::proven::read(&args, (0) as usize) }, words) { Some(__nikaia_value) => __nikaia_value, None => return None };
+            let on = match path_through_clone(unsafe { nikaia_std::proven::read(&args, (0) as usize) }, words) { Some(__nikaia_value) => __nikaia_value, None => return None };
             let rest = match property_paths(args, 1, words) { Some(__nikaia_value) => __nikaia_value, None => return None };
             Some(format!("{}.{}{}({})", on, property_mark(), callee, rest))
         },
@@ -208,6 +208,16 @@ pub(crate) fn property_name(expr: &Expr, words: &winnow_grammar::InternerContext
             Some(format!("{}.{}.{}({})", on, property_mark(), words.resolve(method), rest))
         },
         _ => None,
+    }
+}
+
+pub(crate) fn path_through_clone(arg: &Expr, words: &winnow_grammar::InternerContext) -> Option<String> {
+    match arg {
+        Expr::MethodCall { receiver, method, args, .. } => {
+            let receiver = nikaia_std::boxed::open(receiver); let method = *method;
+            if words.resolve(method) == "clone" && args.is_empty() { path_of(receiver, words) } else { None }
+        },
+        _ => path_of(arg, words),
     }
 }
 

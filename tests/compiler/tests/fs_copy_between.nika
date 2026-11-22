@@ -1,0 +1,37 @@
+// `fs::copy_between` copies a file from one root into another and keeps its
+// permission bits (ADR-platform-layer-v1 D4, D7 item 1): each name is
+// resolved under its own root, so a store outside the target is read, and a
+// `to` that leaves its root is `Outside`. The mode is set and read through
+// `sh`: `std::fs` sets none. No absolute name is printed.
+use std::fs
+use std::io
+use std::process
+
+fn main() throws {
+    let scratch = fs::scratch()
+    fs::create_dir("store", scratch)
+    fs::create_dir("target/out", scratch; recursive: true)
+    fs::write("store/run", scratch, "#!/bin/sh\necho ran\n")
+    let top = fs::canonical(".", scratch).to_text()
+    process::run("chmod", ["0755", "store/run"]; dir: top.clone())
+    let store = fs::Root::Dir(f"{top}/store")
+    let target = fs::Root::Dir(f"{top}/target/out")
+    let copied = fs::copy_between("run", store, "run", target)
+    println(f"copied: {copied} bytes")
+    let mode = process::run("sh", ["-c", "if test -x target/out/run; then echo true; else echo false; fi"]; dir: top)
+    println(f"executable: {mode.stdout.trim()}")
+    println(f"same bytes: {fs::read_to_string("run", target) == fs::read_to_string("run", store)}")
+    fs::copy_between("run", store, "../escaped", target) catch {
+        match error {
+            io::IoError::Outside(p) => println(f"to outside: Outside {p.display()}"),
+            else => println("to outside: other"),
+        }
+    }
+    println(f"escaped made: {fs::exists("target/escaped", scratch)}")
+    fs::copy_between("../run", target, "again", target) catch {
+        match error {
+            io::IoError::Outside(p) => println(f"from outside: Outside {p.display()}"),
+            else => println("from outside: other"),
+        }
+    }
+}

@@ -1,0 +1,9 @@
+error[NK1117]: There's no function called `T`.
+  --> tests/kind_arm_constructor_outside_is_refused.nika:5:2
+   |
+ 5 | 	let y: T = T()
+   |  ^^^^^^^^^^^^^^
+   |
+   = note: A function called by its name alone is one of yours or one that's always available. A function from a package is called with the package's name in front: `package::name(…)`.
+   = help: Declare it with `fn T(…)`, or call it through the package that has it.
+1 type error

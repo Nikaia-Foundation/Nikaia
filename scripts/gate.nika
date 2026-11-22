@@ -259,7 +259,7 @@ fn gate_test_in(dir: String, names: Vec[String]) throws {
     for name in names {
         for ext in [".nika", ".stdout", ".stderr", ".out"] {
             let from = f"tests/compiler/tests/{name}{ext}"
-            if fs::exists(from.clone(), fs::Root::Anywhere) { process::run("cp", ["-r", from, f"{dir}/tests/"]) }
+            if fs::exists(from.clone(), fs::Root::Dir(".")) { process::run("cp", ["-r", from, f"{dir}/tests/"]) }
         }
     }
     let ran = process::run(
@@ -318,7 +318,7 @@ fn gate_sweep() throws {
         let rest = name.strip_prefix("nikaia-test-") ?? ""
         let pid = rest.split("-").collect()[0].clone()
         if pid == "" || (text::parse_i64(pid.clone()) ?? 0) <= 0 { continue }
-        if fs::exists(f"/proc/{pid}", fs::Root::Anywhere) { continue }
+        if fs::exists(pid, fs::Root::Dir("/proc")) { continue }
         process::run("rm", ["-rf", f"{tmp}/{name}"])
     }
 }
