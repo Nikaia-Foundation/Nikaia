@@ -2,6 +2,7 @@
 //
 //     nikaia run scripts/issue-check.nika -- N
 //     nikaia run scripts/issue-check.nika -- --body FILE [--open M...]
+//     nikaia run scripts/issue-check.nika -- --body - [--open M...] < FILE
 //
 // prints one line per missing requirement and exits 1 when any is missing
 // (nothing and exit 0 when the form holds). It checks:
@@ -17,7 +18,8 @@
 //
 // Quoted text (a fenced block, a backtick span holding a `#`) names nothing.
 // With `-- N` the body and the state of each `#M` are read from GitHub; with
-// `--body FILE` the state too, unless `--open` lists the open ones (then
+// `--body FILE` (`--body -`: the body on standard input, the driver's form,
+// #2466) the state too, unless `--open` lists the open ones (then
 // every other `#M` counts as closed: the tests' form). The driver runs it
 // on each issue before queuing it (drive_queue in scripts/drive.nika); the
 // issues the driver files itself (drive_found_body, drive_improve_body) hold
@@ -25,6 +27,7 @@
 
 use std::cli
 use std::fs
+use std::io
 use std::process
 
 fn check_repo() -> String {
@@ -90,7 +93,7 @@ fn check_is_heading(line: String) -> bool {
 // dependency (the issue's own form, #2003's item 6), while prose such as
 // "the key decided in #1909" does.
 fn check_unbracketed(text: String) -> String {
-    let mut out = String()
+    let mut out = String(capacity: text.len())
     let mut depth = 0
     for c in text.scalars {
         if c == '\n' {
@@ -203,7 +206,7 @@ fn main() throws {
     let mut known = false
     let mut open: Vec[String] = []
     if args.len() >= 3 && args[1] == "--body" {
-        body = fs::read_to_string(args[2].clone(), fs::Root::Anywhere)
+        body = if args[2] == "-" { io::read_to_string() } else { fs::read_to_string(args[2].clone(), fs::Root::Anywhere) }
         if args.len() >= 4 && args[3] == "--open" {
             known = true
             for k in 4..<args.len() { open.push(args[k].clone()) }
@@ -217,7 +220,7 @@ fn main() throws {
         }
         body = got.stdout
     } else {
-        println("usage: nikaia run scripts/issue-check.nika -- N | --body FILE [--open M...]")
+        println("usage: nikaia run scripts/issue-check.nika -- N | --body FILE|- [--open M...]")
         process::exit(2)
     }
     let findings = check_body(body, own, known, open)
