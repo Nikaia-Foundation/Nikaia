@@ -1,0 +1,12 @@
+// **A range's `filter` hands its lambda the item by reference, and a
+// range's item copies** (#2103, ADR-231 D2): with open numbers the lambda
+// was written `|x|` and Rust refused `x > 1` and `quick(x)` on a `&i64`.
+fn quick(x: i64) -> i64 {
+    return x
+}
+
+fn main() throws {
+    let compared = (1..3).filter(fn(x) { x > 1 }).count()
+    let passed = (1..5).filter(fn(x) { quick(x) % 2 == 0 }).count()
+    println(f"{compared} {passed}")
+}

@@ -369,6 +369,21 @@ pub(crate) fn check_crossings_a_type_that_does_not_compare(state: &mut CheckStat
     state.findings.push(finding);
 }
 
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn check_crossings_a_type_with_no_order(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, op: &str, left: &Ty, right: &Ty, span: &Span) {
+    for side in [left, right] {
+        match side {
+            Ty::Named { name, .. } => { if state.type_parameters.contains_key(name) { return; } },
+            _ => { },
+        }
+    }
+    let asking = CheckComparable { beside: &world.parts_beside, structs: &state.structs, enums: &state.enums, payloads: &state.enum_payloads, parameters: &state.struct_parameters, own: world.own, library: world.library };
+    let refused: Option<CheckFinding> = compare_order_refusal(&asking, op, left, right, span);
+    let finding = match refused { Some(__nikaia_value) => __nikaia_value, None => return };
+    state.findings.push(finding);
+}
+
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn check_crossings_bounds(beside: &collections::BTreeMap<String, Vec<Ty>>, structs: &collections::BTreeMap<String, Vec<FieldContract>>, enums: &collections::BTreeMap<String, collections::BTreeSet<String>>, payloads: &collections::BTreeMap<String, Vec<Ty>>, parameters: &collections::BTreeMap<String, Vec<String>>, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, type_parameters: &collections::BTreeMap<String, Vec<String>>, key: &str, wanted: &collections::BTreeMap<String, Vec<String>>, bound: &collections::BTreeMap<String, Ty>, span: &Span) -> Vec<CheckFinding> {
     let asking = CheckComparable { beside, structs, enums, payloads, parameters, own: world.own, library: world.library };

@@ -3215,13 +3215,6 @@ touches = []
 views = ["x: borrowed", "y: borrowed"]
 signature = "(x: ref Vec[i64], y: ref Vec[i64], j: i64) -> Vec[i64]?"
 
-[fn."sv_dots"]
-sync = "inferred"
-panics = true
-touches = []
-views = ["held: borrowed"]
-signature = "(held: ref Vec[SvHeld], u: u32, v: u32) -> SvDots?"
-
 [fn."sv_elim_test_answer_kind"]
 sync = "inferred"
 panics = false
@@ -5715,13 +5708,6 @@ fields = ["dists: Vec[i64]", "preds: Vec[i64]"]
 compares = true
 equates = true
 hashes = true
-
-[type."SvDots"]
-fields = ["uv: i64", "vv: i64"]
-compares = true
-equates = true
-hashes = true
-copies = true
 
 [type."SvDriven"]
 pub = true

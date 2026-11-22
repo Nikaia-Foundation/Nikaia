@@ -1,0 +1,17 @@
+error[NK1171]: `String` is code, and code has no method called `with_capacity`.
+  --> tests/code_has_no_methods.nika:8:5
+   |
+ 8 |     let mut left = String.with_capacity(64)
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: A value of type `fn() -> String sync` is called, `String(…)`; no declaration, ledger or description gives it methods.
+   = help: `String` here is its constructor: call it, `String(…)` with the options it takes, and call `with_capacity` on the value it makes, or write `String::with_capacity(…)` for a function of the type.
+error[NK1171]: `twice` is code, and code has no method called `clone`.
+   --> tests/code_has_no_methods.nika:10:5
+    |
+ 10 |     let n = twice.clone()
+    |     ^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: A value of type `fn(a: i64) -> i64 sync` is called, `twice(…)`; no declaration, ledger or description gives it methods.
+    = help: Call it first, `twice(…).clone()`, for a method of what it hands back.
+2 type errors

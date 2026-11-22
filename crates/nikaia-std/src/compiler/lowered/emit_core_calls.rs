@@ -1185,7 +1185,7 @@ impl EmitState {
         if rust_text { out.push(&block_text_open(self.on_block_types())); }
         if kind == 1 {
             out.push(&format!("nikaia_std::seq::{}(", entry));
-            self.emit_core_receiver(world, walk, out, host, receiver, depth, flow, scope, false)?;
+            self.emit_core_receiver_as_argument(world, walk, out, host, receiver, depth, flow, scope)?;
             out.push(", ");
         } else if kind == 2 {
             out.push(&format!("nikaia_std::seq::{}(&mut ", entry));
@@ -1568,8 +1568,8 @@ pub(crate) fn emit_tuple_part_copy(i: i64, word: &str) -> String {
 }
 
 pub(crate) fn emit_tuple_part_copies(parts: &[String]) -> String {
-    let copies: Vec<String> = parts.iter().enumerate().map(|(at, item)| (at as i64, item)).map(|__nikaia_tuple117100| {
-        let (i, word) = __nikaia_tuple117100;
+    let copies: Vec<String> = parts.iter().enumerate().map(|(at, item)| (at as i64, item)).map(|__nikaia_tuple117105| {
+        let (i, word) = __nikaia_tuple117105;
         emit_tuple_part_copy(i, word)
     }).collect::<Vec<_>>();
     if copies.len() == 1 { return format!("({},)", *unsafe { nikaia_std::proven::read(&copies, (0) as usize) }); }

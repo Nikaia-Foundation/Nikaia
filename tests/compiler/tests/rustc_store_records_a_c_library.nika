@@ -1,0 +1,87 @@
+// #2037, ADR-021 D14: every crate type is recorded. A `c-library` package
+// is one crate with two crate types, a `cdylib` and a `staticlib`; its
+// shared library, its archive and the `.d` are recorded under the one key,
+// so a build by another compiler whose Rust came out the same reuses them
+// and puts both libraries in place again. Another compiler is stood in for
+// as in `rustc_runs_once_on_the_same_rust`: the switches' last line
+// rewritten and the Cargo-fresh record dropped.
+use std::env
+use std::fs
+use std::process
+
+fn toolchain() -> String throws {
+	let exe = env::current_exe()?.display() ?? ""
+	if exe.len() == 0 {
+		eprintln("no running nikaia among this program's ancestors: run it with `nikaia test` (#1305)")
+		process::exit(2)
+	}
+	return exe
+}
+
+// What the store said for each crate since the last call, the crate's tag
+// (`_` and the project's digest, #495) left out, and the trace emptied.
+fn verdicts(trace: ref fs::Root) -> String throws {
+	let said = process::run(
+		"sh",
+		["-c", f"grep ' rustc ' {trace.path().to_text()} | sed -E 's/_[0-9a-f]{{16,}} / /'; rm -f {trace.path().to_text()}"],
+	).stdout.trim().clone()
+	return said.replace("\n", ", ")
+}
+
+// Another compiler, as far as the build can tell; and the libraries the
+// last build put in place removed, so the next one must make them again.
+fn another_compiler(p: ref fs::Root) throws {
+	process::run(
+		"sh",
+		[
+			"-c",
+			"sed -i '$ s/.*/another-compiler/' target/nikaia/gen/switches; find target -name cargo-fresh -delete; rm -rf target/nikaia/c-library",
+		]; dir: p.path().to_text(),
+	)
+}
+
+fn build(nikaia: String, p: ref fs::Root, cache: ref fs::Root, trace: ref fs::Root) -> String throws {
+	let built = process::run(
+		nikaia,
+		["build"]; dir: p.path().to_text(),
+		env: [
+			("RUST_BACKTRACE", "0"),
+			("NIKAIA_CACHE_DIR", cache.path().to_text()),
+			("NIKAIA_WRAPPER_TRACE", trace.path().to_text()),
+		],
+	)
+	if built.code != 0 {
+		eprintln(built.stderr)
+	}
+	return f"built {built.code}"
+}
+
+// The libraries in `target/nikaia/c-library/`, by kind.
+fn libraries(p: ref fs::Root) -> String throws {
+	return process::run(
+		"sh",
+		["-c", "cd target/nikaia/c-library && ls | grep -E '\\.(so|dylib|a)$' | sed -E 's/.*\\.//' | sort | tr '\\n' ' '"]; dir: p.path().to_text(),
+	).stdout.trim().clone()
+}
+
+fn main() throws {
+	let tmp = fs::scratch()
+	let nikaia = toolchain()
+	let cache = tmp.join("cache")
+	let trace = tmp.join("trace")
+	let p = tmp.join("tally")
+	process::run("mkdir", ["-p", f"{p.path().to_text()}/src"])
+	fs::write(
+		"nikaia.toml",
+		p,
+		"[package]\nname = \"tally\"\nversion = \"0.1.0\"\n\n[build]\nartifact = \"c-library\"\n",
+	)
+	fs::write(
+		"src/main.nika",
+		p,
+		"pub extern fn twice(n: i64) -> i64 sync {\n\treturn n * 2\n}\n",
+	)
+	println(f"first: {build(nikaia, p, cache, trace)}; {verdicts(trace)}; libraries {libraries(p)}")
+	another_compiler(p)
+	println(f"same Rust, another compiler: {build(nikaia, p, cache, trace)}; {verdicts(trace)}; libraries {libraries(p)}")
+}

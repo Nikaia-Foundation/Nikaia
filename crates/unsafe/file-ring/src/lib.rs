@@ -63,6 +63,7 @@ use std::fs::File;
 use std::io;
 use std::io::{Read, Write};
 use std::os::fd::{FromRawFd, OwnedFd};
+use std::os::unix::fs::OpenOptionsExt;
 use std::os::unix::io::AsRawFd;
 use std::path::Path;
 use std::sync::Arc;
@@ -308,15 +309,39 @@ impl Ring {
     /// (Nikaia ADR-055 §6 step 3) -
     /// `read_many` above is the same operation for a caller that is going to
     /// wait for it anyway, and both are here because the ring is the same ring.
-    pub fn begin_read(&mut self, path: &Path) -> io::Result<usize> {
+    ///
+    /// **`Ok(None)` for anything but a regular file** (Nikaia #2137): the
+    /// path is opened `O_NONBLOCK`, so the read side of a FIFO with no writer
+    /// does not wait in `open` on the calling thread - the thread that runs
+    /// the program. Such a file is handed back for the caller to read where
+    /// waiting is allowed: its descriptor cannot be kept, since a FIFO read
+    /// without the wait in `open` ends at once, empty, while no writer has
+    /// come. A regular file has the flag cleared again before it reaches the
+    /// ring, which would otherwise answer a read of an uncached page with
+    /// `EAGAIN`.
+    pub fn begin_read(&mut self, path: &Path) -> io::Result<Option<usize>> {
         self.release_finished();
-        let slot = self.begin(path, Kind::Read, Vec::new())?;
+        let file = std::fs::OpenOptions::new()
+            .read(true)
+            .custom_flags(libc::O_NONBLOCK)
+            .open(path)?;
+        if !file.metadata()?.is_file() {
+            return Ok(None);
+        }
+        // SAFETY: `fcntl` with `F_SETFL` takes a descriptor and an integer and
+        // borrows nothing; the descriptor is `file`'s, open for this call. The
+        // only status flag the `open` above set is `O_NONBLOCK`, so `0` clears
+        // exactly it. `-1` is checked.
+        if unsafe { libc::fcntl(file.as_raw_fd(), libc::F_SETFL, 0) } == -1 {
+            return Err(io::Error::last_os_error());
+        }
+        let slot = self.begin_on(file, Kind::Read, Vec::new())?;
         self.claim(slot);
         self.submit_one(slot);
         // Handed to the kernel now rather than at the next poll: a submission
         // sitting in the queue is an operation that has not started.
         let _ = self.ring.submit();
-        Ok(slot)
+        Ok(Some(slot))
     }
 
     /// The same for a write.
@@ -542,7 +567,11 @@ impl Ring {
 
     /// Open `path`, size it, and take a slot with a buffer the kernel can use.
     fn begin(&mut self, path: &Path, kind: Kind, bytes: Vec<u8>) -> io::Result<usize> {
-        let file = File::open(path)?;
+        self.begin_on(File::open(path)?, kind, bytes)
+    }
+
+    /// The same for a file already open.
+    fn begin_on(&mut self, file: File, kind: Kind, bytes: Vec<u8>) -> io::Result<usize> {
         let size = file.metadata()?.len() as usize;
         let buf = match kind {
             // `stat`'s answer is a hint and not a contract - `/proc` reports

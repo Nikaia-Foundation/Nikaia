@@ -1,0 +1,14 @@
+// **A lambda inside an `f"…"` hole is part of its function's body**
+// (#2103): one that pauses makes the function pause, as it does outside
+// the literal; `main` was a plain `fn` that awaited.
+use std::time
+
+fn slow(x: i64) -> i64 {
+    time::sleep(1.millis())
+    return x
+}
+
+fn main() throws {
+    let a: i64 = 1
+    println(f"{(a..3).map(fn(x) { slow(x) }).count()}")
+}

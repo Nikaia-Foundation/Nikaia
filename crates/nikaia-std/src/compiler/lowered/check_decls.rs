@@ -220,6 +220,8 @@ impl CheckState {
     pub(crate) fn function_as_a_value(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, name: &str) -> Option<Ty> {
         let mut key = nikaia_std::block::Text::from(name.to_string());
         if self.structs.contains_key(name) || world.own.types.contains_key(name) { key = format!("{}::new", name); }
+        let direct = ledger_function(world, name).is_some();
+        if !direct && (world.library.types.contains_key(name) || a_part_one_type(name)) { key = format!("{}::new", name); }
         let contract = match ledger_function(world, &key) { Some(__nikaia_value) => __nikaia_value, None => return None };
         let signature = match contract.signature.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return None };
         let mut params: Vec<Ty> = vec![];

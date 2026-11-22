@@ -1,0 +1,12 @@
+// #2113: a method call on code (a std type's constructor, a function named
+// as a value) is refused by the checker (NK1171), not by rustc (Part III C.1).
+fn twice(a: i64) -> i64 {
+    return a * 2
+}
+
+fn main() throws {
+    let mut left = String.with_capacity(64)
+    left.push_str("a")
+    let n = twice.clone()
+    println(left)
+}

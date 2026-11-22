@@ -195,6 +195,7 @@ pub(crate) fn statement_blocks(stmt: &Stmt, names: &winnow_grammar::InternerCont
 }
 
 pub(crate) fn expression_blocks(expr: &Expr, names: &winnow_grammar::InternerContext, unaliased: &mut dyn FnMut(&str) -> String, holes_of: &mut dyn FnMut(&Expr) -> Vec<Expr>, root_at: &mut dyn FnMut(&str) -> i64, found: &mut Walked) {
+    for hole in holes_of(expr) { expression_blocks(&hole, names, &mut &mut *unaliased, &mut &mut *holes_of, &mut &mut *root_at, found); }
     match expr {
         Expr::Block(block, _) => { block_names(block, names, &mut &mut *unaliased, &mut &mut *holes_of, &mut &mut *root_at, found); },
         Expr::AsyncGroup(block, _, _, _, _) => { block_names(block, names, &mut &mut *unaliased, &mut &mut *holes_of, &mut &mut *root_at, found); },

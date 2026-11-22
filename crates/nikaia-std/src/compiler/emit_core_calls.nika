@@ -1765,7 +1765,7 @@ impl EmitState {
         }
         if kind == 1 {
             out.push(f"nikaia_std::seq::{entry}(")
-            self.emit_core_receiver(world, walk, out, host, receiver, depth, flow, scope, false)
+            self.emit_core_receiver_as_argument(world, walk, out, host, receiver, depth, flow, scope)
             out.push(", ")
         } else if kind == 2 {
             out.push(f"nikaia_std::seq::{entry}(&mut ")

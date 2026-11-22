@@ -453,6 +453,19 @@ impl EmitState {
         self.emit_core_postfix_base(world, walk, out, host, expr, depth, inside, scope)
     }
 
+    /// **A receiver written as a function's first argument** (#2103):
+    /// `nikaia_std::seq::then(a..b, ..)` needs no parentheses around a range
+    /// or an operator, which rustc warns about, so it is written bare.
+    fn emit_core_receiver_as_argument[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, receiver: ref Expr?, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
+        if receiver == null {
+            out.push("__nikaia_it")
+            return
+        }
+        let expr = receiver ?? return
+        let inside = if self.facts.changed_elements.contains(node_key(expr)) { flow.place() } else { flow }
+        self.emit_expr(world, walk, out, host, expr, depth, inside, scope)
+    }
+
     /// **A call of a field that holds a function**, written through the field:
     /// `(button.on_click)(4)`, awaited where it may pause - `false`, and nothing
     /// written, where the checker recorded no such call. `reached` is the safe

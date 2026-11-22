@@ -300,6 +300,13 @@ pub(crate) fn check_core_ops_outcome<H: CheckHost>(state: &mut CheckState, world
     if check_core_ops_equality(&op) { return check_core_ops_equal(state, world, host, &op, lhs, left, rhs, right, at, span); }
     if check_core_ops_ordering(&op) {
         state.an_operator_needs_a_bound(world, &op, left, right, at);
+        let symbol: String = match op {
+            BinaryOp::Lt => String::from("<"),
+            BinaryOp::Le => String::from("<="),
+            BinaryOp::Gt => String::from(">"),
+            _ => String::from(">="),
+        };
+        check_crossings_a_type_with_no_order(state, world, &symbol, left, right, at);
         state.a_maybe_compared_with_a_value(left, right, span);
         state.a_view_compared_with_a_value(world, lhs, left, rhs, right, at);
         if is_text_type(&left.unseen()) && is_text_type(&right.unseen()) { let added = state.facts.ordered_texts.insert(at.start as i64); }
