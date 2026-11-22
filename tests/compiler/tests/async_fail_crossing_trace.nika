@@ -1,0 +1,34 @@
+// Under `NIKAIA_TRACE=1` the trace of a failure that crossed two tasks'
+// boundaries is the task's trace, then per crossing a line
+// `── started at <site> ──` and the trace of the code that waited
+// (ADR-async-5 D23, Part I 7.1, #2562). The traces differ from run to run, so
+// this prints the long form's own lines and counts the rest; the control
+// without the switch has the note instead, and no stitching line.
+use std::env
+use std::fs
+use std::process
+
+fn toolchain() -> String throws {
+    let exe = env::current_exe()?.display() ?? ""
+    if exe.len() > 0 { return exe }
+    return "target/fast/nikaia"
+}
+
+fn main() throws {
+    let tmp = fs::scratch()
+    fs::write("main.nika", tmp, "struct Bad {}\n\nimpl Error for Bad {\n\tfn message(ref self) -> String {\n\t\treturn \"the task failed\"\n\t}\n}\n\nfn work(n: i64) -> i64 throws {\n\tif n > 5 {\n\t\tthrow Bad {}\n\t}\n\treturn n\n}\n\nfn middle(n: i64) -> i64 throws {\n\tlet v = async work(n)\n\tlet beside = n * 2\n\treturn v + beside\n}\n\nfn outer(n: i64) -> i64 throws {\n\tlet m = async middle(n)\n\tlet beside = n + 3\n\treturn m + beside\n}\n\nfn main() throws {\n\tlet n = outer(7) catch {\n\t\tprintln(error.full())\n\t\t0\n\t}\n\tprintln(f\"{n}\")\n}\n")
+    for switch in ["1", "0"] {
+        let out = process::run(toolchain(), ["run", "main.nika"]; dir: tmp.path().to_text(), env: [("NIKAIA_TRACE", switch.clone())])
+        println(f"NIKAIA_TRACE={switch}, exit {out.code}:")
+        let mut traced = 0
+        for line in out.stdout.lines() {
+            let shown = line.starts_with("the task failed") || line.starts_with("  raised at") || line.starts_with("  started at") || line.starts_with("  arrived at") || line.starts_with("──") || line.starts_with("  (no trace") || line == "0"
+            if shown {
+                println(line)
+            } else {
+                traced += 1
+            }
+        }
+        println(f"traced lines: {traced > 0}")
+    }
+}

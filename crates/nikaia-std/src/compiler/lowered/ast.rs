@@ -91,7 +91,7 @@ pub enum Expr {
     Select(Vec<SelectArm>, node_id::NodeId),
     If { cond: nikaia_std::block::Boxed<Expr>, then_branch: Block, else_branch: Option<Block>, id: node_id::NodeId },
     Call { func: nikaia_std::block::Boxed<Expr>, args: Vec<Expr>, config: Vec<ConfigArg>, id: node_id::NodeId },
-    Spawn { body: nikaia_std::block::Boxed<Expr>, written_async: bool, child: bool, within: nikaia_std::block::Boxed<Option<Expr>>, admission: nikaia_std::block::Boxed<Option<Expr>>, id: node_id::NodeId },
+    Spawn { body: nikaia_std::block::Boxed<Expr>, written_async: bool, child: bool, deferred: bool, within: nikaia_std::block::Boxed<Option<Expr>>, admission: nikaia_std::block::Boxed<Option<Expr>>, id: node_id::NodeId },
     Async(nikaia_std::block::Boxed<Expr>, node_id::NodeId, nikaia_std::block::Boxed<Option<Expr>>, nikaia_std::block::Boxed<Option<Expr>>),
     AsyncGroup(Block, node_id::NodeId, nikaia_std::block::Boxed<Option<Expr>>, nikaia_std::block::Boxed<Option<Expr>>, nikaia_std::block::Boxed<Option<Expr>>),
     Dsl { target: winnow_grammar::Symbol, package: Option<winnow_grammar::Symbol>, context: Option<winnow_grammar::Symbol>, content: String, id: node_id::NodeId },

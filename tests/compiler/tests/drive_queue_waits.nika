@@ -14,7 +14,7 @@
 // its `Needs:`. A closed dependency, a `Needs: supervisor decision`, a prose
 // `after #N`, the issue the body is `Part of`, and quoted text (a backtick
 // or double-quoted span with a `#`, a fenced block, a `<details>` block)
-// hold up nothing (#1881, #1903).
+// hold up nothing (#1881, #1903), in a report's `Needs:` and `Found:` too.
 use std::env
 use std::fs
 use std::process
@@ -34,7 +34,7 @@ fn main() throws {
     let nikaia = toolchain()
     let dir = fs::scratch()
     let list = f"{dir.path().to_text()}/issues.txt"
-    fs::write("issues.txt", dir, "=== #10 ===\nNo dependency.\nNeeds: supervisor decision\n=== #11 ===\n## Found\n\nNeeds #900\n=== #12 ===\n- [ ] **Blocked by** #901, #902\n=== #13 ===\nThis waits for #903 and #900 to land.\n=== #14 ===\nDepends on: #904\n=== #15 ===\nAfter #905, plain --bless no longer works; after #900 too.\n=== #18 ===\nNeeds #901; see also #900.\n=== #16 ===\nA run ended blocked.\n=== #17 ===\nA run ended partial.\n=== #19 ===\nA run ended partial, waiting.\n=== #20 ===\nA run ended blocked, its gaps filed by the driver.\n=== #21 ===\nA run ended blocked, its filed gap closed.\n=== #22 ===\nA renamed run ended blocked, waiting.\n=== #23 ===\nA run ended blocked, citing an issue.\n=== #24 ===\nPart of #900.\nNeeds #900, #901\n=== #25 ===\nPart of #903; a renamed run waits for it.\n=== #26 ===\nThe driver printed `SKIPPED #26 waits for #900`.\n```\nNeeds: #901\n```\n<details><summary>report</summary>\n\nNeeds: #903\nwaits for #906\n</details>\n`Needs:` #907\n=== #27 ===\nA run ended blocked on a cited issue, moved aside.\n=== #28 ===\n- Friction: the driver's comment (\"waits for #903\") claimed a dependency.\n=== #29 ===\nWaits for #903, as \"a quote\" says.\n")
+    fs::write("issues.txt", dir, "=== #10 ===\nNo dependency.\nNeeds: supervisor decision\n=== #11 ===\n## Found\n\nNeeds #900\n=== #12 ===\n- [ ] **Blocked by** #901, #902\n=== #13 ===\nThis waits for #903 and #900 to land.\n=== #14 ===\nDepends on: #904\n=== #15 ===\nAfter #905, plain --bless no longer works; after #900 too.\n=== #18 ===\nNeeds #901; see also #900.\n=== #16 ===\nA run ended blocked.\n=== #17 ===\nA run ended partial.\n=== #19 ===\nA run ended partial, waiting.\n=== #20 ===\nA run ended blocked, its gaps filed by the driver.\n=== #21 ===\nA run ended blocked, its filed gap closed.\n=== #22 ===\nA renamed run ended blocked, waiting.\n=== #23 ===\nA run ended blocked, citing an issue.\n=== #24 ===\nPart of #900.\nNeeds #900, #901\n=== #25 ===\nPart of #903; a renamed run waits for it.\n=== #26 ===\nThe driver printed `SKIPPED #26 waits for #900`.\n```\nNeeds: #901\n```\n<details><summary>report</summary>\n\nNeeds: #903\nwaits for #906\n</details>\n`Needs:` #907\n=== #27 ===\nA run ended blocked on a cited issue, moved aside.\n=== #28 ===\n- Friction: the driver's comment (\"waits for #903\") claimed a dependency.\n=== #29 ===\nWaits for #903, as \"a quote\" says.\n=== #30 ===\nA renamed run ended blocked on an owner decision, its probe citing an issue.\n")
     fs::write("issue-16.md.run1.report.md", dir, "Result: blocked\nFound: the walk lacks a term (#906)\nNeeds: supervisor decision\n")
     fs::write("issue-17.md.report.md", dir, "Result: partial\nFound: a gap (#900)\n")
     fs::write("issue-19.md.report.md", dir, "Result: partial - built, kept as a draft\nFound: a walk gap (#900); blocks the draft\nNeeds: #907 for the draft's last site\n")
@@ -43,6 +43,7 @@ fn main() throws {
     fs::write("issue-22.md.run1.report.md", dir, "Result: blocked\nFound: a gap (#900)\nNeeds: #906\n")
     fs::write("issue-23.md.report.md", dir, "Result: blocked\nFound: a gap, see #906\nNeeds: supervisor decision\n")
     fs::write("issue-25.md.run1.report.md", dir, "Result: blocked\nNeeds: #903\n")
+    fs::write("issue-30.md.run1.report.md", dir, "Result: blocked\nFound: none\nNeeds: owner decision: probe `fn f() (ADR-361 D13, #903)`\n")
     fs::write("issue-27.md.report.md", dir, "Result: blocked\nFound: a gap, see #906\nNeeds: supervisor decision")
     process::run(nikaia.clone(), ["run", "scripts/drive.nika", "--", "--report-aside", dir.path().to_text(), "issue-27.md", "906"]; dir: repo.clone())
     fs::write("found.txt", dir, "issue-17: filed #910\nissue-20: filed #908\nissue-20: filed #909\nissue-21: filed #911\n")

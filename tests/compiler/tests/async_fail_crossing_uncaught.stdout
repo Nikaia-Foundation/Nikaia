@@ -1,0 +1,12 @@
+the value form, exit 1:
+Error: the task failed
+  raised at work
+  started at load
+  arrived at load
+  (no trace; set NIKAIA_TRACE=1 to capture one)
+the handle form, exit 1:
+Error: the task failed
+  raised at work
+  started at joined
+  arrived at joined
+  (no trace; set NIKAIA_TRACE=1 to capture one)

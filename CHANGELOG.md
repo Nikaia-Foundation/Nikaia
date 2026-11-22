@@ -8,6 +8,22 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1525] — 2026-11-21
+
+**checker: a task handle used after join(), cancel() or detach() took it is NK2105, not rustc's NK1343 (#2645)**
+- A task handle used after its join(), cancel() or detach() took it is now refused with NK2105, with its own note and help, instead of an internal error from rustc (NK1343).
+
+## [0.0.1524] — 2026-11-21
+
+**Builders' changes (#2512, #2561, #2562, #2610, #2643, #2644)**
+- A `par_iter` lambda that writes a resource (prints, writes a file) is refused against its own other runs (NK2104) unless the walk is `par_iter(limit: 1)`; and two tasks that print text with holes, or a name, now meet (NK2104), where before the check gave up on them.
+- async(deferred) - `async(deferred) fn { … }` and `async(detached, deferred) fn { … }` build: the task runs only from the handle's `start()` (ADR-async-5 D12); a deferred handle neither started nor cancelled on some path, or started twice, is NK2121.
+- An unread task with a fallback (`async e catch { f }` as a statement or a binding nothing names, with or without `within:`) runs its fallback instead of raising at the group's end; the group's end throws the first unread failure with the rest as its `secondary`, and a leaving `throw` leads with them (ADR-async-5 D21, D22).
+- An error that crosses a task's boundary shows, under its `raised at` line, `started at` and `arrived at` for each crossing (value tasks, child and detached handles, unread failures at a group's end, each `secondary` with its own); under `NIKAIA_TRACE=1` the task's trace and the waiting code's are stitched with `── started at <site> ──` per crossing (ADR-async-5 D23).
+- A walk made by `par_iter(limit: 1)` and bound to a name (`let walk = xs.par_iter(limit: 1)`) runs one element at a time wherever it is used, so a printing lambda handed to it later is no longer refused with NK2104.
+- A child handle's task, `async(handle) fn { … }`, is now checked against the statements that run beside it until its join, and a deferred one from its `start()` (NK2104, ADR-async-5 D11, D12).
+- Checker: `start()` on a task handle that is not deferred (`async(handle)`, `async(detached)`, `spawn`) is now refused as NK2121 at the `start()`, instead of panicking at run time or failing in rustc.
+
 ## [0.0.1523] — 2026-11-21
 
 **Builders' changes (#2619)**

@@ -1605,6 +1605,11 @@ impl EmitState {
         // the body moves is the new handle and the caller's own survives the
         // `spawn`.
         let handles = self.emit_task_handles(task)
+        // **A deferred task** (`async(detached, deferred)`, ADR-async-5 D12):
+        // the start below is a closure its handle's `start()` calls, so the
+        // setting and the body's channel pick the handle as for `spawn`.
+        let deferred = walk.async_deferred
+        walk.async_deferred = false
         // **A deadline** (ADR-async-5 D16, #986) counts from here, outside
         // the future; a fallback inside the task binds its guarded block by
         // it, so `task::TimedOut` reaches the fallback.
@@ -1676,10 +1681,19 @@ impl EmitState {
                 kind = "BoxedTask"
             }
         }
+        if deferred {
+            out.push("nikaia_std::task::Deferred::new(move || ")
+        }
+        // **A failure leaves the task with where it was started**
+        // (ADR-async-5 D23, `error::started_paused`).
+        let mut starter: String = "async move "
+        if failing {
+            starter = "nikaia_std::error::started_paused(async move "
+        }
         if host.overlaps_user_code() {
-            out.push(f"nikaia_std::task::{kind}::start_on_pool(async move ")
+            out.push(f"nikaia_std::task::{kind}::start_on_pool({starter}")
         } else {
-            out.push(f"nikaia_std::task::{kind}::start(async move ")
+            out.push(f"nikaia_std::task::{kind}::start({starter}")
         }
         // Plain, like any other lambda body: a `return` inside the task leaves the
         // task, and a failure in it is the task's. `in_lambda` is deliberately
@@ -1694,7 +1708,7 @@ impl EmitState {
             } else {
                 out.append(inner)
             }
-            out.push(f"; Ok::<_, {scope.channel}>(__nikaia_task) }}")
+            out.push(f"; Ok::<_, {scope.channel}>(__nikaia_task) }}, &{rust_string(scope.origin)})")
             // What its error says in the log if nobody waits (ADR-346 D6). One
             // of the two traits answers `report`, so the other is unused
             // (#1686).
@@ -1714,6 +1728,9 @@ impl EmitState {
             }
             self.emit_stmt_block_opening_with(world, walk, out, host, body, depth, inside, inside_scope, EmitTail::Return, opening)
             walk.async_bound = ""
+            out.push(")")
+        }
+        if deferred {
             out.push(")")
         }
         if opened {

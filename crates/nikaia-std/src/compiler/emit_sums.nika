@@ -324,6 +324,21 @@ impl EmitState {
                 }
             }
             out.push("            _ => {}\n        }\n    }\n}\n")
+            // **Where a failure crossed a task's boundary** (ADR-async-5
+            // D23): a member in an envelope records it there; one without
+            // keeps nothing.
+            let mut crossed: String = ""
+            for member in members {
+                let variant = sum_variant(member)
+                if self.sum_member_held(world, member, params).starts_with("nikaia_std::error::Thrown<") {
+                    crossed = f"{crossed}            {name}::{variant}(e) => nikaia_std::error::Crossed::WHICH(e, site),\n"
+                }
+            }
+            let mut crossing: String = f"impl{decl} nikaia_std::error::Crossed for {name}{params} {{\n"
+            for which in ["started_at", "arrived_at"] {
+                crossing = f"{crossing}    fn {which}(&mut self, site: nikaia_std::error::Origin) {{\n        #[allow(unreachable_patterns)]\n        match self {{\n{crossed.replace("WHICH", which)}            _ => {{}}\n        }}\n    }}\n"
+            }
+            out.push(f"{crossing}}}\n")
             if crashed {
                 out.push(f"impl{decl} nikaia_std::task::Crosses for {name}{params} {{\n    type Sent = Self;\n    fn sent(self) -> Self {{ self }}\n    fn back(sent: Self) -> Self {{ sent }}\n}}\n")
             }
