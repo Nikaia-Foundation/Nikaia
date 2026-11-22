@@ -43,6 +43,8 @@ pub trait ProjectLowerHost {
     fn could_promise(&self) -> String;
     fn committed_ledger(&self) -> Option<Ledger>;
     fn sync_lost(&self) -> Vec<SyncLost>;
+    fn par_sites(&self) -> Vec<ParSite>;
+    fn pieces_lost(&self) -> Vec<SyncLost>;
     fn keepers(&self) -> collections::BTreeMap<String, collections::BTreeMap<String, Vec<String>>>;
     fn theirs(&self) -> Vec<String>;
     fn export(&self) -> Result<(), std::boxed::Box<dyn std::error::Error>>;
@@ -117,12 +119,15 @@ pub fn project_lower_reading<H: ProjectLowerHost>(host: &H, in_project: bool) ->
 
 pub(crate) fn project_lower_made<H: ProjectLowerHost>(host: &H) -> Result<ProjectLowerArtifacts, std::boxed::Box<dyn std::error::Error>> {
     let promise = host.could_promise();
-    let lost = host.sync_lost();
+    let mut lost = host.sync_lost();
     let keepers = host.keepers();
     let theirs = host.theirs();
     let mut warnings = project_lower_check(host)?; #[allow(clippy::redundant_locals)] let theirs = theirs;
+    let sites = host.par_sites();
+    for each in host.pieces_lost() { lost.push(each); }
     let rust = host.emit()?; #[allow(clippy::redundant_locals)] let theirs = theirs;
-    let ledger = project_lower_published(host.contracts(), &host.published());
+    let mut ledger = project_lower_published(host.contracts(), &host.published());
+    par_iter_column(&mut ledger, &sites);
     let (text, derived) = host.render(&ledger); #[allow(clippy::redundant_locals)] let theirs = theirs;
     for entry in host.unused_reads() {
         let line = format!("warning: the allowlist names `{}` and nothing read it\n", entry);

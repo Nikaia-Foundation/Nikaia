@@ -341,7 +341,10 @@ pub(crate) fn implemented(name: &str, n: i64) -> Result<(String, String), nikaia
 }
 
 pub(crate) fn function_key(entry: &mut FnContract, name: &str, key: &str, value: &str, n: i64) -> Result<(), nikaia_std::error::Thrown<Refused>> {
-    if key == "pub" { entry.public = value == "true"; } else if key == "sync" { entry.sync_claim = sync_of(value, n)?; } else if key == "throws" { entry.fails_with = throws_of(value, n)?; } else if key == "returns" {
+    if key == "pub" { entry.public = value == "true"; } else if key == "sync" { entry.sync_claim = sync_of(value, n)?; } else if key == "throws" {
+        let through = throws_through(value);
+        if !through.is_empty() { entry.throws_from = through; } else { entry.fails_with = throws_of(value, n)?; }
+    } else if key == "returns" {
         let written = unquoted(value, n)?;
         if written.contains(':') {
             entry.borrows = path_borrows_of(&written, n)?;
@@ -352,7 +355,7 @@ pub(crate) fn function_key(entry: &mut FnContract, name: &str, key: &str, value:
         if spelled.mutates { entry.mutates = true; }
         if !spelled.borrows.is_empty() { entry.borrows = spelled.borrows.copy_owned(); }
         entry.signature = Some(spelled.signature);
-    } else if key == "keeps" { entry.keeps = entries(value, n)?; } else if key == "at_once" { entry.at_once = entries(value, n)?; } else if key == "os_text" { entry.os_text = entries(value, n)?; } else if key == "mutates" { entry.mutates = value == "true"; } else if key == "locks" {
+    } else if key == "keeps" { entry.keeps = entries(value, n)?; } else if key == "at_once" { entry.at_once = entries(value, n)?; } else if key == "par_iter" { entry.par_iter = entries(value, n)?; } else if key == "os_text" { entry.os_text = entries(value, n)?; } else if key == "mutates" { entry.mutates = value == "true"; } else if key == "locks" {
         let said = value.trim();
         if said == "true" { entry.touches_a_lock = Lock::Holds; } else if said == "\"?\"" { entry.touches_a_lock = Lock::Undecided; } else { entry.touches_a_lock = Lock::No; }
     } else if key == "panics" {
@@ -453,6 +456,19 @@ pub(crate) fn throws_of(value: &str, n: i64) -> Result<Vec<String>, nikaia_std::
         return Ok(vec![unnamed]);
     }
     Ok(entries(value, n)?)
+}
+
+pub(crate) fn throws_through(value: &str) -> Vec<String> {
+    #[allow(unused_mut)] let mut names: Vec<String> = vec![];
+    if !value.starts_with("\"throws(") || !value.ends_with(")\"") { return names; }
+    let c: Vec<scalar> = nikaia_std::list::scalars(value.chars());
+    if c.len() < 11 { return names; }
+    let inside = slice(&c, 8, unsafe { nikaia_std::proven::sub::<i64>(c.len() as i64, 2) }); #[allow(unused_mut, clippy::redundant_locals)] let mut names = names;
+    for part in inside.split(',') {
+        let name = part.trim();
+        if !name.is_empty() { names.push(nikaia_std::block::Text::from(name.to_string())); }
+    }
+    names
 }
 
 pub(crate) fn ledger_borrows_in_order(entry: &mut FnContract) {
