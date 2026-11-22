@@ -18,3 +18,16 @@ Instructions per line, the files by size in quarters (each quarter's instruction
 | lints (NK1261, NK1350) | 0 | 0 |
 | rest of the walk | 800 | 90 |
 | the walk | 1,000 | 100 |
+
+A fixed cost per file and the instructions per added line (least squares; the slope over the smaller and the larger half of the files by lines)
+
+| Analysis | Fixed per file | Per line | Per line, smaller half | Per line, larger half |
+| :--- | ---: | ---: | ---: | ---: |
+| handles (ADR-312) | 0 | 0 | - | - |
+| outside data (ADR-396) | 285 | -85 | - | - |
+| bounds (ADR-385) | 0 | 0 | - | - |
+| proofs (ADR-269 D4, ADR-396 D5) | 0 | 0 | - | - |
+| views (NK2302, NK2305, NK2303) | 0 | 0 | - | - |
+| lints (NK1261, NK1350) | 0 | 0 | - | - |
+| rest of the walk | 1,065 | -265 | - | - |
+| the walk | 1,350 | -350 | - | - |

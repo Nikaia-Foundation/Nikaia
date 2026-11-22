@@ -71,13 +71,16 @@ fn analysis_of(name: String, all: Vec[(String, Vec[String])]) -> String {
     return ""
 }
 
-// `n` with a comma every three digits: `1,234,567`.
+// `n` with a comma every three digits: `1,234,567`, `-265`.
 fn grouped(n: i64) -> String {
     let digits = f"{n}"
     let mut out: String = ""
     let mut k = 0
+    // A minus sign is no digit: no comma follows it.
+    let mut first = 1
+    if n < 0 { first = 2 }
     for c in digits.scalars {
-        if k > 0 && c != '-' && (digits.len() - k) % 3 == 0 { out.push_str(",") }
+        if k >= first && (digits.len() - k) % 3 == 0 { out.push_str(",") }
         out.push(c)
         k += 1
     }
@@ -318,6 +321,76 @@ fn per_file(read: String, root: String, want: i64) throws {
     let mut row: String = "| the walk |"
     for q in filled { row = f"{row} {grouped((walks[q] ?? 0) / at_least_one(lines_in[q] ?? 0))} |" }
     println(row)
+    // A cost fixed per file makes the ratio above fall with size even where
+    // the cost grows with the lines; the fit below parts the two. Each
+    // analysis's instructions as `fixed + per_line * lines`, least squares
+    // over every file, then the slope alone over the smaller and the larger
+    // half of the files by lines: a slope that rises from one half to the
+    // other grows faster than the lines.
+    println("")
+    println("A fixed cost per file and the instructions per added line (least squares; the slope over the smaller and the larger half of the files by lines)")
+    println("")
+    println("| Analysis | Fixed per file | Per line | Per line, smaller half | Per line, larger half |")
+    println("| :--- | ---: | ---: | ---: | ---: |")
+    let half = n / 2
+    let mut column = 0
+    for analysis in names {
+        let mut xs: Vec[i64] = Vec()
+        let mut ys: Vec[i64] = Vec()
+        for (lines, _, each, total) in rows {
+            xs.push(lines)
+            let mut named = 0
+            for x in each { named += x }
+            if column < each.len() { ys.push(each[column]) } else { ys.push(total - named) }
+        }
+        println(f"| {analysis} | {fitted(xs, ys, 0, n)} | {fitted_slope(xs, ys, 0, half)} | {fitted_slope(xs, ys, half, n)} |")
+        column += 1
+    }
+    let mut xs: Vec[i64] = Vec()
+    let mut ys: Vec[i64] = Vec()
+    for (lines, _, _, total) in rows {
+        xs.push(lines)
+        ys.push(total)
+    }
+    println(f"| the walk | {fitted(xs, ys, 0, n)} | {fitted_slope(xs, ys, 0, half)} | {fitted_slope(xs, ys, half, n)} |")
+}
+
+// The least-squares line through the points `from ..< to` of `xs`, `ys`:
+// (whether it is defined, its value at 0, its slope). Undefined where those
+// points have fewer than two distinct `xs`.
+fn least_squares(xs: ref Vec[i64], ys: ref Vec[i64], from: i64, to: i64) -> (bool, f64, f64) {
+    let mut m = 0.0
+    let mut sx = 0.0
+    let mut sy = 0.0
+    let mut sxx = 0.0
+    let mut sxy = 0.0
+    for k in from..<to {
+        let x = xs[k] as f64
+        let y = ys[k] as f64
+        m += 1.0
+        sx += x
+        sy += y
+        sxx += x * x
+        sxy += x * y
+    }
+    let spread = m * sxx - sx * sx
+    if m < 2.0 || spread <= 0.0 { return (false, 0.0, 0.0) }
+    let slope = (m * sxy - sx * sy) / spread
+    return (true, (sy - slope * sx) / m, slope)
+}
+
+// The fit's fixed cost and slope as two table cells, `-` where undefined.
+fn fitted(xs: ref Vec[i64], ys: ref Vec[i64], from: i64, to: i64) -> String {
+    let (defined, fixed, slope) = least_squares(xs, ys, from, to)
+    if !defined { return "- | -" }
+    return f"{grouped(fixed.round() as i64)} | {grouped(slope.round() as i64)}"
+}
+
+// The fit's slope alone as a table cell, `-` where undefined.
+fn fitted_slope(xs: ref Vec[i64], ys: ref Vec[i64], from: i64, to: i64) -> String {
+    let (defined, _, slope) = least_squares(xs, ys, from, to)
+    if !defined { return "-" }
+    return grouped(slope.round() as i64)
 }
 
 fn usage() throws {
