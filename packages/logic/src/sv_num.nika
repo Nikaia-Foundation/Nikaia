@@ -16,6 +16,8 @@
 // overflows: it compares the integer parts and then the reciprocals of the
 // fractional parts.
 
+use std::bigint
+
 /// Why the solver could not tell.
 pub enum SvUnknown {
 	/// Every step left was one that would leave `i64` (D11).
@@ -481,6 +483,143 @@ fn sv_delta_text(a: ref SvDelta) -> String {
 		return f"{real}-δ"
 	}
 	return f"{real}{sign}{sv_rat_text(a.k)}δ"
+}
+
+// --- The numbers past `i64` (#2707): where a pivot of the simplex leaves
+// `i64`, the query goes on in `bigint::BigInt` (D11 answers *unknown* only
+// once a budget on that stage is spent). The same shapes as above: a
+// rational normalised by gcd with a positive denominator, and `c + k·δ`.
+
+/// A rational of two `BigInt`: `den > 0`, `gcd(num, den) = 1`.
+pub struct SvBigRat {
+	pub num: bigint::BigInt,
+	pub den: bigint::BigInt,
+}
+
+/// `c + k·δ` over `SvBigRat`.
+pub struct SvBigDelta {
+	pub c: SvBigRat,
+	pub k: SvBigRat,
+}
+
+fn sv_big(n: i64) -> bigint::BigInt {
+	return bigint::BigInt::of(n)
+}
+
+/// `a / b` rounded toward zero, `b != 0`.
+fn sv_big_quo(a: ref bigint::BigInt, b: ref bigint::BigInt) -> bigint::BigInt {
+	let (q, _r) = a.div_rem(b) ?? return sv_big(0)
+	return q
+}
+
+/// The 64-bit digits of `a`, at least 1: what one product of it costs.
+fn sv_big_digits(a: ref bigint::BigInt) -> i64 {
+	return a.bits() / 64 + 1
+}
+
+/// `n / d` normalised, `d != 0`.
+fn sv_big_rat(n: bigint::BigInt, d: bigint::BigInt) -> SvBigRat {
+	if n.sign() == 0 {
+		return SvBigRat { num: n, den: sv_big(1) }
+	}
+	let g = n.gcd(d)
+	let mut num = sv_big_quo(n, g)
+	let mut den = sv_big_quo(d, g)
+	if den.sign() < 0 {
+		num = num.neg()
+		den = den.neg()
+	}
+	return SvBigRat { num: num, den: den }
+}
+
+fn sv_big_rat_of(a: ref SvRat) -> SvBigRat {
+	return SvBigRat { num: sv_big(a.num), den: sv_big(a.den) }
+}
+
+fn sv_big_rat_int(n: bigint::BigInt) -> SvBigRat {
+	return SvBigRat { num: n, den: sv_big(1) }
+}
+
+/// The rational in `i64`, `null` where it does not fit.
+fn sv_big_rat_narrow(a: ref SvBigRat) -> SvRat? {
+	return SvRat { num: a.num.narrow() ?? return null, den: a.den.narrow() ?? return null }
+}
+
+fn sv_big_rat_add(a: ref SvBigRat, b: ref SvBigRat) -> SvBigRat {
+	if a.den == b.den {
+		return sv_big_rat(a.num.add(b.num), a.den.clone())
+	}
+	return sv_big_rat(a.num.mul(b.den).add(b.num.mul(a.den)), a.den.mul(b.den))
+}
+
+fn sv_big_rat_sub(a: ref SvBigRat, b: ref SvBigRat) -> SvBigRat {
+	let minus = SvBigRat { num: b.num.neg(), den: b.den.clone() }
+	return sv_big_rat_add(a, minus)
+}
+
+fn sv_big_rat_mul(a: ref SvBigRat, b: ref SvBigRat) -> SvBigRat {
+	return sv_big_rat(a.num.mul(b.num), a.den.mul(b.den))
+}
+
+fn sv_big_rat_div(a: ref SvBigRat, b: ref SvBigRat) -> SvBigRat {
+	return sv_big_rat(a.num.mul(b.den), a.den.mul(b.num))
+}
+
+/// `a·n / d`, `d != 0`.
+fn sv_big_rat_scale(a: ref SvBigRat, n: ref bigint::BigInt, d: ref bigint::BigInt) -> SvBigRat {
+	return sv_big_rat(a.num.mul(n), a.den.mul(d))
+}
+
+/// -1, 0 or 1 as `a` is below, at or above `b`.
+fn sv_big_rat_cmp(a: ref SvBigRat, b: ref SvBigRat) -> i64 {
+	if a.den == b.den {
+		return a.num.sub(b.num).sign()
+	}
+	return a.num.mul(b.den).sub(b.num.mul(a.den)).sign()
+}
+
+/// `⌊a⌋`.
+fn sv_big_rat_floor(a: ref SvBigRat) -> bigint::BigInt {
+	let (q, r) = a.num.div_rem(a.den) ?? return sv_big(0)
+	if r.sign() < 0 {
+		return q.sub(sv_big(1))
+	}
+	return q
+}
+
+fn sv_big_delta_of(a: ref SvDelta) -> SvBigDelta {
+	return SvBigDelta { c: sv_big_rat_of(a.c), k: sv_big_rat_of(a.k) }
+}
+
+fn sv_big_delta_zero() -> SvBigDelta {
+	return SvBigDelta { c: sv_big_rat_int(sv_big(0)), k: sv_big_rat_int(sv_big(0)) }
+}
+
+fn sv_big_delta_add(a: ref SvBigDelta, b: ref SvBigDelta) -> SvBigDelta {
+	return SvBigDelta { c: sv_big_rat_add(a.c, b.c), k: sv_big_rat_add(a.k, b.k) }
+}
+
+fn sv_big_delta_sub(a: ref SvBigDelta, b: ref SvBigDelta) -> SvBigDelta {
+	return SvBigDelta { c: sv_big_rat_sub(a.c, b.c), k: sv_big_rat_sub(a.k, b.k) }
+}
+
+/// `a·n / d`, `d != 0`.
+fn sv_big_delta_scale(a: ref SvBigDelta, n: ref bigint::BigInt, d: ref bigint::BigInt) -> SvBigDelta {
+	return SvBigDelta { c: sv_big_rat_scale(a.c, n, d), k: sv_big_rat_scale(a.k, n, d) }
+}
+
+/// Ordered by the rational part, then by the coefficient of `δ`.
+fn sv_big_delta_cmp(a: ref SvBigDelta, b: ref SvBigDelta) -> i64 {
+	let first = sv_big_rat_cmp(a.c, b.c)
+	if first != 0 {
+		return first
+	}
+	return sv_big_rat_cmp(a.k, b.k)
+}
+
+/// `a` against a value in `i64`, such as a bound.
+fn sv_big_delta_cmp_small(a: ref SvBigDelta, b: ref SvDelta) -> i64 {
+	return sv_big_delta_cmp(a, sv_big_delta_of(b))
 }
 
 // --- Tests: the solver's numbers (moved from
