@@ -129,7 +129,7 @@ impl Host<'_> {
                 "`{callee}` may not run while the program is built: {because}"
             )),
             CheckComputed::Stopped(detail) => stopped_as_said(&detail),
-            CheckComputed::NotHere(_) => {
+            CheckComputed::NotHere(_) | CheckComputed::Refused { .. } => {
                 not_run("This compiler can't compile it while the program is built.")
             }
         }
@@ -265,6 +265,9 @@ impl CheckHost for Host<'_> {
             }
             crate::comptime_run::Computed::Stopped(detail) => CheckComputed::Stopped(detail),
             crate::comptime_run::Computed::NotHere(why) => CheckComputed::NotHere(why),
+            crate::comptime_run::Computed::Refused { message, at } => {
+                CheckComputed::Refused { message, at }
+            }
         }
     }
 

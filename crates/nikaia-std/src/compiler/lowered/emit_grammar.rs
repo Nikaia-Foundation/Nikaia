@@ -486,7 +486,7 @@ impl EmitState {
                     #[allow(unused_mut)] let mut spanned: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut as_spans = as_spans;
                     emit_span_bindings(world, &walk, &alt.pattern.node, &mut as_spans, &mut spanned, false);
                     let mut prelude = String::from(""); #[allow(unused_mut, clippy::redundant_locals)] let mut as_bytes = as_bytes; #[allow(unused_mut, clippy::redundant_locals)] let mut as_spans = as_spans; #[allow(unused_mut, clippy::redundant_locals)] let mut spanned = spanned;
-                    #[allow(unused_mut)] let mut as_texts: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut as_bytes = as_bytes;
+                    #[allow(unused_mut)] let mut as_texts: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut as_bytes = as_bytes; #[allow(unused_mut, clippy::redundant_locals)] let mut as_spans = as_spans;
                     #[allow(unused_mut)] let mut covered: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut as_texts = as_texts;
                     emit_text_bindings(world, &walk, &alt.pattern, &mut as_texts, &mut covered);
                     for name in as_bytes.iter() { if !nikaia_std::list::contains(&as_texts, &name) { prelude = format!("{}let {} = {}.as_bytes(); ", prelude, name, name); } }
@@ -497,6 +497,7 @@ impl EmitState {
                     let mut bound_bytes: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut as_texts = as_texts; #[allow(unused_mut, clippy::redundant_locals)] let mut covered = covered;
                     emit_bytes_bindings(world, &alt.pattern.node, &mut bound_bytes);
                     for (name, range) in as_texts.iter().zip(covered.iter()) { if nikaia_std::list::contains(&bound_bytes, &name) { if bytes { prelude = format!("{}let {} = ::nikaia_std::grammar::covered_raw(input, {}); ", prelude, name, range); } else { prelude = format!("{}let {} = ::nikaia_std::grammar::covered(input, {}).as_bytes(); ", prelude, name, range); } } else if bytes { prelude = format!("{}let {} = ::nikaia_std::grammar::covered_bytes::<_, __WgEr>(input, {})?; ", prelude, name, range); } else { prelude = format!("{}let {} = ::nikaia_std::grammar::covered(input, {}); ", prelude, name, range); } }
+                    if !as_texts.is_empty() || positions && !as_spans.is_empty() { prelude = format!("{}let _state = &mut input.state; ", prelude); }
                     if self.emit_action_can_fail(world, action) {
                         if prelude != "" { out.push(&format!("{{ {}", prelude)); }
                         self.emit_failing_action(world, walk, out, host, action, emit_passes_a_cut(&alt.pattern.node))?;

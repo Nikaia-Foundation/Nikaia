@@ -19,6 +19,7 @@ pub enum CheckComputed {
     Forbidden { callee: String, because: String },
     Stopped(String),
     NotHere(String),
+    Refused { message: String, at: i64 },
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -483,6 +484,7 @@ impl CheckState {
             CheckComputed::Forbidden { ref callee, ref because } => { self.a_body_that_may_not_run_at_build_time(callee, because, span); },
             CheckComputed::Stopped(ref detail) => { self.a_build_time_run_that_stopped(world, host, bound, detail, here, span); },
             CheckComputed::NotHere(ref why) => { self.a_build_time_value_not_compiled(bound, why, span); },
+            CheckComputed::Refused { ref message, at } => { self.a_program_the_lowering_refuses(bound, message, at, span); },
         }
         CheckCompiled { answered: true, value: None, said: true }
     }
@@ -499,6 +501,18 @@ impl CheckState {
         let mut help: String = format!("Write `let {} = …` to compute it while the program runs.", bound);
         if self.computing_default { help = format!("Make `{}` a `T?` and compute it in the body.", bound); }
         self.findings.push(check_refusal("NK1127", span, format!("`{}` can't be computed while the program is built.", bound), vec![format!("{}.", why)], Some(help)));
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub(crate) fn a_program_the_lowering_refuses(&mut self, bound: &str, message: &str, at: i64, span: &Span) {
+        if at < 0 {
+            let why = nikaia_std::index::or(message.strip_suffix('.'), || std::convert::AsRef::<str>::as_ref(message));
+            self.a_build_time_value_not_compiled(bound, &format!("The program around it is refused where it is lowered: {}", why), span);
+            return;
+        }
+        let place = Span { start: u32::try_from(at).unwrap_or_else(|_| panic!("the value does not fit in an `u32`")), end: u32::try_from(at).unwrap_or_else(|_| panic!("the value does not fit in an `u32`")) };
+        if self.findings.iter().any(|f| { f.code == "" && f.span.start == place.start && f.span.end == place.end && f.message == message }) { return; }
+        self.findings.push(check_refusal("", &place, nikaia_std::block::Text::from(message.to_string()), vec![], None));
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.

@@ -317,6 +317,7 @@ pub(crate) fn the_command_line(ty: &Ty) -> bool {
 }
 
 pub(crate) fn elements_walked(over: &Ty, bindings: i64) -> Vec<Ty> {
+    if over.is_seen() { return elements_walked(&over.unseen(), bindings).iter().map(|t| { stamped_if(true, t.clone()) }).collect::<Vec<_>>(); }
     if bindings == 1 { return vec![element_walked(over, 1)]; }
     let parts = parts_walked(over, bindings);
     if (parts.len() as i64) == bindings { return parts; }

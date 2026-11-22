@@ -328,6 +328,7 @@ pub(crate) fn check_core_call_on_undescribed<H: CheckHost>(state: &mut CheckStat
     let stamped: Option<Ty> = check_core_call_on_seen(on);
     if stamped.is_some() {
         let held: Ty = nikaia_std::index::or(stamped, || Ty::Unknown);
+        state.flow.stamped_receivers.insert(id_of(receiver) as i64);
         return check_core_call_on(state, world, host, &held, receiver, method, args, entry, span);
     }
     let through: Option<Ty> = state.seen_through(world, on);
@@ -1289,7 +1290,8 @@ pub(crate) fn check_core_call_on_described<H: CheckHost>(state: &mut CheckState,
         };
     }
     let paused = check_crossings_a_lambda_that_pauses_at_an_entry(state, key, receiver, on, args, lambda_at, shaped, span);
-    state.stamped_through(contract, &found, paused)
+    let receiver_seen = state.flow.stamped_receivers.contains(&(id_of(receiver) as i64));
+    state.stamped_through(contract, &found, receiver_seen, paused)
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before

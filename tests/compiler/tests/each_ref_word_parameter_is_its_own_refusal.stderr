@@ -1,0 +1,17 @@
+error[NK1257]: An `i64` is copied at a read, so a parameter can't be a `ref i64`.
+  --> tests/each_ref_word_parameter_is_its_own_refusal.nika:3:8
+   |
+ 3 | fn add(a: ref i64, b: ref i64) -> i64 {
+   |        ^ written `ref i64`
+   |
+   = note: A number, a `bool`, a `scalar` and an enum whose variants hold nothing are copied at a read (ADR-279 D8): the copy is never dearer than a pointer, so `ref` on one says nothing. Only an `extern "C"` declaration writes it, as the pointer C expects.
+   = help: Write `i64` without `ref`; a parameter the function changes is `mut name: i64`.
+error[NK1257]: An `i64` is copied at a read, so a parameter can't be a `ref i64`.
+  --> tests/each_ref_word_parameter_is_its_own_refusal.nika:3:20
+   |
+ 3 | fn add(a: ref i64, b: ref i64) -> i64 {
+   |                    ^ written `ref i64`
+   |
+   = note: A number, a `bool`, a `scalar` and an enum whose variants hold nothing are copied at a read (ADR-279 D8): the copy is never dearer than a pointer, so `ref` on one says nothing. Only an `extern "C"` declaration writes it, as the pointer C expects.
+   = help: Write `i64` without `ref`; a parameter the function changes is `mut name: i64`.
+2 type errors

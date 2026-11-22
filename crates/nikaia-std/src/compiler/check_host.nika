@@ -38,6 +38,10 @@ pub enum CheckComputed {
     /// Nothing was compiled, and why: the value is refused, never interpreted
     /// (ADR-321 D1).
     NotHere(String),
+    /// The emitter refused the program's own code where it lowered the
+    /// program that computes it (#2294): its words, and the byte of this
+    /// file it is about, or -1.
+    Refused { message: String, at: i64 },
 }
 
 /// What `compiled_build_time_value` came to: whether it answered at all (an
@@ -661,6 +665,7 @@ impl CheckState {
             CheckComputed::Forbidden { callee, because } => self.a_body_that_may_not_run_at_build_time(callee, because, span),
             CheckComputed::Stopped(detail) => self.a_build_time_run_that_stopped(world, host, bound, detail, here, span),
             CheckComputed::NotHere(why) => self.a_build_time_value_not_compiled(bound, why, span),
+            CheckComputed::Refused { message, at } => self.a_program_the_lowering_refuses(bound, message, at, span),
         }
         return CheckCompiled { answered: true, value: null, said: true }
     }
@@ -685,6 +690,25 @@ impl CheckState {
             help = f"Make `{bound}` a `T?` and compute it in the body."
         }
         self.findings.push(check_refusal("NK1127", span, f"`{bound}` can't be computed while the program is built.", [f"{why}."], help))
+    }
+
+    /// **The emitter's refusal of the program, said where it is about**
+    /// (#2294): the lowering after the check refuses the program in the same
+    /// words, in the shape every lowering refusal has, no code in front of it
+    /// ([ADR-171](../../docs/specification/adr/adr-171.md) D2,
+    /// `render_refusal`); said once, however many values ran into it. A
+    /// refusal about another file is `NK1127`'s note.
+    fn a_program_the_lowering_refuses(ref mut self, bound: ref String, message: ref String, at: i64, span: ref Span) sync {
+        if at < 0 {
+            let why = message.strip_suffix(".") ?? message
+            self.a_build_time_value_not_compiled(bound, f"The program around it is refused where it is lowered: {why}", span)
+            return
+        }
+        let place = Span { start: at as u32, end: at as u32 }
+        if self.findings.iter().any(fn(f) { f.code == "" && f.span.start == place.start && f.span.end == place.end && f.message == message }) {
+            return
+        }
+        self.findings.push(check_refusal("", place, message.clone(), [], null))
     }
 
     /// **A build-time run that stopped as the program would** (ADR-321 D1): the

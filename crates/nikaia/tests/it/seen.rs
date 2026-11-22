@@ -151,7 +151,9 @@ fn a_set_under_a_stamped_condition_is_refused() {
              }\n",
             "NK2205"
         ),
-        2
+        // Both arms' sets name the whole `match` and say the same words, so
+        // the finding is said once (#2247).
+        1
     );
 }
 

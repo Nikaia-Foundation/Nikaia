@@ -1,0 +1,16 @@
+use compiler_tests
+
+// An option whose default is a call into a dependency, computed at build
+// time (ADR-318 D1): a struct of the dependency, and a field of one (#2255).
+fn depth(text: String; limits: compiler_tests::LimitsBeside = compiler_tests::limits_beside()) -> i64 {
+	return limits.depth + text.len()
+}
+
+fn bytes(text: String; given: i64 = compiler_tests::limits_beside().bytes) -> i64 {
+	return given + text.len()
+}
+
+fn main() throws {
+	println(f"{depth("")}")
+	println(f"{bytes("")}")
+}
