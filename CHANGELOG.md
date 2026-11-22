@@ -8,6 +8,12 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1526] — 2026-11-22
+
+**Builders' changes (#1933)**
+- NK1385: a warning on a String built by push from a source that bounds it | `let mut out = String()` filled in one loop over `s` (its view, `0..<s.len()` or `while i < len`) with parts of `s` now warns NK1385, and `nikaia fix` writes `String(capacity: s.len())` (ADR-149 D5).
+- lower-std's checker analyses have their own entry points, and scripts/analysis_cost.nika prints instructions per analysis (handles, outside data, bounds, proofs, views, lints) as a table from callgrind.
+
 ## [0.0.1525] — 2026-11-21
 
 **checker: a task handle used after join(), cancel() or detach() took it is NK2105, not rustc's NK1343 (#2645)**

@@ -2122,6 +2122,7 @@ pub(crate) fn check_core_block<H: CheckHost>(state: &mut CheckState, world: &Che
     check_core_view_lists_end(state, world, block);
     check_core_place_in_block(state, world, block);
     check_core_place_boxes(state, world, block);
+    state.a_text_without_room(world, block);
     state.scope.pop();
     tail
 }

@@ -1,0 +1,33 @@
+// #1933: `nikaia fix` makes the edit of `NK1385`: the empty text a loop
+// fills from its source gets `String(capacity: s.len())`. `--dry-run` names
+// the edit and writes nothing; `fix` writes the file, which then checks with
+// no `NK1385` and runs with the output it had.
+use std::env
+use std::fs
+use std::process
+
+fn toolchain() -> String throws {
+    let exe = env::current_exe()?.display() ?? ""
+    if exe.len() > 0 { return exe }
+    return "target/fast/nikaia"
+}
+
+fn main() throws {
+    let tmp = fs::scratch()
+    let nikaia = toolchain()
+    let source = "fn copied(s: String) -> String {\n    let mut out = String()\n    for c in s.scalars {\n        out.push(c)\n    }\n    return out\n}\n\nfn main() throws {\n    println(copied(\"abc\"))\n}\n"
+    fs::write("main.nika", tmp, source)
+    let before = process::run(nikaia, ["run", f"{tmp.path().to_text()}/main.nika"])
+    let dry = process::run(nikaia, ["fix", "--dry-run", f"{tmp.path().to_text()}/main.nika"])
+    print(f"dry run: {dry.stdout}{dry.stderr}".replace(tmp.path().to_text(), "TMP"))
+    let same = fs::read_to_string("main.nika", tmp) == source
+    println(f"unchanged after the dry run: {same}")
+    let fixed = process::run(nikaia, ["fix", f"{tmp.path().to_text()}/main.nika"])
+    print(f"fix: {fixed.stdout}{fixed.stderr}".replace(tmp.path().to_text(), "TMP"))
+    print(fs::read_to_string("main.nika", tmp))
+    let checked = process::run(nikaia, ["check", f"{tmp.path().to_text()}/main.nika"])
+    print(f"check: {checked.stdout}{checked.stderr}".replace(tmp.path().to_text(), "TMP"))
+    let after = process::run(nikaia, ["run", f"{tmp.path().to_text()}/main.nika"])
+    println(f"same output: {after.stdout == before.stdout}")
+    print(after.stdout)
+}
