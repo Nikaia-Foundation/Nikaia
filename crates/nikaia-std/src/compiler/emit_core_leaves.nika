@@ -506,6 +506,68 @@ impl EmitState {
         out.push(" }")
     }
 
+    /// **A `for` over this file's `@stream` entry, its body the parser's
+    /// `each`** (ADR-grammar-typed-read-v1 D7, #2708, `emit_stmt_for_each`):
+    /// the input is lent for the walk, a temporary living as long as the
+    /// `match` it is bound by; the values and options are taken first, as on
+    /// the thread, a lent value lent and not copied. The walk's value is
+    /// `Some` of what broke the parse, `None` where it read to the end, or
+    /// the failure rendered against the input.
+    fn emit_core_grammar_each[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, rule: ref GrammarRule, name: ref String, lowered: ref String, rule_name: ref String, input: ref Expr, values: ref Vec[Expr], config: ref Vec[ConfigArg], table: ref Expr?, body: ref EmitOut, question: ref String, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
+        out.push("match ::std::convert::AsRef::<[u8]>::as_ref(&*")
+        self.emit_expr(world, walk, out, host, input, depth, flow, scope)
+        out.push(") { __wg_source => { ")
+        let mut handed = String()
+        for i in 0..<rule.args.len() {
+            let lent = self.facts.lent_rule_values.contains(f"{name}::{rule_name}::{emit_text(world, rule.args[i].name)}")
+            out.push(f"let __wg_value{i} = ")
+            if lent {
+                out.push("&(")
+            }
+            if i < values.len() {
+                self.emit_expr(world, walk, out, host, values[i], depth, flow, scope)
+            }
+            if lent {
+                out.push(")")
+            }
+            out.push("; ")
+            handed.push_str(f"__wg_value{i}, ")
+        }
+        let mut j = 0
+        for option in rule.config {
+            out.push(f"let __wg_option{j} = ")
+            let mut given = false
+            for c in config {
+                if !given && c.name == option.name {
+                    self.emit_expr(world, walk, out, host, c.value, depth, flow, scope)
+                    given = true
+                }
+            }
+            if !given {
+                self.emit_expr(world, walk, out, host, option.default, depth, flow, scope)
+            }
+            out.push("; ")
+            handed.push_str(f"__wg_option{j}, ")
+            j += 1
+        }
+        let mut context = "winnow_grammar::ParseContext::<()>::default()"
+        match table {
+            null => {},
+            words => {
+                out.push("let __wg_words = winnow_grammar::InternerContext::clone(&")
+                self.emit_expr(world, walk, out, host, words, depth, flow, scope)
+                out.push("); ")
+                context = "winnow_grammar::ParseContext::<()>::with_state_and_interner((), __wg_words)"
+            },
+        }
+        let mark = "__NIKAIA_EACH_BODY__"
+        let mut each = f"|__wg_one| {{ {mark} }}"
+        if self.facts.emitting_entries.contains(f"{name}::{rule_name}") {
+            each = f"|__wg_item: &::std::option::Option<_>| match __wg_item {{ ::std::option::Option::Some(__wg_one) => {{ {mark} }}, ::std::option::Option::None => ::std::ops::ControlFlow::Continue(()) }}"
+        }
+        out.push_around(f"let mut __wg_context = {context}; match {lowered}::parse_{rule_name}_slice_each(__wg_source, &mut __wg_context, {handed}{each}) {{ Ok(::std::ops::ControlFlow::Break(__wg_broken)) => Ok(::std::option::Option::Some(__wg_broken)), Ok(::std::ops::ControlFlow::Continue(_)) => Ok(::std::option::Option::None), Err(__wg_error) => Err(nikaia_std::grammar::ParseError::of(__wg_error.render(__wg_source))) }} }} }}{question}", mark, body)
+    }
+
     /// `Measurements.file(data)` - the whole of what a user writes to run a
     /// grammar (ADR-grammar-syntax-v1 D1, D2). `parallelism` is how the build asks the driver
     /// to cut the input.
@@ -590,6 +652,13 @@ impl EmitState {
         let streamed = match entered {
             rule => rule.stream,
             null => false,
+        }
+        let each_body: EmitOut? = match walk.each_body { null => null, held => held.clone() }
+        if streamed && each_body != null {
+            walk.each_body = null
+            let rule = entered ?? return
+            self.emit_core_grammar_each(world, walk, out, host, rule, name, lowered, rule_name, input, values, config, table, each_body ?? return, question, depth, flow, scope)
+            return
         }
         if streamed {
             let rule = entered ?? return

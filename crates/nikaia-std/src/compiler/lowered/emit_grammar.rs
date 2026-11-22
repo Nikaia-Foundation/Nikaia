@@ -256,6 +256,16 @@ impl EmitState {
         out.push(&format!("let __wg_parsed = {}::parse_{}_slice_each(&__wg_source[..], &mut __wg_context, {}{}); ", name, rule_name, handed, each));
         out.push(&emit_stream_batched_end("__wg_error.render(&__wg_source[..])"));
         out.push(" }\n");
+        out.push(&format!("\n#[doc(hidden)]\n#[allow(non_snake_case, dead_code, clippy::too_many_arguments)]\npub fn {}<__WgB>(__wg_source: &[u8]{}, __wg_words: ::std::option::Option<winnow_grammar::InternerContext>, mut __wg_each: impl FnMut(&{}) -> ::std::ops::ControlFlow<__WgB>) -> {}<::std::option::Option<__WgB>, nikaia_std::grammar::ParseError> {{ ", emit_stream_each_name(name, &rule_name), params, item, self.rust_result()));
+        for j in 0..rule.config.len() as i64 {
+            out.push(&format!("let __wg_option{} = match __wg_given{} {{ ::std::option::Option::Some(__wg_value) => __wg_value, ::std::option::Option::None => ", j, j));
+            self.emit_expr(world, walk, out, host, &unsafe { nikaia_std::proven::read(&rule.config, (j) as usize) }.default, 0, EmitFlow::plain(), &EmitScope::plain())?;
+            out.push(" }; ");
+        }
+        out.push("let mut __wg_context = match __wg_words { ::std::option::Option::Some(__wg_table) => winnow_grammar::ParseContext::<()>::with_state_and_interner((), __wg_table), ::std::option::Option::None => winnow_grammar::ParseContext::<()>::default() }; ");
+        let mut each = String::from("|__wg_one| __wg_each(__wg_one)");
+        if self.facts.emitting_entries.contains(&format!("{}::{}", name, rule_name)) { each = format!("|__wg_item: &::std::option::Option<{}>| match __wg_item {{ ::std::option::Option::Some(__wg_one) => __wg_each(__wg_one), ::std::option::Option::None => ::std::ops::ControlFlow::Continue(()) }}", item); }
+        out.push(&format!("match {}::parse_{}_slice_each(__wg_source, &mut __wg_context, {}{}) {{ Ok(::std::ops::ControlFlow::Break(__wg_broken)) => Ok(::std::option::Option::Some(__wg_broken)), Ok(::std::ops::ControlFlow::Continue(_)) => Ok(::std::option::Option::None), Err(__wg_error) => Err(nikaia_std::grammar::ParseError::of(__wg_error.render(__wg_source))) }} }}\n", name, rule_name, handed, each));
         Ok(())
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -646,6 +656,8 @@ pub(crate) fn emit_stream_walks(def: &GrammarDef, offered_to_rust: bool) -> Vec<
 }
 
 pub(crate) fn emit_stream_walk_name(book: &str, rule: &str) -> String { format!("__nikaia_walk_{}__{}", book, rule) }
+
+pub(crate) fn emit_stream_each_name(book: &str, rule: &str) -> String { format!("__nikaia_each_{}__{}", book, rule) }
 
 pub(crate) fn emit_stream_reader_name(book: &str, rule: &str) -> String { format!("__nikaia_reader_{}__{}", book, rule) }
 

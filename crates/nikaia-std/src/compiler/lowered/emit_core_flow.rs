@@ -909,13 +909,13 @@ impl EmitState {
             let held = match value { Some(__nikaia_value) => __nikaia_value, None => return Ok(()) };
             let is_null = matches!(held, Expr::LitNull(_));
             let either = call_returns_either(world.words, world.items, &scope.function) && !is_null && !self.facts.mixed_choices.contains(&node_key(held)) && !self.facts.mixed_leaves.contains_key(&node_key(held)) && !never_a_value(held);
-            if flow.can_throw { out.push("return Ok("); } else { out.push("return "); }
+            if flow.returns_out { out.push("return Ok(::std::option::Option::Some("); } else if flow.can_throw { out.push("return Ok("); } else { out.push("return "); }
             if either { out.push("nikaia_std::either_text::either("); }
             self.emit_expr(world, walk, out, host, held, depth, flow, scope)?;
             if either { out.push(")"); }
             if !self.facts.wrapped.contains_key(&node_key(held)) && !self.facts.some_tails.contains(&node_key(held)) && self.either_into_owned(world, held, &scope.function, -1) { out.push(".into()"); }
-            if flow.can_throw { out.push(")"); }
-        } else if flow.can_throw { out.push("return Ok(())"); } else { out.push("return"); }
+            if flow.returns_out { out.push("))"); } else if flow.can_throw { out.push(")"); }
+        } else if flow.returns_out { out.push("return Ok(::std::option::Option::Some(()))"); } else if flow.can_throw { out.push("return Ok(())"); } else { out.push("return"); }
         Ok(())
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before

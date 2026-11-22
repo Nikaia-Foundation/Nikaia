@@ -562,9 +562,20 @@ impl EmitState {
                     }
                 }
                 if streamed {
-                    out.push(&format!("Ok::<_, nikaia_std::grammar::ParseError>({}{}(::std::convert::AsRef::<[u8]>::as_ref(&*", package, emit_stream_walk_name(&book, &rule)));
-                    self.emit_expr(world, walk, out, host, unsafe { nikaia_std::proven::read(&args, (0) as usize) }, depth, flow, scope)?;
-                    out.push(").to_vec()");
+                    let each_body: Option<EmitOut> = match walk.each_body {
+                        None => None,
+                        Some(ref held) => Some(held.clone()),
+                    };
+                    walk.each_body = None;
+                    if each_body.is_some() {
+                        out.push(&format!("{}{}(::std::convert::AsRef::<[u8]>::as_ref(&*", package, emit_stream_each_name(&book, &rule)));
+                        self.emit_expr(world, walk, out, host, unsafe { nikaia_std::proven::read(&args, (0) as usize) }, depth, flow, scope)?;
+                        out.push(")");
+                    } else {
+                        out.push(&format!("Ok::<_, nikaia_std::grammar::ParseError>({}{}(::std::convert::AsRef::<[u8]>::as_ref(&*", package, emit_stream_walk_name(&book, &rule)));
+                        self.emit_expr(world, walk, out, host, unsafe { nikaia_std::proven::read(&args, (0) as usize) }, depth, flow, scope)?;
+                        out.push(").to_vec()");
+                    }
                     for i in 1..args.len() as i64 {
                         out.push(", ");
                         self.emit_expr(world, walk, out, host, unsafe { nikaia_std::proven::read(&args, (i) as usize) }, depth, flow, scope)?;
@@ -591,7 +602,10 @@ impl EmitState {
                         }
                     }
                     if !table { out.push(", ::std::option::Option::None"); }
-                    out.push(&format!(")){}", question));
+                    match each_body {
+                        None => { out.push(&format!(")){}", question)); },
+                        Some(ref body) => { out.push_around(&format!(", |__wg_one| {{ __NIKAIA_EACH_BODY__ }}){}", question), "__NIKAIA_EACH_BODY__", body); },
+                    }
                     return Ok(true);
                 }
                 if args.len() != 1 { return Ok(false); }
@@ -1574,8 +1588,8 @@ pub(crate) fn emit_tuple_part_copy(i: i64, word: &str) -> String {
 }
 
 pub(crate) fn emit_tuple_part_copies(parts: &[String]) -> String {
-    let copies: Vec<String> = parts.iter().enumerate().map(|(at, item)| (at as i64, item)).map(|__nikaia_tuple117732| {
-        let (i, word) = __nikaia_tuple117732;
+    let copies: Vec<String> = parts.iter().enumerate().map(|(at, item)| (at as i64, item)).map(|__nikaia_tuple118691| {
+        let (i, word) = __nikaia_tuple118691;
         emit_tuple_part_copy(i, word)
     }).collect::<Vec<_>>();
     if copies.len() == 1 { return format!("({},)", *unsafe { nikaia_std::proven::read(&copies, (0) as usize) }); }

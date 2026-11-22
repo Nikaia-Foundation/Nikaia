@@ -191,6 +191,21 @@ impl EmitState {
             }
             out.push("        }\n    }\n}\n\n");
             if !borrows {
+                for (narrower, small) in self.sums.iter() {
+                    if (narrower.len() as i64) >= members.len() as i64 || self.is_std && !self.sums_written.contains(small) { continue; }
+                    let mut inside = true;
+                    for member in narrower.iter() { if !nikaia_std::list::contains(&members, &member) || self.borrows_named(world, member) { inside = false; } }
+                    if inside {
+                        let mut cases: String = String::from("");
+                        for member in narrower.iter() {
+                            let variant = sum_variant(member);
+                            cases = format!("{}            {}::{}(e) => {}::{}(e),\n", cases, small, variant, name, variant);
+                        }
+                        out.push(&format!("impl From<{}> for {} {{\n    fn from(error: {}) -> {} {{\n        match error {{\n{}        }}\n    }}\n}}\n\n", small, name, small, name, cases));
+                    }
+                }
+            }
+            if !borrows {
                 let mut read: String = String::from("");
                 let mut taken: String = String::from("");
                 for member in members.iter() {

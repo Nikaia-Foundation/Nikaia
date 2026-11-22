@@ -1,0 +1,24 @@
+// A walk of `Yaml::events` whose items are kept past the loop
+// (ADR-grammar-typed-read-v1 D7, #2708): the `for` runs its body as the
+// parser's `each`, and an item views the input it is parsed from, so one kept
+// beyond its turn is a copy, `.clone()`.
+use yaml
+
+fn scalars(text: String) -> Vec[yaml::Event] throws {
+	let input = Bytes(text.bytes().collect())
+	let mut kept: Vec[yaml::Event] = []
+	for e in yaml::Yaml::events(input) {
+		if e.kind == yaml::EventKind::Scalar {
+			kept.push(e.clone())
+		}
+	}
+	return kept
+}
+
+fn main() throws {
+	let kept = scalars("k: v\nl: [x, 'y']\n")
+	println(f"{kept.len()} scalars")
+	for e in kept {
+		println(yaml::event_line(e))
+	}
+}

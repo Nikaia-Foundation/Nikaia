@@ -511,6 +511,10 @@ impl EmitState {
                             out.insert_at(start, "(")
                             out.push(")")
                         }
+                    } else if here.returns_out {
+                        out.push("return Ok(::std::option::Option::Some(")
+                        self.emit_core_handed_back(world, walk, out, host, given, at, depth, here, scope)
+                        out.push("));")
                     } else if here.can_throw {
                         out.push("return Ok(")
                         self.emit_core_handed_back(world, walk, out, host, given, at, depth, here, scope)
@@ -520,6 +524,8 @@ impl EmitState {
                         self.emit_core_handed_back(world, walk, out, host, given, at, depth, here, scope)
                         out.push(";")
                     }
+                } else if here.returns_out {
+                    out.push("return Ok(::std::option::Option::Some(()));")
                 } else if here.can_throw {
                     out.push("return Ok(());")
                 } else {
@@ -1243,6 +1249,9 @@ impl EmitState {
                 return
             }
         }
+        if self.emit_stmt_each_walk(world, iter, at, flow) && self.emit_stmt_for_each(world, walk, out, host, bindings, shape, mutable, mut_names, iter, body, depth, flow, scope) {
+            return
+        }
         // **A step that can fail is bound before it is unwrapped** (ADR-025
         // D1): a `_` there takes a hidden name, which `let _ = _?` cannot read.
         let fallible = self.facts.fallible_loops.contains(at)
@@ -1401,6 +1410,115 @@ impl EmitState {
             inside = scope.clone() with { changed: changed }
         }
         self.emit_stmt_block_opening_with(world, walk, out, host, body, depth, flow.inside_a_loop(), inside, EmitTail::Statement, emit_counted_turn(host.counts_steps(), opening))
+    }
+
+    /// **Whether a `for` runs its body as the parser's `each`**
+    /// (ADR-grammar-typed-read-v1 D7, #2708): its iterable is the call of a
+    /// `@stream` entry, of this file's grammar or a package's, in a function
+    /// that fails into its own channel, outside a `catch` (whose guarded half
+    /// the closure could not break out to), and whose body does not pause
+    /// (`emit_stmt_for_each`). Every other walk keeps the parser's thread
+    /// (`emit_stream_batched_start`).
+    fn emit_stmt_each_walk(ref self, world: ref EmitWorld, iter: ref Expr, at: i64, flow: EmitFlow) -> bool {
+        if !flow.can_throw || flow.caught || flow.breaks_to >= 0 {
+            return false
+        }
+        if !self.facts.fallible_loops.contains(at) || self.facts.timed_loops.contains(at) || self.facts.pausing_loops.contains(at) {
+            return false
+        }
+        return match iter {
+            Expr::Call { func, args, .. } => match func {
+                Expr::Path(segments, _) => args.len() > 0 && self.emit_stmt_a_stream_entry(world, segments),
+                else => false,
+            },
+            else => false,
+        }
+    }
+
+    /// Whether `segments` name a `@stream` entry: `G::rule` of this file's
+    /// grammar, as `emit_core_grammar_entry` finds it, or a package's, as
+    /// `emit_call_grammar` does.
+    fn emit_stmt_a_stream_entry(ref self, world: ref EmitWorld, segments: ref Vec[winnow_grammar::Symbol]) -> bool {
+        if segments.len() == 2 && self.grammars.contains_key(emit_text(world, segments[0])) {
+            let def = self.grammars.get(emit_text(world, segments[0])) ?? return false
+            for r in def.rules {
+                if r.is_entry && r.name == segments[1] {
+                    return r.stream && r.ret_type != null && !emit_leaf_par_fold(r)
+                }
+            }
+            return false
+        }
+        if segments.len() != 3 && segments.len() != 2 {
+            return false
+        }
+        let first = segments.len() - 2
+        let package = match first {
+            0 => "",
+            else => f"{emit_text(world, segments[0])}::",
+        }
+        let key = f"{package}{emit_text(world, segments[first])}::{emit_text(world, segments[first + 1])}"
+        if !self.a_package_grammar_entry(key) {
+            return false
+        }
+        let contract = self.own_contracts.functions.get(key) ?? return false
+        let signature = contract.signature ?? return false
+        let result = signature.result ?? return false
+        return a_sequence_type(result)
+    }
+
+    /// **The body of a `for` over a `@stream` call is the parser's `each`**
+    /// (ADR-grammar-typed-read-v1 D7, #2708): no thread and no channel. The
+    /// call's lowering lends the input and wraps `walk.each_body` in the
+    /// closure the engine calls with each item as `__wg_one`. In it, the body
+    /// runs as a `for` over that one item, so a `break` and a `continue` are
+    /// the body's own: the turn went on to the next item exactly where the
+    /// one-item walk was asked for another (`__nikaia_went_on`), and stopped
+    /// it otherwise. The body is a closure of its own too, failing into the
+    /// function's channel, so a failing call's `?` and a `throw` leave it as
+    /// they leave the function, and a `return` hands out `Some(value)`
+    /// (`EmitFlow::returns_out`). Whatever is not a `continue` breaks the
+    /// parse with that outcome, which the `for` acts on after it. A body
+    /// that pauses cannot be the engine's closure, so nothing is written
+    /// and `false` hands the walk back to the thread (D7's table).
+    fn emit_stmt_for_each[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, bindings: ref Vec[winnow_grammar::Symbol], shape: ref Vec[i64], mutable: bool, mut_names: ref Vec[bool], iter: ref Expr, body: ref Block, depth: i64, flow: EmitFlow, scope: ref EmitScope) -> bool sync throws {
+        let mut names: Vec[String] = []
+        let mut index = 0
+        for one in bindings {
+            let local = self.emit_stmt_local(emit_text(world, one))
+            let marked = mut_names.len() == 0 || mut_names[index]
+            index += 1
+            if mutable && local != "_" && marked {
+                names.push(f"mut {local}")
+            } else {
+                names.push(local)
+            }
+        }
+        let mut allowed = ""
+        if mutable && names.len() > 1 {
+            allowed = "#[allow(unused_mut)] "
+        }
+        let bound = emit_stmt_tuple_pattern(names, shape)
+        let mut inner = EmitOut::empty()
+        inner.push(f"let mut __nikaia_went_on = false; let __nikaia_ran: ::core::result::Result<::std::option::Option<_>, {scope.channel}> = (|| {{ ")
+        inner.push(f"{allowed}for {bound} in ::std::iter::once(__wg_one.clone()).chain(::std::iter::from_fn(|| {{ __nikaia_went_on = true; ::std::option::Option::None }})) ")
+        let inside = flow.inside_a_loop() with { returns_out: true }
+        self.emit_stmt_block_opening_with(world, walk, inner, host, body, depth, inside, scope, EmitTail::Statement, emit_counted_turn(host.counts_steps(), null))
+        if inner.buf.contains(".await") {
+            return false
+        }
+        inner.push(" Ok(::std::option::Option::None) })(); match __nikaia_ran { Ok(::std::option::Option::None) if __nikaia_went_on => ::std::ops::ControlFlow::Continue(()), __nikaia_other => ::std::ops::ControlFlow::Break(__nikaia_other) }")
+        out.push("{ let __nikaia_each = ")
+        walk.each_body = inner
+        self.emit_expr(world, walk, out, host, iter, depth, flow, scope)
+        if walk.each_body != null {
+            walk.each_body = null
+            throw EmitRefused { message: "A `for` over a `@stream` call found no walk to run its body in. This is a compiler bug.", at: flow.statement }
+        }
+        // A `return` of a body nested in another's hands its value out of
+        // that one in turn.
+        let handed = if flow.returns_out { "Ok(::std::option::Option::Some(__nikaia_value))" } else { "Ok(__nikaia_value)" }
+        out.push(f"; match __nikaia_each {{ ::std::option::Option::Some(Ok(::std::option::Option::Some(__nikaia_value))) => return {handed}, ::std::option::Option::Some(Err(__nikaia_error)) => return Err(__nikaia_error), _ => {{}} }} }}")
+        return true
     }
 
     /// The local list a `for` body pushes onto exactly once, at its top level,
