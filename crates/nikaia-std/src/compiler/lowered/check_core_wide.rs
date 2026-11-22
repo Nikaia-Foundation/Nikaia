@@ -30,10 +30,10 @@ pub(crate) fn wide_plain(name: &str) -> Ty { Ty::Named { name: nikaia_std::block
 impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn wide_taken(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>) -> bool { world.own.types.contains_key("Wide") || self.structs.contains_key("Wide") || self.enums.contains_key("Wide") }
+    pub(crate) fn wide_taken(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>) -> bool { world.own.types.contains_key("Wide") || self.structs.contains_key("Wide") || self.enums.contains_key("Wide") }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn wide_element(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, ty: &Ty) -> String {
+    pub(crate) fn wide_element(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, ty: &Ty) -> String {
         if self.wide_taken(world) { return String::from(""); }
         match value_of_a_copy(&ty.unseen()) {
             Ty::Named { ref name, ref args, view } => if !view && name == "Wide" && args.len() == 1 { wide_named(unsafe { nikaia_std::proven::read(&args, (0) as usize) }) } else { String::from("") },
@@ -42,7 +42,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn wide_made(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, key: &str, args: &[Expr], found: &[Ty], func: &Expr, span: &Span) -> Option<Ty> {
+    pub(crate) fn wide_made(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, key: &str, args: &[Expr], found: &[Ty], func: &Expr, span: &Span) -> Option<Ty> {
         if self.wide_taken(world) { return None; }
         let entry = match key.strip_prefix("Wide::") { Some(__nikaia_value) => __nikaia_value, None => return None };
         let mut at: i64 = if entry == "from_halves" { 1 } else { 0 };
@@ -70,7 +70,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn wide_method(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, expr: &Expr, on: &Ty, method: &str, span: &Span) -> Option<Ty> {
+    pub(crate) fn wide_method(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, expr: &Expr, on: &Ty, method: &str, span: &Span) -> Option<Ty> {
         let element = self.wide_element(world, on);
         let unsigned = wide_unsigned_of(&element);
         if unsigned == "" { return None; }

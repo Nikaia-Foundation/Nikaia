@@ -45,7 +45,7 @@ pub(crate) fn check_cleanup_is_sync(ledger: &Ledger, owner: &str) -> bool {
 impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn method_options(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, method: winnow_grammar::Symbol, contract: &FnContract, on: i64) {
+    pub(crate) fn method_options(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, method: winnow_grammar::Symbol, contract: &FnContract, on: i64) {
         let signature = match contract.signature.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return };
         if signature.config.is_empty() { return; }
         let mut options: Vec<(String, String)> = vec![];
@@ -75,7 +75,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn a_walk_of_a_failing_sequence(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, method: winnow_grammar::Symbol, span: &Span) {
+    pub(crate) fn a_walk_of_a_failing_sequence(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, method: winnow_grammar::Symbol, span: &Span) {
         if self.flow.guarded.is_some() {
             let held: Option<CheckGuarded> = match self.flow.guarded.as_ref() {
                 Some(__nikaia_it) => Some(__nikaia_it.clone()),
@@ -105,7 +105,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn fallible_step(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, over: &Ty, bindings: i64, span: &Span) {
+    pub(crate) fn fallible_step(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, over: &Ty, bindings: i64, span: &Span) {
         let mut name: String = String::from("");
         match over {
             Ty::Named { name: written, .. } => {
@@ -144,7 +144,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn seen_through(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, ty: &Ty) -> Option<Ty> {
+    pub(crate) fn seen_through(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, ty: &Ty) -> Option<Ty> {
         let name = match ty {
             Ty::Named { name, .. } => nikaia_std::block::Text::from(name.to_string()),
             _ => return None,
@@ -158,14 +158,14 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn fits_through_deref(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, found: &Ty, want: &Ty) -> bool {
+    pub(crate) fn fits_through_deref(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, found: &Ty, want: &Ty) -> bool {
         if found.fits(want) { return true; }
         let seen = match self.seen_through(world, found) { Some(__nikaia_value) => __nikaia_value, None => return false };
         seen.fits(want)
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn fields_of_base(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, base: &str) -> Vec<Ty> {
+    pub(crate) fn fields_of_base(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, base: &str) -> Vec<Ty> {
         nikaia_std::index::or(match *nikaia_std::index::get(&world.fields_by_base, base) {
             Some(__nikaia_it) => Some(__nikaia_it.clone()),
             None => None,
@@ -173,13 +173,13 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn cleanup_of(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, ty: &Ty) -> Option<CheckCleanup> {
+    pub(crate) fn cleanup_of(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, ty: &Ty) -> Option<CheckCleanup> {
         let mut seen: collections::BTreeSet<String> = collections::BTreeSet::new();
         self.cleanup_within(world, ty, &mut seen)
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn cleanup_within(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, ty: &Ty, seen: &mut collections::BTreeSet<String>) -> Option<CheckCleanup> {
+    pub(crate) fn cleanup_within(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, ty: &Ty, seen: &mut collections::BTreeSet<String>) -> Option<CheckCleanup> {
         let mut held: Vec<Ty> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         match ty.unseen() {
             Ty::Named { ref name, ref args, view } => {
@@ -227,7 +227,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn tears_down(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, ty: &Ty, seen: &mut collections::BTreeSet<String>) -> Option<String> {
+    pub(crate) fn tears_down(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, ty: &Ty, seen: &mut collections::BTreeSet<String>) -> Option<String> {
         let name = match ty {
             Ty::Named { name, view, .. } => {
                 let view = *view;

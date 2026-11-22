@@ -149,7 +149,11 @@ impl<'a> Checker<'a> {
     #[track_caller]
     pub(super) fn nikaia<R>(
         &mut self,
-        f: impl FnOnce(&mut CheckState, &CheckWorld<'a, 'a, 'a, 'a, 'a, 'a, 'a>, &host::Host<'a>) -> R,
+        f: impl FnOnce(
+            &mut CheckState,
+            &CheckWorld<'a, 'a, 'a, 'a, 'a, 'a, 'a, 'a>,
+            &host::Host<'a>,
+        ) -> R,
     ) -> R {
         let mut state = crate::baton::out_of(self.s.0.take(), "the state");
         let world = self.world;

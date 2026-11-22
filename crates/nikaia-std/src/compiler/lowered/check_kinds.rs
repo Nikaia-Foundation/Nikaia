@@ -35,7 +35,7 @@ pub(crate) fn kind_a_usize(ty: &Ty) -> bool {
     }
 }
 
-pub(crate) fn kind_the_buffers_own_length(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, count: &Expr, buffer: &Expr) -> bool {
+pub(crate) fn kind_the_buffers_own_length(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, count: &Expr, buffer: &Expr) -> bool {
     match count {
         Expr::MethodCall { receiver, method, args, .. } => { let receiver = nikaia_std::boxed::open(receiver); let method = *method; world.words.resolve(method) == "len" && args.is_empty() && receiver == buffer },
         _ => false,
@@ -90,7 +90,7 @@ pub(crate) fn kind_names_a_value_of_the_inner(pattern: &MatchPattern) -> bool {
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn kind_some_or_none(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, pattern: &MatchPattern) -> Option<&'static str> {
+pub(crate) fn kind_some_or_none(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, pattern: &MatchPattern) -> Option<&'static str> {
     match pattern {
         MatchPattern::Tuple { path, .. } => { if path.len() == 1 && world.words.resolve(*unsafe { nikaia_std::proven::read(&path, (0) as usize) }) == "Some" { return Some("Some"); } },
         MatchPattern::Path(path) => { if path.len() == 1 && world.words.resolve(*unsafe { nikaia_std::proven::read(&path, (0) as usize) }) == "None" { return Some("None"); } },
@@ -107,7 +107,7 @@ pub(crate) fn kind_some_or_none(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, 
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn kind_some_binding(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, pattern: &MatchPattern) -> String {
+pub(crate) fn kind_some_binding(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, pattern: &MatchPattern) -> String {
     match pattern {
         MatchPattern::Tuple { parts, .. } => { if parts.len() == 1 { return written_pattern(world.words, unsafe { nikaia_std::proven::read(&parts, (0) as usize) }); } },
         _ => { },
@@ -135,7 +135,7 @@ pub(crate) fn kind_a_literal_misfit(literal: &Expr, kind: &str) -> bool {
     true
 }
 
-pub(crate) fn kind_an_update_only_replaces(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, name: &str, body: &Block) -> bool {
+pub(crate) fn kind_an_update_only_replaces(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, name: &str, body: &Block) -> bool {
     let mut assigned = false;
     let mut read = false;
     for stmt in body.stmts.iter() {
@@ -154,14 +154,14 @@ pub(crate) fn kind_an_update_only_replaces(world: &CheckWorld<'_, '_, '_, '_, '_
     assigned && !read
 }
 
-pub(crate) fn kind_is_the_name(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, target: &Expr, name: &str) -> bool {
+pub(crate) fn kind_is_the_name(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, target: &Expr, name: &str) -> bool {
     match target {
         Expr::Variable(n, _) => { let n = *n; world.words.resolve(n) == name },
         _ => false,
     }
 }
 
-pub(crate) fn kind_callee_name(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, func: &Expr) -> Option<String> {
+pub(crate) fn kind_callee_name(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, func: &Expr) -> Option<String> {
     match func {
         Expr::Variable(name, _) => { let name = *name; Some(nikaia_std::block::Text::from(world.words.resolve(name).to_string())) },
         Expr::Path(segments, _) => Some(kind_path_text(world, segments)),
@@ -169,7 +169,7 @@ pub(crate) fn kind_callee_name(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, f
     }
 }
 
-pub(crate) fn kind_path_text(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, segments: &[winnow_grammar::Symbol]) -> String {
+pub(crate) fn kind_path_text(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, segments: &[winnow_grammar::Symbol]) -> String {
     let mut parts: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     parts.reserve(segments.iter().size_hint().0); for segment in segments.iter() {
         let segment = *segment;
@@ -181,7 +181,7 @@ pub(crate) fn kind_path_text(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, seg
 impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn raised_bounds(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, bounds: &[ConfigArg], span: &Span) -> Option<CheckRaised> {
+    pub(crate) fn raised_bounds(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, bounds: &[ConfigArg], span: &Span) -> Option<CheckRaised> {
         let mut raised = CheckRaised { steps: None, ram: None };
         let mut refused = false;
         for bound in bounds.iter() {
@@ -206,7 +206,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn a_length_that_fits_its_buffer(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, written: &str, wanted: &[(String, Ty)], given: &[Expr], found: &[Ty], span: &Span) {
+    pub(crate) fn a_length_that_fits_its_buffer(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, written: &str, wanted: &[(String, Ty)], given: &[Expr], found: &[Ty], span: &Span) {
         if !self.foreign_names.contains(written) { return; }
         let mut at: i64 = 0;
         while at < wanted.len() as i64 {
@@ -217,7 +217,7 @@ impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    pub(crate) fn a_buffer_and_its_count(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, written: &str, wanted: &[(String, Ty)], given: &[Expr], found: &[Ty], at: i64, span: &Span) {
+    pub(crate) fn a_buffer_and_its_count(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, written: &str, wanted: &[(String, Ty)], given: &[Expr], found: &[Ty], at: i64, span: &Span) {
         if !kind_a_slice_pointer(&unsafe { nikaia_std::proven::read(&wanted, (at) as usize) }.1) { return; }
         if unsafe { nikaia_std::proven::add::<i64>(at, 1) } >= wanted.len() as i64 || !kind_a_usize(&unsafe { nikaia_std::proven::read(&wanted, (nikaia_std::proven::add::<i64>(at, 1)) as usize) }.1) { return; }
         if unsafe { nikaia_std::proven::add::<i64>(at, 1) } >= given.len() as i64 { return; }
@@ -230,7 +230,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn an_update_block_reads_what_it_writes(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, params: &[winnow_grammar::Symbol], body: &Block, span: &Span) {
+    pub(crate) fn an_update_block_reads_what_it_writes(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, params: &[winnow_grammar::Symbol], body: &Block, span: &Span) {
         for param in params.iter() {
             let param = *param;
             let name = nikaia_std::block::Text::from(world.words.resolve(param).to_string());
@@ -239,7 +239,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn a_null_arm_on_a_plain_value(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, on: &Ty, value: &Expr, arms: &[MatchArm], span: &Span) {
+    pub(crate) fn a_null_arm_on_a_plain_value(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, on: &Ty, value: &Expr, arms: &[MatchArm], span: &Span) {
         match on {
             Ty::Nullable(_) => { return; },
             Ty::Unknown => { return; },
@@ -251,7 +251,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn a_pattern_of_another_type(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, on: &Ty, value: &Expr, arms: &[MatchArm], span: &Span) {
+    pub(crate) fn a_pattern_of_another_type(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, on: &Ty, value: &Expr, arms: &[MatchArm], span: &Span) {
         let mut kind: String = String::from("");
         let mut shown: String = String::from("");
         let known = self.kind_of_the_matched(on);
@@ -277,7 +277,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn a_type_that_cannot_arrive(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, on: &Ty, value: &Expr, arms: &[MatchArm], span: &Span) {
+    pub(crate) fn a_type_that_cannot_arrive(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, on: &Ty, value: &Expr, arms: &[MatchArm], span: &Span) {
         let mut members: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         for member in several_errors_of(on) { members.push(member.text()); }
         if members.is_empty() {
@@ -315,7 +315,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn kind_a_misfit(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, pattern: &MatchPattern, kind: &str) -> bool {
+    pub(crate) fn kind_a_misfit(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, pattern: &MatchPattern, kind: &str) -> bool {
         match pattern {
             MatchPattern::Literal(literal) => { return kind_a_literal_misfit(literal, kind); },
             MatchPattern::Range { start, .. } => { return kind_a_literal_misfit(start, kind); },
@@ -329,14 +329,14 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn kind_a_variant_misfit(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, path: &[winnow_grammar::Symbol], kind: &str) -> bool {
+    pub(crate) fn kind_a_variant_misfit(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, path: &[winnow_grammar::Symbol], kind: &str) -> bool {
         if path.len() != 2 { return false; }
         let owner = nikaia_std::block::Text::from(world.words.resolve(*unsafe { nikaia_std::proven::read(&path, (0) as usize) }).to_string());
         self.enums.contains_key(&owner) && owner != kind
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn a_some_or_none_over_a_nullable(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, on: &Ty, value: &Expr, arms: &[MatchArm], span: &Span) -> bool {
+    pub(crate) fn a_some_or_none_over_a_nullable(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, on: &Ty, value: &Expr, arms: &[MatchArm], span: &Span) -> bool {
         match on {
             Ty::Nullable(_) => { },
             _ => { return false; },
@@ -360,7 +360,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn a_pattern_naming_nothing(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, on: &Ty, value: &Expr, arms: &[MatchArm], span: &Span) -> bool {
+    pub(crate) fn a_pattern_naming_nothing(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, on: &Ty, value: &Expr, arms: &[MatchArm], span: &Span) -> bool {
         let nullable = matches!(on, Ty::Nullable(_));
         if !self.kind_a_certain_subject(on) { return false; }
         for arm in arms.iter() {
@@ -386,7 +386,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn kind_an_undeclared_call(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, pattern: &MatchPattern) -> Option<String> {
+    pub(crate) fn kind_an_undeclared_call(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, pattern: &MatchPattern) -> Option<String> {
         match pattern {
             MatchPattern::Tuple { path, parts } => {
                 if path.len() == 1 {
@@ -422,7 +422,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn a_variant_matched_on_a_nullable(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, on: &Ty, value: &Expr, arms: &[MatchArm], span: &Span) {
+    pub(crate) fn a_variant_matched_on_a_nullable(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, on: &Ty, value: &Expr, arms: &[MatchArm], span: &Span) {
         let inner = match on {
             Ty::Nullable(inner) => { let inner = nikaia_std::boxed::open(inner); inner.clone() },
             _ => return,
@@ -444,7 +444,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn several_arrive(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, guarded: &Expr) -> bool {
+    pub(crate) fn several_arrive(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, guarded: &Expr) -> bool {
         let name = match guarded {
             Expr::Call { func, .. } => { let func = nikaia_std::boxed::open(func); match kind_callee_name(world, func) { Some(__nikaia_value) => __nikaia_value, None => return false } },
             Expr::Try(inner, _) => { let inner = nikaia_std::boxed::open(inner); return self.several_arrive(world, inner) },

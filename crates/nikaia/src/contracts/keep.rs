@@ -311,6 +311,29 @@ pub(crate) fn buffer_plans(
     ledger: &Ledger,
     library: &Ledger,
 ) -> Vec<nikaia_std::compiler::buffers::BufferPlan> {
+    let own_methods = nikaia_std::compiler::ty::method_index(ledger);
+    let library_methods = nikaia_std::compiler::ty::method_index(library);
+    buffer_plans_indexed(
+        parsed,
+        beside,
+        ledger,
+        library,
+        &own_methods,
+        &library_methods,
+    )
+}
+
+/// [`buffer_plans`] handed the two ledgers' method indexes, which a caller
+/// that plans every file of a package against the same ledgers makes once
+/// (#2685).
+pub(crate) fn buffer_plans_indexed(
+    parsed: &Parsed,
+    beside: Option<&Context>,
+    ledger: &Ledger,
+    library: &Ledger,
+    own_methods: &nikaia_std::compiler::ty::MethodIndex,
+    library_methods: &nikaia_std::compiler::ty::MethodIndex,
+) -> Vec<nikaia_std::compiler::buffers::BufferPlan> {
     use nikaia_std::compiler::buffers::{self as nika, BufferAsk};
     let mut context = Context::of(&parsed.interner, &parsed.program.items);
     if let Some(theirs) = beside {
@@ -338,14 +361,12 @@ pub(crate) fn buffer_plans(
     .kept
     .into_iter()
     .collect();
-    let own_methods = nikaia_std::compiler::ty::method_index(ledger);
-    let library_methods = nikaia_std::compiler::ty::method_index(library);
     let ask = BufferAsk {
         names: &parsed.interner,
         own: ledger,
-        own_methods: &own_methods,
+        own_methods,
         library,
-        library_methods: &library_methods,
+        library_methods,
         items: &parsed.program.items,
         context: &context,
         given_up: &given_up,

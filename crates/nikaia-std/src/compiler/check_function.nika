@@ -77,61 +77,73 @@ fn check_function_compared(world: ref CheckWorld, beside: ref collections::BTree
     return compare_declared(asking, world.here)
 }
 
-impl CheckState {
-    /// One file's shape walks, under the interner its symbols resolve in.
-    fn field_walks_in(ref mut self, file: ref ParsedView) sync {
-        for item in file.items {
-            match item.node {
-                Item::Fn { name, generics, args, body, .. } => {
-                    let called = name ?? continue
-                    let mut walked: String? = null
-                    // **A type in the parameter list makes a copy per type**
-                    // (ADR-330 D1): the call names the type, and nothing else
-                    // could tell the copies apart.
-                    for arg in args {
-                        if walked == null && file.text(arg.name) == "" && arg.ty.generics.len() == 0 {
-                            let written = file.text(arg.ty.name)
-                            for g in generics {
-                                if file.text(g.name) == written {
-                                    walked = written.clone()
-                                }
+/// **One file's shape walks** (ADR-304 D4, ADR-330 D1 and D2), into
+/// `walks`: each function that walks a type's fields, by the parameter it
+/// walks.
+pub fn check_function_field_walks(file: ref ParsedView, mut walks: collections::BTreeMap[String, String]) sync {
+    for item in file.items {
+        match item.node {
+            Item::Fn { name, generics, args, body, .. } => {
+                let called = name ?? continue
+                let mut walked: String? = null
+                // **A type in the parameter list makes a copy per type**
+                // (ADR-330 D1): the call names the type, and nothing else
+                // could tell the copies apart.
+                for arg in args {
+                    if walked == null && file.text(arg.name) == "" && arg.ty.generics.len() == 0 {
+                        let written = file.text(arg.ty.name)
+                        for g in generics {
+                            if file.text(g.name) == written {
+                                walked = written.clone()
                             }
                         }
                     }
-                    for g in generics {
-                        if walked != null {
-                            continue
-                        }
-                        let parameter = file.text(g.name)
-                        for b in g.bounds {
-                            let member = check_function_shape_member(file.text(b)) ?? continue
-                            if check_function_walks_the_fields_of(file, body, parameter, member) {
-                                walked = parameter.clone()
-                            }
+                }
+                for g in generics {
+                    if walked != null {
+                        continue
+                    }
+                    let parameter = file.text(g.name)
+                    for b in g.bounds {
+                        let member = check_function_shape_member(file.text(b)) ?? continue
+                        if check_function_walks_the_fields_of(file, body, parameter, member) {
+                            walked = parameter.clone()
                         }
                     }
-                    // **A function that asks a type its kind or name**
-                    // is a copy per type as well (ADR-330 D2).
-                    for g in generics {
-                        if walked == null && check_function_reflects_on(file, body, file.text(g.name)) {
-                            walked = file.text(g.name).clone()
-                        }
+                }
+                // **A function that asks a type its kind or name**
+                // is a copy per type as well (ADR-330 D2).
+                for g in generics {
+                    if walked == null && check_function_reflects_on(file, body, file.text(g.name)) {
+                        walked = file.text(g.name).clone()
                     }
-                    let parameter = walked ?? continue
-                    self.walks_fields.insert(file.text(called), parameter)
-                },
-                else => {},
-            }
+                }
+                let parameter = walked ?? continue
+                walks.insert(file.text(called), parameter)
+            },
+            else => {},
         }
     }
+}
 
+impl CheckState {
     /// **Which functions walk a type's fields, and which parameter each
     /// walks** (ADR-304 D4), over the program's every file: they share one
-    /// namespace (Part I 9.1), so a call may stand in another file.
+    /// namespace (Part I 9.1), so a call may stand in another file. Worked
+    /// out once for the package where the check was handed it (#2685).
     fn collect_field_walks(ref mut self, world: ref CheckWorld) sync {
-        self.field_walks_in(world.here)
-        for other in world.beside {
-            self.field_walks_in(other)
+        match world.package {
+            null => {
+                check_function_field_walks(world.here, self.walks_fields)
+                for other in world.beside {
+                    check_function_field_walks(other, self.walks_fields)
+                }
+            },
+            given => {
+                for (function, parameter) in given.walks_fields {
+                    self.walks_fields.insert(function.clone(), parameter.clone())
+                }
+            },
         }
     }
 

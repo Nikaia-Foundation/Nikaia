@@ -618,6 +618,34 @@ pub struct CheckWorld {
     /// package** (ADR-277 D17), by the trait method, then the parameter: what
     /// a lending caller's `NK2101` names.
     pub keepers: collections::BTreeMap[String, collections::BTreeMap[String, Vec[String]]],
+    /// **What the package's files declare and read, worked out once for all
+    /// its file checks** (`CheckPackage`, #2685). `null` where the check was
+    /// handed none: it works each out over `here` and `beside` itself.
+    pub package: ref CheckPackage?,
+}
+
+/// **The facts of a whole package that each file's check asks the same**
+/// (#2685), where `here` and `beside` together are the package's files.
+pub struct CheckPackage {
+    /// What the files read (`check_core_names_read`): which of a file's
+    /// functions another file names (ADR-327 D17).
+    pub names_read: CheckNamesRead,
+    /// Which functions walk a type's fields, and which parameter each walks
+    /// (`check_function_field_walks`, ADR-304 D4).
+    pub walks_fields: collections::BTreeMap[String, String],
+    /// The members a type holds itself through, boxed
+    /// (`item_contain_themselves`, ADR-246 D1).
+    pub boxed_members: collections::BTreeMap[String, collections::BTreeSet[String]],
+}
+
+/// **The names the files of a package read** (#2685): how many files read
+/// each, in a body, a constant, a field's default or a rule, and how many
+/// hold a grammar; `with_here` says whether the file being checked is among
+/// those counted.
+pub struct CheckNamesRead {
+    pub named: collections::BTreeMap[String, i64],
+    pub grammars: i64,
+    pub with_here: bool,
 }
 
 /// **What the checker keeps while it walks a program**: the findings, the

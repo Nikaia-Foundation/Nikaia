@@ -12,7 +12,7 @@ pub(crate) fn ext_an_enum_note() -> String { String::from("An `extern` enum is a
 impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn an_entry_point(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, item: &Item, span: &Span, of_a_trait: bool) {
+    pub(crate) fn an_entry_point(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, item: &Item, span: &Span, of_a_trait: bool) {
         match item {
             Item::Fn { name, generics, args, ret_type, is_public, is_extern, .. } => {
                 let is_extern = *is_extern; let is_public = *is_public; let name = *name;
@@ -24,7 +24,7 @@ impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    pub(crate) fn an_entry_point_of(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, name: Option<winnow_grammar::Symbol>, generics: &[GenericParam], args: &[FnArg], ret_type: Option<&Type>, is_public: bool, span: &Span, of_a_trait: bool) {
+    pub(crate) fn an_entry_point_of(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, name: Option<winnow_grammar::Symbol>, generics: &[GenericParam], args: &[FnArg], ret_type: Option<&Type>, is_public: bool, span: &Span, of_a_trait: bool) {
         let mut written: String = String::from("new");
         if name.is_some() { written = nikaia_std::block::Text::from(world.words.resolve(match name { Some(__nikaia_value) => __nikaia_value, None => return }).to_string()); }
         if !is_public { self.findings.push(check_refusal("NK1237", span, format!("`{}` is `extern` but not `pub`.", written), vec![String::from("`extern` before a function with a body exports it to C, and what a package exports is part of its surface.")], Some(format!("Write `pub extern fn {}`, or leave out `extern` for a function only this program calls.", written)))); }
@@ -49,14 +49,14 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn what_an_entry_point_hands_back(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, written: &str, ret_type: Option<&Type>, span: &Span) {
+    pub(crate) fn what_an_entry_point_hands_back(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, written: &str, ret_type: Option<&Type>, span: &Span) {
         let result = match ret_type { Some(__nikaia_value) => __nikaia_value, None => return };
         let way = self.crosses_to_c(world, result, true);
         if way.is_some() { self.findings.push(check_refusal("NK1240", span, format!("What `{}` hands back cannot cross to C.", written), vec![String::from("An entry point hands back numbers, `bool` and `scalar`, text and bytes into the caller's buffer, a struct or an enum of the package, or an optional of those (Part III 15.1).")], std::convert::identity(way))); }
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn an_extern_struct(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, item: &Item, span: &Span) {
+    pub(crate) fn an_extern_struct(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, item: &Item, span: &Span) {
         match item {
             Item::Struct { name, generics, fields, is_public, is_extern, .. } => {
                 let is_extern = *is_extern; let is_public = *is_public; let name = *name;
@@ -67,7 +67,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn an_extern_struct_of(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, name: winnow_grammar::Symbol, generics: &[GenericParam], fields: &[FieldDef], is_public: bool, span: &Span) {
+    pub(crate) fn an_extern_struct_of(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, name: winnow_grammar::Symbol, generics: &[GenericParam], fields: &[FieldDef], is_public: bool, span: &Span) {
         let written = nikaia_std::block::Text::from(world.words.resolve(name).to_string());
         if !is_public { self.findings.push(check_refusal("NK1237", span, format!("`{}` is `extern` but not `pub`.", written), vec![ext_a_struct_note()], Some(format!("Write `pub extern struct {}`, or leave out `extern` for a struct only this program uses.", written)))); }
         if !generics.is_empty() { self.findings.push(check_refusal("NK1145", span, format!("`{}` is an `extern` struct with type parameters, and C's layout has none.", written), vec![ext_a_struct_note()], Some(format!("Declare one `extern` struct for each type `{}` is used with.", written)))); }
@@ -81,7 +81,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn an_extern_enum(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, item: &Item, span: &Span) {
+    pub(crate) fn an_extern_enum(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, item: &Item, span: &Span) {
         match item {
             Item::Enum { name, variants, is_public, is_extern } => {
                 let is_extern = *is_extern; let is_public = *is_public; let name = *name;
@@ -92,7 +92,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn an_extern_enum_of(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, name: winnow_grammar::Symbol, variants: &[EnumVariant], is_public: bool, span: &Span) {
+    pub(crate) fn an_extern_enum_of(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, name: winnow_grammar::Symbol, variants: &[EnumVariant], is_public: bool, span: &Span) {
         let written = nikaia_std::block::Text::from(world.words.resolve(name).to_string());
         if !is_public { self.findings.push(check_refusal("NK1237", span, format!("`{}` is `extern` but not `pub`.", written), vec![ext_an_enum_note()], Some(format!("Write `pub extern enum {}`, or leave out `extern` for an enum only this program uses.", written)))); }
         for variant in variants.iter() {
@@ -112,14 +112,14 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn a_variant_field(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, written: &str, variant_name: &str, field: &str, ty: &Type, at: &Span) {
+    pub(crate) fn a_variant_field(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, written: &str, variant_name: &str, field: &str, ty: &Type, at: &Span) {
         if a_c_value(&world.here, ty) { return; }
         let shown = nikaia_std::block::Text::from(world.words.resolve(ty.name).to_string());
         self.findings.push(check_refusal("NK1145", at, format!("`{}::{}.{}` is a `{}`, which is not a C value.", written, variant_name, field, shown), vec![ext_an_enum_note()], Some(String::from("Leave out `extern`: a `pub enum` crosses to C as a handle, read through `_kind` and a getter per field."))));
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn crosses_to_c(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, ty: &Type, out: bool) -> Option<String> {
+    pub(crate) fn crosses_to_c(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, ty: &Type, out: bool) -> Option<String> {
         let name = nikaia_std::block::Text::from(world.words.resolve(ty.name).to_string());
         if (*ty.code).is_some() { return self.a_callback_crosses(world, ty, out); }
         if ty.is_tuple { return Some(String::from("Hand a tuple's parts over one by one, or as a `pub extern struct`.")); }
@@ -130,7 +130,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn a_callback_crosses(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, ty: &Type, out: bool) -> Option<String> {
+    pub(crate) fn a_callback_crosses(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, ty: &Type, out: bool) -> Option<String> {
         if out { return Some(String::from("Hand back a value; a function is a parameter's shape: a callback.")); }
         let code = match (*ty.code).as_ref() { Some(__nikaia_value) => __nikaia_value, None => return None };
         if !code.is_sync { return Some(String::from("Write the callback `sync`: C calls it on its own thread, where nothing may pause.")); }
@@ -144,7 +144,7 @@ impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    pub(crate) fn ext_table(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, name: &str, base: &str, args: &[String], view: bool, out: bool, declared: bool) -> Option<String> {
+    pub(crate) fn ext_table(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, name: &str, base: &str, args: &[String], view: bool, out: bool, declared: bool) -> Option<String> {
         let plain = args.is_empty();
         if plain && !view && ext_a_number(base) { return None; }
         if ext_a_text(base) && plain && view && !out { return None; }

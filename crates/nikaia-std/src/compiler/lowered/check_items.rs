@@ -205,7 +205,7 @@ impl CheckState {
         self.findings.push(check_refusal("NK1228", span, format!("`{}` is a package, and a `dsl` block names a grammar.", name), vec![String::from("A grammar from a package is named with its package, as every name from one is.")], Some(format!("Write `dsl {}::Grammar`, naming the grammar `{}` offers.", name, name))));
         true
     }
-    pub(crate) fn through_a_package_unread(&self, view: &ParsedView<'_, '_, '_, '_, '_, '_, '_>, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, expr: &Expr) -> bool {
+    pub(crate) fn through_a_package_unread(&self, view: &ParsedView<'_, '_, '_, '_, '_, '_, '_>, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, expr: &Expr) -> bool {
         let func = match expr {
             Expr::Call { func, .. } => { let func = nikaia_std::boxed::open(func); func },
             Expr::Path(_, _) => expr,
@@ -401,7 +401,7 @@ pub(crate) fn item_variant_names(view: &ParsedView<'_, '_, '_, '_, '_, '_, '_>, 
 }
 
 impl CheckState {
-    pub(crate) fn a_placeholder(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, subject: &Ty) -> Option<String> {
+    pub(crate) fn a_placeholder(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, subject: &Ty) -> Option<String> {
         let name = match item_plain_name(subject) { Some(__nikaia_value) => __nikaia_value, None => return None };
         let declared = item_enum_placeholder_in(&world.here, &name);
         if declared.is_some() { return Some(match declared { Some(__nikaia_value) => __nikaia_value, None => return None }); }
@@ -428,11 +428,11 @@ impl CheckState {
         let joined = nikaia_std::block::Text::from(holes.join(", "));
         Some(format!("{} {{ {} }}", name, joined))
     }
-    pub(crate) fn a_stand_in(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, ty: &Ty) -> Option<String> {
+    pub(crate) fn a_stand_in(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, ty: &Ty) -> Option<String> {
         if item_has_a_default(ty) { return Some(String::from("")); }
         self.a_placeholder(world, ty)
     }
-    pub(crate) fn shape_of(&self, view: &ParsedView<'_, '_, '_, '_, '_, '_, '_>, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, on: &str) -> Option<Vec<FieldContract>> {
+    pub(crate) fn shape_of(&self, view: &ParsedView<'_, '_, '_, '_, '_, '_, '_>, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, on: &str) -> Option<Vec<FieldContract>> {
         if !self.enums.contains_key(on) { return self.fields_of(world, on); }
         let known = match self.enums.get(on) { Some(__nikaia_value) => __nikaia_value, None => return None };
         #[allow(unused_mut)] let mut variants: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
@@ -452,7 +452,7 @@ impl CheckState {
         out.reserve(variants.iter().size_hint().0); for variant in variants.iter() { out.push(FieldContract { name: nikaia_std::block::Text::from(variant.to_string()), ty: Ty::Named { name: String::from("$Variant"), args: vec![], view: false }, public: true, default: String::from(""), attributes: vec![] }); }
         Some(out)
     }
-    pub(crate) fn a_function_nothing_declares(&mut self, view: &ParsedView<'_, '_, '_, '_, '_, '_, '_>, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, name: &str, span: &Span) {
+    pub(crate) fn a_function_nothing_declares(&mut self, view: &ParsedView<'_, '_, '_, '_, '_, '_, '_>, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, name: &str, span: &Span) {
         let declared = self.lookup(name).is_some() || self.structs.contains_key(name) || self.enums.contains_key(name) || world.own.types.contains_key(name) || self.modules.contains(name) || self.grammars.contains_key(name) || self.foreign_names.contains(name) || self.variant_parts.contains_key(name) || is_hull(name) || name == "access_all" || name == "update_all" || name == "panic" || name == "asset" || name == "assert" || name == "assume" || imports_a_package(view, name);
         if declared { return; }
         let mut known: Vec<String> = vec![];
@@ -467,7 +467,7 @@ impl CheckState {
         }
         self.findings.push(check_refusal("NK1117", span, format!("There's no function called `{}`.", name), vec![String::from("A function called by its name alone is one of yours or one that's always available. A function from a package is called with the package's name in front: `package::name(…)`.")], Some(help)));
     }
-    pub(crate) fn a_trait_nothing_declares(&mut self, view: &ParsedView<'_, '_, '_, '_, '_, '_, '_>, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, written: &str, span: &Span) {
+    pub(crate) fn a_trait_nothing_declares(&mut self, view: &ParsedView<'_, '_, '_, '_, '_, '_, '_>, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, written: &str, span: &Span) {
         let at = nikaia_std::text::find_first(&written, &"::");
         if at.is_some() {
             let head = nikaia_std::block::Text::from(written.before(match at { Some(__nikaia_value) => __nikaia_value, None => return }.start).to_string());
@@ -488,7 +488,7 @@ impl CheckState {
         }
         self.findings.push(check_refusal("NK1117", span, format!("There's no trait called `{}`.", written), vec![because], Some(help)));
     }
-    pub(crate) fn a_head_nothing_declares(&mut self, view: &ParsedView<'_, '_, '_, '_, '_, '_, '_>, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, head: &str, written: &str, span: &Span) {
+    pub(crate) fn a_head_nothing_declares(&mut self, view: &ParsedView<'_, '_, '_, '_, '_, '_, '_>, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, head: &str, written: &str, span: &Span) {
         let head = view.unaliased(head);
         let prefix = format!("{}::", head);
         let mut declared = self.structs.contains_key(&head) || self.enums.contains_key(&head);
@@ -630,57 +630,72 @@ pub(crate) fn item_declared_type_name(file: &ParsedView<'_, '_, '_, '_, '_, '_, 
     }
 }
 
+pub fn item_contain_themselves(files: &[ParsedView<'_, '_, '_, '_, '_, '_, '_>], boxed: &mut collections::BTreeMap<String, collections::BTreeSet<String>>) {
+    let mut generics: collections::BTreeMap<String, ItemGeneric<'_>> = collections::BTreeMap::new();
+    for file in files.iter() {
+        for item in file.items.iter() {
+            match &item.node {
+                Item::Struct { name, generics: params, fields, .. } => {
+                    let name = *name;
+                    if !params.is_empty() {
+                        let mut names: Vec<String> = vec![];
+                        names.reserve(params.iter().size_hint().0); for p in params.iter() { names.push(file.text(p.name)); }
+                        let mut members: Vec<Type> = vec![];
+                        members.reserve(fields.iter().size_hint().0); for f in fields.iter() { members.push(f.ty.clone()); }
+                        generics.insert(file.text(name), ItemGeneric { file: file.clone(), params: names, members });
+                    }
+                },
+                _ => { },
+            }
+        }
+    }
+    let mut members: collections::BTreeMap<String, Vec<ItemInline>> = collections::BTreeMap::new();
+    for file in files.iter() {
+        for item in file.items.iter() {
+            let name = match item_declared_type_name(file, &item.node) { Some(__nikaia_value) => __nikaia_value, None => continue };
+            let mut entry = item_inlines(&members, &name);
+            for held in item_members_of(file, &item.node) {
+                let mut inline: collections::BTreeSet<String> = collections::BTreeSet::new();
+                item_held_inline(file, &held.ty, &generics, &mut inline);
+                entry.push(ItemInline { member: nikaia_std::block::Text::from(held.member.to_string()), inline });
+            }
+            members.insert(nikaia_std::block::Text::from(name.to_string()), entry);
+        }
+    }
+    let mut holds: collections::BTreeMap<String, collections::BTreeSet<String>> = collections::BTreeMap::new();
+    for (name, fields) in members.iter() {
+        let mut all: collections::BTreeSet<String> = collections::BTreeSet::new();
+        for f in fields.iter() { all.extend(f.inline.iter().cloned()); }
+        holds.insert(nikaia_std::block::Text::from(name.to_string()), all);
+    }
+    for (name, fields) in members.iter() {
+        for f in fields.iter() {
+            let mut back = false;
+            for held in f.inline.iter() { if held == name || item_reaches(held, name, &holds) { back = true; } }
+            if back {
+                let mut set = item_boxed_set(&boxed, name);
+                set.insert(nikaia_std::block::Text::from(f.member.to_string()));
+                boxed.insert(nikaia_std::block::Text::from(name.to_string()), set);
+            }
+        }
+    }
+}
+
 impl CheckState {
-    pub(crate) fn types_that_contain_themselves(&mut self, here: &ParsedView<'_, '_, '_, '_, '_, '_, '_>, beside: &[ParsedView<'_, '_, '_, '_, '_, '_, '_>]) {
-        let mut files: Vec<ParsedView<'_, '_, '_, '_, '_, '_, '_>> = nikaia_std::block::List::from_array_in([here.clone()], nikaia_std::block::Place::Block);
-        files.reserve(beside.iter().size_hint().0); for other in beside.iter() { files.push(other.clone()); }
-        let mut generics: collections::BTreeMap<String, ItemGeneric<'_>> = collections::BTreeMap::new();
-        for file in files.iter() {
-            for item in file.items.iter() {
-                match &item.node {
-                    Item::Struct { name, generics: params, fields, .. } => {
-                        let name = *name;
-                        if !params.is_empty() {
-                            let mut names: Vec<String> = vec![];
-                            names.reserve(params.iter().size_hint().0); for p in params.iter() { names.push(file.text(p.name)); }
-                            let mut members: Vec<Type> = vec![];
-                            members.reserve(fields.iter().size_hint().0); for f in fields.iter() { members.push(f.ty.clone()); }
-                            generics.insert(file.text(name), ItemGeneric { file: file.clone(), params: names, members });
-                        }
-                    },
-                    _ => { },
-                }
-            }
-        }
-        let mut members: collections::BTreeMap<String, Vec<ItemInline>> = collections::BTreeMap::new();
-        for file in files.iter() {
-            for item in file.items.iter() {
-                let name = match item_declared_type_name(file, &item.node) { Some(__nikaia_value) => __nikaia_value, None => continue };
-                let mut entry = item_inlines(&members, &name);
-                for held in item_members_of(file, &item.node) {
-                    let mut inline: collections::BTreeSet<String> = collections::BTreeSet::new();
-                    item_held_inline(file, &held.ty, &generics, &mut inline);
-                    entry.push(ItemInline { member: nikaia_std::block::Text::from(held.member.to_string()), inline });
-                }
-                members.insert(nikaia_std::block::Text::from(name.to_string()), entry);
-            }
-        }
-        let mut holds: collections::BTreeMap<String, collections::BTreeSet<String>> = collections::BTreeMap::new();
-        for (name, fields) in members.iter() {
-            let mut all: collections::BTreeSet<String> = collections::BTreeSet::new();
-            for f in fields.iter() { all.extend(f.inline.iter().cloned()); }
-            holds.insert(nikaia_std::block::Text::from(name.to_string()), all);
-        }
-        for (name, fields) in members.iter() {
-            for f in fields.iter() {
-                let mut back = false;
-                for held in f.inline.iter() { if held == name || item_reaches(held, name, &holds) { back = true; } }
-                if back {
+    pub(crate) fn types_that_contain_themselves(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>) {
+        match world.package {
+            None => {
+                let mut files: Vec<ParsedView<'_, '_, '_, '_, '_, '_, '_>> = vec![world.here.clone()];
+                files.reserve(world.beside.iter().size_hint().0); for other in world.beside.iter() { files.push(other.clone()); }
+                item_contain_themselves(&files, &mut self.facts.boxed_members);
+            },
+            Some(given) => {
+                for (name, members) in given.boxed_members.iter() {
                     let mut set = item_boxed_set(&self.facts.boxed_members, name);
-                    set.insert(nikaia_std::block::Text::from(f.member.to_string()));
+                    set.extend(members.iter().cloned());
                     self.facts.boxed_members.insert(nikaia_std::block::Text::from(name.to_string()), set);
                 }
-            }
+            },
         }
     }
 }

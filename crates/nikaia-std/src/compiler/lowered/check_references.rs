@@ -13,7 +13,7 @@ pub(crate) fn check_reference_written(expr: &Expr) -> bool {
     }
 }
 
-pub(crate) fn check_reference_a_library_text_view(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, given: &Expr, found: &Ty) -> bool {
+pub(crate) fn check_reference_a_library_text_view(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, given: &Expr, found: &Ty) -> bool {
     let text = match found {
         Ty::Named { name, args, view } => { let view = *view; view && args.is_empty() && (name == "str" || type_last_segment(name) == "String") },
         _ => false,
@@ -68,7 +68,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn a_name_that_changes(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, expr: &Expr) -> bool {
+    pub(crate) fn a_name_that_changes(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, expr: &Expr) -> bool {
         match expr {
             Expr::Variable(symbol, _) => {
                 let symbol = *symbol;
@@ -81,7 +81,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn a_mut_view_name(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, expr: &Expr) -> bool {
+    pub(crate) fn a_mut_view_name(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, expr: &Expr) -> bool {
         match expr {
             Expr::Variable(symbol, _) => {
                 let symbol = *symbol;
@@ -94,7 +94,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn a_text_slot_name(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, expr: &Expr) -> bool {
+    pub(crate) fn a_text_slot_name(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, expr: &Expr) -> bool {
         match expr {
             Expr::Variable(symbol, _) => {
                 let symbol = *symbol;
@@ -107,7 +107,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn an_either_name(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, expr: &Expr) -> bool {
+    pub(crate) fn an_either_name(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, expr: &Expr) -> bool {
         match expr {
             Expr::Variable(symbol, _) => {
                 let symbol = *symbol;
@@ -120,7 +120,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn a_name_that_is_lent(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, expr: &Expr) -> bool {
+    pub(crate) fn a_name_that_is_lent(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, expr: &Expr) -> bool {
         match expr {
             Expr::Variable(symbol, _) => {
                 let symbol = *symbol;
@@ -134,7 +134,7 @@ impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    pub(crate) fn lent_to_a_mut_parameter(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, given_expr: &Expr, found: &Ty, want: &Ty, takes_a_receiver: bool, written: &str, span: &Span) -> bool {
+    pub(crate) fn lent_to_a_mut_parameter(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, given_expr: &Expr, found: &Ty, want: &Ty, takes_a_receiver: bool, written: &str, span: &Span) -> bool {
         if check_reference_written(given_expr) && !takes_a_receiver && !found.is_unknown() {
             let mut under = false;
             for owned in viewed_from_type(found) { if owned.fits(want) || self.fits_through_deref(world, &owned, want) { under = true; } }
@@ -174,7 +174,7 @@ impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    pub(crate) fn the_compiler_writes_the_reference(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, contract: &FnContract, at: i64, given: Option<&Expr>, found: &Ty, want: &Ty, own: bool, written: &str, span: &Span) -> bool {
+    pub(crate) fn the_compiler_writes_the_reference(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, contract: &FnContract, at: i64, given: Option<&Expr>, found: &Ty, want: &Ty, own: bool, written: &str, span: &Span) -> bool {
         let mut takes_a_receiver = false;
         let mut changes = false;
         let mut position = at;
@@ -388,7 +388,7 @@ pub(crate) fn check_gives_back_returns(expr: &Expr, name: &str, words: &winnow_g
 impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn a_map_read_past_a_jump(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, given: &Expr) -> bool {
+    pub(crate) fn a_map_read_past_a_jump(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, given: &Expr) -> bool {
         match given {
             Expr::Coalesce { value: read, fallback, .. } => {
                 let read = nikaia_std::boxed::open(read); let fallback = nikaia_std::boxed::open(fallback);
@@ -402,7 +402,7 @@ impl CheckState {
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn check_references_is_self(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, expr: &Expr) -> bool {
+pub(crate) fn check_references_is_self(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, expr: &Expr) -> bool {
     match expr {
         Expr::Variable(symbol, _) => { let symbol = *symbol; world.words.resolve(symbol) == "self" },
         _ => false,

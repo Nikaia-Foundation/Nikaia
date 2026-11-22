@@ -22,7 +22,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn io_inside_a_door(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, on: &Ty, what: &str, span: &Span) {
+    pub(crate) fn io_inside_a_door(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, on: &Ty, what: &str, span: &Span) {
         if !self.inside_a_door { return; }
         let name = match on {
             Ty::Named { name, .. } => nikaia_std::block::Text::from(name.to_string()),

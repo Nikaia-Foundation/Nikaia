@@ -80,7 +80,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn an_integer_beside_a_float(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, lhs: &Expr, left: &Ty, rhs: &Expr, right: &Ty, at: &Span) -> bool {
+    pub(crate) fn an_integer_beside_a_float(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, lhs: &Expr, left: &Ty, rhs: &Expr, right: &Ty, at: &Span) -> bool {
         let l = value_of_a_copy(&left.unseen());
         let r = value_of_a_copy(&right.unseen());
         let mut float: String = String::from("");
@@ -110,7 +110,7 @@ impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    pub(crate) fn a_compound_over_two_integer_types(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, op: &BinaryOp, target: &Expr, into: &Ty, value: &Expr, found: &Ty, span: &Span) {
+    pub(crate) fn a_compound_over_two_integer_types(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, op: &BinaryOp, target: &Expr, into: &Ty, value: &Expr, found: &Ty, span: &Span) {
         let x = match an_integer_named(into) { Some(__nikaia_value) => __nikaia_value, None => return };
         let v = match an_integer_named(found) { Some(__nikaia_value) => __nikaia_value, None => return };
         if x == v || is_a_literal(value) { return; }
@@ -132,7 +132,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn widen_operands(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, value: &Expr, into: &str, within: &Span) -> bool {
+    pub(crate) fn widen_operands(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, value: &Expr, into: &str, within: &Span) -> bool {
         match value {
             Expr::Binary { op, lhs, rhs, span, .. } => {
                 let lhs = nikaia_std::boxed::open(lhs); let rhs = nikaia_std::boxed::open(rhs);
@@ -158,7 +158,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn widen_operand(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, side: &Expr, into: &str, span: &Span) {
+    pub(crate) fn widen_operand(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, side: &Expr, into: &str, span: &Span) {
         if self.narrow_by_width(world, side, into, span) || self.widen_operands(world, side, into, span) { return; }
         let literal_int = matches!(side, Expr::LitInt { .. });
         if literal_int {
@@ -170,7 +170,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn widened_elements(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, found: &Ty, want: &Ty, value: &Expr, span: &Span) -> Option<Ty> {
+    pub(crate) fn widened_elements(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, found: &Ty, want: &Ty, value: &Expr, span: &Span) -> Option<Ty> {
         let from = match found {
             Ty::Named { name, .. } => nikaia_std::block::Text::from(name.to_string()),
             _ => return None,
@@ -195,7 +195,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn array_literal(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, found: &Ty, want: &Ty, value: &Expr, span: &Span) -> Option<Ty> {
+    pub(crate) fn array_literal(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, found: &Ty, want: &Ty, value: &Expr, span: &Span) -> Option<Ty> {
         if !is_a_list_literal(value) { return None; }
         let name = match want {
             Ty::Named { name, .. } => nikaia_std::block::Text::from(name.to_string()),
@@ -249,7 +249,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn collect_by_use(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, found: &Ty, want: &Ty, value: &Expr) -> Option<Ty> {
+    pub(crate) fn collect_by_use(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, found: &Ty, want: &Ty, value: &Expr) -> Option<Ty> {
         let receiver = collect_receiver(value);
         if receiver.len() != 1 || !a_collect_call(world, value) { return None; }
         let made = named_arguments_of(found);
@@ -289,7 +289,7 @@ impl CheckState {
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn a_collect_into_an_option(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, found: &Ty, want: &Ty, value: &Expr) -> bool {
+pub(crate) fn a_collect_into_an_option(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, found: &Ty, want: &Ty, value: &Expr) -> bool {
     if !a_collect_call(world, value) { return false; }
     let made = named_arguments_of(found);
     let found_name = match found {
@@ -303,7 +303,7 @@ pub(crate) fn a_collect_into_an_option(world: &CheckWorld<'_, '_, '_, '_, '_, '_
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn a_collect_call(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, value: &Expr) -> bool {
+pub(crate) fn a_collect_call(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, value: &Expr) -> bool {
     match value {
         Expr::MethodCall { method, args, .. } => { let method = *method; args.is_empty() && world.words.resolve(method) == "collect" },
         _ => false,
@@ -335,7 +335,7 @@ pub(crate) fn repeat_count_of(value: &Expr) -> Option<Expr> {
 impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn repeat_count_known(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, count: &Expr) -> Option<i64> {
+    pub(crate) fn repeat_count_known(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, count: &Expr) -> Option<i64> {
         let known = match self.constant_of(world, count) { Some(__nikaia_value) => __nikaia_value, None => return None };
         if known.beyond { return None; }
         integer_as_count(&known.value)
