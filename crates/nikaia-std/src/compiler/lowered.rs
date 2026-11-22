@@ -3611,7 +3611,7 @@ pub mod keep {
 }
 pub mod keeps {
     #[allow(unused_imports)]
-    pub use super::{KeepsBody, uses_in, KeepsHost, KeepsColumn, KeepsKeeper, KeepsImplRow, KeepsIndexes, KeepsFound, keeps_infer, keeps_uses_of};
+    pub use super::{KeepsBody, uses_in, KeepsHost, KeepsColumn, KeepsKeeper, KeepsImplRow, KeepsIndexes, KeepsFound, keeps_infer, keeps_of_unit, keeps_callees_first, keeps_units, keeps_uses_of};
 }
 pub mod leaves {}
 pub mod ledger {
@@ -3938,6 +3938,7 @@ pub fn nikaia_tests() -> std::vec::Vec<(std::string::String, fn() -> Result<(), 
     let mut all: std::vec::Vec<(std::string::String, fn() -> Result<(), std::boxed::Box<dyn std::error::Error>>)> = std::vec::Vec::new();
     all.extend(ast_nikaia_tests().into_iter().map(|(name, run)| (name.to_string(), run)));
     all.extend(crossing_nikaia_tests().into_iter().map(|(name, run)| (name.to_string(), run)));
+    all.extend(keeps_nikaia_tests().into_iter().map(|(name, run)| (name.to_string(), run)));
     all.extend(locks_nikaia_tests().into_iter().map(|(name, run)| (name.to_string(), run)));
     all.extend(manifest_nikaia_tests().into_iter().map(|(name, run)| (name.to_string(), run)));
     all.extend(modules_nikaia_tests().into_iter().map(|(name, run)| (name.to_string(), run)));
@@ -3989,4 +3990,4 @@ pub fn nikaia_run_tests(filters: &[std::string::String], list: bool, more: std::
 /// **The digest of this lowered set** (#1610): every file `lower-std` wrote
 /// beside this index, and the index above this line. Compiled into the same
 /// crate as the code it names, it is the compiler's identity for its caches.
-pub const LOWERED_DIGEST: &str = "c0ea6a6fa63321a3b74ac84764b7036edf2788f43a5e39d63c47d74d1c74d005";
+pub const LOWERED_DIGEST: &str = "b01a1f06aa8939cccf4ab4f16f9788b7a147ed3a5dd9aa17be2c3c1da4eae280";
