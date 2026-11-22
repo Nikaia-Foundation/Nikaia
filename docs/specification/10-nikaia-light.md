@@ -1,7 +1,7 @@
 # Nikaia Language Specification
 **Part I: The Language Core**
-**Version:** 0.0.1525 (Draft)
-**Date:** 2026-11-21
+**Version:** 0.0.1526 (Draft)
+**Date:** 2026-11-22
 
 ---
 
@@ -1685,7 +1685,12 @@ uses.
 `String(capacity: n)` and `HashMap(capacity: n)` build the same empty value as
 `Vec()`, with room for `n` elements (bytes, entries) held ahead, so the first
 `n` pushes ask for memory once. The option's default is `0`, which is `Vec()`;
-a negative room stops the program, as any negative count does.
+a negative room stops the program, as any negative count does. The compiler
+never holds room ahead on its own: a capacity is a promise about memory, and
+programs say their promises (ADR-149 D5). Where a `String` that starts empty
+grows only by pushes of the parts of one source its loop walks, so that the
+source's length bounds it, the compiler warns (`NK1385`, #1933) and its help
+writes `String(capacity: s.len())`.
 
 ```nika
 let n = 10
@@ -3206,6 +3211,9 @@ struct Reading { name: String, temp: i32 }   // `name` a view where views flow i
 
 `--tethers` (on `nikaia build` and `nikaia lower`) prints where each buffer lives and why, and changes nothing;
 a change is a ledger diff in review.
+It also prints, one line per site with file and line, each cut that takes its source's buffer and
+each `replace` that works in its source's buffer (ADR-text-reuse-1 D5); the language server shows
+the same line as an inlay hint there.
 
 There is no struct with lifetime parameters in Nikaia.
 

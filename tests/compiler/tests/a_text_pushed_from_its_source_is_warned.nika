@@ -1,0 +1,37 @@
+// **`NK1385` on a text built by pushes from a source that bounds it** (#1933,
+// owner 2026-11-21): a `for` over a view of `s` pushing its items, and a
+// `for` over `0..<s.len()` pushing cuts of `s`. Each starts empty and grows
+// to at most `s.len()` bytes; the help writes `String(capacity: s.len())`.
+fn copied(s: String) -> String {
+    let mut out = String()
+    for c in s.scalars {
+        out.push(c)
+    }
+    return out
+}
+
+fn kept(s: String) -> String {
+    let mut out = ""
+    for g in s.graphemes {
+        if g != " " {
+            out.push_str(g)
+        }
+    }
+    return out
+}
+
+fn cut(s: String) -> String throws {
+    let mut out = String()
+    for i in 0..<s.len() {
+        if i % 2 == 0 {
+            out.push_str(s.bytes[i..<(i + 1)].text())
+        }
+    }
+    return out
+}
+
+fn main() throws {
+    println(copied("abc"))
+    println(kept("a b c"))
+    println(cut("abcdef"))
+}

@@ -160,6 +160,13 @@ The whole package under callgrind was not run: at about 50 times its 6 min
 dependency cycle: 213 of the 271 files, 180,437 of about 205,000 lines
 (88 %), reference each other (names defined in one file used in another,
 counted on the text). So a 25 %, 50 % or 75 % cut that keeps every file's
-dependencies does not exist: the smallest closed cut is 88 %. How to cut
-(check a share of the files against the whole package beside, or one
-row per file against its lines) waits for a decision.
+dependencies does not exist: the smallest closed cut is 88 %. The cut
+is one row per file against its lines, the package whole (#2649):
+`nikaia run scripts/analysis_cost.nika -- --files` counts each
+analysis inside each file's walk and prints the instructions per line of
+the files by size in quarters (`docs/measuring.md`). Its table is still to
+be counted: callgrind instruments the whole command, and a run on one
+thread (2026-11-21, commit c4087853c) had counted 131,179,660,271
+instructions inside the walks of the ledger (`infer_package_checked`) and
+no file's check yet when the builder's run ended; it needs a session that
+outlives one.
