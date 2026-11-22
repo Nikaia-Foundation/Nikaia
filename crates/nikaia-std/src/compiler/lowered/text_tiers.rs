@@ -493,6 +493,13 @@ pub(crate) struct TierLocal {
     pub(crate) element_of: Option<String>,
     pub(crate) text_items: bool,
     pub(crate) called: bool,
+    pub(crate) inner: Option<InnerList>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub(crate) struct InnerList {
+    pub(crate) at: Declaring,
+    pub(crate) path: Vec<i64>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -635,7 +642,7 @@ pub(crate) fn tier_arm_read(node: i64, walk: &mut TierWalk) -> bool {
     walk.param_arms.contains(&node)
 }
 
-pub(crate) fn plain_local(kinds: Kinds) -> TierLocal { TierLocal { kinds, of: None, literal: -1, declared: None, from: None, empty: -1, listed: -1, through: vec![], lent: false, made: false, unkept: false, items_of: None, cut: false, element_of: None, text_items: false, called: false } }
+pub(crate) fn plain_local(kinds: Kinds) -> TierLocal { TierLocal { kinds, of: None, literal: -1, declared: None, from: None, empty: -1, listed: -1, through: vec![], lent: false, made: false, unkept: false, items_of: None, cut: false, element_of: None, text_items: false, called: false, inner: None } }
 
 pub(crate) fn tier_at(word: &str, walk: &mut TierWalk) -> Tier {
     if !walk.reads.tiers.contains(word) { walk.reads.tiers.insert(nikaia_std::block::Text::from(word.to_string())); }
@@ -1140,11 +1147,67 @@ pub(crate) fn element_word(iter: &Expr, ask: &TierAsk<'_, '_, '_, '_, '_, '_, '_
         },
         _ => { },
     }
-    let found = match source_of(iter, ask, walk) { Some(__nikaia_value) => __nikaia_value, None => return None };
-    let ty = found.ty.clone();
+    let found = match inner_list(iter, ask, walk) { Some(__nikaia_value) => __nikaia_value, None => return None };
+    let ty = found.at.ty.clone();
     if !a_container(ask.names, &ty) || a_map(ask.names, &ty) || ty.generics.is_empty() { return None; }
     if !plain_string(ask.names, unsafe { nikaia_std::proven::read(&ty.generics, (0) as usize) }) { return None; }
-    Some(seen(&found.owner, &vec![0], walk))
+    let mut path = found.path.copy_owned();
+    path.push(0);
+    Some(seen(&found.at.owner, &path, walk))
+}
+
+pub(crate) fn inner_list(value: &Expr, ask: &TierAsk<'_, '_, '_, '_, '_, '_, '_>, walk: &mut TierWalk) -> Option<InnerList> {
+    match value {
+        Expr::Variable(name, _) => {
+            let name = *name;
+            let local = match tier_local(ask.names.resolve(name), &walk) { Some(__nikaia_value) => __nikaia_value, None => return None };
+            if local.inner.is_some() {
+                return match local.inner.as_ref() {
+                    Some(__nikaia_it) => Some(__nikaia_it.clone()),
+                    None => None,
+                };
+            }
+        },
+        Expr::Index { base, index, .. } => {
+            let base = nikaia_std::boxed::open(base); let index = nikaia_std::boxed::open(index);
+            if a_range(index) { return None; }
+            let outer = match inner_list(base, ask, walk) { Some(__nikaia_value) => __nikaia_value, None => return None };
+            return inner_element(&outer, ask);
+        },
+        _ => { },
+    }
+    let found = match source_of(value, ask, walk) { Some(__nikaia_value) => __nikaia_value, None => return None };
+    Some(InnerList { at: found, path: vec![] })
+}
+
+pub(crate) fn inner_element(outer: &InnerList, ask: &TierAsk<'_, '_, '_, '_, '_, '_, '_>) -> Option<InnerList> {
+    let ty = outer.at.ty.clone();
+    if !a_container(ask.names, &ty) || a_map(ask.names, &ty) || ty.generics.is_empty() { return None; }
+    let element = (*unsafe { nikaia_std::proven::read(&ty.generics, (0) as usize) }).clone();
+    if !a_container(ask.names, &element) || a_map(ask.names, &element) { return None; }
+    let mut path = outer.path.copy_owned();
+    path.push(0);
+    Some(InnerList { at: Declaring { owner: outer.at.owner.clone(), ty: element }, path })
+}
+
+pub(crate) fn walked_list(iter: &Expr, ask: &TierAsk<'_, '_, '_, '_, '_, '_, '_>, walk: &mut TierWalk) -> Option<InnerList> {
+    match iter {
+        Expr::MethodCall { receiver, method, args, .. } => {
+            let receiver = nikaia_std::boxed::open(receiver); let method = *method;
+            let name = ask.names.resolve(method);
+            if args.is_empty() && (name == "iter" || name == "drain" || name == "into_iter") { return walked_list(receiver, ask, walk); }
+        },
+        _ => { },
+    }
+    let outer = match inner_list(iter, ask, walk) { Some(__nikaia_value) => __nikaia_value, None => return None };
+    inner_element(&outer, ask)
+}
+
+pub(crate) fn read_list(value: &Expr, ask: &TierAsk<'_, '_, '_, '_, '_, '_, '_>, walk: &mut TierWalk) -> Option<InnerList> {
+    match value {
+        Expr::Index { .. } => inner_list(value, ask, walk),
+        _ => None,
+    }
 }
 
 pub(crate) fn tier_a_name(value: Option<&Expr>) -> bool {
@@ -2093,6 +2156,7 @@ pub(crate) fn tier_statement(stmt: &Stmt, at: i64, ask: &TierAsk<'_, '_, '_, '_,
                         Some(__nikaia_it) => Some(__nikaia_it.clone()),
                         None => None,
                     };
+                    local.inner = walked_list(iter, ask, walk);
                     local.unkept = only_own_text(&kinds) && !rooted_in_a_parameter(iter, ask, walk) || views_a_temporary(iter, ask, walk);
                 }
                 if map.is_some() {
@@ -2219,7 +2283,9 @@ pub(crate) fn tier_let(names: &[winnow_grammar::Symbol], value: &Expr, ty: Optio
         let mut element_of: Option<String> = None;
         if !written { element_of = made_element_read(value, ask, walk); }
         let unkept = bound.view && (unkept_root(value, ask, walk) || views_a_temporary(value, ask, walk));
-        let local = TierLocal { kinds: bound, of, literal, declared, from, empty, listed, through, lent: false, made: !a_read(value), unkept, items_of, cut: a_cut(value, ask), element_of, text_items, called: !written && a_function_call(value) };
+        let mut inner: Option<InnerList> = None;
+        if declared.is_none() { inner = read_list(value, ask, walk); }
+        let local = TierLocal { kinds: bound, of, literal, declared, from, empty, listed, through, lent: false, made: !a_read(value), unkept, items_of, cut: a_cut(value, ask), element_of, text_items, called: !written && a_function_call(value), inner };
         bind_tier_local(nikaia_std::block::Text::from(ask.names.resolve(*unsafe { nikaia_std::proven::read(&names, (0) as usize) }).to_string()), local, walk);
         return;
     }
@@ -5406,7 +5472,7 @@ pub(crate) fn walk_function(item: &Item, target: Option<&str>, ask: &TierAsk<'_,
         let of: String = nikaia_std::block::Text::from(ask.names.resolve(arg.ty.name).to_string());
         let mut ty = arg.ty.clone();
         if lent_fields.contains(ask.names.resolve(arg.name)) { ty.is_view = true; }
-        let local = TierLocal { kinds, of: Some(of), literal: -1, declared: Some(Declaring { owner, ty }), from: None, empty: -1, listed: -1, through: vec![], lent: false, made: false, unkept: false, items_of: None, cut: false, element_of: None, text_items: false, called: false };
+        let local = TierLocal { kinds, of: Some(of), literal: -1, declared: Some(Declaring { owner, ty }), from: None, empty: -1, listed: -1, through: vec![], lent: false, made: false, unkept: false, items_of: None, cut: false, element_of: None, text_items: false, called: false, inner: None };
         bind_tier_local(nikaia_std::block::Text::from(ask.names.resolve(arg.name).to_string()), local, walk);
         at += 1;
     }
@@ -5417,7 +5483,7 @@ pub(crate) fn walk_function(item: &Item, target: Option<&str>, ask: &TierAsk<'_,
         let local = TierLocal { kinds: owned_kinds(), of: match target {
             Some(__nikaia_it) => Some(nikaia_std::block::Text::from(__nikaia_it.to_string())),
             None => None,
-        }, literal: -1, declared: None, from: None, empty: -1, listed: -1, through: vec![], lent: false, made: false, unkept: false, items_of: None, cut: false, element_of: None, text_items: false, called: false };
+        }, literal: -1, declared: None, from: None, empty: -1, listed: -1, through: vec![], lent: false, made: false, unkept: false, items_of: None, cut: false, element_of: None, text_items: false, called: false, inner: None };
         bind_tier_local(String::from("self"), local, walk);
     }
     walk.handed_back = -1;

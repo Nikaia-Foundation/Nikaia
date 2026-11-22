@@ -1,0 +1,16 @@
+// A view walked out of a list of lists of literals and pushed into a list
+// handed on as text of its own is refused at the push with NK1102, as the
+// flat form is, not left to rustc (#2184).
+use std::process
+
+fn main() throws {
+    let runs: Vec[Vec[String]] = [["b"], ["c", "d"]]
+    for words in runs {
+        let mut argv: Vec[String] = ["a"]
+        for w in words {
+            argv.push(w)
+        }
+        let out = process::run("echo", argv)
+        print(out.stdout)
+    }
+}

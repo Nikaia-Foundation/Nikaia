@@ -749,6 +749,17 @@ struct TierLocal {
     /// list the body made when its items are text of its own
     /// (`made_list_local`).
     called: bool,
+    /// A list held inside a declared position, the element a `for` walks of
+    /// a list of lists or one read out of it (`let words = runs[0]`, #2184):
+    /// where its text stands in that position.
+    inner: InnerList?,
+}
+
+/// A list inside a declared position: the declared position's owner with
+/// the list's own type, and where it stands inside the declared type.
+struct InnerList {
+    at: Declaring,
+    path: Vec[i64],
 }
 
 /// What one walk found, every position by its word.
@@ -1018,7 +1029,7 @@ fn tier_arm_read(node: i64, mut walk: TierWalk) -> bool {
 }
 
 fn plain_local(kinds: Kinds) -> TierLocal {
-    return TierLocal { kinds: kinds, of: null, literal: -1, declared: null, from: null, empty: -1, listed: -1, through: [], lent: false, made: false, unkept: false, items_of: null, cut: false, element_of: null, text_items: false, called: false }
+    return TierLocal { kinds: kinds, of: null, literal: -1, declared: null, from: null, empty: -1, listed: -1, through: [], lent: false, made: false, unkept: false, items_of: null, cut: false, element_of: null, text_items: false, called: false, inner: null }
 }
 
 fn tier_at(word: ref String, mut walk: TierWalk) -> Tier {
@@ -1745,15 +1756,83 @@ fn element_word(iter: ref Expr, ask: ref TierAsk, mut walk: TierWalk) -> String?
         }
         else => {}
     }
-    let found = source_of(iter, ask, walk) ?? return null
-    let ty = found.ty.clone()
+    let found = inner_list(iter, ask, walk) ?? return null
+    let ty = found.at.ty.clone()
     if !a_container(ask.names, ty) || a_map(ask.names, ty) || ty.generics.len() == 0 {
         return null
     }
     if !plain_string(ask.names, ty.generics[0]) {
         return null
     }
-    return seen(found.owner, [0], walk)
+    let mut path = found.path.clone()
+    path.push(0)
+    return seen(found.at.owner, path, walk)
+}
+
+/// **A list inside a declared position** (#2184): a declared list, the
+/// element a `for` walks of a list of lists, or one read out of it by
+/// index, with where it stands in the declared type, so the text a loop
+/// walks of it is that position's.
+fn inner_list(value: ref Expr, ask: ref TierAsk, mut walk: TierWalk) -> InnerList? {
+    match value {
+        Expr::Variable(name, _) => {
+            let local = tier_local(ask.names.resolve(name), walk) ?? return null
+            if local.inner != null {
+                return local.inner?.clone()
+            }
+        }
+        Expr::Index { base, index, .. } => {
+            if a_range(index) {
+                return null
+            }
+            let outer = inner_list(base, ask, walk) ?? return null
+            return inner_element(outer, ask)
+        }
+        else => {}
+    }
+    let found = source_of(value, ask, walk) ?? return null
+    return InnerList { at: found, path: [] }
+}
+
+/// The element of a list inside a declared position, where it is a list
+/// or a set itself.
+fn inner_element(outer: ref InnerList, ask: ref TierAsk) -> InnerList? {
+    let ty = outer.at.ty.clone()
+    if !a_container(ask.names, ty) || a_map(ask.names, ty) || ty.generics.len() == 0 {
+        return null
+    }
+    let element = ty.generics[0].clone()
+    if !a_container(ask.names, element) || a_map(ask.names, element) {
+        return null
+    }
+    let mut path = outer.path.clone()
+    path.push(0)
+    return InnerList { at: Declaring { owner: outer.at.owner.clone(), ty: element }, path: path }
+}
+
+/// The list a `for` binds each turn, of a list of lists: `runs`,
+/// `runs.iter()`, `runs.into_iter()`, `runs.drain()` (#2184).
+fn walked_list(iter: ref Expr, ask: ref TierAsk, mut walk: TierWalk) -> InnerList? {
+    match iter {
+        Expr::MethodCall { receiver, method, args, .. } => {
+            let name = ask.names.resolve(method)
+            if args.len() == 0 && (name == "iter" || name == "drain" || name == "into_iter") {
+                return walked_list(receiver, ask, walk)
+            }
+        }
+        else => {}
+    }
+    let outer = inner_list(iter, ask, walk) ?? return null
+    return inner_element(outer, ask)
+}
+
+/// The list a `let` without a type reads out of a list of lists by index,
+/// `let words = runs[0]` (#2184).
+fn read_list(value: ref Expr, ask: ref TierAsk, mut walk: TierWalk) -> InnerList? {
+    return match value {
+        Expr::Index { .. } => inner_list(value, ask, walk),
+        else => null,
+    }
 }
 
 /// Whether a value is a name or a field read, and nothing else: a field read
@@ -3058,6 +3137,7 @@ fn tier_statement(stmt: ref Stmt, at: i64, ask: ref TierAsk, mut walk: TierWalk)
                 if bindings.len() == 1 {
                     local.from = from?.clone()
                     local.of = walked?.clone()
+                    local.inner = walked_list(iter, ask, walk)
                     local.unkept = (only_own_text(kinds) && !rooted_in_a_parameter(iter, ask, walk)) || views_a_temporary(iter, ask, walk)
                 }
                 if map != null {
@@ -3206,7 +3286,11 @@ fn tier_let(names: ref Vec[winnow_grammar::Symbol], value: ref Expr, ty: ref Typ
         // `return s.replace(")", "").trim()` does (#1287), and is refused
         // with NK1104, not left to rustc.
         let unkept = bound.view && (unkept_root(value, ask, walk) || views_a_temporary(value, ask, walk))
-        let local = TierLocal { kinds: bound, of: of, literal: literal, declared: declared, from: from, empty: empty, listed: listed, through: through, lent: false, made: !a_read(value), unkept: unkept, items_of: items_of, cut: a_cut(value, ask), element_of: element_of, text_items: text_items, called: !written && a_function_call(value) }
+        let mut inner: InnerList? = null
+        if declared == null {
+            inner = read_list(value, ask, walk)
+        }
+        let local = TierLocal { kinds: bound, of: of, literal: literal, declared: declared, from: from, empty: empty, listed: listed, through: through, lent: false, made: !a_read(value), unkept: unkept, items_of: items_of, cut: a_cut(value, ask), element_of: element_of, text_items: text_items, called: !written && a_function_call(value), inner: inner }
         bind_tier_local(ask.names.resolve(names[0]).clone(), local, walk)
         return
     }
@@ -7628,7 +7712,7 @@ fn walk_function(item: ref Item, target: String?, ask: ref TierAsk, mut walk: Ti
         if lent_fields.contains(ask.names.resolve(arg.name)) {
             ty.is_view = true
         }
-        let local = TierLocal { kinds: kinds, of: of, literal: -1, declared: Declaring { owner: owner, ty: ty }, from: null, empty: -1, listed: -1, through: [], lent: false, made: false, unkept: false, items_of: null, cut: false, element_of: null, text_items: false, called: false }
+        let local = TierLocal { kinds: kinds, of: of, literal: -1, declared: Declaring { owner: owner, ty: ty }, from: null, empty: -1, listed: -1, through: [], lent: false, made: false, unkept: false, items_of: null, cut: false, element_of: null, text_items: false, called: false, inner: null }
         bind_tier_local(ask.names.resolve(arg.name).clone(), local, walk)
         at += 1
     }
@@ -7641,7 +7725,7 @@ fn walk_function(item: ref Item, target: String?, ask: ref TierAsk, mut walk: Ti
     walk.lent_self = false
     if receiver != null && target != null {
         walk.lent_self = receiver?.is_ref ?? false
-        let local = TierLocal { kinds: owned_kinds(), of: target?.clone(), literal: -1, declared: null, from: null, empty: -1, listed: -1, through: [], lent: false, made: false, unkept: false, items_of: null, cut: false, element_of: null, text_items: false, called: false }
+        let local = TierLocal { kinds: owned_kinds(), of: target?.clone(), literal: -1, declared: null, from: null, empty: -1, listed: -1, through: [], lent: false, made: false, unkept: false, items_of: null, cut: false, element_of: null, text_items: false, called: false, inner: null }
         bind_tier_local("self", local, walk)
     }
     walk.handed_back = -1
