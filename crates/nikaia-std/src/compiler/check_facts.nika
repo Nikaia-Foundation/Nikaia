@@ -755,6 +755,11 @@ pub struct CheckFacts {
     /// walk: the bounds walk assumes it of a call as a ledger's `ensures`.
     pub summaries: collections::BTreeMap[String, Ensured],
     pub mut_args: collections::BTreeSet[i64],
+    /// **The arguments handed to a `mut` parameter that are a `&mut`
+    /// already** (a `mut` parameter, lent on as it is): not in `mut_args`,
+    /// since nothing writes their `&mut`, but they lend their root all the
+    /// same, so a method call on that root binds them first.
+    pub relent_args: collections::BTreeSet[i64],
     /// **The receivers of methods written `ref mut self`** (#787), by the
     /// receiver's node: a call there lends its root as a `mut` argument does.
     pub mut_receivers: collections::BTreeSet[i64],
@@ -1157,6 +1162,7 @@ impl CheckFacts {
             summaries: collections::BTreeMap(),
             mut_args: collections::BTreeSet(),
             mut_receivers: collections::BTreeSet(),
+            relent_args: collections::BTreeSet(),
             mut_arg_bindings: collections::BTreeMap(),
             reborrowed_args: collections::BTreeSet(),
             view_derefs: collections::BTreeSet(),

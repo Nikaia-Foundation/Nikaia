@@ -227,6 +227,7 @@ pub(crate) fn prover_function(walk: &mut ProverWalk, item: &Spanned<Item>, owner
             walk.state.in_test = was_a_test;
             walk.state.summing = vec![];
             walk.state.unsummed = was_a_test || of_a_trait || key.is_none() || !prover_summable(body);
+            walk.state.option_lists.clear();
             let leaves = prover_block(walk, body, &mut scope, &at, program, words, own, library, &mut *ask, &mut *model, &mut *escape, &mut *holes_of, &mut *unaliased, &mut *written_of, &mut *condition);
             walk.state.in_test = false;
             let summed_key = nikaia_std::index::or(match key.as_ref() {
@@ -262,6 +263,7 @@ pub(crate) fn prover_block(walk: &mut ProverWalk, block: &Block, scope: &mut Pro
         }
         let looped = matches!(stmt.node, Stmt::For { .. } | Stmt::While { .. });
         if looped { ({ let __nikaia_arg1 = &outside_fills(&stmt.node, &scope.tainted, &scope.sources, words, library, &walk.state, &mut &mut *holes_of); prover_filled(scope, __nikaia_arg1) }); }
+        raw_sink_option_list(walk, &stmt.node, &scope, words, library, &mut &mut *holes_of, &mut &mut *ask, &mut &mut *written_of);
         if prover_stmt(walk, stmt, scope, at, program, words, own, library, &mut &mut *ask, &mut &mut *model, &mut &mut *escape, &mut &mut *holes_of, &mut &mut *unaliased, &mut &mut *written_of, &mut &mut *condition) { return true; }
         let changes = match &stmt.node {
             Stmt::Expr(_) => true,
@@ -2075,6 +2077,7 @@ pub(crate) fn prover_raw_sink(walk: &mut ProverWalk, callee: &str, args: &[Expr]
         if raw_sink_clean_lead(unsafe { nikaia_std::proven::read(&args, (0) as usize) }, scope, words, library, &walk.state, &mut *holes_of) { guard.push_str("path"); }
         let sink = ParamSink { index: -1, kind: String::from("program"), sink: String::from("the program `process::run` runs"), operation: String::from(""), root_part: false, guard };
         for part in parts.iter() { raw_sink_part(walk, &sink, &sink.sink, part, span, scope, at, program, words, library, &mut *holes_of, &mut *ask, &mut *written_of); }
+        if args.len() > 1 { raw_sink_options(walk, unsafe { nikaia_std::proven::read(&args, (1) as usize) }, "", span, scope, at, program, words, library, &mut *holes_of, &mut *ask, &mut *written_of); }
     } else if callee.starts_with("fs::") && library.functions.contains_key(callee) {
         for (i, written) in args.iter().enumerate().map(|(at, item)| (at as i64, item)) {
             let mut joins: Vec<Expr> = vec![];
@@ -2143,6 +2146,15 @@ pub(crate) fn raw_sink_through(walk: &mut ProverWalk, callee: &str, args: &[Expr
     for sink in sinks.iter() {
         if sink.index < 0 || sink.index >= all.len() as i64 { continue; }
         let shown = format!("{}, through `{}`", sink.sink, callee);
+        if sink.kind == "options" {
+            raw_sink_options(walk, unsafe { nikaia_std::proven::read(&all, (sink.index) as usize) }, &format!(", through `{}`", callee), span, scope, at, program, words, library, &mut *holes_of, &mut *ask, &mut *written_of);
+            continue;
+        }
+        if sink.kind == "option" {
+            let first = match raw_sink_first_part(unsafe { nikaia_std::proven::read(&all, (sink.index) as usize) }, &mut *written_of) { Some(__nikaia_value) => __nikaia_value, None => continue };
+            raw_sink_part(walk, sink, &shown, &first, span, scope, at, program, words, library, &mut *holes_of, &mut *ask, &mut *written_of);
+            continue;
+        }
         if sink.root_part {
             raw_sink_root_through(walk, sink, &shown, unsafe { nikaia_std::proven::read(&all, (sink.index) as usize) }, span, scope, at, program, words, library, &mut *holes_of, &mut *ask, &mut *written_of);
             continue;
@@ -2255,11 +2267,123 @@ pub(crate) fn raw_sink_finding(walk: &mut ProverWalk, sink: &ParamSink, shown: &
     } else if sink.kind == "sql" {
         notes.push(String::from("SQL from outside can carry a statement of its own: `x; DROP TABLE users`."));
         help = format!("Hand it to the statement as a value, a hole `:name` in the text and `{}` under `\"name\"` in `execute`'s `parameters`; or, where it names a table or a column, check it where it arrives: `throw BadInput({}) if !db::is_identifier({})`, after which it is proved. If the program means to send SQL from outside, `untrusted-sql = true` under `[allow]` in the manifest builds it.", first, first, first);
+    } else if sink.kind == "option" {
+        notes.push(String::from("A program reads an argument that starts with `-` as an option, and an option can name a program to run or a file to write: `-rf`, `--checkpoint-action=exec=sh`."));
+        help = format!("Check it where it arrives: `if !process::is_operand({}) {{ process::exit(2) }}`, after which it is proved; or put a literal `\"--\"` before it in the list, which ends the options: `[\"--\", {}]`. If the program means to pass options from outside, `untrusted-option = true` under `[allow]` in the manifest builds it.", first, first);
+    } else if sink.kind == "options" {
+        notes.push(String::from("A program reads an argument that starts with `-` as an option, and a list filled from outside may hold one: `-rf`, `--checkpoint-action=exec=sh`."));
+        help = format!("Push into `{}` only values checked where they arrive, `if !process::is_operand(name) {{ process::exit(2) }}`, or push a literal `\"--\"` first, which ends the options. If the program means to pass options from outside, `untrusted-option = true` under `[allow]` in the manifest builds it.", first);
     } else {
         notes.push(String::from("No check makes a stranger's choice of program safe: a name is looked up on `PATH`, a path runs that file."));
         help = String::from("Name the program with a literal, or choose it with a `match` whose arms are literals: `let editor = match env::var(\"EDITOR\") ?? \"\" { \"vim\" => \"vim\", \"nano\" => \"nano\", else => \"vi\", }`. If the program means to run a program from outside, `untrusted-program = true` under `[allow]` in the manifest builds it.");
     }
     walk.findings.push(Finding { code: String::from("NK1308"), span, message: format!("`{}` reaches {}, and it comes from outside the program.", first, shown), notes, help: Some(help), warning: false, labels: vec![] });
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn raw_sink_options(walk: &mut ProverWalk, list: &Expr, through: &str, span: Span, scope: &ProverScope, at: &ProverWhere, program: &Program, words: &winnow_grammar::InternerContext, library: &Ledger, holes_of: &mut impl FnMut(&Expr) -> Vec<Expr>, ask: &mut impl FnMut(&logic::TermArena, &[i64], i64) -> SolverAnswer, written_of: &mut impl FnMut(&Expr) -> String) {
+    match list {
+        Expr::ListLit { items, .. } => {
+            let sink = ParamSink { index: -1, kind: String::from("option"), sink: String::from("the start of an argument of `process::run`, which the program may read as an option"), operation: String::from(""), root_part: false, guard: String::from("process::is_operand") };
+            let shown = format!("{}{}", sink.sink, through);
+            for item in items.iter() {
+                if raw_sink_double_dash(item, &mut *written_of) { return; }
+                let first = match raw_sink_first_part(item, &mut *written_of) { Some(__nikaia_value) => __nikaia_value, None => continue };
+                raw_sink_part(walk, &sink, &shown, &first, span, scope, at, program, words, library, &mut *holes_of, &mut *ask, &mut *written_of);
+            }
+        },
+        _ => {
+            let name = nikaia_std::index::or(raw_sink_name(list, words), || "".into());
+            let state = nikaia_std::index::or(*nikaia_std::index::get(&walk.state.option_lists, &name), || 2);
+            if state < 2 { return; }
+            let sink = ParamSink { index: -1, kind: String::from("options"), sink: String::from("the arguments of `process::run`, each of which the program may read as an option"), operation: String::from(""), root_part: false, guard: String::from("") };
+            raw_sink_part(walk, &sink, &format!("{}{}", sink.sink, through), list, span, scope, at, program, words, library, &mut *holes_of, &mut *ask, &mut *written_of);
+        },
+    }
+}
+
+pub(crate) fn raw_sink_double_dash(item: &Expr, written_of: &mut impl FnMut(&Expr) -> String) -> bool {
+    match item {
+        Expr::LitStr { .. } => written_of(item) == "\"--\"",
+        _ => false,
+    }
+}
+
+pub(crate) fn raw_sink_first_part(expr: &Expr, written_of: &mut dyn FnMut(&Expr) -> String) -> Option<Expr> {
+    match expr {
+        Expr::LitInterpolated { parts, .. } => {
+            for part in parts.iter() {
+                match part {
+                    FPart::Text(text) => { if !text.is_empty() { return None; } },
+                    FPart::Hole { expr, .. } => { return raw_sink_first_part(expr, &mut &mut *written_of); },
+                }
+            }
+            return None;
+        },
+        Expr::Binary { op, lhs, rhs, .. } => {
+            let lhs = nikaia_std::boxed::open(lhs); let rhs = nikaia_std::boxed::open(rhs);
+            if *op != BinaryOp::Add { return Some(expr.clone()); }
+            if written_of(lhs) == "\"\"" { return raw_sink_first_part(rhs, &mut &mut *written_of); }
+            return raw_sink_first_part(lhs, &mut &mut *written_of);
+        },
+        Expr::LitStr { .. } => return None,
+        _ => return Some(expr.clone()),
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn raw_sink_option_list(walk: &mut ProverWalk, stmt: &Stmt, scope: &ProverScope, words: &winnow_grammar::InternerContext, library: &Ledger, holes_of: &mut impl FnMut(&Expr) -> Vec<Expr>, ask: &mut impl FnMut(&logic::TermArena, &[i64], i64) -> SolverAnswer, written_of: &mut impl FnMut(&Expr) -> String) {
+    match stmt {
+        Stmt::Let { names, value, .. } => {
+            for name in names.iter() {
+                let name = *name;
+                walk.state.option_lists.remove(words.resolve(name));
+            }
+            if names.len() != 1 { return; }
+            match value {
+                Expr::ListLit { items, .. } => {
+                    let mut state: i64 = 0;
+                    for item in items.iter() { if state == 0 { state = raw_sink_option_pushed(walk, item, scope, words, library, &mut *holes_of, &mut *ask, &mut *written_of); } }
+                    walk.state.option_lists.insert(nikaia_std::block::Text::from(words.resolve(*unsafe { nikaia_std::proven::read(&names, (0) as usize) }).to_string()), state);
+                },
+                _ => { },
+            }
+        },
+        Stmt::Assign { target, op, .. } => {
+            if op.is_none() {
+                let name = match raw_sink_name(target, words) { Some(__nikaia_value) => __nikaia_value, None => return };
+                walk.state.option_lists.remove(&name);
+            }
+        },
+        Stmt::Expr(inner) => {
+            let call = match inner {
+                Expr::Try(call, _) => { let call = nikaia_std::boxed::open(call); call },
+                _ => inner,
+            };
+            match call {
+                Expr::MethodCall { receiver, method, args, .. } => {
+                    let receiver = nikaia_std::boxed::open(receiver); let method = *method;
+                    let name = match receiver {
+                        Expr::Variable(name, _) => { let name = *name; nikaia_std::block::Text::from(words.resolve(name).to_string()) },
+                        _ => return,
+                    };
+                    let state = match *nikaia_std::index::get(&walk.state.option_lists, &name) { Some(__nikaia_value) => nikaia_std::num::value(__nikaia_value), None => return };
+                    if state != 0 { return; }
+                    if words.resolve(method) == "push" && args.len() == 1 { ({ let __nikaia_arg1 = raw_sink_option_pushed(walk, unsafe { nikaia_std::proven::read(&args, (0) as usize) }, scope, words, library, &mut *holes_of, &mut *ask, &mut *written_of); walk.state.option_lists.insert(name, __nikaia_arg1) }); } else if any_from_outside(args, &scope.tainted, words, library, &walk.state, &mut *holes_of) { walk.state.option_lists.insert(name, 2); }
+                },
+                _ => { },
+            }
+        },
+        _ => { },
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn raw_sink_option_pushed(walk: &mut ProverWalk, item: &Expr, scope: &ProverScope, words: &winnow_grammar::InternerContext, library: &Ledger, holes_of: &mut impl FnMut(&Expr) -> Vec<Expr>, ask: &mut impl FnMut(&logic::TermArena, &[i64], i64) -> SolverAnswer, written_of: &mut impl FnMut(&Expr) -> String) -> i64 {
+    if raw_sink_double_dash(item, &mut *written_of) { return 1; }
+    let first = match raw_sink_first_part(item, &mut *written_of) { Some(__nikaia_value) => __nikaia_value, None => return 0 };
+    if raw_sink_outside(&first, scope, words, library, &walk.state, &mut *holes_of) && !raw_sink_passes(walk, "process::is_operand", &first, scope, words, &mut *ask) { return 2; }
+    0
 }
 
 pub(crate) fn raw_sink_outside(part: &Expr, scope: &ProverScope, words: &winnow_grammar::InternerContext, library: &Ledger, state: &ProverState, holes_of: &mut impl FnMut(&Expr) -> Vec<Expr>) -> bool {

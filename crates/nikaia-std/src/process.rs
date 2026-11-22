@@ -34,6 +34,12 @@ use std::time::{Duration, Instant};
 
 use crate::io::IoError;
 
+/// `process::is_operand(text)`: whether an argument is read as an operand,
+/// not an option ([ADR-raw-sinks-1](../../../docs/specification/adr/adr-raw-sinks-1.md)
+/// D18). Its Nikaia half, `runtime/raw_sinks.nika`, the entry in
+/// `std.contracts`.
+pub use crate::runtime::is_operand;
+
 /// What a program that ran to its end left behind.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Output {
