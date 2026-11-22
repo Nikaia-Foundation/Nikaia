@@ -9,30 +9,18 @@
 // (`scripts/slot.nika`: a fixed place, so the build hits ADR-021 D14's rustc
 // store, #2015). A test program cannot be run again with `nikaia run`, so
 // the slot runs `facade_script`, the copy, build and run as a shell line.
-use std::fs
+use std::env
 use std::process
 
 fn toolchain(repo: String) -> String throws {
-	let exe = process::run(
-		"sh",
-		[
-			"-c",
-			"e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\"",
-		],
-	).stdout.trim().clone()
+	let exe = env::current_exe()?.display() ?? ""
 	if exe.len() > 0 { return exe }
 	return f"{repo}/target/fast/nikaia"
 }
 
+// The repository: the test file stands at `packages/yaml/tests/` below it.
 fn root() -> String throws {
-	let here = process::run("pwd", []).stdout.trim().clone()
-	if fs::exists(f"{here}/scripts/gate.nika", fs::Root::Anywhere) { return here }
-	let parent = process::run(
-		"sh",
-		["-c", "readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/cwd"],
-	).stdout.trim().clone()
-	if fs::exists(f"{parent}/scripts/gate.nika", fs::Root::Anywhere) { return parent }
-	return process::run("realpath", [f"{parent}/../.."]).stdout.trim().clone()
+	return env::current_main()?.parent()?.parent()?.parent()?.parent()?.display() ?? "../.."
 }
 
 // The shell line run in the slot ($1), with the package at $2, the compiler
