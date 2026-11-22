@@ -1,0 +1,138 @@
+name: Close PRs of closed issues
+
+# When an issue closes, every open pull request that would fix it (`Fixes #N`,
+# `Closes #N`, `Resolves #N` in its description, or linked in the sidebar) is
+# closed with a comment that hands the work back to its author: reopen the
+# issue or file a new one, link it, reopen the pull request. A pull request
+# that fixes several issues is closed only once all of them are closed.
+#
+# Started by hand, it sweeps every open pull request whose issues are all
+# closed (`issue` empty) or the ones of one issue; `dry_run` only lists them.
+#
+# No code of a pull request is checked out or run, and no text of one is put
+# into a script: the job reads descriptions as data through the API.
+on:
+  issues:
+    types: [closed]
+  workflow_dispatch:
+    inputs:
+      issue:
+        description: "Issue number; empty sweeps all open pull requests"
+        required: false
+        default: ""
+      dry_run:
+        description: "Only list what would be closed"
+        type: boolean
+        default: true
+
+concurrency:
+  group: close-prs-of-closed-issues
+  cancel-in-progress: false
+
+jobs:
+  close:
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+      issues: read
+    steps:
+      - name: Close the pull requests
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { owner, repo } = context.repo;
+            const here = `${owner}/${repo}`.toLowerCase();
+
+            let trigger = null;
+            let dryRun = false;
+            if (context.eventName === 'issues') {
+              trigger = context.payload.issue.number;
+            } else {
+              const raw = String(context.payload.inputs.issue || '').trim();
+              if (raw !== '') {
+                if (!/^\d+$/.test(raw)) { core.setFailed(`not an issue number: ${raw}`); return; }
+                trigger = Number(raw);
+              }
+              dryRun = String(context.payload.inputs.dry_run) === 'true';
+            }
+
+            // The issues of this repository a description would close.
+            const keyword = /(?:^|[^\w])(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?)\s*:?\s+(?:([\w.-]+\/[\w.-]+))?#(\d+)\b/gi;
+            function closes(body) {
+              const found = new Set();
+              for (const m of (body || '').matchAll(keyword)) {
+                if (m[1] && m[1].toLowerCase() !== here) continue;
+                found.add(Number(m[2]));
+              }
+              return found;
+            }
+
+            const query = `query($owner: String!, $repo: String!, $after: String) {
+              repository(owner: $owner, name: $repo) {
+                pullRequests(states: OPEN, first: 50, after: $after) {
+                  pageInfo { hasNextPage endCursor }
+                  nodes {
+                    number
+                    body
+                    closingIssuesReferences(first: 20) {
+                      nodes { number repository { nameWithOwner } }
+                    }
+                  }
+                }
+              }
+            }`;
+            const pulls = [];
+            let after = null;
+            do {
+              const page = (await github.graphql(query, { owner, repo, after })).repository.pullRequests;
+              pulls.push(...page.nodes);
+              after = page.pageInfo.hasNextPage ? page.pageInfo.endCursor : null;
+            } while (after);
+
+            const issueCache = new Map();
+            async function issue(number) {
+              if (!issueCache.has(number)) {
+                try {
+                  const { data } = await github.rest.issues.get({ owner, repo, issue_number: number });
+                  issueCache.set(number, data.pull_request ? null : data);
+                } catch (e) {
+                  if (e.status !== 404 && e.status !== 410) throw e;
+                  issueCache.set(number, null);
+                }
+              }
+              return issueCache.get(number);
+            }
+
+            for (const pr of pulls) {
+              const refs = closes(pr.body);
+              for (const n of pr.closingIssuesReferences.nodes) {
+                if (n.repository.nameWithOwner.toLowerCase() === here) refs.add(n.number);
+              }
+              if (trigger !== null && !refs.has(trigger)) continue;
+
+              const issues = [];
+              for (const n of refs) {
+                const i = await issue(n);
+                if (i) issues.push(i);
+              }
+              if (issues.length === 0 || issues.some(i => i.state !== 'closed')) continue;
+
+              const list = issues.map(i => `#${i.number}`).join(', ');
+              const one = issues.length === 1;
+              core.info(`#${pr.number}: ${one ? 'issue' : 'issues'} ${list} closed${dryRun ? ' (dry run)' : ''}`);
+              if (dryRun) continue;
+
+              const body = [
+                `This pull request was closed automatically because the ${one ? 'issue' : 'issues'} it fixes (${list}) ${one ? 'was' : 'were'} closed.`,
+                '',
+                'We close a pull request when its issue closes, so that the open list holds only work that is still wanted. This is no judgement on the work.',
+                '',
+                'If something here is still needed:',
+                '',
+                `1. Reopen ${one ? 'the issue' : 'the issue it belongs to'} with a comment on what is still open, or file a new issue for it.`,
+                '2. Link that issue in the description of this pull request (`Fixes #N`).',
+                '3. Reopen this pull request. If GitHub does not let you, say so in a comment here and we reopen it.',
+              ].join('\n');
+              await github.rest.issues.createComment({ owner, repo, issue_number: pr.number, body });
+              await github.rest.pulls.update({ owner, repo, pull_number: pr.number, state: 'closed' });
+            }
