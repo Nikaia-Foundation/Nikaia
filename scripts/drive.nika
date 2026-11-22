@@ -4103,7 +4103,7 @@ fn drive_improve_dup(point: String, existing: String) -> String {
 			let text = if title.starts_with("After ") && colon != null { f"{title.after(colon?.end ?? title.end())}" } else { title }
 			if drive_improve_alike(said.clone(), text) { return number }
 		} else if line.starts_with("\t- ") && number != "" {
-			let reported = drive_improve_unheaded(f"{line["\t- ".len()..]}")
+			let reported = drive_improve_unheaded(f"{line.strip_prefix("\t- ") ?? ""}")
 			if drive_improve_alike(said.clone(), reported) { return number }
 		}
 	}

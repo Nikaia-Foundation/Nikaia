@@ -4884,7 +4884,7 @@ signature = "(srcs: ref Vec[SvSrc]) -> String"
 
 [fn."sv_status"]
 sync = "inferred"
-panics = true
+panics = false
 touches = []
 views = ["source: borrowed"]
 signature = "(source: String) -> String"

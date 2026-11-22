@@ -1,0 +1,25 @@
+error[NK1214]: `t` is cut with brackets, `t[0..]`, and a text takes no `[…]`: it is cut by name, at its own positions (ADR-374 D3).
+  --> tests/text_bracket_cut_is_refused.nika:6:5
+   |
+ 6 |     println(t[0..<t.len()])
+   |     ^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: Brackets count elements, and a boundary in a text is not one; `Bytes` and lists keep `[a..<b]` with numbers.
+   = help: Cut at a match with `t.before(m.start)`, `t.after(m.end)` or `t.between(p, q)`; or say the view: `t.bytes[0..].text()` for bytes, `t.graphemes.take(t.len())` for what a reader sees.
+error[NK1214]: `t` is cut with brackets, `t["ab".len()..]`, and a text takes no `[…]`: it is cut by name, at its own positions (ADR-374 D3).
+  --> tests/text_bracket_cut_is_refused.nika:7:5
+   |
+ 7 |     println(t["ab".len()..])
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: Brackets count elements, and a boundary in a text is not one; `Bytes` and lists keep `[a..<b]` with numbers.
+   = help: Cut at a match with `t.before(m.start)`, `t.after(m.end)` or `t.between(p, q)`; or say the view: `t.bytes["ab".len()..].text()` for bytes, `t.graphemes` for what a reader sees.
+error[NK1214]: `t` is cut with brackets, `t[0..<(t.len() - "d".len())]`, and a text takes no `[…]`: it is cut by name, at its own positions (ADR-374 D3).
+  --> tests/text_bracket_cut_is_refused.nika:8:5
+   |
+ 8 |     println(t[..<t.len() - "d".len()])
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: Brackets count elements, and a boundary in a text is not one; `Bytes` and lists keep `[a..<b]` with numbers.
+   = help: Cut at a match with `t.before(m.start)`, `t.after(m.end)` or `t.between(p, q)`; or say the view: `t.bytes[0..<(t.len() - "d".len())].text()` for bytes, `t.graphemes.take(t.len() - "d".len())` for what a reader sees.
+3 type errors

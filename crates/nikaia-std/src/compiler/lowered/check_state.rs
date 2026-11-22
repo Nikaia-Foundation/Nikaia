@@ -16,12 +16,6 @@ pub struct CheckImmutable {
     pub over: String,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct CheckTextPosition {
-    pub text: String,
-    pub step: i64,
-}
-
 #[derive(Debug, Clone, PartialEq)]
 pub struct CheckLocal {
     pub name: String,
@@ -447,7 +441,6 @@ pub struct CheckState {
     pub reads_on_paths: Vec<CheckRead>,
     pub lent_lets: collections::BTreeSet<(String, i64)>,
     pub text_bytes_lets: collections::BTreeSet<i64>,
-    pub text_positions: collections::BTreeMap<i64, CheckTextPosition>,
     pub handed: Vec<CheckTaken>,
     pub read_at: Vec<(String, i64)>,
     pub written_at: Vec<(String, i64)>,

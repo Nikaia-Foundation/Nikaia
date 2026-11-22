@@ -3358,7 +3358,7 @@ pub mod check_simd {
 }
 pub mod check_state {
     #[allow(unused_imports)]
-    pub use super::{CheckKind, CheckImmutable, CheckTextPosition, CheckLocal, CheckPromises, CheckHanded, CheckGuarded, CheckTaken, CheckRead, CheckPartOut, CheckGive, CheckPendingCleanup, CheckWayOut, CheckPendingCoalesce, CheckPendingConcat, CheckPendingHandle, CheckRepeats, CheckHeldTaking, CheckSeverity, CheckLabel, CheckFinding, CheckEdit, CheckWorld, CheckPackage, CheckNamesRead, CheckCallsInATask, CheckMethodCalls, CheckCodeArg, CheckStoredCode, CheckState};
+    pub use super::{CheckKind, CheckImmutable, CheckLocal, CheckPromises, CheckHanded, CheckGuarded, CheckTaken, CheckRead, CheckPartOut, CheckGive, CheckPendingCleanup, CheckWayOut, CheckPendingCoalesce, CheckPendingConcat, CheckPendingHandle, CheckRepeats, CheckHeldTaking, CheckSeverity, CheckLabel, CheckFinding, CheckEdit, CheckWorld, CheckPackage, CheckNamesRead, CheckCallsInATask, CheckMethodCalls, CheckCodeArg, CheckStoredCode, CheckState};
 }
 pub mod check_takes {
     #[allow(unused_imports)]
@@ -3988,4 +3988,4 @@ pub fn nikaia_run_tests(filters: &[std::string::String], list: bool, more: std::
 /// **The digest of this lowered set** (#1610): every file `lower-std` wrote
 /// beside this index, and the index above this line. Compiled into the same
 /// crate as the code it names, it is the compiler's identity for its caches.
-pub const LOWERED_DIGEST: &str = "99efc3865496afa0859f749ac7ad85aad59fcfd10572bad81d1ad4d6df2fe88a";
+pub const LOWERED_DIGEST: &str = "40fe479cbef0c8648184519de57b7f94497a3587c1cd191c50326ec680316eac";

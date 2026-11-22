@@ -1,9 +1,7 @@
-//! **A position the text hands out cuts it without a view** (ADR-374 D1-D3,
-//! Part I 2.6, #453 step 6): a match's `start` and `end` cut the text by name;
-//! in brackets either end of the text and such a position moved by the byte
-//! length of a text literal still cut it (until #743 removes text brackets); a
-//! number the program made up is `NK1214`, and a cut inside a scalar stops the
-//! program in the language's words.
+//! **A position the text hands out cuts it by name** (ADR-374 D1-D3, Part I
+//! 2.6, #453 step 6): a match's `start` and `end` cut the text with `before`,
+//! `after` and `between`; a text takes no `[…]`, so a cut in brackets, a
+//! number the program made up included, is `NK1214` (#2521).
 
 use crate::common;
 #[allow(unused_imports)]
@@ -132,20 +130,6 @@ fn a_cut_of_bytes_takes_any_number() {
     assert_eq!(run("positions-bytes", source), "3 bc\n");
 }
 
-/// A cut inside `ä` - one byte past where it starts, which a literal's length
-/// moving the start can reach - stops the program in the language's words.
-#[test]
-fn a_cut_inside_a_scalar_stops_the_program() {
-    let (ok, out, err) = nikaia(
-        "positions-inside",
-        "run",
-        "fn main() throws {\n    let s = \"x\u{e4}y\"\n    println(s[\"xa\".len()..])\n}\n",
-    );
-    assert!(!ok, "{out}{err}");
-    assert!(err.contains("byte position 2 is inside a scalar"), "{err}");
-    assert!(!err.contains("char boundary"), "{err}");
-}
-
 /// `rfind` hands out a match of its text, as `find` does.
 #[test]
 fn a_position_from_rfind_cuts_its_text() {
@@ -154,16 +138,6 @@ fn a_position_from_rfind_cuts_its_text() {
         "fn last(name: String) -> String {\n    let colon = name.rfind(\"::\") ?? return name.clone()\n    return name.after(colon.end).clone()\n}\n\nfn main() throws {\n    println(last(\"std::io::Write\"))\n    println(last(\"plain\"))\n}\n",
     );
     assert_eq!(out, "Write\nplain\n");
-}
-
-/// The start of a text moved by a literal's length, and its end moved back.
-#[test]
-fn the_ends_moved_by_a_literal_cut() {
-    let out = run(
-        "positions-literal-ends",
-        "fn main() throws {\n    let t = \"ab-cdx\"\n    println(t[\"ab\".len()..])\n    println(t[..<t.len() - \"x\".len()])\n}\n",
-    );
-    assert_eq!(out, "-cdx\nab-cd\n");
 }
 
 /// An `rfind` match does not cut a text in brackets either.
