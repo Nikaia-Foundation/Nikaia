@@ -756,6 +756,7 @@ pub(crate) fn comptime_shipped_disagreement<H: ComptimeComputeHost>(host: &H, pa
             },
         };
         for (function, contract) in derived.functions.iter() {
+            if !contract.touches_known { continue; }
             let ours = comptime_rule_answer(contract);
             let said = match shipped.functions.get(nikaia_std::index::as_text(&function)) {
                 None => format!("has no entry for `{}`", function),

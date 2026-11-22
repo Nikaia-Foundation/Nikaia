@@ -1064,6 +1064,13 @@ fn comptime_shipped_disagreement[H: ComptimeComputeHost](host: ref H, packages: 
             return (name.clone(), f"The ledger `{name}` shipped (`nikaia.contracts`) does not read ({error}), and its functions run at build time only on entries that agree with what this build derives from its sources.")
         }
         for (function, contract) in derived.functions.iter() {
+            // A function this build derives as touching what nothing says is
+            // one whose calls reach a Rust crate (ADR-321 D9) or an entry no
+            // ledger describes: D2 refuses it wherever it is reached, on the
+            // derived entry, so what the package ships for it changes nothing.
+            if !contract.touches_known {
+                continue
+            }
             let ours = comptime_rule_answer(contract)
             let said = match shipped.functions.get(function) {
                 null => f"has no entry for `{function}`",
