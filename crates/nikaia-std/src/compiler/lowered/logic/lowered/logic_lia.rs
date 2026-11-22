@@ -160,14 +160,14 @@ pub(crate) fn lg_terms_cmp(a: &collections::BTreeMap<String, i64>, b: &collectio
         left_names.push(name);
         left_ks.push(k);
     }
-    #[allow(unused_mut)] let mut right_names: Vec<&str> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut left_names = left_names;
+    let mut right_names: Vec<&str> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut left_names = left_names;
     let mut right_ks: Vec<i64> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     for (name, k) in b.iter() {
         let k = nikaia_std::num::value(k);
         right_names.push(name);
         right_ks.push(k);
     }
-    let mut at: i64 = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut left_names = left_names; #[allow(unused_mut, clippy::redundant_locals)] let mut right_names = right_names;
+    let mut at: i64 = 0;
     while ((at) as usize) < left_ks.len() && ((at) as usize) < right_ks.len() {
         if AsRef::<str>::as_ref(&(*unsafe { nikaia_std::proven::read(&left_names, (at) as usize) })) < AsRef::<str>::as_ref(&(*unsafe { nikaia_std::proven::read(&right_names, (at) as usize) })) { return -1; }
         if AsRef::<str>::as_ref(&(*unsafe { nikaia_std::proven::read(&right_names, (at) as usize) })) < AsRef::<str>::as_ref(&(*unsafe { nikaia_std::proven::read(&left_names, (at) as usize) })) { return 1; }

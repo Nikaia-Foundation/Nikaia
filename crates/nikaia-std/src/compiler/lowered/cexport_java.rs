@@ -114,10 +114,10 @@ pub(crate) fn cx_java_part(part: &CxPart, ctx: &CxCtx) -> (String, i64, i64) {
 }
 
 pub(crate) fn cx_java_fields_laid(fields: &[(String, CxPart)], ctx: &CxCtx) -> (Vec<String>, Vec<i64>, i64, i64) {
-    #[allow(unused_mut)] let mut members: Vec<String> = vec![];
+    let mut members: Vec<String> = vec![];
     let mut offsets: Vec<i64> = vec![];
-    let mut at: i64 = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut members = members;
-    let mut align: i64 = 1; #[allow(unused_mut, clippy::redundant_locals)] let mut members = members;
+    let mut at: i64 = 0;
+    let mut align: i64 = 1;
     for (field, part) in fields.iter() {
         let (layout, size, own) = cx_java_part(part, ctx);
         let start = cx_java_round(at, own);
@@ -138,8 +138,8 @@ pub(crate) fn cx_java_record_laid(record: &CxRecord, ctx: &CxCtx) -> (String, i6
         return (format!("MemoryLayout.structLayout({})", nikaia_std::block::Text::from(members.join(", "))), size, align);
     }
     #[allow(unused_mut)] let mut union_members: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-    let mut union_size: i64 = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut union_members = union_members;
-    let mut union_align: i64 = 1; #[allow(unused_mut, clippy::redundant_locals)] let mut union_members = union_members;
+    let mut union_size: i64 = 0;
+    let mut union_align: i64 = 1;
     union_members.reserve(record.variants.iter().size_hint().0); for variant in record.variants.iter() {
         if variant.fields.is_empty() { continue; }
         let (members, _, size, align) = cx_java_fields_laid(&variant.fields, ctx);
@@ -149,7 +149,7 @@ pub(crate) fn cx_java_record_laid(record: &CxRecord, ctx: &CxCtx) -> (String, i6
     }
     if union_members.is_empty() { return (nikaia_std::block::Text::from("MemoryLayout.structLayout(JAVA_INT.withName(\"tag\"))"), 4, 4); }
     let start = cx_java_round(4, union_align);
-    let mut align: i64 = 4; #[allow(unused_mut, clippy::redundant_locals)] let mut union_members = union_members;
+    let mut align: i64 = 4;
     if union_align > align { align = union_align; }
     let end = cx_java_round(start + union_size, align);
     let mut members: Vec<String> = nikaia_std::block::List::from_array_in([String::from("JAVA_INT.withName(\"tag\")")], nikaia_std::block::Place::Block); #[allow(unused_mut, clippy::redundant_locals)] let mut union_members = union_members;
@@ -267,7 +267,7 @@ impl CxJava {
                 args.push(String::from("self"));
             } else { args.push(String::from("live()")); }
         }
-        let mut position: i64 = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut params = params; #[allow(unused_mut, clippy::redundant_locals)] let mut layouts = layouts; #[allow(unused_mut, clippy::redundant_locals)] let mut before = before; #[allow(unused_mut, clippy::redundant_locals)] let mut args = args; #[allow(unused_mut, clippy::redundant_locals)] let mut raising = raising;
+        let mut position: i64 = 0;
         while ((position) as usize) < entry.arg_names.len() {
             let name = cx_java_camel(unsafe { nikaia_std::proven::read(&entry.arg_names, (position) as usize) });
             let param = nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&entry.arg_names, (position) as usize) }).to_string());
@@ -360,7 +360,7 @@ impl CxJava {
                     #[allow(unused_mut)] let mut c_params: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block); #[allow(unused_mut, clippy::redundant_locals)] let mut java_params = java_params;
                     #[allow(unused_mut)] let mut c_layouts: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block); #[allow(unused_mut, clippy::redundant_locals)] let mut java_params = java_params; #[allow(unused_mut, clippy::redundant_locals)] let mut c_params = c_params;
                     #[allow(unused_mut)] let mut handed: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block); #[allow(unused_mut, clippy::redundant_locals)] let mut java_params = java_params; #[allow(unused_mut, clippy::redundant_locals)] let mut c_params = c_params; #[allow(unused_mut, clippy::redundant_locals)] let mut c_layouts = c_layouts;
-                    let mut at = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut java_params = java_params; #[allow(unused_mut, clippy::redundant_locals)] let mut c_params = c_params; #[allow(unused_mut, clippy::redundant_locals)] let mut c_layouts = c_layouts; #[allow(unused_mut, clippy::redundant_locals)] let mut handed = handed;
+                    let mut at = 0;
                     for part in lent.iter() {
                         match part {
                             CxLent::Value(shape) => {
@@ -616,7 +616,7 @@ impl CxJava {
             #[allow(unused_mut)] let mut components: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
             #[allow(unused_mut)] let mut reads: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block); #[allow(unused_mut, clippy::redundant_locals)] let mut components = components;
             let mut writes: String = String::from(""); #[allow(unused_mut, clippy::redundant_locals)] let mut components = components; #[allow(unused_mut, clippy::redundant_locals)] let mut reads = reads;
-            let mut at: i64 = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut components = components; #[allow(unused_mut, clippy::redundant_locals)] let mut reads = reads;
+            let mut at: i64 = 0;
             for (field, part) in record.fields.iter() {
                 let java = cx_java_name(field);
                 components.push(format!("{} {}", cx_java_field_type(part, ctx), java));
@@ -636,7 +636,7 @@ impl CxJava {
             #[allow(unused_mut)] let mut components: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
             #[allow(unused_mut)] let mut got: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block); #[allow(unused_mut, clippy::redundant_locals)] let mut components = components;
             let mut put: String = String::from(""); #[allow(unused_mut, clippy::redundant_locals)] let mut components = components; #[allow(unused_mut, clippy::redundant_locals)] let mut got = got;
-            let mut at: i64 = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut components = components; #[allow(unused_mut, clippy::redundant_locals)] let mut got = got;
+            let mut at: i64 = 0;
             for (field, part) in variant.fields.iter() {
                 let java = cx_java_name(field);
                 components.push(format!("{} {}", cx_java_field_type(part, ctx), java));

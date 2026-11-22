@@ -2137,7 +2137,10 @@ pub(crate) fn tier_statement(stmt: &Stmt, at: i64, ask: &TierAsk<'_, '_, '_, '_,
         },
         Stmt::Assign { target, op, value } => {
             tie_stored(target, value, ask, walk);
+            let before = walk.handed_back;
+            if op.is_none() && into_a_changed_parameter(target, ask, walk) { walk.handed_back = handed_struct(value); }
             tier_assign(target, value, op.is_some(), ask, walk);
+            walk.handed_back = before;
             if op.is_some() { changed_in_place(target, tier_written(target, ask), ask, walk); }
         },
         Stmt::For { bindings, iter, body, .. } => {
@@ -2193,7 +2196,14 @@ pub(crate) fn tier_statement(stmt: &Stmt, at: i64, ask: &TierAsk<'_, '_, '_, '_,
             walk.handed_back = before;
             flow_result(given, &kinds, ask, walk);
         },
-        Stmt::Expr(expr) => { return tier_expr(expr, ask, walk); },
+        Stmt::Expr(expr) => {
+            let before = walk.handed_back;
+            let stored = stored_struct(expr, ask, walk);
+            if stored >= 0 { walk.handed_back = stored; }
+            let kinds = tier_expr(expr, ask, walk);
+            if stored >= 0 { walk.handed_back = before; }
+            return kinds;
+        },
         _ => { },
     }
     no_kinds()
@@ -2568,6 +2578,36 @@ pub(crate) fn count_arm_use(value: &Expr, ask: &TierAsk<'_, '_, '_, '_, '_, '_, 
     let word = match lendable_parameter(value, ask, walk) { Some(__nikaia_value) => __nikaia_value, None => return };
     let before = nikaia_std::index::or(*nikaia_std::index::get(&walk.flows.arm_uses, &word), || 0);
     walk.flows.arm_uses.insert(word, before + 1);
+}
+
+pub(crate) fn stored_struct(expr: &Expr, ask: &TierAsk<'_, '_, '_, '_, '_, '_, '_>, walk: &mut TierWalk) -> i64 {
+    match expr {
+        Expr::MethodCall { receiver, method, args, .. } => {
+            let receiver = nikaia_std::boxed::open(receiver); let method = *method;
+            let name = ask.names.resolve(method);
+            let puts = name == "push" || name == "push_back" || name == "push_front" || name == "insert";
+            if !puts || !into_a_changed_parameter(receiver, ask, walk) { return -1; }
+            for arg in args.iter() {
+                let id = handed_struct(arg);
+                if id >= 0 { return id; }
+            }
+            return -1;
+        },
+        _ => return -1,
+    }
+}
+
+pub(crate) fn into_a_changed_parameter(place: &Expr, ask: &TierAsk<'_, '_, '_, '_, '_, '_, '_>, walk: &mut TierWalk) -> bool {
+    let root = match hb_place_root(place, ask.names) { Some(__nikaia_value) => __nikaia_value, None => return false };
+    let local = match tier_local(&root, &walk) { Some(__nikaia_value) => __nikaia_value, None => return false };
+    let declared = match local.declared { Some(__nikaia_value) => __nikaia_value, None => return false };
+    match declared.owner {
+        TextOwner::Param(ref key, at) => {
+            let function = match *nikaia_std::index::get(&walk.declared.fns, key) { Some(__nikaia_value) => __nikaia_value, None => return false };
+            at < function.changes.len() as i64 && *nikaia_std::index::get(&function.changes, nikaia_std::index::at(at))
+        },
+        _ => false,
+    }
 }
 
 pub(crate) fn handed_struct(value: &Expr) -> i64 {
@@ -3721,9 +3761,10 @@ pub(crate) fn late_expr(expr: &Expr, leaf: bool, ask: &TierAsk<'_, '_, '_, '_, '
         Expr::MethodCall { receiver, method, args, .. } => {
             let receiver = nikaia_std::boxed::open(receiver); let method = *method;
             late_expr(receiver, false, ask, late);
+            let beside = late.temporaries.copy_owned();
             late_all(args, ask, late);
             late_temporary(expr, ask, late);
-            late_pushed_cut(receiver, ask.names.resolve(method), args, ask, late);
+            late_pushed_cut(receiver, ask.names.resolve(method), args, &beside, ask, late);
         },
         Expr::SafeMethod { receiver, args, .. } => {
             let receiver = nikaia_std::boxed::open(receiver);
@@ -3838,7 +3879,7 @@ pub(crate) fn late_argument(arg: &Expr, ask: &TierAsk<'_, '_, '_, '_, '_, '_, '_
     late_defer(TierLateArm { at: node_key(arg), name: nikaia_std::block::Text::from(word.to_string()), serial, loops, argument: true }, late);
 }
 
-pub(crate) fn late_pushed_cut(receiver: &Expr, method: &str, args: &[Expr], ask: &TierAsk<'_, '_, '_, '_, '_, '_, '_>, late: &mut TierLate) {
+pub(crate) fn late_pushed_cut(receiver: &Expr, method: &str, args: &[Expr], beside: &collections::BTreeSet<String>, ask: &TierAsk<'_, '_, '_, '_, '_, '_, '_>, late: &mut TierLate) {
     if late.leaving > 0 || args.len() != 1 { return; }
     if method != "push" && method != "push_back" && method != "push_front" { return; }
     let list = match receiver {
@@ -3847,17 +3888,7 @@ pub(crate) fn late_pushed_cut(receiver: &Expr, method: &str, args: &[Expr], ask:
     };
     let held = late_serial(&list, &late);
     if held <= late.params_from || held > late.params_upto { return; }
-    let word = match unsafe { nikaia_std::proven::read(&args, (0) as usize) } {
-        Expr::Index { base, index, .. } => {
-            let base = nikaia_std::boxed::open(base); let index = nikaia_std::boxed::open(index);
-            if !a_range(index) { return; }
-            match base {
-                Expr::Variable(name, _) => { let name = *name; nikaia_std::block::Text::from(ask.names.resolve(name).to_string()) },
-                _ => return,
-            }
-        },
-        _ => return,
-    };
+    let word = match given_cut_source(unsafe { nikaia_std::proven::read(&args, (0) as usize) }, ask.names) { Some(__nikaia_value) => __nikaia_value, None => return };
     let serial = late_serial(&word, &late);
     if serial <= late.params_upto { return; }
     let key = format!("{} {}", word, serial);
@@ -3865,7 +3896,7 @@ pub(crate) fn late_pushed_cut(receiver: &Expr, method: &str, args: &[Expr], ask:
     pushed.push(node_key(unsafe { nikaia_std::proven::read(&args, (0) as usize) }));
     late.cut_pushes.insert(nikaia_std::block::Text::from(key.to_string()), pushed);
     let loops = late_loops(&word, &late);
-    if late.loops > loops || late.temporaries.contains(&format!("{} {}", word, serial)) || !late.made.contains(&format!("{} {}", word, serial)) { return; }
+    if late.loops > loops || beside.contains(&format!("{} {}", word, serial)) || !late.made.contains(&format!("{} {}", word, serial)) { return; }
     if late.viewers.contains_key(&format!("{} {}", word, serial)) { return; }
     late.cuts.insert(node_key(unsafe { nikaia_std::proven::read(&args, (0) as usize) }));
     late_defer(TierLateArm { at: node_key(unsafe { nikaia_std::proven::read(&args, (0) as usize) }), name: nikaia_std::block::Text::from(word.to_string()), serial, loops, argument: true }, late);
@@ -4206,6 +4237,18 @@ pub(crate) fn tier_expr(expr: &Expr, ask: &TierAsk<'_, '_, '_, '_, '_, '_, '_>, 
             let receiver = nikaia_std::boxed::open(receiver); let method = *method;
             let kinds = method_kinds(receiver, ask.names.resolve(method), args, ask, walk);
             own_method_options(ask.names.resolve(method), config, ask, walk);
+            if walk.late_cuts.contains(&node_key(expr)) {
+                match receiver {
+                    Expr::Variable(name, _) => {
+                        let name = *name;
+                        if only_own_text(&kinds_of_local(ask.names.resolve(name), &walk)) {
+                            walk.flows.given_cuts.insert(node_key(expr));
+                            return owned_kinds();
+                        }
+                    },
+                    _ => { },
+                }
+            }
             kinds
         },
         Expr::SafeMethod { receiver, method, args, config, .. } => {
@@ -5317,7 +5360,7 @@ pub(crate) fn walk_grammar(def: &GrammarDef, ask: &TierAsk<'_, '_, '_, '_, '_, '
             walk_action((alt.action).as_ref(), ask, walk);
             close_tier_scope(walk);
         }
-        if rule.stream { own_stream_items((rule.ret_type).as_ref(), ask, walk); }
+        if rule.stream && def.public && rule.args.is_empty() && rule.config.is_empty() { own_stream_items((rule.ret_type).as_ref(), ask, walk); }
     }
 }
 

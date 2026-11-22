@@ -1124,7 +1124,8 @@ impl collecting::ModulesEmitHost for EmitHost<'_> {
                     || crate::emit::needs_of(&u.parsed),
                 ))
             });
-        needs.preamble()
+        // A package spliced under a hand-written root is no crate root (#2714).
+        needs.preamble(self.build.crate_root == "crate")
     }
 
     fn emit_unit(

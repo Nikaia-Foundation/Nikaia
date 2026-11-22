@@ -209,8 +209,8 @@ pub fn cx_export(words: &winnow_grammar::InternerContext, items: &[Spanned<Item>
     while at < plains.len() as i64 {
         if *nikaia_std::index::get(&build.crossing, nikaia_std::index::at(at)) {
             let plain = unsafe { nikaia_std::proven::read(&plains, (at) as usize) };
-            #[allow(unused_mut)] let mut values: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-            let mut number = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut values = values;
+            let mut values: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
+            let mut number = 0;
             values.reserve(plain.variants.iter().size_hint().0); for variant in plain.variants.iter() {
                 values.push(format!("    {}_{}_{} = {}", upper, plain.stem, nikaia_std::block::Text::from(variant.to_uppercase()), number));
                 number += 1;
@@ -255,7 +255,7 @@ pub(crate) fn cx_record_type(record: &CxRecord, ctx: &CxCtx) -> String {
     if record.is_enum() {
         let ty = nikaia_std::block::Text::from(record.name.to_string());
         #[allow(unused_mut)] let mut tags: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-        let mut tag = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut tags = tags;
+        let mut tag = 0;
         tags.reserve(record.variants.iter().size_hint().0); for variant in record.variants.iter() {
             tags.push(format!("    {}_{}_{} = {}", upper, nikaia_std::block::Text::from(ty.to_uppercase()), nikaia_std::block::Text::from(variant.name.to_uppercase()), tag));
             tag += 1;
@@ -355,8 +355,8 @@ pub(crate) fn cx_arms(raising: &CxRaising) -> String {
 }
 
 pub(crate) fn cx_choice_arms_in(plain: &CxPlain) -> String {
-    #[allow(unused_mut)] let mut arms: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-    let mut number = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut arms = arms;
+    let mut arms: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
+    let mut number = 0;
     arms.reserve(plain.variants.iter().size_hint().0); for variant in plain.variants.iter() {
         arms.push(format!("{} => {}::{},", number, plain.name, variant));
         number += 1;
@@ -365,8 +365,8 @@ pub(crate) fn cx_choice_arms_in(plain: &CxPlain) -> String {
 }
 
 pub(crate) fn cx_choice_arms_out(plain: &CxPlain) -> String {
-    #[allow(unused_mut)] let mut arms: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-    let mut number = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut arms = arms;
+    let mut arms: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
+    let mut number = 0;
     arms.reserve(plain.variants.iter().size_hint().0); for variant in plain.variants.iter() {
         arms.push(format!("{}::{} => {},", plain.name, variant, number));
         number += 1;
@@ -502,8 +502,8 @@ pub(crate) fn cx_wrapper(words: &winnow_grammar::InternerContext, ctx: &CxCtx, c
             { use ::core::fmt::Write as _; let _ = checks.write_fmt(format_args!("    // SAFETY: the C caller hands a handle this library made and has not freed, or NULL (ADR-284 D5).\n    let {}__nikaia_self = match unsafe {{ nikaia_std::c_boundary::{}(__nikaia_self) }} {{ Ok(held) => held, Err(status) => return __nikaia_refused(status) }};\n", binding, how)); };
         }
     }
-    #[allow(unused_mut)] let mut params = CxParams { rust_params: rust_params.copy_owned(), c_params: c_params.copy_owned(), checks: nikaia_std::block::Text::from(checks.to_string()), call_args: call_args.copy_owned() };
-    let mut position: i64 = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut params = params;
+    let mut params = CxParams { rust_params: rust_params.copy_owned(), c_params: c_params.copy_owned(), checks: nikaia_std::block::Text::from(checks.to_string()), call_args: call_args.copy_owned() };
+    let mut position: i64 = 0;
     while position < entry.arg_names.len() as i64 {
         let param = nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&entry.arg_names, (position) as usize) }).to_string());
         let local = cx_escaped(&param);
@@ -680,7 +680,7 @@ pub(crate) fn cx_parameter(ctx: &CxCtx, contracts: &Ledger, key: &str, position:
             #[allow(unused_mut)] let mut c_args: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block); #[allow(unused_mut, clippy::redundant_locals)] let mut rust_args = rust_args;
             #[allow(unused_mut)] let mut closure_params: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block); #[allow(unused_mut, clippy::redundant_locals)] let mut rust_args = rust_args; #[allow(unused_mut, clippy::redundant_locals)] let mut c_args = c_args;
             #[allow(unused_mut)] let mut passed: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block); #[allow(unused_mut, clippy::redundant_locals)] let mut rust_args = rust_args; #[allow(unused_mut, clippy::redundant_locals)] let mut c_args = c_args; #[allow(unused_mut, clippy::redundant_locals)] let mut closure_params = closure_params;
-            let mut at = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut rust_args = rust_args; #[allow(unused_mut, clippy::redundant_locals)] let mut c_args = c_args; #[allow(unused_mut, clippy::redundant_locals)] let mut closure_params = closure_params; #[allow(unused_mut, clippy::redundant_locals)] let mut passed = passed;
+            let mut at = 0;
             for part in lent.iter() {
                 let name = format!("__nikaia_{}", at);
                 match part {

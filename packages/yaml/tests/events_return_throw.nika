@@ -1,0 +1,65 @@
+// A `return` and a `throw` inside a walk of `Yaml::events`
+// (ADR-grammar-typed-read-v1 D7, #2708): the `for` runs its body as the
+// parser's `each`, and either one stops the parse there and leaves the
+// function with its value or its error, as from any loop. The third document
+// does not parse, so a walk that read it would fail with the parse error.
+use yaml
+
+struct TooDeep { at: u32 }
+impl Error for TooDeep { fn message(ref self) -> String { return f"a sequence starts at {self.at}" } }
+
+// The first scalar's text, or "none".
+fn first_scalar(text: String) -> String throws {
+	let input = Bytes(text.bytes().collect())
+	for e in yaml::Yaml::events(input) {
+		if e.kind == yaml::EventKind::Scalar {
+			return e.value.clone()
+		}
+	}
+	return "none"
+}
+
+// How many events come before the first sequence, which is refused.
+fn before_a_sequence(text: String) -> i64 throws {
+	let input = Bytes(text.bytes().collect())
+	let mut seen = 0
+	for e in yaml::Yaml::events(input) {
+		if e.kind == yaml::EventKind::SequenceStart {
+			throw TooDeep { at: e.start }
+		}
+		seen += 1
+	}
+	return seen
+}
+
+// A `return` from a loop inside the walk's body.
+fn first_long(text: String, n: i64) -> String throws {
+	let input = Bytes(text.bytes().collect())
+	for e in yaml::Yaml::events(input) {
+		for i in 0..<n {
+			if e.value.len() > i + 2 {
+				return f"{e.value} at {i}"
+			}
+		}
+	}
+	return "none"
+}
+
+fn main() throws {
+	let bad = "a\n--- b\n--- [c, d\n"
+	println(f"first scalar: {first_scalar(bad)}")
+	println(f"first scalar of nothing: {first_scalar("")}")
+	println(f"before a sequence: {before_a_sequence("x\n--- [y]\n") catch { -1 }}")
+	let thrown = before_a_sequence("x\n--- [y]\n") catch {
+		match error {
+			TooDeep => println(f"thrown: {error}")
+			else => println("another error")
+		}
+		-1
+	}
+	println(f"seen: {thrown}")
+	println(f"none to throw: {before_a_sequence("x\n--- y\n")}")
+	println(f"first long: {first_long("- ab\n- abcd\n", 3)}")
+	let failed = first_scalar("[a\n") catch { "parse error" }
+	println(f"broken input: {failed}")
+}

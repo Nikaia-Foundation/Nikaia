@@ -1293,7 +1293,7 @@ pub(crate) fn project_drive_rustc_outputs(args: &[String], toolchain: &str) -> O
     let mut target: nikaia_std::either_text::EitherText<'_> = "".into_either();
     #[allow(unused_mut)] let mut kinds: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     #[allow(unused_mut)] let mut types: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block); #[allow(unused_mut, clippy::redundant_locals)] let mut kinds = kinds;
-    let mut k: i64 = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut kinds = kinds; #[allow(unused_mut, clippy::redundant_locals)] let mut types = types;
+    let mut k: i64 = 0;
     while k < args.len() as i64 {
         let arg = unsafe { nikaia_std::proven::read(&args, (k) as usize) };
         let next = if unsafe { nikaia_std::proven::add::<i64>(k, 1) } < args.len() as i64 { unsafe { nikaia_std::proven::read(&args, (nikaia_std::proven::add::<i64>(k, 1)) as usize) } } else { "" };

@@ -1447,7 +1447,9 @@ impl EmitState {
                 else => false,
             }
             let either = call_returns_either(world.words, world.items, scope.function) && !is_null && !self.facts.mixed_choices.contains(node_key(held)) && !self.facts.mixed_leaves.contains_key(node_key(held)) && !never_a_value(held)
-            if flow.can_throw {
+            if flow.returns_out {
+                out.push("return Ok(::std::option::Option::Some(")
+            } else if flow.can_throw {
                 out.push("return Ok(")
             } else {
                 out.push("return ")
@@ -1462,9 +1464,13 @@ impl EmitState {
             if !self.facts.wrapped.contains_key(node_key(held)) && !self.facts.some_tails.contains(node_key(held)) && self.either_into_owned(world, held, scope.function, -1) {
                 out.push(".into()")
             }
-            if flow.can_throw {
+            if flow.returns_out {
+                out.push("))")
+            } else if flow.can_throw {
                 out.push(")")
             }
+        } else if flow.returns_out {
+            out.push("return Ok(::std::option::Option::Some(()))")
         } else if flow.can_throw {
             out.push("return Ok(())")
         } else {

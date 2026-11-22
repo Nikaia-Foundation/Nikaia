@@ -148,8 +148,8 @@ impl CheckState {
                 what = String::from("a tuple");
                 kinds = "a tuple has";
                 #[allow(unused_mut)] let mut names: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-                #[allow(unused_mut)] let mut holes: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block); #[allow(unused_mut, clippy::redundant_locals)] let mut names = names;
-                let mut index: i64 = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut names = names; #[allow(unused_mut, clippy::redundant_locals)] let mut holes = holes;
+                let mut holes: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block); #[allow(unused_mut, clippy::redundant_locals)] let mut names = names;
+                let mut index: i64 = 0;
                 while index < parts.len() as i64 {
                     let letter = check_exprs_part_name(index);
                     holes.push(format!("`{{{}}}`", letter));

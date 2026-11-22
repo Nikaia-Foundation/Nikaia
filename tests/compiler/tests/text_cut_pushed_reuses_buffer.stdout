@@ -1,0 +1,11 @@
+fn given(all: &mut Vec<String>, city: &str) -> Result<(), std::boxed::Box<dyn std::error::Error>> {
+all.push(nikaia_std::index::shrunk({ let __cut = line.after(m.end); let __span = nikaia_std::index::cut_span(&line, __cut); nikaia_std::index::given_cut(line, __span) }));
+fn heads(all: &mut Vec<String>, lines: &[String]) {
+all.push(nikaia_std::index::shrunk({ let __cut = line.before(m.start); let __span = nikaia_std::index::cut_span(&line, __cut); nikaia_std::index::given_cut(line, __span) }));
+fn trimmed(all: &mut Vec<String>, lines: &[String]) {
+all.push(nikaia_std::index::shrunk({ let __cut = line.trim(); let __span = nikaia_std::index::cut_span(&line, __cut); nikaia_std::index::given_cut(line, __span) }));
+fn echoed<'k>(all: &mut Vec<&'k str>, city: &str, __keep: &'k nikaia_std::tether::Keep) -> Result<(), nikaia_std::error::Thrown<io::IoError>> {
+let line = __keep.put_viewed(nikaia_std::block::Text::from(nikaia_std::concat::plus(city, ";3")));
+Bonn;3
+12,Kiel,Ulm,Essen
+3

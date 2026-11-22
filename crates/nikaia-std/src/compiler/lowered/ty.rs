@@ -482,7 +482,7 @@ pub fn parse(written: &str) -> Ty {
 
 pub fn split_args(written: &str) -> Vec<String> {
     #[allow(unused_mut)] let mut parts: Vec<String> = vec![];
-    let mut depth = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut parts = parts;
+    let mut depth = 0;
     let mut current: String = String::from(""); #[allow(unused_mut, clippy::redundant_locals)] let mut parts = parts;
     for c in written.chars() {
         if c == '[' || c == '(' {
