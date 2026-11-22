@@ -75,6 +75,37 @@ fn check_walked_articles(mut state: CheckState) sync {
     state.findings = said
 }
 
+/// **A finding is said once where it would print the same** (#2247): a
+/// finding's span is the statement it is in, and a label underlines its word
+/// where it first stands there, so two calls of one name in one statement
+/// (`twice(twice(x))`) gave two findings no reader could tell apart. The
+/// first stays; one that differs in code, severity, message, a note, the
+/// help or a label is another finding and stays too.
+fn check_walked_once_per_site(mut state: CheckState) sync {
+    let mut said: collections::BTreeSet[String] = collections::BTreeSet()
+    let mut kept: Vec[CheckFinding] = []
+    for f in state.findings.clone() {
+        let severity = match f.severity {
+            CheckSeverity::Error => "error",
+            else => "other",
+        }
+        let help = f.help?.clone() ?? ""
+        let mut key: String = f"{severity}\n{f.code}\n{f.span.start}\n{f.span.end}\n{f.message}\n{help}"
+        for note in f.notes {
+            key = f"{key}\nnote\n{note}"
+        }
+        for label in f.labels {
+            key = f"{key}\nlabel\n{label.span.start}\n{label.span.end}\n{label.word}\n{label.text}\n{label.main}"
+        }
+        if said.contains(key) {
+            continue
+        }
+        said.insert(key)
+        kept.push(f)
+    }
+    state.findings = kept
+}
+
 /// **The method sets the emitter reads**: only the calls that provably fail,
 /// and only where the name is not also a call that does not; the same
 /// subtraction for what pauses; and a checked conversion is dropped where a
@@ -100,6 +131,7 @@ fn check_walked_method_facts(mut state: CheckState) sync {
 fn check_walked_settle(mut state: CheckState) sync {
     check_walked_unknown_last(state)
     check_walked_articles(state)
+    check_walked_once_per_site(state)
     check_walked_method_facts(state)
     // The order is the span's start; the sort is stable.
     state.findings.sort_by_key(fn(f) { f.span.start })

@@ -1,0 +1,85 @@
+// #2483 (ADR-raw-sinks-1 D17 item 7): the record that lets a build skip
+// Cargo is read only below the outer build's roots, the project's root, the
+// sysroot of `std`'s sources and the target directory. Through a Cargo that
+// counts its calls: a program built twice skips Cargo the second time; a
+// record that names a file below none of the roots, its length, time and
+// digest as they are, stands for nothing, so Cargo runs again; the record
+// that build writes skips Cargo again.
+use std::env
+use std::fs
+use std::process
+
+fn toolchain() -> String throws {
+	let exe = env::current_exe()?.display() ?? ""
+	if exe.len() == 0 {
+		eprintln("no running nikaia among this program's ancestors: run it with `nikaia test` (#1305)")
+		process::exit(2)
+	}
+	return exe
+}
+
+/// How many times Cargo was started since the last call, and the log emptied.
+fn calls(log: String) -> String throws {
+	let counted = process::run(
+		"sh",
+		["-c", f"cat {log} 2>/dev/null | wc -l; rm -f {log}"],
+	).stdout.trim().clone()
+	return counted
+}
+
+fn main() throws {
+	let tmp = fs::scratch()
+	let nikaia = toolchain()
+	let real = process::run(
+		"sh",
+		["-c", "echo ${CARGO:-$(command -v cargo)}"],
+	).stdout.trim().clone()
+	let path = process::run("sh", ["-c", "echo $PATH"]).stdout.trim().clone()
+	process::run(
+		"mkdir",
+		["-p", f"{tmp.path().to_text()}/p/src", f"{tmp.path().to_text()}/bin"],
+	)
+	let shim = tmp.join("bin/cargo")
+	fs::write("bin/cargo", tmp, SHIM)
+	process::run("chmod", ["+x", shim.path().to_text()])
+	let log = f"{tmp.path().to_text()}/cargo.log"
+	let env = [
+		("RUST_BACKTRACE", "0"),
+		("CARGO_TERM_COLOR", "never"),
+		("NIKAIA_CACHE_DIR", f"{tmp.path().to_text()}/cache"),
+		("CARGO", shim.path().to_text()),
+		("REAL_CARGO", real),
+		("SHIM_LOG", log.clone()),
+		("PATH", f"{tmp.path().to_text()}/bin:{path}"),
+	]
+
+	let p = tmp.join("p")
+	fs::write(
+		"nikaia.toml",
+		p,
+		"[package]\nname = \"rooted\"\nversion = \"0.1.0\"\n",
+	)
+	fs::write(
+		"src/main.nika",
+		p,
+		"fn main() throws {\n\tprintln(\"one\")\n}\n",
+	)
+	let first = process::run(nikaia, ["build"]; dir: p.path().to_text(), env: env.clone())
+	println(f"build: {first.code}, Cargo started: {calls(log)}")
+	let second = process::run(nikaia, ["build"]; dir: p.path().to_text(), env: env.clone())
+	println(f"build again: {second.code}, Cargo started: {calls(log)}")
+	// A file outside the project, the sysroot and the target directory,
+	// named in the record with its length, time and digest as they are.
+	fs::write("outside.txt", tmp, "outside\n")
+	let named = process::run(
+		"sh",
+		["-c", f"f={tmp.path().to_text()}/outside.txt; echo \"$(stat -c %s $f):$(date -r $f +%s%N):$(sha256sum $f | cut -d' ' -f1):$f\" >> {p.path().to_text()}/target/nikaia/build/cargo-fresh"],
+	)
+	println(f"record names a path outside the roots: {named.code}")
+	let third = process::run(nikaia, ["build"]; dir: p.path().to_text(), env: env.clone())
+	println(f"build with that record: {third.code}, Cargo started: {calls(log)}")
+	let fourth = process::run(nikaia, ["build"]; dir: p.path().to_text(), env: env)
+	println(f"build after the new record: {fourth.code}, Cargo started: {calls(log)}")
+}
+
+comptime SHIM: ref String = "#!/bin/bash\n# Cargo, with each start counted.\necho \"$1\" >> \"$SHIM_LOG\"\nexec \"$REAL_CARGO\" \"$@\"\n"

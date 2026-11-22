@@ -5,8 +5,8 @@
 // this was written - see `contracts::sync`.
 pub fn parameters(body: &str) -> Vec<String> {
     let c: Vec<scalar> = nikaia_std::list::scalars(body.chars());
-    #[allow(unused_mut)] let mut found: Vec<String> = Vec::new();
-    let mut i: i64 = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut found = found;
+    let mut found: Vec<String> = Vec::new();
+    let mut i: i64 = 0;
     while i < c.len() as i64 {
         if *unsafe { nikaia_std::proven::read(&c, (i) as usize) } != ':' {
             i = unsafe { nikaia_std::proven::add::<i64>(i, 1) };

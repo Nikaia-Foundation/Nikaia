@@ -483,6 +483,12 @@ fn the_command_line(ty: ref Ty) -> bool {
 /// value for two, the parts of a pair a list, a set, an array or a sequence
 /// holds - and `Unknown` for each where the shape is not one of these.
 fn elements_walked(over: ref Ty, bindings: i64) -> Vec[Ty] {
+    // **What a `for` takes out of a seen value is seen** (ADR-281 D22, D23,
+    // #2335): `for x in order.get()` walks the list under the stamp, and
+    // each element keeps it, so a `set(x)` is `NK2205`.
+    if over.is_seen() {
+        return elements_walked(over.unseen(), bindings).iter().map(fn(t) { stamped_if(true, t.clone()) }).collect()
+    }
     if bindings == 1 {
         return [element_walked(over, 1)]
     }

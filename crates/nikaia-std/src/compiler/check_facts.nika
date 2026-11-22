@@ -167,6 +167,17 @@ pub struct CheckFacts {
     pub pausing_walks: collections::BTreeSet[i64],
     pub pausing_loops: collections::BTreeSet[i64],
     pub owned_loops: collections::BTreeSet[i64],
+    /// **The `for`s over a `@stream` call, whose one binding is lent from the
+    /// input** (ADR-grammar-typed-read-v1 D7, #2708), by the `for`'s start:
+    /// the emitter binds the item by reference, never a copy of it.
+    pub lent_stream_loops: collections::BTreeSet[i64],
+    /// **A `let` bound to a `@stream` call that one `for` walks** (#2708):
+    /// the binding's id to the `let`'s start (`check_core_stmt_a_stream_let`),
+    /// and the `for`'s start to the `let`'s it walks. The emitter writes the
+    /// call where that `for` stands, as a `for` over the call itself.
+    pub stream_lets: collections::BTreeMap[i64, i64],
+    pub stream_let_loops: collections::BTreeMap[i64, i64],
+    pub walked_stream_lets: collections::BTreeSet[i64],
     pub copied_loop_bindings: collections::BTreeSet[(i64, String)],
     pub copied_view_bindings: collections::BTreeSet[(i64, String)],
     pub unsigned_literals: collections::BTreeMap[i64, String],
@@ -564,8 +575,9 @@ pub struct CheckFacts {
     pub failing_through_calls: collections::BTreeMap[i64, i64],
     /// **A method called on a walk of failing elements** (#2736), by its
     /// receiver's node: what it does with each element is done inside the
-    /// element's `Result`.
-    pub failing_item_receivers: collections::BTreeSet[i64],
+    /// element's `Result`; with what the walk fails with, read off its type
+    /// (#2742), for a `catch` around the walk to open.
+    pub failing_item_receivers: collections::BTreeMap[i64, Vec[String]],
     /// A lambda where the function type hands back nothing (#1321): its
     /// body's last value is dropped, as a named function's is that declares
     /// no result.
@@ -957,6 +969,10 @@ impl CheckFacts {
             fallible_loops: collections::BTreeSet(),
             pausing_walks: collections::BTreeSet(),
             pausing_loops: collections::BTreeSet(),
+            lent_stream_loops: collections::BTreeSet(),
+            stream_lets: collections::BTreeMap(),
+            stream_let_loops: collections::BTreeMap(),
+            walked_stream_lets: collections::BTreeSet(),
             owned_loops: collections::BTreeSet(),
             copied_loop_bindings: collections::BTreeSet(),
             copied_view_bindings: collections::BTreeSet(),
@@ -1095,7 +1111,7 @@ impl CheckFacts {
             failing_lambdas: collections::BTreeSet(),
             failing_through_lambdas: collections::BTreeMap(),
             failing_through_calls: collections::BTreeMap(),
-            failing_item_receivers: collections::BTreeSet(),
+            failing_item_receivers: collections::BTreeMap(),
             valueless_lambdas: collections::BTreeSet(),
             run_code_fails: collections::BTreeSet(),
             changing_lambdas: collections::BTreeMap(),

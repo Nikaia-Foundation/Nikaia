@@ -516,6 +516,7 @@ pub fn comptime_dependency_modules<H: ComptimeLowerHost>(host: &H, packages: &co
         let wanted: Option<String> = Some(nikaia_std::block::Text::from(name.to_string()));
         let theirs: Vec<i64> = (nikaia_std::range::span(0, host.unit_count())).filter(|&u| { host.package_of(u) == wanted }).collect::<Vec<_>>();
         { use ::core::fmt::Write as _; let _ = rust.write_fmt(format_args!("pub mod {} {{\n#[allow(unused_imports)]\nuse nikaia_std::prelude::*;\n", name)); };
+        rust.push_str("#[allow(unused_imports)]\nuse winnow_grammar::grammar;\n");
         rust.push_str(&block_types_import(true));
         for at in theirs.iter() {
             let at = nikaia_std::num::value(at);
@@ -551,6 +552,7 @@ pub const NOWHERE: &str = "This check has no place to compile build-time code in
 pub enum ComptimeDriven {
     Program(String),
     NotLowered,
+    Refused { message: String, at: i64 },
     Uncrossed { ty: String, because: String },
     NoHandBack,
 }
@@ -561,6 +563,13 @@ pub const COMPTIME_STOPPED_AT: &str = "@";
 pub struct ComptimeLowered {
     pub rust: String,
     pub rows: Vec<(i64, i64, i64)>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct ComptimeRefusal {
+    pub message: String,
+    pub at: i64,
+    pub unit: i64,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -583,9 +592,12 @@ pub trait ComptimeComputeHost {
     fn value_fn_names(&self, unit: i64) -> collections::BTreeSet<String>;
     fn unit_package(&self, unit: i64) -> Option<String>;
     fn by_package(&self, units: &[i64]) -> collections::BTreeMap<String, Ledger>;
+    fn shipped_ledger(&self, package: &str) -> Option<String>;
+    fn trace(&self, said: &str);
     fn derived(&self, units: &[i64], packages: &collections::BTreeMap<String, Ledger>) -> Ledger;
     fn lowered_alone(&self, unit: i64, derived: &Ledger) -> Option<ComptimeLowered>;
     fn lowered_units(&self, units: &[i64], here: i64, derived: &Ledger, packages: &collections::BTreeMap<String, Ledger>) -> Option<ComptimeLowered>;
+    fn lowering_refused(&self) -> Option<ComptimeRefusal>;
     fn dump(&self, unit: i64, ty: &Ty, out: &mut String) -> Option<CheckWall>;
     fn bounds(&self) -> (u64, u64);
     fn run_comptime(&self, program: &str, bound: &str, answer: &mut String) -> Option<CheckWall>;
@@ -696,6 +708,11 @@ pub fn comptime_computed<H: ComptimeComputeHost>(host: &H, here: i64, bound: &st
     let home = host.unit_package(*nikaia_std::index::get(&units, nikaia_std::index::at(here)));
     let others: Vec<i64> = units.iter().copied().filter(|&u| { host.unit_package(u).is_some() && host.unit_package(u) != home }).collect::<Vec<_>>();
     let packages = host.by_package(&others);
+    for name in packages.keys() { host.trace(&format!("{} derived for a build-time run", name)); }
+    match comptime_shipped_disagreement(host, &packages) {
+        None => { },
+        Some((callee, because)) => { return CheckComputed::Forbidden { callee, because }; },
+    }
     let unit_refs: Vec<i64> = units.iter().copied().filter(|&u| { host.unit_package(u) == home }).collect::<Vec<_>>();
     let derived = host.derived(&unit_refs, &packages);
     match comptime_forbidden_because(&derived) {
@@ -708,6 +725,7 @@ pub fn comptime_computed<H: ComptimeComputeHost>(host: &H, here: i64, bound: &st
     let program = match comptime_driven(host, &units, here, &derived, &packages, ty) {
         ComptimeDriven::Program(program) => program,
         ComptimeDriven::NotLowered => return not_here(COMPTIME_NOT_LOWERED),
+        ComptimeDriven::Refused { message, at } => return CheckComputed::Refused { message, at },
         ComptimeDriven::Uncrossed { ref ty, ref because } => { return CheckComputed::NotHere(format!("Its type `{}` can't be handed back from the program that computes it: {}", ty, because)); },
         ComptimeDriven::NoHandBack => return not_here("Its type can't be handed back from the program that computes it"),
     };
@@ -738,6 +756,46 @@ pub(crate) fn comptime_callee_nothing_declares<H: ComptimeComputeHost>(host: &H,
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
+pub(crate) fn comptime_shipped_disagreement<H: ComptimeComputeHost>(host: &H, packages: &collections::BTreeMap<String, Ledger>) -> Option<(String, String)> {
+    for (name, derived) in packages.iter() {
+        let text = match host.shipped_ledger(name) { Some(__nikaia_value) => __nikaia_value, None => continue };
+        let shipped = match read(&text) {
+            Ok(value) => value,
+            Err(error) => {
+                let (error, __nikaia_site) = error.split();
+                return Some((nikaia_std::block::Text::from(name.to_string()), format!("The ledger `{}` shipped (`nikaia.contracts`) does not read ({}), and its functions run at build time only on entries that agree with what this build derives from its sources.", name, error)));
+            },
+        };
+        for (function, contract) in derived.functions.iter() {
+            if !contract.touches_known { continue; }
+            let ours = comptime_rule_answer(contract);
+            let said = match shipped.functions.get(nikaia_std::index::as_text(&function)) {
+                None => format!("has no entry for `{}`", function),
+                Some(found) => {
+                    let theirs = comptime_rule_answer(found);
+                    if theirs == ours { continue; }
+                    format!("says `{}` {}", function, theirs)
+                },
+            };
+            return Some((format!("{}::{}", name, function), format!("`{}`'s shipped ledger (`nikaia.contracts`) {}, and this build derives from its sources that it {}; a package's functions run at build time only on entries that agree.", name, said, ours)));
+        }
+    }
+    None
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn comptime_rule_answer(contract: &FnContract) -> String {
+    let pauses = if contract.sync_claim.is_sync() { "never pauses" } else { "can pause" };
+    if !contract.touches_known { return format!("{} and touches what nothing says", pauses); }
+    let mut touched: Vec<String> = contract.touches.iter().map(|t| { format!("`{}`", t.text()) }).collect::<Vec<_>>();
+    touched.sort();
+    if touched.is_empty() { return format!("{} and touches nothing", pauses); }
+    format!("{} and touches {}", pauses, nikaia_std::block::Text::from(touched.join(", ")))
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
 pub(crate) fn comptime_forbidden_because(derived: &Ledger) -> Option<String> {
     let contract = match derived.functions.get(VALUE_FN) { Some(__nikaia_value) => __nikaia_value, None => return None };
     bt_may_not_run(contract)
@@ -759,7 +817,10 @@ pub(crate) fn comptime_driven<H: ComptimeComputeHost>(host: &H, units: &[i64], h
         1 => host.lowered_alone(*nikaia_std::index::get(&units, nikaia_std::index::at(here)), derived),
         _ => host.lowered_units(units, here, derived, packages),
     };
-    let lowered = match found { Some(__nikaia_value) => __nikaia_value, None => return ComptimeDriven::NotLowered };
+    let lowered = match found { Some(__nikaia_value) => __nikaia_value, None => return match host.lowering_refused() {
+        None => ComptimeDriven::NotLowered,
+        Some(ref refused) => ComptimeDriven::Refused { message: nikaia_std::block::Text::from(refused.message.to_string()), at: if refused.unit == *nikaia_std::index::get(&units, nikaia_std::index::at(here)) { refused.at } else { -1 } },
+    } };
     let mut dump: String = String::from("");
     let wall = host.dump(*nikaia_std::index::get(&units, nikaia_std::index::at(here)), ty, &mut dump);
     match wall {

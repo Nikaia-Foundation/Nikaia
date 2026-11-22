@@ -707,6 +707,11 @@ pub fn comptime_dependency_modules[H: ComptimeLowerHost](host: ref H, packages: 
         let wanted: String? = name.clone()
         let theirs: Vec[i64] = (0..<host.unit_count()).filter(fn(u) { host.package_of(u) == wanted }).collect()
         rust.push_str(f"pub mod {name} {{\n#[allow(unused_imports)]\nuse nikaia_std::prelude::*;\n")
+        // **A package's `grammar` is a `grammar!` in its module** (#2255:
+        // `yaml`'s were E0433 here), and a `use` at the top of the program
+        // does not reach into a module. The bundle always carries
+        // `winnow_grammar` (`COMPTIME_BUNDLE_NAMED`).
+        rust.push_str("#[allow(unused_imports)]\nuse winnow_grammar::grammar;\n")
         // The block types the package's files are lowered to (#490).
         rust.push_str(block_types_import(true))
         for at in theirs {
@@ -749,8 +754,13 @@ pub comptime NOWHERE: ref String = "This check has no place to compile build-tim
 pub enum ComptimeDriven {
     /// The program, ready to compile.
     Program(String),
-    /// The emitter refused the units, or the driver could not be written.
+    /// The driver could not be written, or the units not lowered for no
+    /// refusal of the emitter.
     NotLowered,
+    /// The emitter refused the program's own code (#2294), in its words, at
+    /// the byte of the value's file it is about, or -1 where it is about
+    /// another file or no place.
+    Refused { message: String, at: i64 },
     /// The value's type has no form that crosses back, and why.
     Uncrossed { ty: String, because: String },
     /// The value's type cannot be handed back, for another reason.
@@ -766,6 +776,15 @@ pub comptime COMPTIME_STOPPED_AT: ref String = "@"
 pub struct ComptimeLowered {
     pub rust: String,
     pub rows: Vec[(i64, i64, i64)],
+}
+
+/// **What the emitter said where it refused a run's unit** (#2294): its
+/// words, the byte of the unit it is about (-1 where it named none) and the
+/// unit, by the index the host handed out.
+pub struct ComptimeRefusal {
+    pub message: String,
+    pub at: i64,
+    pub unit: i64,
 }
 
 /// One `comptime` a file declares, as `comptime_worked_out_ahead` reads it.
@@ -809,6 +828,12 @@ pub trait ComptimeComputeHost {
     fn unit_package(ref self, unit: i64) -> String? sync
     /// Each dependency's units derived as their package (`comptime_by_package`).
     fn by_package(ref self, units: ref Vec[i64]) -> collections::BTreeMap[String, Ledger] sync
+    /// The `nikaia.contracts` package `package` shipped, as written beside
+    /// its sources; `null` where it ships none (ADR-321 D8).
+    fn shipped_ledger(ref self, package: ref String) -> String? sync
+    /// `said` in the build's trace (`NIKAIA_WRAPPER_TRACE`), where one was
+    /// asked for.
+    fn trace(ref self, said: ref String) sync
     /// The ledger `units` come to against `std` and `packages`, each under
     /// its name.
     fn derived(ref self, units: ref Vec[i64], packages: ref collections::BTreeMap[String, Ledger]) -> Ledger sync
@@ -820,6 +845,10 @@ pub trait ComptimeComputeHost {
     /// steps counted (`comptime_lowered_units`); `null` where the emitter
     /// refused one.
     fn lowered_units(ref self, units: ref Vec[i64], here: i64, derived: ref Ledger, packages: ref collections::BTreeMap[String, Ledger]) -> ComptimeLowered? sync
+    /// What the emitter said where the last `lowered_alone` or
+    /// `lowered_units` came to `null` because it refused a unit, taken: asked
+    /// again, `null`.
+    fn lowering_refused(ref self) -> ComptimeRefusal? sync
     /// The dump of a value of type `ty` (`grammar_run_dump`) over unit
     /// `unit`, written to `out`; the wall where it has none.
     fn dump(ref self, unit: i64, ty: ref Ty, mut out: String) -> CheckWall? sync
@@ -985,6 +1014,16 @@ pub fn comptime_computed[H: ComptimeComputeHost](host: ref H, here: i64, bound: 
     let home = host.unit_package(units[here])
     let others: Vec[i64] = units.iter().filter(fn(u) { host.unit_package(u) != null && host.unit_package(u) != home }).collect()
     let packages = host.by_package(others)
+    for name in packages.keys() {
+        host.trace(f"{name} derived for a build-time run")
+    }
+    // **A dependency's shipped ledger is believed only where this build
+    // derives the same** (ADR-321 D8): the run reads the derived entries, and
+    // a package that ships others is refused, not run.
+    match comptime_shipped_disagreement(host, packages) {
+        null => {},
+        (callee, because) => return CheckComputed::Forbidden { callee: callee, because: because },
+    }
     let unit_refs: Vec[i64] = units.iter().filter(fn(u) { host.unit_package(u) == home }).collect()
     let derived = host.derived(unit_refs, packages)
     match comptime_forbidden_because(derived) {
@@ -997,6 +1036,7 @@ pub fn comptime_computed[H: ComptimeComputeHost](host: ref H, here: i64, bound: 
     let program = match comptime_driven(host, units, here, derived, packages, ty) {
         ComptimeDriven::Program(program) => program,
         ComptimeDriven::NotLowered => return not_here(COMPTIME_NOT_LOWERED),
+        ComptimeDriven::Refused { message, at } => return CheckComputed::Refused { message: message, at: at },
         ComptimeDriven::Uncrossed { ty, because } => {
             return CheckComputed::NotHere(f"Its type `{ty}` can't be handed back from the program that computes it: {because}")
         },
@@ -1033,6 +1073,60 @@ fn comptime_callee_nothing_declares[H: ComptimeComputeHost](host: ref H, here: i
     })
 }
 
+/// **The first entry a dependency's shipped ledger gives otherwise than this
+/// build derives from its sources** ([ADR-321](../../../docs/specification/adr/adr-321.md)
+/// D8): the function as the program names it and the refusal's note, both
+/// answers in it; `null` where every package agrees. An entry is compared on
+/// what D2's rule reads of it, whether it can pause and what it touches, and
+/// a function the derivation has and the shipped ledger lacks disagrees. A
+/// package that ships no ledger has nothing to disagree with: the run reads
+/// the derived entries either way.
+fn comptime_shipped_disagreement[H: ComptimeComputeHost](host: ref H, packages: ref collections::BTreeMap[String, Ledger]) -> (String, String)? sync {
+    for (name, derived) in packages {
+        let text = host.shipped_ledger(name) ?? continue
+        let shipped = read(text) catch {
+            return (name.clone(), f"The ledger `{name}` shipped (`nikaia.contracts`) does not read ({error}), and its functions run at build time only on entries that agree with what this build derives from its sources.")
+        }
+        for (function, contract) in derived.functions.iter() {
+            // A function this build derives as touching what nothing says is
+            // one whose calls reach a Rust crate (ADR-321 D9) or an entry no
+            // ledger describes: D2 refuses it wherever it is reached, on the
+            // derived entry, so what the package ships for it changes nothing.
+            if !contract.touches_known {
+                continue
+            }
+            let ours = comptime_rule_answer(contract)
+            let said = match shipped.functions.get(function) {
+                null => f"has no entry for `{function}`",
+                found => {
+                    let theirs = comptime_rule_answer(found)
+                    if theirs == ours {
+                        continue
+                    }
+                    f"says `{function}` {theirs}"
+                },
+            }
+            return (f"{name}::{function}", f"`{name}`'s shipped ledger (`nikaia.contracts`) {said}, and this build derives from its sources that it {ours}; a package's functions run at build time only on entries that agree.")
+        }
+    }
+    return null
+}
+
+/// What D2's rule reads of `contract`, as a refusal names it: whether it can
+/// pause and what it touches, the touches sorted.
+fn comptime_rule_answer(contract: ref FnContract) -> String sync {
+    let pauses = if contract.sync_claim.is_sync() { "never pauses" } else { "can pause" }
+    if !contract.touches_known {
+        return f"{pauses} and touches what nothing says"
+    }
+    let mut touched: Vec[String] = contract.touches.iter().map(fn(t) { f"`{t.text()}`" }).collect()
+    touched.sort()
+    if touched.is_empty() {
+        return f"{pauses} and touches nothing"
+    }
+    return f"{pauses} and touches {touched.join(", ")}"
+}
+
 /// **Why the value function of `derived` may not run at build time**
 /// (ADR-287 D13, D14), read off its entry; `null` where it may.
 fn comptime_forbidden_because(derived: ref Ledger) -> String? sync {
@@ -1058,7 +1152,14 @@ fn comptime_driven[H: ComptimeComputeHost](host: ref H, units: ref Vec[i64], her
         1 => host.lowered_alone(units[here], derived),
         else => host.lowered_units(units, here, derived, packages),
     }
-    let lowered = found ?? return ComptimeDriven::NotLowered
+    // **A refusal of the program's own code is said as the program's**
+    // (#2294): the whole program is lowered after the check and refused in
+    // the same words, and a value that runs code beside it was `NK1127`'s
+    // *this compiler's fault* instead, the only error the reader saw.
+    let lowered = found ?? return match host.lowering_refused() {
+        null => ComptimeDriven::NotLowered,
+        refused => ComptimeDriven::Refused { message: refused.message.clone(), at: if refused.unit == units[here] { refused.at } else { -1 } },
+    }
     let mut dump: String = ""
     let wall = host.dump(units[here], ty, dump)
     match wall {

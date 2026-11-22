@@ -1,7 +1,7 @@
 error[NK2702]: `all` is a sequence, and it was already used up.
-   --> tests/grammar_stream_walked_once.nika:38:2
+   --> tests/grammar_stream_walked_once.nika:39:2
     |
- 38 | 	for it in all {
+ 39 | 	for it in all {
     |  ^
     |
     = note: A sequence of `Item` makes its elements as they're asked for, so walking it uses it up: a `for`, a `collect()`, a `count()` or any other walk.

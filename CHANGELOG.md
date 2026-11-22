@@ -8,6 +8,27 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1544] — 2026-11-22
+
+**Builders' changes (#2742, #2752)**
+- A walk whose step can fail keeps what it fails with when bound to a name: `let w = xs.iter().map(fn(x) { f(x) }); w.collect() catch { error.message() }` works as the chained form does. Was NK1343.
+- NK1134 explains a `catch` around a pending task value: the help writes the fallback after the `async` expression, `let a = async work(7) catch { … }` (ADR-async-5 D22 step 3).
+
+## [0.0.1543] — 2026-11-22
+
+**Builders' changes (#2483, #2516, #2720)**
+- The record that lets a build skip Cargo (#1750) is read only below the project's and its members' roots, the sysroot's crates/, the target directory and a test batch's directory; a path below none of them makes Cargo run.
+- A Nikaia dependency's shipped ledger is compared with the entries this build derives from its sources before any of its functions run at build time; a disagreement is NK1152 naming the package, the function and both entries (ADR-321 D8).
+- Under raw-sinks = "warn" a path from outside that reaches fs::Root::Anywhere unproved is opened as under Dir("."), so one that leaves the directory throws io::IoError::Outside (ADR-raw-sinks-1 D7).
+- The start of an argument of `process::run` is a raw sink: data from outside there is NK1308 unless `process::is_operand` proves it, a literal "--" stands before it, or `[allow] untrusted-option = true` admits it (ADR-raw-sinks-1 D18).
+- none (a test only)
+
+## [0.0.1542] — 2026-11-22
+
+**Builders' changes (#2714)**
+- A list of text is no longer bound again after a `let` of an untyped number (`let mut k = 0`), which made rustc refuse a caller whose `mut` argument held views of the list.
+- Generated crates raise rustc's recursion limit to 512 - a grammar with a long chain of rules (some 70 and more) no longer stops the build of a program, package or test batch at rustc's default of 128.
+
 ## [0.0.1541] — 2026-11-22
 
 **Builders' changes (#1589)**

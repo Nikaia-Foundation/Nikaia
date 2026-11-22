@@ -1450,7 +1450,10 @@ pub fn check_core_flow_try_catch<H: CheckHost>(state: &mut CheckState, world: &C
         None => None,
     };
     state.flow.guarded = Some(CheckGuarded::nothing());
+    let probing = state.flow.task_probe;
+    state.flow.task_probe = false;
     let answers = check_core_expr(state, world, host, guarded_expr, span);
+    state.flow.task_probe = probing;
     let held: Option<CheckGuarded> = match state.flow.guarded.as_ref() {
         Some(__nikaia_it) => Some(__nikaia_it.clone()),
         None => None,
@@ -1463,7 +1466,23 @@ pub fn check_core_flow_try_catch<H: CheckHost>(state: &mut CheckState, world: &C
     let guarded: CheckGuarded = nikaia_std::index::or(held, || CheckGuarded::nothing());
     state.a_fatal_error_passes(world, &guarded, handler, span);
     let caught = check_core_flow_caught_type(&guarded);
-    state.nothing_here_can_fail(&guarded, span);
+    let mut named: collections::BTreeSet<String> = collections::BTreeSet::new();
+    names_in(guarded_expr, world.words, &mut named);
+    let mut task: Option<String> = None;
+    for name in named.iter() {
+        if task.is_none() {
+            match state.binding(name) {
+                Some(ref bound) => {
+                    task = match state.flow.pending_tasks.get(&bound.id) {
+                        Some(__nikaia_it) => Some(__nikaia_it.clone()),
+                        None => None,
+                    };
+                },
+                None => { },
+            }
+        }
+    }
+    state.nothing_here_can_fail(&guarded, (task).as_deref(), span);
     let id = state.a_new_binding();
     state.scope.push(vec![CheckLocal::free(String::from("error"), caught, id)]);
     let mut open = false;
@@ -1512,6 +1531,10 @@ pub fn check_core_flow_try_catch<H: CheckHost>(state: &mut CheckState, world: &C
     if !state.block_leaves(world, handler) && check_core_flow_widened_by_null(&value, &answers) {
         state.facts.nullable_catches.insert(node_key(guarded_expr));
         return Ty::Nullable(nikaia_std::block::Boxed::new(answers.clone()));
+    }
+    if !state.block_leaves(world, handler) && a_plain_str_view(&answers) && a_plain_string(&value) {
+        state.facts.owned_catches.insert(node_key(guarded_expr));
+        return value;
     }
     if state.block_leaves(world, handler) || value.is_unknown() || value.fits(&answers) {
         if a_type_variable(&answers) && a_plain_string(&value) {

@@ -1,0 +1,16 @@
+// A counted loop over a lent list: the prover drops the check of `xs[k]`
+// (ADR-306 D19), so it is emitted as `proven::read`, and the loop is the one
+// Kani gets an invariant on (#2720). The probe by hand
+// found Kani's loop contracts accept this `for` as emitted.
+fn total(xs: Vec[i64]) -> i64 {
+	let mut sum = 0
+	for k in 0..<xs.len() {
+		sum = sum + xs[k]
+	}
+	return sum
+}
+
+fn main() throws {
+	println(f"{total([3, 4, 5])}")
+	println(f"{total([])}")
+}

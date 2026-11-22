@@ -53,6 +53,30 @@ pub(crate) fn check_walked_articles(state: &mut CheckState) {
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
+pub(crate) fn check_walked_once_per_site(state: &mut CheckState) {
+    let mut said: collections::BTreeSet<String> = collections::BTreeSet::new();
+    let mut kept: Vec<CheckFinding> = vec![];
+    for f in state.findings.copy_owned() {
+        let severity = match f.severity {
+            CheckSeverity::Error => "error",
+            _ => "other",
+        };
+        let help = nikaia_std::index::or(match f.help.as_ref() {
+            Some(__nikaia_it) => Some(__nikaia_it.clone()),
+            None => None,
+        }, || "".into());
+        let mut key: String = format!("{}\n{}\n{}\n{}\n{}\n{}", severity, f.code, f.span.start, f.span.end, f.message, help);
+        for note in f.notes.iter() { key = format!("{}\nnote\n{}", key, note); }
+        for label in f.labels.iter() { key = format!("{}\nlabel\n{}\n{}\n{}\n{}\n{}", key, label.span.start, label.span.end, label.word, label.text, label.main); }
+        if said.contains(&key) { continue; }
+        said.insert(key);
+        kept.push(f);
+    }
+    state.findings = kept;
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
 pub(crate) fn check_walked_method_facts(state: &mut CheckState) {
     for at in state.flow.fallible_methods.copy_owned() { if !state.flow.opaque_methods.contains(&at) { state.facts.fallible_methods.insert(at); } }
     for at in state.flow.pausing_methods.copy_owned() { if !state.flow.settled_methods.contains(&at) { state.facts.pausing_methods.insert(at); } }
@@ -64,6 +88,7 @@ pub(crate) fn check_walked_method_facts(state: &mut CheckState) {
 pub(crate) fn check_walked_settle(state: &mut CheckState) {
     check_walked_unknown_last(state);
     check_walked_articles(state);
+    check_walked_once_per_site(state);
     check_walked_method_facts(state);
     state.findings.sort_by_key(|f| { f.span.start });
 }

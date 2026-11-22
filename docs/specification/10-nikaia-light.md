@@ -1,6 +1,6 @@
 # Nikaia Language Specification
 **Part I: The Language Core**
-**Version:** 0.0.1541 (Draft)
+**Version:** 0.0.1544 (Draft)
 **Date:** 2026-11-22
 
 ---
@@ -3072,7 +3072,12 @@ A parameter the function changes in place says `mut` in the declaration,
 refused with `NK1138`. A `mut` parameter handed to another `mut` parameter is
 passed straight on. A `mut` parameter given away whole is `NK1131`: it stays
 the caller's, so the way out is `.clone()` or taking it `keep`. A callee that
-wants a changeable copy writes `let mut v = x` inside.
+wants a changeable copy writes `let mut v = x` inside. **A `mut` parameter may
+receive views of another lent parameter**, `out.push(Event { value: n })`, as a
+result may be one ([ADR-views-v4](adr/adr-views-v4.md) D32): the source is
+inferred from the body, the parameter it views stays lent, not `keep`, and
+the caller may give its argument up but neither change it nor hand it over
+while what it passed for `out` lives.
 
 **A part taken out of a `mut` parameter is given back before the function is
 left**, and one taken out of a `let mut` view of a place before the view's block
@@ -3213,7 +3218,9 @@ place a buffer moves to while a view of it lives, and who owns it is read off
 the program:
 
 * **the caller's frame**, wherever a frame outlives the views — handed back,
-  kept in a `mut` parameter, or kept by a list outside a loop. This costs
+  kept in a `mut` parameter (a view of another parameter put into it is
+  tethered to that argument while the `mut` one lives, [ADR-views-v4](adr/adr-views-v4.md)
+  D32), or kept by a list outside a loop. This costs
   nothing, works across any number of calls, and the body may pause;
 * **a handle that travels with the value**, where no frame outlives it — a task;
 * **a handle per view**, where a container keeps views across a loop and drops
@@ -4063,16 +4070,18 @@ form, in this order.**
 
 ```nika
 let page = async http::get(url) catch { Page::empty() }   // the fallback
-let size = page.len() catch { 0 }                          // a catch where it arrives
 let h = async(handle) fn { crawl(site) } catch { [] }     // a handle's fallback
 let found = h.join() catch { [] }                          // a catch where it arrives
 ```
 
 1. **In the task.** A `catch` inside the task's expression or lambda is the
    task's own and runs at once, when the task fails.
-2. **Where it arrives.** Otherwise the failure is held, and nothing runs for it
-   until it arrives: at the mention that waits, for the value form, or at
-   `h.join()`, for a handle. A `catch` that encloses that point handles it.
+2. **Where it arrives, for a handle.** Otherwise a handle's failure is held,
+   and nothing runs for it until it arrives at `h.join()`; a `catch` that
+   encloses the join handles it. A value form's failure has no such place: it
+   is waited for before the whole statement that first names it (above), so a
+   `catch` inside that statement does not enclose the wait. Its handlers are
+   the task's own `catch` and the fallback.
 3. **The fallback.** Otherwise the `catch` written directly after the `async`
    expression runs, the last handler before the receiver: for the value form
    at the wait point, its value becoming the value; for a handle inside the
@@ -4087,9 +4096,7 @@ is not a failure and runs no fallback. `task::OverBudget` is one and runs it,
 and so is `task::TimedOut` from a deadline (`within:` above). The
 `task::TimedOut` of a `join(within:)` whose own limit ran out is the join's
 error, not the task's: it meets a `catch` around the join, and no fallback runs
-for it (8.2). Which handler runs depends on the path that reaches the
-mention. Once a `catch` where the failure arrived has taken it, a later mention
-of `x` on that path is refused unless the binding has a fallback (`NK2118`).
+for it (8.2). A handle a `join` took is used up: a later use is `NK2105`.
 The function throws what the fallback throws, or the task's whole set where
 there is no fallback.
 

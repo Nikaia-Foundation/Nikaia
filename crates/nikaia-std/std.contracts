@@ -636,9 +636,10 @@ sync = true
 touches = []
 signature = "(p: ref String) -> bool"
 
-# Whether `text` does not start with `-`, so a program reads it as an operand,
-# not an option: the precondition of the start of each argument of
-# `process::run` from outside the program (ADR-raw-sinks-1 D18). The empty
+# Whether `text` starts with neither `-` nor `/`, so a program reads it as an
+# operand, not an option (a Windows program reads `/x` as one): the
+# precondition of the start of each argument of `process::run` from outside
+# the program (ADR-raw-sinks-1 D18, item 6 for `/`). The empty
 # text holds it. A pure `bool` call, so a guard on it is a fact the prover
 # reads (ADR-381). Written in Nikaia, `src/runtime/raw_sinks.nika`.
 [fn."process::is_operand"]

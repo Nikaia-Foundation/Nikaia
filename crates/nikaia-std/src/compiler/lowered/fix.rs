@@ -21,7 +21,7 @@ pub async fn fix_run<H: LspHost>(host: &H, named: &[String], dry_run: bool, only
     for path in named.iter() { fix_files_under(path, &mut files).await; }
     let open: collections::BTreeMap<String, String> = collections::BTreeMap::new(); #[allow(unused_mut, clippy::redundant_locals)] let mut files = files;
     let mut said_of: collections::BTreeMap<String, Vec<Shown>> = collections::BTreeMap::new(); #[allow(unused_mut, clippy::redundant_locals)] let mut files = files;
-    let mut code: i64 = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut files = files;
+    let mut code: i64 = 0;
     for file in files.iter() {
         let source = match fs::read_to_string(std::path::Path::new(&(file)), &fs::Root::Anywhere).await {
             Ok(value) => value,
@@ -81,7 +81,7 @@ pub(crate) fn fix_planned(path: &str, source: &str, found: &[Shown], only: &[Str
     edits.sort_by_key(|e| { e.start });
     #[allow(unused_mut)] let mut said: Vec<String> = vec![];
     let mut out: String = String::from(""); #[allow(unused_mut, clippy::redundant_locals)] let mut said = said;
-    let mut at: i64 = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut said = said;
+    let mut at: i64 = 0;
     for edit in edits.iter() {
         let line = fix_line_of(source, edit.start);
         if edit.start < at {
@@ -110,8 +110,8 @@ pub(crate) fn fix_diff(path: &str, old: &str, new: &str) -> String {
     let was: Vec<&str> = old.split("\n").collect::<Vec<_>>();
     let now: Vec<&str> = new.split("\n").collect::<Vec<_>>(); #[allow(clippy::redundant_locals)] let was = was;
     let mut out = format!("--- {}\n+++ {}\n", path, path); #[allow(clippy::redundant_locals)] let was = was; #[allow(clippy::redundant_locals)] let now = now;
-    let mut i: i64 = 0; #[allow(clippy::redundant_locals)] let was = was; #[allow(clippy::redundant_locals)] let now = now;
-    let mut j: i64 = 0; #[allow(clippy::redundant_locals)] let was = was; #[allow(clippy::redundant_locals)] let now = now;
+    let mut i: i64 = 0;
+    let mut j: i64 = 0;
     while i < was.len() as i64 && j < now.len() as i64 {
         if *unsafe { nikaia_std::proven::read(&was, (i) as usize) } == *nikaia_std::index::get(&now, nikaia_std::index::at(j)) {
             i = unsafe { nikaia_std::proven::add::<i64>(i, 1) };

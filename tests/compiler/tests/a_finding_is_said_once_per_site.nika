@@ -1,0 +1,17 @@
+// A finding is said once where it would print the same (#2247): a call
+// nested in a call of the same name (`twice(twice(x))`) is one statement,
+// and its refusals were each said twice, at the same place, word for word.
+use std::time
+
+fn twice(x: i64) -> i64 {
+	time::sleep(1.millis())
+	return x + x
+}
+
+fn quad(x: i64) -> i64 sync {
+	return twice(twice(x))
+}
+
+fn main() throws {
+	println(f"{nope(nope(quad(2)))}")
+}

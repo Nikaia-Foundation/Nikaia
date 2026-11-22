@@ -230,9 +230,9 @@ pub(crate) fn check_core_method_own_item(which: &str, item: Ty) -> Ty {
 
 pub(crate) fn check_core_method_either_items(which: &str, on: Ty) -> Ty {
     match on {
-        Ty::Seq { ref item, is_sync, pauses, can_throw, parallel, shape } => {
+        Ty::Seq { ref item, is_sync, pauses, ref fails, parallel, shape } => {
             let item = nikaia_std::boxed::open(item);
-            return Ty::Seq { item: nikaia_std::block::Boxed::new(check_core_method_own_item(which, item.clone())), is_sync, pauses, can_throw, parallel, shape: shape.clone() };
+            return Ty::Seq { item: nikaia_std::block::Boxed::new(check_core_method_own_item(which, item.clone())), is_sync, pauses, fails: fails.copy_owned(), parallel, shape: shape.clone() };
         },
         _ => { },
     }
@@ -378,7 +378,7 @@ pub(crate) fn check_core_method_resolved(state: &mut CheckState, world: &CheckWo
 
 pub(crate) fn check_core_method_collects_a_list(on: &Ty, value: &Ty) -> bool {
     let plain = match on {
-        Ty::Seq { pauses, can_throw, parallel, shape, .. } => { let can_throw = *can_throw; let parallel = *parallel; let pauses = *pauses; !pauses && !can_throw && !parallel && !shape.timed },
+        Ty::Seq { pauses, fails, parallel, shape, .. } => { let parallel = *parallel; let pauses = *pauses; !pauses && fails.is_empty() && !parallel && !shape.timed },
         _ => false,
     };
     plain && match value {
@@ -393,9 +393,9 @@ pub(crate) fn check_core_method_summed(name: &str, on: &Ty, value: &Ty) -> Strin
         Ty::Seq { .. } => { },
         _ => { return String::from(""); },
     }
-    match value {
-        Ty::Named { name: number, args, view } => {
-            let view = *view;
+    let plain = value.unseen();
+    match plain {
+        Ty::Named { name: ref number, ref args, view } => {
             if args.is_empty() && !view && a_number_name(number) { return nikaia_std::block::Text::from(number.to_string()); }
             return String::from("");
         },
@@ -570,7 +570,11 @@ pub(crate) fn check_core_method_called<H: CheckHost>(state: &mut CheckState, wor
     state.flow.walk_lent = false;
     state.flow.text_slot = false;
     state.flow.text_walk = false;
-    let value: Ty = check_core_call_on(state, world, host, &on.clone(), receiver, method, args, written, span);
+    let answered: Ty = check_core_call_on(state, world, host, &on.clone(), receiver, method, args, written, span);
+    let restamp = state.flow.stamped_receivers.contains(&(id_of(receiver) as i64)) && answered.is_seen();
+    let on: Ty = on.unseen();
+    let mut value: Ty = answered.clone();
+    if restamp { value = answered.unseen(); }
     if state.flow.text_slot { state.flow.text_slot_views.insert(id_of(expr) as i64); }
     if state.flow.text_walk { state.flow.text_walks.insert(id_of(expr) as i64); }
     state.flow.text_slot = false;
@@ -602,7 +606,7 @@ pub(crate) fn check_core_method_called<H: CheckHost>(state: &mut CheckState, wor
     state.set_receiver = outer_receiver;
     let mut walked: Ty = value.clone();
     match value {
-        Ty::Seq { ref item, is_sync, pauses, can_throw, parallel, shape } => {
+        Ty::Seq { ref item, is_sync, pauses, ref fails, parallel, shape } => {
             let item = nikaia_std::boxed::open(item);
             if item.is_unknown() && walk_open.is_some() {
                 state.flow.open_walks.insert(id_of(expr) as i64, nikaia_std::index::or(walk_open, || 0));
@@ -610,7 +614,7 @@ pub(crate) fn check_core_method_called<H: CheckHost>(state: &mut CheckState, wor
             }
             if copies_as_a_view(item) {
                 state.facts.copied_walks.insert(id_of(expr) as i64);
-                walked = Ty::Seq { item: nikaia_std::block::Boxed::new(unviewed_type(item)), is_sync, pauses, can_throw, parallel, shape: shape.clone() };
+                walked = Ty::Seq { item: nikaia_std::block::Boxed::new(unviewed_type(item)), is_sync, pauses, fails: fails.copy_owned(), parallel, shape: shape.clone() };
             }
         },
         _ => { },
@@ -705,10 +709,17 @@ pub(crate) fn check_core_method_called<H: CheckHost>(state: &mut CheckState, wor
     state.a_lane_method_not_offered(&lanes, &name, span);
     state.a_shuffle_out_of_lanes(world, &lanes, &name, args, span);
     let widened: Option<Ty> = state.wide_method(world, expr, &on, &name, span);
-    if widened.is_some() { return nikaia_std::index::or(widened, || Ty::Unknown); }
+    if widened.is_some() { return check_core_method_restamped(nikaia_std::index::or(widened, || Ty::Unknown), restamp); }
     let changed: Option<Ty> = check_simd_method_result(&lanes, &name);
-    if changed.is_some() { return nikaia_std::index::or(changed, || Ty::Unknown); }
-    walked
+    if changed.is_some() { return check_core_method_restamped(nikaia_std::index::or(changed, || Ty::Unknown), restamp); }
+    check_core_method_restamped(walked, restamp)
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn check_core_method_restamped(ty: Ty, restamp: bool) -> Ty {
+    if restamp { return stamped_type(&ty); }
+    ty
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -747,7 +758,7 @@ pub(crate) fn check_core_method_cloned(state: &mut CheckState, expr: &Expr, on: 
     if !lent && !item.is_unknown() && !state.facts.copied_walks.contains(&(id_of(expr) as i64)) { state.facts.owned_clones.insert(id_of(expr) as i64); }
     if copies_as_a_view(&item) { state.facts.owned_clones.insert(id_of(expr) as i64); }
     match walked {
-        Ty::Seq { ref item, is_sync, pauses, can_throw, parallel, shape } => { let item = nikaia_std::boxed::open(item); Ty::Seq { item: nikaia_std::block::Boxed::new(unviewed_type(item)), is_sync, pauses, can_throw, parallel, shape: shape.clone() } },
+        Ty::Seq { ref item, is_sync, pauses, ref fails, parallel, shape } => { let item = nikaia_std::boxed::open(item); Ty::Seq { item: nikaia_std::block::Boxed::new(unviewed_type(item)), is_sync, pauses, fails: fails.copy_owned(), parallel, shape: shape.clone() } },
         _ => walked,
     }
 }
@@ -825,7 +836,7 @@ pub(crate) fn check_core_method_deadline(state: &CheckState, world: &CheckWorld<
     }
     if !within && !one { return found; }
     match found {
-        Ty::Seq { ref item, is_sync, pauses, can_throw, parallel, shape } => { let item = nikaia_std::boxed::open(item); Ty::Seq { item: nikaia_std::block::Boxed::new(item.clone()), is_sync, pauses, can_throw, parallel, shape: Shape { ends: shape.ends, sized: shape.sized, replays: shape.replays, timed: shape.timed || within, one_at_a_time: shape.one_at_a_time || one, failing_items: shape.failing_items } } },
+        Ty::Seq { ref item, is_sync, pauses, ref fails, parallel, shape } => { let item = nikaia_std::boxed::open(item); Ty::Seq { item: nikaia_std::block::Boxed::new(item.clone()), is_sync, pauses, fails: fails.copy_owned(), parallel, shape: Shape { ends: shape.ends, sized: shape.sized, replays: shape.replays, timed: shape.timed || within, one_at_a_time: shape.one_at_a_time || one, failing_items: shape.failing_items } } },
         _ => found,
     }
 }
@@ -1027,7 +1038,7 @@ pub(crate) fn check_core_method_walked<H: CheckHost>(state: &mut CheckState, wor
     }
     if name == "chars" && args.is_empty() && config.is_empty() && check_core_method_text_receiver(&on) {
         state.a_chars_call(world, expr, receiver, span);
-        return Ty::Seq { item: nikaia_std::block::Boxed::new(check_core_method_named("scalar")), is_sync: true, pauses: false, can_throw: false, parallel: false, shape: Shape { ends: true, sized: false, replays: false, timed: false, one_at_a_time: false, failing_items: false } };
+        return Ty::Seq { item: nikaia_std::block::Boxed::new(check_core_method_named("scalar")), is_sync: true, pauses: false, fails: vec![], parallel: false, shape: Shape { ends: true, sized: false, replays: false, timed: false, one_at_a_time: false, failing_items: false } };
     }
     if state.check_core_method_on_a_text_slot(world, receiver, &on) { return check_core_method_called(state, world, host, expr, Ty::Named { name: nikaia_std::block::Text::from(TEXT.to_string()), args: vec![], view: true }, receiver, method, args, &name, span); }
     check_core_method_a_handle_taken(state, world, &on, receiver, &name, args, config, span);

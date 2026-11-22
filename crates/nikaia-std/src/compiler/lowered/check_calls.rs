@@ -48,8 +48,8 @@ pub(crate) fn walks_by_value(contract: &FnContract) -> bool {
 }
 
 pub(crate) fn shape_through(contract: &FnContract, receiver: &Ty, found: &[Ty], result: Ty) -> Ty {
-    let (item, is_sync, pauses, can_throw, parallel, written) = match result {
-        Ty::Seq { ref item, is_sync, pauses, can_throw, parallel, shape } => { let item = nikaia_std::boxed::open(item); (item.clone(), is_sync, pauses, can_throw, parallel, shape.clone()) },
+    let (item, is_sync, pauses, fails, parallel, written) = match result {
+        Ty::Seq { ref item, is_sync, pauses, ref fails, parallel, shape } => { let item = nikaia_std::boxed::open(item); (item.clone(), is_sync, pauses, fails.copy_owned(), parallel, shape.clone()) },
         _ => return result,
     };
     let mut ends = true;
@@ -58,6 +58,7 @@ pub(crate) fn shape_through(contract: &FnContract, receiver: &Ty, found: &[Ty], 
     let mut timed = false;
     let mut one_at_a_time = false;
     let mut failing_items = false;
+    let mut failing_set: Vec<String> = vec![];
     if contract.signature.is_some() {
         let signature = nikaia_std::index::or(match contract.signature.as_ref() {
             Some(__nikaia_it) => Some(__nikaia_it.clone()),
@@ -70,6 +71,7 @@ pub(crate) fn shape_through(contract: &FnContract, receiver: &Ty, found: &[Ty], 
             timed = shape_timed(receiver);
             one_at_a_time = shape_one_at_a_time(receiver);
             failing_items = shape_failing_items(receiver);
+            failing_set = sequence_failures(receiver);
         }
         let arguments = call_arguments(&signature);
         let mut at: i64 = 0;
@@ -83,7 +85,14 @@ pub(crate) fn shape_through(contract: &FnContract, receiver: &Ty, found: &[Ty], 
         }
     }
     ends = ends && (!contract.ends_by_length || sized);
-    Ty::Seq { item: nikaia_std::block::Boxed::new(item), is_sync, pauses, can_throw: can_throw || failing_items, parallel: on_every_core, shape: Shape { ends: written.ends && ends, sized: written.sized && sized, replays: written.replays, timed: written.timed || timed, one_at_a_time: written.one_at_a_time || one_at_a_time, failing_items: written.failing_items || failing_items } }
+    Ty::Seq { item: nikaia_std::block::Boxed::new(item), is_sync, pauses, fails: failures_joined(&fails, &failing_set), parallel: on_every_core, shape: Shape { ends: written.ends && ends, sized: written.sized && sized, replays: written.replays, timed: written.timed || timed, one_at_a_time: written.one_at_a_time || one_at_a_time, failing_items: written.failing_items || failing_items } }
+}
+
+pub fn sequence_failures(ty: &Ty) -> Vec<String> {
+    match ty {
+        Ty::Seq { fails, .. } => fails.copy_owned(),
+        _ => vec![],
+    }
 }
 
 pub(crate) fn shape_failing_items(ty: &Ty) -> bool {
@@ -137,12 +146,9 @@ pub(crate) fn a_paused_chain(key: &str, on: &Ty) -> bool {
 }
 
 pub(crate) fn a_pausing_sequence(result: Ty, on: &Ty) -> Ty {
-    let fails = match on {
-        Ty::Seq { can_throw, .. } => { let can_throw = *can_throw; can_throw },
-        _ => false,
-    };
+    let on_fails = sequence_failures(on);
     match result {
-        Ty::Seq { ref item, can_throw, parallel, shape, .. } => { let item = nikaia_std::boxed::open(item); Ty::Seq { item: nikaia_std::block::Boxed::new(item.clone()), is_sync: false, pauses: true, can_throw: can_throw || fails, parallel, shape: Shape { ends: false, sized: false, replays: shape.replays, timed: shape.timed, one_at_a_time: shape.one_at_a_time, failing_items: shape.failing_items } } },
+        Ty::Seq { ref item, ref fails, parallel, shape, .. } => { let item = nikaia_std::boxed::open(item); Ty::Seq { item: nikaia_std::block::Boxed::new(item.clone()), is_sync: false, pauses: true, fails: failures_joined(fails, &on_fails), parallel, shape: Shape { ends: false, sized: false, replays: shape.replays, timed: shape.timed, one_at_a_time: shape.one_at_a_time, failing_items: shape.failing_items } } },
         _ => result,
     }
 }

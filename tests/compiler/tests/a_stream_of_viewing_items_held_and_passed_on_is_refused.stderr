@@ -1,0 +1,7 @@
+error: [NK1359] `Words::items` is held in `held` and not walked by one `for` alone, so it would be walked on a thread of its own, but its items view the input they are parsed from (`Item` holds a view), and a view can't leave the walk over that input. Walk the call with a `for` right where it is made, or bound by a `let` that one `for` walks, in a function that throws, outside a `catch`, with a body that doesn't pause. The other ways to walk such a stream are "The other methods of a `@stream` walk" (#2709).
+   --> tests/a_stream_of_viewing_items_held_and_passed_on_is_refused.nika:19:2
+    |
+ 19 | 	let held = Words::items("[c];")
+    |  ^
+    |
+

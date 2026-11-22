@@ -1,0 +1,27 @@
+warning[NK1308]: `name` reaches the program `process::run` runs, and it comes from outside the program.
+   --> tests/a_pub_parameter_at_a_raw_sink_is_from_outside.nika:13:5
+    |
+ 13 |     process::run(name, [])
+    |     ^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: `name` is a parameter of the `pub` function `run_it`: a caller the compiler cannot see chooses the value, so nothing here says what it holds.
+    = note: No check makes a stranger's choice of program safe: a name is looked up on `PATH`, a path runs that file.
+    = note: `raw-sinks = "warn"` lets this build through.
+    = help: Name the program with a literal, or choose it with a `match` whose arms are literals: `let editor = match env::var("EDITOR") ?? "" { "vim" => "vim", "nano" => "nano", else => "vi", }`. If the program means to run a program from outside, `untrusted-program = true` under `[allow]` in the manifest builds it.
+warning[NK1308]: `dir` reaches the start of an argument of `process::run`, which the program may read as an option, and it comes from outside the program.
+   --> tests/a_pub_parameter_at_a_raw_sink_is_from_outside.nika:17:5
+    |
+ 17 |     process::run("ls", [dir])
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: `dir` is a parameter of the `pub` function `list_raw`: a caller the compiler cannot see chooses the value, so nothing here says what it holds.
+    = note: A program reads an argument that starts with `-` as an option, and a Windows program one that starts with `/`; an option can name a program to run or a file to write: `-rf`, `--checkpoint-action=exec=sh`, `/G:secrets.txt`. A literal `"--"` before it ends only the `-` options.
+    = note: `raw-sinks = "warn"` lets this build through.
+    = help: Check it where it arrives: `if !process::is_operand(dir) { process::exit(2) }` refuses a leading `-` and `/`, after which it is proved; or, where it names a file, pass it as `"./" + dir` or as the path of a root it is joined under (`dir.join(dir).path().to_text()`), which start with text the program wrote. If the program means to pass options from outside, `untrusted-option = true` under `[allow]` in the manifest builds it.
+warning: Type `__NikaiaThrows_io_IoError__process_Exit` is more private than the item `list_guarded`.
+   --> tests/a_pub_parameter_at_a_raw_sink_is_from_outside.nika:20:1
+    |
+ 20 | pub fn list_guarded(dir: String) throws {
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: But type `__NikaiaThrows_io_IoError__process_Exit` is only usable at visibility `pub(crate)`.

@@ -43,7 +43,7 @@ pub fn pause_chain(graph: &collections::BTreeMap<String, SyncReach>, holds: &col
     let mut came_from: collections::BTreeMap<String, String> = collections::BTreeMap::new(); #[allow(unused_mut, clippy::redundant_locals)] let mut queue = queue;
     let mut seen: collections::BTreeSet<String> = collections::BTreeSet::new(); #[allow(unused_mut, clippy::redundant_locals)] let mut queue = queue;
     seen.insert(nikaia_std::block::Text::from(start.to_string()));
-    let mut next: i64 = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut queue = queue;
+    let mut next: i64 = 0;
     while ((next) as usize) < queue.len() {
         let at = nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&queue, (next) as usize) }).to_string());
         next = unsafe { nikaia_std::proven::add::<i64>(next, 1) };
@@ -340,7 +340,21 @@ pub fn unit_violations(program: &Program, names: &winnow_grammar::InternerContex
             _ => { },
         }
     }
-    found
+    once_per_site(&found)
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn once_per_site(found: &[Violation]) -> Vec<Violation> {
+    let mut said: collections::BTreeSet<String> = collections::BTreeSet::new();
+    let mut kept: Vec<Violation> = vec![];
+    kept.reserve(found.iter().size_hint().0); for v in found.iter() {
+        let key = format!("{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}", v.span.start, v.span.end, v.caller, v.promise, v.callee, v.from_library, v.unpromised, v.construct);
+        if said.contains(&key) { continue; }
+        said.insert(key);
+        kept.push(v.clone());
+    }
+    kept
 }
 
 pub fn unit_pausing(program: &Program, names: &winnow_grammar::InternerContext, unaliased: &mut impl FnMut(&str) -> String, holes_of: &mut impl FnMut(&Expr) -> Vec<Expr>, own: &Ledger, library: &Ledger, wanted: &[String]) -> Vec<bool> {

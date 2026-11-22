@@ -79,7 +79,7 @@ fn prover_bodies(mut walk: ProverWalk, program: ref Program, words: ref winnow_g
 /// the top holds where the action runs. An action has no callers, so a claim
 /// in it is proved there or refused.
 fn prover_action(mut walk: ProverWalk, def: ref GrammarDef, rule: ref GrammarRule, pattern: ref Pattern, action: ref Block, program: ref Program, words: ref winnow_grammar::InternerContext, own: ref Ledger, library: ref Ledger, ask: fn(ref logic::TermArena, ref Vec[i64], i64) -> SolverAnswer sync, model: fn(ref logic::TermArena, ref Vec[i64], i64) -> collections::BTreeMap[String, i64]? sync, escape: fn(ref String) -> String sync, holes_of: fn(ref Expr) -> Vec[Expr] sync, unaliased: fn(ref String) -> String sync, written_of: fn(ref Expr) -> String sync, condition: fn(ref String, ref collections::BTreeSet[String]) -> Vec[logic::SolverTerm] sync) sync {
-    let at = ProverWhere { function: null, params: collections::BTreeSet(), no_precondition: "a grammar action has no callers", top: true, free: false, posts: false, lambda: true, throws_out: true }
+    let at = ProverWhere { function: null, params: collections::BTreeSet(), no_precondition: "a grammar action has no callers", top: true, free: false, posts: false, lambda: true, throws_out: true, public: false }
     let mut scope = ProverScope::unknown()
     for arg in rule.args {
         let name = words.resolve(arg.name).clone()
@@ -201,7 +201,7 @@ fn prover_bound_number(def: ref GrammarDef, pattern: ref Pattern, words: ref win
 /// A test's or a bench's body: every claim in it is the test's verdict (D11).
 fn prover_test(mut walk: ProverWalk, body: ref Block, program: ref Program, words: ref winnow_grammar::InternerContext, own: ref Ledger, library: ref Ledger, ask: fn(ref logic::TermArena, ref Vec[i64], i64) -> SolverAnswer sync, model: fn(ref logic::TermArena, ref Vec[i64], i64) -> collections::BTreeMap[String, i64]? sync, escape: fn(ref String) -> String sync, holes_of: fn(ref Expr) -> Vec[Expr] sync, unaliased: fn(ref String) -> String sync, written_of: fn(ref Expr) -> String sync, condition: fn(ref String, ref collections::BTreeSet[String]) -> Vec[logic::SolverTerm] sync) {
     walk.state.in_test = true
-    let at = ProverWhere { function: null, params: collections::BTreeSet(), no_precondition: "a test has no callers", top: true, free: false, posts: false, lambda: false, throws_out: true }
+    let at = ProverWhere { function: null, params: collections::BTreeSet(), no_precondition: "a test has no callers", top: true, free: false, posts: false, lambda: false, throws_out: true, public: false }
     let mut scope = ProverScope::unknown()
     prover_block(walk, body, scope, at, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition)
     walk.state.in_test = false
@@ -333,7 +333,7 @@ fn prover_function(mut walk: ProverWalk, item: ref Spanned[Item], owner: String?
                 no_precondition = "A method of a trait's implementation can't have a precondition: a call through the trait doesn't know it, and there is no second entry to check it."
             }
             let free = !has_owner && !was_a_test
-            let at = ProverWhere { function: claim_text_of(key), params: params, no_precondition: no_precondition, top: true, free: free, posts: !was_a_test && !of_a_trait, lambda: false, throws_out: can_throw }
+            let at = ProverWhere { function: claim_text_of(key), params: params, no_precondition: no_precondition, top: true, free: free, posts: !was_a_test && !of_a_trait, lambda: false, throws_out: can_throw, public: is_public && !was_a_test && (key ?? "") != "main" }
             walk.state.in_test = was_a_test
             // **A result summary** (ADR-359 D1, D14): every exit of the body
             // of a free function, or of a method no trait's call can reach,
@@ -813,6 +813,19 @@ fn prover_let(mut walk: ProverWalk, names: ref Vec[winnow_grammar::Symbol], muta
     let mut joins: Vec[Expr] = []
     let root = raw_sink_root(value, scope, words, written_of, joins)
     let rooted = !mutable && names.len() == 1 && raw_sink_is_root(root, words, written_of)
+    // D18 item 1: a text bound to a name starts where its value starts, a
+    // literal piece or a name (#2722).
+    let mut start_name: String = ""
+    let mut has_start = false
+    if !mutable && names.len() == 1 {
+        let first = raw_sink_first_part(value, written_of) ?? value.clone()
+        if raw_sink_first_part(value, written_of) == null {
+            has_start = true
+        } else {
+            has_start = raw_sink_name(first, words) != null
+            start_name = raw_sink_name(first, words) ?? ""
+        }
+    }
     for name in names {
         let n = words.resolve(name).clone()
         scope.rebind(walk.arena, n)
@@ -831,6 +844,10 @@ fn prover_let(mut walk: ProverWalk, names: ref Vec[winnow_grammar::Symbol], muta
         if rooted {
             scope.roots.insert(n.clone(), root.clone())
             scope.root_joins.insert(n.clone(), joins.clone())
+        }
+        if has_start && start_name != n {
+            scope.starts.insert(n.clone(), value.clone())
+            scope.start_names.insert(n.clone(), start_name.clone())
         }
         if !mutable {
             scope.fixed.insert(n.clone())
@@ -2976,7 +2993,7 @@ fn raw_sink_through(mut walk: ProverWalk, callee: ref String, args: ref Vec[Expr
             continue
         }
         if sink.kind == "option" {
-            let first = raw_sink_first_part(all[sink.index], written_of) ?? continue
+            let first = raw_sink_option_start(all[sink.index], scope, words, written_of) ?? continue
             raw_sink_part(walk, sink, shown, first, span, scope, at, program, words, library, holes_of, ask, written_of)
             continue
         }
@@ -3079,7 +3096,10 @@ fn raw_sink_part(mut walk: ProverWalk, sink: ref ParamSink, shown: ref String, p
         raw_sink_finding(walk, sink, shown, part, span, scope, words, library, holes_of, written_of)
         return
     }
-    if !walk.state.collecting || !at.free {
+    if walk.state.collecting && !at.free {
+        return
+    }
+    if !walk.state.collecting && !at.public {
         return
     }
     match part {
@@ -3092,6 +3112,20 @@ fn raw_sink_part(mut walk: ProverWalk, sink: ref ParamSink, shown: ref String, p
     }
     let from = carried_param(part, scope, words, library, walk.state, holes_of) ?? return
     if raw_sink_passes(walk, sink.guard, part, scope, words, ask) {
+        return
+    }
+    // **A `pub` function's parameter at a raw sink is data from outside**
+    // (ADR-raw-sinks-1 D6, #2366): reported in its body in pass 2, as well
+    // as at each call that hands it data from outside.
+    if !walk.state.collecting {
+        let before = walk.findings.len()
+        raw_sink_finding(walk, sink, shown, part, span, scope, words, library, holes_of, written_of)
+        if walk.findings.len() > before {
+            let mut said = walk.findings.pop() ?? return
+            let function = carrying_function(at.function) ?? "this function"
+            said.notes[0] = f"`{from}` is a parameter of the `pub` function `{function}`: a caller the compiler cannot see chooses the value, so nothing here says what it holds."
+            walk.findings.push(said)
+        }
         return
     }
     let owner = carrying_function(at.function) ?? return
@@ -3161,11 +3195,11 @@ fn raw_sink_finding(mut walk: ProverWalk, sink: ref ParamSink, shown: ref String
         notes.push("SQL from outside can carry a statement of its own: `x; DROP TABLE users`.")
         help = f"Hand it to the statement as a value, a hole `:name` in the text and `{first}` under `\"name\"` in `execute`'s `parameters`; or, where it names a table or a column, check it where it arrives: `throw BadInput({first}) if !db::is_identifier({first})`, after which it is proved. If the program means to send SQL from outside, `untrusted-sql = true` under `[allow]` in the manifest builds it."
     } else if sink.kind == "option" {
-        notes.push("A program reads an argument that starts with `-` as an option, and an option can name a program to run or a file to write: `-rf`, `--checkpoint-action=exec=sh`.")
-        help = f"Check it where it arrives: `if !process::is_operand({first}) {{ process::exit(2) }}`, after which it is proved; or put a literal `\"--\"` before it in the list, which ends the options: `[\"--\", {first}]`. If the program means to pass options from outside, `untrusted-option = true` under `[allow]` in the manifest builds it."
+        notes.push("A program reads an argument that starts with `-` as an option, and a Windows program one that starts with `/`; an option can name a program to run or a file to write: `-rf`, `--checkpoint-action=exec=sh`, `/G:secrets.txt`. A literal `\"--\"` before it ends only the `-` options.")
+        help = f"Check it where it arrives: `if !process::is_operand({first}) {{ process::exit(2) }}` refuses a leading `-` and `/`, after which it is proved; or, where it names a file, pass it as `\"./\" + {first}` or as the path of a root it is joined under (`dir.join({first}).path().to_text()`), which start with text the program wrote. If the program means to pass options from outside, `untrusted-option = true` under `[allow]` in the manifest builds it."
     } else if sink.kind == "options" {
-        notes.push("A program reads an argument that starts with `-` as an option, and a list filled from outside may hold one: `-rf`, `--checkpoint-action=exec=sh`.")
-        help = f"Push into `{first}` only values checked where they arrive, `if !process::is_operand(name) {{ process::exit(2) }}`, or push a literal `\"--\"` first, which ends the options. If the program means to pass options from outside, `untrusted-option = true` under `[allow]` in the manifest builds it."
+        notes.push("A program reads an argument that starts with `-` as an option, and a Windows program one that starts with `/`, and a list filled from outside may hold one: `-rf`, `--checkpoint-action=exec=sh`, `/G:secrets.txt`. A literal `\"--\"` in it ends only the `-` options.")
+        help = f"Push into `{first}` only values checked where they arrive, `if !process::is_operand(name) {{ process::exit(2) }}`, which refuses a leading `-` and `/`, or files as `\"./\" + name` or as the paths of a root they are joined under (`dir.join(name).path().to_text()`). If the program means to pass options from outside, `untrusted-option = true` under `[allow]` in the manifest builds it."
     } else {
         notes.push("No check makes a stranger's choice of program safe: a name is looked up on `PATH`, a path runs that file.")
         help = "Name the program with a literal, or choose it with a `match` whose arms are literals: `let editor = match env::var(\"EDITOR\") ?? \"\" { \"vim\" => \"vim\", \"nano\" => \"nano\", else => \"vi\", }`. If the program means to run a program from outside, `untrusted-program = true` under `[allow]` in the manifest builds it."
@@ -3175,9 +3209,10 @@ fn raw_sink_finding(mut walk: ProverWalk, sink: ref ParamSink, shown: ref String
 
 /// **The arguments of `process::run`** (ADR-raw-sinks-1 D18): the start of
 /// each element of a list literal is a raw sink, its guard
-/// `process::is_operand`; a literal `"--"` proves every element after it.
-/// A list built out of sight is one part, passed where the walk saw every
-/// value from outside pushed into it proved or after a `"--"`
+/// `process::is_operand`. A literal `"--"` proves no element after it: it
+/// ends only the `-` options, and a Windows program reads a leading `/` as
+/// one too (D18 item 6). A list built out of sight is one part, passed where
+/// the walk saw every value from outside pushed into it proved
 /// (`ProverState::option_lists`). `through` follows the sink's name where
 /// the list reaches it through a call (`, through `f``).
 fn raw_sink_options(mut walk: ProverWalk, list: ref Expr, through: ref String, span: Span, scope: ref ProverScope, at: ref ProverWhere, program: ref Program, words: ref winnow_grammar::InternerContext, library: ref Ledger, holes_of: fn(ref Expr) -> Vec[Expr] sync, ask: fn(ref logic::TermArena, ref Vec[i64], i64) -> SolverAnswer sync, written_of: fn(ref Expr) -> String sync) {
@@ -3186,31 +3221,19 @@ fn raw_sink_options(mut walk: ProverWalk, list: ref Expr, through: ref String, s
             let sink = ParamSink { index: -1, kind: "option", sink: "the start of an argument of `process::run`, which the program may read as an option", operation: "", root_part: false, guard: "process::is_operand" }
             let shown = f"{sink.sink}{through}"
             for item in items {
-                if raw_sink_double_dash(item, written_of) {
-                    return
-                }
-                let first = raw_sink_first_part(item, written_of) ?? continue
+                let first = raw_sink_option_start(item, scope, words, written_of) ?? continue
                 raw_sink_part(walk, sink, shown, first, span, scope, at, program, words, library, holes_of, ask, written_of)
             }
         },
         else => {
             let name = raw_sink_name(list, words) ?? ""
             let state = walk.state.option_lists[name] ?? 2
-            if state < 2 {
+            if state == 0 {
                 return
             }
             let sink = ParamSink { index: -1, kind: "options", sink: "the arguments of `process::run`, each of which the program may read as an option", operation: "", root_part: false, guard: "" }
             raw_sink_part(walk, sink, f"{sink.sink}{through}", list, span, scope, at, program, words, library, holes_of, ask, written_of)
         },
-    }
-}
-
-/// Whether an element of a list is the literal `"--"`, which ends the
-/// options (ADR-raw-sinks-1 D18 item 3).
-fn raw_sink_double_dash(item: ref Expr, written_of: fn(ref Expr) -> String sync) -> bool {
-    return match item {
-        Expr::LitStr { .. } => written_of(item) == "\"--\"",
-        else => false,
     }
 }
 
@@ -3249,11 +3272,52 @@ fn raw_sink_first_part(expr: ref Expr, written_of: fn(ref Expr) -> String sync) 
     }
 }
 
+/// **The part an argument of `process::run` starts with, through a root**
+/// (ADR-raw-sinks-1 D18 item 4): `raw_sink_first_part`, and where that part
+/// is the path of a root (`root.path()`, `root.join(part).path()`, through
+/// `.to_text()` or `.display()`), the part the root's own directory starts
+/// with instead, since the joined parts follow it: none for `Anywhere` or
+/// `fs::scratch()`, the start of `dir` for `fs::Root::Dir(dir)`.
+fn raw_sink_option_start(item: ref Expr, scope: ref ProverScope, words: ref winnow_grammar::InternerContext, written_of: fn(ref Expr) -> String sync) -> Expr? {
+    let first = raw_sink_first_part(item, written_of) ?? return null
+    // A name bound to a text starts as its value does (#2722).
+    let bound = raw_sink_name(first, words) ?? ""
+    if scope.starts.contains_key(bound) {
+        let value = scope.starts[bound]?.clone() ?? first.clone()
+        return raw_sink_option_start(value, scope, words, written_of)
+    }
+    let mut path = first.clone()
+    match first {
+        Expr::MethodCall { receiver, method, args, .. } => {
+            let name = words.resolve(method)
+            if args.is_empty() && (name == "to_text" || name == "display") {
+                path = receiver.clone()
+            }
+        },
+        else => {},
+    }
+    match path {
+        Expr::MethodCall { receiver, method, args, .. } => {
+            if !args.is_empty() || words.resolve(method) != "path" {
+                return first
+            }
+            let mut joins: Vec[Expr] = []
+            let base = raw_sink_root(receiver, scope, words, written_of, joins)
+            if raw_sink_anywhere(base, words, written_of) || raw_sink_scratch(base, words) {
+                return null
+            }
+            let dir = raw_sink_dir(base, words) ?? return first
+            return raw_sink_first_part(dir, written_of)
+        },
+        else => return first,
+    }
+}
+
 /// **A list that fills the arguments of `process::run`, followed**
 /// (ADR-raw-sinks-1 D18, `ProverState::option_lists`): a `let` of one name
 /// to a list literal starts it, judged by its elements as the sink judges
-/// them; a `push` of a literal `"--"` ends its options, of a value from
-/// outside whose start is not proved opens it; any other changing call
+/// them; a `push` of a value from outside whose start is not proved opens
+/// it (a literal `"--"` before it does not prove it, D18 item 6); any other changing call
 /// handed a value from outside opens it, and an assignment forgets it.
 fn raw_sink_option_list(mut walk: ProverWalk, stmt: ref Stmt, scope: ref ProverScope, words: ref winnow_grammar::InternerContext, library: ref Ledger, holes_of: fn(ref Expr) -> Vec[Expr] sync, ask: fn(ref logic::TermArena, ref Vec[i64], i64) -> SolverAnswer sync, written_of: fn(ref Expr) -> String sync) {
     match stmt {
@@ -3312,13 +3376,10 @@ fn raw_sink_option_list(mut walk: ProverWalk, stmt: ref Stmt, scope: ref ProverS
 }
 
 /// What a value put into a followed list makes of it (`raw_sink_option_list`):
-/// 1 for a literal `"--"`, 2 for a value from outside whose start is not
-/// proved `process::is_operand`, else 0.
+/// 2 for a value from outside whose start is not proved
+/// `process::is_operand`, else 0.
 fn raw_sink_option_pushed(mut walk: ProverWalk, item: ref Expr, scope: ref ProverScope, words: ref winnow_grammar::InternerContext, library: ref Ledger, holes_of: fn(ref Expr) -> Vec[Expr] sync, ask: fn(ref logic::TermArena, ref Vec[i64], i64) -> SolverAnswer sync, written_of: fn(ref Expr) -> String sync) -> i64 {
-    if raw_sink_double_dash(item, written_of) {
-        return 1
-    }
-    let first = raw_sink_first_part(item, written_of) ?? return 0
+    let first = raw_sink_option_start(item, scope, words, written_of) ?? return 0
     if raw_sink_outside(first, scope, words, library, walk.state, holes_of) && !raw_sink_passes(walk, "process::is_operand", first, scope, words, ask) {
         return 2
     }

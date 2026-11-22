@@ -3195,7 +3195,10 @@ pub mod check_boxes {
 }
 pub mod check_buildtime {}
 pub mod check_buildtime2 {}
-pub mod check_calls {}
+pub mod check_calls {
+    #[allow(unused_imports)]
+    pub use super::{sequence_failures};
+}
 pub mod check_claims {
     #[allow(unused_imports)]
     pub use super::{check_claims_unproved, check_claims_assumes_in_std};
@@ -3405,7 +3408,7 @@ pub mod comptime_driver {
 }
 pub mod comptime_tree {
     #[allow(unused_imports)]
-    pub use super::{VALUE_FN, NOT_COMPUTED_YET, comptime_keeps, comptime_sub_program, TURN_MARK, comptime_unit_without_its_constants, comptime_drop_readers, comptime_constants_of, comptime_readers_dropped, comptime_value_fn_names, comptime_declared_of, comptime_as_built, ComptimeLowerHost, comptime_lowered_units, comptime_without_foreign, comptime_dependency_modules, comptime_by_package, COMPTIME_NOT_LOWERED, COMPTIME_NOT_READ, COMPTIME_NOT_CARRIED, NOWHERE, ComptimeDriven, COMPTIME_STOPPED_AT, ComptimeLowered, ComptimeDeclared, ComptimeComputeHost, comptime_value_computed, COMPTIME_VALUE_DIR, comptime_computed};
+    pub use super::{VALUE_FN, NOT_COMPUTED_YET, comptime_keeps, comptime_sub_program, TURN_MARK, comptime_unit_without_its_constants, comptime_drop_readers, comptime_constants_of, comptime_readers_dropped, comptime_value_fn_names, comptime_declared_of, comptime_as_built, ComptimeLowerHost, comptime_lowered_units, comptime_without_foreign, comptime_dependency_modules, comptime_by_package, COMPTIME_NOT_LOWERED, COMPTIME_NOT_READ, COMPTIME_NOT_CARRIED, NOWHERE, ComptimeDriven, COMPTIME_STOPPED_AT, ComptimeLowered, ComptimeRefusal, ComptimeDeclared, ComptimeComputeHost, comptime_value_computed, COMPTIME_VALUE_DIR, comptime_computed};
 }
 pub mod contract_changes {
     #[allow(unused_imports)]
@@ -3524,7 +3527,7 @@ pub mod emit_out {
 pub mod emit_pattern {}
 pub mod emit_program {
     #[allow(unused_imports)]
-    pub use super::{EMIT_PROGRAM_COUNTING_HEAP};
+    pub use super::{EMIT_PROGRAM_COUNTING_HEAP, EMIT_PROGRAM_RECURSION_LIMIT};
 }
 pub mod emit_reach {
     #[allow(unused_imports)]
@@ -3591,7 +3594,7 @@ pub mod grammar_decode {
 }
 pub mod grammar_run {
     #[allow(unused_imports)]
-    pub use super::{GrammarRunHost, grammar_run_compile_and_run, GrammarDriverHost, grammar_run_driver, grammar_run_dump};
+    pub use super::{GrammarRunHost, grammar_run_compile_and_run, GrammarDriverHost, grammar_run_driver, grammar_run_dump, grammar_run_dump_shaped, grammar_run_shapes_empty, grammar_run_shapes_add, grammar_run_shapes_qualified, grammar_run_shapes};
 }
 pub mod grammar_types {
     #[allow(unused_imports)]
@@ -3899,7 +3902,7 @@ pub mod trust {
 }
 pub mod ty {
     #[allow(unused_imports)]
-    pub use super::{Ty, CodeNames, Shape, ENDS, SIZED, REPLAYS, SEQ, PAR, PAUSES, ARRAY, TEXT, TEXT_VIEW, text, ty_shown, spoken, spoken_in, shown_in, parse, split_args, Provenance, Sync, Lock, Panics, Crosses, Threads, Touch, State, Held, Count, Class, FieldContract, VariantContract, ConfigContract, Signature, FnContract, TypeContract, Ledger, Notes, SEEN, a_named_ty, a_view_ty, a_seen_ty, bind, substitute, qualify, renamed, MethodIndex, method_index};
+    pub use super::{Ty, CodeNames, Shape, ENDS, SIZED, REPLAYS, SEQ, PAR, PAUSES, ARRAY, TEXT, TEXT_VIEW, text, ty_shown, spoken, spoken_in, shown_in, parse, split_args, Provenance, Sync, Lock, Panics, Crosses, Threads, Touch, State, Held, Count, Class, FieldContract, VariantContract, ConfigContract, Signature, FnContract, TypeContract, Ledger, Notes, SEEN, a_named_ty, a_view_ty, a_seen_ty, bind, substitute, qualify, renamed, MethodIndex, method_index, failures_joined, unnamed_failure};
 }
 pub mod type_rules {
     #[allow(unused_imports)]
@@ -3988,4 +3991,4 @@ pub fn nikaia_run_tests(filters: &[std::string::String], list: bool, more: std::
 /// **The digest of this lowered set** (#1610): every file `lower-std` wrote
 /// beside this index, and the index above this line. Compiled into the same
 /// crate as the code it names, it is the compiler's identity for its caches.
-pub const LOWERED_DIGEST: &str = "a76d037d95a84692478b57bbca1f212bda1e8b767bc3f34a0a48db0d7b2ce401";
+pub const LOWERED_DIGEST: &str = "90031917885aebb855b5b89975e7fd00a0265c8c24c1cf177dfdb74cc3c87f3b";

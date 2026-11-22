@@ -825,6 +825,7 @@ impl EmitState {
                 // drives it, with this build's parallelism.
                 let mut pieces = false
                 let mut streamed = false
+                let mut stream_item: String = ""
                 let mut options: Vec[String] = []
                 let contract = self.own_contracts.functions.get(f"{package}{book}::{rule}")
                 if contract != null {
@@ -836,7 +837,16 @@ impl EmitState {
                     match held.signature {
                         signature => {
                             match signature.result {
-                                result => { streamed = a_sequence_type(result) },
+                                result => {
+                                    streamed = a_sequence_type(result)
+                                    stream_item = match result {
+                                        Ty::Seq { item, .. } => match item {
+                                            Ty::Named { name, .. } => name.clone(),
+                                            else => "",
+                                        },
+                                        else => "",
+                                    }
+                                },
                                 null => {},
                             }
                             for option in signature.config {
@@ -852,9 +862,23 @@ impl EmitState {
                     // out is `None`, and the walk takes its default where it is
                     // declared; last the caller's `words:` table (ADR-grammar-input-v1 D10),
                     // which is no option the rule declares.
-                    out.push(f"Ok::<_, nikaia_std::grammar::ParseError>({package}{emit_stream_walk_name(book, rule)}(::std::convert::AsRef::<[u8]>::as_ref(&*")
-                    self.emit_expr(world, walk, out, host, args[0], depth, flow, scope)
-                    out.push(").to_vec()")
+                    // **A `for` over it runs its body as the parser's `each`**
+                    // (ADR-grammar-typed-read-v1 D7, #2708, `emit_stmt_for_each`):
+                    // through the package's `emit_stream_each`, the input lent.
+                    let each_body: EmitOut? = match walk.each_body { null => null, held => held.clone() }
+                    walk.each_body = null
+                    if each_body != null {
+                        out.push(f"{package}{emit_stream_each_name(book, rule)}(::std::convert::AsRef::<[u8]>::as_ref(&*")
+                        self.emit_expr(world, walk, out, host, args[0], depth, flow, scope)
+                        out.push(")")
+                    } else {
+                        if self.emit_stream_item_views(stream_item) {
+                            self.emit_stream_thread_refused(walk, f"{package}{book}::{rule}", stream_item, flow.statement)
+                        }
+                        out.push(f"Ok::<_, nikaia_std::grammar::ParseError>({package}{emit_stream_walk_name(book, rule)}(::std::convert::AsRef::<[u8]>::as_ref(&*")
+                        self.emit_expr(world, walk, out, host, args[0], depth, flow, scope)
+                        out.push(").to_vec()")
+                    }
                     for i in 1..<args.len() {
                         out.push(", ")
                         self.emit_expr(world, walk, out, host, args[i], depth, flow, scope)
@@ -885,7 +909,10 @@ impl EmitState {
                     if !table {
                         out.push(", ::std::option::Option::None")
                     }
-                    out.push(f")){question}")
+                    match each_body {
+                        null => out.push(f")){question}"),
+                        body => out.push_around(f", |__wg_one| {{ __NIKAIA_EACH_BODY__ }}){question}", "__NIKAIA_EACH_BODY__", body),
+                    }
                     return true
                 }
                 if args.len() != 1 {
@@ -1849,7 +1876,7 @@ impl EmitState {
         let own = (self.facts.method_callees[on_node]?.clone() ?? "Seq::collect") != "Seq::collect"
         // **A walk of failing elements is collected into a `Result`**
         // (#2736): the first failure ends it, and nothing after is computed.
-        let failing_items = self.facts.failing_item_receivers.contains(on_node)
+        let failing_items = self.facts.failing_item_receivers.contains_key(on_node)
         if name == "collect" && args.len() == 0 && !own && !self.method_pauses(on_node) && failing_items {
             out.push(if declared { f"::<{self.rust_result()}<_, _>>" } else { f"::<{self.rust_result()}<Vec<_>, _>>" })
         } else if name == "collect" && args.len() == 0 && !declared && !own && !self.method_pauses(on_node) {
@@ -2009,7 +2036,7 @@ impl EmitState {
     /// it is refused with a line, as a walk of a pausing one is.
     fn emit_call_failing_through(ref self, on_node: i64, name: ref String, flow: EmitFlow) -> (String, String, String) sync throws {
         let through = self.facts.failing_through_calls.get(on_node) ?? 0
-        if self.facts.failing_item_receivers.contains(on_node) {
+        if self.facts.failing_item_receivers.contains_key(on_node) {
             if through != 0 {
                 throw EmitRefused { message: f"`{name}` is given a lambda that can fail, over a sequence whose elements can already fail; only one step of a chain can fail so far. Collect the sequence first, with `… .collect() catch {{ … }}`, and walk the list.", at: flow.statement }
             }

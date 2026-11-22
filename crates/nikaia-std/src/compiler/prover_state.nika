@@ -100,9 +100,9 @@ pub struct ProverState {
     /// **The lists of the function walked that fill the arguments of
     /// `process::run`** (ADR-raw-sinks-1 D18), by name: 0 where every
     /// value from outside pushed into one starts with a part that is not
-    /// outside or is proved `process::is_operand`, 1 where a literal `"--"`
-    /// was pushed before any that is not, 2 where one that is not came
-    /// first. A list bound otherwise is not here, and is judged as a whole.
+    /// outside or is proved `process::is_operand`, 2 where one that is not
+    /// was pushed (a literal `"--"` before it proves nothing, D18 item 6). A
+    /// list bound otherwise is not here, and is judged as a whole.
     pub option_lists: collections::BTreeMap[String, i64],
     /// **The `std` methods a named property may call** (ADR-381 D1, D5),
     /// by their ledger keys: `Vec::is_sorted`, `Vec::is_sorted_by_key`.
@@ -1511,6 +1511,10 @@ pub struct ProverWhere {
     pub lambda: bool,
     /// The function `throws`, so a call in it may leave it.
     pub throws_out: bool,
+    /// A `pub` function's body (not `main`'s nor a test's), whose callers
+    /// the compiler cannot see: a parameter that reaches a raw sink is data
+    /// from outside here (ADR-raw-sinks-1 D6).
+    pub public: bool,
 }
 
 impl ProverWhere {

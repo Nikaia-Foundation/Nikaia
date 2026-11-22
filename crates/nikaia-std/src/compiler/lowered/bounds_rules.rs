@@ -2066,8 +2066,8 @@ pub(crate) fn rules_changed_by(frame: Option<&BoundsChanged>, receiver: Option<&
 
 pub(crate) fn rules_tail(body: &Block) -> Option<Expr> {
     let last = match body.stmts.last() { Some(__nikaia_value) => __nikaia_value, None => return None };
-    match last.node {
-        Stmt::Expr(ref value) => Some(value.clone()),
+    match &last.node {
+        Stmt::Expr(value) => Some(value.clone()),
         _ => None,
     }
 }

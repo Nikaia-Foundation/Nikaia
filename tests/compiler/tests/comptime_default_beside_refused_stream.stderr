@@ -1,0 +1,7 @@
+error: The compiler can't translate this `@stream` entry: its body has to hold one repetition of a rule, `item*`, `item+`, `item{2,5}` or `list(item, sep)`.
+   --> tests/comptime_default_beside_refused_stream.nika:10:5
+    |
+ 10 |     @stream entry rule items(lim: Lim = default_lim()) -> i64 = A(lim.depth)* B(lim.depth)* eof
+    |     ^
+    |
+1 other error

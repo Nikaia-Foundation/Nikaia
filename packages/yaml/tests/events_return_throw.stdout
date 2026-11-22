@@ -1,0 +1,8 @@
+first scalar: a
+first scalar of nothing: none
+before a sequence: -1
+thrown: a sequence starts at 6
+seen: -1
+none to throw: 8
+first long: abcd at 0
+broken input: parse error

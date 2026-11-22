@@ -380,6 +380,10 @@ impl EmitState {
         let rule_name = emit_text(world, rule.name)
         let ty = rule.ret_type ?? return
         let item = host.ty_named(walk, ty)
+        // **Items that view the input stay on the input's walk** (#2708): no
+        // thread walk is written for them, and a caller that would take one
+        // is `NK1359` (`emit_stream_thread_refused`).
+        let viewing = self.emit_stream_item_views(emit_text(world, ty.name))
         let mut params = String()
         let mut handed = String()
         for i in 0..<rule.args.len() {
@@ -394,18 +398,37 @@ impl EmitState {
             params.push_str(f", __wg_given{j}: ::std::option::Option<{option_ty}>")
             handed.push_str(f"__wg_option{j}, ")
         }
-        out.push(f"\n#[doc(hidden)]\n#[allow(non_snake_case, dead_code, clippy::too_many_arguments)]\npub fn {emit_stream_walk_name(name, rule_name)}(__wg_source: ::std::vec::Vec<u8>{params}, __wg_words: ::std::option::Option<winnow_grammar::InternerContext>) -> impl Iterator<Item = {self.rust_result()}<{item}, nikaia_std::grammar::ParseError>> {{ ")
+        if !viewing {
+            out.push(f"\n#[doc(hidden)]\n#[allow(non_snake_case, dead_code, clippy::too_many_arguments)]\npub fn {emit_stream_walk_name(name, rule_name)}(__wg_source: ::std::vec::Vec<u8>{params}, __wg_words: ::std::option::Option<winnow_grammar::InternerContext>) -> impl Iterator<Item = {self.rust_result()}<{item}, nikaia_std::grammar::ParseError>> {{ ")
+            for j in 0..<rule.config.len() {
+                out.push(f"let __wg_option{j} = match __wg_given{j} {{ ::std::option::Option::Some(__wg_value) => __wg_value, ::std::option::Option::None => ")
+                self.emit_expr(world, walk, out, host, rule.config[j].default, 0, EmitFlow::plain(), EmitScope::plain())
+                out.push(" }; ")
+            }
+            out.push(emit_stream_batched_start())
+            out.push("let mut __wg_context = match __wg_words { ::std::option::Option::Some(__wg_table) => winnow_grammar::ParseContext::<()>::with_state_and_interner((), __wg_table), ::std::option::Option::None => winnow_grammar::ParseContext::<()>::default() }; ")
+            let each = emit_stream_each(item, self.facts.emitting_entries.contains(f"{name}::{rule_name}"), true)
+            out.push(f"let __wg_parsed = {name}::parse_{rule_name}_slice_each(&__wg_source[..], &mut __wg_context, {handed}{each}); ")
+            out.push(emit_stream_batched_end("__wg_error.render(&__wg_source[..])"))
+            out.push(" }\n")
+        }
+        // **The walk a `for` runs its body in, as the parser's `each`**
+        // (ADR-grammar-typed-read-v1 D7, #2708, `emit_stmt_for_each`): the
+        // input lent, no thread, each item handed to the caller's closure by
+        // reference. Its value is `Some` of what broke the parse, `None` where
+        // it read to the end, or the failure rendered against the input.
+        out.push(f"\n#[doc(hidden)]\n#[allow(non_snake_case, dead_code, clippy::too_many_arguments)]\npub fn {emit_stream_each_name(name, rule_name)}<__WgB>(__wg_source: &[u8]{params}, __wg_words: ::std::option::Option<winnow_grammar::InternerContext>, mut __wg_each: impl FnMut(&{emit_renamed_lifetime(item, "'a", "'_")}) -> ::std::ops::ControlFlow<__WgB>) -> {self.rust_result()}<::std::option::Option<__WgB>, nikaia_std::grammar::ParseError> {{ ")
         for j in 0..<rule.config.len() {
             out.push(f"let __wg_option{j} = match __wg_given{j} {{ ::std::option::Option::Some(__wg_value) => __wg_value, ::std::option::Option::None => ")
             self.emit_expr(world, walk, out, host, rule.config[j].default, 0, EmitFlow::plain(), EmitScope::plain())
             out.push(" }; ")
         }
-        out.push(emit_stream_batched_start())
         out.push("let mut __wg_context = match __wg_words { ::std::option::Option::Some(__wg_table) => winnow_grammar::ParseContext::<()>::with_state_and_interner((), __wg_table), ::std::option::Option::None => winnow_grammar::ParseContext::<()>::default() }; ")
-        let each = emit_stream_each(item, self.facts.emitting_entries.contains(f"{name}::{rule_name}"), true)
-        out.push(f"let __wg_parsed = {name}::parse_{rule_name}_slice_each(&__wg_source[..], &mut __wg_context, {handed}{each}); ")
-        out.push(emit_stream_batched_end("__wg_error.render(&__wg_source[..])"))
-        out.push(" }\n")
+        let mut each = "|__wg_one| __wg_each(__wg_one)"
+        if self.facts.emitting_entries.contains(f"{name}::{rule_name}") {
+            each = f"|__wg_item: &::std::option::Option<{emit_renamed_lifetime(item, "'a", "'_")}>| match __wg_item {{ ::std::option::Option::Some(__wg_one) => __wg_each(__wg_one), ::std::option::Option::None => ::std::ops::ControlFlow::Continue(()) }}"
+        }
+        out.push(f"match {name}::parse_{rule_name}_slice_each(__wg_source, &mut __wg_context, {handed}{each}) {{ Ok(::std::ops::ControlFlow::Break(__wg_broken)) => Ok(::std::option::Option::Some(__wg_broken)), Ok(::std::ops::ControlFlow::Continue(_)) => Ok(::std::option::Option::None), Err(__wg_error) => Err(nikaia_std::grammar::ParseError::of(__wg_error.render(__wg_source))) }} }}\n")
     }
 
     /// **The options a `par_fold` entry names after its `;`** (ADR-372 D6),
@@ -744,6 +767,14 @@ impl EmitState {
                             prelude = f"{prelude}let {name} = ::nikaia_std::grammar::covered(input, {range}); "
                         }
                     }
+                    // The backend lends `_state = &mut input.state` before
+                    // the action, and the prelude above reads `input`: taken
+                    // again after it, the backend's loan ends before that
+                    // read, and an `emit` or `_state.user()` in the action
+                    // borrows the new one (#2254).
+                    if as_texts.len() > 0 || (positions && as_spans.len() > 0) {
+                        prelude = f"{prelude}let _state = &mut input.state; "
+                    }
                     // A grammar action is the rule's own body: what it ends
                     // in is what the rule hands back, so a `return` there is
                     // that value (ADR-grammar-actions-v1). The prelude opens the action's
@@ -816,7 +847,12 @@ impl EmitState {
             handed.push(f"{name} = {name}")
         }
         let passed = if handed.is_empty() { "" } else { f"({handed.join(", ")})" }
-        let folded = if emitting { f"::std::option::Option<{item}>" } else { item.clone() }
+        // **An item that views the input names no lifetime of its own here**
+        // (#2708): the entry hands back a count, so its rule declares no
+        // `'a`, and the fold's closure takes the item at whatever lifetime
+        // the engine reads it with.
+        let unnamed = emit_renamed_lifetime(item, "'a", "'_")
+        let folded = if emitting { f"::std::option::Option<{unnamed}>" } else { unnamed }
         if rule.alts.len() != 1 || rule.alts[0].action != null {
             throw EmitRefused { message: "The compiler can't translate a `@stream` entry with an action or with alternatives yet: its body is `item*`, alone or between other patterns.", at: rule.span.start as i64 }
         }
@@ -1011,10 +1047,37 @@ fn emit_stream_walks(def: ref GrammarDef, offered_to_rust: bool) -> Vec[GrammarR
     return found
 }
 
+impl EmitState {
+    /// **Whether a `@stream` entry's items view the input** (ADR-views-v4 D5,
+    /// #2708): its item type, named `item` (with or without its package in
+    /// front), holds a view or is tethered to the input.
+    fn emit_stream_item_views(ref self, item: ref String) -> bool {
+        let bare = (item.split("::").last() ?? "").clone()
+        return self.borrowing.contains(item) || self.tethered.contains(item) || self.borrowing.contains(bare) || self.tethered.contains(bare)
+    }
+
+    /// **`NK1359`: a walk that keeps the parser's thread, of items that view
+    /// the input** (ADR-grammar-typed-read-v1 D7, #2708): the thread owns a
+    /// copy of the input and hands items over a channel, which a view of the
+    /// caller's input cannot cross. Only a `for` over the call, whose body is
+    /// the parser's `each`, walks such items, until "The other methods of a
+    /// `@stream` walk" (#2709) are built.
+    fn emit_stream_thread_refused(ref self, walk: ref EmitWalk, entry: ref String, item: ref String, at: i64?) sync throws {
+        let used = if walk.stream_use == "" { "is used as a value (passed to a call, stored, combined or given to a task)" } else { walk.stream_use.clone() }
+        throw EmitRefused { message: f"[NK1359] `{entry}` {used}, so it would be walked on a thread of its own, but its items view the input they are parsed from (`{item}` holds a view), and a view can't leave the walk over that input. Walk the call with a `for` right where it is made, or bound by a `let` that one `for` walks, in a function that throws, outside a `catch`, with a body that doesn't pause. The other ways to walk such a stream are \"The other methods of a `@stream` walk\" (#2709).", at: at }
+    }
+}
+
 /// The function beside grammar `book` another package walks its `@stream`
 /// entry `rule` with; `emit_call_grammar` in `emit_core_calls.nika` calls it.
 fn emit_stream_walk_name(book: ref String, rule: ref String) -> String {
     return f"__nikaia_walk_{book}__{rule}"
+}
+
+/// The function beside grammar `book` a `for` over its `@stream` entry
+/// `rule` runs its body in, as the parser's `each` (#2708).
+fn emit_stream_each_name(book: ref String, rule: ref String) -> String {
+    return f"__nikaia_each_{book}__{rule}"
 }
 
 /// The function beside grammar `book` that reads its `@stream` entry `rule`

@@ -149,6 +149,12 @@ impl FmtLexer {
         while self.at < self.c.len() as i64 {
             let c = *nikaia_std::index::get(&self.c, nikaia_std::index::at(self.at));
             if c == '\'' && self.character() { continue; }
+            let word_before = self.at > 0 && ((*nikaia_std::index::get(&self.c, nikaia_std::index::at(unsafe { nikaia_std::proven::sub::<i64>(self.at, 1) }))).is_alphanumeric() || *unsafe { nikaia_std::proven::read(&self.c, (nikaia_std::proven::sub::<i64>(self.at, 1)) as usize) } == '_');
+            if c == 'f' && self.ahead(1) == '"' && !word_before {
+                self.at += 2;
+                self.interpolated()?;
+                continue;
+            }
             self.at += 1;
             if c == '"' { self.quoted()?; } else if c == '{' { depth += 1; } else if c == '}' {
                 if depth == 0 { return Ok(()); }
@@ -348,9 +354,9 @@ pub(crate) struct FmtShape {
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 pub(crate) fn fmt_shape(toks: &[FmtToken]) -> FmtShape {
-    #[allow(unused_mut)] let mut stack: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-    let mut under: i64 = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut stack = stack;
-    let mut bars = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut stack = stack;
+    let mut stack: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
+    let mut under: i64 = 0;
+    let mut bars = 0;
     let mut depth: Vec<i64> = vec![];
     let mut barred: Vec<bool> = vec![];
     for k in 0..toks.len() as i64 {

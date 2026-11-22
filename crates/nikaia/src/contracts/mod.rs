@@ -371,7 +371,7 @@ impl LedgerOps for Ledger {
         units: &[&Parsed],
         library: &Ledger,
     ) -> (Self, Vec<crate::check::Checked>, sync::Noted) {
-        infer_package_with(units, library, false)
+        infer_package_with(units, &[], library, false)
     }
 
     /// A function by the name a caller wrote.
@@ -621,8 +621,10 @@ pub fn a_literal(expr: &Expr) -> bool {
 /// where the build has a build-time directory (ADR-321 D1), as the checker computes the
 /// same value; a call is never interpreted (D19). `None` where it cannot be
 /// computed or has no literal - the checker refuses it there.
+#[allow(clippy::too_many_arguments)]
 fn computed_literal(
     units: &[&Parsed],
+    beside: &[&Parsed],
     parsed: &Parsed,
     name: &str,
     expr: &Expr,
@@ -639,8 +641,12 @@ fn computed_literal(
     let build_time_dir = crate::comptime_run::defaults_build_time_dir()?;
     let here = units.iter().position(|unit| std::ptr::eq(*unit, parsed))?;
     let ty = crate::comptime_run::as_built(ty.clone());
+    // **The dependencies' files too** (#2255): a default that calls into
+    // one is compiled with its module, as the check computes a `comptime`
+    // with every file of the program.
+    let files: Vec<&Parsed> = units.iter().chain(beside).copied().collect();
     match crate::comptime_run::compute(
-        units,
+        &files,
         here,
         name,
         expr,
@@ -668,14 +674,25 @@ pub fn infer_package_parallel(
     units: &[&Parsed],
     library: &Ledger,
 ) -> (Ledger, Vec<crate::check::Checked>) {
-    let (ledger, checked, _) = infer_package_with(units, library, true);
+    let (ledger, checked, _) = infer_package_with(units, &[], library, true);
     (ledger, checked)
+}
+
+/// [`LedgerOps::infer_package_noted`], with `beside` - the dependencies'
+/// units - at hand for a default that calls into one (#2255).
+pub(crate) fn infer_package_beside(
+    units: &[&Parsed],
+    beside: &[&Parsed],
+    library: &Ledger,
+) -> (Ledger, Vec<crate::check::Checked>, sync::Noted) {
+    infer_package_with(units, beside, library, false)
 }
 
 /// [`LedgerOps::infer_package_noted`], with the units checked in parallel
 /// where `parallel`.
 fn infer_package_with(
     units: &[&Parsed],
+    beside: &[&Parsed],
     library: &Ledger,
     parallel: bool,
 ) -> (Ledger, Vec<crate::check::Checked>, sync::Noted) {
@@ -703,6 +720,7 @@ fn infer_package_with(
         .collect();
     let host = InferHost {
         units,
+        beside,
         library,
         checked: RefCell::new(Vec::new()),
         resolved: RefCell::new(BTreeMap::new()),
@@ -742,6 +760,9 @@ pub fn literal_of(value: &nikaia_std::compiler::build_values::BuildValue) -> Opt
 /// what they answer, kept for `infer_package_noted` to hand back.
 struct InferHost<'a> {
     units: &'a [&'a Parsed],
+    /// The dependencies' units, which a computed default may call into
+    /// (#2255); the package's ledger is not inferred from them.
+    beside: &'a [&'a Parsed],
     library: &'a Ledger,
     checked: RefCell<Vec<crate::check::Checked>>,
     resolved: RefCell<BTreeMap<String, crate::check::MethodCalls>>,
@@ -999,6 +1020,7 @@ impl nikaia_std::compiler::ledger_items::LedgerInferHost for InferHost<'_> {
     fn computed_literal(&self, unit: i64, name: &str, expr: &Expr, ty: &ty::Ty) -> Option<String> {
         computed_literal(
             self.units,
+            self.beside,
             self.units[unit as usize],
             name,
             expr,

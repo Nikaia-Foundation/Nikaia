@@ -404,7 +404,7 @@ pub(crate) fn check_handed_expr(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '
             let callee = match check_handed_callee(view, func) { Some(__nikaia_value) => __nikaia_value, None => return false };
             if !closed.contains(&callee) { return false; }
             let params = check_handed_params_of(world, view, &callee);
-            let mut j: i64 = 0; #[allow(clippy::redundant_locals)] let params = params;
+            let mut j: i64 = 0;
             for arg in args.iter() {
                 let at: i64 = j;
                 j = unsafe { nikaia_std::proven::add::<i64>(j, 1) };

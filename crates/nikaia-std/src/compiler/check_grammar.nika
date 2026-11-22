@@ -39,6 +39,61 @@ fn bare_reference(pattern: ref Pattern, world: ref CheckWorld) -> String sync {
     }
 }
 
+/// **Whether `iter` calls a `@stream` entry** (ADR-grammar-typed-read-v1 D7,
+/// #2708): `G::rule(input)` of a grammar the program declares, or another
+/// package's `p::G::rule(input)`, whose contract fails with `ParseError`
+/// alone, takes `input` first and hands back a sequence, as the emitter's
+/// `emit_stmt_a_stream_entry` finds it.
+fn grammar_a_stream_call(world: ref CheckWorld, iter: ref Expr) -> bool sync {
+    return match iter {
+        Expr::Call { func, args, .. } => match func {
+            Expr::Path(segments, _) => args.len() > 0 && grammar_a_stream_entry(world, segments),
+            else => false,
+        },
+        else => false,
+    }
+}
+
+fn grammar_a_stream_entry(world: ref CheckWorld, segments: ref Vec[winnow_grammar::Symbol]) -> bool sync {
+    if segments.len() == 2 {
+        let book = f"{world.words.resolve(segments[0])}"
+        let rule = f"{world.words.resolve(segments[1])}"
+        if grammar_a_stream_entry_in(world.here, book, rule) {
+            return true
+        }
+        for view in world.beside {
+            if grammar_a_stream_entry_in(view, book, rule) {
+                return true
+            }
+        }
+    }
+    let contract = world.own.functions.get(check_core_call_joined(world, segments)) ?? return false
+    if contract.fails_with.len() != 1 || contract.fails_with[0] != "ParseError" {
+        return false
+    }
+    let signature = contract.signature ?? return false
+    let result = signature.result ?? return false
+    return signature.params.len() >= 1 && signature.params[0].0 == "input" && a_sequence_type(result)
+}
+
+fn grammar_a_stream_entry_in(view: ref ParsedView, book: ref String, rule: ref String) -> bool sync {
+    for item in view.items {
+        match item.node {
+            Item::Grammar(def) => {
+                if view.text(def.name) == book {
+                    for r in def.rules {
+                        if r.is_entry && r.stream && view.text(r.name) == rule {
+                            return r.ret_type != null
+                        }
+                    }
+                }
+            },
+            else => {},
+        }
+    }
+    return false
+}
+
 /// The built-in `text(..)` or `bytes(..)` with a pattern inside, not a rule
 /// of that name: what its pattern binds is the alternative's (Part II 10,
 /// #2409).

@@ -868,9 +868,9 @@ pub(crate) fn sv_smtlib_script(source: &str) -> SvSmtRead {
         }
     }
     if queries > 1 { return SvSmtRead::Failed(SvReadWhy::Unsupported(format!("{} check-sat commands: a query is self-contained (ADR-270 D3)", queries))); }
-    #[allow(unused_mut)] let mut reader = SvSmtReader { arena: TermArena::empty(), ints: collections::BTreeSet::new(), reals: collections::BTreeSet::new(), bools: collections::BTreeSet::new(), bound_names: vec![], bound_values: vec![], defined: collections::BTreeMap::new(), funs: collections::BTreeMap::new(), side: vec![], fresh: 0, ites: collections::BTreeMap::new(), folds: collections::BTreeMap::new(), made: collections::BTreeMap::new(), nl: vec![], nl_names: collections::BTreeMap::new(), depth: 0 };
+    let mut reader = SvSmtReader { arena: TermArena::empty(), ints: collections::BTreeSet::new(), reals: collections::BTreeSet::new(), bools: collections::BTreeSet::new(), bound_names: vec![], bound_values: vec![], defined: collections::BTreeMap::new(), funs: collections::BTreeMap::new(), side: vec![], fresh: 0, ites: collections::BTreeMap::new(), folds: collections::BTreeMap::new(), made: collections::BTreeMap::new(), nl: vec![], nl_names: collections::BTreeMap::new(), depth: 0 };
     let mut stack: Vec<Vec<i64>> = nikaia_std::block::List::from_array_in([vec![]], nikaia_std::block::Place::Block);
-    let mut asserted = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut reader = reader;
+    let mut asserted = 0;
     for command in commands.iter() {
         let items = match command.clone() {
             LgSexp::List(inside) => inside,

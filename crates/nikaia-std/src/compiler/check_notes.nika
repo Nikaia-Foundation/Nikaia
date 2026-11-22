@@ -107,7 +107,7 @@ impl CheckState {
     /// **`NK2402`: a `catch` now also receives errors** a callee gained
     /// (ADR-308 D3). `gained` is what the committed ledger lacks for `key`.
     fn newly_reaches_a_handler(ref mut self, key: ref String, gained: ref Vec[String], span: ref Span) sync {
-        if self.flow.guarded == null || gained.len() == 0 {
+        if self.flow.guarded == null || self.flow.task_probe || gained.len() == 0 {
             return
         }
         let named = names_listed(gained)

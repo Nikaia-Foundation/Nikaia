@@ -1,16 +1,16 @@
 warning[NK1261]: `ref` is redundant here: a parameter written `ref String` says what `String` already says.
-  --> tests/a_trait_method_with_a_view_result_and_no_from_is_refused.nika:4:5
+  --> tests/a_trait_method_with_a_view_result_and_no_from_is_refused.nika:4:13
    |
  4 |     fn pick(a: ref String, b: ref String) -> ref String
-   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |             ^ written `ref String`
    |
    = note: Text is a view wherever a view suffices, and the ledger records whether a published parameter is lent or kept and what a result points into (ADR-282 D2). Only an `extern "C"` declaration and a `pub extern fn` write `ref String`, as the pointer C expects.
    = help: Write `String` without `ref`.
 warning[NK1261]: `ref` is redundant here: a parameter written `ref String` says what `String` already says.
-  --> tests/a_trait_method_with_a_view_result_and_no_from_is_refused.nika:4:5
+  --> tests/a_trait_method_with_a_view_result_and_no_from_is_refused.nika:4:28
    |
  4 |     fn pick(a: ref String, b: ref String) -> ref String
-   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |                            ^ written `ref String`
    |
    = note: Text is a view wherever a view suffices, and the ledger records whether a published parameter is lent or kept and what a result points into (ADR-282 D2). Only an `extern "C"` declaration and a `pub extern fn` write `ref String`, as the pointer C expects.
    = help: Write `String` without `ref`.
@@ -23,18 +23,18 @@ error[NK1336]: `pick` hands back a view, but has no body to tell whose data it p
    = note: Where there is no body to infer it from - a trait's method, a foreign function - `from` alone makes the result a view of what it names, and a result without one owns its value (ADR-views-v4 D8, D14).
    = help: Write one of `from a`, `from b`, `from a | b` after the result type, or declare it without `ref` to hand back text of its own.
 warning[NK1261]: `ref` is redundant here: a parameter written `ref String` says what `String` already says.
-  --> tests/a_trait_method_with_a_view_result_and_no_from_is_refused.nika:8:5
+  --> tests/a_trait_method_with_a_view_result_and_no_from_is_refused.nika:8:15
    |
  8 |     fn choose(a: ref String, b: ref String) -> ref String from a | b
-   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |               ^ written `ref String`
    |
    = note: Text is a view wherever a view suffices, and the ledger records whether a published parameter is lent or kept and what a result points into (ADR-282 D2). Only an `extern "C"` declaration and a `pub extern fn` write `ref String`, as the pointer C expects.
    = help: Write `String` without `ref`.
 warning[NK1261]: `ref` is redundant here: a parameter written `ref String` says what `String` already says.
-  --> tests/a_trait_method_with_a_view_result_and_no_from_is_refused.nika:8:5
+  --> tests/a_trait_method_with_a_view_result_and_no_from_is_refused.nika:8:30
    |
  8 |     fn choose(a: ref String, b: ref String) -> ref String from a | b
-   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |                              ^ written `ref String`
    |
    = note: Text is a view wherever a view suffices, and the ledger records whether a published parameter is lent or kept and what a result points into (ADR-282 D2). Only an `extern "C"` declaration and a `pub extern fn` write `ref String`, as the pointer C expects.
    = help: Write `String` without `ref`.

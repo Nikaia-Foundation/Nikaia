@@ -1918,7 +1918,11 @@ pub fn check_core_flow_try_catch[H: CheckHost](mut state: CheckState, world: ref
     // **A guard of its own, and the enclosing one set aside** (ADR-308).
     let enclosing: CheckGuarded? = state.flow.guarded?.clone()
     state.flow.guarded = CheckGuarded::nothing()
+    // A `catch` inside a task's walk is a handler again (`NK2402`).
+    let probing = state.flow.task_probe
+    state.flow.task_probe = false
     let answers = check_core_expr(state, world, host, guarded_expr, span)
+    state.flow.task_probe = probing
     let held: CheckGuarded? = state.flow.guarded?.clone()
     state.flow.guarded = enclosing
     // **A nested `catch` fails the enclosing one only by what passes it**
@@ -1939,7 +1943,22 @@ pub fn check_core_flow_try_catch[H: CheckHost](mut state: CheckState, world: ref
     let guarded: CheckGuarded = held ?? CheckGuarded::nothing()
     state.a_fatal_error_passes(world, guarded, handler, span)
     let caught = check_core_flow_caught_type(guarded)
-    state.nothing_here_can_fail(guarded, span)
+    // **A pending binding named in it** (ADR-async-5 D22): its task's
+    // failure arrives before the statement, where this `catch` is not.
+    let mut named: collections::BTreeSet[String] = collections::BTreeSet()
+    names_in(guarded_expr, world.words, named)
+    let mut task: String? = null
+    for name in named {
+        if task == null {
+            match state.binding(name) {
+                bound => {
+                    task = state.flow.pending_tasks.get(bound.id)?.clone()
+                },
+                null => {},
+            }
+        }
+    }
+    state.nothing_here_can_fail(guarded, task, span)
     let id = state.a_new_binding()
     state.scope.push([CheckLocal::free("error", caught, id)])
     // **A set that cannot be named is open** (ADR-351 D4): a `match` over it
@@ -2004,6 +2023,13 @@ pub fn check_core_flow_try_catch[H: CheckHost](mut state: CheckState, world: ref
     if !state.block_leaves(world, handler) && check_core_flow_widened_by_null(value, answers) {
         state.facts.nullable_catches.insert(node_key(guarded_expr))
         return Ty::Nullable(answers.clone())
+    }
+    // **A view of text beside text of its own is owned** (ADR-282 D4, Part
+    // I 7.1, #2353), as the two arms of an `if` are: `bad.text() catch {
+    // error.message() }` copies the view the guarded call hands back.
+    if !state.block_leaves(world, handler) && a_plain_str_view(answers) && a_plain_string(value) {
+        state.facts.owned_catches.insert(node_key(guarded_expr))
+        return value
     }
     if state.block_leaves(world, handler) || value.is_unknown() || value.fits(answers) {
         // **A type not yet known beside text of its own** (ADR-282 D4): the

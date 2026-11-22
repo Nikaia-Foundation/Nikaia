@@ -80,12 +80,12 @@ pub(crate) fn sysroot_package_shared(text: &str) -> String {
     let method_keywords: Vec<&'static str> = vec!["fn ", "const ", "unsafe fn ", "async fn "]; #[allow(clippy::redundant_locals)] let keywords = keywords;
     let n = text.as_bytes().len() as i64;
     let mut out: String = String::from(""); #[allow(clippy::redundant_locals)] let keywords = keywords; #[allow(clippy::redundant_locals)] let method_keywords = method_keywords;
-    let mut at: i64 = 0; #[allow(clippy::redundant_locals)] let keywords = keywords; #[allow(clippy::redundant_locals)] let method_keywords = method_keywords;
-    let mut depth = 0; #[allow(clippy::redundant_locals)] let keywords = keywords; #[allow(clippy::redundant_locals)] let method_keywords = method_keywords;
+    let mut at: i64 = 0;
+    let mut depth = 0;
     let mut start = true;
     let mut inherent = false;
     let mut in_struct = false;
-    let mut copied: i64 = 0; #[allow(clippy::redundant_locals)] let keywords = keywords; #[allow(clippy::redundant_locals)] let method_keywords = method_keywords;
+    let mut copied: i64 = 0;
     while at < n {
         if start && depth == 0 {
             in_struct = sysroot_package_at(text, at, "struct ") || sysroot_package_at(text, at, "pub struct ");
@@ -230,7 +230,7 @@ pub fn sysroot_package_assemble(names: &[String], lowered: &[String], views: &[P
         let name = __keep_frame.put(nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&names, (at) as usize) }).to_string()));
         let mut body: String = String::from("");
         let all: Vec<String> = (*nikaia_std::index::get(&lowered, (at) as usize)).lines().map(|line| { nikaia_std::block::Text::from(line.to_string()) }).collect::<Vec<_>>();
-        let mut i: i64 = 0; #[allow(clippy::redundant_locals)] let all = all;
+        let mut i: i64 = 0;
         while ((i) as usize) < all.len() {
             if *unsafe { nikaia_std::proven::read(&all, (i) as usize) } == "#[allow(unused_imports)]" && ((unsafe { nikaia_std::proven::add::<i64>(i, 1) }) as usize) < all.len() && (*unsafe { nikaia_std::proven::read(&all, (nikaia_std::proven::add::<i64>(i, 1)) as usize) }).starts_with("use nikaia_std::") {
                 let import = nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&all, (nikaia_std::proven::add::<i64>(i, 1)) as usize) }).to_string());

@@ -190,6 +190,12 @@ impl FmtLexer {
             if c == '\'' && self.character() {
                 continue
             }
+            let word_before = self.at > 0 && (self.c[self.at - 1].is_alphanumeric() || self.c[self.at - 1] == '_')
+            if c == 'f' && self.ahead(1) == '"' && !word_before {
+                self.at += 2
+                self.interpolated()
+                continue
+            }
             self.at += 1
             if c == '"' {
                 self.quoted()

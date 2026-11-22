@@ -1,0 +1,62 @@
+warning[NK1261]: `ref` is redundant here: a field written `ref String?` says what `String?` already says.
+  --> tests/each_ref_string_parameter_is_its_own_warning.nika:6:5
+   |
+ 6 |     first: ref String?,
+   |     ^^^^^ written `ref String?`
+   |
+   = note: Text is a view wherever a view suffices, and the ledger records whether a published parameter is lent or kept and what a result points into (ADR-282 D2). Only an `extern "C"` declaration and a `pub extern fn` write `ref String`, as the pointer C expects.
+   = help: Write `String?` without `ref`.
+warning[NK1261]: `ref` is redundant here: a field written `ref String?` says what `String?` already says.
+  --> tests/each_ref_string_parameter_is_its_own_warning.nika:7:5
+   |
+ 7 |     last: ref String?,
+   |     ^^^^ written `ref String?`
+   |
+   = note: Text is a view wherever a view suffices, and the ledger records whether a published parameter is lent or kept and what a result points into (ADR-282 D2). Only an `extern "C"` declaration and a `pub extern fn` write `ref String`, as the pointer C expects.
+   = help: Write `String?` without `ref`.
+warning[NK1261]: `ref` is redundant here: a parameter written `ref String` says what `String` already says.
+   --> tests/each_ref_string_parameter_is_its_own_warning.nika:11:21
+    |
+ 11 |     fn joined(self, a: ref String, b: ref String) -> String
+    |                     ^ written `ref String`
+    |
+    = note: Text is a view wherever a view suffices, and the ledger records whether a published parameter is lent or kept and what a result points into (ADR-282 D2). Only an `extern "C"` declaration and a `pub extern fn` write `ref String`, as the pointer C expects.
+    = help: Write `String` without `ref`.
+warning[NK1261]: `ref` is redundant here: a parameter written `ref String` says what `String` already says.
+   --> tests/each_ref_string_parameter_is_its_own_warning.nika:11:36
+    |
+ 11 |     fn joined(self, a: ref String, b: ref String) -> String
+    |                                    ^ written `ref String`
+    |
+    = note: Text is a view wherever a view suffices, and the ledger records whether a published parameter is lent or kept and what a result points into (ADR-282 D2). Only an `extern "C"` declaration and a `pub extern fn` write `ref String`, as the pointer C expects.
+    = help: Write `String` without `ref`.
+warning[NK1261]: `ref` is redundant here: a parameter written `ref String` says what `String` already says.
+   --> tests/each_ref_string_parameter_is_its_own_warning.nika:14:9
+    |
+ 14 | fn join(a: ref String, b: ref String; sep: ref String = ",") -> String {
+    |         ^ written `ref String`
+    |
+    = note: Text is a view wherever a view suffices, and the ledger records whether a published parameter is lent or kept and what a result points into (ADR-282 D2). Only an `extern "C"` declaration and a `pub extern fn` write `ref String`, as the pointer C expects.
+    = help: Write `String` without `ref`.
+warning[NK1261]: `ref` is redundant here: a parameter written `ref String` says what `String` already says.
+   --> tests/each_ref_string_parameter_is_its_own_warning.nika:14:24
+    |
+ 14 | fn join(a: ref String, b: ref String; sep: ref String = ",") -> String {
+    |                        ^ written `ref String`
+    |
+    = note: Text is a view wherever a view suffices, and the ledger records whether a published parameter is lent or kept and what a result points into (ADR-282 D2). Only an `extern "C"` declaration and a `pub extern fn` write `ref String`, as the pointer C expects.
+    = help: Write `String` without `ref`.
+warning[NK1261]: `ref` is redundant here: a parameter written `ref String` says what `String` already says.
+   --> tests/each_ref_string_parameter_is_its_own_warning.nika:14:39
+    |
+ 14 | fn join(a: ref String, b: ref String; sep: ref String = ",") -> String {
+    |                                       ^^^ written `ref String`
+    |
+    = note: Text is a view wherever a view suffices, and the ledger records whether a published parameter is lent or kept and what a result points into (ADR-282 D2). Only an `extern "C"` declaration and a `pub extern fn` write `ref String`, as the pointer C expects.
+    = help: Write `String` without `ref`.
+warning: Trait `Joined` is never used.
+   --> tests/each_ref_string_parameter_is_its_own_warning.nika:10:1
+    |
+ 10 | trait Joined {
+    | ^^^^^^^^^^^^^^
+    |

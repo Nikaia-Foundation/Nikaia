@@ -1,0 +1,24 @@
+// A caller may not change what a `mut` parameter holds views of while that
+// argument lives (ADR-views-v4 D32, D9, #2425): `walk` puts a view of `s` into
+// `out`, so `s` stays as it was until `out` is last used.
+struct E {
+	v: String,
+}
+
+fn walk(s: String, mut out: Vec[E]) {
+	out.push(E { v: s })
+}
+
+fn make() -> String {
+	let mut g = String()
+	g.push_str("abc")
+	return g
+}
+
+fn main() throws {
+	let mut s = make()
+	let mut out: Vec[E] = []
+	walk(s, out)
+	s.push_str("!")
+	println(out[0].v)
+}
