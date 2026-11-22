@@ -15,8 +15,10 @@ comptime COMPARE_PLAIN: Array[ref String, 11] = ["i32", "i64", "u8", "u32", "u64
 comptime COMPARE_CONTAINERS: Array[ref String, 15] = ["Vec", "List", "Array", "Option", "Set", "collections::HashMap", "collections::HashSet", "collections::BTreeMap", "collections::BTreeSet", "HashMap", "HashSet", "BTreeMap", "BTreeSet", "Shared", "Seen"]
 
 /// The maps and sets not kept in order, which have no order.
-// What `.clone()` does not reach: a task's handle and a lock (#1245).
-comptime COMPARE_UNCOPIED: Array[ref String, 4] = ["TaskHandle", "task::ChildHandle", "Locked", "SharedMut"]
+// What `.clone()` does not reach: a task's handle and a lock (#1245), and
+// the handles of a socket, a file, a child process and a channel's end, which
+// the library below never copies (#2238).
+comptime COMPARE_UNCOPIED: Array[ref String, 10] = ["TaskHandle", "task::ChildHandle", "Locked", "SharedMut", "net::Connection", "net::Listener", "fs::File", "process::Child", "channel::Sender", "channel::Receiver"]
 
 comptime COMPARE_UNORDERED: Array[ref String, 7] = ["Set", "collections::HashMap", "collections::HashSet", "HashMap", "HashSet", "TrustedMap", "TrustedSet"]
 
@@ -482,6 +484,9 @@ pub struct CompareDeclared {
     pub totally: Vec[String],
     /// Those whose hash is derived from their fields (ADR-010 D11).
     pub hashes: Vec[String],
+    /// Those that do not copy (Part I 4.7, #2238): a part is a handle
+    /// `.clone()` does not reach, so the emitter derives no `Clone`.
+    pub uncloned: Vec[String],
 }
 
 /// **Which declared types compare** (ADR-204 D1), for the derive the emitter
@@ -496,8 +501,12 @@ fn compare_declared(asking: ref CheckComparable, here: ref ParsedView) -> Compar
             else => {},
         }
     }
-    let mut found = CompareDeclared { compares: [], totally: [], hashes: [] }
+    let mut found = CompareDeclared { compares: [], totally: [], hashes: [], uncloned: [] }
+    let unbound: collections::BTreeMap[String, Vec[String]] = collections::BTreeMap()
     for name in declared {
+        if !asking.clones(Ty::Named { name: name.clone(), args: [], view: false }, unbound) {
+            found.uncloned.push(name.clone())
+        }
         // An `impl Eq` is the equality (ADR-341 D5).
         if asking.implements("Eq", name) {
             continue

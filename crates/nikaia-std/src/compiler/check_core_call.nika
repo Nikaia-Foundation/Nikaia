@@ -665,8 +665,12 @@ fn check_core_call_unresolved[H: CheckHost](mut state: CheckState, world: ref Ch
     if is_variable && state.run_code.contains(name) {
         let looked: Ty = state.lookup(name) ?? Ty::Unknown
         match looked {
-            Ty::Fn { params, result, can_throw, .. } => {
+            Ty::Fn { params, result, is_sync, can_throw, .. } => {
                 check_core_call_lent(state, world, args, params, found, name, span)
+                // **A parameter of code that may pause pauses where it is
+                // run** (#831, #2200): inside a lock that is `NK2202`, since
+                // a door block is `sync` (ADR-281 D14).
+                state.a_call_that_may_pause(name, !is_sync, false, span)
                 // **A parameter of code fails with what its callers hand
                 // it** (ADR-351 D1, D4).
                 let current: String = state.current?.clone() ?? ""

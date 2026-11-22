@@ -60,6 +60,13 @@ pub struct TaskHandle<T> {
     asked: crate::rt::exec::Uncounted<std::sync::Arc<Cancelled>>,
 }
 
+/// What a struct that holds one prints for `Debug` (#2238).
+impl<T> std::fmt::Debug for TaskHandle<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("TaskHandle")
+    }
+}
+
 /// **The request a [`TaskHandle::cancel`] makes**
 /// ([ADR-292](../../../docs/specification/adr/adr-292.md) D14).
 ///

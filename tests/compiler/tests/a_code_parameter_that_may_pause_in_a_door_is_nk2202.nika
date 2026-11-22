@@ -1,0 +1,18 @@
+// #2200: a parameter of code that does not say `sync` may pause, and a door
+// block is `sync` (ADR-281 D14), so running it inside the lock is `NK2202`,
+// as a named call that may pause is. It was accepted, and rustc refused the
+// lowered `AsyncFnMut` call (NK1343). A parameter that says `sync` runs
+// there (`look_sync`).
+fn look(list: SharedMut[Vec[i64]], f: fn() -> i64) -> i64 {
+    return list.access fn(v) { v.len() + f() }
+}
+
+fn look_sync(list: SharedMut[Vec[i64]], f: fn() -> i64 sync) -> i64 {
+    return list.access fn(v) { v.len() + f() }
+}
+
+fn main() throws {
+    let list: SharedMut[Vec[i64]] = SharedMut([1, 2, 3])
+    println(f"{look(list, fn { 0 })}")
+    println(f"{look_sync(list, fn { 0 })}")
+}

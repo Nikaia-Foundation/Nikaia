@@ -1,0 +1,29 @@
+// A `test` block of a `std` file is checked by `lower-std` as the block it
+// is, before it becomes a function (#2229): a `let mut` of a literal that the
+// block grows (`key = key + "0"`) holds text of its own there too (ADR-282
+// D31), as in a function, so `lower-std` lowers it instead of NK1105.
+use std::env
+use std::fs
+use std::process
+
+fn toolchain() -> String throws {
+    let exe = env::current_exe()?.display() ?? ""
+    if exe.len() > 0 { return exe }
+    return "target/fast/nikaia"
+}
+
+fn main() throws {
+    let tmp = fs::scratch()
+    let nikaia = toolchain()
+    let dir = tmp.join("crates/nikaia-std/src/compiler")
+    process::run("mkdir", ["-p", dir.path().to_text()])
+    fs::write("nikaia.toml", dir, "[package]\nname = \"compiler\"\nwithin = \"std\"\n")
+    fs::write("a.nika", dir, "/// A number.\npub fn a_one() -> i64 sync {\n    return 1\n}\n\ntest \"a grown literal\" {\n    let mut key = \"Station\"\n    if a_one() < 10 {\n        key = key + \"00\"\n    }\n    key = key + f\"{a_one()}\"\n    assert(key == \"Station001\")\n}\n")
+    let out = process::run(nikaia, ["lower-std", "--sysroot", f"{tmp.path().to_text()}/crates"]; dir: tmp.path().to_text(), env: [("NIKAIA_CACHE_DIR", f"{tmp.path().to_text()}/cache"), ("NIKAIA_LOWER_CACHE_SALT", "grown-literal")])
+    println(f"exit {out.code}")
+    for line in out.stderr.lines() {
+        if line.contains("NK") {
+            println(line)
+        }
+    }
+}

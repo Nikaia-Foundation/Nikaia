@@ -87,21 +87,16 @@ impl Drop for Frame {
     }
 }
 
-/// **Stop, and say where**: what was exceeded, then the path. A path deeper
-/// than a reader can take in is shown by its first and last calls.
+/// **Stop, and say where**: what was exceeded, then the path, shortened in
+/// Nikaia (`runtime/build_time.nika`, `shown_path`).
 fn stop(what: &str) -> ! {
-    let path = PATH.with(|p| {
-        let path = p.borrow();
-        match path.len() > 12 {
-            true => {
-                let mut shown: Vec<&str> = path[..6].to_vec();
-                shown.push("…");
-                shown.extend(&path[path.len() - 6..]);
-                shown.join(" > ")
-            }
-            false => path.join(" > "),
-        }
+    let path: Vec<crate::block::Text> = PATH.with(|p| {
+        p.borrow()
+            .iter()
+            .map(|&name| crate::block::Text::from(name))
+            .collect()
     });
+    let path = crate::runtime::build_time::shown_path(&path);
     let mut err = std::io::stderr();
     let _ = writeln!(err, "{SAID} {what} | {path}");
     std::process::exit(3);
