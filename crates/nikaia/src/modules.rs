@@ -368,7 +368,17 @@ fn package_ledger_checked(
     let parsed: Vec<&Parsed> = units.iter().map(|u| &u.parsed).collect();
     // A dependency's ledger is inferred from its own `nikaia.proofs` and
     // kept out of this build's (ADR-270 D23).
-    let infer = || crate::contracts::Ledger::infer_package_noted(&parsed, library);
+    // Each question the ledger pass asks is placed in its file, where it is
+    // asked first (the lowering's pass, #2684, as `trust` below).
+    let files = units
+        .iter()
+        .map(|u| (u.path.clone(), u.source.clone()))
+        .collect();
+    let infer = || {
+        crate::proofs::with_units(files, || {
+            crate::contracts::Ledger::infer_package_noted(&parsed, library)
+        })
+    };
     let (mut own, checked, noted) = match (dependency, units.first()) {
         (Some(_), Some(first)) => crate::proofs::for_package(&first.path, infer),
         _ => infer(),

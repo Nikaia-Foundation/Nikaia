@@ -123,7 +123,8 @@ pub fn infer(
         let published =
             nikaia_std::compiler::prove_run::prove_with_published(own, &facts.published);
         crate::proofs::in_unit(at, || {
-            crate::bounds::proven_for_lowering(units[at], &beside, facts, &[&published, library])
+            let summed = with_summaries(units[at], facts, own, library);
+            crate::bounds::proven_for_lowering(units[at], &beside, &summed, &[&published, library])
         })
     };
     // The largest first, so no core is left with a long file at the end; the
@@ -150,4 +151,35 @@ pub fn infer(
             contract.panics = panics;
         }
     }
+}
+
+/// **The unit's facts with the result summaries its check proves** (ADR-359
+/// D14, #2684): the ledger's check proves nothing (#727), so the private
+/// functions' summaries the program's check hands its lowering are proved
+/// here, by the same prover, and the lowering's question matches the
+/// ledger's.
+fn with_summaries(
+    parsed: &Parsed,
+    facts: &crate::check::CheckFacts,
+    own: &Ledger,
+    library: &Ledger,
+) -> crate::check::CheckFacts {
+    let claims: BTreeSet<(i64, i64)> = facts.claims.keys().cloned().collect();
+    let comptimes = crate::prove::comptimes_of(
+        parsed,
+        &facts.comptime_values,
+        &facts.whole_lets,
+        &facts.method_callees,
+        &facts.field_owners,
+        &facts.outside,
+        &facts.zero_divisors,
+        &facts.arithmetic,
+        &facts.divisions,
+        &facts.unfit_numbers,
+        &facts.map_indices,
+    );
+    let mut summed = facts.clone();
+    summed.summaries =
+        crate::prove::prove(parsed, own, library, &claims, &comptimes, None).summaries;
+    summed
 }
