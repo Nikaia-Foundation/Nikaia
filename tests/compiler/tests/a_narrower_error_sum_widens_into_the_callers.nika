@@ -1,0 +1,39 @@
+// A function that fails in two ways, called with its failure handed on from
+// one that fails in those and a third (Part I 7.1): `main` prints, so it fails
+// with `io::IoError` too, and the callee's sum of two widens into `main`'s sum
+// of three member for member.
+struct A { at: i64 }
+impl Error for A { fn message(ref self) -> String { return f"a at {self.at}" } }
+struct B { at: i64 }
+impl Error for B { fn message(ref self) -> String { return f"b at {self.at}" } }
+
+fn two(n: i64) -> i64 throws {
+	if n == 1 {
+		throw A { at: 1 }
+	}
+	if n == 2 {
+		throw B { at: 2 }
+	}
+	return n
+}
+
+// The failure crosses `passed` into `main`'s handler with its member.
+fn passed(n: i64) -> i64 throws {
+	println(f"asked {n}")
+	return two(n)
+}
+
+fn main() throws {
+	println(f"{two(3)}")
+	for n in [1, 2, 4] {
+		let v = passed(n) catch {
+			match error {
+				A => println(f"caught {error}")
+				B => println(f"caught {error}")
+				else => println("another")
+			}
+			-1
+		}
+		println(f"{v}")
+	}
+}

@@ -1,0 +1,28 @@
+// A value handed back for a seen argument or receiver is seen, and an option
+// stays one (ADR-281 D23, #2334): `Seen[T]?`, which a `null` arm and `??`
+// can match, not `Seen[T?]`, which is never `null`.
+fn half(x: i64) -> i64? {
+	if x > 0 {
+		return x / 2
+	}
+	return null
+}
+
+fn main() throws {
+	let n: SharedMut[i64] = SharedMut(4)
+	let k = n.get()
+	match half(k) {
+		null => println("none"),
+		else => println("some"),
+	}
+	let order: SharedMut[Vec[i64]] = SharedMut([3, 4])
+	let seen = order.get()
+	match seen.first() {
+		null => println("empty"),
+		else => println("first"),
+	}
+	println(f"{seen.first() ?? 0} {seen.iter().sum()}")
+	let fs: SharedMut[Vec[f64]] = SharedMut([1.5])
+	let g = fs.get()
+	println(f"{g.iter().sum()}")
+}

@@ -740,12 +740,19 @@ int main(void) {
 }
 "#;
 
+/// The library's `read_size` and `sized` read the path their caller chose under
+/// `fs::Root::Anywhere`: a `pub` function's parameter at a raw sink is outside
+/// data, so the package says it takes paths from outside (ADR-raw-sinks-1 D4,
+/// D6), or the build opens it as under `Dir(".")`.
 fn package(purpose: &str, manifest_build: &str, source: &str) -> PathBuf {
     let root = common::scratch_dir(purpose);
     std::fs::create_dir_all(root.join("src")).expect("the package");
     std::fs::write(
         root.join("nikaia.toml"),
-        format!("[package]\nname = \"calc\"\nversion = \"0.1.0\"\n\n[build]\n{manifest_build}"),
+        format!(
+            "[package]\nname = \"calc\"\nversion = \"0.1.0\"\n\n[build]\n{manifest_build}\n\
+             [allow]\nuntrusted-paths-read = true\n"
+        ),
     )
     .expect("a manifest");
     std::fs::write(root.join("src/main.nika"), source).expect("a source");

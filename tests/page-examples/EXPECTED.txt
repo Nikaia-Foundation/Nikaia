@@ -103,7 +103,7 @@ website/safe/deadlines.html #1 refused (as written) [NK2605]  use std::time
 website/safe/deadlines.html #2 lowered (as written)  use std::time
 website/safe/index.html #1 refused (as written) [NK1117,NK2605]  fn load() -> String {
 website/safe/index.html #2 refused (items, then a body) [NK1207]  fn percent(n: int) -> int {
-website/safe/index.html #3 refused (a body) [NK1117,NK1117,NK1117,NK1117]  async {
+website/safe/index.html #3 refused (a body) [NK1117,NK1117]  async {
 website/safe/index.html #4 refused (a body) [NK1117,NK1202]  let out = process::run("git", ["rev-parse", "HEAD"])
 website/safe/index.html #5 refused (a body) [NK1117,NK1117]  fs::read_to_string(name, fs::Root::Dir("store"))
 website/safe/index.html #6 refused (a body) [NK1117,NK1117,NK1181,NK1181]  let column = form.get("sort") ?? "name"

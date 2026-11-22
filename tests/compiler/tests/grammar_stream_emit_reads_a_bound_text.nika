@@ -1,0 +1,27 @@
+// An emitting rule of a `@stream` entry reads a bound `text(p)` or `span(p)`
+// whose `p` binds names (Part II 10, #2254): the backend lends its state to
+// the action before the action reads the covered input, and the `emit`
+// after that read uses the state again; rustc refused the two loans before.
+
+struct Item {
+	word: String,
+}
+
+grammar Words {
+	@stream entry rule items -> Item = group*
+	rule group = t:text(w:until(";")) ";" -> { emit Item { word: f"{t} {w}" } }
+}
+
+grammar Spans {
+	@stream entry rule items -> Item = pair*
+	rule pair = s:span(k:alpha1 "=" v:alpha1) ";" -> { emit Item { word: f"{k} {v} [{s.text()}]" } }
+}
+
+fn main() throws {
+	for it in Words::items("a;bc;") {
+		println(it.word)
+	}
+	for it in Spans::items("ab=cd;x=y;") {
+		println(it.word)
+	}
+}

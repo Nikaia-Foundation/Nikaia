@@ -899,6 +899,7 @@ pub struct ProverWhere {
     pub posts: bool,
     pub lambda: bool,
     pub throws_out: bool,
+    pub public: bool,
 }
 
 impl ProverWhere {

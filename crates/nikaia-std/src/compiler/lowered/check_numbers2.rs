@@ -204,7 +204,7 @@ impl CheckState {
         let wanted = named_arguments_of(want);
         let items = items_of(value);
         let mut has_count = false;
-        let mut count: i64 = 0; #[allow(clippy::redundant_locals)] let items = items;
+        let mut count: i64 = 0;
         if name == "Array" && wanted.len() == 2 {
             match *unsafe { nikaia_std::proven::read(&wanted, (1) as usize) } {
                 Ty::Count(n) => {

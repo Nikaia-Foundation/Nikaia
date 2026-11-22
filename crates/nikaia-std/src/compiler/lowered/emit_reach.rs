@@ -191,7 +191,7 @@ pub(crate) fn code_on_a_cycle(graph: &collections::BTreeMap<String, collections:
     #[allow(unused_mut)] let mut pending: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     for first in reach_set_for(graph, key) { pending.push(first); }
     let mut seen: collections::BTreeSet<String> = collections::BTreeSet::new(); #[allow(unused_mut, clippy::redundant_locals)] let mut pending = pending;
-    let mut at: i64 = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut pending = pending;
+    let mut at: i64 = 0;
     while ((at) as usize) < pending.len() {
         let next = nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&pending, (at) as usize) }).to_string());
         at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };

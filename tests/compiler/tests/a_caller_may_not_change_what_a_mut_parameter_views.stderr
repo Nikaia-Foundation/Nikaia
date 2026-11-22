@@ -1,0 +1,13 @@
+error[NK2305]: `s` is changed here, but `out` may point into its data and is used later.
+   --> tests/a_caller_may_not_change_what_a_mut_parameter_views.nika:22:2
+    |
+ 21 | 	walk(s, out)
+    |          --- `walk` keeps a view of `s` in `out` here
+ 22 | 	s.push_str("!")
+    |  ^ `s` changes here
+ 23 | 	println(out[0].v)
+    |          --- `out` is used here, after the change
+    |
+    = note: `walk` keeps views of what it was given as `s` in `out`.
+    = help: Use `out` before this change, or hand `walk` a copy: `s.clone()`.
+1 change to data a view still to be used may point into

@@ -8,6 +8,12 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1542] — 2026-11-22
+
+**Builders' changes (#2714)**
+- A list of text is no longer bound again after a `let` of an untyped number (`let mut k = 0`), which made rustc refuse a caller whose `mut` argument held views of the list.
+- Generated crates raise rustc's recursion limit to 512 - a grammar with a long chain of rules (some 70 and more) no longer stops the build of a program, package or test batch at rustc's default of 128.
+
 ## [0.0.1541] — 2026-11-22
 
 **Builders' changes (#1589)**

@@ -149,15 +149,17 @@ pub fn grammar_run_driver<H: GrammarDriverHost>(host: &H, names: &winnow_grammar
 
 pub fn grammar_run_dump(names: &winnow_grammar::InternerContext, aliases: &collections::BTreeMap<String, String>, program: &Program, ledger: &Ledger, result: &Ty, out: &mut String) -> Option<CheckWall> {
     let shapes = grammar_run_shapes(names, aliases, program, ledger);
-    let refused = match dump(&shapes, result, "value", 1, out) { Some(__nikaia_value) => __nikaia_value, None => return None };
+    grammar_run_dump_shaped(&shapes, result, out)
+}
+
+pub fn grammar_run_dump_shaped(shapes: &Shapes, result: &Ty, out: &mut String) -> Option<CheckWall> {
+    let refused = match dump(shapes, result, "value", 1, out) { Some(__nikaia_value) => __nikaia_value, None => return None };
     Some(CheckWall::NoCrossedForm { ty: refused.ty, because: refused.because })
 }
 
-pub(crate) fn grammar_run_shapes(names: &winnow_grammar::InternerContext, aliases: &collections::BTreeMap<String, String>, program: &Program, ledger: &Ledger) -> Shapes {
-    let mut shapes = Shapes { enums: collections::BTreeMap::new(), structs: collections::BTreeMap::new(), constants: ledger.types.iter().filter_map(|__nikaia_tuple10676| {
-        let (name, entry) = __nikaia_tuple10676;
-        grammar_run_constant(name, &entry.constant)
-    }).collect() };
+pub fn grammar_run_shapes_empty() -> Shapes { Shapes { enums: collections::BTreeMap::new(), structs: collections::BTreeMap::new(), constants: collections::BTreeMap::new() } }
+
+pub fn grammar_run_shapes_add(names: &winnow_grammar::InternerContext, aliases: &collections::BTreeMap<String, String>, program: &Program, shapes: &mut Shapes) {
     for item in program.items.iter() {
         match &item.node {
             Item::Enum { name, variants, .. } => {
@@ -173,6 +175,28 @@ pub(crate) fn grammar_run_shapes(names: &winnow_grammar::InternerContext, aliase
             _ => { },
         }
     }
+}
+
+pub fn grammar_run_shapes_qualified(shapes: &Shapes, package: &str, into: &mut Shapes) {
+    let mut declared: collections::BTreeSet<String> = collections::BTreeSet::new();
+    for (name, _) in shapes.enums.iter() { declared.insert(nikaia_std::block::Text::from(name.to_string())); }
+    for (name, _) in shapes.structs.iter() { declared.insert(nikaia_std::block::Text::from(name.to_string())); }
+    for (name, variants) in shapes.enums.iter() {
+        let shaped: Vec<VariantShape> = variants.iter().map(|variant| { VariantShape { name: nikaia_std::block::Text::from(variant.name.to_string()), carried: variant.carried.iter().map(|t| { qualify(t, package, &declared) }).collect::<Vec<_>>(), named: variant.named } }).collect::<Vec<_>>();
+        into.enums.entry(String::from(format!("{}::{}", package, name))).or_insert(shaped);
+    }
+    for (name, fields) in shapes.structs.iter() {
+        let shaped: Vec<FieldShape> = fields.iter().map(|field| { FieldShape { name: nikaia_std::block::Text::from(field.name.to_string()), spelled: nikaia_std::block::Text::from(field.spelled.to_string()), ty: qualify(&field.ty, package, &declared) } }).collect::<Vec<_>>();
+        into.structs.entry(String::from(format!("{}::{}", package, name))).or_insert(shaped);
+    }
+}
+
+pub fn grammar_run_shapes(names: &winnow_grammar::InternerContext, aliases: &collections::BTreeMap<String, String>, program: &Program, ledger: &Ledger) -> Shapes {
+    let mut shapes = Shapes { enums: collections::BTreeMap::new(), structs: collections::BTreeMap::new(), constants: ledger.types.iter().filter_map(|__nikaia_tuple13824| {
+        let (name, entry) = __nikaia_tuple13824;
+        grammar_run_constant(name, &entry.constant)
+    }).collect() };
+    grammar_run_shapes_add(names, aliases, program, &mut shapes);
     shapes
 }
 

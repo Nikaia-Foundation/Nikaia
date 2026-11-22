@@ -104,9 +104,17 @@ fn no_program_in_the_repository_has_a_type_error() {
                 .find(|manifest| manifest.is_file())
                 .and_then(|manifest| std::fs::read_to_string(manifest).ok())
                 .is_some_and(|manifest| manifest.contains("artifact = \"c-library\""));
+            // A raw sink the package's manifest admits under `[allow]` is no
+            // refusal (ADR-raw-sinks-1 D4, D6): this harness does not read it.
+            let admits_paths = path
+                .ancestors()
+                .map(|dir| dir.join("nikaia.toml"))
+                .find_map(|manifest| std::fs::read_to_string(manifest).ok())
+                .is_some_and(|text| text.contains("untrusted-paths-read"));
             for finding in common::corpus_findings(&path, &parsed, &library)
                 .into_iter()
                 .filter(|finding| !(a_library && finding.code == "NK1238"))
+                .filter(|finding| !(admits_paths && finding.code == "NK1308"))
                 // A warning is not a type error (`NK1261` and the rest).
                 .filter(|finding| finding.severity != check::Severity::Warning)
             {

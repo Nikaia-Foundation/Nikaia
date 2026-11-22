@@ -448,8 +448,8 @@ pub(crate) fn lsp_range(source: &str, span: &Span, word: &str) -> json::Value {
     let lines: Vec<&str> = source.split("\n").collect::<Vec<_>>();
     let at = span.start as i64;
     let end = span.end as i64;
-    let mut line: i64 = 0; #[allow(clippy::redundant_locals)] let lines = lines;
-    let mut start: i64 = 0; #[allow(clippy::redundant_locals)] let lines = lines;
+    let mut line: i64 = 0;
+    let mut start: i64 = 0;
     while line + 1 < lines.len() as i64 && (start + (*unsafe { nikaia_std::proven::read(&lines, (line) as usize) }).len() as i64) < at {
         start += (*unsafe { nikaia_std::proven::read(&lines, (line) as usize) }).len() as i64 + 1;
         line = unsafe { nikaia_std::proven::add::<i64>(line, 1) };

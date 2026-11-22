@@ -73,7 +73,7 @@ impl CxPython {
                 args.push(String::from("self._live()"));
             }
         }
-        let mut position: i64 = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut def_params = def_params; #[allow(unused_mut, clippy::redundant_locals)] let mut argtypes = argtypes; #[allow(unused_mut, clippy::redundant_locals)] let mut before = before; #[allow(unused_mut, clippy::redundant_locals)] let mut args = args; #[allow(unused_mut, clippy::redundant_locals)] let mut keep = keep; #[allow(unused_mut, clippy::redundant_locals)] let mut raising = raising;
+        let mut position: i64 = 0;
         while position < entry.arg_names.len() as i64 {
             let name = cx_python_name(unsafe { nikaia_std::proven::read(&entry.arg_names, (position) as usize) });
             let ty = (*nikaia_std::index::get(&entry.arg_types, nikaia_std::index::at(position))).clone();
@@ -138,7 +138,7 @@ impl CxPython {
                     #[allow(unused_mut)] let mut c_args: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
                     #[allow(unused_mut)] let mut params: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block); #[allow(unused_mut, clippy::redundant_locals)] let mut c_args = c_args;
                     #[allow(unused_mut)] let mut handed: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block); #[allow(unused_mut, clippy::redundant_locals)] let mut c_args = c_args; #[allow(unused_mut, clippy::redundant_locals)] let mut params = params;
-                    let mut at = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut c_args = c_args; #[allow(unused_mut, clippy::redundant_locals)] let mut params = params; #[allow(unused_mut, clippy::redundant_locals)] let mut handed = handed;
+                    let mut at = 0;
                     for part in lent.iter() {
                         match part {
                             CxLent::Value(shape) => {
@@ -288,8 +288,8 @@ impl CxPython {
         if streams.len() == 1 && owner_name.is_none() {
             self.any_stream = true;
             #[allow(unused_mut)] let mut others: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-            #[allow(unused_mut)] let mut forwarded: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block); #[allow(unused_mut, clippy::redundant_locals)] let mut others = others;
-            let mut place: i64 = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut others = others; #[allow(unused_mut, clippy::redundant_locals)] let mut forwarded = forwarded;
+            let mut forwarded: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block); #[allow(unused_mut, clippy::redundant_locals)] let mut others = others;
+            let mut place: i64 = 0;
             while ((place) as usize) < def_params.len() {
                 if place != *unsafe { nikaia_std::proven::read(&streams, (0) as usize) } {
                     others.push(nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&def_params, (place) as usize) }).to_string()));

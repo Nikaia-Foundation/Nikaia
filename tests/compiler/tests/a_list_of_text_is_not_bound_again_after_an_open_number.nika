@@ -1,0 +1,29 @@
+// A list of text is not bound again after a `let` of an open number (#490,
+// #2425): `let mut k = 0` holds no text, so `words` stays declared before
+// `out`, which holds views of it (ADR-views-v4 D32). Bound again after `k`,
+// `words` was dropped before `out`: rustc said `words` does not live long
+// enough.
+struct E {
+	v: String,
+}
+
+fn put(s: String, mut out: Vec[E]) {
+	out.push(E { v: s })
+}
+
+fn make(text: String) -> String {
+	let mut g = String()
+	g.push_str(text)
+	return g
+}
+
+fn main() throws {
+	let words = [make("abc"), make("def")]
+	let mut out: Vec[E] = []
+	let mut k = 0
+	for w in words {
+		put(w, out)
+		k += 1
+	}
+	println(f"{out[1].v} {k}")
+}

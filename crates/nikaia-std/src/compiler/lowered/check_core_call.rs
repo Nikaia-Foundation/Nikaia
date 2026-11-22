@@ -73,7 +73,7 @@ pub(crate) fn check_core_call_owner(name: &str) -> String {
     if parts.len() < 2 { return nikaia_std::block::Text::from(name.to_string()); }
     let last = unsafe { nikaia_std::proven::sub::<i64>(parts.len() as i64, 1) };
     let mut owner: String = String::from(""); #[allow(clippy::redundant_locals)] let parts = parts;
-    let mut i: i64 = 0; #[allow(clippy::redundant_locals)] let parts = parts;
+    let mut i: i64 = 0;
     for part in parts.iter() {
         let part = *part;
         if i == last { break; }
@@ -636,7 +636,7 @@ pub(crate) fn check_core_call_described<H: CheckHost>(state: &mut CheckState, wo
     check_crossings_a_standard_bound_not_met(state, world, key, &bound, span);
     check_core_call_on_weighed_through(state, key, &bound);
     let typed: Ty = nikaia_std::index::or(constructed, || substitute(&result, &bound).into());
-    state.stamped_through(contract, found, typed)
+    state.stamped_through(contract, found, false, typed)
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before

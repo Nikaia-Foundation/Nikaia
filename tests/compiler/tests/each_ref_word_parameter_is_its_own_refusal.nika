@@ -1,0 +1,9 @@
+// Each `ref i64` parameter is its own `NK1257` (#2719), labelled at its
+// name, though a finding is said once where it would print the same (#2247).
+fn add(a: ref i64, b: ref i64) -> i64 {
+    return a + b
+}
+
+fn main() throws {
+    println(f"{add(1, 2)}")
+}

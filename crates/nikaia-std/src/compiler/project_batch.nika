@@ -41,9 +41,11 @@ fn project_batch_module(k: i64, rust: ref String) -> String? {
     return f"pub mod p{k} " + "{\n" + rust + "\n}\n"
 }
 
-/// **The header of the batch's crate**: what comes before its modules.
+/// **The header of the batch's crate**: what comes before its modules,
+/// with the recursion limit its programs' grammars need (#2714), as a
+/// program alone has it.
 fn project_batch_header() -> String {
-    return "#![allow(warnings)]\n#[global_allocator]\nstatic NIKAIA_HEAP: nikaia_std::block::Counting = nikaia_std::block::Counting;\n"
+    return "#![allow(warnings)]\n" + EMIT_PROGRAM_RECURSION_LIMIT + "#[global_allocator]\nstatic NIKAIA_HEAP: nikaia_std::block::Counting = nikaia_std::block::Counting;\n"
 }
 
 /// **Where each module is in the batch's crate** (#1582), the lines of

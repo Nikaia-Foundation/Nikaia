@@ -85,9 +85,18 @@ fn example_findings(path: &std::path::Path, source: &str) -> Vec<nikaia::check::
     let parsed = parse_to_ast(source).expect("the source parses");
     let library =
         nikaia::contracts::Ledger::parse(nikaia::contracts::STD).expect("std ships a ledger");
+    // A raw sink the package's manifest admits under `[allow]` is no refusal
+    // (ADR-raw-sinks-1 D4, D6): the file-level check does not read the
+    // manifest, so the key is read here.
+    let admits_paths = path
+        .ancestors()
+        .map(|dir| dir.join("nikaia.toml"))
+        .find_map(|manifest| std::fs::read_to_string(manifest).ok())
+        .is_some_and(|text| text.contains("untrusted-paths-read"));
     common::corpus_findings(path, &parsed, &library)
         .into_iter()
         .filter(|f| f.severity == nikaia::check::Severity::Error)
+        .filter(|f| !(admits_paths && f.code == "NK1308"))
         .collect()
 }
 

@@ -192,6 +192,13 @@ touches = []
 views = ["ty: borrowed"]
 signature = "(ty: ref KeepsBesideType) -> KeepsBesidePointer?"
 
+[fn."limits_beside"]
+pub = true
+sync = "inferred"
+panics = false
+touches = []
+signature = "() -> LimitsBeside"
+
 [fn."list_beside_by_method"]
 pub = true
 sync = "inferred"
@@ -471,6 +478,14 @@ fields = ["pub name: String", "pub is_slice: bool", "pub is_mut: bool"]
 compares = true
 equates = true
 hashes = true
+
+[type."LimitsBeside"]
+pub = true
+fields = ["pub depth: i64", "pub bytes: i64"]
+compares = true
+equates = true
+hashes = true
+copies = true
 
 [type."ListBesideMaker"]
 pub = true

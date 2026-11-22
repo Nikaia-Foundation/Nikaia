@@ -77,8 +77,8 @@ pub fn indented_text(text: &str) -> String {
 
 pub(crate) fn brace_groups(text: &str) -> Vec<String> {
     let c: Vec<scalar> = nikaia_std::list::scalars(text.chars());
-    #[allow(unused_mut)] let mut found: Vec<String> = vec![];
-    let mut at: i64 = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut found = found;
+    let mut found: Vec<String> = vec![];
+    let mut at: i64 = 0;
     while ((at) as usize) < c.len() {
         if *unsafe { nikaia_std::proven::read(&c, (at) as usize) } == '\\' {
             at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };

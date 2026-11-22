@@ -1,0 +1,10 @@
+// What a `for` takes out of a list read from a lock is seen too (ADR-281
+// D22, D23, #2335): a `set` given the element is refused like a `set` given
+// the whole value.
+fn main() throws {
+	let order: SharedMut[Vec[i64]] = SharedMut([7, 8])
+	let n: SharedMut[i64] = SharedMut(0)
+	for x in order.get() {
+		n.set(x)
+	}
+}

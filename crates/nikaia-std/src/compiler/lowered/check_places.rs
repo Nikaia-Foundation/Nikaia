@@ -21,20 +21,34 @@ pub(crate) fn a_root_is_one_of_two(wanted: &[(String, Ty)]) -> String {
     String::from("")
 }
 
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn stamped_type(ty: &Ty) -> Ty {
+    let plain = ty.unseen();
+    match plain {
+        Ty::Nullable(ref inner) => {
+            let inner = nikaia_std::boxed::open(inner);
+            return Ty::Nullable(nikaia_std::block::Boxed::new(Ty::Named { name: nikaia_std::block::Text::from(SEEN.to_string()), args: vec![inner.clone()], view: false }));
+        },
+        _ => { },
+    }
+    Ty::Named { name: nikaia_std::block::Text::from(SEEN.to_string()), args: vec![plain], view: false }
+}
+
 impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     pub(crate) fn no_door(&mut self, written: &str, shape: &str, wanted: &str, span: &Span) { self.findings.push(check_refusal("NK1124", span, format!("Write `{}` like this: `{}`.", written, shape), vec![nikaia_std::block::Text::from(wanted.to_string())], None)); }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn stamped_through(&self, contract: &FnContract, given: &[Ty], result: Ty) -> Ty {
-        let mut any_seen = false;
+    pub(crate) fn stamped_through(&self, contract: &FnContract, given: &[Ty], receiver_seen: bool, result: Ty) -> Ty {
+        let mut any_seen = receiver_seen;
         for one in given.iter() { if one.is_seen() { any_seen = true; } }
         if result.is_seen() || !any_seen { return result; }
         let mut reaches_a_lock = !contract.touches_known;
         for touch in contract.touches.iter() { if touch.names_a_lock() { reaches_a_lock = true; } }
         if reaches_a_lock { return result; }
-        Ty::Named { name: nikaia_std::block::Text::from(SEEN.to_string()), args: vec![result.unseen()], view: false }
+        stamped_type(&result)
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
@@ -70,7 +84,7 @@ impl CheckState {
         match on {
             Ty::Named { name, args, .. } => {
                 let order = match *nikaia_std::index::get(&self.struct_parameters, name) { Some(__nikaia_value) => __nikaia_value, None => return bound };
-                let mut at: i64 = 0; #[allow(clippy::redundant_locals)] let order = order;
+                let mut at: i64 = 0;
                 while at < order.len() as i64 && at < args.len() as i64 {
                     if !(*unsafe { nikaia_std::proven::read(&args, (at) as usize) }).is_unknown() { bound.insert(nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&order, (at) as usize) }).to_string()), (*unsafe { nikaia_std::proven::read(&args, (at) as usize) }).clone()); }
                     at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
@@ -101,7 +115,7 @@ impl CheckState {
                 let name = *name;
                 let word = nikaia_std::block::Text::from(world.words.resolve(name).to_string());
                 let local = match self.binding(&word) { Some(__nikaia_value) => __nikaia_value, None => return false };
-                !local.lent && !local.ty.is_a_view() && !self.lent_here(&word)
+                !local.lent && !local.ty.is_a_view() && !self.lent_here(&word) && !self.got_past_a_jump.contains(&word)
             },
             _ => false,
         }

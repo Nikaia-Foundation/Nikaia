@@ -231,6 +231,7 @@ impl EmitState {
         let rule_name = emit_text(world, rule.name);
         let ty = match rule.ret_type.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return Ok(()) };
         let item = host.ty_named(walk, ty)?;
+        let viewing = self.emit_stream_item_views(&emit_text(world, ty.name));
         let mut params = nikaia_std::block::Text::new_in(nikaia_std::block::Place::Block);
         let mut handed = nikaia_std::block::Text::new_in(nikaia_std::block::Place::Block);
         for i in 0..rule.args.len() as i64 {
@@ -244,18 +245,30 @@ impl EmitState {
             { use ::core::fmt::Write as _; let _ = params.write_fmt(format_args!(", __wg_given{}: ::std::option::Option<{}>", j, option_ty)); };
             { use ::core::fmt::Write as _; let _ = handed.write_fmt(format_args!("__wg_option{}, ", j)); };
         }
-        out.push(&format!("\n#[doc(hidden)]\n#[allow(non_snake_case, dead_code, clippy::too_many_arguments)]\npub fn {}(__wg_source: ::std::vec::Vec<u8>{}, __wg_words: ::std::option::Option<winnow_grammar::InternerContext>) -> impl Iterator<Item = {}<{}, nikaia_std::grammar::ParseError>> {{ ", emit_stream_walk_name(name, &rule_name), params, self.rust_result(), item));
+        if !viewing {
+            out.push(&format!("\n#[doc(hidden)]\n#[allow(non_snake_case, dead_code, clippy::too_many_arguments)]\npub fn {}(__wg_source: ::std::vec::Vec<u8>{}, __wg_words: ::std::option::Option<winnow_grammar::InternerContext>) -> impl Iterator<Item = {}<{}, nikaia_std::grammar::ParseError>> {{ ", emit_stream_walk_name(name, &rule_name), params, self.rust_result(), item));
+            for j in 0..rule.config.len() as i64 {
+                out.push(&format!("let __wg_option{} = match __wg_given{} {{ ::std::option::Option::Some(__wg_value) => __wg_value, ::std::option::Option::None => ", j, j));
+                self.emit_expr(world, walk, out, host, &unsafe { nikaia_std::proven::read(&rule.config, (j) as usize) }.default, 0, EmitFlow::plain(), &EmitScope::plain())?;
+                out.push(" }; ");
+            }
+            out.push(&emit_stream_batched_start());
+            out.push("let mut __wg_context = match __wg_words { ::std::option::Option::Some(__wg_table) => winnow_grammar::ParseContext::<()>::with_state_and_interner((), __wg_table), ::std::option::Option::None => winnow_grammar::ParseContext::<()>::default() }; ");
+            let each = emit_stream_each(&item, self.facts.emitting_entries.contains(&format!("{}::{}", name, rule_name)), true);
+            out.push(&format!("let __wg_parsed = {}::parse_{}_slice_each(&__wg_source[..], &mut __wg_context, {}{}); ", name, rule_name, handed, each));
+            out.push(&emit_stream_batched_end("__wg_error.render(&__wg_source[..])"));
+            out.push(" }\n");
+        }
+        out.push(&format!("\n#[doc(hidden)]\n#[allow(non_snake_case, dead_code, clippy::too_many_arguments)]\npub fn {}<__WgB>(__wg_source: &[u8]{}, __wg_words: ::std::option::Option<winnow_grammar::InternerContext>, mut __wg_each: impl FnMut(&{}) -> ::std::ops::ControlFlow<__WgB>) -> {}<::std::option::Option<__WgB>, nikaia_std::grammar::ParseError> {{ ", emit_stream_each_name(name, &rule_name), params, emit_renamed_lifetime(&item, "'a", "'_"), self.rust_result()));
         for j in 0..rule.config.len() as i64 {
             out.push(&format!("let __wg_option{} = match __wg_given{} {{ ::std::option::Option::Some(__wg_value) => __wg_value, ::std::option::Option::None => ", j, j));
             self.emit_expr(world, walk, out, host, &unsafe { nikaia_std::proven::read(&rule.config, (j) as usize) }.default, 0, EmitFlow::plain(), &EmitScope::plain())?;
             out.push(" }; ");
         }
-        out.push(&emit_stream_batched_start());
         out.push("let mut __wg_context = match __wg_words { ::std::option::Option::Some(__wg_table) => winnow_grammar::ParseContext::<()>::with_state_and_interner((), __wg_table), ::std::option::Option::None => winnow_grammar::ParseContext::<()>::default() }; ");
-        let each = emit_stream_each(&item, self.facts.emitting_entries.contains(&format!("{}::{}", name, rule_name)), true);
-        out.push(&format!("let __wg_parsed = {}::parse_{}_slice_each(&__wg_source[..], &mut __wg_context, {}{}); ", name, rule_name, handed, each));
-        out.push(&emit_stream_batched_end("__wg_error.render(&__wg_source[..])"));
-        out.push(" }\n");
+        let mut each = String::from("|__wg_one| __wg_each(__wg_one)");
+        if self.facts.emitting_entries.contains(&format!("{}::{}", name, rule_name)) { each = format!("|__wg_item: &::std::option::Option<{}>| match __wg_item {{ ::std::option::Option::Some(__wg_one) => __wg_each(__wg_one), ::std::option::Option::None => ::std::ops::ControlFlow::Continue(()) }}", emit_renamed_lifetime(&item, "'a", "'_")); }
+        out.push(&format!("match {}::parse_{}_slice_each(__wg_source, &mut __wg_context, {}{}) {{ Ok(::std::ops::ControlFlow::Break(__wg_broken)) => Ok(::std::option::Option::Some(__wg_broken)), Ok(::std::ops::ControlFlow::Continue(_)) => Ok(::std::option::Option::None), Err(__wg_error) => Err(nikaia_std::grammar::ParseError::of(__wg_error.render(__wg_source))) }} }}\n", name, rule_name, handed, each));
         Ok(())
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -473,7 +486,7 @@ impl EmitState {
                     #[allow(unused_mut)] let mut spanned: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut as_spans = as_spans;
                     emit_span_bindings(world, &walk, &alt.pattern.node, &mut as_spans, &mut spanned, false);
                     let mut prelude = String::from(""); #[allow(unused_mut, clippy::redundant_locals)] let mut as_bytes = as_bytes; #[allow(unused_mut, clippy::redundant_locals)] let mut as_spans = as_spans; #[allow(unused_mut, clippy::redundant_locals)] let mut spanned = spanned;
-                    #[allow(unused_mut)] let mut as_texts: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut as_bytes = as_bytes;
+                    #[allow(unused_mut)] let mut as_texts: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut as_bytes = as_bytes; #[allow(unused_mut, clippy::redundant_locals)] let mut as_spans = as_spans;
                     #[allow(unused_mut)] let mut covered: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut as_texts = as_texts;
                     emit_text_bindings(world, &walk, &alt.pattern, &mut as_texts, &mut covered);
                     for name in as_bytes.iter() { if !nikaia_std::list::contains(&as_texts, &name) { prelude = format!("{}let {} = {}.as_bytes(); ", prelude, name, name); } }
@@ -484,6 +497,7 @@ impl EmitState {
                     let mut bound_bytes: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut as_texts = as_texts; #[allow(unused_mut, clippy::redundant_locals)] let mut covered = covered;
                     emit_bytes_bindings(world, &alt.pattern.node, &mut bound_bytes);
                     for (name, range) in as_texts.iter().zip(covered.iter()) { if nikaia_std::list::contains(&bound_bytes, &name) { if bytes { prelude = format!("{}let {} = ::nikaia_std::grammar::covered_raw(input, {}); ", prelude, name, range); } else { prelude = format!("{}let {} = ::nikaia_std::grammar::covered(input, {}).as_bytes(); ", prelude, name, range); } } else if bytes { prelude = format!("{}let {} = ::nikaia_std::grammar::covered_bytes::<_, __WgEr>(input, {})?; ", prelude, name, range); } else { prelude = format!("{}let {} = ::nikaia_std::grammar::covered(input, {}); ", prelude, name, range); } }
+                    if !as_texts.is_empty() || positions && !as_spans.is_empty() { prelude = format!("{}let _state = &mut input.state; ", prelude); }
                     if self.emit_action_can_fail(world, action) {
                         if prelude != "" { out.push(&format!("{{ {}", prelude)); }
                         self.emit_failing_action(world, walk, out, host, action, emit_passes_a_cut(&alt.pattern.node))?;
@@ -524,7 +538,8 @@ impl EmitState {
             handed.push(format!("{} = {}", name, name));
         }
         let passed = if handed.is_empty() { String::from("") } else { format!("({})", nikaia_std::block::Text::from(handed.join(", "))) };
-        let folded = if emitting { format!("::std::option::Option<{}>", item) } else { nikaia_std::block::Text::from(item.to_string()) };
+        let unnamed = emit_renamed_lifetime(&item, "'a", "'_");
+        let folded = if emitting { format!("::std::option::Option<{}>", unnamed) } else { unnamed };
         if rule.alts.len() != 1 || unsafe { nikaia_std::proven::read(&rule.alts, (0) as usize) }.action.is_some() { return Err(nikaia_std::error::raise(EmitRefused { message: String::from("The compiler can't translate a `@stream` entry with an action or with alternatives yet: its body is `item*`, alone or between other patterns."), at: Some(rule.span.start as i64) }, &"emit_stream_rule")); }
         let pattern = &unsafe { nikaia_std::proven::read(&rule.alts, (0) as usize) }.pattern;
         let parts: Vec<Spanned<Pattern>> = match &pattern.node {
@@ -645,7 +660,22 @@ pub(crate) fn emit_stream_walks(def: &GrammarDef, offered_to_rust: bool) -> Vec<
     found
 }
 
+impl EmitState {
+    pub(crate) fn emit_stream_item_views(&self, item: &str) -> bool {
+        let bare = nikaia_std::block::Text::from(nikaia_std::index::or(item.split("::").last(), || "").to_string());
+        self.borrowing.contains(item) || self.tethered.contains(item) || self.borrowing.contains(&bare) || self.tethered.contains(&bare)
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub(crate) fn emit_stream_thread_refused(&self, walk: &EmitWalk, entry: &str, item: &str, at: Option<i64>) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
+        let used = if walk.stream_use == "" { String::from("is used as a value (passed to a call, stored, combined or given to a task)") } else { nikaia_std::block::Text::from(walk.stream_use.to_string()) };
+        return Err(nikaia_std::error::throwing(EmitRefused { message: format!("[NK1359] `{}` {}, so it would be walked on a thread of its own, but its items view the input they are parsed from (`{}` holds a view), and a view can't leave the walk over that input. Walk the call with a `for` right where it is made, or bound by a `let` that one `for` walks, in a function that throws, outside a `catch`, with a body that doesn't pause. The other ways to walk such a stream are \"The other methods of a `@stream` walk\" (#2709).", entry, used, item), at }, &"emit_stream_thread_refused"));
+    }
+}
+
 pub(crate) fn emit_stream_walk_name(book: &str, rule: &str) -> String { format!("__nikaia_walk_{}__{}", book, rule) }
+
+pub(crate) fn emit_stream_each_name(book: &str, rule: &str) -> String { format!("__nikaia_each_{}__{}", book, rule) }
 
 pub(crate) fn emit_stream_reader_name(book: &str, rule: &str) -> String { format!("__nikaia_reader_{}__{}", book, rule) }
 

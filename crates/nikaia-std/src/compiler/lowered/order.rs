@@ -708,7 +708,7 @@ pub fn par_report(items: &[Spanned<Item>], names: &winnow_grammar::InternerConte
     let lines: Vec<&str> = source.split("\n").collect::<Vec<_>>();
     let mut out: String = String::from(""); #[allow(clippy::redundant_locals)] let lines = lines;
     let sites = par_sites(items, names, &mut *fanned, &mut *pauses);
-    let mut at: i64 = 0; #[allow(clippy::redundant_locals)] let lines = lines;
+    let mut at: i64 = 0;
     while at < sites.len() as i64 {
         let key = nikaia_std::block::Text::from(unsafe { nikaia_std::proven::read(&sites, (at) as usize) }.function.to_string());
         let mut count: i64 = 0;

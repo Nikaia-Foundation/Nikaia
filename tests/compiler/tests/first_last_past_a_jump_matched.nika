@@ -1,0 +1,67 @@
+// `first` and `last` hand back a reference as `get` does (#2240): a name
+// bound past a jump out of either, then taken apart by a `match`, binds its
+// parts by reference without a `ref` Rust refuses.
+enum E { A { text: String, n: i64 }, B }
+
+fn first_text(v: ref Vec[E]) -> String? {
+    let first = v.first() ?? return null
+    return match first {
+        E::A { text, .. } => text.clone(),
+        else => null,
+    }
+}
+
+fn last_text(v: ref Vec[E]) -> String? {
+    let last = v.last() ?? return null
+    return match last {
+        E::A { text, .. } => text.clone(),
+        else => null,
+    }
+}
+
+fn either_text(v: ref Vec[E], w: ref Vec[E]) -> String? {
+    let found = v.first() ?? w.last() ?? return null
+    return match found {
+        E::A { text, .. } => text.clone(),
+        else => null,
+    }
+}
+
+fn matched_text(v: ref Vec[E]) -> String? {
+    let first = match v.first() {
+        null => return null,
+        x => x,
+    }
+    return match first {
+        E::A { text, .. } => text.clone(),
+        else => null,
+    }
+}
+
+struct Spanned[T] { node: T, at: i64 }
+
+// A field of an element `last` handed back, matched, and a `match` inside on
+// a part it bound: the part is a view, bound without `ref`.
+fn last_inner(v: ref Vec[Spanned[E]]) -> i64 {
+    let last = v.last() ?? return -1
+    return match last.node {
+        E::A { text, n } => match text.len() {
+            0 => 0,
+            else => n,
+        },
+        else => -2,
+    }
+}
+
+fn main() throws {
+    let v = [E::A { text: "x", n: 1 }, E::B]
+    let w = [E::B, E::A { text: "y", n: 2 }]
+    let none: Vec[E] = []
+    println(first_text(v) ?? "none")
+    println(last_text(w) ?? "none")
+    println(last_text(v) ?? "none")
+    println(either_text(none, w) ?? "none")
+    println(matched_text(v) ?? "none")
+    println(first_text(none) ?? "none")
+    println(last_inner([Spanned { node: E::B, at: 0 }, Spanned { node: E::A { text: "z", n: 7 }, at: 1 }]))
+}

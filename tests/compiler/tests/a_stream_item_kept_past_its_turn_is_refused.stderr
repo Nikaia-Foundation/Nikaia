@@ -1,0 +1,10 @@
+error[NK1102]: `Vec::push` expects `value` to be an `Item` of its own here, but you're passing a view of an `Item`.
+   --> tests/a_stream_item_kept_past_its_turn_is_refused.nika:17:3
+    |
+ 17 | 		kept.push(it)
+    |   ^^^^^^^^^^^^^
+    |
+    = note: This is a view: it points into an `Item` that something else owns.
+    = note: `Vec::push` keeps its `value` after the call returns, so it needs an `Item` of its own.
+    = help: Write `.clone()` to copy it here.
+1 type error
