@@ -96,26 +96,8 @@ pub(crate) fn project_check_let_raw_sinks_through(findings: &[CheckFinding], raw
             continue;
         }
         let help = nikaia_std::index::or(finding.help.as_deref(), || "");
-        let mut key: String = String::from("");
-        for known in raw_sinks_allow_keys() { if ::core::convert::identity(match (AsRef::<str>::as_ref(&(help)), AsRef::<str>::as_ref(&(known)), ) { (__nikaia_t, __nikaia_f1, ) => { let mut __nikaia_rest: &str = __nikaia_t; loop { match __nikaia_rest.find("`") { Some(__nikaia_i) => { if __nikaia_rest[__nikaia_i + "`".len()..].strip_prefix(__nikaia_f1).and_then(|__nikaia_r| __nikaia_r.strip_prefix(" = ")).is_some() { break true; } match __nikaia_rest[__nikaia_i..].chars().next() { Some(__nikaia_c) => __nikaia_rest = &__nikaia_rest[__nikaia_i + __nikaia_c.len_utf8()..], None => break false, } }, None => break false, } } } }) { key = nikaia_std::block::Text::from(known.to_string()); } }
-        let mut source: String = String::from("");
-        match help.split_once(&*format!("`{} = [\"", key)) {
-            Some((_, rest)) => {
-                match rest.split_once("\"") {
-                    Some((named, _)) => { source = nikaia_std::block::Text::from(named.to_string()); },
-                    None => { },
-                }
-            },
-            None => { },
-        }
-        let mut keys: Vec<String> = nikaia_std::block::List::from_array_in([nikaia_std::block::Text::from(key.to_string())], nikaia_std::block::Place::Block);
-        if key.starts_with("untrusted-paths-") && key != "untrusted-paths-anywhere" { keys.push(String::from("untrusted-paths-anywhere")); }
-        let mut allowed = false;
-        for one in keys.iter() {
-            let word = if package.is_empty() { nikaia_std::block::Text::from(one.to_string()) } else { format!("{}:{}", package, one) };
-            if allow.iter().any(|given| { AsRef::<str>::as_ref(&(given)) == AsRef::<str>::as_ref(&(word)) || !source.is_empty() && ::core::convert::identity(match (AsRef::<str>::as_ref(&(given)), AsRef::<str>::as_ref(&(word)), AsRef::<str>::as_ref(&(source)), ) { (__nikaia_t, __nikaia_f0, __nikaia_f2, ) => __nikaia_t.len() == __nikaia_f0.len() + "=".len() + __nikaia_f2.len() && __nikaia_t.strip_prefix(__nikaia_f0).and_then(|__nikaia_r| __nikaia_r.strip_prefix("=")).and_then(|__nikaia_r| __nikaia_r.strip_prefix(__nikaia_f2)).is_some() }) }) { allowed = true; }
-        }
-        if allowed { continue; }
+        let (key, source) = project_check_raw_sink_key(help);
+        if project_check_raw_sink_allowed(help, allow, package) { continue; }
         let value = if source.is_empty() { String::from("true") } else { format!("[\"{}\"]", source) };
         let mut said = finding.clone();
         if !package.is_empty() {
@@ -130,6 +112,43 @@ pub(crate) fn project_check_let_raw_sinks_through(findings: &[CheckFinding], raw
         kept.push(said);
     }
     kept
+}
+
+pub(crate) fn project_check_raw_sink_key(help: &str) -> (String, String) {
+    let mut key: String = String::from("");
+    for known in raw_sinks_allow_keys() { if ::core::convert::identity(match (AsRef::<str>::as_ref(&(help)), AsRef::<str>::as_ref(&(known)), ) { (__nikaia_t, __nikaia_f1, ) => { let mut __nikaia_rest: &str = __nikaia_t; loop { match __nikaia_rest.find("`") { Some(__nikaia_i) => { if __nikaia_rest[__nikaia_i + "`".len()..].strip_prefix(__nikaia_f1).and_then(|__nikaia_r| __nikaia_r.strip_prefix(" = ")).is_some() { break true; } match __nikaia_rest[__nikaia_i..].chars().next() { Some(__nikaia_c) => __nikaia_rest = &__nikaia_rest[__nikaia_i + __nikaia_c.len_utf8()..], None => break false, } }, None => break false, } } } }) { key = nikaia_std::block::Text::from(known.to_string()); } }
+    let mut source: String = String::from("");
+    match help.split_once(&*format!("`{} = [\"", key)) {
+        Some((_, rest)) => {
+            match rest.split_once("\"") {
+                Some((named, _)) => { source = nikaia_std::block::Text::from(named.to_string()); },
+                None => { },
+            }
+        },
+        None => { },
+    }
+    (key, source)
+}
+
+pub(crate) fn project_check_raw_sink_allowed(help: &str, allow: &[String], package: &str) -> bool {
+    let (key, source) = project_check_raw_sink_key(help);
+    let mut keys: Vec<String> = nikaia_std::block::List::from_array_in([nikaia_std::block::Text::from(key.to_string())], nikaia_std::block::Place::Block);
+    if key.starts_with("untrusted-paths-") && key != "untrusted-paths-anywhere" { keys.push(String::from("untrusted-paths-anywhere")); }
+    for one in keys.iter() {
+        let word = if package.is_empty() { nikaia_std::block::Text::from(one.to_string()) } else { format!("{}:{}", package, one) };
+        if allow.iter().any(|given| { AsRef::<str>::as_ref(&(given)) == AsRef::<str>::as_ref(&(word)) || !source.is_empty() && ::core::convert::identity(match (AsRef::<str>::as_ref(&(given)), AsRef::<str>::as_ref(&(word)), AsRef::<str>::as_ref(&(source)), ) { (__nikaia_t, __nikaia_f0, __nikaia_f2, ) => __nikaia_t.len() == __nikaia_f0.len() + "=".len() + __nikaia_f2.len() && __nikaia_t.strip_prefix(__nikaia_f0).and_then(|__nikaia_r| __nikaia_r.strip_prefix("=")).and_then(|__nikaia_r| __nikaia_r.strip_prefix(__nikaia_f2)).is_some() }) }) { return true; }
+    }
+    false
+}
+
+pub fn project_check_raw_path_checks(sites: &collections::BTreeMap<i64, RawPathCheck>, raw_sinks: &str, allow: &[String], package: &str) -> collections::BTreeMap<i64, i64> {
+    let mut out: collections::BTreeMap<i64, i64> = collections::BTreeMap::new();
+    if raw_sinks != "warn" { return out; }
+    for (call, site) in sites.iter() {
+        let call = nikaia_std::num::value(call);
+        if site.helps.iter().any(|help| { !project_check_raw_sink_allowed(help, allow, package) }) { out.insert(call.clone(), site.root); }
+    }
+    out
 }
 
 pub fn project_check_raw_sinks_in_std(findings: &[CheckFinding]) -> Vec<CheckFinding> {
@@ -221,14 +240,14 @@ pub fn project_check_keeps_that_moved(committed: &Ledger, inferred: &Ledger) -> 
         let before = match committed.functions.get(name) { Some(__nikaia_value) => __nikaia_value, None => continue };
         let now = match contract.signature.as_ref() { Some(__nikaia_value) => __nikaia_value, None => continue };
         let then = match before.signature.as_ref() { Some(__nikaia_value) => __nikaia_value, None => continue };
-        let moved: Vec<ProjectCheckKept> = now.params.iter().filter(|__nikaia_tuple29137| {
-            let (param, _) = __nikaia_tuple29137;
-            AsRef::<str>::as_ref(&(param)) != AsRef::<str>::as_ref(&("self")) && then.params.iter().any(|__nikaia_tuple29196| {
-                let (p, _) = __nikaia_tuple29196;
+        let moved: Vec<ProjectCheckKept> = now.params.iter().filter(|__nikaia_tuple30832| {
+            let (param, _) = __nikaia_tuple30832;
+            AsRef::<str>::as_ref(&(param)) != AsRef::<str>::as_ref(&("self")) && then.params.iter().any(|__nikaia_tuple30891| {
+                let (p, _) = __nikaia_tuple30891;
                 AsRef::<str>::as_ref(&(p)) == AsRef::<str>::as_ref(&(param))
             })
-        }).filter_map(|__nikaia_tuple29237| {
-            let (param, ty) = __nikaia_tuple29237;
+        }).filter_map(|__nikaia_tuple30932| {
+            let (param, ty) = __nikaia_tuple30932;
             let kept = nikaia_std::list::contains(&contract.keeps, &param);
             if kept != nikaia_std::list::contains(&before.keeps, &param) { Some(ProjectCheckKept { param: nikaia_std::block::Text::from(param.to_string()), now: kept, ty: ty.text() }) } else { None }
         }).collect::<Vec<_>>();
@@ -256,11 +275,11 @@ pub fn project_check_explain<H: ProjectCheckExplainHost>(host: &H, comptime_aske
 }
 
 pub fn project_check_explain_kinds(overlaps: bool, sharing: bool, tethers: bool, asserts: bool, bounds: bool, trust: bool) -> Vec<String> {
-    vec![("overlaps", overlaps), ("sharing", sharing), ("tethers", tethers), ("asserts", asserts), ("bounds", bounds), ("trust", trust)].iter().filter(|&__nikaia_tuple31815| {
-        let (_, asked) = __nikaia_tuple31815; let asked = nikaia_std::num::value(asked);
+    vec![("overlaps", overlaps), ("sharing", sharing), ("tethers", tethers), ("asserts", asserts), ("bounds", bounds), ("trust", trust)].iter().filter(|&__nikaia_tuple33510| {
+        let (_, asked) = __nikaia_tuple33510; let asked = nikaia_std::num::value(asked);
         asked
-    }).map(|__nikaia_tuple31845| {
-        let (kind, _) = __nikaia_tuple31845;
+    }).map(|__nikaia_tuple33540| {
+        let (kind, _) = __nikaia_tuple33540;
         nikaia_std::block::Text::from(kind.to_string())
     }).collect::<Vec<_>>()
 }

@@ -485,6 +485,11 @@ pub struct Program {
     /// (`check::propagation_against`), so the emitter reads it rather than
     /// walking the unit again (#727).
     pub checked_facts: BTreeMap<usize, crate::check::CheckFacts>,
+    /// **The calls of a unit whose path from outside is checked where they
+    /// run** ([ADR-raw-sinks-1](../../../docs/specification/adr/adr-raw-sinks-1.md)
+    /// D7), by the id of the root each writes, with its index, opened as
+    /// `Dir(".")` instead: what `raw-sinks = "warn"` lets through.
+    pub raw_path_checks: BTreeMap<usize, BTreeMap<i64, i64>>,
     /// **The impls that keep each parameter of the program's own trait
     /// methods** ([ADR-277](../../../docs/specification/adr/adr-277.md) D17),
     /// each said with the statement that keeps it: what `NK1265` and a
@@ -806,6 +811,7 @@ impl Program {
             pauses,
             own_checked,
             checked_facts: BTreeMap::new(),
+            raw_path_checks: BTreeMap::new(),
             keepers,
         })
     }
@@ -1138,6 +1144,11 @@ impl collecting::ModulesEmitHost for EmitHost<'_> {
                 at == 0,
                 self.reads,
                 self.program.checked_facts.get(&at).cloned(),
+                self.program
+                    .raw_path_checks
+                    .get(&at)
+                    .cloned()
+                    .unwrap_or_default(),
             )
         })
         // **A refusal from the lowering gets its line here**

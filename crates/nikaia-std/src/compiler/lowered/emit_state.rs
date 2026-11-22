@@ -74,6 +74,7 @@ pub struct EmitState {
     pub offered_to_rust: bool,
     pub every_item_public: bool,
     pub environment_untrusted: bool,
+    pub raw_path_checks: collections::BTreeMap<i64, i64>,
     pub fails: bool,
     pub trusted_input: bool,
     pub unchecked_assumes: bool,

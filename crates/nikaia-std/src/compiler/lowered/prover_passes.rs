@@ -58,6 +58,7 @@ pub fn prover_passes(walk: &mut ProverWalk, program: &Program, words: &winnow_gr
         walk.reaches.clear();
         walk.findings = vec![];
         walk.outside.clear();
+        walk.raw_paths.clear();
         walk.state.broken.clear();
         prover_bodies(walk, program, words, own, library, &mut *ask, &mut *model, &mut *escape, &mut *holes_of, &mut *unaliased, &mut *written_of, &mut *condition);
         settled = walk.state.broken.is_empty();

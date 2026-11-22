@@ -472,8 +472,13 @@ pub fn emit_module_body_at(
     // The facts of a check already run as `check::propagation_against` would
     // run it, or `None` for the emitter to run it.
     checked: Option<crate::check::CheckFacts>,
+    // **The calls whose path from outside is checked where they run**
+    // (ADR-raw-sinks-1 D7), by the id of the root the call writes, opened
+    // as `Dir(".")` instead: what the check let through under
+    // `raw-sinks = "warn"`.
+    raw_path_checks: std::collections::BTreeMap<i64, i64>,
 ) -> Result<Lowered> {
-    Emitter::with_contracts(
+    let mut emitter = Emitter::with_contracts(
         parsed,
         beside,
         build,
@@ -484,8 +489,9 @@ pub fn emit_module_body_at(
         checked,
         None,
     )
-    .for_entry(entry)
-    .items_only()
+    .for_entry(entry);
+    emitter.s.raw_path_checks = raw_path_checks;
+    emitter.items_only()
 }
 
 /// **The names a call must not hand a fast map to** (ADR-010 D9, barriers):

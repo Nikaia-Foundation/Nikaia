@@ -188,6 +188,7 @@ impl tree::ComptimeLowerHost for LowerHost<'_> {
             // The run's own sub-program computes nothing itself (#2153).
             &crate::assets::Reads::none().building_nowhere(),
             None,
+            BTreeMap::new(),
         )
         .ok()?;
         if let Some(placed_at) = placed_at {
