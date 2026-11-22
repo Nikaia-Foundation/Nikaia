@@ -47,7 +47,14 @@ fn compiled(purpose: &str, support: &str, source: &str) -> String {
     let rust = lowered(source);
     let dir = common::scratch_dir(purpose);
     let file = dir.join("lowered.rs");
-    std::fs::write(&file, format!("{support}\n{rust}")).expect("write the Rust");
+    // Crate attributes (`#![recursion_limit]`) must stay first: the stand-ins
+    // go after them.
+    let text = {
+        let (inner, body): (Vec<&str>, Vec<&str>) =
+            rust.lines().partition(|line| line.starts_with("#!["));
+        format!("{}\n{support}\n{}", inner.join("\n"), body.join("\n"))
+    };
+    std::fs::write(&file, text).expect("write the Rust");
 
     let compiled = common::compile(
         &file,
