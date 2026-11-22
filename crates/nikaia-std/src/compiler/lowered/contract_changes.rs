@@ -17,7 +17,37 @@ pub fn changed_contracts(now: &Ledger, committed: &Ledger, keepers: &collections
         if !implies(&old.requires, &new.requires, &names) { { use ::core::fmt::Write as _; let _ = out.write_fmt(format_args!("warning[NK1208]: `{}` asks more of its callers than the committed ledger says.\n   = note: it required {}, and now requires {}.\n   = note: a caller that showed what it required before may now stop where it is checked.\n   = help: if that is meant, commit `nikaia.contracts`, and this is not said again.\n", key, conditions_said(&old.requires), conditions_said(&new.requires))); }; }
         if !implies(&new.ensures, &old.ensures, &names) { { use ::core::fmt::Write as _; let _ = out.write_fmt(format_args!("warning[NK1208]: `{}` promises less than the committed ledger says.\n   = note: it ensured {}, and now ensures {}.\n   = note: a caller's proof that relied on what it ensured may no longer hold.\n   = help: if that is meant, commit `nikaia.contracts`, and this is not said again.\n", key, conditions_said(&old.ensures), conditions_said(&new.ensures))); }; }
     }
+    for (key, new) in now.types.iter() {
+        let old = match committed.types.get(key) { Some(__nikaia_value) => __nikaia_value, None => continue };
+        if !new.public || !mine(key) || old.rules.is_empty() && new.rules.is_empty() { continue; }
+        let names = field_names(new);
+        let was = rule_claims(&old.rules);
+        let is = rule_claims(&new.rules); #[allow(clippy::redundant_locals)] let was = was;
+        if !implies(&was, &is, &names) { { use ::core::fmt::Write as _; let _ = out.write_fmt(format_args!("warning[NK1208]: the rule of `{}` asks more of its consumers than the committed ledger says.\n   = note: it was {}, and now is {}.\n   = note: a consumer's value of it that kept the rule before may now stop where it is built or written.\n   = help: if that is meant, commit `nikaia.contracts`, and this is not said again.\n", key, conditions_said(&was), conditions_said(&is))); }; }
+        if !implies(&is, &was, &names) { { use ::core::fmt::Write as _; let _ = out.write_fmt(format_args!("warning[NK1208]: the rule of `{}` promises less than the committed ledger says.\n   = note: it was {}, and now is {}.\n   = note: a consumer's proof that relied on the rule may no longer hold.\n   = help: if that is meant, commit `nikaia.contracts`, and this is not said again.\n", key, conditions_said(&was), conditions_said(&is))); }; }
+    }
     out
+}
+
+pub(crate) fn rule_claims(rules: &[String]) -> Vec<String> {
+    let mut out: Vec<String> = vec![];
+    out.reserve(rules.iter().size_hint().0); for rule in rules.iter() {
+        let inner = nikaia_std::index::or(match rule.strip_prefix("assert(") {
+            Some(__nikaia_it) => __nikaia_it.strip_suffix(")"),
+            None => None,
+        }, || std::convert::AsRef::<str>::as_ref(rule));
+        out.push(nikaia_std::block::Text::from(inner.to_string()));
+    }
+    out
+}
+
+pub(crate) fn field_names(contract: &TypeContract) -> collections::BTreeSet<String> {
+    let mut names: collections::BTreeSet<String> = collections::BTreeSet::new();
+    for field in contract.fields.iter() {
+        if has_a_length(&type_name_of(&field.ty)) { names.insert(format!("{}.len()", field.name)); }
+        names.insert(nikaia_std::block::Text::from(field.name.to_string()));
+    }
+    names
 }
 
 pub(crate) fn column_moved(key: &str, old: &FnContract, new: &FnContract, by_parameter: &collections::BTreeMap<String, Vec<String>>) -> String {

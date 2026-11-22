@@ -1,0 +1,16 @@
+// A pivot that leaves `i64` makes the tableau again in `BigInt` from the
+// rows the query wrote, over the basis and bounds kept, and the query is
+// answered there (#2707): the chain's coefficients near 2^18 overflow a
+// pivot, the contradiction in `y0`, `y1` is found past it, and its
+// certificate is checked. With a budget of 1 on the stage past `i64` the
+// same query is unknown (overflow).
+use logic
+use std::fs
+
+fn main() throws {
+	let root = fs::Root::Dir("tests")
+	let source = fs::read_to_string("smtlib/lra_pivot_past_i64.smt2", root)
+	for engine in ["new:cases=16384", "new:cases=16384,big_budget=1"] {
+		println(logic::sv_line_stats(source, engine, true))
+	}
+}

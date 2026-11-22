@@ -1,0 +1,60 @@
+// A name a returned `match` ends in is handed back by value, so the arm
+// binds it whole, not as `ref end` (#2707: rustc refused the lowered arms).
+enum E {
+	A,
+	B(i64),
+	C(String),
+}
+
+enum P {
+	Left,
+	Ended(E),
+}
+
+struct S {
+	n: i64,
+}
+
+impl S {
+	fn again(ref mut self) -> E {
+		self.n += 1
+		return E::B(self.n)
+	}
+
+	fn step(ref mut self, k: i64) -> P {
+		return if k == 0 { P::Left } else if k == 1 { P::Ended(E::A) } else { P::Ended(E::B(k)) }
+	}
+
+	fn go(ref mut self, k: i64) -> E {
+		let mut q = self.step(k)
+		match q {
+			P::Ended(end) => {
+				return match end {
+					E::A => self.again(),
+					else => end,
+				}
+			},
+			P::Left => {
+				q = self.step(1)
+			},
+		}
+		match q {
+			P::Ended(end) => {
+				return end
+			},
+			else => {},
+		}
+		return E::A
+	}
+}
+
+fn main() throws {
+	let mut s = S { n: 0 }
+	for k in [0, 1, 7] {
+		match s.go(k) {
+			E::A => println("a"),
+			E::B(n) => println(f"b {n}"),
+			E::C(t) => println(t),
+		}
+	}
+}

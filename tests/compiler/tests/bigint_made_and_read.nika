@@ -1,0 +1,34 @@
+// `bigint::BigInt` is made from an integer or a `Wide[i64]` and read back
+// (Part I 2.2, #2706): `narrow` gives back what `of` took, and `null` past
+// `i64`; the text is decimal; `==` and the comparisons order by value.
+use std::bigint
+
+fn show(label: String, n: bigint::BigInt) throws {
+    let back = match n.narrow() {
+        null => "null",
+        else => f"{n.narrow() ?? 0}",
+    }
+    println(f"{label}: {n.to_text()} sign {n.sign()} bits {n.bits()} narrow {back}")
+}
+
+fn main() throws {
+    let least: i64 = -9223372036854775807 - 1
+    let most: i64 = 9223372036854775807
+    let all_ones: u64 = 18446744073709551615
+    show("0", bigint::BigInt::of(0))
+    show("1", bigint::BigInt::of(1))
+    show("-1", bigint::BigInt::of(-1))
+    show("i64::MIN", bigint::BigInt::of(least))
+    show("i64::MAX", bigint::BigInt::of(most))
+    show("u64::MAX", bigint::BigInt::from_wide(Wide::from_halves(all_ones, 0)))
+    show("2^64", bigint::BigInt::from_wide(Wide::from_halves(0, 1)))
+    show("-2^127", bigint::BigInt::from_wide(Wide::from_halves(0, least)))
+    show("10^19", bigint::BigInt::from_wide(Wide::product(1000000000000000000, 10)))
+    let big = bigint::BigInt::from_wide(Wide::from_halves(0, 1))
+    let low = bigint::BigInt::from_wide(Wide::from_halves(0, least))
+    println(bigint::BigInt::of(5) == bigint::BigInt::from_wide(Wide::of(5)))
+    println(bigint::BigInt::of(5) != bigint::BigInt::of(-5))
+    println(bigint::BigInt::of(-1) < bigint::BigInt::of(0) && bigint::BigInt::of(0) < bigint::BigInt::of(1))
+    println(bigint::BigInt::of(most) < big && low < bigint::BigInt::of(least))
+    println(big > low && big >= big && low <= low)
+}

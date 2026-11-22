@@ -29,7 +29,7 @@ well, because its rules depend on indentation and context, its input often
 comes from outside the program, and there is a tuned parser to measure
 against, `saphyr-parser`.
 
-## Where it stands
+## Where the yaml package stands today
 
 The package passes all 402 cases of the yaml-test-suite, which it carries in
 its own tests. Every index in its source is proved, and of its 101 arithmetic
@@ -53,7 +53,7 @@ target is at most 1.5 times `saphyr-parser` on the events
 
 ## The questions
 
-### Is every bound check proved?
+### Is every bound check in the yaml package proved?
 
 <div class="rq-bars">
 <div class="rq-row"><span>Built</span><div class="rq-build" role="img" aria-label="Built: about 70 % of the estimated whole, 20 % held back for what is not yet known"><span class="rq-known" style="width: 80%"><span class="rq-done" style="width: 88%"></span></span><span class="rq-unknown" style="width: 20%"></span></div></div>
@@ -74,7 +74,7 @@ does on its own. A proved check is left out only where a build asks for it
 ([ADR-306](/docs/specification/adr/adr-306.html)), so the figures above say
 what can be left out, not what a default build leaves out.
 
-### How close does it come to saphyr-parser?
+### How close does the yaml package come to the speed of saphyr-parser?
 
 <div class="rq-bars">
 <div class="rq-row"><span>Built</span><div class="rq-build" role="img" aria-label="Built: about 35 % of the estimated whole, 30 % held back for what is not yet known"><span class="rq-known" style="width: 70%"><span class="rq-done" style="width: 50%"></span></span><span class="rq-unknown" style="width: 30%"></span></div></div>
@@ -131,7 +131,7 @@ the source cannot see these, so they form a class of their own, found in the
 profile and fixed in the compiler. The question is how much of the work of
 optimising a library the compiler can take on by naming where it goes.
 
-### Can a grammar be the parser?
+### Can a grammar be the yaml package's parser?
 
 <div class="rq-bars">
 <div class="rq-row"><span>Built</span><div class="rq-build" role="img" aria-label="Built: about 60 % of the estimated whole, 25 % held back for what is not yet known"><span class="rq-known" style="width: 75%"><span class="rq-done" style="width: 80%"></span></span><span class="rq-unknown" style="width: 25%"></span></div></div>
@@ -152,7 +152,7 @@ for the compiler, among them
 is whether a grammar written in the language can express a format as
 demanding as YAML in full, and run as fast as a parser written by hand.
 
-### Can it keep comments and layout?
+### Can the yaml package keep comments and layout when it writes a file back?
 
 <div class="rq-bars">
 <div class="rq-row"><span>Built</span><div class="rq-build" role="img" aria-label="Built: about 5 % of the estimated whole, 30 % held back for what is not yet known"><span class="rq-known" style="width: 70%"><span class="rq-done" style="width: 7%"></span></span><span class="rq-unknown" style="width: 30%"></span></div></div>
@@ -171,7 +171,7 @@ lets the events be read straight from the parse. The question is whether one
 tree can serve both fast reading and faithful editing, or whether the two pull
 it apart.
 
-### Does it feel familiar to the people who use it?
+### Does the yaml package feel familiar to people who know the YAML libraries of Rust?
 
 <div class="rq-bars">
 <div class="rq-row"><span>Built</span><div class="rq-build" role="img" aria-label="Built: about 70 % of the estimated whole, 25 % held back for what is not yet known"><span class="rq-known" style="width: 75%"><span class="rq-done" style="width: 93%"></span></span><span class="rq-unknown" style="width: 25%"></span></div></div>
@@ -193,7 +193,7 @@ in Nikaia can take the place of an established one without its users noticing
 anything but the safety it brings, and what the facade costs in instructions
 once the parser underneath is as fast as it can be.
 
-## Ideas this rests on
+## Ideas the yaml package rests on
 
 | Idea | Recorded in |
 | :--- | :--- |

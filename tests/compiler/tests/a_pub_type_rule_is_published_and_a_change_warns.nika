@@ -1,0 +1,57 @@
+// #714, ADR-369 D2 and ADR-269 D18-D19: a `pub` struct's written rule is part
+// of its contract, published in the package's `nikaia.contracts` as written; a
+// private struct's is not. A rule changed in the breaking direction warns
+// (`NK1208`): a narrower one asks more of a consumer that builds a value of
+// the type, a wider one promises less to one whose proof read it.
+use std::env
+use std::fs
+use std::process
+
+fn toolchain() -> String throws {
+    let exe = env::current_exe()?.display() ?? ""
+    if exe.len() > 0 { return exe }
+    return "target/fast/nikaia"
+}
+
+fn build(nikaia: String, tmp: ref fs::Root, label: String) throws {
+    let out = process::run(nikaia, ["build"]; dir: tmp.path().to_text())
+    println(f"-- {label}")
+    let mut inside = false
+    for line in f"{out.stdout}{out.stderr}".lines() {
+        if line.starts_with("warning[") || line.starts_with("error[") {
+            inside = line.contains("NK1208")
+        } else if !line.starts_with(" ") {
+            inside = false
+        }
+        if inside && !line.contains("Compiling") && !line.contains("Finished") && !line.contains("Blocking waiting for file lock") {
+            println(line.replace(tmp.path().to_text(), "TMP"))
+        }
+    }
+    let ledger = fs::read_to_string("nikaia.contracts", tmp)
+    for line in ledger.lines() {
+        if line.starts_with("[type.") || line.starts_with("rules") {
+            println(line)
+        }
+    }
+}
+
+fn piece(rule: ref String) -> String {
+    return f"pub struct Piece {{\n    pub start: i64,\n    pub end: i64,\n    assert({rule}; message: \"a piece ends after it starts\")\n}}\n"
+}
+
+fn main() throws {
+    let tmp = fs::scratch()
+    let nikaia = toolchain()
+    process::run("mkdir", ["-p", f"{tmp.path().to_text()}/src"])
+    fs::write("nikaia.toml", tmp, "[package]\nname = \"rules\"\nversion = \"0.1.0\"\n")
+    let private = "struct Hidden {\n    n: i64,\n    assert(n >= 0)\n}\n"
+    let main = "fn main() throws {\n    let p = Piece { start: 1, end: 2 }\n    let h = Hidden { n: 1 }\n    println(p.end - p.start + h.n)\n}\n"
+    fs::write("src/main.nika", tmp, f"{piece("0 <= start && start <= end")}{private}{main}")
+    build(nikaia, tmp, "first build, the rule published")
+    fs::write("src/main.nika", tmp, f"{piece("0 <= start && start < end")}{private}{main}")
+    build(nikaia, tmp, "a narrower rule")
+    fs::write("src/main.nika", tmp, f"{piece("0 <= start")}{private}{main}")
+    build(nikaia, tmp, "a wider rule")
+    fs::write("src/main.nika", tmp, f"{piece("0 <= start")}{private}{main}")
+    build(nikaia, tmp, "the same rule again")
+}

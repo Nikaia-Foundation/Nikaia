@@ -565,6 +565,8 @@ fn type_key(mut entry: TypeContract, key: ref String, value: ref String, n: i64)
         entry.fields = fields
     } else if key == "attributes" {
         entry.attributes = entries(value, n)
+    } else if key == "rules" {
+        entry.rules = entries(value, n)
     } else if key == "variant_attributes" {
         // `Spot: Tag { text: "s" }`, after `variants` (ADR-331 D8).
         for one in entries(value, n) {

@@ -1838,6 +1838,12 @@ pub struct TypeContract {
     pub mark: String,
     /// The type's own attributes' values, as a field's are (ADR-331 D6, D8).
     pub attributes: Vec[String],
+    /// **The type's written rules** ([ADR-369](../../../../docs/specification/adr/adr-369.md)
+    /// D1, D2), each `assert(claim; message: …)` as written, for a `pub`
+    /// struct: part of its contract (ADR-269 D18), which a consumer checks
+    /// where it builds a value of the type or writes a `pub` field of one.
+    /// A found rule is never here (ADR-369 D4).
+    pub rules: Vec[String],
 }
 
 impl TypeContract {
@@ -1859,6 +1865,7 @@ impl TypeContract {
             constant: "",
             mark: "",
             attributes: [],
+            rules: [],
         }
     }
 }
