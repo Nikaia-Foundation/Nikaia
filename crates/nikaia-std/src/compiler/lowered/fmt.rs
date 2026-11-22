@@ -149,6 +149,12 @@ impl FmtLexer {
         while self.at < self.c.len() as i64 {
             let c = *nikaia_std::index::get(&self.c, nikaia_std::index::at(self.at));
             if c == '\'' && self.character() { continue; }
+            let word_before = self.at > 0 && ((*nikaia_std::index::get(&self.c, nikaia_std::index::at(unsafe { nikaia_std::proven::sub::<i64>(self.at, 1) }))).is_alphanumeric() || *unsafe { nikaia_std::proven::read(&self.c, (nikaia_std::proven::sub::<i64>(self.at, 1)) as usize) } == '_');
+            if c == 'f' && self.ahead(1) == '"' && !word_before {
+                self.at += 2;
+                self.interpolated()?;
+                continue;
+            }
             self.at += 1;
             if c == '"' { self.quoted()?; } else if c == '{' { depth += 1; } else if c == '}' {
                 if depth == 0 { return Ok(()); }
