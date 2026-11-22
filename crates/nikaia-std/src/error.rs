@@ -25,7 +25,7 @@ use std::sync::OnceLock;
 use ref_or_box::{Either, RefOrBox};
 
 // One joined failure under the one it joined (ADR-292 D8), in Nikaia.
-use crate::runtime::error::indented;
+use crate::runtime::error::{indented, long_head, trace_note};
 
 /// Whether this process captures a trace when an error is raised.
 ///
@@ -296,11 +296,7 @@ impl Raised {
     fn long(&self, note_trace: bool, escape: bool) -> String {
         // An envelope put on in the box to hold a list has no site of its own,
         // and says so as a library's error does (ADR-280 D3).
-        let message = shown(&self.inner, escape);
-        let mut out = match self.tail.origin() == BELOW_SITE {
-            true => format!("{message}\n{BELOW}"),
-            false => format!("{message}\n  raised at {}", self.tail.origin()),
-        };
+        let mut out = String::from(long_head(&shown(&self.inner, escape), self.tail.origin()));
         crossed_lines(&mut out, self.tail.crossings());
         let mut source = self.inner.source();
         while let Some(cause) = source {
@@ -561,16 +557,10 @@ fn full_form_with<E: fmt::Display>(
     note_trace: bool,
     escape: bool,
 ) -> String {
-    // **An envelope with no site says so in the sentence that already existed**
-    // ([ADR-280](../../../docs/specification/adr/adr-280.md) D3). Since
-    // [ADR-292](../../../docs/specification/adr/adr-292.md) D8 a library's
-    // error may be enveloped for the sake of the **list**, and *raised at
-    // (below Nikaia)* would be this compiler inventing a place.
-    let message = shown(error, escape);
-    let mut out = match origin == BELOW_SITE {
-        true => format!("{message}\n{BELOW}"),
-        false => format!("{message}\n  raised at {origin}"),
-    };
+    // The head - the message, then where it was raised or that no `throw` of
+    // this program did ([ADR-280](../../../docs/specification/adr/adr-280.md)
+    // D3) - is written in `runtime/error.nika`.
+    let mut out = String::from(long_head(&shown(error, escape), origin));
     crossed_lines(&mut out, crossings);
     trace_part(&mut out, trace, crossings, note_trace);
     out
@@ -598,21 +588,20 @@ fn trace_part(
     crossings: &[Crossing],
     note_trace: bool,
 ) {
-    match trace {
-        Some(t) if t.status() == BacktraceStatus::Captured => {
-            out.push_str(&format!("\n{t}"));
-            for crossing in crossings {
-                out.push_str(&format!("\n── started at {} ──", crossing.started));
-                if let Some(waited) = &crossing.trace
-                    && waited.status() == BacktraceStatus::Captured
-                {
-                    out.push_str(&format!("\n{waited}"));
-                }
+    let captured = trace.filter(|t| t.status() == BacktraceStatus::Captured);
+    if let Some(t) = captured {
+        out.push_str(&format!("\n{t}"));
+        for crossing in crossings {
+            out.push_str(&format!("\n── started at {} ──", crossing.started));
+            if let Some(waited) = &crossing.trace
+                && waited.status() == BacktraceStatus::Captured
+            {
+                out.push_str(&format!("\n{waited}"));
             }
         }
-        _ if note_trace => out.push_str("\n  (no trace; set NIKAIA_TRACE=1 to capture one)"),
-        _ => {}
     }
+    // The note that there is none (ADR-292 D8), in `runtime/error.nika`.
+    out.push_str(&trace_note(captured.is_some(), note_trace));
 }
 
 impl<E: fmt::Display> fmt::Display for Thrown<E> {
@@ -700,6 +689,10 @@ impl<E> From<E> for Thrown<E> {
 }
 
 /// What the origin says for an error no `throw` of this program raised.
+/// `long_head` in `runtime/error.nika` reads it and writes the below-Nikaia
+/// sentence for it ([ADR-280](../../../docs/specification/adr/adr-280.md)
+/// D3); it stays here because the runtime has no file-level constant to hand
+/// an envelope (a top-level `let` is not an item, adr-database-v1).
 const BELOW_SITE: &str = "(below Nikaia)";
 
 /// **What a joining block does with the failures after the first**
@@ -890,14 +883,10 @@ impl Full for Box<dyn Error> {
     fn full(&self) -> crate::block::Text {
         match self.downcast_ref::<Raised>() {
             Some(raised) => raised.full(),
-            None => crate::block::Text::from(format!("{self}\n{BELOW}")),
+            None => long_head(&self.to_string(), BELOW_SITE),
         }
     }
 }
-
-/// What the long form says about a failure **no `throw` in this program
-/// raised** ([ADR-280](../../../docs/specification/adr/adr-280.md) D3).
-const BELOW: &str = "  (raised below Nikaia; no site recorded)";
 
 /// The long form for a **library's** error type, where one is the channel (D2).
 ///
@@ -912,31 +901,31 @@ const BELOW: &str = "  (raised below Nikaia; no site recorded)";
 /// channel, and there are two.
 impl Full for crate::io::IoError {
     fn full(&self) -> crate::block::Text {
-        crate::block::Text::from(format!("{self}\n{BELOW}"))
+        long_head(&self.to_string(), BELOW_SITE)
     }
 }
 
 impl Full for crate::lock::Overtaken {
     fn full(&self) -> crate::block::Text {
-        crate::block::Text::from(format!("{self}\n{BELOW}"))
+        long_head(&self.to_string(), BELOW_SITE)
     }
 }
 
 impl Full for crate::process::Exit {
     fn full(&self) -> crate::block::Text {
-        crate::block::Text::from(format!("{self}\n{BELOW}"))
+        long_head(&self.to_string(), BELOW_SITE)
     }
 }
 
 impl Full for crate::regex::Error {
     fn full(&self) -> crate::block::Text {
-        crate::block::Text::from(format!("{self}\n{BELOW}"))
+        long_head(&self.to_string(), BELOW_SITE)
     }
 }
 
 impl Full for crate::grammar::ParseError {
     fn full(&self) -> crate::block::Text {
-        crate::block::Text::from(format!("{self}\n{BELOW}"))
+        long_head(&self.to_string(), BELOW_SITE)
     }
 }
 

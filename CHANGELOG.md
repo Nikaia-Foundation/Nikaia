@@ -8,6 +8,12 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1536] — 2026-11-22
+
+**Builders' changes (#2069, #2070)**
+- Self-hosting: the call path a build-time stop prints (first and last 6 calls past 12) is shortened in Nikaia (runtime/build_time.nika).
+- Self-hosting: the head of an error's long form (raised at / below Nikaia) and the no-trace note are written in Nikaia (runtime/error.nika).
+
 ## [0.0.1535] — 2026-11-22
 
 **A dependency's warning no longer keeps a binary's lowering out of the build cache**

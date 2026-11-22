@@ -61,6 +61,17 @@ mod abort_lines_lowered {
 pub use abort_lines_lowered::*;
 
 #[allow(unsafe_code)]
+mod build_time_lowered {
+    #[allow(unused_imports)]
+    use super::*;
+    #[allow(unused_imports)]
+    use nikaia_std::block::names::{{CopyOwned, String, Vec, format, vec}};
+    include!("lowered/build_time.rs");
+}
+#[allow(unused_imports)]
+pub use build_time_lowered::*;
+
+#[allow(unsafe_code)]
 mod cli_lowered {
     #[allow(unused_imports)]
     use super::*;
@@ -251,13 +262,17 @@ pub mod abort_lines {
     #[allow(unused_imports)]
     pub use super::{lookup};
 }
+pub mod build_time {
+    #[allow(unused_imports)]
+    pub use super::{shown_path};
+}
 pub mod cli {
     #[allow(unused_imports)]
     pub use super::{an};
 }
 pub mod error {
     #[allow(unused_imports)]
-    pub use super::{indented};
+    pub use super::{indented, long_head, trace_note};
 }
 pub mod fixed {
     #[allow(unused_imports)]
@@ -364,4 +379,4 @@ pub fn nikaia_run_tests(filters: &[std::string::String], list: bool, more: std::
 /// **The digest of this lowered set** (#1610): every file `lower-std` wrote
 /// beside this index, and the index above this line. Compiled into the same
 /// crate as the code it names, it is the compiler's identity for its caches.
-pub const LOWERED_DIGEST: &str = "bf83f10a2bb0d8a13f207997823575d5291e7a899d68cd6b86c92538da1b14e2";
+pub const LOWERED_DIGEST: &str = "458e86ab1039c797123aa4a3a2c30c77028ce3201f6c09fe8c0c114537dd5fb0";
