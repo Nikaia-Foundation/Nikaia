@@ -13,9 +13,10 @@
 // The input is fasta's output (benches/game/fasta). Written as a Nikaia
 // programmer writes it first, from examples/k-nucleotide: a `grammar` for
 // FASTA, map keys that are views into the DNA rather than copies, a count
-// per fragment. Standard input is untrusted, so the maps keyed by it get the
-// keyed hash with a per-process seed (ADR-365 D2; `nikaia build --trust`
-// lists it).
+// per fragment. The input is the one fasta wrote for this run, chosen by
+// whoever runs the benchmark, so the read says `trusted: true` and the maps
+// keyed by it take the fast hash (ADR-365 D2; `nikaia build --trust` lists
+// it).
 use std::io
 use std::collections
 
@@ -85,7 +86,7 @@ fn report_fragment(dna: String, fragment: String) throws {
 }
 
 fn main() throws {
-	let text = io::read_to_string() catch {
+	let text = io::read_to_string(trusted: true) catch {
 		eprintln(f"cannot read standard input: {error}")
 		return
 	}
