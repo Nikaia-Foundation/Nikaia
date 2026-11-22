@@ -8723,6 +8723,21 @@ compares = true
 equates = true
 hashes = true
 
+[fn."bigint::BigInt::abs"]
+pub = true
+sync = true
+panics = false
+touches = []
+signature = "(ref self) -> bigint::BigInt"
+
+[fn."bigint::BigInt::add"]
+pub = true
+sync = true
+panics = false
+touches = []
+views = ["other: borrowed"]
+signature = "(ref self, other: ref bigint::BigInt) -> bigint::BigInt"
+
 [fn."bigint::BigInt::bits"]
 pub = true
 sync = true
@@ -8744,12 +8759,27 @@ panics = false
 touches = []
 signature = "(w: Wide[i64]) -> bigint::BigInt"
 
+[fn."bigint::BigInt::mul"]
+pub = true
+sync = true
+panics = true
+touches = []
+views = ["other: borrowed"]
+signature = "(ref self, other: ref bigint::BigInt) -> bigint::BigInt"
+
 [fn."bigint::BigInt::narrow"]
 pub = true
 sync = true
 panics = true
 touches = []
 signature = "(ref self) -> i64?"
+
+[fn."bigint::BigInt::neg"]
+pub = true
+sync = true
+panics = true
+touches = []
+signature = "(ref self) -> bigint::BigInt"
 
 [fn."bigint::BigInt::of"]
 pub = true
@@ -8764,6 +8794,14 @@ sync = true
 panics = false
 touches = []
 signature = "(ref self) -> i64"
+
+[fn."bigint::BigInt::sub"]
+pub = true
+sync = true
+panics = true
+touches = []
+views = ["other: borrowed"]
+signature = "(ref self, other: ref bigint::BigInt) -> bigint::BigInt"
 
 [fn."bigint::BigInt::to_text"]
 pub = true
@@ -8780,6 +8818,12 @@ panics = false
 touches = []
 signature = "(sign: i64, digits: Vec[u64]) -> bigint::BigInt"
 
+[fn."bigint::magnitude_add"]
+sync = true
+panics = false
+touches = []
+signature = "(a: Vec[u64], b: Vec[u64]) -> Vec[u64]"
+
 [fn."bigint::magnitude_compare"]
 sync = true
 panics = false
@@ -8791,6 +8835,18 @@ sync = true
 panics = false
 touches = []
 signature = "(a: Vec[u64], d: u64) -> (Vec[u64], u64)"
+
+[fn."bigint::magnitude_mul"]
+sync = true
+panics = false
+touches = []
+signature = "(a: Vec[u64], b: Vec[u64]) -> Vec[u64]"
+
+[fn."bigint::magnitude_sub"]
+sync = true
+panics = false
+touches = []
+signature = "(a: Vec[u64], b: Vec[u64]) -> Vec[u64]"
 
 [fn."bigint::trimmed"]
 sync = true
