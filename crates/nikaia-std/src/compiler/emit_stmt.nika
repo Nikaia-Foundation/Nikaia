@@ -449,7 +449,17 @@ impl EmitState {
         self.write_keep_prelude(walk, out, scope.function, at, depth)
         self.emit_core_hold_temporaries(world, walk, out, host, node, span, depth, tail, here, scope)
         match node {
-            Stmt::Let { names, shape, mutable, mut_names, ty, value, .. } => self.emit_stmt_let(world, walk, out, host, names, shape, mutable, mut_names, ty, value, span, depth, here, scope),
+            Stmt::Let { names, shape, mutable, mut_names, ty, value, .. } => {
+                // **A `let` bound to a `@stream` call one `for` walks** is
+                // written where that `for` stands (#2708,
+                // `check_core_stmt_a_stream_let`): the walk runs its body as
+                // the parser's `each` there.
+                if self.facts.walked_stream_lets.contains(span.start as i64) {
+                    walk.deferred_streams.insert(span.start as i64, value.clone())
+                } else {
+                    self.emit_stmt_let(world, walk, out, host, names, shape, mutable, mut_names, ty, value, span, depth, here, scope)
+                }
+            },
             Stmt::Comptime { name, .. } => {
                 let bound = emit_text(world, name)
                 // **Once per turn** where it reads the turn's field (#1087).
@@ -1249,7 +1259,23 @@ impl EmitState {
                 return
             }
         }
-        if self.emit_stmt_each_walk(world, iter, at, flow) && self.emit_stmt_for_each(world, walk, out, host, bindings, shape, mutable, mut_names, iter, body, depth, flow, scope) {
+        // **A `for` over a `let` bound to a `@stream` call walks the call**
+        // (#2708): the `let` wrote nothing, and the call stands here.
+        let deferred_at = self.facts.stream_let_loops.get(at) ?? -1
+        match walk.deferred_streams.remove(deferred_at) {
+            null => {},
+            call => {
+                self.emit_stmt_for_walked(world, walk, out, host, bindings, shape, mutable, mut_names, call, body, at, depth, flow, scope)
+                return
+            },
+        }
+        self.emit_stmt_for_walked(world, walk, out, host, bindings, shape, mutable, mut_names, iter, body, at, depth, flow, scope)
+    }
+
+    /// The `for` over `iter`, once a `@stream` call its `let` held stands in
+    /// for the name (#2708).
+    fn emit_stmt_for_walked[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, bindings: ref Vec[winnow_grammar::Symbol], shape: ref Vec[i64], mutable: bool, mut_names: ref Vec[bool], iter: ref Expr, body: ref Block, at: i64, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
+        if self.emit_stmt_each_walk(world, iter, at, flow) && self.emit_stmt_for_each(world, walk, out, host, bindings, shape, mutable, mut_names, iter, body, at, depth, flow, scope) {
             return
         }
         // **A step that can fail is bound before it is unwrapped** (ADR-025
@@ -1307,8 +1333,11 @@ impl EmitState {
             // ADR-025 D1's `?`: a step that can fail fails the enclosing
             // function.
             let mut unwrap: String? = null
+            let lent_item = if self.facts.lent_stream_loops.contains(at) { "&" } else { "" }
             if self.facts.fallible_loops.contains(at) {
-                unwrap = f"let {bound} = {plain}?;"
+                unwrap = f"let {bound} = {lent_item}{plain}?;"
+            } else if lent_item != "" {
+                unwrap = f"let {bound} = &{plain};"
             }
             let pad = "    ".repeat(depth)
             let inner = "    ".repeat(depth + 1)
@@ -1370,24 +1399,15 @@ impl EmitState {
         out.push(" ")
         // ADR-025 D1: a step that can fail fails the enclosing function.
         let mut unwrap: String? = null
+        // A `@stream` call's item is lent from the input (#2708): the step
+        // is held for the turn, and the name is a reference to it.
+        let lent_item = if self.facts.lent_stream_loops.contains(at) { "&" } else { "" }
         if self.facts.fallible_loops.contains(at) {
-            unwrap = f"let {names} = {each.join(", ")}?;"
+            unwrap = f"let {names} = {lent_item}{each.join(", ")}?;"
+        } else if lent_item != "" {
+            unwrap = f"let {names} = &{names};"
         }
-        // **A number, a `bool` or a `char` is read out of the view once, where
-        // the body opens** (`Checked::copied_loop_bindings`, ADR-182 D1, D5).
-        let mut copied = ""
-        for one in bindings {
-            if self.facts.copied_loop_bindings.contains((at, emit_text(world, one))) {
-                let name = self.emit_stmt_local(emit_text(world, one))
-                copied += f"let {name} = nikaia_std::num::value({name});"
-            }
-        }
-        for one in bindings {
-            if self.facts.copied_view_bindings.contains((at, emit_text(world, one))) {
-                let name = self.emit_stmt_local(emit_text(world, one))
-                copied += f"let {name} = *{name};"
-            }
-        }
+        let copied = self.emit_stmt_loop_copies(world, bindings, at)
         let mut opening: String? = null
         if copied == "" {
             opening = unwrap
@@ -1480,7 +1500,7 @@ impl EmitState {
     /// parse with that outcome, which the `for` acts on after it. A body
     /// that pauses cannot be the engine's closure, so nothing is written
     /// and `false` hands the walk back to the thread (D7's table).
-    fn emit_stmt_for_each[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, bindings: ref Vec[winnow_grammar::Symbol], shape: ref Vec[i64], mutable: bool, mut_names: ref Vec[bool], iter: ref Expr, body: ref Block, depth: i64, flow: EmitFlow, scope: ref EmitScope) -> bool sync throws {
+    fn emit_stmt_for_each[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, bindings: ref Vec[winnow_grammar::Symbol], shape: ref Vec[i64], mutable: bool, mut_names: ref Vec[bool], iter: ref Expr, body: ref Block, at: i64, depth: i64, flow: EmitFlow, scope: ref EmitScope) -> bool sync throws {
         let mut names: Vec[String] = []
         let mut index = 0
         for one in bindings {
@@ -1498,11 +1518,18 @@ impl EmitState {
             allowed = "#[allow(unused_mut)] "
         }
         let bound = emit_stmt_tuple_pattern(names, shape)
+        // **The item is lent from the input** (ADR-grammar-typed-read-v1 D7,
+        // #2708): bound to the engine's reference, never a copy, where the
+        // checker lends it; a `mut` head owns a copy of it.
+        let lent = self.facts.lent_stream_loops.contains(at)
+        let one = if lent { "__wg_one" } else { "__wg_one.clone()" }
         let mut inner = EmitOut::empty()
         inner.push(f"let mut __nikaia_went_on = false; let __nikaia_ran: ::core::result::Result<::std::option::Option<_>, {scope.channel}> = (|| {{ ")
-        inner.push(f"{allowed}for {bound} in ::std::iter::once(__wg_one.clone()).chain(::std::iter::from_fn(|| {{ __nikaia_went_on = true; ::std::option::Option::None }})) ")
+        inner.push(f"{allowed}for {bound} in ::std::iter::once({one}).chain(::std::iter::from_fn(|| {{ __nikaia_went_on = true; ::std::option::Option::None }})) ")
         let inside = flow.inside_a_loop() with { returns_out: true }
-        self.emit_stmt_block_opening_with(world, walk, inner, host, body, depth, inside, scope, EmitTail::Statement, emit_counted_turn(host.counts_steps(), null))
+        let copied = self.emit_stmt_loop_copies(world, bindings, at)
+        let opening: String? = if copied == "" { null } else { copied }
+        self.emit_stmt_block_opening_with(world, walk, inner, host, body, depth, inside, scope, EmitTail::Statement, emit_counted_turn(host.counts_steps(), opening))
         if inner.buf.contains(".await") {
             return false
         }
@@ -1519,6 +1546,26 @@ impl EmitState {
         let handed = if flow.returns_out { "Ok(::std::option::Option::Some(__nikaia_value))" } else { "Ok(__nikaia_value)" }
         out.push(f"; match __nikaia_each {{ ::std::option::Option::Some(Ok(::std::option::Option::Some(__nikaia_value))) => return {handed}, ::std::option::Option::Some(Err(__nikaia_error)) => return Err(__nikaia_error), _ => {{}} }} }}")
         return true
+    }
+
+    /// **A number, a `bool` or a `char` is read out of the view once, where
+    /// the body opens** (`Checked::copied_loop_bindings`, ADR-182 D1, D5), and
+    /// so is an element of a type that copies (`copied_view_bindings`).
+    fn emit_stmt_loop_copies(ref self, world: ref EmitWorld, bindings: ref Vec[winnow_grammar::Symbol], at: i64) -> String {
+        let mut copied = ""
+        for one in bindings {
+            if self.facts.copied_loop_bindings.contains((at, emit_text(world, one))) {
+                let name = self.emit_stmt_local(emit_text(world, one))
+                copied += f"let {name} = nikaia_std::num::value({name});"
+            }
+        }
+        for one in bindings {
+            if self.facts.copied_view_bindings.contains((at, emit_text(world, one))) {
+                let name = self.emit_stmt_local(emit_text(world, one))
+                copied += f"let {name} = *{name};"
+            }
+        }
+        return copied
     }
 
     /// The local list a `for` body pushes onto exactly once, at its top level,

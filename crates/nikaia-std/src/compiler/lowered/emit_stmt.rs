@@ -330,7 +330,10 @@ impl EmitState {
         self.write_keep_prelude(walk, out, &scope.function, at, depth);
         self.emit_core_hold_temporaries(world, walk, out, host, node, span, depth, &tail, here, scope)?;
         match node {
-            Stmt::Let { names, shape, mutable, mut_names, ty, value, .. } => { let mutable = *mutable; self.emit_stmt_let(world, walk, out, host, names, shape, mutable, mut_names, (ty).as_ref(), value, span, depth, here, scope)?; },
+            Stmt::Let { names, shape, mutable, mut_names, ty, value, .. } => {
+                let mutable = *mutable;
+                if self.facts.walked_stream_lets.contains(&(span.start as i64)) { walk.deferred_streams.insert(span.start as i64, value.clone()); } else { self.emit_stmt_let(world, walk, out, host, names, shape, mutable, mut_names, (ty).as_ref(), value, span, depth, here, scope)?; }
+            },
             Stmt::Comptime { name, .. } => {
                 let name = *name;
                 let bound = emit_text(world, name);
@@ -926,7 +929,22 @@ impl EmitState {
                 return Ok(());
             }
         }
-        if self.emit_stmt_each_walk(world, iter, at, &flow) && self.emit_stmt_for_each(world, walk, out, host, bindings, shape, mutable, mut_names, iter, body, depth, flow, scope)? { return Ok(()); }
+        let deferred_at = nikaia_std::index::or(self.facts.stream_let_loops.get(&at), || -1);
+        match walk.deferred_streams.remove(&deferred_at) {
+            None => { },
+            Some(ref call) => {
+                self.emit_stmt_for_walked(world, walk, out, host, bindings, shape, mutable, mut_names, call, body, at, depth, flow, scope)?;
+                return Ok(());
+            },
+        }
+        self.emit_stmt_for_walked(world, walk, out, host, bindings, shape, mutable, mut_names, iter, body, at, depth, flow, scope)?;
+        Ok(())
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn emit_stmt_for_walked<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, bindings: &[winnow_grammar::Symbol], shape: &[i64], mutable: bool, mut_names: &[bool], iter: &Expr, body: &Block, at: i64, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
+        if self.emit_stmt_each_walk(world, iter, at, &flow) && self.emit_stmt_for_each(world, walk, out, host, bindings, shape, mutable, mut_names, iter, body, at, depth, flow, scope)? { return Ok(()); }
         let fallible = self.facts.fallible_loops.contains(&at);
         #[allow(unused_mut)] let mut each: Vec<String> = vec![];
         for one in bindings.iter() {
@@ -955,7 +973,8 @@ impl EmitState {
         let plain = emit_stmt_tuple_pattern(&each, shape);
         if self.facts.pausing_loops.contains(&at) {
             let mut unwrap: Option<String> = None;
-            if self.facts.fallible_loops.contains(&at) { unwrap = Some(format!("let {} = {}?;", bound, plain)); }
+            let lent_item = if self.facts.lent_stream_loops.contains(&at) { "&" } else { "" };
+            if self.facts.fallible_loops.contains(&at) { unwrap = Some(format!("let {} = {}{}?;", bound, lent_item, plain)); } else if lent_item != "" { unwrap = Some(format!("let {} = &{};", bound, plain)); }
             let pad = nikaia_std::block::Text::from("    ".repeat(nikaia_std::count::of(depth)));
             let inner = nikaia_std::block::Text::from("    ".repeat(nikaia_std::count::of(depth + 1)));
             out.push("{\n");
@@ -993,22 +1012,9 @@ impl EmitState {
         }
         out.push(" ");
         let mut unwrap: Option<String> = None;
-        if self.facts.fallible_loops.contains(&at) { unwrap = Some(format!("let {} = {}?;", names, nikaia_std::block::Text::from(each.join(", ")))); }
-        let mut copied: String = String::from("");
-        for one in bindings.iter() {
-            let one = *one;
-            if self.facts.copied_loop_bindings.contains(&(at, emit_text(world, one))) {
-                let name = self.emit_stmt_local(&emit_text(world, one));
-                copied += ::core::convert::AsRef::<str>::as_ref(&format!("let {} = nikaia_std::num::value({});", name, name));
-            }
-        }
-        for one in bindings.iter() {
-            let one = *one;
-            if self.facts.copied_view_bindings.contains(&(at, emit_text(world, one))) {
-                let name = self.emit_stmt_local(&emit_text(world, one));
-                copied += ::core::convert::AsRef::<str>::as_ref(&format!("let {} = *{};", name, name));
-            }
-        }
+        let lent_item = if self.facts.lent_stream_loops.contains(&at) { "&" } else { "" };
+        if self.facts.fallible_loops.contains(&at) { unwrap = Some(format!("let {} = {}{}?;", names, lent_item, nikaia_std::block::Text::from(each.join(", ")))); } else if lent_item != "" { unwrap = Some(format!("let {} = &{};", names, names)); }
+        let copied = self.emit_stmt_loop_copies(world, bindings, at);
         let mut opening: Option<String> = None;
         if copied == "" { opening = unwrap; } else if unwrap.is_none() { opening = Some(nikaia_std::block::Text::from(copied.to_string())); } else { opening = Some(format!("{} {}", nikaia_std::index::or(unwrap.as_deref(), || ""), copied)); }
         let mut inside = scope.clone();
@@ -1059,7 +1065,7 @@ impl EmitState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    pub(crate) fn emit_stmt_for_each<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, bindings: &[winnow_grammar::Symbol], shape: &[i64], mutable: bool, mut_names: &[bool], iter: &Expr, body: &Block, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<bool, nikaia_std::error::Thrown<EmitRefused>> {
+    pub(crate) fn emit_stmt_for_each<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, bindings: &[winnow_grammar::Symbol], shape: &[i64], mutable: bool, mut_names: &[bool], iter: &Expr, body: &Block, at: i64, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<bool, nikaia_std::error::Thrown<EmitRefused>> {
         #[allow(unused_mut)] let mut names: Vec<String> = vec![];
         let mut index: i64 = 0;
         for one in bindings.iter() {
@@ -1072,11 +1078,15 @@ impl EmitState {
         let mut allowed = ""; #[allow(unused_mut, clippy::redundant_locals)] let mut names = names;
         if mutable && names.len() > 1 { allowed = "#[allow(unused_mut)] "; }
         let bound = emit_stmt_tuple_pattern(&names, shape);
+        let lent = self.facts.lent_stream_loops.contains(&at);
+        let one = if lent { "__wg_one" } else { "__wg_one.clone()" };
         let mut inner = EmitOut::empty();
         inner.push(&format!("let mut __nikaia_went_on = false; let __nikaia_ran: ::core::result::Result<::std::option::Option<_>, {}> = (|| {{ ", scope.channel));
-        inner.push(&format!("{}for {} in ::std::iter::once(__wg_one.clone()).chain(::std::iter::from_fn(|| {{ __nikaia_went_on = true; ::std::option::Option::None }})) ", allowed, bound));
+        inner.push(&format!("{}for {} in ::std::iter::once({}).chain(::std::iter::from_fn(|| {{ __nikaia_went_on = true; ::std::option::Option::None }})) ", allowed, bound, one));
         let inside = EmitFlow { returns_out: true, ..flow.inside_a_loop() };
-        self.emit_stmt_block_opening_with(world, walk, &mut inner, host, body, depth, inside, scope, &EmitTail::Statement, emit_counted_turn(host.counts_steps(), None))?;
+        let copied = self.emit_stmt_loop_copies(world, bindings, at);
+        let opening: Option<String> = if copied == "" { None } else { Some(copied) };
+        self.emit_stmt_block_opening_with(world, walk, &mut inner, host, body, depth, inside, scope, &EmitTail::Statement, emit_counted_turn(host.counts_steps(), opening))?;
         if inner.buf.contains(".await") { return Ok(false); }
         inner.push(" Ok(::std::option::Option::None) })(); match __nikaia_ran { Ok(::std::option::Option::None) if __nikaia_went_on => ::std::ops::ControlFlow::Continue(()), __nikaia_other => ::std::ops::ControlFlow::Break(__nikaia_other) }");
         out.push("{ let __nikaia_each = ");
@@ -1089,6 +1099,24 @@ impl EmitState {
         let handed = if flow.returns_out { "Ok(::std::option::Option::Some(__nikaia_value))" } else { "Ok(__nikaia_value)" };
         out.push(&format!("; match __nikaia_each {{ ::std::option::Option::Some(Ok(::std::option::Option::Some(__nikaia_value))) => return {}, ::std::option::Option::Some(Err(__nikaia_error)) => return Err(__nikaia_error), _ => {{}} }} }}", handed));
         Ok(true)
+    }
+    pub(crate) fn emit_stmt_loop_copies(&self, world: &EmitWorld<'_, '_, '_, '_>, bindings: &[winnow_grammar::Symbol], at: i64) -> String {
+        let mut copied: String = String::from("");
+        for one in bindings.iter() {
+            let one = *one;
+            if self.facts.copied_loop_bindings.contains(&(at, emit_text(world, one))) {
+                let name = self.emit_stmt_local(&emit_text(world, one));
+                copied += ::core::convert::AsRef::<str>::as_ref(&format!("let {} = nikaia_std::num::value({});", name, name));
+            }
+        }
+        for one in bindings.iter() {
+            let one = *one;
+            if self.facts.copied_view_bindings.contains(&(at, emit_text(world, one))) {
+                let name = self.emit_stmt_local(&emit_text(world, one));
+                copied += ::core::convert::AsRef::<str>::as_ref(&format!("let {} = *{};", name, name));
+            }
+        }
+        copied
     }
     pub(crate) fn emit_stmt_for_grown(&self, world: &EmitWorld<'_, '_, '_, '_>, bindings: &[winnow_grammar::Symbol], body: &Block) -> Option<String> {
         let mut grown: Option<String> = None;

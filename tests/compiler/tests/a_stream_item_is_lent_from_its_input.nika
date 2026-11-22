@@ -1,0 +1,43 @@
+// The item of a `for` over a `@stream` call is lent from the input
+// (ADR-grammar-typed-read-v1 D7, ADR-views-v4 D5, #2708): the walk runs its
+// body as the parser's `each` and binds the item it hands over, never a
+// copy of it, so one kept past its turn is copied with `.clone()`. A `let`
+// bound to the call, which one `for` walks, is walked the same way.
+
+struct Item {
+	word: String,
+}
+
+grammar Words {
+	@stream entry rule items -> Item = item*
+	rule item -> Item = "[" w:until("]") "]" ";" -> { Item { word: w.clone() } }
+}
+
+fn kept(text: String) -> Vec[Item] throws {
+	let mut kept: Vec[Item] = []
+	for it in Words::items(text) {
+		if it.word.len() > 1 {
+			kept.push(it.clone())
+		}
+	}
+	return kept
+}
+
+fn counted(text: String) -> i64 throws {
+	let items = Words::items(text)
+	let mut n = 0
+	for it in items {
+		println(f"held {it.word}")
+		n += 1
+	}
+	return n
+}
+
+fn main() throws {
+	for it in kept("[a];[bb];[ccc];") {
+		println(it.word)
+	}
+	println(counted("[x];[yy];"))
+	let broken = counted("[x];[y") catch { -1 }
+	println(f"broken: {broken}")
+}

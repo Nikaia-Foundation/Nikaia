@@ -31,6 +31,46 @@ pub(crate) fn bare_reference(pattern: &Pattern, world: &CheckWorld<'_, '_, '_, '
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
+pub(crate) fn grammar_a_stream_call(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, iter: &Expr) -> bool {
+    match iter {
+        Expr::Call { func, args, .. } => { let func = nikaia_std::boxed::open(func); match func {
+            Expr::Path(segments, _) => !args.is_empty() && grammar_a_stream_entry(world, segments),
+            _ => false,
+        } },
+        _ => false,
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn grammar_a_stream_entry(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, segments: &[winnow_grammar::Symbol]) -> bool {
+    if segments.len() == 2 {
+        let book = format!("{}", world.words.resolve(*unsafe { nikaia_std::proven::read(&segments, (0) as usize) }));
+        let rule = format!("{}", world.words.resolve(*unsafe { nikaia_std::proven::read(&segments, (1) as usize) }));
+        if grammar_a_stream_entry_in(&world.here, &book, &rule) { return true; }
+        for view in world.beside.iter() { if grammar_a_stream_entry_in(view, &book, &rule) { return true; } }
+    }
+    let contract = match world.own.functions.get(&check_core_call_joined(world, segments)) { Some(__nikaia_value) => __nikaia_value, None => return false };
+    if contract.fails_with.len() != 1 || *unsafe { nikaia_std::proven::read(&contract.fails_with, (0) as usize) } != "ParseError" { return false; }
+    let signature = match contract.signature.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return false };
+    let result = match signature.result.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return false };
+    !signature.params.is_empty() && unsafe { nikaia_std::proven::read(&signature.params, (0) as usize) }.0 == "input" && a_sequence_type(result)
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn grammar_a_stream_entry_in(view: &ParsedView<'_, '_, '_, '_, '_, '_, '_>, book: &str, rule: &str) -> bool {
+    for item in view.items.iter() {
+        match &item.node {
+            Item::Grammar(def) => { if view.text(def.name) == book { for r in def.rules.iter() { if r.is_entry && r.stream && view.text(r.name) == rule { return r.ret_type.is_some(); } } } },
+            _ => { },
+        }
+    }
+    false
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
 pub(crate) fn grammar_a_text_call(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, pattern: &Pattern, rules: &collections::BTreeSet<String>) -> bool {
     match pattern {
         Pattern::Ref { name, generics, args } => { let name = *name; generics.is_empty() && !args.is_empty() && (world.words.resolve(name) == "text" || world.words.resolve(name) == "bytes") && !rules.contains(world.words.resolve(name)) },
