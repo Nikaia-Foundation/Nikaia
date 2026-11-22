@@ -58,6 +58,73 @@ fn check_core_stmt_a_map_read(value: ref Expr) -> bool sync {
     }
 }
 
+/// **A choice whose arms are all a map's read** (or `null`, or a jump) is
+/// the view a lone read is (ADR-293 D15, #2170): `match lit { true => m[k],
+/// else => m[k] }` binds an option of a view. An arm of its own beside a
+/// read copied the read out (`reads_beside_an_owned_arm`). The count of reads,
+/// or `-1` where an arm is anything else.
+fn check_core_stmt_reads_in_arms(state: ref CheckState, value: ref Expr) -> i64 sync {
+    let mut reads = 0
+    match value {
+        Expr::Match { arms, .. } => {
+            for arm in arms {
+                let found = check_core_stmt_reads_in_arms(state, arm.body)
+                if found < 0 {
+                    return -1
+                }
+                reads += found
+            }
+            return reads
+        }
+        Expr::If { then_branch, else_branch, .. } => {
+            for tail in block_tail(then_branch) {
+                let found = check_core_stmt_reads_in_arms(state, tail)
+                if found < 0 {
+                    return -1
+                }
+                reads += found
+            }
+            let other = else_branch ?? return -1
+            for tail in block_tail(other) {
+                let found = check_core_stmt_reads_in_arms(state, tail)
+                if found < 0 {
+                    return -1
+                }
+                reads += found
+            }
+            return reads
+        }
+        Expr::Block(block, _) => {
+            for tail in block_tail(block) {
+                let found = check_core_stmt_reads_in_arms(state, tail)
+                if found < 0 {
+                    return -1
+                }
+                reads += found
+            }
+            return reads
+        }
+        else => {}
+    }
+    if ends_in_null(value) {
+        return 0
+    }
+    let node = id_of(value) as i64
+    if state.flow.map_read_sites.contains(node) && !state.facts.copied_reads.contains(node) && !state.facts.copied_walks.contains(node) {
+        return 1
+    }
+    return -1
+}
+
+/// Whether a choice ends only in a map's read, by `check_core_stmt_reads_in_arms`.
+fn check_core_stmt_arms_all_reads(state: ref CheckState, value: ref Expr) -> bool sync {
+    return match value {
+        Expr::Match { .. } => check_core_stmt_reads_in_arms(state, value) > 0,
+        Expr::If { .. } => check_core_stmt_reads_in_arms(state, value) > 0,
+        else => false,
+    }
+}
+
 /// A call of `get`, by its method's name.
 fn check_core_stmt_a_get(world: ref CheckWorld, read: ref Expr) -> bool sync {
     return match read {
@@ -1078,7 +1145,7 @@ fn check_core_stmt_let[H: CheckHost](mut state: CheckState, world: ref CheckWorl
     // **A name bound to a map read is a view of the map** (#297).
     let was_read = state.flow.read_a_map
     state.flow.read_a_map = outer_read
-    let of_a_map = was_read && check_core_stmt_a_map_read(value)
+    let of_a_map = was_read && (check_core_stmt_a_map_read(value) || check_core_stmt_arms_all_reads(state, value))
     let element_read = check_core_stmt_element_read(state, world, value)
     // **A value `get` hands back past a jump is a reference** (D30).
     let got = check_core_stmt_got(state, world, value)

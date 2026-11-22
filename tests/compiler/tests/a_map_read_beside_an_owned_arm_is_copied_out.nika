@@ -1,0 +1,43 @@
+// A `match` or an `if` whose arms join a number with a map's read is an
+// `i64?` of its own: one owned arm decides it, and the read arm is copied
+// out, as a read kept where a `T?` is wanted is (ADR-293 D15, ADR-387 D1,
+// #2170).
+
+use std::collections
+
+fn by_match(m: collections::BTreeMap[String, i64], k: String, lit: bool) -> i64? {
+    let n = match lit {
+        true => 3,
+        else => m.get(k),
+    }
+    return n
+}
+
+fn by_brackets(m: collections::BTreeMap[String, i64], k: String, lit: bool) -> i64? {
+    let n = match lit {
+        true => m[k],
+        else => 3,
+    }
+    return n
+}
+
+fn by_if(m: collections::BTreeMap[String, i64], k: String, lit: bool) -> i64? {
+    let n = if lit { m[k] } else { 3 }
+    return n
+}
+
+fn in_a_list(m: ref collections::BTreeMap[String, i64], k: String) -> Vec[i64?] {
+    return [m[k], 3, null]
+}
+
+fn main() throws {
+    let mut m: collections::BTreeMap[String, i64] = collections::BTreeMap()
+    m.insert("a", 5)
+    let k: String = "a"
+    let gone: String = "b"
+    println(f"{by_match(m.clone(), k.clone(), true) ?? 0} {by_match(m.clone(), k.clone(), false) ?? 0}")
+    println(f"{by_brackets(m.clone(), k.clone(), true) ?? 0} {by_brackets(m.clone(), gone.clone(), true) ?? 0}")
+    println(f"{by_if(m.clone(), k.clone(), true) ?? 0} {by_if(m.clone(), k.clone(), false) ?? 0}")
+    let listed = in_a_list(m, k)
+    println(f"{listed.len()} {listed[0] ?? 0} {listed[2] == null}")
+}
