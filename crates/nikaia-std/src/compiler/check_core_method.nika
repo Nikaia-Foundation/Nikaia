@@ -1013,6 +1013,7 @@ fn check_core_method_called[H: CheckHost](mut state: CheckState, world: ref Chec
     let lanes = value_of_a_copy(on.unseen())
     state.a_lane_method_not_offered(lanes, name, span)
     state.a_shuffle_out_of_lanes(world, lanes, name, args, span)
+    state.a_lookup_out_of_lanes(world, lanes, name, args, span)
     // **A `Wide[T]`'s method** (Part I 2.2, #2619): the halves and the
     // magnitude in the unsigned type of `T`'s width.
     let widened: Ty? = state.wide_method(world, expr, on, name, span)

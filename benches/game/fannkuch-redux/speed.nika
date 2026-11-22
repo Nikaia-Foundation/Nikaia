@@ -1,12 +1,15 @@
-// fannkuch-redux written for speed: the program of `main.nika`, its lists
-// made arrays of 16 (the game's n stays below 16), and the copy that is
-// flipped kept in one array of its own, filled again for each permutation,
-// so no permutation allocates. One thread.
+// fannkuch-redux written for speed: the program of `main.nika`, the
+// permutation held in one `simd::Fixed[u8, 16]` (the game's n stays below 16).
+// A flip reverses a prefix with one lookup whose indices a table built once
+// picks by the first item (ADR-377 D10), as Rust #6's `pshufb` does, and the
+// next permutation rotates a prefix the same way. No permutation allocates.
+// One thread.
 //
 //     nikaia run speed.nika -- 7
 //     228
 //     Pfannkuchen(7) = 16
 use std::cli
+use std::simd
 use std::text
 
 struct Counts {
@@ -15,9 +18,27 @@ struct Counts {
 }
 
 fn fannkuch(n: i64) -> Counts sync {
-	let mut perm: Array[i64, 16] = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
+	// `reverse[k]` reverses the first k + 1 items; `rotate[r]` moves the
+	// first item behind the next r.
+	let mut reverse: Vec[simd::Fixed[u8, 16]] = []
+	let mut rotate: Vec[simd::Fixed[u8, 16]] = []
+	for k in 0..<16 {
+		let mut flipped: Array[u8, 16] = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
+		let mut turned: Array[u8, 16] = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
+		for i in 0..k {
+			flipped[i] = (k - i) as u8
+		}
+		for i in 0..<k {
+			turned[i] = (i + 1) as u8
+		}
+		turned[k] = 0
+		reverse.push(simd::Fixed::from(flipped))
+		rotate.push(simd::Fixed::from(turned))
+	}
+	// `& simd::splat(15)` proves each index below the 16 lanes.
+	let low: simd::Fixed[u8, 16] = simd::splat(15)
+	let mut perm: simd::Fixed[u8, 16] = simd::Fixed::from([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15])
 	let mut count: Array[i64, 16] = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
-	let mut flip: Array[i64, 16] = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
 	let mut checksum = 0
 	let mut most = 0
 	let mut even = true
@@ -27,24 +48,14 @@ fn fannkuch(n: i64) -> Counts sync {
 			count[r - 1] = r
 			r = r - 1
 		}
-		if perm[0] != 0 {
-			for i in 0..<n {
-				flip[i] = perm[i]
-			}
+		let mut k = perm.lane(0) as i64
+		if k != 0 {
+			let mut flip = perm
 			let mut flips = 0
-			let mut k = flip[0]
 			while k != 0 {
-				let mut i = 0
-				let mut j = k
-				while i < j {
-					let t = flip[i]
-					flip[i] = flip[j]
-					flip[j] = t
-					i = i + 1
-					j = j - 1
-				}
+				flip = flip.lookup(reverse[k] & low)
 				flips = flips + 1
-				k = flip[0]
+				k = flip.lane(0) as i64
 			}
 			if flips > most {
 				most = flips
@@ -59,11 +70,7 @@ fn fannkuch(n: i64) -> Counts sync {
 			if r == n {
 				return Counts { checksum: checksum, flips: most }
 			}
-			let first = perm[0]
-			for i in 0..<r {
-				perm[i] = perm[i + 1]
-			}
-			perm[r] = first
+			perm = perm.lookup(rotate[r] & low)
 			count[r] = count[r] - 1
 			if count[r] > 0 {
 				break

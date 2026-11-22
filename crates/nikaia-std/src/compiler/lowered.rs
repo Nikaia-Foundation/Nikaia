@@ -3357,7 +3357,7 @@ pub mod check_shapes {
 }
 pub mod check_simd {
     #[allow(unused_imports)]
-    pub use super::{check_simd_float, check_simd_float_vector, check_simd_lane_bits, check_simd_wanted, check_simd_element};
+    pub use super::{check_simd_kind, check_simd_float, check_simd_float_vector, check_simd_lane_bits, check_simd_wanted, check_simd_element};
 }
 pub mod check_state {
     #[allow(unused_imports)]
@@ -3994,4 +3994,4 @@ pub fn nikaia_run_tests(filters: &[std::string::String], list: bool, more: std::
 /// **The digest of this lowered set** (#1610): every file `lower-std` wrote
 /// beside this index, and the index above this line. Compiled into the same
 /// crate as the code it names, it is the compiler's identity for its caches.
-pub const LOWERED_DIGEST: &str = "6a9c97f0b707a5977df85398cd6ef1383925e8645ccf8446fe42666e3bbbca20";
+pub const LOWERED_DIGEST: &str = "674d31f062c668d448e148076027288f59a06f4fb1171bb7ec50e5b8ba641275";

@@ -564,6 +564,7 @@ fn check_core_comptime_binding[H: CheckHost](mut state: CheckState, world: ref C
         without_mut: null,
         empty_list: null,
         open_number: null,
+        lanes_at_most: null,
     })
     return Ty::Tuple([])
 }

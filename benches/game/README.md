@@ -95,8 +95,8 @@ those of the Rust entry. Tokens are given once per program.
 | fannkuch-redux | Rust #6, one thread, `target-cpu=ivybridge` | 87.2 | 1.945 | 81.5 | 1.794 | 1.00 |  |
 | fannkuch-redux | Nikaia, `--cpu=x86-64` | 513.1 | 8.842 | 510.1 | 11.056 | 6.26 | 378 |
 | fannkuch-redux | Nikaia, `--cpu=x86-64-v3` | 514.3 | 9.130 | 511.3 | 9.304 | 6.27 |  |
-| fannkuch-redux | Nikaia for speed, `--cpu=x86-64` | 225.7 | 7.518 | 216.1 | 7.444 | 2.65 | 460 |
-| fannkuch-redux | Nikaia for speed, `--cpu=x86-64-v3` | 225.2 | 7.522 | 215.6 | 7.448 | 2.64 |  |
+| fannkuch-redux | Nikaia for speed, `--cpu=x86-64` | 943.5 | 2.088 | 925.8 | 2.052 | 11.36 | 590 |
+| fannkuch-redux | Nikaia for speed, `--cpu=x86-64-v3` | 121.5 | 2.084 | 111.6 | 2.058 | 1.37 |  |
 | binary-trees | Rust #5, `target-cpu=ivybridge` | 49.3 | 0.577 | 43.3 | 0.471 | 1.00 | 502 |
 | binary-trees | Rust #5, one thread, `target-cpu=ivybridge` | 49.3 | 0.577 | 43.3 | 0.471 | 1.00 |  |
 | binary-trees | Nikaia, `--cpu=x86-64` | 183.0 | 1.209 | 145.8 | 1.108 | 3.37 | 237 |
@@ -145,12 +145,13 @@ figure has moved since, the paragraph says so.
   is scalar, one `divsd` an entry, where Rust #6 divides two lanes by hand.
   `i64`'s signed `/ 2` also costs a shift, an add and a shift, 3 of an entry's
   13 instructions, where Rust's `usize` costs one shift.
-* **fannkuch-redux**, 6.26x and 2.65x. The same two algorithms in plain Rust
-  count 499 and 266 a permutation, so Nikaia's code costs what Rust's does.
-  The gap is Rust #6's algorithm. It holds the permutation in one `u128` and
-  flips a prefix with one `pshufb` whose mask it picks at run time. `std::simd`
-  has only constant shuffles; a run-time shuffle is undecided (ADR-377,
-  section 4).
+* **fannkuch-redux**, 6.26x and 1.37x at `x86-64-v3`. The plain program
+  costs what the same algorithm in plain Rust does (499 a permutation). The
+  speed row holds the permutation in one `simd::Fixed[u8, 16]` and flips a
+  prefix with one `lookup` whose indices a table picks by the first item
+  (ADR-377 D10), as Rust #6's `pshufb` does (re-counted on 2026-11-22 with
+  Nikaia 0.0.1545: 215.6 before). At `x86-64`, a level without SSSE3, the
+  lookup goes byte by byte and counts 11.36x.
 * **binary-trees**, 3.37x (re-counted on 2026-11-21 with Nikaia 0.0.1517;
   5.75x before). Each node's box is built in the task's block (ADR-327 D16,
   D17), `main`'s here, so `malloc` and `free` are no longer counted (71 % of
