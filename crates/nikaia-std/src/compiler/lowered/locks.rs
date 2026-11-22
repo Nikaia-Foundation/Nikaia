@@ -74,7 +74,7 @@ pub fn locks_infer(ledger: &mut Ledger, units: &[ParsedView<'_, '_, '_, '_, '_, 
     }
     declared.extend(ledger.types.keys().cloned());
     declared.extend(library.types.keys().cloned());
-    let answer = locking_of(&graph, &declared, library, &ledger);
+    let answer = locking_callees_first(&graph, &declared, library, &ledger);
     for (name, holds) in answer.functions.iter() {
         let holds = *holds;
         let contract = match ledger.functions.get_mut(name) { Some(__nikaia_value) => __nikaia_value, None => continue };
@@ -208,7 +208,7 @@ pub fn locking(itself: &collections::BTreeMap<String, Lock>, callees: &collectio
             }, || Lock::No);
             if before.holds() { continue; }
             let mut reached = Lock::No;
-            for callee in called.iter() { reached = reached.or(&theirs_of(&touches, library, declared, callee)); }
+            for callee in called.iter() { reached = reached.or(&theirs_of(&touches, &nothing_stored(), library, declared, callee)); }
             let grown = before.or(&reached);
             if grown != before {
                 touches.insert(nikaia_std::block::Text::from(name.to_string()), grown);
@@ -216,6 +216,10 @@ pub fn locking(itself: &collections::BTreeMap<String, Lock>, callees: &collectio
             }
         }
     }
+    settled(&touches, own)
+}
+
+pub(crate) fn settled(touches: &collections::BTreeMap<String, Lock>, own: &Ledger) -> Locking {
     let mut answer = Locking { functions: collections::BTreeMap::new(), fields: collections::BTreeMap::new() };
     for (name, holds) in touches.iter() {
         let holds = *holds;
@@ -229,16 +233,114 @@ pub fn locking(itself: &collections::BTreeMap<String, Lock>, callees: &collectio
     answer
 }
 
-pub(crate) fn theirs_of(touches: &collections::BTreeMap<String, Lock>, library: &Ledger, declared: &collections::BTreeSet<String>, callee: &str) -> Lock {
+pub(crate) fn theirs_of(touches: &collections::BTreeMap<String, Lock>, stored: &collections::BTreeMap<String, Lock>, library: &Ledger, declared: &collections::BTreeSet<String>, callee: &str) -> Lock {
     let constructed = format!("{}::new", callee);
     for key in [nikaia_std::block::Text::from(callee.to_string()), constructed] {
         let found = match match *nikaia_std::index::get(&touches, &key) {
             Some(__nikaia_it) => Some(__nikaia_it.clone()),
             None => None,
-        } { Some(__nikaia_value) => __nikaia_value, None => match described(library, &key) { Some(__nikaia_value) => __nikaia_value, None => continue } };
+        } { Some(__nikaia_value) => __nikaia_value, None => match match *nikaia_std::index::get(&stored, &key) {
+            Some(__nikaia_it) => Some(__nikaia_it.clone()),
+            None => None,
+        } { Some(__nikaia_value) => __nikaia_value, None => match described(library, &key) { Some(__nikaia_value) => __nikaia_value, None => continue } } };
         return found;
     }
     if is_a_variant(declared, callee) { Lock::No } else { Lock::Undecided }
+}
+
+pub(crate) fn nothing_stored() -> collections::BTreeMap<String, Lock> { collections::BTreeMap::new() }
+
+pub fn locks_of_unit(unit: &[String], graph: &collections::BTreeMap<String, Reaches>, stored: &collections::BTreeMap<String, Lock>, declared: &collections::BTreeSet<String>, library: &Ledger) -> collections::BTreeMap<String, Lock> {
+    let mut touches: collections::BTreeMap<String, Lock> = collections::BTreeMap::new();
+    for name in unit.iter() {
+        let itself = nikaia_std::index::or(match (*nikaia_std::index::get(&graph, name)).as_ref().map(|__nikaia_it| &__nikaia_it.itself) {
+            Some(__nikaia_it) => Some(__nikaia_it.copy_owned()),
+            None => None,
+        }, || Lock::No);
+        touches.insert(nikaia_std::block::Text::from(name.to_string()), itself);
+    }
+    let mut changed = true;
+    while changed {
+        changed = false;
+        for name in unit.iter() {
+            let before = nikaia_std::index::or(match *nikaia_std::index::get(&touches, name) {
+                Some(__nikaia_it) => Some(__nikaia_it.clone()),
+                None => None,
+            }, || Lock::No);
+            if before.holds() { continue; }
+            let reaches = match *nikaia_std::index::get(&graph, name) { Some(__nikaia_value) => __nikaia_value, None => continue };
+            let mut reached = Lock::No;
+            for callee in reaches.callees.iter() { reached = reached.or(&theirs_of(&touches, stored, library, declared, callee)); }
+            let grown = before.or(&reached);
+            if grown != before {
+                touches.insert(nikaia_std::block::Text::from(name.to_string()), grown);
+                changed = true;
+            }
+        }
+    }
+    touches
+}
+
+pub fn locking_callees_first(graph: &collections::BTreeMap<String, Reaches>, declared: &collections::BTreeSet<String>, library: &Ledger, own: &Ledger) -> Locking {
+    let mut stored: collections::BTreeMap<String, Lock> = collections::BTreeMap::new();
+    for unit in callees_first(graph, library) {
+        let column = locks_of_unit(&unit, graph, &stored, declared, library);
+        stored.extend(column);
+    }
+    settled(&stored, own)
+}
+
+pub(crate) fn edge_of(graph: &collections::BTreeMap<String, Reaches>, library: &Ledger, callee: &str) -> Option<String> {
+    if graph.contains_key(callee) { return Some(nikaia_std::block::Text::from(callee.to_string())); }
+    if library.functions.contains_key(callee) { return None; }
+    let constructed = format!("{}::new", callee);
+    if graph.contains_key(&constructed) { return Some(constructed); }
+    None
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub(crate) struct Components {
+    pub(crate) index: collections::BTreeMap<String, i64>,
+    pub(crate) low: collections::BTreeMap<String, i64>,
+    pub(crate) open: collections::BTreeSet<String>,
+    pub(crate) stack: Vec<String>,
+    pub(crate) units: Vec<Vec<String>>,
+    pub(crate) next: i64,
+}
+
+pub fn callees_first(graph: &collections::BTreeMap<String, Reaches>, library: &Ledger) -> Vec<Vec<String>> {
+    let mut walk = Components { index: collections::BTreeMap::new(), low: collections::BTreeMap::new(), open: collections::BTreeSet::new(), stack: vec![], units: vec![], next: 0 };
+    for (name, _) in graph.iter() { if !walk.index.contains_key(name) { connect(graph, library, name, &mut walk); } }
+    walk.units
+}
+
+pub(crate) fn connect(graph: &collections::BTreeMap<String, Reaches>, library: &Ledger, name: &str, walk: &mut Components) {
+    walk.index.insert(nikaia_std::block::Text::from(name.to_string()), walk.next);
+    walk.low.insert(nikaia_std::block::Text::from(name.to_string()), walk.next);
+    walk.next = walk.next + 1;
+    walk.stack.push(nikaia_std::block::Text::from(name.to_string()));
+    walk.open.insert(nikaia_std::block::Text::from(name.to_string()));
+    let reaches = match *nikaia_std::index::get(&graph, name) { Some(__nikaia_value) => __nikaia_value, None => return };
+    for callee in reaches.callees.iter() {
+        let to = match edge_of(graph, library, callee) { Some(__nikaia_value) => __nikaia_value, None => continue };
+        let mut reached: i64 = -1;
+        if !walk.index.contains_key(&to) {
+            connect(graph, library, &to, walk);
+            reached = nikaia_std::index::or(*nikaia_std::index::get(&walk.low, &to), || -1);
+        } else if walk.open.contains(&to) { reached = nikaia_std::index::or(*nikaia_std::index::get(&walk.index, &to), || -1); }
+        let mine = nikaia_std::index::or(*nikaia_std::index::get(&walk.low, name), || 0);
+        if reached >= 0 && reached < mine { walk.low.insert(nikaia_std::block::Text::from(name.to_string()), reached); }
+    }
+    if nikaia_std::index::or(*nikaia_std::index::get(&walk.low, name), || -1) != nikaia_std::index::or(*nikaia_std::index::get(&walk.index, name), || -2) { return; }
+    let mut unit: Vec<String> = vec![];
+    loop {
+        let top = match walk.stack.pop() { Some(__nikaia_value) => __nikaia_value, None => break };
+        walk.open.remove(&top);
+        let last = top == name;
+        unit.push(top);
+        if last { break; }
+    }
+    walk.units.push(unit);
 }
 
 pub(crate) fn described(library: &Ledger, key: &str) -> Option<Lock> {
@@ -293,10 +395,45 @@ pub(crate) fn __nikaia_test_0() -> Result<(), std::boxed::Box<dyn std::error::Er
     Ok(())
 }
 
+pub(crate) fn __nikaia_test_1() -> Result<(), std::boxed::Box<dyn std::error::Error>> {
+    let mut graph: collections::BTreeMap<String, Reaches> = collections::BTreeMap::new();
+    locks_test_node(&mut graph, String::from("a"), Lock::No, Some(String::from("b")));
+    locks_test_node(&mut graph, String::from("b"), Lock::No, Some(String::from("c")));
+    locks_test_node(&mut graph, String::from("c"), Lock::Holds, None);
+    locks_test_node(&mut graph, String::from("p"), Lock::No, Some(String::from("q")));
+    locks_test_node(&mut graph, String::from("q"), Lock::No, Some(String::from("p")));
+    locks_test_node(&mut graph, String::from("s"), Lock::No, Some(String::from("t")));
+    let mut both = Reaches { itself: Lock::No, callees: collections::BTreeSet::new() };
+    both.callees.insert(String::from("s"));
+    both.callees.insert(String::from("u"));
+    graph.insert(String::from("t"), both);
+    locks_test_node(&mut graph, String::from("u"), Lock::Holds, Some(String::from("t")));
+    locks_test_node(&mut graph, String::from("r"), Lock::No, Some(String::from("mystery")));
+    let mut own = Ledger::blank();
+    for name in ["a", "b", "c", "p", "q", "s", "t", "u", "r"] { own.functions.insert(with_owner("", name), FnContract::empty()); }
+    let whole = locking_of(&graph, &collections::BTreeSet::new(), &Ledger::blank(), &own);
+    let first = locking_callees_first(&graph, &collections::BTreeSet::new(), &Ledger::blank(), &own);
+    if !(whole.functions == first.functions) { nikaia_std::abort::assertion_failed("assert(whole.functions == first.functions)", None, &[("whole.functions", (&&nikaia_std::abort::Operand(&(whole.functions))).shown()), ("first.functions", (&&nikaia_std::abort::Operand(&(first.functions))).shown()), ]) };
+    if !(whole.fields == first.fields) { nikaia_std::abort::assertion_failed("assert(whole.fields == first.fields)", None, &[("whole.fields", (&&nikaia_std::abort::Operand(&(whole.fields))).shown()), ("first.fields", (&&nikaia_std::abort::Operand(&(first.fields))).shown()), ]) };
+    if !(nikaia_std::index::or((*nikaia_std::index::get(&first.functions, "s")).copied(), || Lock::No) == Lock::Holds) { nikaia_std::abort::assertion_failed("assert((first.functions[\"s\"] ?? Lock::No) == Lock::Holds)", None, &[("first.functions[\"s\"] ?? Lock::No", (&&nikaia_std::abort::Operand(&(nikaia_std::index::or((*nikaia_std::index::get(&first.functions, "s")).copied(), || Lock::No)))).shown()), ("Lock::Holds", (&&nikaia_std::abort::Operand(&(Lock::Holds))).shown()), ]) };
+    if !(nikaia_std::index::or((*nikaia_std::index::get(&first.functions, "p")).copied(), || Lock::Holds) == Lock::No) { nikaia_std::abort::assertion_failed("assert((first.functions[\"p\"] ?? Lock::Holds) == Lock::No)", None, &[("first.functions[\"p\"] ?? Lock::Holds", (&&nikaia_std::abort::Operand(&(nikaia_std::index::or((*nikaia_std::index::get(&first.functions, "p")).copied(), || Lock::Holds)))).shown()), ("Lock::No", (&&nikaia_std::abort::Operand(&(Lock::No))).shown()), ]) };
+    let units = callees_first(&graph, &Ledger::blank());
+    let mut pair = 0;
+    for unit in units.iter() { if unit.len() > 1 { pair = pair + 1; } }
+    if !(pair == 2) { nikaia_std::abort::assertion_failed("assert(pair == 2)", None, &[("pair", (&&nikaia_std::abort::Operand(&(pair))).shown()), ]) };
+    let mut stored: collections::BTreeMap<String, Lock> = collections::BTreeMap::new();
+    stored.insert(String::from("b"), Lock::Holds);
+    let alone: Vec<String> = vec![with_owner("", "a")];
+    let head = locks_of_unit(&alone, &graph, &stored, &collections::BTreeSet::new(), &Ledger::blank());
+    if !(nikaia_std::index::or((*nikaia_std::index::get(&head, "a")).copied(), || Lock::No) == nikaia_std::index::or((*nikaia_std::index::get(&whole.functions, "a")).copied(), || Lock::No)) { nikaia_std::abort::assertion_failed("assert((head[\"a\"] ?? Lock::No) == (whole.functions[\"a\"] ?? Lock::No))", None, &[("head[\"a\"] ?? Lock::No", (&&nikaia_std::abort::Operand(&(nikaia_std::index::or((*nikaia_std::index::get(&head, "a")).copied(), || Lock::No)))).shown()), ("whole.functions[\"a\"] ?? Lock::No", (&&nikaia_std::abort::Operand(&(nikaia_std::index::or((*nikaia_std::index::get(&whole.functions, "a")).copied(), || Lock::No)))).shown()), ]) };
+    Ok(())
+}
+
 
 /// The `test` blocks of this file (#2082), as `nikaia test --std` runs them.
 pub(crate) fn locks_nikaia_tests() -> Vec<(&'static str, fn() -> Result<(), std::boxed::Box<dyn std::error::Error>>)> {
     vec![
         ("locks::the_locks_entry_answers_a_call_chain_a_recursive_pair_and_an_unknown_call", __nikaia_test_0),
+        ("locks::the_per_function_locks_entry_gives_the_whole_package_column", __nikaia_test_1),
     ]
 }

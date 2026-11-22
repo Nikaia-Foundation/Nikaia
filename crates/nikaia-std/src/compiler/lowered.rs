@@ -3635,7 +3635,7 @@ pub mod libraries {
 }
 pub mod locks {
     #[allow(unused_imports)]
-    pub use super::{BodyCalls, Reaches, stored_reaches, locks_infer, free_calls, locking_of, Locking, locking};
+    pub use super::{BodyCalls, Reaches, stored_reaches, locks_infer, free_calls, locking_of, Locking, locking, locks_of_unit, locking_callees_first, callees_first};
 }
 pub mod lsp {
     #[allow(unused_imports)]
@@ -3979,4 +3979,4 @@ pub fn nikaia_run_tests(filters: &[std::string::String], list: bool, more: std::
 /// **The digest of this lowered set** (#1610): every file `lower-std` wrote
 /// beside this index, and the index above this line. Compiled into the same
 /// crate as the code it names, it is the compiler's identity for its caches.
-pub const LOWERED_DIGEST: &str = "9c75caad62ef626a18d3b54da0f61c85cf624b25b923865cfd1c90c3f28bca59";
+pub const LOWERED_DIGEST: &str = "40f71574574b00079281ee03a5be53a16933af33957cf85a997dacb3225ed2b6";
