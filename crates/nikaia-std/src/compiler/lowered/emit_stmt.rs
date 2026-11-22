@@ -19,6 +19,28 @@ pub(crate) fn emit_stmt_makes_a_map(world: &EmitWorld<'_, '_, '_, '_>, node: &Ex
 
 pub(crate) fn emit_stmt_an_int_literal(item: &Expr) -> bool { matches!(item, Expr::LitInt { .. }) }
 
+pub(crate) fn emit_stmt_indexes_by(world: &EmitWorld<'_, '_, '_, '_>, bindings: &[winnow_grammar::Symbol], body: &Block) -> bool {
+    for each in visited_in_block(body) {
+        match each {
+            Expr::Index { index, .. } => {
+                let index = nikaia_std::boxed::open(index);
+                match index {
+                    Expr::Variable(v, _) => {
+                        let v = *v;
+                        for one in bindings.iter() {
+                            let one = *one;
+                            if emit_text(world, one) == emit_text(world, v) { return true; }
+                        }
+                    },
+                    _ => { },
+                }
+            },
+            _ => { },
+        }
+    }
+    false
+}
+
 pub(crate) fn emit_stmt_first(buf: &str, what: &str, from: i64) -> i64 {
     let tail = match nikaia_std::bytes::text_of_a_cut(&*buf, nikaia_std::index::get(&buf.as_bytes(), nikaia_std::index::at(from..))) {
         Ok(value) => value,
@@ -1022,7 +1044,8 @@ impl EmitState {
         let timed = self.facts.timed_loops.contains(&at);
         if timed { out.push("nikaia_std::par::listed("); }
         let lends = is_a_place(iter) && !self.facts.owned_loops.contains(&at) && !timed;
-        self.emit_stmt_for_iter(world, walk, out, host, iter, lends, depth, flow, scope)?;
+        let indexed = self.emit_stmt_for_iter_indexed(world, bindings, body);
+        self.emit_stmt_for_iter(world, walk, out, host, iter, lends, indexed, depth, flow, scope)?;
         if timed { out.push(")?"); }
         if lends && values_only { out.push(".values_mut()"); } else if lends && viewed { out.push(".iter_mut()"); } else if lends {
             out.push(".iter()");
@@ -1179,10 +1202,11 @@ impl EmitState {
         if nikaia_std::list::contains(&shadowed, &name) { return None; }
         Some(name)
     }
+    pub(crate) fn emit_stmt_for_iter_indexed(&self, world: &EmitWorld<'_, '_, '_, '_>, bindings: &[winnow_grammar::Symbol], body: &Block) -> bool { emit_stmt_indexes_by(world, bindings, body) }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    pub(crate) fn emit_stmt_for_iter<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, iter: &Expr, lends: bool, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
+    pub(crate) fn emit_stmt_for_iter<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, iter: &Expr, lends: bool, indexed: bool, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
         match iter {
             Expr::Range { .. } => {
                 self.emit_core_bare_range(world, walk, out, host, iter, depth, flow, scope)?;
@@ -1191,7 +1215,7 @@ impl EmitState {
             Expr::ListLit { items, .. } => {
                 if !lends && !items.is_empty() {
                     let all_ints = items.iter().all(|item| { emit_stmt_an_int_literal(item) });
-                    let each = if all_ints { flow.widened() } else { flow };
+                    let each = if all_ints && indexed { flow.widened() } else { flow };
                     out.push("[");
                     let mut i = 0;
                     for item in items.iter() {

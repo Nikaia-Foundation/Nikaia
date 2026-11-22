@@ -33,6 +33,29 @@ fn emit_stmt_an_int_literal(item: ref Expr) -> bool {
     }
 }
 
+/// Whether `body` reads a list by one of `bindings` (`items[at]`), the place
+/// where an integer literal that walks into the binding must say its type.
+fn emit_stmt_indexes_by(world: ref EmitWorld, bindings: ref Vec[winnow_grammar::Symbol], body: ref Block) -> bool {
+    for each in visited_in_block(body) {
+        match each {
+            Expr::Index { index, .. } => {
+                match index {
+                    Expr::Variable(v, _) => {
+                        for one in bindings {
+                            if emit_text(world, one) == emit_text(world, v) {
+                                return true
+                            }
+                        }
+                    },
+                    else => {},
+                }
+            },
+            else => {},
+        }
+    }
+    return false
+}
+
 /// Where `what` first occurs in `buf` from `from`, or a number past any end.
 fn emit_stmt_first(buf: ref String, what: ref String, from: i64) -> i64 {
     let tail = buf.bytes[from..].text() catch { return 9223372036854775807 }
@@ -1420,7 +1443,8 @@ impl EmitState {
         // literal; **a name holding a sequence is not a place that lends**
         // (ADR-293 D19): the checker says which loops walk by value.
         let lends = is_a_place(iter) && !self.facts.owned_loops.contains(at) && !timed
-        self.emit_stmt_for_iter(world, walk, out, host, iter, lends, depth, flow, scope)
+        let indexed = self.emit_stmt_for_iter_indexed(world, bindings, body)
+        self.emit_stmt_for_iter(world, walk, out, host, iter, lends, indexed, depth, flow, scope)
         if timed {
             out.push(")?")
         }
@@ -1650,8 +1674,13 @@ impl EmitState {
         return name
     }
 
+    /// Whether the `for` body indexes a list by its binding.
+    fn emit_stmt_for_iter_indexed(ref self, world: ref EmitWorld, bindings: ref Vec[winnow_grammar::Symbol], body: ref Block) -> bool {
+        return emit_stmt_indexes_by(world, bindings, body)
+    }
+
     /// What a `for` iterates over, written.
-    fn emit_stmt_for_iter[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, iter: ref Expr, lends: bool, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
+    fn emit_stmt_for_iter[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, iter: ref Expr, lends: bool, indexed: bool, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
         match iter {
             // **A range written into the `for` stays the language below's own**
             // (ADR-293 D18): it is walked once, where it stands.
@@ -1665,12 +1694,13 @@ impl EmitState {
             Expr::ListLit { items, .. } => {
                 if !lends && items.len() != 0 {
                     // **Integer literals there carry their `i64`** (ADR-285
-                    // D21): the binding has no other place that says its
-                    // type, and an index by it (`index::at`) is generic, so
+                    // D21) where the body indexes by the binding, which has no
+                    // other place that says its type; elsewhere rustc settles
+                    // it from the use (`let b: u8 = z`). An index by it (`index::at`) is generic, so
                     // rustc cannot settle it before a field read on the
                     // element.
                     let all_ints = items.iter().all(fn(item) { emit_stmt_an_int_literal(item) })
-                    let each = if all_ints { flow.widened() } else { flow }
+                    let each = if all_ints && indexed { flow.widened() } else { flow }
                     out.push("[")
                     let mut i = 0
                     for item in items {

@@ -1,0 +1,11 @@
+// A `for` over a list literal of integers takes its binding's type from the
+// use when the body does not index by it: `let b: u8 = z` is a `u8`, which
+// an `i64` suffix on the literals would make rustc refuse.
+fn main() throws {
+    let mut c: Vec[u8] = []
+    for z in [1, 2] {
+        let b: u8 = z
+        c.push(b)
+    }
+    println(f"{c.len()}")
+}
