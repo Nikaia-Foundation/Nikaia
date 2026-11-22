@@ -1793,8 +1793,11 @@ impl EmitState {
         // its `collect` gathers each element as a value or a failure, and its
         // `for_each` each `()` or failure, and `par::kept_failures` throws the
         // first in input order with the others as its `secondary` list.
+        // A pausing chain's `collect` (one task per element, D25) gathers
+        // the same list of values and failures, awaited.
         let kept_end = self.facts.kept_failure_ends.contains(on_node) && !self.method_pauses(on_node)
-        let kept_collect = kept_end && name == "collect" && args.len() == 0
+        let kept_paused = self.facts.kept_failure_ends.contains(on_node) && self.method_pauses(on_node) && name == "collect" && args.len() == 0
+        let kept_collect = (kept_end || kept_paused) && name == "collect" && args.len() == 0
         let kept_each = kept_end && (self.facts.failing_through_calls.get(on_node) ?? 0) == 3
         if kept_collect {
             let declared_into = receiver != null && self.facts.collected_into.contains(node_key(receiver ?? return))
@@ -1909,7 +1912,10 @@ impl EmitState {
         // (#2736): the first failure ends it, and nothing after is computed.
         let failing_items = self.facts.failing_item_receivers.contains_key(on_node)
         if kept_collect {
-            out.push("::<Vec<_>>")
+            // A pausing chain's `collect` names no type.
+            if !kept_paused {
+                out.push("::<Vec<_>>")
+            }
         } else if name == "collect" && args.len() == 0 && !own && !self.method_pauses(on_node) && failing_items {
             out.push(if declared { f"::<{self.rust_result()}<_, _>>" } else { f"::<{self.rust_result()}<Vec<_>, _>>" })
         } else if name == "collect" && args.len() == 0 && !declared && !own && !self.method_pauses(on_node) {

@@ -584,6 +584,12 @@ pub struct CheckFacts {
     /// `secondary` list (`par::kept_failures`), where a sequence stops at the
     /// first.
     pub kept_failure_ends: collections::BTreeSet[i64],
+    /// **A `par_iter` lambda that never pauses and places an allocation in
+    /// a block** (ADR-async-5 D28, ADR-327 D13), by its node: each element
+    /// runs with a task's budget in its piece's block, and a full block ends
+    /// that element alone with `task::OverBudget`, kept among the call's
+    /// failures (`par::in_block`).
+    pub blocked_lambdas: collections::BTreeSet[i64],
     /// A lambda where the function type hands back nothing (#1321): its
     /// body's last value is dropped, as a named function's is that declares
     /// no result.
@@ -1119,6 +1125,7 @@ impl CheckFacts {
             failing_through_calls: collections::BTreeMap(),
             failing_item_receivers: collections::BTreeMap(),
             kept_failure_ends: collections::BTreeSet(),
+            blocked_lambdas: collections::BTreeSet(),
             valueless_lambdas: collections::BTreeSet(),
             run_code_fails: collections::BTreeSet(),
             changing_lambdas: collections::BTreeMap(),

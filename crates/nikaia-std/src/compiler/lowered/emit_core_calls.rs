@@ -1214,7 +1214,8 @@ impl EmitState {
         let timed = self.facts.timed_ends.contains(&on_node);
         if timed { out.push("nikaia_std::par::ended("); }
         let kept_end = self.facts.kept_failure_ends.contains(&on_node) && !self.method_pauses(on_node);
-        let kept_collect = kept_end && name == "collect" && args.is_empty();
+        let kept_paused = self.facts.kept_failure_ends.contains(&on_node) && self.method_pauses(on_node) && name == "collect" && args.is_empty();
+        let kept_collect = (kept_end || kept_paused) && name == "collect" && args.is_empty();
         let kept_each = kept_end && nikaia_std::index::or(self.facts.failing_through_calls.get(&on_node), || 0) == 3;
         if kept_collect {
             let declared_into = receiver.is_some() && self.facts.collected_into.contains(&node_key(match receiver { Some(__nikaia_value) => __nikaia_value, None => return Ok(()) }));
@@ -1277,7 +1278,7 @@ impl EmitState {
             None => None,
         }, || "Seq::collect".into()) != "Seq::collect";
         let failing_items = self.facts.failing_item_receivers.contains_key(&on_node);
-        if kept_collect { out.push("::<Vec<_>>"); } else if name == "collect" && args.is_empty() && !own && !self.method_pauses(on_node) && failing_items { out.push(&if declared { format!("::<{}<_, _>>", self.rust_result()) } else { format!("::<{}<Vec<_>, _>>", self.rust_result()) }); } else if name == "collect" && args.is_empty() && !declared && !own && !self.method_pauses(on_node) { out.push("::<Vec<_>>"); }
+        if kept_collect { if !kept_paused { out.push("::<Vec<_>>"); } } else if name == "collect" && args.is_empty() && !own && !self.method_pauses(on_node) && failing_items { out.push(&if declared { format!("::<{}<_, _>>", self.rust_result()) } else { format!("::<{}<Vec<_>, _>>", self.rust_result()) }); } else if name == "collect" && args.is_empty() && !declared && !own && !self.method_pauses(on_node) { out.push("::<Vec<_>>"); }
         if name == "sum" && args.is_empty() && receiver.is_some() {
             let summed = nikaia_std::index::or(*nikaia_std::index::get(&self.facts.summed, &on_node), || "");
             if summed != "" { out.push(&format!("::<{}>", summed)); }
@@ -1644,8 +1645,8 @@ pub(crate) fn emit_tuple_part_copy(i: i64, word: &str) -> String {
 }
 
 pub(crate) fn emit_tuple_part_copies(parts: &[String]) -> String {
-    let copies: Vec<String> = parts.iter().enumerate().map(|(at, item)| (at as i64, item)).map(|__nikaia_tuple125556| {
-        let (i, word) = __nikaia_tuple125556;
+    let copies: Vec<String> = parts.iter().enumerate().map(|(at, item)| (at as i64, item)).map(|__nikaia_tuple125956| {
+        let (i, word) = __nikaia_tuple125956;
         emit_tuple_part_copy(i, word)
     }).collect::<Vec<_>>();
     if copies.len() == 1 { return format!("({},)", *unsafe { nikaia_std::proven::read(&copies, (0) as usize) }); }

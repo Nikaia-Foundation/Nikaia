@@ -96,7 +96,9 @@ pub fn emit_contracts_state__unchecked<H: EmitContractsHost, P: EmitHolesHost>(h
     state.template_errors = holes.errors;
     state.kept_calls = holes.kept_calls;
     let world = EmitWorld { words, aliases: nikaia_std::index::get(&units, 0).aliases, items, library };
-    state.sums = state.error_sums(&world);
+    let mut sums = state.error_sums(&world);
+    if units.len() <= 2 || emit_contracts_declares_main(words, items) { state.lambda_sums(&world, &mut sums); }
+    state.sums = sums;
     state.sums_written = emit_sums_written(&state.sums, units, &state.sums_used_here(&world));
     let coalesced = vc_coalesced(&state.facts);
     let mut_viewed = vc_mut_viewed(&state.facts);
@@ -126,5 +128,19 @@ pub(crate) fn emit_contracts_code_cycle_graph(units: &[ParsedView<'_, '_, '_, '_
     let mut graph: collections::BTreeMap<String, collections::BTreeSet<String>> = collections::BTreeMap::new();
     for unit in units.iter() { for (key, reached) in code_cycle_edges(unit.words, unit.aliases, unit.items, &index).into_iter() { graph.entry(String::from(key)).or_default().extend(reached); } }
     graph
+}
+
+pub(crate) fn emit_contracts_declares_main(words: &winnow_grammar::InternerContext, items: &[Spanned<Item>]) -> bool {
+    for item in items.iter() {
+        match &item.node {
+            Item::Fn { name, receiver, .. } => {
+                let name = *name;
+                let called = match name { Some(__nikaia_value) => __nikaia_value, None => continue };
+                if words.resolve(called) == "main" && receiver.is_none() { return true; }
+            },
+            _ => { },
+        }
+    }
+    false
 }
 
