@@ -31,6 +31,15 @@ fn run(repo: String, nikaia: String, script: String, args: Vec[String]) throws {
     println(f"exit {out.code}")
 }
 
+// issue-check run with `--body -` and BODY on standard input (#2466).
+fn run_stdin(repo: String, nikaia: String, body: String, args: Vec[String]) throws {
+    let mut all: Vec[String] = ["run", "scripts/issue-check.nika", "--", "--body", "-"]
+    for a in args { all.push(a.clone()) }
+    let out = process::run(nikaia, all; dir: repo, stdin: process::Input::Text(body))
+    println(out.stdout.trim())
+    println(f"exit {out.code}")
+}
+
 // drive.nika run with NIKAIA_DRIVE_ISSUE_CHECK naming CHECK, the form check
 // it runs in place of scripts/issue-check.nika (#2466).
 fn run_check(repo: String, nikaia: String, check: String, args: Vec[String]) throws {
@@ -63,6 +72,9 @@ fn main() throws {
     let bad = f"{lane}/bad.md"
     fs::write("bad.md", dir, "## Problem\n\nIt breaks.\n\n**To build**\n\n1. Use the key decided in #904.\n2. Then #905, which is closed.\n\n**Done when:** the test passes.\n")
     run(repo.clone(), nikaia.clone(), "scripts/issue-check.nika", ["--body", bad, "--open", "904"])
+    // The same bodies on standard input give the same rows (#2466).
+    run_stdin(repo.clone(), nikaia.clone(), fs::read_to_string("good.md", dir), ["--open", "900", "901", "902", "903"])
+    run_stdin(repo.clone(), nikaia.clone(), fs::read_to_string("bad.md", dir), ["--open", "904"])
     let none = f"{lane}/none.md"
     fs::write("none.md", dir, "It breaks, see #904.\n")
     run(repo.clone(), nikaia.clone(), "scripts/issue-check.nika", ["--body", none, "--open", "904"])
