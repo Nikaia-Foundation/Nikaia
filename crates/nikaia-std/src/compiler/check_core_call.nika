@@ -835,7 +835,7 @@ fn check_core_call_described[H: CheckHost](mut state: CheckState, world: ref Che
     check_crossings_a_standard_bound_not_met(state, world, key, bound, span)
     check_core_call_on_weighed_through(state, key, bound)
     let typed: Ty = constructed ?? substitute(result, bound)
-    return state.stamped_through(contract, found, typed)
+    return state.stamped_through(contract, found, false, typed)
 }
 
 /// **A list of text written out, handed to an option, is text of its own**

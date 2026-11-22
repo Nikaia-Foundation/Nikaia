@@ -418,6 +418,9 @@ fn check_core_call_on_undescribed[H: CheckHost](mut state: CheckState, world: re
     let stamped: Ty? = check_core_call_on_seen(on)
     if stamped != null {
         let held: Ty = stamped ?? Ty::Unknown
+        // The method is the `T`'s, and its result keeps the stamp (ADR-281
+        // D23, #2334).
+        state.flow.stamped_receivers.insert(id_of(receiver) as i64)
         return check_core_call_on(state, world, host, held, receiver, method, args, entry, span)
     }
     let through: Ty? = state.seen_through(world, on)
@@ -1566,7 +1569,8 @@ fn check_core_call_on_described[H: CheckHost](mut state: CheckState, world: ref 
     state.flow.text_walk = views_text_slots(result, bound, false)
     let shaped = shape_through(contract, on, found, substituted)
     let paused = check_crossings_a_lambda_that_pauses_at_an_entry(state, key, receiver, on, args, lambda_at, shaped, span)
-    return state.stamped_through(contract, found, paused)
+    let receiver_seen = state.flow.stamped_receivers.contains(id_of(receiver) as i64)
+    return state.stamped_through(contract, found, receiver_seen, paused)
 }
 
 /// **`NK1171`: code has no methods** (#2113): a value of a `fn` type is

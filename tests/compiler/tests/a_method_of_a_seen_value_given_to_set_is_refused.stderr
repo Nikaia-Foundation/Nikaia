@@ -1,0 +1,19 @@
+error[NK2205]: This `set` into `n` stores a value that was read from a lock earlier.
+  --> tests/a_method_of_a_seen_value_given_to_set_is_refused.nika:7:2
+   |
+ 7 | 	n.set(k.abs())
+   |  ^^^^^^^^^^^^^^
+   |
+   = note: A value read from a lock is out of date as soon as the lock is released: anything can change between the read and the store.
+   = note: This is found wherever the value was read: on the line above, in another function, or in another request.
+   = help: Write `n.update fn(mut v) { … }`, which reads and changes the value while holding the lock; a value from another lock goes in with `update_all(other, n) fn(mut x, mut v) { … }`, which holds both.
+error[NK2205]: This `set` into `n` stores a value that was read from a lock earlier.
+   --> tests/a_method_of_a_seen_value_given_to_set_is_refused.nika:10:2
+    |
+ 10 | 	n.set(seen.first() ?? 0)
+    |  ^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: A value read from a lock is out of date as soon as the lock is released: anything can change between the read and the store.
+    = note: This is found wherever the value was read: on the line above, in another function, or in another request.
+    = help: Write `n.update fn(mut v) { … }`, which reads and changes the value while holding the lock; a value from another lock goes in with `update_all(other, n) fn(mut x, mut v) { … }`, which holds both.
+2 mistakes with a lock

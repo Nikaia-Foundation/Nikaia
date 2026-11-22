@@ -34,6 +34,20 @@ fn a_root_is_one_of_two(wanted: ref Vec[(String, Ty)]) -> String sync {
     return ""
 }
 
+/// **A type stamped as read from a lock** (ADR-281 D22): an option is stamped
+/// inside (#2334), since `Seen[T]?` may be `null`, as `match` and `??` ask,
+/// and `Seen[T?]` never would be.
+fn stamped_type(ty: ref Ty) -> Ty sync {
+    let plain = ty.unseen()
+    match plain {
+        Ty::Nullable(inner) => {
+            return Ty::Nullable(Ty::Named { name: SEEN.clone(), args: [inner.clone()], view: false })
+        }
+        else => {}
+    }
+    return Ty::Named { name: SEEN.clone(), args: [plain], view: false }
+}
+
 impl CheckState {
     /// The one message shape for a door written wrong.
     fn no_door(ref mut self, written: ref String, shape: ref String, wanted: ref String, span: ref Span) sync {
@@ -41,9 +55,11 @@ impl CheckState {
     }
 
     /// **A value that came out of a lock passes the stamp on** (ADR-281 D22): a
-    /// callee that touches a lock, or that nothing describes, does not.
-    fn stamped_through(ref self, contract: ref FnContract, given: ref Vec[Ty], result: Ty) -> Ty sync {
-        let mut any_seen = false
+    /// callee that touches a lock, or that nothing describes, does not. A
+    /// stamped receiver passes it on as an argument does (D23, `stand.abs()`,
+    /// #2334).
+    fn stamped_through(ref self, contract: ref FnContract, given: ref Vec[Ty], receiver_seen: bool, result: Ty) -> Ty sync {
+        let mut any_seen = receiver_seen
         for one in given {
             if one.is_seen() {
                 any_seen = true
@@ -61,7 +77,7 @@ impl CheckState {
         if reaches_a_lock {
             return result
         }
-        return Ty::Named { name: SEEN.clone(), args: [result.unseen()], view: false }
+        return stamped_type(result)
     }
 
     /// **`NK1132`: a `break` or a `continue` with no loop to act on.** Two shapes
