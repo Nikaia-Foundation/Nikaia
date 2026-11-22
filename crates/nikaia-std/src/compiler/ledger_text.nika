@@ -353,6 +353,14 @@ fn type_text(contract: ref TypeContract) -> String {
             out.push_str(f"field_attributes = [{quoted_all(attributes)}]\n")
         }
     }
+    // **Its written rules** (ADR-369 D1, ADR-269 D18), as written.
+    if contract.rules.len() > 0 {
+        let mut escaped: Vec[String] = []
+        for rule in contract.rules {
+            escaped.push(ledger_escaped(rule))
+        }
+        out.push_str(f"rules = [{quoted_all(escaped)}]\n")
+    }
     // **The other shape of type**: an `enum`'s cases, which is what lets a
     // consumer's `match` be total (Part I 3.4).
     if contract.variants.len() > 0 {

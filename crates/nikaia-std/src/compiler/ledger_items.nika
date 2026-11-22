@@ -457,10 +457,15 @@ fn declare_items(units: ref Vec[ParsedView], borrowing: ref Vec[collections::BTr
                 Item::Enum { name, variants, is_public, .. } => {
                     ledger.types.insert(view.text(name), declared_enum(view.words, view.aliases, variants, is_public, borrowing_names))
                 },
-                Item::Struct { name, generics, fields, is_public, is_extern, .. } => {
+                Item::Struct { name, generics, fields, is_public, is_extern, rules } => {
                     let key = view.text(name)
                     let mut contract = TypeContract::empty()
                     contract.public = is_public
+                    // **A `pub` struct's written rules are its contract**
+                    // (ADR-369 D2, ADR-269 D18): published as written.
+                    if is_public {
+                        contract.rules = rules.iter().map(fn(r) { written_expression(view.words, r.node) }).collect()
+                    }
                     contract.tethered = tethered_fields(view.words, fields, borrowing_names)
                     contract.fields = declared_fields(view.words, view.aliases, generics, fields, is_extern)
                     for (at, f) in fields.iter().enumerate() {
