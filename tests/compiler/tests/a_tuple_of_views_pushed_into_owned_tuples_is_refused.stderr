@@ -1,0 +1,10 @@
+error[NK1102]: `Vec::push` expects `value` to be a `(u32, String)` whose parts are their own here, but you're passing a `(u32, String)` whose parts are views.
+  --> tests/a_tuple_of_views_pushed_into_owned_tuples_is_refused.nika:6:2
+   |
+ 6 | 	into.push(t)
+   |  ^^^^^^^^^^^^
+   |
+   = note: Part 1 is a view: it points into a `String` that something else owns.
+   = note: `Vec::push` keeps its `value` after the call returns, so its tuple needs a `String` of its own.
+   = help: Write `.clone()` to copy it here: a copy of a tuple of views has parts of its own.
+1 type error

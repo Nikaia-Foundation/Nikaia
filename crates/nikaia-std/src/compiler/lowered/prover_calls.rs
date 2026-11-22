@@ -140,7 +140,7 @@ pub(crate) fn from_outside(expr: &Expr, tainted: &collections::BTreeSet<String>,
             let source = outside_source_named(func, words);
             if source.is_some() && untrusted(library, nikaia_std::index::or(source.as_deref(), || "")) && !says_trusted(words, config) && !operator_read(library, nikaia_std::index::or(source.as_deref(), || ""), args) { return true; }
             if source.is_some() && state.outside.proved_result(nikaia_std::index::or(source.as_deref(), || "")) {
-                let led = nikaia_std::index::or(match state.outside.leads.get(&nikaia_std::index::or(source, || "".into())) {
+                let led = nikaia_std::index::or(match state.outside.leads.get(nikaia_std::index::or(source.as_deref(), || "")) {
                     Some(__nikaia_it) => Some(__nikaia_it.clone()),
                     None => None,
                 }, || collections::BTreeSet::new().into());
@@ -150,7 +150,7 @@ pub(crate) fn from_outside(expr: &Expr, tainted: &collections::BTreeSet<String>,
                 }
                 return false;
             }
-            if source.is_some() && state.outside.results.contains_key(&nikaia_std::index::or(source, || "".into())) { return true; }
+            if source.is_some() && state.outside.results.contains_key(nikaia_std::index::or(source.as_deref(), || "")) { return true; }
         },
         Expr::MethodCall { receiver, method, config, .. } => {
             let receiver = nikaia_std::boxed::open(receiver); let method = *method;

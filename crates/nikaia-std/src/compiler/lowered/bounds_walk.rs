@@ -5328,7 +5328,7 @@ pub(crate) fn bounding_for(walk: &mut BoundsWalk, bindings: &[winnow_grammar::Sy
     walk.rule_loops.push(kept.copy_owned());
     if !bounding_block(walk, body, &mut inner, context, program, words, &mut &mut *ask) { bounding_turn_end(walk, &inner, false, false, &mut &mut *ask); }
     walk.rule_loops.pop();
-    if classed.is_some() { walk.loop_classes.remove(&nikaia_std::index::or(classed, || "".into())); }
+    if classed.is_some() { walk.loop_classes.remove(nikaia_std::index::or(classed.as_deref(), || "")); }
     let mut filled: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     let mut count: i64 = 0;
     if counted && low.is_some() && high.is_some() {
