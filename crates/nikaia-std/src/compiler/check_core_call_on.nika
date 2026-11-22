@@ -1679,8 +1679,10 @@ fn check_core_call_on[H: CheckHost](mut state: CheckState, world: ref CheckWorld
     }
     // **A copy of a type this program declares is the derived one**, where
     // its parts copy: one holding a handle `.clone()` does not reach has none
-    // (Part I 4.7, #2238), as the handle itself has none.
-    if found == null && entry == "clone" && args.len() == 0 && (state.structs.contains_key(type_name) || state.enums.contains_key(type_name) || world.own.types.contains_key(type_name)) {
+    // (Part I 4.7, #2238), as the handle itself has none. So is a copy of a
+    // struct `std` writes in Nikaia, whose fields its ledger lists
+    // (`bigint::BigInt`, Part I 2.2: `.clone()` is the one word for a copy).
+    if found == null && entry == "clone" && args.len() == 0 && (state.structs.contains_key(type_name) || state.enums.contains_key(type_name) || world.own.types.contains_key(type_name) || check_core_call_on_library_struct(world, type_name)) {
         if check_core_call_on_clones(world.parts_beside, state.structs, state.enums, state.enum_payloads, state.struct_parameters, state.type_parameters, world, on) {
             return check_core_call_on_owned(on)
         }
@@ -1692,6 +1694,13 @@ fn check_core_call_on[H: CheckHost](mut state: CheckState, world: ref CheckWorld
     }
     let resolved: CheckResolved = found ?? return Ty::Unknown
     return check_core_call_on_described(state, world, host, on, receiver, method, args, entry, resolved.key, resolved.contract, span)
+}
+
+/// **Whether `type_name` is a struct of `std` written in Nikaia**: its
+/// ledger entry lists its fields, and the lowered struct derives its copy.
+fn check_core_call_on_library_struct(world: ref CheckWorld, type_name: ref String) -> bool {
+    let entry = world.library.types[type_name] ?? return false
+    return entry.fields.len() > 0
 }
 
 /// **Whether `key` is an entry of the type `inner` names** (#1976): its key
