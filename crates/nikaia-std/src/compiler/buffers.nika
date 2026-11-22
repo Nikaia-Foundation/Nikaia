@@ -1612,7 +1612,8 @@ fn origins_of(expr: ref Expr, ask: ref BufferAsk, holes_of: fn(ref Expr) -> Vec[
     let none: collections::BTreeSet[(i64, String)] = collections::BTreeSet()
     return match expr {
         Expr::Variable(name, _) => origins_of_local(ask.names.resolve(name), walk),
-        Expr::MethodCall { .. } => method_origins(expr, ask, holes_of, unaliased, walk),
+        // A cut given its local's buffer (`given`) views nothing (#1589).
+        Expr::MethodCall { .. } => if ask.given.contains(node_key(expr)) { none } else { method_origins(expr, ask, holes_of, unaliased, walk) },
         Expr::SafeMethod { .. } => method_origins(expr, ask, holes_of, unaliased, walk),
         Expr::Call { func, args, .. } => call_origins(func, args, ask, holes_of, unaliased, walk),
         // A text field taken whole is moved out, no view of its struct: only

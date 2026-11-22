@@ -122,9 +122,9 @@ pub(crate) fn features_hashes_follow(c: &[scalar], at: i64, hashes: i64) -> bool
 pub(crate) fn features_scan_line(line: &str, lexer: &mut FeatureLexer) -> FeatureLine {
     let c: Vec<scalar> = nikaia_std::list::scalars(line.chars());
     let n = c.len() as i64;
-    #[allow(unused_mut)] let mut words: Vec<String> = vec![];
+    let mut words: Vec<String> = vec![];
     let mut last = ' ';
-    let mut at: i64 = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut words = words;
+    let mut at: i64 = 0;
     while at < n {
         let ch = *unsafe { nikaia_std::proven::read(&c, (at) as usize) };
         if lexer.comment > 0 {
@@ -528,8 +528,8 @@ pub(crate) fn features_unsendable(items: &[FeatureItem], lines: &[String], ty: &
     if crosses(&own).may_not() { return Some((nikaia_std::block::Text::from(ty.to_string()), String::from(""))); }
     let mut lexer = FeatureLexer { depth: 0, comment: 0, string: false, hashes: -1 };
     #[allow(unused_mut)] let mut queue = features_scan_line(ty, &mut lexer).words;
-    #[allow(unused_mut)] let mut seen: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block); #[allow(unused_mut, clippy::redundant_locals)] let mut queue = queue;
-    let mut next: i64 = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut queue = queue; #[allow(unused_mut, clippy::redundant_locals)] let mut seen = seen;
+    let mut seen: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block); #[allow(unused_mut, clippy::redundant_locals)] let mut queue = queue;
+    let mut next: i64 = 0;
     while ((next) as usize) < queue.len() {
         let name = nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&queue, (next) as usize) }).to_string());
         next = unsafe { nikaia_std::proven::add::<i64>(next, 1) };

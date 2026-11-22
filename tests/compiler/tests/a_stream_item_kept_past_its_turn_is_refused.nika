@@ -1,0 +1,20 @@
+// An item of a `for` over a `@stream` call is lent from the input
+// (ADR-grammar-typed-read-v1 D7, #2708): kept past its turn without a copy,
+// it is refused as any view is, and the help names `.clone()`.
+
+struct Item {
+	word: String,
+}
+
+grammar Words {
+	@stream entry rule items -> Item = item*
+	rule item -> Item = "[" w:until("]") "]" ";" -> { Item { word: w.clone() } }
+}
+
+fn main() throws {
+	let mut kept: Vec[Item] = []
+	for it in Words::items("[a];[bb];") {
+		kept.push(it)
+	}
+	println(kept.len())
+}

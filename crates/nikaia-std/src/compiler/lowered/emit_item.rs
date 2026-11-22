@@ -155,8 +155,8 @@ impl EmitState {
                     match &variant.fields {
                         VariantFields::Unit => { out.push(&format!("    {},\n", vname)); },
                         VariantFields::Tuple(types) => {
-                            #[allow(unused_mut)] let mut parts: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-                            let mut i: i64 = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut parts = parts;
+                            let mut parts: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
+                            let mut i: i64 = 0;
                             parts.reserve(types.iter().size_hint().0); for t in types.iter() {
                                 let member = boxed_member(&owner, i, "");
                                 let lowered = self.emit_fn_ty(world, walk, host, t, &EmitLifetimes::Named, "<field>", &variant_slot(&enum_name, &owner, i));
@@ -244,7 +244,7 @@ impl EmitState {
                     let field_vis = if field.is_public || is_extern || self.every_item_public { "pub " } else { "" };
                     body.push(&format!("    {}{}: {},\n", field_vis, escaped_name(&field_text), self.boxed_ty(&text, &field_text, lowered)));
                 }
-                let mut hidden: i64 = 0; #[allow(clippy::redundant_locals)] let slots = slots;
+                let mut hidden: i64 = 0;
                 if seeded { hidden = emit_seeds_finish(&mut walk.place, 0); }
                 let mut parts: Vec<String> = vec![]; #[allow(clippy::redundant_locals)] let slots = slots;
                 if self.borrowing.contains(&text) {
@@ -501,7 +501,7 @@ impl EmitState {
         let mut shares_a_lifetime = false;
         let mut awaits_code = false;
         #[allow(unused_mut)] let mut params: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block); #[allow(unused_mut, clippy::redundant_locals)] let mut from_names = from_names;
-        let mut at: i64 = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut from_names = from_names; #[allow(unused_mut, clippy::redundant_locals)] let mut params = params;
+        let mut at: i64 = 0;
         if method.receiver.is_some() {
             let mut receiver = emit_item_receiver(Option::as_ref(&method.receiver));
             if nikaia_std::list::contains(&from_names, &"self") && receiver.starts_with('&') {

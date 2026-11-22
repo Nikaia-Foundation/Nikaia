@@ -141,7 +141,7 @@ pub(crate) fn nn_held(value: Option<&Expr>) -> i64 {
 }
 
 pub(crate) fn nn_every(body: &Block, visited: &[&Expr], state: &mut NnState) {
-    #[allow(unused_mut)] let mut blocks: Vec<&Block> = vec![body];
+    let mut blocks: Vec<&Block> = vec![body];
     for expr in visited.iter() {
         let expr = *expr;
         match expr {
@@ -157,7 +157,7 @@ pub(crate) fn nn_every(body: &Block, visited: &[&Expr], state: &mut NnState) {
             _ => { },
         }
     }
-    let mut at: i64 = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut blocks = blocks;
+    let mut at: i64 = 0;
     while ((at) as usize) < blocks.len() {
         let block = *unsafe { nikaia_std::proven::read(&blocks, (at) as usize) };
         for stmt in block.stmts.iter() {

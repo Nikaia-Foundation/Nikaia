@@ -163,9 +163,13 @@ impl EmitNeeds {
         }
     }
 
-    /// The lines at the top of the emitted file.
-    pub fn preamble(ref self) -> String {
+    /// The lines at the top of the emitted file; with `root`, the file is
+    /// its crate's root and opens with the crate's recursion limit (#2714).
+    pub fn preamble(ref self, root: bool) -> String {
         let mut out: String = ""
+        if root {
+            out.push_str(EMIT_PROGRAM_RECURSION_LIMIT)
+        }
         if self.uses_grammar {
             out.push_str("use winnow_grammar::grammar;\n")
         }

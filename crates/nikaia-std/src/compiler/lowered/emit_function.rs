@@ -305,7 +305,7 @@ impl EmitState {
                 let result_borrows = self.emit_fn_borrows(&key);
                 let has_borrows = result_borrows.is_some();
                 let named: Vec<String> = nikaia_std::index::or(result_borrows, || vec![].into()); #[allow(unused_mut, clippy::redundant_locals)] let mut params = params;
-                let mut lowered_views = 0; #[allow(clippy::redundant_locals)] let named = named;
+                let mut lowered_views = 0;
                 let mut index: i64 = 0;
                 for each in args.iter() {
                     if self.emit_fn_lowered_as_a_view(world, &key, recv, index, each) { lowered_views += 1; }
@@ -403,7 +403,7 @@ impl EmitState {
                 #[allow(unused_mut)] let mut lengths: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block); #[allow(unused_mut, clippy::redundant_locals)] let mut params = params;
                 let mut runs: Vec<bool> = vec![];
                 #[allow(unused_mut)] let mut open: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block); #[allow(unused_mut, clippy::redundant_locals)] let mut lengths = lengths;
-                let mut at: i64 = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut params = params; #[allow(clippy::redundant_locals)] let named = named; #[allow(unused_mut, clippy::redundant_locals)] let mut lengths = lengths; #[allow(unused_mut, clippy::redundant_locals)] let mut open = open;
+                let mut at: i64 = 0;
                 runs.reserve(args.iter().size_hint().0); for each in args.iter() {
                     let any = !each.ty.is_view && !each.ty.is_slice && each.ty.count.is_none() && each.ty.generics.len() == 1 && emit_text(world, each.ty.name) == "Array";
                     let lent_run = any && (self.emit_fn_changes(&key, &emit_text(world, each.name)) || self.emit_fn_lends(world, &key, unsafe { nikaia_std::proven::add::<i64>(at, recv) }));
@@ -417,7 +417,7 @@ impl EmitState {
                 let on_a_cycle = code_on_a_cycle(&self.code_cycle_graph, &self.own_contracts, &key);
                 walk.dyn_code = on_a_cycle;
                 #[allow(unused_mut)] let mut either_first: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut params = params; #[allow(unused_mut, clippy::redundant_locals)] let mut lengths = lengths;
-                let mut k: i64 = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut params = params; #[allow(clippy::redundant_locals)] let named = named; #[allow(unused_mut, clippy::redundant_locals)] let mut lengths = lengths; #[allow(unused_mut, clippy::redundant_locals)] let mut either_first = either_first;
+                let mut k: i64 = 0;
                 for each in args.iter() {
                     if emit_text(world, each.ty.name) == "meta::Field" {
                         k = unsafe { nikaia_std::proven::add::<i64>(k, 1) };
@@ -501,7 +501,7 @@ impl EmitState {
                     } else { params.push(format!("{}: {}{}", local, reference, spelled)); }
                     k = unsafe { nikaia_std::proven::add::<i64>(k, 1) };
                 }
-                let mut j: i64 = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut params = params;
+                let mut j: i64 = 0;
                 params.reserve(config.iter().size_hint().0); for each in config.iter() {
                     let pname = emit_text(world, each.name);
                     let mut position = self.emit_how(&sig, each.name, &pname, false, false);

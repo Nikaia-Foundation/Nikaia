@@ -355,6 +355,54 @@ impl EmitState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
+    pub(crate) fn emit_core_grammar_each<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, rule: &GrammarRule, name: &str, lowered: &str, rule_name: &str, input: &Expr, values: &[Expr], config: &[ConfigArg], table: Option<&Expr>, body: &EmitOut, question: &str, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
+        out.push("match ::std::convert::AsRef::<[u8]>::as_ref(&*");
+        self.emit_expr(world, walk, out, host, input, depth, flow, scope)?;
+        out.push(") { __wg_source => { ");
+        let mut handed = nikaia_std::block::Text::new_in(nikaia_std::block::Place::Block);
+        for i in 0..rule.args.len() as i64 {
+            let lent = self.facts.lent_rule_values.contains(&format!("{}::{}::{}", name, rule_name, emit_text(world, unsafe { nikaia_std::proven::read(&rule.args, (i) as usize) }.name)));
+            out.push(&format!("let __wg_value{} = ", i));
+            if lent { out.push("&("); }
+            if ((i) as usize) < values.len() { self.emit_expr(world, walk, out, host, unsafe { nikaia_std::proven::read(&values, (i) as usize) }, depth, flow, scope)?; }
+            if lent { out.push(")"); }
+            out.push("; ");
+            { use ::core::fmt::Write as _; let _ = handed.write_fmt(format_args!("__wg_value{}, ", i)); };
+        }
+        let mut j = 0;
+        for option in rule.config.iter() {
+            out.push(&format!("let __wg_option{} = ", j));
+            let mut given = false;
+            for c in config.iter() {
+                if !given && c.name == option.name {
+                    self.emit_expr(world, walk, out, host, &c.value, depth, flow, scope)?;
+                    given = true;
+                }
+            }
+            if !given { self.emit_expr(world, walk, out, host, &option.default, depth, flow, scope)?; }
+            out.push("; ");
+            { use ::core::fmt::Write as _; let _ = handed.write_fmt(format_args!("__wg_option{}, ", j)); };
+            j += 1;
+        }
+        let mut context = "winnow_grammar::ParseContext::<()>::default()";
+        match table {
+            None => { },
+            Some(words) => {
+                out.push("let __wg_words = winnow_grammar::InternerContext::clone(&");
+                self.emit_expr(world, walk, out, host, words, depth, flow, scope)?;
+                out.push("); ");
+                context = "winnow_grammar::ParseContext::<()>::with_state_and_interner((), __wg_words)";
+            },
+        }
+        let mark = "__NIKAIA_EACH_BODY__";
+        let mut each = format!("|__wg_one| {{ {} }}", mark);
+        if self.facts.emitting_entries.contains(&format!("{}::{}", name, rule_name)) { each = format!("|__wg_item: &::std::option::Option<_>| match __wg_item {{ ::std::option::Option::Some(__wg_one) => {{ {} }}, ::std::option::Option::None => ::std::ops::ControlFlow::Continue(()) }}", mark); }
+        out.push_around(&format!("let mut __wg_context = {}; match {}::parse_{}_slice_each(__wg_source, &mut __wg_context, {}{}) {{ Ok(::std::ops::ControlFlow::Break(__wg_broken)) => Ok(::std::option::Option::Some(__wg_broken)), Ok(::std::ops::ControlFlow::Continue(_)) => Ok(::std::option::Option::None), Err(__wg_error) => Err(nikaia_std::grammar::ParseError::of(__wg_error.render(__wg_source))) }} }} }}{}", context, lowered, rule_name, handed, each, question), mark, body);
+        Ok(())
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn emit_core_grammar_entry<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, grammar_symbol: winnow_grammar::Symbol, entry: winnow_grammar::Symbol, input: &Expr, values: &[Expr], config: &[ConfigArg], parallelism: &str, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
         let question = match flow.caught {
             true => "",
@@ -409,8 +457,23 @@ impl EmitState {
             Some(ref rule) => rule.stream,
             None => false,
         };
+        let each_body: Option<EmitOut> = match walk.each_body {
+            None => None,
+            Some(ref held) => Some(held.clone()),
+        };
+        if streamed && each_body.is_some() {
+            walk.each_body = None;
+            let rule = match entered { Some(__nikaia_value) => __nikaia_value, None => return Ok(()) };
+            self.emit_core_grammar_each(world, walk, out, host, &rule, &name, &lowered, &rule_name, input, values, config, (table).as_ref(), &match each_body { Some(__nikaia_value) => __nikaia_value, None => return Ok(()) }, question, depth, flow, scope)?;
+            return Ok(());
+        }
         if streamed {
             let rule = match entered { Some(__nikaia_value) => __nikaia_value, None => return Ok(()) };
+            let item_name = match rule.ret_type {
+                None => String::from(""),
+                Some(ref ty) => emit_text(world, ty.name),
+            };
+            if self.emit_stream_item_views(&item_name) { self.emit_stream_thread_refused(&walk, &format!("{}::{}", name, rule_name), &item_name, Some(flow.statement))?; }
             out.push("Ok::<_, nikaia_std::grammar::ParseError>({ let __wg_source = ::std::convert::AsRef::<[u8]>::as_ref(&*");
             self.emit_expr(world, walk, out, host, input, depth, flow, scope)?;
             out.push(").to_vec(); ");

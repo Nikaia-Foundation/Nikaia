@@ -5329,8 +5329,8 @@ pub(crate) fn bounding_for(walk: &mut BoundsWalk, bindings: &[winnow_grammar::Sy
     if !bounding_block(walk, body, &mut inner, context, program, words, &mut &mut *ask) { bounding_turn_end(walk, &inner, false, false, &mut &mut *ask); }
     walk.rule_loops.pop();
     if classed.is_some() { walk.loop_classes.remove(&nikaia_std::index::or(classed, || "".into())); }
-    #[allow(unused_mut)] let mut filled: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-    let mut count: i64 = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut filled = filled;
+    let mut filled: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
+    let mut count: i64 = 0;
     if counted && low.is_some() && high.is_some() {
         let l = nikaia_std::index::or(low, || 0);
         let h = nikaia_std::index::or(high, || 0);

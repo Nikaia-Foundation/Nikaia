@@ -6078,9 +6078,22 @@ fn main() throws {
 	if !dry { drive_adopt() }
 	let mut runs: i64 = 0
 	let mut bumps: i64 = 0
-	// Builder runs since the last suite started (#2022).
+	// Builder runs since the last suite started (#2022), counted from
+	// unpushed.txt: a run the time limit ends after one builder leaves its
+	// brief there, and a counter that started at 0 again on each restart never
+	// reached a block of two, so the lane's commits sat unpushed (yaml lane,
+	// 2026-11-22: five builders over five restarts, no suite).
 	let mut built: i64 = 0
+	for l in drive_read(f"{dir}/unpushed.txt").split("\n") {
+		if l.trim() != "" { built += 1 }
+	}
 	let block = drive_lane_block()
+	// A full block left by earlier runs is tested before the next builder.
+	if !dry && built >= block && drive_suite_fits() == "" {
+		println(f"BLOCK {built} builder runs left unpushed: the suite starts")
+		drive_suite(exe.clone(), dry, dir)
+		built = 0
+	}
 	let own = drive_read("scripts/drive.nika")
 	while runs <= max {
 		if !dry { drive_pickup(dir.clone()) }

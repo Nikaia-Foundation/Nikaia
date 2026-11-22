@@ -130,9 +130,9 @@ pub struct SysrootNames {
 // this was written - see `contracts::sync`.
 pub fn sysroot_words(text: &str) -> Vec<String> {
     let mut seen: collections::BTreeSet<String> = collections::BTreeSet::new();
-    #[allow(unused_mut)] let mut out: Vec<String> = vec![];
+    let mut out: Vec<String> = vec![];
     let n = text.as_bytes().len() as i64;
-    let mut at: i64 = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut out = out;
+    let mut at: i64 = 0;
     while at < n {
         let b = *nikaia_std::index::get(&text.as_bytes(), nikaia_std::index::at(at)) as i64;
         if sysroot_package_word_byte(b) && !(b >= 48 && b <= 57) {

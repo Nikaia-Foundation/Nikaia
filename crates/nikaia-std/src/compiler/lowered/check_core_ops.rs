@@ -901,8 +901,8 @@ pub(crate) fn check_core_ops_closure<H: CheckHost>(state: &mut CheckState, world
     check_core_ops_a_pair_split(state, world, (declared).as_ref(), params, span);
     check_core_ops_none_named(state, (declared).as_ref(), params, span);
     let mut frame: Vec<CheckLocal> = vec![];
-    #[allow(unused_mut)] let mut names: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-    let mut at: i64 = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut names = names;
+    let mut names: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
+    let mut at: i64 = 0;
     for p in params.iter() {
         let p = *p;
         let mut ty: Ty = Ty::Unknown;
