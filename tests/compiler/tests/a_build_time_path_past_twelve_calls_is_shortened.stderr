@@ -1,0 +1,19 @@
+error[NK1152]: `TWELVE` took more than 100 steps while the program was built.
+   --> tests/a_build_time_path_past_twelve_calls_is_shortened.nika:18:1
+    |
+ 18 | comptime(steps: 100) TWELVE = down(9)
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: It was in `TWELVE` > `down` > `down` > `down` > `down` > `down` > `down` > `down` > `down` > `down` > `down` > `spin`.
+    = note: Each turn of a loop and each call is a step, and the count is the same on every machine.
+    = help: Look for a loop or a recursion that does not end, or compute the value while the program runs, with `let` instead of `comptime`.
+error[NK1152]: `THIRTEEN` took more than 100 steps while the program was built.
+   --> tests/a_build_time_path_past_twelve_calls_is_shortened.nika:19:1
+    |
+ 19 | comptime(steps: 100) THIRTEEN = down(10)
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: It was in `THIRTEEN` > `down` > `down` > `down` > `down` > `down` > … > `down` > `down` > `down` > `down` > `down` > `spin`.
+    = note: Each turn of a loop and each call is a step, and the count is the same on every machine.
+    = help: Look for a loop or a recursion that does not end, or compute the value while the program runs, with `let` instead of `comptime`.
+2 type errors
