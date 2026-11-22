@@ -828,6 +828,12 @@ pub trait ComptimeComputeHost {
     fn unit_package(ref self, unit: i64) -> String? sync
     /// Each dependency's units derived as their package (`comptime_by_package`).
     fn by_package(ref self, units: ref Vec[i64]) -> collections::BTreeMap[String, Ledger] sync
+    /// The `nikaia.contracts` package `package` shipped, as written beside
+    /// its sources; `null` where it ships none (ADR-321 D8).
+    fn shipped_ledger(ref self, package: ref String) -> String? sync
+    /// `said` in the build's trace (`NIKAIA_WRAPPER_TRACE`), where one was
+    /// asked for.
+    fn trace(ref self, said: ref String) sync
     /// The ledger `units` come to against `std` and `packages`, each under
     /// its name.
     fn derived(ref self, units: ref Vec[i64], packages: ref collections::BTreeMap[String, Ledger]) -> Ledger sync
@@ -1008,6 +1014,16 @@ pub fn comptime_computed[H: ComptimeComputeHost](host: ref H, here: i64, bound: 
     let home = host.unit_package(units[here])
     let others: Vec[i64] = units.iter().filter(fn(u) { host.unit_package(u) != null && host.unit_package(u) != home }).collect()
     let packages = host.by_package(others)
+    for name in packages.keys() {
+        host.trace(f"{name} derived for a build-time run")
+    }
+    // **A dependency's shipped ledger is believed only where this build
+    // derives the same** (ADR-321 D8): the run reads the derived entries, and
+    // a package that ships others is refused, not run.
+    match comptime_shipped_disagreement(host, packages) {
+        null => {},
+        (callee, because) => return CheckComputed::Forbidden { callee: callee, because: because },
+    }
     let unit_refs: Vec[i64] = units.iter().filter(fn(u) { host.unit_package(u) == home }).collect()
     let derived = host.derived(unit_refs, packages)
     match comptime_forbidden_because(derived) {
@@ -1055,6 +1071,60 @@ fn comptime_callee_nothing_declares[H: ComptimeComputeHost](host: ref H, here: i
     return comptime_undeclared_callee(host.file_words(here), value, host.library(), fn(name) {
         (0..<host.file_count()).any(fn(at) { comptime_declares(host.file_items(at), host.file_words(at), name) })
     })
+}
+
+/// **The first entry a dependency's shipped ledger gives otherwise than this
+/// build derives from its sources** ([ADR-321](../../../docs/specification/adr/adr-321.md)
+/// D8): the function as the program names it and the refusal's note, both
+/// answers in it; `null` where every package agrees. An entry is compared on
+/// what D2's rule reads of it, whether it can pause and what it touches, and
+/// a function the derivation has and the shipped ledger lacks disagrees. A
+/// package that ships no ledger has nothing to disagree with: the run reads
+/// the derived entries either way.
+fn comptime_shipped_disagreement[H: ComptimeComputeHost](host: ref H, packages: ref collections::BTreeMap[String, Ledger]) -> (String, String)? sync {
+    for (name, derived) in packages {
+        let text = host.shipped_ledger(name) ?? continue
+        let shipped = read(text) catch {
+            return (name.clone(), f"The ledger `{name}` shipped (`nikaia.contracts`) does not read ({error}), and its functions run at build time only on entries that agree with what this build derives from its sources.")
+        }
+        for (function, contract) in derived.functions.iter() {
+            // A function this build derives as touching what nothing says is
+            // one whose calls reach a Rust crate (ADR-321 D9) or an entry no
+            // ledger describes: D2 refuses it wherever it is reached, on the
+            // derived entry, so what the package ships for it changes nothing.
+            if !contract.touches_known {
+                continue
+            }
+            let ours = comptime_rule_answer(contract)
+            let said = match shipped.functions.get(function) {
+                null => f"has no entry for `{function}`",
+                found => {
+                    let theirs = comptime_rule_answer(found)
+                    if theirs == ours {
+                        continue
+                    }
+                    f"says `{function}` {theirs}"
+                },
+            }
+            return (f"{name}::{function}", f"`{name}`'s shipped ledger (`nikaia.contracts`) {said}, and this build derives from its sources that it {ours}; a package's functions run at build time only on entries that agree.")
+        }
+    }
+    return null
+}
+
+/// What D2's rule reads of `contract`, as a refusal names it: whether it can
+/// pause and what it touches, the touches sorted.
+fn comptime_rule_answer(contract: ref FnContract) -> String sync {
+    let pauses = if contract.sync_claim.is_sync() { "never pauses" } else { "can pause" }
+    if !contract.touches_known {
+        return f"{pauses} and touches what nothing says"
+    }
+    let mut touched: Vec[String] = contract.touches.iter().map(fn(t) { f"`{t.text()}`" }).collect()
+    touched.sort()
+    if touched.is_empty() {
+        return f"{pauses} and touches nothing"
+    }
+    return f"{pauses} and touches {touched.join(", ")}"
 }
 
 /// **Why the value function of `derived` may not run at build time**

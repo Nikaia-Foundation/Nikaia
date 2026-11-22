@@ -38,6 +38,16 @@ pub struct ProverScope {
     /// D11, D14, #2441): `key` of `let at = fs::Root::Dir(cache).join(key)`,
     /// each a part of the root where a call opens a path under `at`.
     pub root_joins: collections::BTreeMap[String, Vec[Expr]],
+    /// **Names bound to a text whose start is known** (ADR-raw-sinks-1 D18
+    /// item 1, #2722): `kept` of `let kept = f"{repo}/target/{key}"`, with
+    /// the value, so that `kept` as an argument of `process::run` starts as
+    /// the value does (with `repo`), not with the `key` inside it. Kept only
+    /// where the value starts with a literal piece or a name.
+    pub starts: collections::BTreeMap[String, Expr],
+    /// **The name each of `starts` starts with**, "" for a literal piece: a
+    /// new binding of that name forgets the entry, since the value was
+    /// written with the old one.
+    pub start_names: collections::BTreeMap[String, String],
     /// Names bound anywhere in this body, so a callee's name that a local
     /// shadows is not the callee.
     pub locals: collections::BTreeSet[String],
@@ -141,6 +151,8 @@ impl ProverScope {
             joined: collections::BTreeSet(),
             roots: collections::BTreeMap(),
             root_joins: collections::BTreeMap(),
+            starts: collections::BTreeMap(),
+            start_names: collections::BTreeMap(),
             locals: collections::BTreeSet(),
             facts: [],
             entry: collections::BTreeMap(),
@@ -210,6 +222,18 @@ impl ProverScope {
         self.joined.remove(name)
         self.roots.remove(name)
         self.root_joins.remove(name)
+        self.starts.remove(name)
+        self.start_names.remove(name)
+        let mut started: Vec[String] = []
+        for (bound, start) in self.start_names {
+            if start == name {
+                started.push(bound.clone())
+            }
+        }
+        for bound in started {
+            self.starts.remove(bound)
+            self.start_names.remove(bound)
+        }
         self.entry.remove(name)
         self.entry.remove(length)
         self.fixed.remove(name)
@@ -569,6 +593,8 @@ impl ProverScope {
         scope.joined = self.joined.clone()
         scope.roots = self.roots.clone()
         scope.root_joins = self.root_joins.clone()
+        scope.starts = self.starts.clone()
+        scope.start_names = self.start_names.clone()
         scope.locals = self.locals.clone()
         scope.maps = self.maps.clone()
         return scope

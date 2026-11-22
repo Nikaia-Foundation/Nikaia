@@ -1,0 +1,11 @@
+// `nikaia fmt` reads an `f"…"` inside the hole of another one as an f-string,
+// so a `\"` in a string of the inner hole does not end it early; the guard
+// over the repository formats this very file.
+fn wrap(a: String, b: String) -> String {
+	return f"<{a}{b}>"
+}
+
+fn main() throws {
+	let x = "x"
+	println(f"{wrap(f"{wrap("l", "\"s\"")}", x)}")
+}

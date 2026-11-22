@@ -1,0 +1,13 @@
+false touches:  (exit 1), demo derived 1 times
+error[NK1152]: You can't call `demo::loud` while the program is built.
+= note: `demo`'s shipped ledger (`nikaia.contracts`) says `loud` never pauses and touches nothing, and this build derives from its sources that it never pauses and touches `stdout write`; a package's functions run at build time only on entries that agree.
+stricter:  (exit 1), demo derived 1 times
+error[NK1152]: You can't call `demo::quiet` while the program is built.
+= note: `demo`'s shipped ledger (`nikaia.contracts`) says `quiet` never pauses and touches `stdout write`, and this build derives from its sources that it never pauses and touches nothing; a package's functions run at build time only on entries that agree.
+no entry:  (exit 1), demo derived 1 times
+error[NK1152]: You can't call `demo::loud` while the program is built.
+= note: `demo`'s shipped ledger (`nikaia.contracts`) has no entry for `loud`, and this build derives from its sources that it never pauses and touches `stdout write`; a package's functions run at build time only on entries that agree.
+honest: 42 (exit 0), demo derived 1 times
+
+again: 42 (exit 0), demo derived 0 times
+

@@ -17,7 +17,13 @@ added the same day (supervisor's decision on
 argument of `process::run` read as an option) added November 22, 2026
 (owner's decision on
 [#1939](https://github.com/Nikaia-Foundation/Nikaia/issues/1939),
-alternative C), which changes D9 and D10
+alternative C), which changes D9 and D10; D18 item 6 (a leading `/`) added
+the same day (owner's decision on
+[#2718](https://github.com/Nikaia-Foundation/Nikaia/issues/2718),
+alternative C); D19 (a shell or interpreter named as the program) added the
+same day (owner's decision on
+[#2717](https://github.com/Nikaia-Foundation/Nikaia/issues/2717),
+alternative B), which changes D9 item 3
 **Answers:** what the compiler does when data from outside the program reaches
 a place that reads text as code or as a location: a shell command, an SQL
 text, markup written as is, a path with no root to keep it in
@@ -96,7 +102,8 @@ its precondition on the outside parts of its text:
 | `html::Raw(markup)` | `html::is_plain(part)`: none of `& < > " '` | `untrusted-markup` |
 | a path under `fs::Root::Anywhere` or `Dir("/")`, in `std::fs` and `http::File` | none: only a value that is not outside passes | `untrusted-paths-anywhere` |
 | the `program` of `process::run` (D10) | none: only a value that is not outside passes | `untrusted-program` |
-| the start of an element of `process::run`'s `args` (D18) | `process::is_operand(part)`: does not start with `-`; or a literal `"--"` earlier in the list | `untrusted-option` |
+| the start of an element of `process::run`'s `args` (D18) | `process::is_operand(part)`: does not start with `-` or `/`; or a literal `"--"` earlier in the list, which proves only the `-` part | `untrusted-option` |
+| an element of `args` with an outside part, when the program names a shell or interpreter (D19) | none: only the manifest key lets it build | `untrusted-shell` |
 
 A call is accepted when each outside part either:
 
@@ -244,10 +251,11 @@ included:
    be proved. A library may run such a structure without a shell. A library
    that does hand a text to `sh` or `cmd.exe` is the shell library this
    record keeps `untrusted-shell` for: its escaping is its own, and it builds
-   in a program only where the application allows it (D5).
+   in a program only where the application allows it (D5). D19 makes the
+   compiler see it when the program is named in `process::run`.
 
 `process::run` stays as it is. Its program is a raw sink by D10, and the
-start of each argument by D18.
+start of each argument by D18, and every argument to a shell by D19.
 
 ### D10 — The program of `process::run` is a raw sink; an outside one is refused, `NK1308`.
 
@@ -535,9 +543,79 @@ an option can name a program to run or a file to write. So:
 5. **Option B of #1939 is moot.** It made `process::is_word` refuse a leading
    `-`; D9 removed `is_word` and `process::shell` with it. What a shell
    library escapes is its own (D9 item 3).
+6. **A leading `/` is refused as well, on every target** (owner's decision on
+   [#2718](https://github.com/Nikaia-Foundation/Nikaia/issues/2718),
+   alternative C). Windows programs read a word that starts with `/` as an
+   option (`robocopy /PURGE`, `findstr /G:file`), and a program is built once
+   for every target, so `process::is_operand` refuses a leading `/` too. A
+   literal `"--"` ends only the `-` options, so it proves only the `-` part:
+   an outside element after it still needs `is_operand` against `/`. A path
+   that is meant passes as `"./" + name` or under a root (item 4); an outside
+   absolute path is refused on Unix too, which is D14's rule anyway: a path
+   from outside goes through a root.
 
 The run time check under `raw-sinks = "warn"` (D7) throws `process::run`'s own
 error, `io::IoError::Other`, naming the argument, before anything starts.
+
+### D19 — A shell or interpreter named as the program makes every outside argument a raw sink, `NK1308`.
+
+Added November 22, 2026 (owner's decision on
+[#2717](https://github.com/Nikaia-Foundation/Nikaia/issues/2717),
+alternative B).
+
+```nika
+let name = req.query("file") ?? ""
+process::run("sh", ["-c", f"convert {name} thumb.png"])     // name = "x; rm -rf ~"
+process::run("cmd.exe", ["/c", f"type {name}"])              // name = "x & del /q *"
+```
+
+passes D10 (the program is a literal) and D18 (the element starts with a
+literal), and the text runs as shell code, which D9 forbids. So:
+
+1. **`std` keeps a list of shells and interpreters.** The shells `sh`,
+   `bash`, `zsh`, `dash`, `ksh`, `fish`, `cmd`, `powershell` and `pwsh`; the
+   interpreters `python`, `python3`, `perl`, `ruby` and `node`; and `ssh`,
+   whose remote side runs its text in a shell. A literal program matches on
+   its base name (`/bin/sh`, `sh.exe`), without case on Windows. The list
+   lives in one place in `std`, and the help names it.
+2. **When the program is on the list, every element of `args` with an outside
+   part is a raw sink**, wherever the part stands, under the key
+   `untrusted-shell` (D4, D5), which D9 kept for this case. Not only the
+   element after a code flag: `sh -ec`, `bash --norc -c` and `cmd /s /c`
+   would slip past a rule that looks for one flag.
+3. **No predicate proves it**, for D9 item 2's reason: no escaping has been
+   checked against every shell. Only the manifest key lets it build. A
+   program that wants a pipe or a glob of its own writes it with literals or
+   with values that are not outside, or runs the commands one by one with
+   `process::run`; it does not allow the key for its own convenience.
+4. **A runner passes the check on to its first operand.** `env`, `sudo`,
+   `nohup`, `timeout`, `nice` and `xargs` start a program named among their
+   arguments, so `process::run("env", ["sh", "-c", text])` counts as
+   `process::run("sh", ["-c", text])`. The first operand is the first
+   element that does not start with `-` (for `timeout` and `nice`, after
+   their number). That operand is a program, so D10's rule holds for it: an
+   outside one is refused under `untrusted-program` unless proved.
+
+   *Amendment (supervisor, 2026-11-22, #2723, by the obvious-decision rule
+   of `docs/supervisor.md`):* "does not start with `-`" alone lets
+   `process::run("sudo", ["-u", "root", "sh", "-c", text])` through, because
+   `root`, the value of `-u`, is taken for the program. So each runner
+   carries a table of the options it knows, and which of them take a value:
+   the value is skipped with its option, `env`'s `NAME=VALUE` operands are
+   skipped, and `--` ends the options. An option that is not in the runner's
+   table, an option the table marks as running a command line of its own
+   (`env -S`/`--split-string`, `sudo -s`/`-i`), a non-literal element before
+   the first operand, or no operand at all leaves the program unknown, and
+   the call is checked as a shell (this D19): refused under `untrusted-shell`
+   unless every argument is proved. The check fails closed: what the table
+   does not know is never taken for safe.
+5. **A program that is not a literal** is refused by D10 unless proved, so
+   the list only has to match literals; a program proved by a `match` over
+   literals (D10) is checked for each literal of the match.
+
+The run time check under `raw-sinks = "warn"` (D7) throws
+`io::IoError::Other`, naming the program and the argument, before the
+process starts.
 
 ## 4. Not decided here
 
@@ -548,9 +626,6 @@ error, `io::IoError::Other`, naming the argument, before anything starts.
   `[allow.packages.NAME]`, `--allow=KEY` and
   `--allow=PACKAGE:KEY`, the predicates of D2, and the codes `NK1308` and
   `NK1309`, reserved after `NK1303`.
-* **An option that starts with `/`.** Some Windows programs read a word that
-  starts with `/` as an option. D18 covers `-` only; a rule for `/` is taken
-  up when a case shows the need, since on Unix it begins an absolute path.
 * **A tool list in the manifest** for `process::run`'s program. A `match`
   over literals (D10) names the programs where they are used; a list beside
   it would be a second place. It is taken up if a case shows the need.
@@ -588,7 +663,7 @@ own precondition, and only a proof of that one admits the value.
   precondition where its module is described (`std::fs`, `html`,
   `http::File`, `db`), says that `std::process` runs no shell (D9), and gives
   `process::run`'s program its rule (D10), and its arguments theirs with
-  `process::is_operand` (D18). Part III 13.3 names the keys
+  `process::is_operand` (D18), and the list of shells and interpreters (D19). Part III 13.3 names the keys
   `untrusted-program` and `untrusted-option`. C.3
   lists `NK1308`, `NK1309` and `NK1314`.
 * Part I 1.3 says that outside data at a raw sink is proved or allowed.
@@ -600,7 +675,9 @@ own precondition, and only a proof of that one admits the value.
   listed on [#2242](https://github.com/Nikaia-Foundation/Nikaia/issues/2242); D17 by
   [#2442](https://github.com/Nikaia-Foundation/Nikaia/issues/2442) and
   [#2460](https://github.com/Nikaia-Foundation/Nikaia/issues/2460); D18 by
-  [#2694](https://github.com/Nikaia-Foundation/Nikaia/issues/2694).
+  [#2694](https://github.com/Nikaia-Foundation/Nikaia/issues/2694); D18 item 6 and D19 by the
+  issues listed on [#2718](https://github.com/Nikaia-Foundation/Nikaia/issues/2718) and
+  [#2717](https://github.com/Nikaia-Foundation/Nikaia/issues/2717).
 * Part III 13.3 names the keys of D15 and their source lists; Part III 17
   (`std::fs`, `std::path`) gives `Root::join`, `Root::path`,
   `path::is_component` and `path::is_below`.

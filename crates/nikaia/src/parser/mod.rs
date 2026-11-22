@@ -336,6 +336,11 @@ pub struct Parsed {
     /// dependency's code as the module the program names it by
     /// ([ADR-321](../../../docs/specification/adr/adr-321.md) D13).
     pub package: Option<String>,
+    /// **The directory of the package this file is a part of**, beside
+    /// `package` and `None` with it: where a build-time run reads the ledger
+    /// the package shipped, to compare with the one it derives
+    /// ([ADR-321](../../../docs/specification/adr/adr-321.md) D8).
+    pub package_root: Option<std::path::PathBuf>,
     /// **What goes into a mixed position from inside an `f"…"` hole**, by the
     /// hole's place - the byte its `{` stands at: the id of each value and the method it is handed over
     /// with ([ADR-229](../../../docs/specification/adr/adr-229.md) D1). An
@@ -537,6 +542,7 @@ impl Parsed {
             text_tiers: self.text_tiers.clone(),
             text_views: self.text_views.clone(),
             package: self.package.clone(),
+            package_root: self.package_root.clone(),
             hole_wraps: self.hole_wraps.clone(),
             viewed_arms: self.viewed_arms.clone(),
             given_pushes: self.given_pushes.clone(),
@@ -844,6 +850,7 @@ pub fn parse_unrefined(input: &str) -> Result<Parsed> {
         text_tiers: Vec::new(),
         text_views: std::collections::BTreeSet::new(),
         package: None,
+        package_root: None,
         hole_wraps: std::collections::BTreeMap::new(),
         viewed_arms: std::collections::BTreeSet::new(),
         given_pushes: std::collections::BTreeSet::new(),

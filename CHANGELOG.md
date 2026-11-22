@@ -8,6 +8,15 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1543] — 2026-11-22
+
+**Builders' changes (#2483, #2516, #2720)**
+- The record that lets a build skip Cargo (#1750) is read only below the project's and its members' roots, the sysroot's crates/, the target directory and a test batch's directory; a path below none of them makes Cargo run.
+- A Nikaia dependency's shipped ledger is compared with the entries this build derives from its sources before any of its functions run at build time; a disagreement is NK1152 naming the package, the function and both entries (ADR-321 D8).
+- Under raw-sinks = "warn" a path from outside that reaches fs::Root::Anywhere unproved is opened as under Dir("."), so one that leaves the directory throws io::IoError::Outside (ADR-raw-sinks-1 D7).
+- The start of an argument of `process::run` is a raw sink: data from outside there is NK1308 unless `process::is_operand` proves it, a literal "--" stands before it, or `[allow] untrusted-option = true` admits it (ADR-raw-sinks-1 D18).
+- none (a test only)
+
 ## [0.0.1542] — 2026-11-22
 
 **Builders' changes (#2714)**

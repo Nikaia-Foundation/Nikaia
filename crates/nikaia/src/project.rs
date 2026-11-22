@@ -112,7 +112,7 @@ fn refused(thrown: nikaia_std::error::Thrown<ProjectSettingsRefusal>) -> anyhow:
 
 /// What `project_settings.nika` asks of the compiler: the environment,
 /// what `native` is on this machine, a hash and a hard link.
-struct SettingsHost;
+pub(crate) struct SettingsHost;
 
 impl project_settings::ProjectSettingsHost for SettingsHost {
     fn env_var(&self, name: &str) -> Option<String> {
@@ -3467,7 +3467,9 @@ impl Project {
             cargo: RefCell::new(None),
             failed: RefCell::new(None),
         };
-        match project_drive::project_drive_drive_to(&host, subcommand, no_cache, locked) {
+        match nikaia_std::rt::exec::block_on(project_drive::project_drive_drive_to(
+            &host, subcommand, no_cache, locked,
+        )) {
             Ok(done) => Ok(done),
             Err(error) => Err(host.error(error)),
         }
@@ -4712,14 +4714,14 @@ impl project_drive::ProjectDriveHost for DriveHost<'_> {
         crate::comptime_run::rustc_version().to_text()
     }
 
-    fn cargo_fresh(&self, record: &Path, handed: &str) -> Option<String> {
-        nikaia_std::rt::exec::block_on(project_drive::project_drive_fresh(record, handed))
+    // ADR-platform-layer-v1 D2, D7 item 3: the outer build's roots, handed
+    // through (ADR-raw-sinks-1 D17 item 7).
+    fn project_root(&self) -> PathBuf {
+        self.project.root.clone()
     }
 
-    fn record_cargo(&self, record: &Path, handed: &str, messages: &str, generated: &Path) {
-        nikaia_std::rt::exec::block_on(project_drive::project_drive_record(
-            record, handed, messages, generated,
-        ));
+    fn std_sources(&self) -> PathBuf {
+        Sysroot::resolve().root().to_path_buf()
     }
 
     fn target_triple(&self) -> String {
