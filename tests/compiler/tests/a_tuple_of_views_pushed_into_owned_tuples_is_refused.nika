@@ -1,0 +1,15 @@
+// A tuple whose parts are views, handed by name to a `push` that keeps
+// tuples of their own, is refused as a function of the program that keeps
+// one refuses it (ADR-282 D2, D19, #2384); it reached rustc before.
+fn hold(name: String, mut into: Vec[(u32, String)]) {
+	let t: (u32, ref String) = (1, name)
+	into.push(t)
+}
+
+fn main() throws {
+	let mut v: Vec[(u32, String)] = []
+	let mut n = String()
+	n.push_str("x")
+	hold(n, v)
+	println(v.len())
+}

@@ -496,7 +496,7 @@ impl CheckState {
     pub(crate) fn a_view_kept_in_a_tuple_part(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, key: &str, name: &str, value: &Expr, found: &Ty, want: &Ty, span: &Span) -> bool {
         let given: Vec<Expr> = match value {
             Expr::Tuple(parts, _) => parts.copy_owned(),
-            _ => return false,
+            _ => return self.a_tuple_of_views_kept(world, key, name, found, want, span),
         };
         let found_parts: Vec<Ty> = match found {
             Ty::Tuple(parts) => parts.copy_owned(),
@@ -512,6 +512,27 @@ impl CheckState {
             if a_text_literal_expr(unsafe { nikaia_std::proven::read(&given, (k) as usize) }) || !(views_into_text(part, &whole) || self.a_view_of_what_does_not_copy(world, part, &whole)) { continue; }
             self.findings.push(check_refusal("NK1102", span, spoken_in(&format!("`{}` expects `{}` to be `{}` here, but part {} of the tuple is `{}`.", key, name, want.text(), k, part.text()), want, Some(part)), vec![format!("This is a view: it points into a `{}` that something else owns.", whole.shown()), format!("`{}` keeps its `{}` after the call returns, so its tuple needs a `{}` of its own.", key, name, whole.shown())], Some(String::from("Write `.clone()` to copy it here."))));
             return true;
+        }
+        false
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub(crate) fn a_tuple_of_views_kept(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, key: &str, name: &str, found: &Ty, want: &Ty, span: &Span) -> bool {
+        let found_parts: Vec<Ty> = match found {
+            Ty::Tuple(parts) => parts.copy_owned(),
+            _ => return false,
+        };
+        let wanted: Vec<Ty> = match want {
+            Ty::Tuple(parts) => parts.copy_owned(),
+            _ => return false,
+        };
+        if (found_parts.len() as i64) != wanted.len() as i64 { return false; }
+        for (k, part) in found_parts.iter().enumerate().map(|(at, item)| (at as i64, item)) {
+            let seen = check_arm_leaves_a_text_view(part);
+            if views_into_text(&seen, nikaia_std::index::get(&wanted, nikaia_std::index::at(k))) || self.a_view_of_what_does_not_copy(world, &seen, unsafe { nikaia_std::proven::read(&wanted, (k) as usize) }) {
+                self.findings.push(check_refusal("NK1102", span, spoken_in(&format!("`{}` expects `{}` to be `{}` here, but you're passing `{}`.", key, name, want.text(), found.text()), want, Some(found)), vec![format!("Part {} is a view: it points into a `{}` that something else owns.", k, (*unsafe { nikaia_std::proven::read(&wanted, (k) as usize) }).shown()), format!("`{}` keeps its `{}` after the call returns, so its tuple needs a `{}` of its own.", key, name, (*unsafe { nikaia_std::proven::read(&wanted, (k) as usize) }).shown())], Some(String::from("Write `.clone()` to copy it here: a copy of a tuple of views has parts of its own."))));
+                return true;
+            }
         }
         false
     }
