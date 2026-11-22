@@ -2024,6 +2024,7 @@ pub(crate) fn tier_block(block: &Block, ask: &TierAsk<'_, '_, '_, '_, '_, '_, '_
                     Stmt::Expr(last) => {
                         tie_leaves(last, -1, None, true, ask, walk);
                         if back { tail = handed_kinds(last, &tail, ask, walk); } else if same_kinds(&tail, &owned_kinds()) && result_plain_text(ask, &walk) && made_element(last, ask, walk) { tail = view_kinds(); }
+                        if tail.view && unkept_root(last, ask, walk) { tail = owned_kinds(); }
                     },
                     _ => { },
                 }
@@ -2217,7 +2218,8 @@ pub(crate) fn tier_let(names: &[winnow_grammar::Symbol], value: &Expr, ty: Optio
         let text_items = !written && (declared.is_none() || adopted_list) && (own_text_items(value, &bound) || declared.is_none() && beside_list_call(value, ask, &walk));
         let mut element_of: Option<String> = None;
         if !written { element_of = made_element_read(value, ask, walk); }
-        let local = TierLocal { kinds: bound, of, literal, declared, from, empty, listed, through, lent: false, made: !a_read(value), unkept: bound.view && unkept_root(value, ask, walk), items_of, cut: a_cut(value, ask), element_of, text_items, called: !written && a_function_call(value) };
+        let unkept = bound.view && (unkept_root(value, ask, walk) || views_a_temporary(value, ask, walk));
+        let local = TierLocal { kinds: bound, of, literal, declared, from, empty, listed, through, lent: false, made: !a_read(value), unkept, items_of, cut: a_cut(value, ask), element_of, text_items, called: !written && a_function_call(value) };
         bind_tier_local(nikaia_std::block::Text::from(ask.names.resolve(*unsafe { nikaia_std::proven::read(&names, (0) as usize) }).to_string()), local, walk);
         return;
     }

@@ -727,7 +727,8 @@ struct TierLocal {
     made: bool,
     /// An element a `for` walks of a list of text of its own that is no
     /// parameter's, or a view of one (#1144): no keep holds it past the
-    /// loop, so its text form is text of its own.
+    /// loop, so its text form is text of its own. Or a view of a call's
+    /// result, which the statement drops (#2182).
     unkept: bool,
     /// The struct each element of the list literal it is bound to is, where
     /// the `let` names no type (#1210): its elements' fields are known places.
@@ -2964,6 +2965,12 @@ fn tier_block(block: ref Block, ask: ref TierAsk, mut walk: TierWalk) -> Kinds {
                             // function's own last value (#1368).
                             tail = view_kinds()
                         }
+                        // **A name no keep holds, as the last value** (#2182):
+                        // asked here, while its `let` is still in scope, as
+                        // `flow_value` asks it of a `return`.
+                        if tail.view && unkept_root(last, ask, walk) {
+                            tail = owned_kinds()
+                        }
                     },
                     else => {}
                 }
@@ -3193,7 +3200,13 @@ fn tier_let(names: ref Vec[winnow_grammar::Symbol], value: ref Expr, ty: ref Typ
         if !written {
             element_of = made_element_read(value, ask, walk)
         }
-        let local = TierLocal { kinds: bound, of: of, literal: literal, declared: declared, from: from, empty: empty, listed: listed, through: through, lent: false, made: !a_read(value), unkept: bound.view && unkept_root(value, ask, walk), items_of: items_of, cut: a_cut(value, ask), element_of: element_of, text_items: text_items, called: !written && a_function_call(value) }
+        // **A name bound to a view of a call's result is unkept too** (#2182):
+        // the statement drops the text it views, so `return rest` after
+        // `let rest = s.replace(")", "").trim()` holds text of its own, as
+        // `return s.replace(")", "").trim()` does (#1287), and is refused
+        // with NK1104, not left to rustc.
+        let unkept = bound.view && (unkept_root(value, ask, walk) || views_a_temporary(value, ask, walk))
+        let local = TierLocal { kinds: bound, of: of, literal: literal, declared: declared, from: from, empty: empty, listed: listed, through: through, lent: false, made: !a_read(value), unkept: unkept, items_of: items_of, cut: a_cut(value, ask), element_of: element_of, text_items: text_items, called: !written && a_function_call(value) }
         bind_tier_local(ask.names.resolve(names[0]).clone(), local, walk)
         return
     }
