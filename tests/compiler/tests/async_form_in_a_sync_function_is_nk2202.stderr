@@ -1,0 +1,10 @@
+error[NK2202]: `two` is `sync`, but it contains an `async` form, which can pause.
+  --> tests/async_form_in_a_sync_function_is_nk2202.nika:3:13
+   |
+ 3 |     let a = async one()
+   |             ^^^^^ this can pause
+   |
+   = note: A `sync` function promises that it never pauses and does no I/O.
+   = note: An `async` form waits for the tasks it starts, which is a pause.
+   = help: Remove `sync` from `two`, or move the call out of it.
+1 call a `sync` function may not make
