@@ -277,6 +277,7 @@ use std::cli
 use std::env
 use std::fs
 use std::io
+use std::path
 use std::process
 use std::text
 
@@ -477,16 +478,20 @@ fn drive_restart(line: String) throws {
 // else built there first, under the merge lock (the worktree is shared). Its
 // absolute path, or "" with the reason printed.
 fn drive_child_exe() -> String throws {
-	let exe = process::run("realpath", ["-m", drive_tree_target()]).stdout.trim() + "/fast/nikaia"
+	// Named from drive_tree_target, relative to the working directory the
+	// child runs in, not from realpath's output: a program process::run runs
+	// is a literal's (ADR-raw-sinks-1 D2), and drive_tree_exe builds the same file.
+	let exe = f"{drive_tree_target()}/fast/nikaia"
 	let crates = process::run("git", ["rev-parse", "HEAD:crates"]).stdout.trim().clone()
-	if crates != "" && fs::exists(exe.clone(), drive_here()) && drive_read(f"{exe}.crates").trim() == crates { return exe }
+	if crates != "" && fs::exists(exe, drive_here()) && drive_read(f"{exe}.crates").trim() == crates { return exe }
 	let owner = drive_read(drive_merge_lock_dir() + "/owner").split(" ").collect()[0].trim().clone()
 	let held = owner == drive_pid()
 	drive_merge_lock("building the compiler of HEAD for a child driver")
 	let head = process::run("git", ["rev-parse", f"HEAD^{{tree}}"]).stdout.trim().clone()
 	let built = drive_tree_exe(head)
 	if !held { drive_merge_unlock() }
-	return built
+	if built == "" { return "" }
+	return exe
 }
 
 // The first line of a compiler's output that starts with `error`, else its
@@ -2142,10 +2147,10 @@ fn drive_qa_input(dir: String, out: String, steps: String) throws {
 		lines.push(brief.clone())
 		let stem = (brief.strip_suffix(".md") ?? "")
 		for r in [f"{brief}.report.md", f"{stem}.report.md"] {
-			if r != ".report.md" && fs::exists(r, fs::Root::Anywhere) { lines.push(r) }
+			if r != ".report.md" && fs::exists(r, drive_here()) { lines.push(r) }
 		}
 	}
-	fs::write(f"{dir}/qa-input.txt", fs::Root::Anywhere, lines.join("\n") + "\n")
+	fs::write(f"{dir}/qa-input.txt", drive_here(), lines.join("\n") + "\n")
 }
 
 // The red steps of a gate run, "" when green.
@@ -2411,7 +2416,7 @@ fn drive_launch(dir: String) throws {
 	if failed != "" {
 		fs::write(
 			log.clone(),
-			fs::Root::Anywhere,
+			drive_here(),
 			"Gate: red local-tests\n" + drive_tail(failed, 200) + "\n",
 		)
 		fs::write(exit.clone(), drive_here(), "1\n")
@@ -2422,7 +2427,7 @@ fn drive_launch(dir: String) throws {
 	if quick {
 		println(f"SUITE {drive_short(sha)} scripts-only, local tests green, pushed without the suite")
 		let how = drive_push(dir.clone(), sha)
-		if how != "none" { fs::write(f"{dir}/unpushed.txt", fs::Root::Anywhere, "") }
+		if how != "none" { fs::write(f"{dir}/unpushed.txt", drive_here(), "") }
 		drive_unlock()
 		return
 	}
@@ -2671,7 +2676,7 @@ fn drive_qa_copy(dir: String) throws {
 	if text.trim() == "" { drive_escalate(f"QA template {drive_qa_template()} missing or empty") }
 	let reported = text.replace(f"{drive_qa_template()}.report.md", f"{qa}.report.md")
 	let own = reported.replace(drive_qa_template_input(), f"{dir}/qa-input.txt")
-	fs::write(qa, fs::Root::Anywhere, own)
+	fs::write(qa, drive_here(), own)
 }
 
 // Waits for the background suite, if one runs, and handles its result: green
@@ -2691,7 +2696,7 @@ fn drive_settle(exe: String, dir: String) throws {
 		let mut covered: i64 = 0
 		if parts.len() > 1 { covered = text::parse_i64(parts[1]) ?? 0 }
 		let exit = f"{drive_lock_dir()}/exit-{sha}"
-		if !fs::exists(exit, fs::Root::Anywhere) {
+		if !fs::exists(exit, drive_here()) {
 			println(f"SUITE {drive_short(sha)} waiting")
 			drive_settle_wait(dir.clone(), sha.clone())
 		}
@@ -2715,7 +2720,7 @@ fn drive_settle(exe: String, dir: String) throws {
 			}
 			let mut body: String = ""
 			if left.len() > 0 { body = left.join("\n") + "\n" }
-			fs::write(f"{dir}/unpushed.txt", fs::Root::Anywhere, body)
+			fs::write(f"{dir}/unpushed.txt", drive_here(), body)
 			drive_unlock()
 			return
 		}
@@ -2962,7 +2967,7 @@ fn drive_nothing_new(dir: String) -> bool throws {
 		["rev-list", "--count", "origin/develop..HEAD"],
 	).stdout.trim().clone()
 	if count != "0" { return false }
-	fs::write(f"{dir}/unpushed.txt", fs::Root::Anywhere, "")
+	fs::write(f"{dir}/unpushed.txt", drive_here(), "")
 	drive_unlock()
 	println("SUITE nothing new after the lock")
 	return true
@@ -3023,14 +3028,14 @@ fn drive_suite(exe: String, dry: bool, dir: String) throws {
 		["rev-list", "--count", "origin/develop..HEAD"],
 	).stdout.trim().clone()
 	if count == "0" {
-		fs::write(f"{dir}/unpushed.txt", fs::Root::Anywhere, "")
+		fs::write(f"{dir}/unpushed.txt", drive_here(), "")
 		return
 	}
 	if drive_docs_only(drive_unpushed_paths()) {
 		let head = process::run("git", ["rev-parse", "HEAD"]).stdout.trim().clone()
 		println(f"SUITE {drive_short(head)} docs-only, pushed without the suite")
 		drive_push(dir, head)
-		fs::write(f"{dir}/unpushed.txt", fs::Root::Anywhere, "")
+		fs::write(f"{dir}/unpushed.txt", drive_here(), "")
 		return
 	}
 	drive_lock(dir)
@@ -3574,7 +3579,7 @@ fn drive_builder(exe: String, dry: bool, dir: String, brief: String) throws {
 	drive_say(dry, f"write {brief}.running (the run's start, removed when its follow-up is done)")
 	if !dry {
 		let cost_from = drive_line_count(drive_read(f"{dir}/cost.txt"))
-		fs::write(f"{brief}.running", fs::Root::Anywhere, f"{cost_from}\n")
+		fs::write(f"{brief}.running", drive_here(), f"{cost_from}\n")
 	}
 	drive_agent(exe, dry, dir, brief, "builder")
 	drive_builder_after(dry, dir, brief)
@@ -4785,7 +4790,7 @@ fn drive_focus_end(
 	let next = drive_focus_next(file, " ")
 	drive_say(dry, f"set {path} to current {next} 0 (not committed)")
 	if dry { return }
-	fs::write(path, fs::Root::Anywhere, drive_focus_set(drive_read(path), next, 0))
+	fs::write(path, drive_here(), drive_focus_set(drive_read(path), next, 0))
 }
 
 // BATCH with each of NUMBERS not yet in it (as the first word of a line)
@@ -4880,7 +4885,7 @@ fn drive_queue_prune(dir: String) throws {
 		let mut name = f"issue-{n}"
 		if words.len() > 1 && words[1].trim() != "" { name = name + "-" + words[1].trim().clone() }
 		let report = f"{dir}/{name}.md.report.md"
-		if fs::exists(report.clone(), fs::Root::Anywhere) {
+		if fs::exists(report.clone(), drive_here()) {
 			// A run ended blocked on open issues (#1857): dropped, not cut.
 			let mut held: Vec[String] = []
 			for m in drive_report_waits(dir.clone(), f"{name}.md", drive_read(report), false) {
@@ -4924,7 +4929,7 @@ fn drive_queue_prune(dir: String) throws {
 		if fixed.contains(n.clone()) { gone.push(tag.clone()) }
 	}
 	if gone.len() == 0 { return }
-	fs::write(path, fs::Root::Anywhere, drive_queue_drop(old, gone))
+	fs::write(path, drive_here(), drive_queue_drop(old, gone))
 	for tag in closed { println(f"DROPPED {tag} closed") }
 	for line in blocked_lines {
 		println(line.replace("SKIPPED", "DROPPED"))
@@ -5430,7 +5435,7 @@ fn drive_queue(dir: String, area: String) throws {
 	let old = drive_read(path.clone())
 	let new = drive_queue_add(old.clone(), numbers)
 	if new == old || new == "" { return }
-	fs::write(path, fs::Root::Anywhere, new.clone())
+	fs::write(path, drive_here(), new.clone())
 	let before = drive_queue_add(old, [])
 	let had: Vec[String] = before.split("\n").collect()
 	for l in new.split("\n") {
@@ -5461,6 +5466,7 @@ fn drive_focus(exe: String, dry: bool, max: i64, ignore_red: bool, lines_file: S
 		let area = drive_focus_current(file)
 		let dir = drive_focus_dir(file, area)
 		if dir == "" { drive_escalate(f"focus: {path} names no area {area}") }
+		if !path::is_below(dir) { drive_escalate(f"focus: {path} names {dir} for {area}, not a relative path below the working directory") }
 		if !dry {
 			drive_pickup(bugs)
 			drive_pickup(dir.clone())
@@ -5489,7 +5495,7 @@ fn drive_focus(exe: String, dry: bool, max: i64, ignore_red: bool, lines_file: S
 				}
 				if area == "bugs" {
 					briefs.push(urgent)
-					fs::write(path, fs::Root::Anywhere, drive_focus_set(file, area, 1))
+					fs::write(path, drive_here(), drive_focus_set(file, area, 1))
 				} else {
 					let stamp = process::run("date", ["+%F %H:%M"]).stdout.trim().clone()
 					let line = drive_focus_record(stamp, "bugs", bugs, [urgent], bugs_from)
@@ -5529,7 +5535,7 @@ fn drive_focus(exe: String, dry: bool, max: i64, ignore_red: bool, lines_file: S
 				return
 			}
 			briefs.push(brief)
-			fs::write(path, fs::Root::Anywhere, drive_focus_set(file, area, count + 1))
+			fs::write(path, drive_here(), drive_focus_set(file, area, count + 1))
 			if count + 1 < block { continue }
 			drive_focus_end(exe, dry, file, area, dir, briefs, cost_from)
 			briefs = []
@@ -5562,7 +5568,7 @@ fn drive_focus(exe: String, dry: bool, max: i64, ignore_red: bool, lines_file: S
 			drive_wake(dir, "ESCALATE focus: every area empty")
 			process::exit(2)
 		}
-		fs::write(path, fs::Root::Anywhere, drive_focus_set(file, next, 0))
+		fs::write(path, drive_here(), drive_focus_set(file, next, 0))
 		cost_from = -1
 	}
 }
@@ -5626,10 +5632,18 @@ fn main() throws {
 		return
 	}
 	if args.len() == 4 && args[1] == "--run-body" {
+		if !path::is_below(args[2]) {
+			println(f"refused: the lane directory {args[2]} is not a relative path below the working directory")
+			process::exit(2)
+		}
 		print(drive_run_comment(args[2], args[3].clone(), 0, "no report"))
 		return
 	}
 	if args.len() >= 3 && args[1] == "--wake" {
+		if args[2] != "" && !path::is_below(args[2]) {
+			println(f"refused: the lane directory {args[2]} is not a relative path below the working directory")
+			process::exit(2)
+		}
 		for k in 3..<args.len() { println(drive_wake_line(args[2], args[k])) }
 		return
 	}
@@ -5822,6 +5836,10 @@ fn main() throws {
 	// the run files of DIR's closed issues (#2459).
 	if (args.len() == 2 || args.len() == 3) && args[1] == "--cleanup" {
 		let lane = if args.len() == 3 { args[2].clone() } else { "" }
+		if lane != "" && !path::is_below(lane) {
+			println(f"refused: the lane directory {lane} is not a relative path below the working directory")
+			process::exit(2)
+		}
 		drive_cleanup(drive_exe(), false, lane)
 		return
 	}
@@ -5952,6 +5970,12 @@ fn main() throws {
 			println("same")
 		}
 		return
+	}
+	// The lane directory is checked where it arrives (ADR-raw-sinks-1 D14):
+	// every helper opens it under drive_here, which refuses a name outside.
+	if !path::is_below(dir) {
+		println(f"refused: the lane directory {dir} is not a relative path below the working directory")
+		process::exit(2)
 	}
 	if !dry { drive_silence_stop_hook() }
 	let exe = drive_exe()
