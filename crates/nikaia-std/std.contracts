@@ -636,6 +636,18 @@ sync = true
 touches = []
 signature = "(p: ref String) -> bool"
 
+# Whether `text` does not start with `-`, so a program reads it as an operand,
+# not an option: the precondition of the start of each argument of
+# `process::run` from outside the program (ADR-raw-sinks-1 D18). The empty
+# text holds it. A pure `bool` call, so a guard on it is a fact the prover
+# reads (ADR-381). Written in Nikaia, `src/runtime/raw_sinks.nika`.
+[fn."process::is_operand"]
+pub = true
+panics = false
+sync = true
+touches = []
+signature = "(text: ref String) -> bool"
+
 # Promise that `markup` is already HTML: the one constructor of `html::Raw`,
 # and the one line to review, because everything downstream of it trusts this
 # call.

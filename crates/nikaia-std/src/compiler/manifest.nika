@@ -39,12 +39,12 @@ pub fn known() -> Vec[String] {
     return ["target", "user-parallelism", "reentrancy-check", "cleanup-deadline", "optimization", "refuted-claims", "unproved-claims", "unproved-checks", "artifact", "symbol-prefix", "raw-sinks", "environment"]
 }
 
-/// **The keys `[allow]` may carry** (ADR-raw-sinks-1 D2, D4, D10, D15): one
+/// **The keys `[allow]` may carry** (ADR-raw-sinks-1 D2, D4, D10, D15, D18): one
 /// per raw sink, each letting data from outside the program reach it
 /// unproved, a path one per operation and `untrusted-paths-anywhere` for all
 /// three. A key outside these is refused naming them, as a `[build]` typo is.
 pub fn raw_sinks_allow_keys() -> Vec[String] {
-    return ["untrusted-shell", "untrusted-sql", "untrusted-markup", "untrusted-program", "untrusted-paths-read", "untrusted-paths-write", "untrusted-paths-remove", "untrusted-paths-anywhere"]
+    return ["untrusted-shell", "untrusted-sql", "untrusted-markup", "untrusted-program", "untrusted-option", "untrusted-paths-read", "untrusted-paths-write", "untrusted-paths-remove", "untrusted-paths-anywhere"]
 }
 
 /// **The sources a path key's list may name** (ADR-raw-sinks-1 D15, ADR-010

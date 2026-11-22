@@ -181,8 +181,12 @@ fn solver_rod_dir(repo: String) -> String {
 // takes Cargo's `dev` profile at opt-level 0, and every figure of the rod was
 // one of an unoptimised binary (`Diffusion2D-PT-D05N100-RC-00`: 157.2 M
 // instructions at 0, 30.9 M at 3, z3 26 M).
+//
+// **It reads the files its command line names** (ADR-raw-sinks-1 D15), as
+// the rod's own manifest says: without the `[allow]` the engine refuses every
+// file outside the program's directory and the fuzz answers `unknown`.
 fn solver_manifest(repo: String) -> String {
-	return f"[package]\nname = \"solver_rod\"\nversion = \"0.1.0\"\n\n[dependencies]\nlogic = {{ path = \"{repo}/packages/logic\" }}\n\n[build.x86_64-linux]\nopt-level = 3\n"
+	return f"[package]\nname = \"solver_rod\"\nversion = \"0.1.0\"\n\n[dependencies]\nlogic = {{ path = \"{repo}/packages/logic\" }}\n\n[build.x86_64-linux]\nopt-level = 3\n\n[allow]\nuntrusted-paths-read = [\"args\"]\n"
 }
 
 // Writes the program's package into the working directory: its manifest
@@ -212,16 +216,22 @@ fn solver_build_env() -> Vec[(String, String)] {
 // `solver_program` writes them, and of the `nikaia` that builds it (its size
 // and age). "" where it cannot be taken.
 fn solver_key(repo: String, nikaia: String) -> String throws {
+	let manifest = solver_manifest(repo.clone())
+	if !process::is_operand(nikaia.clone()) { return "" }
+	if !process::is_operand(manifest.clone()) { return "" }
 	let mut args: Vec[String] = [
 		"-c",
 		"n=$1; m=$2; shift 2; { for f in \"$@\"; do echo \"== ${f##*/}\"; cat \"$f\" || exit 1; done; echo '== nikaia.toml'; printf '%s' \"$m\"; stat -L -c '%s %Y %n' \"$n\" || exit 1; } | sha256sum | cut -c1-16",
 		"sh",
 		nikaia,
-		solver_manifest(repo.clone()),
+		manifest,
 	]
 	let files = solver_program_files(repo)
 	if files.len() == 0 { return "" }
-	for f in files { args.push(f.clone()) }
+	for f in files {
+		if !process::is_operand(f.clone()) { return "" }
+		args.push(f.clone())
+	}
 	let out = process::run("sh", args)
 	if !out.ok { return "" }
 	return out.stdout.trim().clone()
@@ -258,6 +268,7 @@ fn solver_cache_dir() -> String {
 // the rustc store and skips rustc. This script, run again in the slot as
 // `--build-in KEY`, writes and builds it there.
 fn solver_build(repo: String, nikaia: String) -> String throws {
+	if !process::is_operand(repo.clone()) { process::exit(2) }
 	let key = solver_key(repo.clone(), nikaia.clone())
 	// The key is a hash `sha256sum` printed, one component by this guard
 	// (ADR-raw-sinks-1 D14), so the paths built from it are not outside.
@@ -275,6 +286,7 @@ fn solver_build(repo: String, nikaia: String) -> String throws {
 	if fs::exists(f"{key}/solver_rod", store) { return kept }
 	let main = env::current_main()?.display() ?? f"{repo}/scripts/solver.nika"
 	// Under the lock: built only where no run before this one kept it.
+	if !process::is_operand(kept.clone()) { process::exit(2) }
 	let built = process::run(
 		"flock",
 		[
@@ -661,13 +673,11 @@ fn solver_z3_exe() -> String throws {
 // where it wrote an `(error ...)` before any (its answer is then to another
 // query than the file's). The wall clock `-T:30` stays an outer guard.
 fn solver_z3(exe: String, path: String, rlimit: i64) -> String throws {
-	let out = process::run(exe, solver_z3_args(path, rlimit))
+	if !process::is_operand(path.clone()) { process::exit(2) }
+	let mut z3_args: Vec[String] = ["-smt2", "-T:30", f"rlimit={rlimit}"]
+	z3_args.push(path)
+	let out = process::run(exe, z3_args)
 	return solver_cli_answer(out.stdout)
-}
-
-// The arguments of `solver_z3`'s z3 run.
-fn solver_z3_args(path: String, rlimit: i64) -> Vec[String] {
-	return ["-smt2", "-T:30", f"rlimit={rlimit}", path]
 }
 
 // The value after a flag such as `--rlimit`, `fallback` without the flag;
@@ -788,7 +798,10 @@ fn solver_oracle(repo: String, nikaia: String, args: Vec[String]) throws {
 		// A file that must be refused (`; EXPECT: error`) is `run`'s, not z3's.
 		if said == "error" { continue }
 		if said == "" && !write { continue }
-		let out = process::run(z3_exe.clone(), solver_z3_args(p.clone(), rlimit))
+		if !process::is_operand(p.clone()) { process::exit(2) }
+		let mut z3_args: Vec[String] = ["-smt2", "-T:30", f"rlimit={rlimit}"]
+		z3_args.push(p.clone())
+		let out = process::run(z3_exe.clone(), z3_args)
 		let z3 = solver_cli_answer(out.stdout.clone())
 		if said == "" {
 			if z3 == "sat" || z3 == "unsat" {
@@ -920,6 +933,7 @@ fn solver_two(n: i64) -> String {
 fn solver_gen(args: Vec[String]) throws {
 	let dir = if args.len() > 0 { args[0].clone() } else { "tests/solver/stress" }
 	solver_below(dir)
+	if !process::is_operand(dir.clone()) { process::exit(2) }
 	let oracle = solver_z3_exe()
 	let mut written = 0
 	for family in ["guards", "disjunctions", "steps", "parity", "blank"] {
@@ -1730,6 +1744,7 @@ fn solver_one(
 	timeout: i64,
 	instructions: bool,
 ) -> SolverRun throws {
+	if !process::is_operand(path.clone()) { process::exit(2) }
 	// The CLIs' own limit is widened with the runner's: under callgrind they
 	// would give up after a tenth of their work.
 	let own = if instructions { timeout * 100 } else { timeout }

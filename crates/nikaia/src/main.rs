@@ -136,7 +136,7 @@ pub struct Cli {
 
     /// Allow one raw sink for this build, as `[allow]` does
     /// (ADR-raw-sinks-1 D4, D5, D15): `untrusted-shell`, `untrusted-sql`,
-    /// `untrusted-markup`, `untrusted-program`, `untrusted-paths-read`,
+    /// `untrusted-markup`, `untrusted-program`, `untrusted-option`, `untrusted-paths-read`,
     /// `-write`, `-remove` or `-anywhere` (a path key also as `KEY=SOURCE`,
     /// one source), or `PACKAGE:KEY` for a dependency's. May be given more
     /// than once.

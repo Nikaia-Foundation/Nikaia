@@ -1,0 +1,32 @@
+// A `mut` parameter handed on to a `mut` parameter inside the argument of
+// a method called on a part of it: the argument is bound first, as it is
+// for a local (the receiver's `&mut` and the argument's may not overlap).
+
+use std::collections
+
+struct State {
+    lists: collections::BTreeMap[String, i64],
+}
+
+struct Walk {
+    state: State,
+    items: Vec[i64],
+    count: i64,
+}
+
+fn bump(mut walk: Walk) -> i64 {
+    walk.count += 1
+    return walk.count
+}
+
+fn step(mut walk: Walk, name: String) {
+    walk.items.push(bump(walk))
+    walk.state.lists.insert(name, bump(walk))
+}
+
+fn main() throws {
+    let mut walk = Walk { state: State { lists: collections::BTreeMap() }, items: [], count: 0 }
+    step(walk, "a")
+    step(walk, "b")
+    println(f"{walk.items[0]} {walk.items[1]} {walk.state.lists["a"] ?? 0} {walk.state.lists["b"] ?? 0} {walk.count}")
+}

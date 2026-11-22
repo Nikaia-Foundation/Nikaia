@@ -1,7 +1,7 @@
 exit 1: 
-in TMP/nikaia.toml: `[allow]` has no key called `untrusted-shel`. The keys are: untrusted-shell, untrusted-sql, untrusted-markup, untrusted-program, untrusted-paths-read, untrusted-paths-write, untrusted-paths-remove, untrusted-paths-anywhere.
+in TMP/nikaia.toml: `[allow]` has no key called `untrusted-shel`. The keys are: untrusted-shell, untrusted-sql, untrusted-markup, untrusted-program, untrusted-option, untrusted-paths-read, untrusted-paths-write, untrusted-paths-remove, untrusted-paths-anywhere.
 exit 1: 
-in TMP/nikaia.toml: `[allow.packages.thumbs]` has no key called `untrusted-sq`. The keys are: untrusted-shell, untrusted-sql, untrusted-markup, untrusted-program, untrusted-paths-read, untrusted-paths-write, untrusted-paths-remove, untrusted-paths-anywhere.
+in TMP/nikaia.toml: `[allow.packages.thumbs]` has no key called `untrusted-sq`. The keys are: untrusted-shell, untrusted-sql, untrusted-markup, untrusted-program, untrusted-option, untrusted-paths-read, untrusted-paths-write, untrusted-paths-remove, untrusted-paths-anywhere.
 exit 1: 
 in TMP/nikaia.toml: `untrusted-shell` in `[allow]` is `true` or `false`, not `"yes"`.
 exit 1: 
@@ -11,5 +11,5 @@ Error: `raw-sinks` is `error` or `warn`, not `maybe`. `error` refuses a program 
 exit 1: 
 Error: `raw-sinks` is `error` or `warn`, not `maybe`. `error` refuses a program that hands data from outside to a raw sink unproved and not allowed; `warn` builds it and checks the data when the call is reached.
 exit 1: 
-Error: `--allow=thumbs:untrusted-shel` names no raw sink. The keys are: untrusted-shell, untrusted-sql, untrusted-markup, untrusted-program, untrusted-paths-read, untrusted-paths-write, untrusted-paths-remove, untrusted-paths-anywhere, each alone or after a package's name and `:`.
+Error: `--allow=thumbs:untrusted-shel` names no raw sink. The keys are: untrusted-shell, untrusted-sql, untrusted-markup, untrusted-program, untrusted-option, untrusted-paths-read, untrusted-paths-write, untrusted-paths-remove, untrusted-paths-anywhere, each alone or after a package's name and `:`.
 exit 0: hi
