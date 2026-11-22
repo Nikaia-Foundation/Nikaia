@@ -1,0 +1,36 @@
+// A panic in a task's body names its own `.nika` line (ADR-300 D1, D2, D9,
+// #2199): the emitter wraps the body in the task's closure, and the map of
+// the body's lines moves with it. Before the fix only the line the task
+// starts on was mapped, so a panic on a later line of a lambda the task
+// passes on, of a closure task or of a task in an `async { … }` block showed
+// the generated `main.rs` line.
+fn twice(f: fn(i64) -> i64 sync, d: i64) -> i64 {
+	return f(d) + f(d)
+}
+
+fn zero() -> i64 { return 0 }
+
+fn main() throws {
+	let n = async twice(fn(d) {
+		let x = 10
+		x / d
+	}, 0) catch { -1 }
+	println("the lambda's task runs")
+	println(f"{n}")
+	let d = zero()
+	let m = async fn() {
+		let x = 10
+		x / d
+	} catch { -2 }
+	println("the closure task runs")
+	println(f"{m}")
+	let g = async {
+		let t = async fn() {
+			let x = 10
+			x / d
+		} catch { -3 }
+		println("the task in a block runs")
+		t
+	}
+	println(f"{g}")
+}

@@ -1,0 +1,11 @@
+error[NK1102]: `Vec::push` expects `value` to be a `String` of its own here, but you're passing a view of a `String`.
+   --> tests/a_view_pushed_from_a_nested_literal_list_is_refused.nika:11:23
+    |
+ 11 |             argv.push(w)
+    |                       ^
+    |
+    = note: This is a view: it points into text that something else owns.
+    = note: `Vec::push` keeps its `value` after the call returns, so it needs text of its own.
+    = note: Nikaia never copies text behind your back: a copy costs as much as the text is long, so it's written where it happens.
+    = help: Write `.clone()` to copy it here.
+1 type error
