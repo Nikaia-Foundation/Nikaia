@@ -296,7 +296,7 @@ pub mod meta {
 }
 pub mod paths {
     #[allow(unused_imports)]
-    pub use super::{is_component, is_below, root_join, root_path};
+    pub use super::{is_component, is_below, root_join, root_path, root_confined};
 }
 pub mod raw_sinks {
     #[allow(unused_imports)]
@@ -379,4 +379,4 @@ pub fn nikaia_run_tests(filters: &[std::string::String], list: bool, more: std::
 /// **The digest of this lowered set** (#1610): every file `lower-std` wrote
 /// beside this index, and the index above this line. Compiled into the same
 /// crate as the code it names, it is the compiler's identity for its caches.
-pub const LOWERED_DIGEST: &str = "03e1013c6de5cb9af5a76b1de5e330e504c501c8641a52a61c442e8aee96f2d3";
+pub const LOWERED_DIGEST: &str = "458e86ab1039c797123aa4a3a2c30c77028ce3201f6c09fe8c0c114537dd5fb0";

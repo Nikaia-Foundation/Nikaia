@@ -747,6 +747,9 @@ pub struct CheckFacts {
     /// (ADR-396 D5), by where it stands and how it is written, as the
     /// prover's last walk left it: `--bounds` lists them.
     pub outside_indices: collections::BTreeMap[(i64, String), OutsideIndex],
+    /// **Each call that hands a path from outside to `fs::Root::Anywhere`
+    /// unproved** (ADR-raw-sinks-1 D7), by the id of the root it writes.
+    pub raw_paths: collections::BTreeMap[i64, RawPathCheck],
     /// **Each function's result summary, as the bounds walk asks it**
     /// (ADR-359 D14, #1904), by the ledger's key, from the prover's last
     /// walk: the bounds walk assumes it of a call as a ledger's `ensures`.
@@ -1150,6 +1153,7 @@ impl CheckFacts {
             reaches: collections::BTreeMap(),
             published: collections::BTreeMap(),
             outside_indices: collections::BTreeMap(),
+            raw_paths: collections::BTreeMap(),
             summaries: collections::BTreeMap(),
             mut_args: collections::BTreeSet(),
             mut_receivers: collections::BTreeSet(),

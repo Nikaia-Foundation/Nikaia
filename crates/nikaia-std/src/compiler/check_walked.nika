@@ -398,6 +398,9 @@ pub struct CheckWalkedProved {
     /// Each index data from outside reaches, and what became of it
     /// (ADR-396 D5).
     pub outside: collections::BTreeMap[(i64, String), OutsideIndex],
+    /// Each call that hands a path from outside to `fs::Root::Anywhere`
+    /// unproved (ADR-raw-sinks-1 D7).
+    pub raw_paths: collections::BTreeMap[i64, RawPathCheck],
     /// Each function's result summary, as the bounds walk asks it (ADR-359
     /// D14, #1904).
     pub summaries: collections::BTreeMap[String, Ensured],
@@ -450,6 +453,7 @@ fn check_walked_prove[P: CheckWalkedPasses](mut state: CheckState, passes: ref P
     state.findings.extend(proved.findings)
     check_walked_proved(state, proved.entries, proved.reaches, proved.published, proved.std_claims, proved.held, proved.outside)
     state.facts.summaries = proved.summaries
+    state.facts.raw_paths = proved.raw_paths
 }
 
 /// **Where values and views go** (`NK2302`, `NK2305`, `NK2303`).

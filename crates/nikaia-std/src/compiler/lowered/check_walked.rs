@@ -257,6 +257,7 @@ pub struct CheckWalkedProved {
     pub published: collections::BTreeMap<String, Published>,
     pub std_claims: collections::BTreeMap<(i64, i64), String>,
     pub outside: collections::BTreeMap<(i64, String), OutsideIndex>,
+    pub raw_paths: collections::BTreeMap<i64, RawPathCheck>,
     pub summaries: collections::BTreeMap<String, Ensured>,
 }
 
@@ -285,6 +286,7 @@ pub(crate) fn check_walked_prove<P: CheckWalkedPasses>(state: &mut CheckState, p
     state.findings.extend(proved.findings);
     check_walked_proved(state, proved.entries, proved.reaches, proved.published, &proved.std_claims, &proved.held, proved.outside);
     state.facts.summaries = proved.summaries;
+    state.facts.raw_paths = proved.raw_paths;
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before

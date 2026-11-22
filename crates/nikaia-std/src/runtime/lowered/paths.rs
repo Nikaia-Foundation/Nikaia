@@ -55,3 +55,13 @@ pub fn root_path(root: &fs::Root) -> fs::Path {
     }
 }
 
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub fn root_confined(root: &fs::Root) -> fs::Root {
+    let here: fs::Path = std::path::PathBuf::from(".");
+    match root {
+        fs::Root::Dir(dir) => fs::Root::Dir(nikaia_std::fs::path::clone(&(dir))),
+        fs::Root::Anywhere => fs::Root::Dir(here),
+    }
+}
+

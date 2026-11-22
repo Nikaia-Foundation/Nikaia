@@ -85,6 +85,7 @@ pub fn prover_passes(mut walk: ProverWalk, program: ref Program, words: ref winn
         walk.reaches.clear()
         walk.findings = []
         walk.outside.clear()
+        walk.raw_paths.clear()
         walk.state.broken.clear()
         prover_bodies(walk, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition)
         settled = walk.state.broken.is_empty()
