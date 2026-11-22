@@ -111,14 +111,18 @@ pub use winnow_grammar;
 ///
 /// The lints allowed are the lowering's, as on `tools` below: the parentheses
 /// and casts `Wide::of` lowers to, the `&` of a slice read, the `match` of a
-/// `?? return` in a condition.
+/// `?? return` in a condition, a shift by `64 - by`, `x = x | y` and a swap
+/// through a `let`.
 #[allow(
     clippy::question_mark,
     clippy::double_parens,
     clippy::needless_borrow,
     clippy::unnecessary_cast,
     clippy::useless_conversion,
-    clippy::blocks_in_conditions
+    clippy::blocks_in_conditions,
+    clippy::precedence,
+    clippy::assign_op_pattern,
+    clippy::manual_swap
 )]
 pub mod bigint {
     /// The names a lowered program's header brings in, which the lowered file

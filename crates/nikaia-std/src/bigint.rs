@@ -91,6 +91,34 @@ fn magnitude_mul(a: &[u64], b: &[u64]) -> Vec<u64> {
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
+fn shifted_up(a: &[u64], by: u32) -> Vec<u64> {
+    let mut out: Vec<u64> = vec![];
+    let mut carry: u64 = 0u64;
+    for at in 0..a.len() as i64 {
+        if by == 0u32 { out.push(*unsafe { nikaia_std::proven::read(&a, (at) as usize) }); } else {
+            out.push(*unsafe { nikaia_std::proven::read(&a, (at) as usize) } << by | carry);
+            carry = *unsafe { nikaia_std::proven::read(&a, (at) as usize) } >> 64u32 - by;
+        }
+    }
+    out.push(carry);
+    out
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+fn shifted_down(a: &[u64], by: u32) -> Vec<u64> {
+    let mut out: Vec<u64> = vec![];
+    for at in 0..a.len() as i64 {
+        if by == 0u32 { out.push(*unsafe { nikaia_std::proven::read(&a, (at) as usize) }); } else {
+            let above: u64 = if ((unsafe { nikaia_std::proven::add::<i64>(at, 1) }) as usize) < a.len() { *unsafe { nikaia_std::proven::read(&a, (nikaia_std::proven::add::<i64>(at, 1)) as usize) } << 64u32 - by } else { 0u64 };
+            out.push(*unsafe { nikaia_std::proven::read(&a, (at) as usize) } >> by | above);
+        }
+    }
+    trimmed(out)
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
 fn magnitude_div_digit(a: &[u64], d: u64) -> (Vec<u64>, u64) {
     let mut quotient: Vec<u64> = vec![];
     for _ in 0..a.len() as i64 { quotient.push(0); }
@@ -103,6 +131,94 @@ fn magnitude_div_digit(a: &[u64], d: u64) -> (Vec<u64>, u64) {
         rest = r;
     }
     (trimmed(quotient), rest)
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+fn magnitude_div_long(a: &[u64], b: &[u64]) -> (Vec<u64>, Vec<u64>) {
+    let n = b.len() as i64;
+    let m = unsafe { nikaia_std::proven::sub::<i64>(a.len() as i64, n) };
+    let by = (*nikaia_std::index::get(&b, nikaia_std::index::at(unsafe { nikaia_std::proven::sub::<i64>(n, 1) }))).leading_zeros();
+    let v = trimmed(shifted_up(&b, by));
+    let mut u = shifted_up(&a, by);
+    let top = *nikaia_std::index::get(&v, nikaia_std::index::at(unsafe { nikaia_std::proven::sub::<i64>(n, 1) }));
+    let next = *nikaia_std::index::get(&v, nikaia_std::index::at(unsafe { nikaia_std::proven::sub::<i64>(n, 2) }));
+    let mut quotient: Vec<u64> = vec![];
+    for _ in 0..unsafe { nikaia_std::proven::add::<i64>(m, 1) } { quotient.push(0); }
+    let mut j = unsafe { nikaia_std::proven::add::<i64>(m, 1) };
+    while j > 0 {
+        j = unsafe { nikaia_std::proven::sub::<i64>(j, 1) };
+        let mut qhat: u64 = 18446744073709551615u64;
+        let mut rhat = *nikaia_std::index::get(&u, nikaia_std::index::at(unsafe { nikaia_std::proven::sub::<i64>(nikaia_std::proven::add::<i64>(j, n), 1) }));
+        let mut rhat_fits = true;
+        if *nikaia_std::index::get(&u, nikaia_std::index::at(unsafe { nikaia_std::proven::add::<i64>(j, n) })) < top {
+            let (q, r) = match { let __wide = (((*unsafe { nikaia_std::proven::read(&u, (nikaia_std::proven::add::<i64>(j, n)) as usize) }) as u128) << 64) | ((*unsafe { nikaia_std::proven::read(&u, (nikaia_std::proven::sub::<i64>(nikaia_std::proven::add::<i64>(j, n), 1)) as usize) }) as u128); let __by = (top) as u128; match (__wide.checked_div(__by), __wide.checked_rem(__by)) { (Some(__q), Some(__r)) => u64::try_from(__q).ok().map(|__q| (__q, __r as u64)), _ => None } } { Some(__nikaia_value) => __nikaia_value, None => return (vec![], vec![]) };
+            qhat = q;
+            rhat = r;
+        } else {
+            let (r, o) = rhat.overflowing_add(top);
+            rhat = r;
+            rhat_fits = !o;
+        }
+        while rhat_fits {
+            let (low, high) = { let __wide = (qhat) as u128 * (next) as u128; (__wide as u64, (__wide >> 64) as u64) };
+            if high < rhat || high == rhat && low <= *unsafe { nikaia_std::proven::read(&u, (nikaia_std::proven::sub::<i64>(nikaia_std::proven::add::<i64>(j, n), 2)) as usize) } { break; }
+            qhat -= 1;
+            let (r, o) = rhat.overflowing_add(top);
+            rhat = r;
+            rhat_fits = !o;
+        }
+        let mut carry: u64 = 0u64;
+        let mut borrow: u64 = 0u64;
+        for i in 0..n {
+            let (low, high) = { let __wide = (qhat) as u128 * (*unsafe { nikaia_std::proven::read(&v, (i) as usize) }) as u128; (__wide as u64, (__wide >> 64) as u64) };
+            let (p, o) = low.overflowing_add(carry);
+            carry = high + if o { 1u64 } else { 0u64 };
+            let (t1, b1) = (*unsafe { nikaia_std::proven::read(&u, (nikaia_std::proven::add::<i64>(i, j)) as usize) }).overflowing_sub(p);
+            let (t2, b2) = t1.overflowing_sub(borrow);
+            { let __nikaia_stored = t2; unsafe { nikaia_std::proven::write(&mut u, (nikaia_std::proven::add::<i64>(i, j)) as usize, __nikaia_stored) }; }
+            borrow = if b1 { 1 } else { 0 } + if b2 { 1 } else { 0 };
+        }
+        let (t1, b1) = (*unsafe { nikaia_std::proven::read(&u, (nikaia_std::proven::add::<i64>(j, n)) as usize) }).overflowing_sub(carry);
+        let (t2, b2) = t1.overflowing_sub(borrow);
+        { let __nikaia_stored = t2; unsafe { nikaia_std::proven::write(&mut u, (nikaia_std::proven::add::<i64>(j, n)) as usize, __nikaia_stored) }; }
+        if b1 || b2 {
+            qhat -= 1;
+            let mut back = false;
+            for i in 0..n {
+                let (s1, o1) = (*unsafe { nikaia_std::proven::read(&u, (nikaia_std::proven::add::<i64>(i, j)) as usize) }).overflowing_add(*unsafe { nikaia_std::proven::read(&v, (i) as usize) });
+                let (s2, o2) = s1.overflowing_add(if back { 1u64 } else { 0u64 });
+                { let __nikaia_stored = s2; unsafe { nikaia_std::proven::write(&mut u, (nikaia_std::proven::add::<i64>(i, j)) as usize, __nikaia_stored) }; }
+                back = o1 || o2;
+            }
+            { let __nikaia_stored = (*unsafe { nikaia_std::proven::read(&u, (nikaia_std::proven::add::<i64>(j, n)) as usize) }).wrapping_add(if back { 1u64 } else { 0u64 }); unsafe { nikaia_std::proven::write(&mut u, (nikaia_std::proven::add::<i64>(j, n)) as usize, __nikaia_stored) }; }
+        }
+        { let __nikaia_stored = qhat; nikaia_std::index::set(&mut quotient, nikaia_std::index::at(j), __nikaia_stored); }
+    }
+    let mut low_part: Vec<u64> = vec![];
+    for i in 0..n { low_part.push(*nikaia_std::index::get(&u, (i) as usize)); }
+    (trimmed(quotient), shifted_down(&low_part, by))
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+fn magnitude_div(a: &[u64], b: &[u64]) -> (Vec<u64>, Vec<u64>) {
+    if magnitude_compare(&a, &b) < 0 { return (vec![], a.copy_owned()); }
+    if b.len() == 1 {
+        let (q, r) = magnitude_div_digit(&a, *unsafe { nikaia_std::proven::read(&b, (0) as usize) });
+        return (q, trimmed(vec![r]));
+    }
+    magnitude_div_long(&a, &b)
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+fn bits_from(a: &[u64], from: i64) -> i64 {
+    let at = from / 64;
+    let by = from % 64;
+    let mut value: u64 = if at < a.len() as i64 { *nikaia_std::index::get(&a, nikaia_std::index::at(at)) >> by } else { 0u64 };
+    if by > 0 && unsafe { nikaia_std::proven::add::<i64>(at, 1) } < a.len() as i64 { value = value | unsafe { nikaia_std::proven::shl::<u64>(*nikaia_std::index::get(&a, nikaia_std::index::at(nikaia_std::proven::add::<i64>(at, 1))), (nikaia_std::proven::sub::<i64>(64, by)) as u32) }; }
+    nikaia_std::index::or(i64::try_from(value & 4611686018427387903u64).ok(), || 0)
 }
 
 impl BigInt {
@@ -180,6 +296,73 @@ impl BigInt {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     pub fn mul(&self, other: &BigInt) -> BigInt { made(self.sign * other.sign, magnitude_mul(&self.digits, &other.digits)) }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn div_rem(&self, d: &BigInt) -> Option<(BigInt, BigInt)> {
+        if d.sign == 0 { return None; }
+        let (q, r) = magnitude_div(&self.digits, &d.digits);
+        Some((made(self.sign * d.sign, q), made(self.sign, r)))
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn rem(&self, d: &BigInt) -> Option<BigInt> {
+        let (_, r) = match self.div_rem(d) { Some(__nikaia_value) => __nikaia_value, None => return None };
+        Some(r)
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn gcd(&self, other: &BigInt) -> BigInt {
+        let mut u = self.abs();
+        let mut v = other.abs();
+        if u < v {
+            let t = u;
+            u = v;
+            v = t;
+        }
+        while v.sign != 0 {
+            if u.digits.len() == 1 {
+                let mut x = *unsafe { nikaia_std::proven::read(&u.digits, (0) as usize) };
+                let mut y = *nikaia_std::index::get(&v.digits, 0);
+                while y != 0u64 {
+                    let t = x % y;
+                    x = y;
+                    y = t;
+                }
+                return made(1, vec![x]);
+            }
+            let from = u.bits() - 62;
+            let mut uh = bits_from(&u.digits, from);
+            let mut vh = bits_from(&v.digits, from);
+            let mut a: i64 = 1;
+            let mut b: i64 = 0;
+            let mut c: i64 = 0;
+            let mut d: i64 = 1;
+            while vh + c != 0 && vh + d != 0 {
+                let q = (uh + a) / (vh + c);
+                if q != (uh + b) / (vh + d) { break; }
+                let t = a - q * c;
+                a = c;
+                c = t;
+                let t2 = b - q * d;
+                b = d;
+                d = t2;
+                let t3 = uh - q * vh;
+                uh = vh;
+                vh = t3;
+            }
+            if b == 0 {
+                let r = match u.rem(&v) { Some(__nikaia_value) => __nikaia_value, None => return u };
+                u = v;
+                v = r;
+            } else {
+                let next_u = BigInt::of(a).mul(&u).add(&BigInt::of(b).mul(&v));
+                let next_v = BigInt::of(c).mul(&u).add(&BigInt::of(d).mul(&v));
+                u = next_u;
+                v = next_v;
+            }
+        }
+        u
+    }
 }
 
 impl BigInt {

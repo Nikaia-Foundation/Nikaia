@@ -106,6 +106,36 @@ fn magnitude_mul(a: Vec[u64], b: Vec[u64]) -> Vec[u64] sync {
     return trimmed(product)
 }
 
+/// The magnitude moved up by `by` bits, `by` below 64, one digit longer.
+fn shifted_up(a: Vec[u64], by: u32) -> Vec[u64] sync {
+    let mut out: Vec[u64] = []
+    let mut carry: u64 = 0
+    for at in 0..<a.len() {
+        if by == 0 {
+            out.push(a[at])
+        } else {
+            out.push((a[at] << by) | carry)
+            carry = a[at] >> (64 - by)
+        }
+    }
+    out.push(carry)
+    return out
+}
+
+/// The magnitude moved down by `by` bits, `by` below 64.
+fn shifted_down(a: Vec[u64], by: u32) -> Vec[u64] sync {
+    let mut out: Vec[u64] = []
+    for at in 0..<a.len() {
+        if by == 0 {
+            out.push(a[at])
+        } else {
+            let above: u64 = if at + 1 < a.len() { a[at + 1] << (64 - by) } else { 0 }
+            out.push((a[at] >> by) | above)
+        }
+    }
+    return trimmed(out)
+}
+
 /// `a / d` and `a % d` for a magnitude and one digit `d`, not zero.
 fn magnitude_div_digit(a: Vec[u64], d: u64) -> (Vec[u64], u64) sync {
     let mut quotient: Vec[u64] = []
@@ -121,6 +151,106 @@ fn magnitude_div_digit(a: Vec[u64], d: u64) -> (Vec[u64], u64) sync {
         rest = r
     }
     return (trimmed(quotient), rest)
+}
+
+/// `a / b` and `a % b` for magnitudes, `b` of two digits or more and not
+/// above `a`: Knuth's algorithm D (TAOCP 4.3.1).
+fn magnitude_div_long(a: Vec[u64], b: Vec[u64]) -> (Vec[u64], Vec[u64]) sync {
+    let n = b.len()
+    let m = a.len() - n
+    let by = b[n - 1].leading_zeros()
+    let v = trimmed(shifted_up(b, by))
+    let mut u = shifted_up(a, by)
+    let top = v[n - 1]
+    let next = v[n - 2]
+    let mut quotient: Vec[u64] = []
+    for _ in 0..<(m + 1) {
+        quotient.push(0)
+    }
+    let mut j = m + 1
+    while j > 0 {
+        j -= 1
+        // D3: the trial digit from the top two digits of `u` and the top of `v`.
+        let mut qhat: u64 = 18446744073709551615
+        let mut rhat = u[j + n - 1]
+        let mut rhat_fits = true
+        if u[j + n] < top {
+            let (q, r) = u[j + n].narrowing_div_rem(u[j + n - 1], top) ?? return ([], [])
+            qhat = q
+            rhat = r
+        } else {
+            let (r, o) = rhat.overflowing_add(top)
+            rhat = r
+            rhat_fits = !o
+        }
+        while rhat_fits {
+            let (low, high) = qhat.widening_mul(next)
+            if high < rhat || (high == rhat && low <= u[j + n - 2]) {
+                break
+            }
+            qhat -= 1
+            let (r, o) = rhat.overflowing_add(top)
+            rhat = r
+            rhat_fits = !o
+        }
+        // D4: u[j..j+n] -= qhat * v.
+        let mut carry: u64 = 0
+        let mut borrow: u64 = 0
+        for i in 0..<n {
+            let (low, high) = qhat.widening_mul(v[i])
+            let (p, o) = low.overflowing_add(carry)
+            carry = high + (if o { 1 } else { 0 })
+            let (t1, b1) = u[i + j].overflowing_sub(p)
+            let (t2, b2) = t1.overflowing_sub(borrow)
+            u[i + j] = t2
+            borrow = (if b1 { 1 } else { 0 }) + (if b2 { 1 } else { 0 })
+        }
+        let (t1, b1) = u[j + n].overflowing_sub(carry)
+        let (t2, b2) = t1.overflowing_sub(borrow)
+        u[j + n] = t2
+        // D6: one too many, add `v` back.
+        if b1 || b2 {
+            qhat -= 1
+            let mut back = false
+            for i in 0..<n {
+                let (s1, o1) = u[i + j].overflowing_add(v[i])
+                let (s2, o2) = s1.overflowing_add(if back { 1 } else { 0 })
+                u[i + j] = s2
+                back = o1 || o2
+            }
+            u[j + n] = u[j + n].wrapping_add(if back { 1 } else { 0 })
+        }
+        quotient[j] = qhat
+    }
+    let mut low_part: Vec[u64] = []
+    for i in 0..<n {
+        low_part.push(u[i])
+    }
+    return (trimmed(quotient), shifted_down(low_part, by))
+}
+
+/// `a / b` and `a % b` for magnitudes, `b` not zero.
+fn magnitude_div(a: Vec[u64], b: Vec[u64]) -> (Vec[u64], Vec[u64]) sync {
+    if magnitude_compare(a, b) < 0 {
+        return ([], a.clone())
+    }
+    if b.len() == 1 {
+        let (q, r) = magnitude_div_digit(a, b[0])
+        return (q, trimmed([r]))
+    }
+    return magnitude_div_long(a, b)
+}
+
+/// The 62 bits of a magnitude from bit `from` up, which are all its bits
+/// above `from` when it has no more than `from + 62`.
+fn bits_from(a: Vec[u64], from: i64) -> i64 sync {
+    let at = from / 64
+    let by = from % 64
+    let mut value: u64 = if at < a.len() { a[at] >> by } else { 0 }
+    if by > 0 && at + 1 < a.len() {
+        value = value | (a[at + 1] << (64 - by))
+    }
+    return (value & 4611686018427387903).checked_i64() ?? 0
 }
 
 impl BigInt {
@@ -230,6 +360,78 @@ impl BigInt {
         return made(self.sign * other.sign, magnitude_mul(self.digits, other.digits))
     }
 
+    /// `self / d` and `self % d`, rounded as `/` and `%` round: the quotient
+    /// toward zero, the rest with the sign of `self`; `null` for `d` zero.
+    pub fn div_rem(self, d: ref BigInt) -> (BigInt, BigInt)? sync {
+        if d.sign == 0 {
+            return null
+        }
+        let (q, r) = magnitude_div(self.digits, d.digits)
+        return (made(self.sign * d.sign, q), made(self.sign, r))
+    }
+
+    /// `self % d`, with the sign of `self`; `null` for `d` zero.
+    pub fn rem(self, d: ref BigInt) -> BigInt? sync {
+        let (_, r) = self.div_rem(d) ?? return null
+        return r
+    }
+
+    /// The greatest common divisor, never negative; `gcd(0, 0)` is 0.
+    /// Lehmer's algorithm (TAOCP 4.5.2 L) on the leading 62 bits.
+    pub fn gcd(self, other: ref BigInt) -> BigInt sync {
+        let mut u = self.abs()
+        let mut v = other.abs()
+        if u < v {
+            let t = u
+            u = v
+            v = t
+        }
+        while v.sign != 0 {
+            if u.digits.len() == 1 {
+                let mut x = u.digits[0]
+                let mut y = v.digits[0]
+                while y != 0 {
+                    let t = x % y
+                    x = y
+                    y = t
+                }
+                return made(1, [x])
+            }
+            let from = u.bits() - 62
+            let mut uh = bits_from(u.digits, from)
+            let mut vh = bits_from(v.digits, from)
+            let mut a: i64 = 1
+            let mut b: i64 = 0
+            let mut c: i64 = 0
+            let mut d: i64 = 1
+            while vh + c != 0 && vh + d != 0 {
+                let q = (uh + a) / (vh + c)
+                if q != (uh + b) / (vh + d) {
+                    break
+                }
+                let t = a - q * c
+                a = c
+                c = t
+                let t2 = b - q * d
+                b = d
+                d = t2
+                let t3 = uh - q * vh
+                uh = vh
+                vh = t3
+            }
+            if b == 0 {
+                let r = u.rem(v) ?? return u
+                u = v
+                v = r
+            } else {
+                let next_u = BigInt::of(a).mul(u).add(BigInt::of(b).mul(v))
+                let next_v = BigInt::of(c).mul(u).add(BigInt::of(d).mul(v))
+                u = next_u
+                v = next_v
+            }
+        }
+        return u
+    }
 }
 
 impl Ord for BigInt {
