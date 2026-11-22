@@ -183,21 +183,29 @@ pub fn grammar_run_driver[H: GrammarDriverHost](host: ref H, names: ref winnow_g
 /// What the Rust `dumper` keeps is handing over the program's file.
 pub fn grammar_run_dump(names: ref winnow_grammar::InternerContext, aliases: ref collections::BTreeMap[String, String], program: ref Program, ledger: ref Ledger, result: ref Ty, mut out: String) -> CheckWall? {
     let shapes = grammar_run_shapes(names, aliases, program, ledger)
+    return grammar_run_dump_shaped(shapes, result, out)
+}
+
+/// The dump of `result` over `shapes` gathered beforehand
+/// (`grammar_run_shapes`, `grammar_run_shapes_add`,
+/// `grammar_run_shapes_qualified`), pushed onto `out`; the wall that names
+/// the type with no crossed form.
+pub fn grammar_run_dump_shaped(shapes: ref Shapes, result: ref Ty, mut out: String) -> CheckWall? {
     let refused = dump(shapes, result, "value", 1, out) ?? return null
     return CheckWall::NoCrossedForm { ty: refused.ty, because: refused.because }
 }
 
-/// The `enum`s and `struct`s this program declares, each by its name, with
-/// each field's name as Rust reads it; the first declaration of a name is the
-/// one read.
-fn grammar_run_shapes(names: ref winnow_grammar::InternerContext, aliases: ref collections::BTreeMap[String, String], program: ref Program, ledger: ref Ledger) -> Shapes {
-    let mut shapes = Shapes {
-        enums: collections::BTreeMap(),
-        structs: collections::BTreeMap(),
-        // **`std`'s types that cross through a constructor** (ADR-318 D5):
-        // the column is `std`'s, so its ledger is the one read.
-        constants: ledger.types.iter().filter_map(fn((name, entry)) { grammar_run_constant(name, entry.constant) }).collect(),
-    }
+/// No shapes yet: what a dependency's files are gathered into before they
+/// are qualified (`grammar_run_shapes_qualified`).
+pub fn grammar_run_shapes_empty() -> Shapes {
+    return Shapes { enums: collections::BTreeMap(), structs: collections::BTreeMap(), constants: collections::BTreeMap() }
+}
+
+/// **The `enum`s and `struct`s another file declares**, added to `shapes`
+/// under the names that file writes (#2255): a build-time value's type may
+/// be declared in a file beside the one that computes it. A name already
+/// there stays as it was.
+pub fn grammar_run_shapes_add(names: ref winnow_grammar::InternerContext, aliases: ref collections::BTreeMap[String, String], program: ref Program, mut shapes: Shapes) {
     for item in program.items {
         match item.node {
             Item::Enum { name, variants, .. } => {
@@ -211,6 +219,43 @@ fn grammar_run_shapes(names: ref winnow_grammar::InternerContext, aliases: ref c
             else => {},
         }
     }
+}
+
+/// **A dependency's shapes as the program names them** (#2255, ADR-318: an
+/// option's default is any build-time expression, `yaml::default_limits()`
+/// too): each declaration under `package::Name`, and each of its own types a
+/// field or variant names written the same way (`qualify`), so that
+/// `yaml::Limits` is walked field by field. A name already there stays.
+pub fn grammar_run_shapes_qualified(shapes: ref Shapes, package: ref String, mut into: Shapes) {
+    let mut declared: collections::BTreeSet[String] = collections::BTreeSet()
+    for (name, _) in shapes.enums {
+        declared.insert(name.clone())
+    }
+    for (name, _) in shapes.structs {
+        declared.insert(name.clone())
+    }
+    for (name, variants) in shapes.enums {
+        let shaped: Vec[VariantShape] = variants.iter().map(fn(variant) { VariantShape { name: variant.name.clone(), carried: variant.carried.iter().map(fn(t) { qualify(t, package, declared) }).collect(), named: variant.named } }).collect()
+        into.enums.entry(f"{package}::{name}").or_insert(shaped)
+    }
+    for (name, fields) in shapes.structs {
+        let shaped: Vec[FieldShape] = fields.iter().map(fn(field) { FieldShape { name: field.name.clone(), spelled: field.spelled.clone(), ty: qualify(field.ty, package, declared) } }).collect()
+        into.structs.entry(f"{package}::{name}").or_insert(shaped)
+    }
+}
+
+/// The `enum`s and `struct`s this program declares, each by its name, with
+/// each field's name as Rust reads it; the first declaration of a name is the
+/// one read.
+pub fn grammar_run_shapes(names: ref winnow_grammar::InternerContext, aliases: ref collections::BTreeMap[String, String], program: ref Program, ledger: ref Ledger) -> Shapes {
+    let mut shapes = Shapes {
+        enums: collections::BTreeMap(),
+        structs: collections::BTreeMap(),
+        // **`std`'s types that cross through a constructor** (ADR-318 D5):
+        // the column is `std`'s, so its ledger is the one read.
+        constants: ledger.types.iter().filter_map(fn((name, entry)) { grammar_run_constant(name, entry.constant) }).collect(),
+    }
+    grammar_run_shapes_add(names, aliases, program, shapes)
     return shapes
 }
 

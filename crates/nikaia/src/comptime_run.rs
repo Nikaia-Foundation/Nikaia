@@ -607,14 +607,36 @@ impl tree::ComptimeComputeHost for ComputeHost<'_> {
     fn dump(&self, unit: i64, ty: &Ty, out: &mut String) -> Option<Wall> {
         let held = self.units.borrow();
         let unit = &held[unit as usize];
-        nikaia_std::compiler::grammar_run::grammar_run_dump(
+        use nikaia_std::compiler::grammar_run as run;
+        // **The types of the files beside it too** (#2255): a file of the
+        // same package under the names it writes, a dependency's under
+        // `package::Name`, as the program names them.
+        let mut shapes = run::grammar_run_shapes(
             &unit.interner,
             &unit.aliases,
             &unit.program,
             crate::contracts::std_ledger(),
-            ty,
-            out,
-        )
+        );
+        let mut packages = BTreeMap::new();
+        for file in self.files {
+            if file.package == unit.package {
+                run::grammar_run_shapes_add(
+                    &file.interner,
+                    &file.aliases,
+                    &file.program,
+                    &mut shapes,
+                );
+            } else if let Some(package) = &file.package {
+                let into = packages
+                    .entry(package.clone())
+                    .or_insert_with(run::grammar_run_shapes_empty);
+                run::grammar_run_shapes_add(&file.interner, &file.aliases, &file.program, into);
+            }
+        }
+        for (package, beside) in &packages {
+            run::grammar_run_shapes_qualified(beside, package, &mut shapes);
+        }
+        run::grammar_run_dump_shaped(&shapes, ty, out)
     }
 
     fn bounds(&self) -> (u64, u64) {

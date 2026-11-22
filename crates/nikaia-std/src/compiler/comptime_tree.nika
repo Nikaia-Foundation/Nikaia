@@ -707,6 +707,11 @@ pub fn comptime_dependency_modules[H: ComptimeLowerHost](host: ref H, packages: 
         let wanted: String? = name.clone()
         let theirs: Vec[i64] = (0..<host.unit_count()).filter(fn(u) { host.package_of(u) == wanted }).collect()
         rust.push_str(f"pub mod {name} {{\n#[allow(unused_imports)]\nuse nikaia_std::prelude::*;\n")
+        // **A package's `grammar` is a `grammar!` in its module** (#2255:
+        // `yaml`'s were E0433 here), and a `use` at the top of the program
+        // does not reach into a module. The bundle always carries
+        // `winnow_grammar` (`COMPTIME_BUNDLE_NAMED`).
+        rust.push_str("#[allow(unused_imports)]\nuse winnow_grammar::grammar;\n")
         // The block types the package's files are lowered to (#490).
         rust.push_str(block_types_import(true))
         for at in theirs {

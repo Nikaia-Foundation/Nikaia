@@ -3582,7 +3582,7 @@ pub mod grammar_decode {
 }
 pub mod grammar_run {
     #[allow(unused_imports)]
-    pub use super::{GrammarRunHost, grammar_run_compile_and_run, GrammarDriverHost, grammar_run_driver, grammar_run_dump};
+    pub use super::{GrammarRunHost, grammar_run_compile_and_run, GrammarDriverHost, grammar_run_driver, grammar_run_dump, grammar_run_dump_shaped, grammar_run_shapes_empty, grammar_run_shapes_add, grammar_run_shapes_qualified, grammar_run_shapes};
 }
 pub mod grammar_types {
     #[allow(unused_imports)]
@@ -3979,4 +3979,4 @@ pub fn nikaia_run_tests(filters: &[std::string::String], list: bool, more: std::
 /// **The digest of this lowered set** (#1610): every file `lower-std` wrote
 /// beside this index, and the index above this line. Compiled into the same
 /// crate as the code it names, it is the compiler's identity for its caches.
-pub const LOWERED_DIGEST: &str = "ef5276bdc1adbd3ac11c2d103776f9698fc365568e940f6bffdd6d72d3463e89";
+pub const LOWERED_DIGEST: &str = "2c0c4475f9b9772f360b469c752d259c1c1b86e1227dd90436ba92a38df89c09";
