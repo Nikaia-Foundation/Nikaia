@@ -38,9 +38,6 @@ The rules every session and agent needs. What only the main session does
 
 ## Parallel agents share one checkout
 
-* **Nobody runs `git reset`, `git stash`, `git checkout .` or `git restore .`**
-  in the shared checkout: it throws away the others' work. Restore only your
-  own files, by name.
 * **An error in another agent's file is not touched, it is escalated** to the
   supervisor (the session that started the agents).
 

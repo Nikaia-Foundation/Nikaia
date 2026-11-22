@@ -201,9 +201,8 @@ You build one small slice of an issue in the Nikaia repository and end.
   cycle. Right before a long test run (clippy + `it`, `tests/compiler`),
   run that `git status` line once more: a lowered file of yours that lost its
   change means another session rewrote it; run `lower-std` again first (m3a,
-  2026-10-28: one 8-minute round lost on a reset tree). Never `git reset`,
-  `git stash`, `git checkout .` or `git restore .` in the shared checkout (they
-  throw away the other agents' work). Never reset `lowered/` by hand (`git checkout ...lowered/`; the one exception: a rustc error in another agent's lowered file, `docs/builder-facts-lookup.md`, *Lowering*, #1794), never
+  2026-10-28: one 8-minute round lost on a reset tree).
+  Never reset `lowered/` by hand (`git checkout ...lowered/`; the one exception: a rustc error in another agent's lowered file, `docs/builder-facts-lookup.md`, *Lowering*, #1794), never
   `git clone` or a second `target/` (a cold build is about 10 minutes of 4
   cores), never `sleep`/`pgrep` loops. A build only to try one case is a
   wasted cycle.
