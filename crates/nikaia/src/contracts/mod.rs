@@ -630,12 +630,10 @@ fn computed_literal(
     library: &Ledger,
 ) -> Option<String> {
     let reads = crate::assets::Reads::none();
-    let nothing = |_: &str| -> Option<crate::build_time::Value> { None };
+    let nothing = |_: &str| -> Option<nikaia_std::compiler::build_values::BuildValue> { None };
     // **Literals alone are folded** (D1's last paragraph), with or without a
     // build-time directory; the folder runs no call, so anything else is compiled.
-    if let Ok(folded) =
-        crate::build_time::BuildTime::new(parsed, units, &reads, &nothing).evaluate(expr)
-    {
+    if let Ok(folded) = crate::build_eval_host::evaluate(expr, parsed, units, &reads, &nothing) {
         return literal_of(&folded);
     }
     let build_time_dir = crate::comptime_run::defaults_build_time_dir()?;
@@ -735,7 +733,7 @@ fn infer_package_with(
 
 /// A value as the literal both languages spell it the same way, where it has
 /// one.
-pub fn literal_of(value: &crate::build_time::Value) -> Option<String> {
+pub fn literal_of(value: &nikaia_std::compiler::build_values::BuildValue) -> Option<String> {
     nikaia_std::compiler::ledger_items::literal_of(value, &mut |f: f64| format!("{f:?}"))
 }
 

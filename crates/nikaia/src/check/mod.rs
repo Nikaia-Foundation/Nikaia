@@ -34,7 +34,6 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use crate::assets::Reads;
 use crate::ast::{Expr, Item};
-use crate::build_time;
 use crate::contracts::ty::TyOps;
 use crate::contracts::{FieldContract, Ledger, ty::Ty};
 use crate::fold::Constant;
@@ -673,7 +672,7 @@ pub use nikaia_std::compiler::check_walked::CheckMultiLock as MultiLock;
 /// `'\u{…}'`, where it is several - the checker has said `NK1213` there, and
 /// refused (`NK1212`) every literal of several that composes to more than one.
 pub fn char_literal(written: &str) -> String {
-    nikaia_std::compiler::check_glue::check_char_literal(written, &mut crate::build_time::char_of)
+    nikaia_std::compiler::check_glue::check_char_literal(written)
 }
 
 pub fn value_node(expr: &Expr) -> i64 {
