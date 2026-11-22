@@ -106,6 +106,43 @@ pub mod time;
 /// The parser backend a generated program's grammars run on.
 pub use winnow_grammar;
 
+/// `std::bigint`: an exact signed integer of any size (Part I 2.2, #2706),
+/// `src/bigint.nika` lowered to `src/bigint.rs`, wired in as `text` is below.
+///
+/// The lints allowed are the lowering's, as on `tools` below: the parentheses
+/// and casts `Wide::of` lowers to, the `&` of a slice read, the `match` of a
+/// `?? return` in a condition, a shift by `64 - by`, `x = x | y` and a swap
+/// through a `let`.
+#[allow(
+    clippy::question_mark,
+    clippy::double_parens,
+    clippy::needless_borrow,
+    clippy::unnecessary_cast,
+    clippy::useless_conversion,
+    clippy::blocks_in_conditions,
+    clippy::precedence,
+    clippy::assign_op_pattern,
+    clippy::manual_swap
+)]
+pub mod bigint {
+    /// The names a lowered program's header brings in, which the lowered file
+    /// writes: `Ordering`, and the block-placed `Vec` and `String`.
+    #[allow(unused_imports)]
+    use crate::block::names::{CopyOwned, String, Vec};
+    #[allow(unused_imports)]
+    use crate::prelude::*;
+    /// The lowered half, in a module of its own for the reason `text`'s is.
+    #[allow(unsafe_code, unused_parens)]
+    mod lowered {
+        #[allow(unused_imports)]
+        use super::*;
+        #[allow(unused_imports)]
+        use crate::block::names::{format, vec};
+        include!("bigint.rs");
+    }
+    pub use lowered::*;
+}
+
 /// `std::text`, and the first module here that is Nikaia rather than Rust:
 /// `src/text.nika`, lowered to `src/text.rs` by the Stage 0 compiler.
 ///
@@ -628,6 +665,8 @@ pub mod prelude {
     // own, bare, so `Ordering::Less` resolves where the program wrote it.
     pub use crate::grammar::ParseError;
     pub use crate::hash::{TrustedMap, TrustedSet};
+    // `bigint::BigInt::of(7)` after `use std::bigint` (Part I 2.2, #2706).
+    pub use crate::bigint;
     pub use crate::html;
     // `path::is_component(name)` (ADR-raw-sinks-1 D14). Here for `net`'s
     // reason: a module reached through its prefix has to be in scope in the

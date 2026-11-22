@@ -1084,10 +1084,11 @@ pub struct TypeContract {
     pub constant: String,
     pub mark: String,
     pub attributes: Vec<String>,
+    pub rules: Vec<String>,
 }
 
 impl TypeContract {
-    pub fn empty() -> TypeContract { TypeContract { public: false, fields: vec![], variants: vec![], crosses: Crosses::Undecided, iterates_fallibly: false, compares: false, orders: false, equates: false, hashes: false, copies: false, touches: vec![], tethered: vec![], constant: String::from(""), mark: String::from(""), attributes: vec![] } }
+    pub fn empty() -> TypeContract { TypeContract { public: false, fields: vec![], variants: vec![], crosses: Crosses::Undecided, iterates_fallibly: false, compares: false, orders: false, equates: false, hashes: false, copies: false, touches: vec![], tethered: vec![], constant: String::from(""), mark: String::from(""), attributes: vec![], rules: vec![] } }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]

@@ -223,6 +223,17 @@ prover's proof removes only the check at the site, not the entry in the set.
 Under `error` nothing changes: a site is proved or refused, and no sink error
 enters any set.
 
+A part that reaches a site through a parameter is checked at that site, in
+the function that makes the value, for every call (supervisor's decision on
+[#2773](https://github.com/Nikaia-Foundation/Nikaia/issues/2773), November 22,
+2026). The caller only passes the value on; the breach is the line that makes
+the markup or the SQL, so the check and the error belong there, as for any
+other part. Where the prover proves the parameter at every call of the
+function (ADR-396 D1), the check goes; where one call leaves it unproved, the
+check stays and runs for every call. A finding the prover reports at the call
+is not a check, and a site that is neither proved nor checked does not build
+under `warn`: it stays `NK1308`, as in a function that does not throw.
+
 ### D8 — It is switched on when our own code builds under it.
 
 As ADR-396 D4: the build that adds `NK1308` and `NK1309` also makes every site

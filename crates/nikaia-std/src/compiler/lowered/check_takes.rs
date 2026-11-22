@@ -421,8 +421,14 @@ impl CheckState {
             Expr::Variable(symbol, _) => { let symbol = *symbol; nikaia_std::block::Text::from(world.words.resolve(symbol).to_string()) },
             _ => return,
         };
-        if ty.is_a_view() || !is_text_type(ty) { return; }
+        if !is_text_type(ty) { return; }
         let node = node_key(side);
+        let walked = self.binding(&name);
+        if walked.is_some() && self.flow.lent_text_params.contains(&nikaia_std::index::or(walked.as_ref().map(|__nikaia_it| __nikaia_it.id), || -1)) {
+            self.facts.lent_concatenated.insert(node);
+            return;
+        }
+        if ty.is_a_view() { return; }
         let bound = self.frame_of(&name);
         if bound < 0 {
             self.facts.lent_concatenated.insert(node);

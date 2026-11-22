@@ -49,7 +49,51 @@ pub fn changed_contracts(now: ref Ledger, committed: ref Ledger, keepers: ref co
             out.push_str(f"warning[NK1208]: `{key}` promises less than the committed ledger says.\n   = note: it ensured {conditions_said(old.ensures)}, and now ensures {conditions_said(new.ensures)}.\n   = note: a caller's proof that relied on what it ensured may no longer hold.\n   = help: if that is meant, commit `nikaia.contracts`, and this is not said again.\n")
         }
     }
+    // **A `pub` type's written rule** (ADR-369 D2, ADR-269 D19): one the
+    // old does not imply asks more of a consumer that builds a value of the
+    // type or writes a field of one; one that does not imply the old
+    // promises less to a consumer whose proof read it.
+    for (key, new) in now.types {
+        let old = committed.types.get(key) ?? continue
+        if !new.public || !mine(key) || (old.rules.is_empty() && new.rules.is_empty()) {
+            continue
+        }
+        let names = field_names(new)
+        let was = rule_claims(old.rules)
+        let is = rule_claims(new.rules)
+        if !implies(was, is, names) {
+            out.push_str(f"warning[NK1208]: the rule of `{key}` asks more of its consumers than the committed ledger says.\n   = note: it was {conditions_said(was)}, and now is {conditions_said(is)}.\n   = note: a consumer's value of it that kept the rule before may now stop where it is built or written.\n   = help: if that is meant, commit `nikaia.contracts`, and this is not said again.\n")
+        }
+        if !implies(is, was, names) {
+            out.push_str(f"warning[NK1208]: the rule of `{key}` promises less than the committed ledger says.\n   = note: it was {conditions_said(was)}, and now is {conditions_said(is)}.\n   = note: a consumer's proof that relied on the rule may no longer hold.\n   = help: if that is meant, commit `nikaia.contracts`, and this is not said again.\n")
+        }
+    }
     return out
+}
+
+/// Each rule's claim, `assert(` and `)` taken off what the ledger holds; the
+/// prover reads it back inside an `assert` of its own, where a `; message:`
+/// after the claim is the call's option.
+fn rule_claims(rules: ref Vec[String]) -> Vec[String] {
+    let mut out: Vec[String] = []
+    for rule in rules {
+        let inner = rule.strip_prefix("assert(")?.strip_suffix(")") ?? rule
+        out.push(inner.clone())
+    }
+    return out
+}
+
+/// The names a type's rule may read: each field, and the length of each that
+/// has one.
+fn field_names(contract: ref TypeContract) -> collections::BTreeSet[String] {
+    let mut names: collections::BTreeSet[String] = collections::BTreeSet()
+    for field in contract.fields {
+        if has_a_length(type_name_of(field.ty)) {
+            names.insert(f"{field.name}.len()")
+        }
+        names.insert(field.name.clone())
+    }
+    return names
 }
 
 /// `NK1265` for each parameter of the trait method `key` whose `keeps` moved
