@@ -8,6 +8,16 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1548] — 2026-11-22
+
+**Builders' changes (#2706, #2707)**
+- std::bigint::BigInt: an exact signed integer of any size, with of, from_wide, narrow, sign, bits, to_text, ==, <, add, sub, neg, abs, mul, div_rem, rem and gcd (no literal, operator or as)
+- LRA simplex: a step that leaves i64 rebuilds the tableau in BigInt and goes on there within a budget (`big_budget`, default 50,000,000 pivots and digit products); `--stats` says "N overflows, resumed in BigInt". No query answered before loses its answer; LassoRanker still needs i64-sized Farkas multipliers.
+- `x.clone()` on a `bigint::BigInt` (and any struct `std` writes in Nikaia, whose ledger lists its fields) is accepted as the derived copy; it was refused NK1171.
+- `return match end { … else => end }` in an arm binds `end` by value; the lowering bound it `ref end` and rustc refused the arms (NK1343 under `nikaia run`).
+- A `pub` struct's written rule is part of its contract: published in `nikaia.contracts` and a change in the breaking direction (narrower or wider) warns NK1208 (ADR-369, ADR-269 D18-D19).
+- A `pub` struct's written rule is part of its contract: `nikaia.contracts` carries it as `rules = [...]` under the type, and a narrower rule (asks more of consumers) or a wider one (promises less) warns with NK1208 against the committed ledger.
+
 ## [0.0.1547] — 2026-11-22
 
 **Builders' changes (#2608, #2748)**
