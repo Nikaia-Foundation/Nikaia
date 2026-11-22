@@ -1,0 +1,10 @@
+bounds in tests/the_bounds_report_takes_the_kept_proof.nika: 6 indexes, 4 proved; 3 operations, 3 proved
+    12  a[j]    proved
+    12  i1 + 1  proved
+    13  a[i1]   proved
+    15  a[j]    proved
+    15  i2 + 1  proved
+    16  a[i2]   checked: a counter the loop on line 15 changes, with no bound tied to its turns or to another counter (ADR-361 D13, #1634)
+    18  a[j]    proved
+    18  i3 + 1  proved
+    19  a[i3]   checked: a counter the loop on line 18 changes, with no bound tied to its turns or to another counter (ADR-361 D13, #1634)

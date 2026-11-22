@@ -1,0 +1,13 @@
+// The proof book's key is `hash::sha256_hex` of the normal form's text
+// (ADR-270 D4), handed the text's bytes without a copy (#2696): the digest
+// is FIPS 180-4's, so a book written before reads the same.
+use std::hash
+
+fn main() throws {
+    let text = "abc"
+    println(hash::sha256_hex(text.bytes().collect()))
+    let empty = ""
+    println(hash::sha256_hex(empty.bytes().collect()))
+    let normal = "(<= ? 0)\n|- (< ? 1)"
+    println(hash::sha256_hex(normal.bytes().collect()))
+}

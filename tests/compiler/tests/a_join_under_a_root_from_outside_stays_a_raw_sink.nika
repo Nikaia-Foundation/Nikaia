@@ -1,0 +1,19 @@
+// A join adds a part to its root; it does not clean the root under it
+// (ADR-raw-sinks-1 D11, D13). `fs::Root::Dir(dir).join(...)` with `dir` from
+// outside stays `NK1308` (here a warning) whatever is joined: a literal or a
+// name `path::is_component` proved (D14). That guard proves the name, never
+// the directory, and a proved name joined to an unclean one stays a sink too.
+use std::cli
+use std::fs
+use std::path
+
+fn main() throws {
+    let dir = cli::args().nth(1) ?? "."
+    let key = cli::args().nth(2) ?? "src"
+    println(fs::exists("blob", fs::Root::Dir(dir.clone()).join("tests")))
+    let at = fs::Root::Dir(dir.clone()).join("tests")
+    println(fs::exists("blob", at))
+    return if !path::is_component(key)
+    println(fs::exists("blob", fs::Root::Dir(dir).join(key)))
+    println("checked")
+}

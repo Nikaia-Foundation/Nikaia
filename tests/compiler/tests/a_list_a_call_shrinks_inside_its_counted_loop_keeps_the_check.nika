@@ -1,0 +1,41 @@
+// A loop over a list's own length drops the check of `xs[k]` only where
+// nothing in the body can change that length (ADR-306 D3). A call that is
+// handed the list as an argument can: here a function and a method that take
+// it `mut` pop from it, so every index after the call keeps its check, and the
+// read past the shrunk end stops the program instead of reading past it.
+
+struct Trimmer {
+    count: i64,
+}
+
+impl Trimmer {
+    fn trim(ref mut self, mut xs: Vec[i64]) {
+        xs.pop()
+        self.count += 1
+    }
+}
+
+fn shrink(mut xs: Vec[i64]) {
+    xs.pop()
+}
+
+fn main() throws {
+    let mut t = Trimmer { count: 0 }
+    let mut ys: Vec[i64] = [1, 2, 3, 4]
+    let mut total = 0
+    for k in 0..<ys.len() {
+        if k == 0 {
+            t.trim(ys)
+        }
+        if k < 3 {
+            total += ys[k]
+        }
+    }
+    println(f"{total} after {t.count} trim")
+    let mut xs: Vec[i64] = [1, 2, 3, 4]
+    for k in 0..<xs.len() {
+        shrink(xs)
+        total += xs[k]
+    }
+    println(f"{total}")
+}

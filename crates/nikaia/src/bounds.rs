@@ -145,6 +145,23 @@ pub fn proven_taken(
     proven(parsed, beside, facts, ledgers, &BTreeSet::new(), true)
 }
 
+/// **The ledger's answer, if it answered this question**, left kept: the
+/// `--bounds` report asks through loops and without a trace what
+/// [`proven_for_lowering`] asked (#2711), and the lowering after it may still
+/// take the same proof ([`proven_taken`]). Where the questions differ (the
+/// ledger's check runs no prover, so a unit whose `assert`s publish a
+/// `requires` or an `ensures` is asked with them only here) it is `None`.
+pub fn proven_kept(
+    parsed: &Parsed,
+    beside: &[&Parsed],
+    facts: &crate::check::CheckFacts,
+    ledgers: &[&crate::contracts::Ledger],
+) -> Option<Proven> {
+    let kept = LEDGER_PROOFS.lock().ok()?;
+    let (question, proven) = kept.as_ref()?.get(&unit_of(parsed))?;
+    (*question == question_of(parsed, beside, facts, ledgers)).then(|| proven.clone())
+}
+
 /// A unit by its items, whose addresses the proof's counters are keyed by.
 fn unit_of(parsed: &Parsed) -> usize {
     parsed.program.items.as_ptr() as usize
