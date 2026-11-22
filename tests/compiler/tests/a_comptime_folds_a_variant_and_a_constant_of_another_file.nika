@@ -1,0 +1,32 @@
+// #2672: the build-time folder finds an `enum` variant and a `comptime`
+// declared in the package's other file, not only in the file being checked:
+// `Shade::Odd`, `Shade::Mark(3)` and `BASE` are each in `src/other.nika`.
+use std::env
+use std::fs
+use std::process
+
+fn toolchain() -> String throws {
+	let exe = env::current_exe()?.display() ?? ""
+	if exe.len() == 0 {
+		eprintln("no running nikaia among this program's ancestors: run it with `nikaia test` (#1305)")
+		process::exit(2)
+	}
+	return exe
+}
+
+fn main() throws {
+	let tmp = fs::scratch()
+	let nikaia = toolchain()
+	let p = tmp.join("p")
+	process::run("mkdir", ["-p", f"{p.path().to_text()}/src"])
+	fs::write("nikaia.toml", p, "[package]\nname = \"two\"\nversion = \"0.1.0\"\n")
+	let main = "comptime PICK: Shade = Shade::Odd\ncomptime MARK: Shade = Shade::Mark(3)\ncomptime TOTAL: i64 = BASE * 2\n\nfn shade(s: Shade) -> String {\n\treturn match s {\n\t\tShade::Odd => \"odd\",\n\t\tShade::Even => \"even\",\n\t\tShade::Mark(n) => f\"mark {n}\",\n\t}\n}\n\nfn main() throws {\n\tprintln(TOTAL)\n\tprintln(shade(PICK))\n\tprintln(shade(MARK))\n}\n"
+	fs::write("src/main.nika", p, main)
+	fs::write("src/other.nika", p, "pub enum Shade {\n\tOdd,\n\tEven,\n\tMark(i64),\n}\n\ncomptime BASE: i64 = 21\n")
+	let out = process::run(nikaia, ["run"]; dir: p.path().to_text(), env: [("RUST_BACKTRACE", "0")])
+	println(out.stdout.trim())
+	if out.code != 0 {
+		println(out.stderr.trim())
+	}
+	println(f"exit {out.code}")
+}

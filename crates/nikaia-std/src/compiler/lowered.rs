@@ -3535,7 +3535,7 @@ pub mod emit_walk {
 }
 pub mod escapes {
     #[allow(unused_imports)]
-    pub use super::{NotAnEscape, an_escape_nothing_names, decoded, as_a_literal};
+    pub use super::{NotAnEscape, an_escape_nothing_names, decoded, as_a_literal, escape_scalar};
 }
 pub mod findings {
     #[allow(unused_imports)]
@@ -3963,4 +3963,4 @@ pub fn nikaia_run_tests(filters: &[std::string::String], list: bool, more: std::
 /// **The digest of this lowered set** (#1610): every file `lower-std` wrote
 /// beside this index, and the index above this line. Compiled into the same
 /// crate as the code it names, it is the compiler's identity for its caches.
-pub const LOWERED_DIGEST: &str = "461da3429af3c8d4abd5c28b127a838b1207b4ba4e5641549d89e432399e122a";
+pub const LOWERED_DIGEST: &str = "2a969da84aa0dfc94e085da01afd8257d7d4c00dc6626e73136b668c6717ff72";
