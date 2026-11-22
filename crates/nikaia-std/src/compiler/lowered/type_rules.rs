@@ -641,14 +641,14 @@ pub(crate) fn tr_kept_by(words: &winnow_grammar::InternerContext, claim: &Expr, 
             Expr::Variable(..) => { if tr_is_self(expr, words) { seen += 1; } },
             Expr::Field { .. } => {
                 let name = tr_field_of_self(expr, words);
-                if name.is_some() && !names.contains(&nikaia_std::index::or(name, || "".into())) { allowed += 1; }
+                if name.is_some() && !names.contains(nikaia_std::index::or(name.as_deref(), || "")) { allowed += 1; }
             },
             Expr::MethodCall { receiver, method, args, .. } => {
                 let receiver = nikaia_std::boxed::open(receiver); let method = *method;
                 let called = words.resolve(method);
                 let name = tr_field_of_self(receiver, words);
                 let own_method = tr_is_self(receiver, words) && methods.contains(called);
-                let own_len = name.is_some() && names.contains(&nikaia_std::index::or(name, || "".into())) && called == "len" && args.is_empty();
+                let own_len = name.is_some() && names.contains(nikaia_std::index::or(name.as_deref(), || "")) && called == "len" && args.is_empty();
                 if own_method || own_len { allowed += 1; }
             },
             Expr::Index { base, .. } => {
