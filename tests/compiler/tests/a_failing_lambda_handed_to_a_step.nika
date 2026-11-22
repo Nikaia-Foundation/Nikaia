@@ -1,0 +1,66 @@
+// A lambda that can fail, handed to `map`, `filter` or `for_each`, fails
+// the call where the lambda fails: a list's own `map` and `for_each` at
+// once, a sequence's `map` and `filter` where the walk is taken
+// (`throws = "throws(f)"`, ADR-025 D1). The walk stops at the first
+// failure, and nothing after it is computed. It was refused as `NK2606`
+// (#2736).
+struct Bad { why: String }
+
+impl Error for Bad {
+    fn message(ref self) -> String {
+        return self.why.clone()
+    }
+}
+
+fn quick(x: i64) -> i64 throws {
+    if x == 3 {
+        throw Bad { why: "three" }
+    }
+    return x * 2
+}
+
+fn small(x: i64) -> bool throws {
+    if x > 3 {
+        throw Bad { why: "too big" }
+    }
+    return x < 3
+}
+
+fn doubled(xs: Vec[i64]) -> Vec[i64] throws {
+    return xs.iter().map(fn(x) { quick(x) }).collect()
+}
+
+fn main() throws {
+    let xs = [1, 2, 3]
+    let ys: Vec[i64] = xs.clone().map(fn(x) { quick(x) }) catch { [] }
+    println(ys.len())
+    let zs: Vec[i64] = xs.iter().map(fn(x) { quick(x) }).collect() catch { [] }
+    println(zs.len())
+    // The elements before the failure are computed, the ones after not.
+    let mut seen: Vec[i64] = []
+    xs.iter().for_each(fn(x) {
+        let y = quick(x)
+        seen.push(y)
+    }) catch {
+        println(f"stopped: {error.message()}")
+    }
+    println(seen.len())
+    let fine: Vec[i64] = [1, 2].iter().map(fn(x) { quick(x) }).collect() catch { [] }
+    println(fine.len())
+    let kept: Vec[i64] = [1, 2, 3].iter().filter(fn(x) { small(x) }).collect() catch { [] }
+    println(kept.len())
+    let none: Vec[i64] = [1, 5, 2].iter().filter(fn(x) { small(x) }).collect() catch { [9] }
+    println(none[0])
+    // A step that cannot fail, over the failing walk, runs inside it.
+    let then: Vec[i64] = [1, 2].iter().map(fn(x) { quick(x) }).map(fn(y) { y + 1 }).filter(fn(y) { y > 3 }).collect() catch { [] }
+    println(then.len())
+    let mut sum = 0
+    for y in [1, 2].iter().map(fn(x) { quick(x) }) {
+        sum += y
+    }
+    println(sum)
+    let out = doubled([4, 5]) catch { [] }
+    println(out[1])
+    let failed = doubled([3]) catch { [7] }
+    println(failed[0])
+}
