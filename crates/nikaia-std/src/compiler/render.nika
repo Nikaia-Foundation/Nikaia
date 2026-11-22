@@ -293,13 +293,15 @@ pub fn paused(pause: ref Pause) -> Shown {
     let ledger = if pause.from_library { "`std`" } else { "this program" }
     let article = an_or_a(callee)
     let mut notes: Vec[String] = ["A `sync` function promises that it never pauses and does no I/O."]
-    if pause.construct {
+    if pause.construct && callee == "async" {
+        notes.push("An `async` form waits for the tasks it starts, which is a pause.")
+    } else if pause.construct {
         let capital = said(article)
         notes.push(f"{capital} `{callee}` block waits for its branches to finish, which is a pause.")
     } else {
         notes.push(f"`{callee}` isn't declared `sync` in {ledger}.")
     }
-    let message = if pause.construct { f"`{caller}` is `{promise}`, but it contains {article} `{callee}` block, which can pause." } else { f"`{caller}` is `{promise}`, but it calls `{callee}`, which can pause." }
+    let message = if pause.construct && callee == "async" { f"`{caller}` is `{promise}`, but it contains an `async` form, which can pause." } else if pause.construct { f"`{caller}` is `{promise}`, but it contains {article} `{callee}` block, which can pause." } else { f"`{caller}` is `{promise}`, but it calls `{callee}`, which can pause." }
     return Shown { warning: false, code: "NK2202", message: message, notes: notes, help: f"Remove `{promise}` from `{caller}`, or move the call out of it.", span: pause.span.clone(), labels: [Marked { span: pause.span.clone(), word: callee.clone(), text: "this can pause", main: true }], edit: null }
 }
 

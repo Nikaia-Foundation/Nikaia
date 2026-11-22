@@ -1301,6 +1301,8 @@ fn with_lower_host<R>(
         book: RefCell::new(None),
         checking: RefCell::new(None),
         checked_facts: RefCell::new(BTreeMap::new()),
+        par_sites: RefCell::new(Vec::new()),
+        pieces_lost: RefCell::new(Vec::new()),
         raw_path_checks: RefCell::new(BTreeMap::new()),
         unit_facts: RefCell::new(BTreeMap::new()),
         ahead: RefCell::new(BTreeMap::new()),
@@ -1344,6 +1346,10 @@ struct LowerHost<'a> {
     /// What the check of the units reads once for all of them, while it runs.
     checking: RefCell<Option<Checking>>,
     checked_facts: RefCell<BTreeMap<usize, check::CheckFacts>>,
+    /// Every `par_iter` call of the program's own units and the execution
+    /// their check chose, and the `NK2119` each would say (ADR-async-5 D32).
+    par_sites: RefCell<Vec<nikaia_std::compiler::order::ParSite>>,
+    pieces_lost: RefCell<Vec<nikaia_std::compiler::modules::SyncLost>>,
     /// The calls of each unit whose path from outside is checked where they
     /// run (ADR-raw-sinks-1 D7), for the emitter.
     raw_path_checks: RefCell<BTreeMap<usize, BTreeMap<i64, i64>>>,
@@ -1808,6 +1814,14 @@ impl project_lower::ProjectLowerHost for LowerHost<'_> {
         self.program().lost_sync_all()
     }
 
+    fn par_sites(&self) -> Vec<nikaia_std::compiler::order::ParSite> {
+        self.par_sites.borrow().clone()
+    }
+
+    fn pieces_lost(&self) -> Vec<nikaia_std::compiler::modules::SyncLost> {
+        self.pieces_lost.borrow().clone()
+    }
+
     fn keepers(&self) -> BTreeMap<String, BTreeMap<String, Vec<String>>> {
         self.program().keepers.clone()
     }
@@ -2017,6 +2031,8 @@ impl project_lower::ProjectLowerHost for LowerHost<'_> {
             facts_reusable,
         });
         *self.checked_facts.borrow_mut() = BTreeMap::new();
+        *self.par_sites.borrow_mut() = Vec::new();
+        *self.pieces_lost.borrow_mut() = Vec::new();
         *self.raw_path_checks.borrow_mut() = BTreeMap::new();
         *self.foreign.borrow_mut() = Some(foreign);
         units
@@ -2089,6 +2105,33 @@ impl project_lower::ProjectLowerHost for LowerHost<'_> {
             if !checks.is_empty() {
                 self.raw_path_checks.borrow_mut().insert(at, checks);
             }
+        }
+        // **How each `par_iter` call runs** (ADR-async-5 D32), in Nikaia.
+        if let Ok(_) = &checked
+            && unit.package.is_none()
+            && let Some(facts) = &facts
+        {
+            let sites = nikaia_std::compiler::order::par_sites_checked(
+                &unit.parsed.program.items,
+                &unit.parsed.interner,
+                &unit.parsed.aliases,
+                facts,
+                &program.contracts,
+                crate::emit::std_ledger(),
+            );
+            let lost = nikaia_std::compiler::modules::lost_pieces_all(
+                &sites,
+                &program.pauses,
+                &mut |finding: &crate::check::Finding| {
+                    crate::diagnostics::render_finding(
+                        finding,
+                        &unit.path.display().to_text(),
+                        &unit.source,
+                    )
+                },
+            );
+            self.par_sites.borrow_mut().extend(sites);
+            self.pieces_lost.borrow_mut().extend(lost);
         }
         if let Ok(_) = &checked
             && keep

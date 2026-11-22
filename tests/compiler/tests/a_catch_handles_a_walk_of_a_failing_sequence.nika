@@ -1,0 +1,13 @@
+// A walk of a sequence whose step can fail can fail (ADR-025 D1), so a
+// `catch` around it has something to handle: `io::lines()` meets a line
+// that is not UTF-8, `collect` ends there, and the handler runs. It was
+// refused as `NK1134`, "Nothing here can fail" (#2692).
+use std::io
+
+fn main() throws {
+    let got: Vec[String] = io::lines().collect() catch {
+        println("caught")
+        []
+    }
+    println(got.len())
+}

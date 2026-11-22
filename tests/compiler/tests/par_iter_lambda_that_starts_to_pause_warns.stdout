@@ -1,0 +1,20 @@
+-- every lambda computes: both calls run in pieces
+no NK2119
+[fn."total"]
+par_iter = ["pieces", "pieces"]
+-- the first call's lambda now pauses
+warning[NK2119]: `par_iter` 1 of `total` ran in pieces on the cores, and now runs one task per element: a lambda of it can pause.
+   --> TMP/src/main.nika:12:55
+ 12 |     let doubled: Vec[i64] = xs.par_iter().map(fn(x) { step(x) + 1 }).collect()
+    = note: Its call of `step` can pause, so the lambda does.
+    = note: `step` calls `wait`, which pauses here.
+    = note: `time::sleep` can pause.
+    = help: If the walk should use the cores, move the call of `step` out of the lambda; if it may pause, commit `nikaia.contracts`, and this is not said again.
+[fn."total"]
+par_iter = ["tasks", "pieces"]
+-- the ledger written acknowledges it; a lambda written to pause is not warned of
+no NK2119
+[fn."fetched"]
+par_iter = ["tasks"]
+[fn."total"]
+par_iter = ["tasks", "pieces"]
