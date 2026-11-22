@@ -76,6 +76,16 @@ impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     pub(crate) fn a_walk_of_a_failing_sequence(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, method: winnow_grammar::Symbol, span: &Span) {
+        if self.flow.guarded.is_some() {
+            let held: Option<CheckGuarded> = match self.flow.guarded.as_ref() {
+                Some(__nikaia_it) => Some(__nikaia_it.clone()),
+                None => None,
+            };
+            let mut guarded = nikaia_std::index::or(held, || CheckGuarded::nothing());
+            guarded.fallible = true;
+            guarded.unanswered = true;
+            self.flow.guarded = Some(guarded);
+        }
         if self.flow.throwing || self.flow.caught || self.inside_an_action.is_some() { return; }
         let function = nikaia_std::block::Text::from(match self.current.as_deref() { Some(__nikaia_value) => __nikaia_value, None => return }.to_string());
         let name = nikaia_std::block::Text::from(world.words.resolve(method).to_string());
