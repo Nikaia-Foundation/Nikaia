@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1533] — 2026-11-22
+
+**drive.nika: lock, merge, tree and brief helpers open their paths under the checkout root (ADR-raw-sinks-1 D11) (#2470)**
+- drive.nika opens its lock, merge, worktree and brief files under the checkout root fs::Root::Dir(".") instead of Anywhere (ADR-raw-sinks-1 D11)
+
 ## [0.0.1532] — 2026-11-22
 
 **suite: build the solver by its absolute path, lowered once, not twice**
