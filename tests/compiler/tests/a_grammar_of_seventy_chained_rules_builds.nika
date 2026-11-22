@@ -1,0 +1,85 @@
+// A grammar whose longest rule chain is 70 rules deep builds and runs (#2714):
+// each rule's closure parser counts against rustc's recursion limit, whose
+// default of 128 this chain passes, so the generated crate's root raises it.
+
+grammar Deep {
+	entry rule doc -> i64 = v:r1 -> { v }
+	rule r1 -> i64 = "<" v:r2 ">" -> { v + 1 }
+	rule r2 -> i64 = "<" v:r3 ">" -> { v + 1 }
+	rule r3 -> i64 = "<" v:r4 ">" -> { v + 1 }
+	rule r4 -> i64 = "<" v:r5 ">" -> { v + 1 }
+	rule r5 -> i64 = "<" v:r6 ">" -> { v + 1 }
+	rule r6 -> i64 = "<" v:r7 ">" -> { v + 1 }
+	rule r7 -> i64 = "<" v:r8 ">" -> { v + 1 }
+	rule r8 -> i64 = "<" v:r9 ">" -> { v + 1 }
+	rule r9 -> i64 = "<" v:r10 ">" -> { v + 1 }
+	rule r10 -> i64 = "<" v:r11 ">" -> { v + 1 }
+	rule r11 -> i64 = "<" v:r12 ">" -> { v + 1 }
+	rule r12 -> i64 = "<" v:r13 ">" -> { v + 1 }
+	rule r13 -> i64 = "<" v:r14 ">" -> { v + 1 }
+	rule r14 -> i64 = "<" v:r15 ">" -> { v + 1 }
+	rule r15 -> i64 = "<" v:r16 ">" -> { v + 1 }
+	rule r16 -> i64 = "<" v:r17 ">" -> { v + 1 }
+	rule r17 -> i64 = "<" v:r18 ">" -> { v + 1 }
+	rule r18 -> i64 = "<" v:r19 ">" -> { v + 1 }
+	rule r19 -> i64 = "<" v:r20 ">" -> { v + 1 }
+	rule r20 -> i64 = "<" v:r21 ">" -> { v + 1 }
+	rule r21 -> i64 = "<" v:r22 ">" -> { v + 1 }
+	rule r22 -> i64 = "<" v:r23 ">" -> { v + 1 }
+	rule r23 -> i64 = "<" v:r24 ">" -> { v + 1 }
+	rule r24 -> i64 = "<" v:r25 ">" -> { v + 1 }
+	rule r25 -> i64 = "<" v:r26 ">" -> { v + 1 }
+	rule r26 -> i64 = "<" v:r27 ">" -> { v + 1 }
+	rule r27 -> i64 = "<" v:r28 ">" -> { v + 1 }
+	rule r28 -> i64 = "<" v:r29 ">" -> { v + 1 }
+	rule r29 -> i64 = "<" v:r30 ">" -> { v + 1 }
+	rule r30 -> i64 = "<" v:r31 ">" -> { v + 1 }
+	rule r31 -> i64 = "<" v:r32 ">" -> { v + 1 }
+	rule r32 -> i64 = "<" v:r33 ">" -> { v + 1 }
+	rule r33 -> i64 = "<" v:r34 ">" -> { v + 1 }
+	rule r34 -> i64 = "<" v:r35 ">" -> { v + 1 }
+	rule r35 -> i64 = "<" v:r36 ">" -> { v + 1 }
+	rule r36 -> i64 = "<" v:r37 ">" -> { v + 1 }
+	rule r37 -> i64 = "<" v:r38 ">" -> { v + 1 }
+	rule r38 -> i64 = "<" v:r39 ">" -> { v + 1 }
+	rule r39 -> i64 = "<" v:r40 ">" -> { v + 1 }
+	rule r40 -> i64 = "<" v:r41 ">" -> { v + 1 }
+	rule r41 -> i64 = "<" v:r42 ">" -> { v + 1 }
+	rule r42 -> i64 = "<" v:r43 ">" -> { v + 1 }
+	rule r43 -> i64 = "<" v:r44 ">" -> { v + 1 }
+	rule r44 -> i64 = "<" v:r45 ">" -> { v + 1 }
+	rule r45 -> i64 = "<" v:r46 ">" -> { v + 1 }
+	rule r46 -> i64 = "<" v:r47 ">" -> { v + 1 }
+	rule r47 -> i64 = "<" v:r48 ">" -> { v + 1 }
+	rule r48 -> i64 = "<" v:r49 ">" -> { v + 1 }
+	rule r49 -> i64 = "<" v:r50 ">" -> { v + 1 }
+	rule r50 -> i64 = "<" v:r51 ">" -> { v + 1 }
+	rule r51 -> i64 = "<" v:r52 ">" -> { v + 1 }
+	rule r52 -> i64 = "<" v:r53 ">" -> { v + 1 }
+	rule r53 -> i64 = "<" v:r54 ">" -> { v + 1 }
+	rule r54 -> i64 = "<" v:r55 ">" -> { v + 1 }
+	rule r55 -> i64 = "<" v:r56 ">" -> { v + 1 }
+	rule r56 -> i64 = "<" v:r57 ">" -> { v + 1 }
+	rule r57 -> i64 = "<" v:r58 ">" -> { v + 1 }
+	rule r58 -> i64 = "<" v:r59 ">" -> { v + 1 }
+	rule r59 -> i64 = "<" v:r60 ">" -> { v + 1 }
+	rule r60 -> i64 = "<" v:r61 ">" -> { v + 1 }
+	rule r61 -> i64 = "<" v:r62 ">" -> { v + 1 }
+	rule r62 -> i64 = "<" v:r63 ">" -> { v + 1 }
+	rule r63 -> i64 = "<" v:r64 ">" -> { v + 1 }
+	rule r64 -> i64 = "<" v:r65 ">" -> { v + 1 }
+	rule r65 -> i64 = "<" v:r66 ">" -> { v + 1 }
+	rule r66 -> i64 = "<" v:r67 ">" -> { v + 1 }
+	rule r67 -> i64 = "<" v:r68 ">" -> { v + 1 }
+	rule r68 -> i64 = "<" v:r69 ">" -> { v + 1 }
+	rule r69 -> i64 = "<" v:r70 ">" -> { v + 1 }
+	rule r70 -> i64 = "x" -> { 0 }
+}
+
+fn main() throws {
+	let depth = Deep::doc("<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<x>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>") catch {
+		println("error")
+		return
+	}
+	println(depth)
+}

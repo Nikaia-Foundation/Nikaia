@@ -25,6 +25,10 @@ fn emit(source: &str, build: Build) -> String {
     emit_program(&parsed, build)
         .expect("the fixture lowers")
         .rust
+        // The crate's recursion limit (#2714) is an inner attribute, which
+        // the `include!` of the fixtures below cannot hold.
+        .replacen("#![recursion_limit = \"512\"]\n", "", 1)
+        .to_text()
 }
 
 // --- What the emitter produced, compiled ---
