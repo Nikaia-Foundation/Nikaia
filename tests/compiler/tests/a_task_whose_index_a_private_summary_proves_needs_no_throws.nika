@@ -1,0 +1,33 @@
+// A task whose only panic site is an index a private function's result
+// summary proves cannot panic (ADR-359 D14, ADR-async-5 D35, #2684): `kind`
+// returns 0 unless `t` has one element, so past `kind(t) == 0` the index
+// `t[0]` is proved. The ledger's proof reads the same summaries as the
+// emitter's, so `second`'s ledger says `panics = false` and `both` needs no
+// `throws`, as the emitted code holds no check of `t[0]` (the `.bounds`
+// file). `second` is `pub`, so no precondition from its callers proves the
+// index instead (ADR-391 D4).
+
+fn kind(t: ref Vec[i64]) -> i64 sync {
+	if t.len() != 1 {
+		return 0
+	}
+	return 7
+}
+
+pub fn second(t: ref Vec[i64]) -> i64 sync {
+	if kind(t) == 0 {
+		return 0
+	}
+	return t[0]
+}
+
+fn both(t: ref Vec[i64]) -> i64 {
+	let a = async second(t)
+	let b = async second(t)
+	return a + b
+}
+
+fn main() throws {
+	let one: Vec[i64] = [4]
+	println(f"{both(one)}")
+}
