@@ -2701,6 +2701,19 @@ pub fn keeps_uses_of(view: ref ParsedView, item: ref Item, target: String?, ledg
             let mut fields: collections::BTreeMap[String, collections::BTreeMap[String, Ty]] = collections::BTreeMap()
             for arg in args {
                 let mut of: collections::BTreeMap[String, Ty] = collections::BTreeMap()
+                // **A tuple's parts are its fields, by position** (#2444):
+                // `return site.0` of a `(i64, String, i64)` copies the number
+                // out and takes nothing of `site`, as a struct's `i64` field
+                // does.
+                if arg.ty.is_tuple && !arg.ty.is_nullable && !arg.ty.is_view {
+                    let mut part = 0
+                    for one in arg.ty.generics {
+                        of.insert(f"{part}", written_ty(view.words, view.aliases, one))
+                        part += 1
+                    }
+                    fields.insert(view.text(arg.name), of)
+                    continue
+                }
                 let mut found = false
                 for held in declared {
                     if held.name == arg.ty.name {
