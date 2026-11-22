@@ -291,3 +291,24 @@ inclusive costs of its dump (`files.callgrind.275`) show where:
 Both are worked out again in each file's check. So the file checks cost
 about files × package on top of the linear part, and grow with the square
 of the package as it gets more files.
+
+### After the package facts are worked out once (#2685)
+
+Measured again on November 22, 2026, at 0.0.1541, over a sample of 24 files
+(`analysis_cost.nika --files --sample 24`), the same fit:
+
+| Analysis | Fixed per file | Per line | Per line, smaller half | Per line, larger half |
+| :--- | ---: | ---: | ---: | ---: |
+| handles (ADR-312) | -14,072 | 193 | 155 | 205 |
+| outside data (ADR-396) | -651,838 | 24,366 | 19,019 | 24,203 |
+| bounds (ADR-385) | 0 | 0 | 0 | 0 |
+| proofs (ADR-269 D4, ADR-396 D5) | -30,994,485 | 321,103 | 231,293 | 331,750 |
+| views (NK2302, NK2305, NK2303) | 46,319,293 | 62,477 | 45,547 | 62,917 |
+| lints (NK1261, NK1350) | 40,755 | 532 | 376 | 548 |
+| rest of the walk | 33,870,860 | 215,309 | 179,967 | 214,797 |
+| the walk | 48,570,514 | 623,980 | 476,357 | 634,419 |
+
+The fixed cost per file fell from 676 M to 49 M (views from 359 M to 46 M,
+the rest of the walk from 321 M to 34 M). What is left grows with the lines;
+the slopes are those of the 274-file run within the noise of a smaller
+sample.
