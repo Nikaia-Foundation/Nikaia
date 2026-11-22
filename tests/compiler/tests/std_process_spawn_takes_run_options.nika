@@ -1,0 +1,55 @@
+// ADR-243 D11 (#2748): `process::spawn` takes `run`'s options but `within`,
+// with `run`'s defaults and rules, and `Child::id` is the process id. Each
+// option is shown on its own; the defaults stay: input closed, both streams
+// captured.
+use std::io
+use std::process
+
+fn main() throws {
+	let mut plain = process::spawn("sh", ["-c", "echo out; echo err >&2; cat"])
+	let id = plain.id()
+	let said = plain.wait()
+	println(f"defaults: id>0={id > 0} stdout={said.stdout.trim()} stderr={said.stderr.trim()}")
+
+	let mut moved = process::spawn("pwd", []; dir: "/")
+	println(f"dir: {moved.wait().stdout.trim()}")
+
+	let mut set = process::spawn("sh", ["-c", "echo $NIKAIA_SPAWN_A"]; env: [("NIKAIA_SPAWN_A", "set")])
+	println(f"env: {set.wait().stdout.trim()}")
+
+	let mut removed = process::spawn("sh", ["-c", "echo [$HOME]"]; env_remove: ["HOME"])
+	println(f"env_remove: {removed.wait().stdout.trim()}")
+
+	let mut cleared = process::spawn("/usr/bin/env", []; env_clear: true, env: [("ONLY", "this")])
+	println(f"env_clear: {cleared.wait().stdout.trim()}")
+
+	let mut fed = process::spawn("cat", []; stdin: process::Input::Text("fed in\n"))
+	println(f"stdin: {fed.wait().stdout.trim()}")
+
+	let mut shown = process::spawn("sh", ["-c", "echo inherited out"]; stdout: process::Stream::Inherited)
+	println(f"stdout: [{shown.wait().stdout}]")
+
+	let mut split = process::spawn("sh", ["-c", "echo kept; echo gone >&2"]; stderr: process::Stream::Discarded)
+	let both = split.wait()
+	println(f"stderr: {both.stdout.trim()} [{both.stderr}]")
+
+	// D7: an entry no platform accepts starts nothing (one the program
+	// computes; a literal one is `NK1286`).
+	println(f"invalid entry: {tried(empty())}")
+}
+
+fn empty() -> String {
+	let mut name = String()
+	name.push_str("")
+	return name
+}
+
+fn tried(name: String) -> String throws {
+	let mut child = process::spawn("sh", []; env: [(name, "x")]) catch {
+		match error {
+			io::IoError::Other(m) => return f"Other {m}",
+			else => return "other",
+		}
+	}
+	return f"ran {child.wait().code}"
+}

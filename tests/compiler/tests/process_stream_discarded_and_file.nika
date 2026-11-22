@@ -1,0 +1,51 @@
+// ADR-243 D11 (#2748): a child's output stream may go to the null device
+// (`Stream::Discarded`) or to a file (`Stream::File(path)`), created or
+// truncated before the child starts, for `run` and `spawn`; `Output` holds
+// `""` for either. A file that cannot be opened starts nothing and is the
+// call's `IoError`, naming the path.
+use std::fs
+use std::io
+use std::process
+
+fn main() throws {
+	let tmp = fs::scratch()
+	let dir = tmp.path().to_text()
+	let out = f"{dir}/out.txt"
+
+	let gone = process::run("sh", ["-c", "echo gone; echo gone too >&2"]; stdout: process::Stream::Discarded, stderr: process::Stream::Discarded)
+	println(f"discarded: ok={gone.ok} [{gone.stdout}] [{gone.stderr}]")
+
+	let first = process::run("sh", ["-c", "echo first run, longer; echo kept >&2"]; stdout: process::Stream::File(out.clone()))
+	println(f"file: [{first.stdout}] stderr={first.stderr.trim()}")
+	println(f"written: {fs::read_to_string("out.txt", tmp).trim()}")
+	process::run("sh", ["-c", "echo second"]; stdout: process::Stream::File(out))
+	println(f"truncated: [{fs::read_to_string("out.txt", tmp)}]")
+
+	let mut spawned = process::spawn("sh", ["-c", "echo to stderr >&2"]; stdout: process::Stream::Discarded, stderr: process::Stream::File(f"{dir}/err.txt"))
+	let ended = spawned.wait()
+	println(f"spawn: ok={ended.ok} [{ended.stdout}] [{ended.stderr}] {fs::read_to_string("err.txt", tmp).trim()}")
+
+	println(f"run, unopenable: {ran(f"{dir}/no/such/dir/out.txt", dir)}")
+	println(f"spawn, unopenable: {spawned_into(f"{dir}/no/such/dir/err.txt", dir)}")
+}
+
+fn shown(e: io::IoError, dir: String) -> String {
+	return match e {
+		io::IoError::NotFound(p) => f"NotFound {p.display().replace(dir, "TMP")}",
+		else => "other",
+	}
+}
+
+fn ran(path: String, dir: String) -> String throws {
+	let out = process::run("true", []; stdout: process::Stream::File(path)) catch {
+		return shown(error, dir)
+	}
+	return f"ran {out.code}"
+}
+
+fn spawned_into(path: String, dir: String) -> String throws {
+	let mut child = process::spawn("true", []; stderr: process::Stream::File(path)) catch {
+		return shown(error, dir)
+	}
+	return f"ran {child.wait().code}"
+}
