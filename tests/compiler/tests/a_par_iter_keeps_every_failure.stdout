@@ -1,0 +1,44 @@
+element 7 failed
+  raised at work
+  (no trace; set NIKAIA_TRACE=1 to capture one)
+  and then:
+  element 8 failed
+    raised at work
+  and then:
+  element 9 failed
+    raised at work
+map: 0
+element 7 failed
+  raised at keep
+  (no trace; set NIKAIA_TRACE=1 to capture one)
+  and then:
+  element 8 failed
+    raised at keep
+  and then:
+  element 9 failed
+    raised at keep
+filter: 0
+element 7 failed
+  raised at work
+  (no trace; set NIKAIA_TRACE=1 to capture one)
+  and then:
+  element 8 failed
+    raised at work
+  and then:
+  element 9 failed
+    raised at work
+element 7 failed
+  raised at work
+  (no trace; set NIKAIA_TRACE=1 to capture one)
+  and then:
+  element 8 failed
+    raised at work
+  and then:
+  element 9 failed
+    raised at work
+limit: 0
+2 4 6 8
+element 7 failed
+  raised at work
+  (no trace; set NIKAIA_TRACE=1 to capture one)
+iter: 0
