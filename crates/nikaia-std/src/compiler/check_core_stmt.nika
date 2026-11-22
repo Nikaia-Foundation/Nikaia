@@ -133,6 +133,20 @@ fn check_core_stmt_a_get(world: ref CheckWorld, read: ref Expr) -> bool sync {
     }
 }
 
+/// **A read that hands back a reference to what it finds** (#2240): `get`,
+/// and a list's `first` and `last`, which answer an `Option<&T>` as `get`
+/// does (the emitter's `emit_place_already_lent` names the same three), so
+/// a name bound past a jump out of either is a reference below as well.
+fn check_core_stmt_a_lending_read(world: ref CheckWorld, read: ref Expr) -> bool sync {
+    return match read {
+        Expr::MethodCall { method, .. } => {
+            let name = world.words.resolve(method)
+            name == "get" || name == "first" || name == "last"
+        },
+        else => false,
+    }
+}
+
 /// An index read, `xs[i]`.
 fn check_core_stmt_an_index(read: ref Expr) -> bool sync {
     return match read {
@@ -154,7 +168,7 @@ fn check_core_stmt_a_map_index(state: ref CheckState, read: ref Expr) -> bool sy
 /// the reference either hands back, as one `get` does.
 fn check_core_stmt_got(state: ref CheckState, world: ref CheckWorld, value: ref Expr) -> bool sync {
     return match value {
-        Expr::Coalesce { value: read, fallback, .. } => check_core_stmt_a_get(world, read) && (state.jumps(world, fallback) || check_core_stmt_got(state, world, fallback)),
+        Expr::Coalesce { value: read, fallback, .. } => check_core_stmt_a_lending_read(world, read) && (state.jumps(world, fallback) || check_core_stmt_got(state, world, fallback)),
         else => false,
     }
 }
@@ -186,7 +200,7 @@ fn check_core_stmt_got_by_a_match(state: ref CheckState, world: ref CheckWorld, 
         Expr::Match { value: read, arms, .. } => (read, arms),
         else => return false,
     }
-    if !check_core_stmt_a_get(world, read) || arms.len() != 2 {
+    if !check_core_stmt_a_lending_read(world, read) || arms.len() != 2 {
         return false
     }
     let mut jumps = false
