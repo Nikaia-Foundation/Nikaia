@@ -23,7 +23,7 @@ pub(crate) fn check_name_element_wanted(want: &Ty) -> Option<Ty> {
     }
 }
 
-pub(crate) fn check_name_shown_hole(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, hole: &Expr) -> (String, String) {
+pub(crate) fn check_name_shown_hole(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, hole: &Expr) -> (String, String) {
     let written = written_expression(world.words, hole);
     let shown = match hole {
         Expr::Variable(_, _) => nikaia_std::block::Text::from(written.to_string()),
@@ -36,7 +36,7 @@ pub(crate) fn check_name_shown_hole(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '
 impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn made_from_text(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, expr: &Expr) -> bool {
+    pub(crate) fn made_from_text(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, expr: &Expr) -> bool {
         match expr {
             Expr::LitStr { .. } => true,
             Expr::Variable(symbol, _) => {
@@ -67,7 +67,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn a_hole_made_from_text(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, hole: &Expr) -> bool {
+    pub(crate) fn a_hole_made_from_text(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, hole: &Expr) -> bool {
         match hole {
             Expr::Variable(symbol, _) => {
                 let symbol = *symbol;
@@ -86,7 +86,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn a_name_in_text(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, want: &Ty, value: Option<&Expr>, span: &Span) -> bool {
+    pub(crate) fn a_name_in_text(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, want: &Ty, value: Option<&Expr>, span: &Span) -> bool {
         let literal = match value { Some(__nikaia_value) => __nikaia_value, None => return false };
         match literal {
             Expr::LitInterpolated { parts, .. } => {
@@ -132,7 +132,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn a_let_of_names_in_holes(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, id: i64, value: &Expr) {
+    pub(crate) fn a_let_of_names_in_holes(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, id: i64, value: &Expr) {
         match value {
             Expr::LitInterpolated { parts, .. } => {
                 let names = match match *nikaia_std::index::get(&self.facts.path_holes, &(id_of(value) as i64)) {
@@ -157,7 +157,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn a_name_in_a_hole(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, hole: &Expr, span: &Span) {
+    pub(crate) fn a_name_in_a_hole(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, hole: &Expr, span: &Span) {
         let (written, shown) = check_name_shown_hole(world, hole);
         self.a_name_written_in_a_hole(&written, &shown, span);
     }

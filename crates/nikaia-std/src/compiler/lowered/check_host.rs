@@ -73,7 +73,7 @@ pub(crate) fn host_stopped_line(said: &str) -> String {
     nikaia_std::block::Text::from(said.to_string())
 }
 
-pub(crate) fn host_folds(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, value: &Expr, enums: &collections::BTreeSet<String>) -> bool {
+pub(crate) fn host_folds(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, value: &Expr, enums: &collections::BTreeSet<String>) -> bool {
     match value {
         Expr::LitInt { .. } => true,
         Expr::LitFloat(_, _) => true,
@@ -132,12 +132,12 @@ pub(crate) fn host_folds(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, value: 
     }
 }
 
-pub(crate) fn host_all_fold(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, values: &[Expr], enums: &collections::BTreeSet<String>) -> bool {
+pub(crate) fn host_all_fold(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, values: &[Expr], enums: &collections::BTreeSet<String>) -> bool {
     for value in values.iter() { if !host_folds(world, value, enums) { return false; } }
     true
 }
 
-pub(crate) fn host_branch_folds(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, block: &Block, enums: &collections::BTreeSet<String>) -> bool {
+pub(crate) fn host_branch_folds(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, block: &Block, enums: &collections::BTreeSet<String>) -> bool {
     if block.stmts.len() != 1 { return false; }
     match &unsafe { nikaia_std::proven::read(&block.stmts, (0) as usize) }.node {
         Stmt::Expr(inner) => host_folds(world, inner, enums),
@@ -165,7 +165,7 @@ pub(crate) fn host_grammar_names(view: &ParsedView<'_, '_, '_, '_, '_, '_, '_>, 
     }
 }
 
-pub(crate) fn host_runs_a_grammar(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, value: &Expr, grammars: &collections::BTreeSet<String>) -> bool {
+pub(crate) fn host_runs_a_grammar(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, value: &Expr, grammars: &collections::BTreeSet<String>) -> bool {
     let mut runs = false;
     for expr in visited_in_expr(value) {
         match expr {
@@ -192,7 +192,7 @@ pub(crate) fn host_runs_a_grammar(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>
     runs
 }
 
-pub(crate) fn host_assets_in<H: CheckHost>(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, value: &Expr) -> Vec<(String, bool)> {
+pub(crate) fn host_assets_in<H: CheckHost>(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, host: &H, value: &Expr) -> Vec<(String, bool)> {
     let mut found: Vec<(String, bool)> = vec![];
     for expr in visited_in_expr(value) {
         match expr {
@@ -351,7 +351,7 @@ pub(crate) fn host_ring_reach(graph: &collections::BTreeMap<String, Vec<String>>
     vec![]
 }
 
-pub(crate) fn host_ring(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, value: &Expr) -> Vec<String> {
+pub(crate) fn host_ring(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, value: &Expr) -> Vec<String> {
     let mut comptimes: collections::BTreeSet<String> = collections::BTreeSet::new();
     let mut options: collections::BTreeMap<String, Vec<String>> = collections::BTreeMap::new();
     if world.here_at < 0 { host_ring_names(&world.here, &mut comptimes, &mut options); }
@@ -382,7 +382,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn unmarked_hole<H: CheckHost>(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, text: &str, span: &Span) {
+    pub(crate) fn unmarked_hole<H: CheckHost>(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, host: &H, text: &str, span: &Span) {
         let collapsed = collapsed_doubled_braces(text);
         if collapsed.is_some() {
             let single = nikaia_std::index::or(collapsed, || "".into());
@@ -425,7 +425,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn compiled_build_time_value<H: CheckHost>(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, value: &Expr, found: &Ty, bound: &str, span: &Span) -> CheckCompiled {
+    pub(crate) fn compiled_build_time_value<H: CheckHost>(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, host: &H, value: &Expr, found: &Ty, bound: &str, span: &Span) -> CheckCompiled {
         if !self.flow.computes { return CheckCompiled { answered: true, value: None, said: true }; }
         let nothing = CheckCompiled { answered: false, value: None, said: false };
         let ring = host_ring(world, value);
@@ -502,7 +502,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn a_build_time_run_that_stopped<H: CheckHost>(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, bound: &str, said: &str, here: i64, span: &Span) {
+    pub(crate) fn a_build_time_run_that_stopped<H: CheckHost>(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, host: &H, bound: &str, said: &str, here: i64, span: &Span) {
         for line in said.lines() {
             if line.starts_with("nikaia-build-time: ") {
                 let over = nikaia_std::index::or(line.strip_prefix("nikaia-build-time: "), || "");
@@ -526,7 +526,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn a_lent_part_is_handed_on_as_it_is<H: CheckHost>(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, body: &Expr, lent: &collections::BTreeSet<String>) {
+    pub(crate) fn a_lent_part_is_handed_on_as_it_is<H: CheckHost>(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, host: &H, body: &Expr, lent: &collections::BTreeSet<String>) {
         let mut is_block = false;
         let mut empty = false;
         match body {
@@ -594,7 +594,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn a_lent_part_in_an_expression_arm(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, body: &Expr, lent: &collections::BTreeSet<String>) {
+    pub(crate) fn a_lent_part_in_an_expression_arm(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, body: &Expr, lent: &collections::BTreeSet<String>) {
         let mut named: collections::BTreeSet<i64> = collections::BTreeSet::new();
         let mut bound_again = false;
         for expr in visited_in_expr(body) {
@@ -612,7 +612,7 @@ impl CheckState {
     }
 }
 
-pub(crate) fn lent_binds_again(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, block: &Block, lent: &collections::BTreeSet<String>) -> bool {
+pub(crate) fn lent_binds_again(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, block: &Block, lent: &collections::BTreeSet<String>) -> bool {
     for stmt in block.stmts.iter() {
         match &stmt.node {
             Stmt::Let { names, .. } => {

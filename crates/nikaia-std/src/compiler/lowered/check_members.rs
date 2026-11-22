@@ -40,13 +40,13 @@ pub(crate) fn mem_unit_has_trait(unit: &ParsedView<'_, '_, '_, '_, '_, '_, '_>, 
     false
 }
 
-pub(crate) fn mem_a_trait_is_declared(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, name: &str) -> bool {
+pub(crate) fn mem_a_trait_is_declared(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, name: &str) -> bool {
     if mem_unit_has_trait(&world.here, name) { return true; }
     for unit in world.beside.iter() { if mem_unit_has_trait(unit, name) { return true; } }
     false
 }
 
-pub(crate) fn mem_unit_provides(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, unit: &ParsedView<'_, '_, '_, '_, '_, '_, '_>, head: &str, member: &str) -> bool {
+pub(crate) fn mem_unit_provides(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, unit: &ParsedView<'_, '_, '_, '_, '_, '_, '_>, head: &str, member: &str) -> bool {
     for item in unit.items.iter() {
         let implemented = match &item.node {
             Item::Impl { trait_name, target, .. } => { let trait_name = *trait_name; mem_an_impl_provides(world, unit, trait_name, target, head, member) },
@@ -57,7 +57,7 @@ pub(crate) fn mem_unit_provides(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, 
     false
 }
 
-pub(crate) fn mem_an_impl_provides(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, unit: &ParsedView<'_, '_, '_, '_, '_, '_, '_>, trait_name: Option<winnow_grammar::Symbol>, target: &Type, head: &str, member: &str) -> bool {
+pub(crate) fn mem_an_impl_provides(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, unit: &ParsedView<'_, '_, '_, '_, '_, '_, '_>, trait_name: Option<winnow_grammar::Symbol>, target: &Type, head: &str, member: &str) -> bool {
     let symbol = match trait_name { Some(__nikaia_value) => __nikaia_value, None => return false };
     if unit.text(target.name) != head { return false; }
     let written = unit.text(symbol);
@@ -65,13 +65,13 @@ pub(crate) fn mem_an_impl_provides(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_
     !mem_a_trait_is_declared(world, &written)
 }
 
-pub(crate) fn mem_provided_by_a_trait(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, head: &str, member: &str) -> bool {
+pub(crate) fn mem_provided_by_a_trait(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, head: &str, member: &str) -> bool {
     if mem_unit_provides(world, &world.here, head, member) { return true; }
     for unit in world.beside.iter() { if mem_unit_provides(world, unit, head, member) { return true; } }
     false
 }
 
-pub(crate) fn mem_a_unit_declares(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, head: &str) -> bool {
+pub(crate) fn mem_a_unit_declares(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, head: &str) -> bool {
     for unit in world.beside.iter() { if declares_a_type(unit, head) { return true; } }
     false
 }
@@ -85,7 +85,7 @@ pub(crate) fn mem_listed(names: &[String], before: &str) -> String {
 impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn a_member_nothing_writes_down(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, head: &str, member: &str, method: bool, span: &Span) {
+    pub(crate) fn a_member_nothing_writes_down(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, head: &str, member: &str, method: bool, span: &Span) {
         for found in self.findings.iter() { if found.span == *span && mem_a_said_code(&found.code) { return; } }
         if method && resolve_method(world, &format!("{}::deref", head)).is_some() { return; }
         if self.type_parameters.contains_key(head) || self.foreign_names.contains(head) || self.opaque_handles.contains(head) || self.grammars.contains_key(head) || a_number_name(head) { return; }
@@ -117,7 +117,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn a_member_this_type_does_not_have(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, ty: &str, member: &str, span: &Span) {
+    pub(crate) fn a_member_this_type_does_not_have(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, ty: &str, member: &str, span: &Span) {
         if resolve_call(world, &format!("{}::{}", ty, member)).is_some() { return; }
         if an_integer_limit(ty, member) { return; }
         if self.type_parameters.contains_key(ty) {
@@ -159,7 +159,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn a_path_in_a_pattern(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, path: &[winnow_grammar::Symbol], span: &Span) {
+    pub(crate) fn a_path_in_a_pattern(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, path: &[winnow_grammar::Symbol], span: &Span) {
         if path.len() != 2 { return; }
         let ty = nikaia_std::block::Text::from(world.words.resolve(*unsafe { nikaia_std::proven::read(&path, (0) as usize) }).to_string());
         let member = nikaia_std::block::Text::from(world.words.resolve(*unsafe { nikaia_std::proven::read(&path, (1) as usize) }).to_string());
@@ -168,7 +168,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn a_variant_pattern_with_other_parts(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, path: &[winnow_grammar::Symbol], written: i64, span: &Span) {
+    pub(crate) fn a_variant_pattern_with_other_parts(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, path: &[winnow_grammar::Symbol], written: i64, span: &Span) {
         if path.len() != 2 { return; }
         let ty = nikaia_std::block::Text::from(world.words.resolve(*unsafe { nikaia_std::proven::read(&path, (0) as usize) }).to_string());
         let member = nikaia_std::block::Text::from(world.words.resolve(*unsafe { nikaia_std::proven::read(&path, (1) as usize) }).to_string());
@@ -186,7 +186,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn a_rest_pattern(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, path: &[winnow_grammar::Symbol], parts: &[MatchPattern], span: &Span) {
+    pub(crate) fn a_rest_pattern(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, path: &[winnow_grammar::Symbol], parts: &[MatchPattern], span: &Span) {
         if !self.one_rest_at_most(parts, span) || path.len() != 2 { return; }
         let ty = nikaia_std::block::Text::from(world.words.resolve(*unsafe { nikaia_std::proven::read(&path, (0) as usize) }).to_string());
         let member = nikaia_std::block::Text::from(world.words.resolve(*unsafe { nikaia_std::proven::read(&path, (1) as usize) }).to_string());
@@ -215,7 +215,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn a_pattern_naming_a_member_a_type_does_not_have(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, pattern: &MatchPattern, span: &Span) {
+    pub(crate) fn a_pattern_naming_a_member_a_type_does_not_have(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, pattern: &MatchPattern, span: &Span) {
         match pattern {
             MatchPattern::Path(path) => { self.a_path_in_a_pattern(world, path, span); },
             MatchPattern::Named { path, .. } => { self.a_path_in_a_pattern(world, path, span); },

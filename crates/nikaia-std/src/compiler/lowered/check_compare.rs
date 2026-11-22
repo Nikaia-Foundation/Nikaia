@@ -321,7 +321,7 @@ pub(crate) fn compare_declared(asking: &CheckComparable<'_, '_, '_, '_, '_, '_, 
 }
 
 impl CheckState {
-    pub(crate) fn a_write_that_skips_the_door(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, target: &Expr, into: &Ty, written: &str, span: &Span) {
+    pub(crate) fn a_write_that_skips_the_door(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, target: &Expr, into: &Ty, written: &str, span: &Span) {
         let hull = match into {
             Ty::Named { name, .. } => name == "SharedMut",
             _ => false,
@@ -349,7 +349,7 @@ impl CheckState {
         if is == "is" { help = format!("Declare the function with `throws`, or close it yourself where you want to handle the failure: `{}.close() catch {{ … }}`.", name); }
         Some(check_refusal("NK2605", span, format!("This function can fail, because cleaning up `{}` can fail.", name), vec![format!("`{}` {} a `{}`. Its cleanup runs at the end of this block and can fail, so the function can fail with it.", name, is, owner)], Some(help)))
     }
-    pub(crate) fn parts_lent(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, body: &Expr, parts: &collections::BTreeMap<String, Ty>, from: i64, changed_from: i64) -> collections::BTreeSet<String> {
+    pub(crate) fn parts_lent(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, body: &Expr, parts: &collections::BTreeMap<String, Ty>, from: i64, changed_from: i64) -> collections::BTreeSet<String> {
         let mut lent: collections::BTreeSet<String> = collections::BTreeSet::new();
         for (name, ty) in parts.iter() {
             if !self.takes_away(world, ty) { continue; }
@@ -369,7 +369,7 @@ impl CheckState {
         }
         lent
     }
-    pub(crate) fn gives_back_a_moving_field(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, body: &Expr, name: &str, ty: &Ty) -> bool {
+    pub(crate) fn gives_back_a_moving_field(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, body: &Expr, name: &str, ty: &Ty) -> bool {
         for path in check_gives_back_parts(body, name, world.words) {
             let mut at: Ty = ty.clone();
             let mut known = true;

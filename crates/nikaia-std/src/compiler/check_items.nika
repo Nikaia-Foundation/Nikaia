@@ -932,74 +932,93 @@ fn item_declared_type_name(file: ref ParsedView, node: ref Item) -> String? {
     }
 }
 
-impl CheckState {
-    /// **A type that holds itself holds itself through a box the compiler
-    /// writes** (ADR-246 D1): a field is boxed where what it holds inline
-    /// reaches back to the type that declares it. Recorded for every type of
-    /// the program, this file's and the ones beside it.
-    fn types_that_contain_themselves(ref mut self, here: ref ParsedView, beside: ref Vec[ParsedView]) {
-        let mut files: Vec[ParsedView] = [here.clone()]
-        for other in beside {
-            files.push(other.clone())
-        }
-        // A declared generic type is seen through (ADR-294).
-        let mut generics: collections::BTreeMap[String, ItemGeneric] = collections::BTreeMap()
-        for file in files {
-            for item in file.items {
-                match item.node {
-                    Item::Struct { name, generics: params, fields, .. } => {
-                        if params.len() > 0 {
-                            let mut names: Vec[String] = []
-                            for p in params {
-                                names.push(file.text(p.name))
-                            }
-                            let mut members: Vec[Type] = []
-                            for f in fields {
-                                members.push(f.ty.clone())
-                            }
-                            generics.insert(file.text(name), ItemGeneric { file: file.clone(), params: names, members: members })
+/// **A type that holds itself holds itself through a box the compiler
+/// writes** (ADR-246 D1): a field is boxed where what it holds inline
+/// reaches back to the type that declares it. Recorded into `boxed` for
+/// every type of `files`.
+pub fn item_contain_themselves(files: ref Vec[ParsedView], mut boxed: collections::BTreeMap[String, collections::BTreeSet[String]]) {
+    // A declared generic type is seen through (ADR-294).
+    let mut generics: collections::BTreeMap[String, ItemGeneric] = collections::BTreeMap()
+    for file in files {
+        for item in file.items {
+            match item.node {
+                Item::Struct { name, generics: params, fields, .. } => {
+                    if params.len() > 0 {
+                        let mut names: Vec[String] = []
+                        for p in params {
+                            names.push(file.text(p.name))
                         }
-                    },
-                    else => {},
-                }
-            }
-        }
-        // Every declared type's members, with the types each holds inline.
-        let mut members: collections::BTreeMap[String, Vec[ItemInline]] = collections::BTreeMap()
-        for file in files {
-            for item in file.items {
-                let name = item_declared_type_name(file, item.node) ?? continue
-                let mut entry = item_inlines(members, name)
-                for held in item_members_of(file, item.node) {
-                    let mut inline: collections::BTreeSet[String] = collections::BTreeSet()
-                    item_held_inline(file, held.ty, generics, inline)
-                    entry.push(ItemInline { member: held.member.clone(), inline: inline })
-                }
-                members.insert(name.clone(), entry)
-            }
-        }
-        let mut holds: collections::BTreeMap[String, collections::BTreeSet[String]] = collections::BTreeMap()
-        for (name, fields) in members {
-            let mut all: collections::BTreeSet[String] = collections::BTreeSet()
-            for f in fields {
-                all.extend(f.inline.clone())
-            }
-            holds.insert(name.clone(), all)
-        }
-        for (name, fields) in members {
-            for f in fields {
-                let mut back = false
-                for held in f.inline {
-                    if held == name || item_reaches(held, name, holds) {
-                        back = true
+                        let mut members: Vec[Type] = []
+                        for f in fields {
+                            members.push(f.ty.clone())
+                        }
+                        generics.insert(file.text(name), ItemGeneric { file: file.clone(), params: names, members: members })
                     }
+                },
+                else => {},
+            }
+        }
+    }
+    // Every declared type's members, with the types each holds inline.
+    let mut members: collections::BTreeMap[String, Vec[ItemInline]] = collections::BTreeMap()
+    for file in files {
+        for item in file.items {
+            let name = item_declared_type_name(file, item.node) ?? continue
+            let mut entry = item_inlines(members, name)
+            for held in item_members_of(file, item.node) {
+                let mut inline: collections::BTreeSet[String] = collections::BTreeSet()
+                item_held_inline(file, held.ty, generics, inline)
+                entry.push(ItemInline { member: held.member.clone(), inline: inline })
+            }
+            members.insert(name.clone(), entry)
+        }
+    }
+    let mut holds: collections::BTreeMap[String, collections::BTreeSet[String]] = collections::BTreeMap()
+    for (name, fields) in members {
+        let mut all: collections::BTreeSet[String] = collections::BTreeSet()
+        for f in fields {
+            all.extend(f.inline.clone())
+        }
+        holds.insert(name.clone(), all)
+    }
+    for (name, fields) in members {
+        for f in fields {
+            let mut back = false
+            for held in f.inline {
+                if held == name || item_reaches(held, name, holds) {
+                    back = true
                 }
-                if back {
+            }
+            if back {
+                let mut set = item_boxed_set(boxed, name)
+                set.insert(f.member.clone())
+                boxed.insert(name.clone(), set)
+            }
+        }
+    }
+}
+
+impl CheckState {
+    /// **The members each type of the program holds itself through**
+    /// (`item_contain_themselves`, ADR-246 D1), this file's and the ones
+    /// beside it; worked out once for the package where the check was
+    /// handed it (#2685).
+    fn types_that_contain_themselves(ref mut self, world: ref CheckWorld) {
+        match world.package {
+            null => {
+                let mut files: Vec[ParsedView] = [world.here.clone()]
+                for other in world.beside {
+                    files.push(other.clone())
+                }
+                item_contain_themselves(files, self.facts.boxed_members)
+            },
+            given => {
+                for (name, members) in given.boxed_members {
                     let mut set = item_boxed_set(self.facts.boxed_members, name)
-                    set.insert(f.member.clone())
+                    set.extend(members.clone())
                     self.facts.boxed_members.insert(name.clone(), set)
                 }
-            }
+            },
         }
     }
 }

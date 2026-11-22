@@ -22,7 +22,7 @@ pub(crate) fn main_option_word(name: &str) -> String { nikaia_std::block::Text::
 impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn main_parameters(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, item: &Item, span: &Span) {
+    pub fn main_parameters(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, item: &Item, span: &Span) {
         match item {
             Item::Fn { name, receiver, args, config, .. } => {
                 let name = *name;

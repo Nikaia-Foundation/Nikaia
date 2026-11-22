@@ -84,7 +84,7 @@ impl CheckState {
     pub(crate) fn floats_beyond_f32(&mut self, value: &Expr, want: &Ty, span: &Span) { if check_floats_beyond_f32(value, want) { self.findings.push(check_refusal("NK1116", span, String::from("This number is beyond the range of an `f32`."), vec![String::from("An `f32` holds finite values up to about 3.4e38 either side of zero.")], Some(String::from("Keep it an `f64`, or write a number within the `f32` range.")))); } }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn expect_type(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, found: &Ty, want: &Ty, span: &Span, what: &str, message: &mut impl FnMut(&str, &str) -> String) {
+    pub(crate) fn expect_type(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, found: &Ty, want: &Ty, span: &Span, what: &str, message: &mut impl FnMut(&str, &str) -> String) {
         if found.is_unknown() { self.literal_receivers_take(want); }
         if self.fits_through_deref(world, found, want) { return; }
         if text_as_a_path(found, want) >= 0 { return; }
@@ -153,7 +153,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn a_view_copied_out(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, found: &Ty, want: &Ty, value: Option<&Expr>) -> bool {
+    pub(crate) fn a_view_copied_out(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, found: &Ty, want: &Ty, value: Option<&Expr>) -> bool {
         let given = match value { Some(__nikaia_value) => __nikaia_value, None => return false };
         let named = matches!(given, Expr::Variable(_, _));
         if !named || !self.a_view_that_copies(world, found) { return false; }
@@ -178,7 +178,7 @@ impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    pub(crate) fn expect_kept(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, found: &Ty, want: &Ty, value: Option<&Expr>, keeper: &str, span: &Span, what: &str, message: &mut impl FnMut(&str, &str) -> String) {
+    pub(crate) fn expect_kept(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, found: &Ty, want: &Ty, value: Option<&Expr>, keeper: &str, span: &Span, what: &str, message: &mut impl FnMut(&str, &str) -> String) {
         if value.is_some() {
             let given = match value { Some(__nikaia_value) => __nikaia_value, None => return };
             if check_float_literal_fits(given, want) {
@@ -218,7 +218,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn a_view_kept_beside(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, found: &Ty, want: &Ty, value: Option<&Expr>, keeper: &str) {
+    pub(crate) fn a_view_kept_beside(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, found: &Ty, want: &Ty, value: Option<&Expr>, keeper: &str) {
         let mut named: Option<String> = None;
         if value.is_some() {
             let given = match value { Some(__nikaia_value) => __nikaia_value, None => return };

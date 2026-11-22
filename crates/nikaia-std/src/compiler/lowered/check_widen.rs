@@ -299,7 +299,7 @@ pub(crate) fn two_integer_types_for_one_variable(key: &str, variable: &str, boun
 impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn one_type_variable_two_integer_types(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, key: &str, wanted: &[(String, Ty)], given: &[Expr], found: &[Ty], span: &Span) {
+    pub(crate) fn one_type_variable_two_integer_types(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, key: &str, wanted: &[(String, Ty)], given: &[Expr], found: &[Ty], span: &Span) {
         #[allow(unused_mut)] let mut variables: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         #[allow(unused_mut)] let mut types: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block); #[allow(unused_mut, clippy::redundant_locals)] let mut variables = variables;
         let mut places: Vec<i64> = nikaia_std::block::list(nikaia_std::block::Place::Block);

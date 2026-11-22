@@ -628,8 +628,9 @@ fn check_tools_file(
     library: &crate::contracts::Ledger,
     packages: &BTreeSet<String>,
     within_std: bool,
+    package: Option<&crate::check::PackageFacts>,
 ) -> crate::check::Checked {
-    let mut checked = crate::check::check_against(
+    let mut checked = crate::check::check_against_in(
         unit,
         beside,
         own,
@@ -637,6 +638,7 @@ fn check_tools_file(
         packages,
         &crate::check::Newly::default(),
         &crate::assets::Reads::none(),
+        package,
     );
     if within_std {
         crate::check::refuse_assumes_in_std(&mut checked);
@@ -682,6 +684,8 @@ pub fn bounds_tools(
     for (name, ledger) in theirs {
         own.absorb(Some(&name), ledger);
     }
+    // **What every file check reads alike, made once** (#2685).
+    let facts = crate::check::PackageFacts::of(&units, &own, &library);
     let report_one = |at: usize| -> String {
         let beside: Vec<&crate::parser::Parsed> = parsed
             .iter()
@@ -696,6 +700,7 @@ pub fn bounds_tools(
             &library,
             &packages,
             manifest.within_std,
+            facts.as_ref(),
         );
         let path = paths[at].display().to_text();
         let refused = checked
@@ -827,6 +832,9 @@ fn lower_package(
     let views: Vec<_> = parsed.iter().map(crate::check::parsed_view_of).collect();
     let graphs = nikaia_std::compiler::emit_contracts::emit_contracts_package_graphs(&views, &own);
     timer.lap("graphs");
+    // **What every file check reads alike, made once** (#2685), by the first
+    // file the cache does not answer.
+    let facts: std::sync::OnceLock<Option<crate::check::PackageFacts>> = std::sync::OnceLock::new();
 
     // **Each file's declarations and the package's tables, by name** (#1909):
     // a file's key reads what its text names of them (`sysroot_named_key`),
@@ -909,6 +917,9 @@ fn lower_package(
             &library,
             &packages,
             manifest.within_std,
+            facts
+                .get_or_init(|| crate::check::PackageFacts::of(&units, &own, &library))
+                .as_ref(),
         );
         let refusals: Vec<&crate::check::Finding> = checked
             .findings

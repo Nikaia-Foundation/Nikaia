@@ -14,14 +14,14 @@ impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[inline(never)]
-    pub(crate) fn crosses_into_a_task(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, body: &Expr, span: &Span) {
+    pub(crate) fn crosses_into_a_task(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, body: &Expr, span: &Span) {
         let mut named: collections::BTreeSet<String> = collections::BTreeSet::new();
         names_in(body, world.words, &mut named);
         for name in named.iter() { self.a_name_crosses(world, name, span); }
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn a_name_crosses(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, name: &str, span: &Span) {
+    pub(crate) fn a_name_crosses(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, name: &str, span: &Span) {
         let ty = match self.lookup(name) { Some(__nikaia_value) => __nikaia_value, None => return };
         let verdict = crossing(&ty, &Walking { own: world.own, library: world.library, into: Going::Ours });
         if verdict.refused_part().is_none() { return; }
@@ -32,7 +32,7 @@ impl CheckState {
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
     #[inline(never)]
-    pub fn crosses_into_an_unseen_call(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, callee: &str, args: &[Expr], found: &[Ty], config: &[ConfigArg], passed: &[(String, Ty)], span: &Span, why: &str) {
+    pub fn crosses_into_an_unseen_call(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, callee: &str, args: &[Expr], found: &[Ty], config: &[ConfigArg], passed: &[(String, Ty)], span: &Span, why: &str) {
         let mut at: i64 = 0;
         while at < args.len() as i64 && at < found.len() as i64 {
             let (what, path) = names_the_argument(world, nikaia_std::index::get(&args, nikaia_std::index::at(at)), at);
@@ -51,7 +51,7 @@ impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    pub(crate) fn a_value_crosses(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, callee: &str, what: &str, path: Option<&str>, ty: &Ty, span: &Span, why: &str) {
+    pub(crate) fn a_value_crosses(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, callee: &str, what: &str, path: Option<&str>, ty: &Ty, span: &Span, why: &str) {
         let verdict = crossing(ty, &Walking { own: world.own, library: world.library, into: Going::Foreign });
         if verdict.refused_part().is_none() { return; }
         if a_lock_refusal(&verdict) {
