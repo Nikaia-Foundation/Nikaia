@@ -2,11 +2,12 @@
 // test's own `.stdin`, a framed transcript: `initialize`, `initialized`, a
 // notification and a request it does not know, `shutdown`, `exit`. What it
 // writes is the framed answers, and it ends with 0 after a `shutdown`.
+use std::env
 use std::io
 use std::process
 
 fn toolchain() -> String throws {
-    let exe = process::run("sh", ["-c", "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\""]).stdout.trim().clone()
+    let exe = env::current_exe()?.display() ?? ""
     if exe.len() > 0 { return exe }
     return "target/fast/nikaia"
 }

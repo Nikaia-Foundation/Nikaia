@@ -3,11 +3,12 @@
 // as `--tethers` prints it: the grown cut `rest` takes the buffer of `line`,
 // and `t = t.replace(..)` works in the buffer of `t`. A range that holds
 // neither line answers an empty list; `initialize` offers the hints.
+use std::env
 use std::fs
 use std::process
 
 fn toolchain() -> String throws {
-    let exe = process::run("sh", ["-c", "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\""]).stdout.trim().clone()
+    let exe = env::current_exe()?.display() ?? ""
     if exe.len() > 0 { return exe }
     return "target/fast/nikaia"
 }
