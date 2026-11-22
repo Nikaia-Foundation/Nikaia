@@ -87,7 +87,7 @@ pub fn reaches_a_thread(from: &str, calls: &collections::BTreeMap<String, Vec<St
     #[allow(unused_mut)] let mut queue: Vec<String> = nikaia_std::block::List::from_array_in([nikaia_std::block::Text::from(from.to_string())], nikaia_std::block::Place::Block);
     let mut ways: Vec<Vec<String>> = nikaia_std::block::List::from_array_in([vec![]], nikaia_std::block::Place::Block); #[allow(unused_mut, clippy::redundant_locals)] let mut queue = queue;
     seen.insert(nikaia_std::block::Text::from(from.to_string()));
-    let mut next: i64 = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut queue = queue;
+    let mut next: i64 = 0;
     while ((next) as usize) < queue.len() {
         let at = nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&queue, (next) as usize) }).to_string());
         let how = (*nikaia_std::index::get(&ways, (next) as usize)).copy_owned();

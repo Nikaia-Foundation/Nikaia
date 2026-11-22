@@ -81,8 +81,8 @@ pub(crate) fn result_from_of_code(names: &winnow_grammar::InternerContext, ty: &
     let code = match (*ty.code).as_ref() { Some(__nikaia_value) => __nikaia_value, None => return None };
     if code.result_from.is_empty() { return None; }
     #[allow(unused_mut)] let mut parameters: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-    #[allow(unused_mut)] let mut shown: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block); #[allow(unused_mut, clippy::redundant_locals)] let mut parameters = parameters;
-    let mut at: i64 = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut parameters = parameters; #[allow(unused_mut, clippy::redundant_locals)] let mut shown = shown;
+    let mut shown: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block); #[allow(unused_mut, clippy::redundant_locals)] let mut parameters = parameters;
+    let mut at: i64 = 0;
     shown.reserve(ty.generics.iter().size_hint().0); for parameter in ty.generics.iter() {
         let mut text = written_type(names, parameter);
         let written: Option<winnow_grammar::Symbol> = if ((at) as usize) < code.param_names.len() { *unsafe { nikaia_std::proven::read(&code.param_names, (at) as usize) } } else { None };

@@ -228,7 +228,7 @@ pub fn read(written: &str) -> Result<Ledger, nikaia_std::error::Thrown<Refused>>
         Ok(value) => value,
         Err(error) => { return Err(nikaia_std::error::throwing(Refused::Because(format!("{}", error)), &"read")) },
     };
-    let mut n: i64 = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut traits = traits; #[allow(unused_mut, clippy::redundant_locals)] let mut functions = functions;
+    let mut n: i64 = 0;
     for one in lines.iter() {
         n = unsafe { nikaia_std::proven::add::<i64>(n, 1) };
         match one {
@@ -1058,7 +1058,7 @@ pub struct Spelled {
 pub fn spell(text: &str, key: &str, borrows: &[String], mutates: bool) -> Spelled {
     let c: Vec<scalar> = nikaia_std::list::scalars(text.trim().chars());
     #[allow(unused_mut)] let mut declared: Vec<String> = vec![];
-    let mut open: i64 = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut declared = declared;
+    let mut open: i64 = 0;
     if !c.is_empty() && *unsafe { nikaia_std::proven::read(&c, (0) as usize) } == '[' {
         let close = matching(&c, 1, '[', ']');
         if close < 0 { return as_written(text); }

@@ -112,7 +112,7 @@ pub(crate) fn emit_rust_crossing_tuple(parts: &[Ty], toward: bool, depth: i64) -
     #[allow(unused_mut)] let mut names: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     #[allow(unused_mut)] let mut made: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block); #[allow(unused_mut, clippy::redundant_locals)] let mut names = names;
     let mut any = false;
-    let mut k = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut names = names; #[allow(unused_mut, clippy::redundant_locals)] let mut made = made;
+    let mut k = 0;
     names.reserve(parts.iter().size_hint().0); for part in parts.iter() {
         let name = format!("t{}_{}", depth, k);
         k = k + 1;
@@ -915,8 +915,8 @@ impl EmitState {
 }
 
 pub(crate) fn emit_arg_passing(names: &[String], lent: &[i64]) -> String {
-    #[allow(unused_mut)] let mut passed: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-    let mut at: i64 = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut passed = passed;
+    let mut passed: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
+    let mut at: i64 = 0;
     for name in names.iter() {
         if ((at) as usize) < lent.len() && *unsafe { nikaia_std::proven::read(&lent, (at) as usize) } == 1 { passed.push(format!("&{}", name)); } else if ((at) as usize) < lent.len() && *unsafe { nikaia_std::proven::read(&lent, (at) as usize) } == 2 { passed.push(format!("*{}", name)); } else { passed.push(nikaia_std::block::Text::from(name.to_string())); }
         at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };

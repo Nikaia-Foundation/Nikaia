@@ -1,0 +1,21 @@
+// A `@stream` call held in a name and passed on (here to `count`) keeps the
+// parser's thread, which owns a copy of the input and hands its items over a
+// channel (ADR-grammar-typed-read-v1 D7, #2708). Items that view the input
+// (`Item { word: w }`, ADR-views-v4 D5) cannot cross it, so the use is
+// NK1359, naming the use and "The other methods of a `@stream` walk" (#2709).
+// A stream is never handed back from a function: no program writes `Seq[T]`
+// (ADR-105 D4).
+
+struct Item {
+	word: String,
+}
+
+grammar Words {
+	@stream entry rule items -> Item = item*
+	rule item -> Item = "[" w:until("]") "]" ";" -> { Item { word: w } }
+}
+
+fn main() throws {
+	let held = Words::items("[c];")
+	println(held.count())
+}

@@ -1,0 +1,46 @@
+// A view of a lent parameter stored into a `mut` parameter keeps nothing
+// (ADR-views-v4 D32, #2425): an element pushed, an element set and a value
+// inserted. Each function's `s` is inferred lent, not `keep`, the
+// elements view the caller's text while the `mut` argument lives, and
+// nothing is copied: `put` lowers to `fn put<'a>(s: &'a str, out: &mut
+// Vec<E<'a>>)`.
+use std::collections
+
+struct E {
+	v: String,
+}
+
+fn put(s: String, mut out: Vec[E]) {
+	out.push(E { v: s })
+}
+
+fn replace(s: String, mut out: Vec[E]) {
+	out[0] = E { v: s }
+}
+
+fn add(k: i64, s: String, mut m: collections::BTreeMap[i64, E]) {
+	m.insert(k, E { v: s })
+}
+
+fn make(text: String) -> String {
+	let mut g = String()
+	g.push_str(text)
+	return g
+}
+
+fn main() throws {
+	let words = [make("abc"), make("def"), make("ghi")]
+	let mut out: Vec[E] = []
+	for w in words {
+		put(w, out)
+	}
+	replace(words[2], out)
+	println(f"{out[0].v} {out[1].v} {out[2].v}")
+	let mut m: collections::BTreeMap[i64, E] = collections::BTreeMap()
+	let mut k = 0
+	for w in words {
+		add(k, w, m)
+		k += 1
+	}
+	println(f"{m[0]?.v ?? ""} {m[2]?.v ?? ""}")
+}

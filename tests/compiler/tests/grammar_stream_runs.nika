@@ -1,6 +1,6 @@
 // An entry marked `@stream` hands its items over one at a time (ADR-grammar-typed-read-v1
-// D7, amended 2026-11-08, #1442): a `for` takes each item owned, so it
-// outlives the loop, a `break` stops the walk, and the call held in a name is
+// D7, amended 2026-11-08, #1442): a `for` lends each item from the input
+// (#2708), so one kept past the loop is a copy, a `break` stops the walk, and the call held in a name is
 // the same sequence, walked once. The repetition may sit between other
 // patterns.
 
@@ -31,7 +31,7 @@ fn main() throws {
 		if it.word == "stop" {
 			break
 		}
-		kept.push(it)
+		kept.push(it.clone())
 	}
 	for k in kept {
 		println(k.word)

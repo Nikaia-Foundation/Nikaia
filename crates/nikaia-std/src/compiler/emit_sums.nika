@@ -361,6 +361,31 @@ impl EmitState {
                 out.push(f"            {name}::{variant}(e) => {held},\n")
             }
             out.push("        }\n    }\n}\n\n")
+            // **A narrower sum widens into this one** (Part I 7.1): a call
+            // whose callee fails in some of this sum's members, two or more,
+            // hands its failure on with `?`, member for member. Neither may
+            // carry a view (one lifetime per sum, ADR-283 D1).
+            if !borrows {
+                for (narrower, small) in self.sums {
+                    if narrower.len() >= members.len() || (self.is_std && !self.sums_written.contains(small)) {
+                        continue
+                    }
+                    let mut inside = true
+                    for member in narrower {
+                        if !members.contains(member) || self.borrows_named(world, member) {
+                            inside = false
+                        }
+                    }
+                    if inside {
+                        let mut cases: String = ""
+                        for member in narrower {
+                            let variant = sum_variant(member)
+                            cases = f"{cases}            {small}::{variant}(e) => {name}::{variant}(e),\n"
+                        }
+                        out.push(f"impl From<{small}> for {name} {{\n    fn from(error: {small}) -> {name} {{\n        match error {{\n{cases}        }}\n    }}\n}}\n\n")
+                    }
+                }
+            }
             // **A box holding the sum is opened through it** (#1372): the
             // sum hands its member to `holds`, `opened` and `handed`, which
             // cannot name its type. Only a sum without lifetime parameters

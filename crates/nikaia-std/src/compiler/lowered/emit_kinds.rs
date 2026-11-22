@@ -213,10 +213,11 @@ pub struct EmitFlow {
     pub in_loop: bool,
     pub breaks_to: i64,
     pub subject_copies: bool,
+    pub returns_out: bool,
 }
 
 impl EmitFlow {
-    pub fn plain() -> EmitFlow { EmitFlow { can_throw: false, caught: false, caught_named: false, in_a_place: false, arms_are_statements: false, statement: -1, handled_here: false, in_lambda: false, widen: false, inferred: false, in_loop: false, breaks_to: -1, subject_copies: false } }
+    pub fn plain() -> EmitFlow { EmitFlow { can_throw: false, caught: false, caught_named: false, in_a_place: false, arms_are_statements: false, statement: -1, handled_here: false, in_lambda: false, widen: false, inferred: false, in_loop: false, breaks_to: -1, subject_copies: false, returns_out: false } }
     pub(crate) fn inside_a_loop(self) -> EmitFlow { EmitFlow { in_loop: true, ..self } }
     pub fn guarded(self) -> EmitFlow { EmitFlow { caught: true, ..self } }
     pub(crate) fn joined_here(self) -> EmitFlow { EmitFlow { caught: true, handled_here: true, ..self } }

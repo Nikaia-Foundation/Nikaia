@@ -578,8 +578,8 @@ pub(crate) fn cx_handled_structs(words: &winnow_grammar::InternerContext, items:
                             pattern = format!("{}(..)", path);
                             let mut at: i64 = 0;
                             fields.reserve(types.iter().size_hint().0); for field in types.iter() {
-                                #[allow(unused_mut)] let mut places: Vec<&'static str> = vec![];
-                                let mut other: i64 = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut places = places;
+                                let mut places: Vec<&'static str> = vec![];
+                                let mut other: i64 = 0;
                                 while ((other) as usize) < types.len() {
                                     if other == at { places.push("__nikaia_v"); } else { places.push("_"); }
                                     other = unsafe { nikaia_std::proven::add::<i64>(other, 1) };

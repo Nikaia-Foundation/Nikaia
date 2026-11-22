@@ -125,7 +125,7 @@ pub fn bases(export: &Export) -> Vec<String> {
 
 pub fn split_top_level(text: &str) -> Vec<String> {
     #[allow(unused_mut)] let mut out: Vec<String> = vec![];
-    let mut depth = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut out = out;
+    let mut depth = 0;
     let mut current: String = String::from(""); #[allow(unused_mut, clippy::redundant_locals)] let mut out = out;
     for c in text.chars() {
         if c == '<' || c == '(' || c == '[' { depth += 1; } else if c == '>' || c == ')' || c == ']' { depth -= 1; } else if c == ',' && depth == 0 {
