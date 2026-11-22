@@ -1360,6 +1360,21 @@ impl EmitState {
                 return
             }
         }
+        // **A list of text searched by halving for a view of text** (#2389),
+        // as `contains` above: the elements compared as text, which a
+        // `String`, a `str` and a `&str` element can be, and the position
+        // or `null` as below (Part I 4.5).
+        if receiver != null && name == "binary_search" && args.len() == 1 {
+            let list = receiver ?? return
+            if self.facts.text_in_lists.contains(node_key(list)) {
+                out.push("{ let items = &")
+                self.emit_expr(world, walk, out, host, list, depth, flow, scope)
+                out.push("; let at: &str = &")
+                self.emit_expr(world, walk, out, host, args[0], depth, flow, scope)
+                out.push("; items.binary_search_by(|item| ::core::convert::AsRef::<str>::as_ref(item).cmp(at)) }.ok().map(|at| at as i64)")
+                return
+            }
+        }
         // **Formatted text appended is formatted into the text** (#2382):
         // `s.push_str(f"…{x}…")` writes into `s`, without the `String` a
         // `format!` would make, copy from and drop.

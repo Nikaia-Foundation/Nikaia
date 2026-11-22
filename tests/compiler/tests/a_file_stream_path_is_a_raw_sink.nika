@@ -1,0 +1,37 @@
+// ADR-243 D11, ADR-raw-sinks-1 D11 (#2748): the path of
+// `process::Stream::File` is opened by the program for writing, under no
+// root, so one from outside is `NK1308` unless `[allow]
+// untrusted-paths-write` admits it; a literal path and a guarded name joined
+// after a literal directory pass.
+use std::env
+use std::fs
+use std::process
+
+fn toolchain() -> String throws {
+	return env::current_exe()?.display() ?? "target/fast/nikaia"
+}
+
+fn said(nikaia: String, label: String, manifest: String, body: String) throws {
+	let root = fs::scratch()
+	let tmp = f"{root.path().display()}"
+	fs::create_dir("src", root)
+	fs::write("nikaia.toml", root, f"[package]\nname = \"p\"\nversion = \"0.1.0\"\n{manifest}")
+	fs::write("src/main.nika", root, f"use std::io\nuse std::path\nuse std::process\n\nfn main() throws {{\n    let name = io::read_line() ?? \"\"\n{body}}}\n")
+	let out = process::run(nikaia, ["check", "src/main.nika"]; dir: tmp.clone(), env: [("RUST_BACKTRACE", "0")])
+	println(f"-- {label}")
+	println(f"exit {out.code}")
+	for line in f"{out.stdout}{out.stderr}".lines() {
+		if line.contains("NK1308") || line.contains(" --> ") {
+			println(line.replace(tmp, "TMP").trim())
+		}
+	}
+}
+
+fn main() throws {
+	let nikaia = toolchain()
+	said(nikaia, "stdin names the file of run", "", "    process::run(\"true\", []; stdout: process::Stream::File(name))\n")
+	said(nikaia, "stdin names the file of spawn", "", "    process::spawn(\"true\", []; stderr: process::Stream::File(f\"{name}.log\"))\n")
+	said(nikaia, "a literal file", "", "    process::run(\"echo\", [\"./\" + name]; stdout: process::Stream::File(\"out.txt\"))\n")
+	said(nikaia, "a guarded name under a literal directory", "", "    if !path::is_component(name) {\n        return\n    }\n    process::run(\"true\", []; stdout: process::Stream::File(f\"/tmp/logs/{name}\"))\n")
+	said(nikaia, "[allow] untrusted-paths-write", "[allow]\nuntrusted-paths-write = true\n", "    process::run(\"true\", []; stdout: process::Stream::File(name))\n")
+}

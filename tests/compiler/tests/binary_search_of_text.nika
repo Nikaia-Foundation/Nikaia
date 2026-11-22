@@ -1,0 +1,38 @@
+// A list of text searched by halving for a text (#2389): the key a literal,
+// a view and an owned `String`, the list a literal one and one of owned
+// text. Part I 4.5: the position of an equal element, or `null`.
+fn make(s: String) -> String {
+    let mut g = String()
+    g.push_str(s)
+    return g
+}
+
+struct Named {
+    name: String,
+}
+
+fn main() throws {
+    let mut v: Vec[String] = ["b", "a", "c"]
+    v.sort()
+    let r = v.binary_search("b")
+    println(f"{v.len()}")
+    match r {
+        i => println(f"{i}"),
+        null => println("no"),
+    }
+    let k = "c"
+    println(f"{v.binary_search(k) ?? -1}")
+    println(f"{v.binary_search("z") ?? -1}")
+    let mut w: Vec[String] = []
+    w.push(make("b"))
+    w.push(make("a"))
+    w.sort()
+    println(f"{w.binary_search("b") ?? -1}")
+    let kk = make("a")
+    println(f"{w.binary_search(kk) ?? -1}")
+    let e = Named { name: make("c") }
+    println(f"{v.binary_search(e.name) ?? -1}")
+    let mut n: Vec[i64] = [3, 1, 2]
+    n.sort()
+    println(f"{n.binary_search(2) ?? -1}")
+}

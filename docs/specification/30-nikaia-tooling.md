@@ -1,6 +1,6 @@
 # Nikaia Language Specification
 **Part III: Tooling, Ecosystem & Interoperability**
-**Version:** 0.0.1546 (Draft)
+**Version:** 0.0.1547 (Draft)
 **Date:** 2026-11-22
 
 ---
@@ -1764,7 +1764,26 @@ Some modules are available, or behave restrictively, depending on the target and
   process::Stream = process::Stream::Captured` each say where that stream
   goes: `Captured` into `Output` as text, or `Inherited`, the caller's own
   stream, which the program writes as it runs; an inherited stream is `""` in
-  `Output`. `within` bounds a run with inherited streams too.
+  `Output`. `within` bounds a run with inherited streams too. A stream may
+  also be `Discarded`, the null device, or `File(path)`, a file created or
+  truncated before the program starts (ADR-243 D11); either is `""` in
+  `Output`. A file that cannot be opened starts nothing and throws the
+  `io::IoError` naming its path. The path is read from the caller's working
+  directory, not from `dir`, and it is a raw sink like every path the program
+  opens for writing ([ADR-raw-sinks-1](adr/adr-raw-sinks-1.md) D11): one from
+  outside is refused, `NK1308`, unless `[allow] untrusted-paths-write` admits
+  it.
+  **A program started and not waited for** (ADR-243 D11):
+  `process::spawn(program, args)` starts it and hands back a
+  `process::Child` at once. It takes `run`'s options but `within` (`dir`,
+  `env`, `env_remove`, `env_clear`, `stdin`, `stdout`, `stderr`), with the
+  same defaults and rules, so the same call starts the same child.
+  `child.id()` is its process id, an `i64`; `try_wait()` its exit code once it
+  has ended, `kill()` ends it, `wait()` waits and hands back its `Output`, its
+  captured streams read lossily. A spawned program outlives the caller:
+  neither dropping the `Child` nor the caller's end stops it. Its captured
+  streams are read only while the caller runs, so one that should outlive it
+  takes `Discarded`, `File` or `Inherited` streams.
   `process::exit(code)` throws `process::Exit(code)`, a fatal error
   (Part I 7.1), with `code` an `i64` from `0` to `255`; it never returns a
   value, and a function that calls it says `throws`

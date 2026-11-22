@@ -1189,8 +1189,12 @@ impl EmitState {
             out.push(f"; Ok::<_, {boxed}>(__nikaia_value) }}).await")
         } else if nested {
             guarded = guarded with { breaks_to: at }
+            // **A dropped value is a statement** (#2608): wrapped in `Ok(…)`,
+            // a call that hands `()` is reported as `clippy::unit_arg`.
             if a_block {
                 out.push(f"'__nikaia_caught_{at}: {{ let __nikaia_value = ")
+            } else if dropped {
+                out.push(f"'__nikaia_caught_{at}: {{ ")
             } else {
                 out.push(f"'__nikaia_caught_{at}: {{ Ok::<_, std::boxed::Box<dyn std::error::Error>>(")
             }
@@ -1210,6 +1214,8 @@ impl EmitState {
         }
         if nested && a_block && !bound_here {
             out.push("; Ok::<_, std::boxed::Box<dyn std::error::Error>>(__nikaia_value) }")
+        } else if nested && dropped && !bound_here {
+            out.push("; Ok::<_, std::boxed::Box<dyn std::error::Error>>(()) }")
         } else if nested && !bound_here {
             out.push(") }")
         }

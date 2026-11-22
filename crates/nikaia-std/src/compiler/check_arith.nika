@@ -96,12 +96,13 @@ impl CheckState {
     }
 
     /// **`NK1286`: an environment entry no platform accepts, written as a
-    /// literal in a `process::run` call** (ADR-243 D7). A name in `env` or
+    /// literal in a `process::run` or `process::spawn` call** (ADR-243 D7,
+    /// D11). A name in `env` or
     /// `env_remove` that is empty or holds `=` or a NUL, and a value in `env`
     /// that holds a NUL, is refused where it is written; one the program
     /// computes is `run`'s to refuse when it is called.
     fn an_environment_entry_invalid[H: CheckHost](ref mut self, world: ref CheckWorld, host: ref H, key: ref String, config: ref Vec[ConfigArg], span: ref Span) sync {
-        if key != "process::run" {
+        if key != "process::run" && key != "process::spawn" {
             return
         }
         for option in config {

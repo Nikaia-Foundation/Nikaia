@@ -1,0 +1,82 @@
+// #2608, ADR-platform-layer-v1 D5: the outer build chooses the directory
+// Cargo builds in, and sweeps the programs of gone projects out of the shared
+// one, in Nikaia (`project_drive_target_dir`, `project_drive_sweep_programs`).
+// Through a Cargo that records `--target-dir` and `NIKAIA_TARGET_DIR` and
+// builds nothing: a shared build, a gone project's program in the shared
+// tree swept by the next one, and a build that asked for its own directory
+// with a relative `CARGO_TARGET_DIR`.
+use std::env
+use std::fs
+use std::process
+
+fn toolchain() -> String throws {
+	let exe = env::current_exe()?.display() ?? ""
+	if exe.len() == 0 {
+		eprintln("no running nikaia among this program's ancestors: run it with `nikaia test` (#1305)")
+		process::exit(2)
+	}
+	return exe
+}
+
+/// What the shim recorded since the last call, and the log emptied.
+fn recorded(log: String) -> String throws {
+	let said = process::run("sh", ["-c", f"cat {log}; rm -f {log}"]).stdout.trim().clone()
+	return said
+}
+
+fn shown(said: String, at: String) -> String {
+	return said.replace(f"{at}/cache", "CACHE").replace(at, "TMP")
+}
+
+fn there(path: String) -> String throws {
+	return process::run("sh", ["-c", f"test -e {path} && echo yes || echo no"]).stdout.trim().clone()
+}
+
+fn main() throws {
+	let tmp = fs::scratch()
+	let at = tmp.path().to_text()
+	let nikaia = toolchain()
+	process::run("mkdir", ["-p", f"{at}/p/src", f"{at}/bin"])
+	let shim = tmp.join("bin/cargo")
+	fs::write("bin/cargo", tmp, SHIM)
+	process::run("chmod", ["+x", shim.path().to_text()])
+	let log = f"{at}/cargo.log"
+	let p = tmp.join("p")
+	fs::write("nikaia.toml", p, "[package]\nname = \"aimed\"\nversion = \"0.1.0\"\n")
+	fs::write("src/main.nika", p, "fn main() throws {\n\tprintln(\"built\")\n}\n")
+	let env = [
+		("RUST_BACKTRACE", "0"),
+		("CARGO_TERM_COLOR", "never"),
+		("NIKAIA_CACHE_DIR", f"{at}/cache"),
+		("CARGO", shim.path().to_text()),
+		("SHIM_LOG", log.clone()),
+	]
+
+	process::run(nikaia, ["build"]; dir: p.path().to_text(), env: env.clone())
+	let rlib = process::run("cat", [f"{log}.dir"]).stdout.trim().clone()
+	println(f"shared: {recorded(log).replace(rlib, "CACHE/rlib/KEY")}")
+	let in_rlib = rlib.starts_with(f"{at}/cache/rlib/")
+	println(f"in the cache's rlib tree: {in_rlib}")
+	println(f"this project recorded: {there(f"{rlib}/.nikaia-projects")}")
+
+	// A project whose root is gone left its program in the shared tree.
+	process::run("mkdir", ["-p", f"{rlib}/debug/deps", f"{rlib}/debug/build/gone_deadbeef/1"])
+	process::run("sh", ["-c", f"echo {at}/no-such-project > {rlib}/.nikaia-projects/deadbeef"])
+	process::run("touch", [f"{rlib}/debug/deps/libgone_deadbeef.rlib", f"{rlib}/debug/gone-deadbeef", f"{rlib}/debug/deps/liblive_cafe.rlib"])
+	process::run(nikaia, ["build"]; dir: p.path().to_text(), env: env.clone())
+	recorded(log)
+	println(f"gone project's library: {there(f"{rlib}/debug/deps/libgone_deadbeef.rlib")}")
+	println(f"gone project's program: {there(f"{rlib}/debug/gone-deadbeef")}")
+	println(f"gone project's build directory: {there(f"{rlib}/debug/build/gone_deadbeef")}")
+	println(f"gone project's record: {there(f"{rlib}/.nikaia-projects/deadbeef")}")
+	println(f"another crate: {there(f"{rlib}/debug/deps/liblive_cafe.rlib")}")
+
+	let mut own = env
+	own.push(("CARGO_TARGET_DIR", "own"))
+	process::run(nikaia, ["build"]; dir: p.path().to_text(), env: own)
+	println(f"CARGO_TARGET_DIR=own: {shown(recorded(log), at)}")
+}
+
+// Cargo, recording for `build` the `NIKAIA_TARGET_DIR` it got and the
+// `--target-dir` (or `none`), and failing without building.
+comptime SHIM: ref String = "#!/bin/bash\ngot=none\nprev=\nfor a in \"$@\"; do\n  if [ \"$prev\" = --target-dir ]; then got=\"$a\"; fi\n  prev=\"$a\"\ndone\nif [ \"$1\" = build ]; then echo \"NIKAIA_TARGET_DIR=$NIKAIA_TARGET_DIR --target-dir=$got\" >> \"$SHIM_LOG\"; echo \"$NIKAIA_TARGET_DIR\" > \"$SHIM_LOG.dir\"; fi\nexit 3\n"

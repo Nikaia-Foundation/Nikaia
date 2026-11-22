@@ -1,0 +1,47 @@
+// #2608: a `catch` whose value is dropped, around a call whose argument can
+// fail, is lowered as a statement, not as the call's `()` handed to `Ok(…)`,
+// which `clippy::unit_arg` refuses in the lowered compiler. Run, the failure
+// of the argument still reaches the handler; lowered, no `()` is wrapped.
+use std::env
+use std::fs
+use std::process
+
+enum Refused {
+	Said(String),
+}
+
+impl Error for Refused {
+	fn message(ref self) -> String {
+		return match self {
+			Refused::Said(why) => why.clone(),
+		}
+	}
+}
+
+fn make(fail: bool) -> String throws {
+	if fail {
+		throw Refused::Said("no")
+	}
+	return "made"
+}
+
+fn log(text: String) throws {
+	println(f"log {text}")
+}
+
+fn main() throws {
+	log(make(false)) catch {}
+	log(make(true)) catch { println("caught") }
+	println("went on")
+
+	let nikaia = env::current_exe()?.display() ?? ""
+	let tmp = fs::scratch()
+	fs::write("c.nika", tmp, SNIPPET)
+	let at = tmp.path().to_text()
+	process::run(nikaia, ["lower", "c.nika"]; dir: at)
+	let lowered = fs::read_to_string("c.rs", tmp)
+	let wrapped = lowered.contains("Error>>(match log(")
+	println(f"the dropped call lowered as a statement: {!wrapped && lowered.contains("match log(")}")
+}
+
+comptime SNIPPET: ref String = "enum Refused {\n\tSaid(String),\n}\n\nimpl Error for Refused {}\n\nfn make() -> String throws {\n\tthrow Refused::Said(\"no\")\n}\n\nfn log(text: String) throws {\n\tprintln(text)\n}\n\nfn main() throws {\n\tlog(make()) catch {}\n}\n"

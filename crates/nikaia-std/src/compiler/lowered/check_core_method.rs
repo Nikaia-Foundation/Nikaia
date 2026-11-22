@@ -348,7 +348,7 @@ pub(crate) fn check_core_method_resolved(state: &mut CheckState, world: &CheckWo
         Some(__nikaia_it) => Some(__nikaia_it.clone()),
         None => None,
     }, || "".into()).into());
-    if (callee == "Vec::contains" || callee == "Array::contains") && args.len() == 1 {
+    if (callee == "Vec::contains" || callee == "Array::contains" || callee == "Vec::binary_search") && args.len() == 1 {
         let text = match unsafe { nikaia_std::proven::read(&args, (0) as usize) } {
             Expr::Variable(_, _) => check_core_method_text_local(&state, world, unsafe { nikaia_std::proven::read(&args, (0) as usize) }),
             Expr::LitStr { .. } => true,

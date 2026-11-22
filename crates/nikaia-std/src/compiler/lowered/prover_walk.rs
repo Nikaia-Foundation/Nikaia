@@ -1151,6 +1151,12 @@ pub(crate) fn prover_filled(scope: &mut ProverScope, fills: &collections::BTreeM
     }
 }
 
+pub(crate) fn prover_whole_element(walk: &mut ProverWalk, inner: &mut ProverScope, name: &str, unsigned: bool) {
+    inner.ints.insert(nikaia_std::block::Text::from(name.to_string()));
+    inner.loose.insert(nikaia_std::block::Text::from(name.to_string()));
+    if unsigned { inner.not_negative(&mut walk.arena, name); }
+}
+
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn prover_for(walk: &mut ProverWalk, bindings: &[winnow_grammar::Symbol], mutable: bool, iter: &Expr, body: &Block, span: Span, scope: &mut ProverScope, at: &ProverWhere, nested: &ProverWhere, program: &Program, words: &winnow_grammar::InternerContext, own: &Ledger, library: &Ledger, ask: &mut dyn FnMut(&logic::TermArena, &[i64], i64) -> SolverAnswer, model: &mut dyn FnMut(&logic::TermArena, &[i64], i64) -> Option<collections::BTreeMap<String, i64>>, escape: &mut dyn FnMut(&str) -> String, holes_of: &mut dyn FnMut(&Expr) -> Vec<Expr>, unaliased: &mut dyn FnMut(&str) -> String, written_of: &mut dyn FnMut(&Expr) -> String, condition: &mut dyn FnMut(&str, &collections::BTreeSet<String>) -> Vec<logic::SolverTerm>) {
     prover_expr(walk, iter, span, &scope, nested, program, words, own, library, &mut &mut *ask, &mut &mut *model, &mut &mut *escape, &mut &mut *holes_of, &mut &mut *unaliased, &mut &mut *written_of, &mut &mut *condition);
@@ -1219,7 +1225,13 @@ pub(crate) fn prover_for(walk: &mut ProverWalk, bindings: &[winnow_grammar::Symb
         match walk.state.whole_lets.get(&(span.start as i64)) {
             None => { },
             Some(element) => {
-                if has_a_length(element) { inner.has_length(&mut walk.arena, words.resolve(*unsafe { nikaia_std::proven::read(&bindings, (0) as usize) }), None); } else {
+                if has_a_length(element) { inner.has_length(&mut walk.arena, words.resolve(*unsafe { nikaia_std::proven::read(&bindings, (0) as usize) }), None); } else if is_whole_number(element) {
+                    let unsigned = element.starts_with('u');
+                    match iter {
+                        Expr::Range { .. } => { },
+                        _ => { prover_whole_element(walk, &mut inner, words.resolve(*unsafe { nikaia_std::proven::read(&bindings, (0) as usize) }), unsigned); },
+                    }
+                } else {
                     let kind = nikaia_std::block::Text::from(element.to_string());
                     let mut not_params: collections::BTreeSet<String> = collections::BTreeSet::new();
                     prover_parameter_fields(walk, &mut inner, &mut not_params, words.resolve(*unsafe { nikaia_std::proven::read(&bindings, (0) as usize) }), &kind, false, program, words);
@@ -2091,6 +2103,13 @@ pub(crate) fn prover_raw_sink(walk: &mut ProverWalk, callee: &str, args: &[Expr]
         let sink = ParamSink { index: -1, kind: String::from("program"), sink: String::from("the program `process::run` runs"), operation: String::from(""), root_part: false, guard };
         for part in parts.iter() { raw_sink_part(walk, &sink, &sink.sink, part, span, scope, at, program, words, library, &mut *holes_of, &mut *ask, &mut *written_of); }
         if args.len() > 1 { raw_sink_options(walk, unsafe { nikaia_std::proven::read(&args, (1) as usize) }, "", span, scope, at, program, words, library, &mut *holes_of, &mut *ask, &mut *written_of); }
+    } else if callee == "process::Stream::File" && !args.is_empty() {
+        let mut parts: Vec<Expr> = vec![];
+        raw_sink_parts(unsafe { nikaia_std::proven::read(&args, (0) as usize) }, &mut *holes_of, &mut parts);
+        let mut guard = String::new();
+        if raw_sink_clean_lead(unsafe { nikaia_std::proven::read(&args, (0) as usize) }, scope, words, library, &walk.state, &mut *holes_of) { guard.push_str("path"); }
+        let sink = ParamSink { index: -1, kind: String::from("path"), sink: String::from("the file `process::Stream::File` opens for a program's output, which may name any file"), operation: String::from("write"), root_part: false, guard };
+        for part in parts.iter() { raw_sink_part(walk, &sink, &sink.sink, part, span, scope, at, program, words, library, &mut *holes_of, &mut *ask, &mut *written_of); }
     } else if callee.starts_with("fs::") && library.functions.contains_key(callee) {
         for (i, written) in args.iter().enumerate().map(|(at, item)| (at as i64, item)) {
             let mut joins: Vec<Expr> = vec![];
