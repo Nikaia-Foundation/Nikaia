@@ -11,6 +11,7 @@
 
 use std::cli
 use std::fs
+use std::path
 use std::process
 
 fn status_cap(line: String) -> String throws {
@@ -60,14 +61,15 @@ fn status_batch(dir: String) -> String throws {
 // architect's and QA's reports are not counted, as in release.nika. Without
 // released.txt, `BUMP blocked: DIR/released.txt missing` (#1111).
 fn status_bump(dir: String) -> String throws {
-    if !fs::exists(f"{dir}/released.txt", fs::Root::Anywhere) { return f"BUMP blocked: {dir}/released.txt missing" }
-    let released = fs::read_to_string(f"{dir}/released.txt", fs::Root::Anywhere)
-    let listed = process::run("ls", [dir.clone()])
+    if !fs::exists(f"{dir}/released.txt", fs::Root::Dir(".")) { return f"BUMP blocked: {dir}/released.txt missing" }
+    let released = fs::read_to_string(f"{dir}/released.txt", fs::Root::Dir("."))
+    let lane = fs::Root::Dir(".").join(dir.clone())
     let mut pending = 0
-    for name in listed.stdout.split("\n") {
+    for entry in fs::read_dir(".", lane) {
+        let name = entry.to_text()
         if !name.ends_with(".report.md") || name.starts_with("architect-") || name.starts_with("qa-") { continue }
         if released.contains(name.clone()) { continue }
-        let text = fs::read_to_string(f"{dir}/{name}", fs::Root::Anywhere)
+        let text = fs::read_to_string(name, lane)
         let changelog = status_field(text.clone(), "Changelog:")
         let word = status_field(text.clone(), "Result:").split(" ").collect()[0].trim_end_matches(".").trim_end_matches(",").clone()
         let mut accepted = false
@@ -89,6 +91,11 @@ fn main() throws {
         process::exit(2)
     }
     let dir = args[1].clone()
+    // DIR and its files lie below the working directory.
+    if !path::is_below(dir) {
+        println(f"refused: {dir} is not a relative path below the working directory")
+        process::exit(2)
+    }
     println(status_cap(status_ci()))
     println(status_cap(status_batch(dir.clone())))
     println(status_cap(status_bump(dir)))

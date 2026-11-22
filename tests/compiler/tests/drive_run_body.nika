@@ -16,12 +16,24 @@ fn root() -> String throws {
     return env::current_main()?.parent()?.parent()?.parent()?.parent()?.display() ?? "../.."
 }
 
+// A lane of this test's own under the checkout's target/drive-test/ (#2577):
+// drive opens every name under fs::Root::Dir("."), the checkout it runs in, so
+// it gets the lane's names relative to it. The scratch directory's name keeps
+// the two runs of `--both-settings` apart.
+fn test_lane(repo: String, name: String) -> String throws {
+    let id = fs::scratch().path().file_name()?.to_text() ?? "run"
+    let lane = f"target/drive-test/{name}/{id}"
+    fs::create_dir(lane, fs::Root::Dir(repo); recursive: true)
+    return lane
+}
+
 fn main() throws {
-    let tmp = fs::scratch()
     let repo = root()
+    let lane = test_lane(repo.clone(), "drive_run_body")
+    let tmp = fs::Root::Dir(f"{repo}/{lane}")
     let nikaia = toolchain()
-    let a = f"{tmp.path().to_text()}/d9-1252-run.md"
-    let b = f"{tmp.path().to_text()}/qa-task.md"
+    let a = f"{lane}/d9-1252-run.md"
+    let b = f"{lane}/qa-task.md"
     fs::write("d9-1252-run.md", tmp, "# d9\n")
     fs::write("qa-task.md", tmp, "# qa\n")
     fs::write("d9-1252-run.md.report.md", tmp, "Result: done\nTests: drive_run_body\n")
@@ -29,11 +41,14 @@ fn main() throws {
     fs::write("d9-1252-run.md.run.json", tmp, "{\"type\":\"result\",\"duration_ms\":1577409,\"num_turns\":3,\"total_cost_usd\":4.5}")
     fs::write("qa-task.md.report.md", tmp, "Result: partial (one red left)\n")
     fs::write("qa-task.md.run.json", tmp, "{\"duration_ms\":61000,\"num_turns\":12}")
-    fs::write("tokens.txt", tmp, f"{tmp.path().to_text()}/other.md 9 9 1 1 1\n{a} 1000 79 700 200 60\n")
+    // tokens.txt names a brief by its absolute path, as the driver writes it.
+    let abs = process::run("realpath", [f"{repo}/{lane}"]).stdout.trim().clone()
+    fs::write("tokens.txt", tmp, f"{abs}/other.md 9 9 1 1 1\n{abs}/d9-1252-run.md 1000 79 700 200 60\n")
     fs::write("cost.txt", tmp, "2026-11-05 4.5\n2026-11-05 0.255\n")
     for brief in [a, b] {
-        let out = process::run(nikaia.clone(), ["run", "scripts/drive.nika", "--", "--run-body", tmp.path().to_text(), brief.clone()]; dir: repo.clone())
-        print(out.stdout.replace(tmp.path().to_text(), "T"))
+        let out = process::run(nikaia.clone(), ["run", "scripts/drive.nika", "--", "--run-body", lane.clone(), brief.clone()]; dir: repo.clone())
+        print(out.stdout.replace(abs.clone(), "T").replace(f"{repo}/{lane}", "T").replace(lane.clone(), "T"))
         println("====")
     }
+    fs::remove(lane, fs::Root::Dir(repo); recursive: true)
 }

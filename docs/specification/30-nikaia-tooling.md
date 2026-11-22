@@ -1,6 +1,6 @@
 # Nikaia Language Specification
 **Part III: Tooling, Ecosystem & Interoperability**
-**Version:** 0.0.1528 (Draft)
+**Version:** 0.0.1529 (Draft)
 **Date:** 2026-11-22
 
 ---
@@ -1555,7 +1555,10 @@ pub fn create_dir(path: Path, root: Root; recursive: bool = false) throws
 pub fn remove(path: Path, root: Root; recursive: bool = false) throws
 pub fn rename(from: Path, to: Path, root: Root) throws       // both names under one root
 pub fn copy(from: Path, to: Path, root: Root) -> u64 throws
+pub fn copy_between(from: Path, from_root: Root, to: Path, to_root: Root) -> u64 throws
 ```
+
+`copy_between` copies a file from one root into another: `from` is resolved under `from_root` and `to` under `to_root`, each refused as `Outside` where it leaves its own root, and the copy keeps the file's permission bits ([ADR-platform-layer-v1](adr/adr-platform-layer-v1.md) D4, D7).
 
 `m.modified()` is the last modification as a `time::Duration` since the Unix epoch, on the wall clock `time::since_epoch()` reads, and zero where the platform does not say; `m.links()` is the number of hard links, `1` off Unix; `m.file_id()` is the device and inode as `(u64, u64)?`, the same for two names of one file, and null off Unix ([ADR-319](adr/adr-319.md), #922).
 

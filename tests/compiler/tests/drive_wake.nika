@@ -14,10 +14,22 @@ fn root() -> String throws {
     return env::current_main()?.parent()?.parent()?.parent()?.parent()?.display() ?? "../.."
 }
 
+// A lane of this test's own under the checkout's target/drive-test/ (#2577):
+// drive opens every name under fs::Root::Dir("."), the checkout it runs in, so
+// it gets the lane's names relative to it. The scratch directory's name keeps
+// the two runs of `--both-settings` apart.
+fn test_lane(repo: String, name: String) -> String throws {
+    let id = fs::scratch().path().file_name()?.to_text() ?? "run"
+    let lane = f"target/drive-test/{name}/{id}"
+    fs::create_dir(lane, fs::Root::Dir(repo); recursive: true)
+    return lane
+}
+
 fn main() throws {
     let repo = root()
+    let lane = test_lane(repo.clone(), "drive_wake")
+    let tmp = fs::Root::Dir(f"{repo}/{lane}")
     let nikaia = toolchain()
-    let tmp = fs::scratch()
     // b1 ran: its report is the one to read; b0 has none yet.
     fs::write("b1.md", tmp, "brief\n")
     fs::write("b1.md.report.md", tmp, "Result: partial\n")
@@ -39,11 +51,12 @@ fn main() throws {
         "ESCALATE focus: every area empty (drive.nika SHA)",
         "ESCALATE drive: cycle.nika failed (drive.nika SHA)",
     ]
-    let mut argv: Vec[String] = ["run", "scripts/drive.nika", "--", "--wake", tmp.path().to_text()]
+    let mut argv: Vec[String] = ["run", "scripts/drive.nika", "--", "--wake", lane.clone()]
     for l in lines { argv.push(l.clone()) }
     let out = process::run(nikaia, argv; dir: repo)
-    println(out.stdout.trim().replace(tmp.path().to_text(), "T"))
+    println(out.stdout.trim().replace(f"{repo}/{lane}", "T").replace(lane.clone(), "T"))
     // Where the lane is not known (the time limit), nothing names a file.
     let none = process::run(nikaia, ["run", "scripts/drive.nika", "--", "--wake", "", "ESCALATE CUT b1.md: Result: partial"]; dir: repo)
     println(none.stdout.trim())
+    fs::remove(lane, fs::Root::Dir(repo); recursive: true)
 }

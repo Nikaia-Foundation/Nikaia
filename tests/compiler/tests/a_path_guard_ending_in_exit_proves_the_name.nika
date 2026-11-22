@@ -1,0 +1,30 @@
+// A guard whose refusing branch ends in `process::exit(..)` proves the name
+// after it, as one that ends in `return` does (ADR-raw-sinks-1 D14, #2469):
+// `exit` throws `Exit` (ADR-345) and never comes back. So `name` joined
+// after a clean part passes a sink under `Anywhere`, for
+// `path::is_component` and `path::is_below`, and as the program
+// `process::run` runs (D10). The same name with no guard stays `NK1308`,
+// here a warning under `raw-sinks = "warn"`. The runs sit in a branch not
+// taken.
+use std::cli
+use std::fs
+use std::path
+use std::process
+
+fn main() throws {
+    let open = cli::args().nth(4) ?? "open.txt"
+    println(fs::exists(f"data/{open}", fs::Root::Anywhere))
+    let name = cli::args().nth(1) ?? "notes.txt"
+    if !path::is_component(name) { process::exit(2) }
+    println(fs::exists(f"data/{name}", fs::Root::Anywhere))
+    let below = cli::args().nth(2) ?? "notes.txt"
+    if !path::is_below(below) {
+        eprintln("not below")
+        process::exit(2)
+    }
+    println(fs::exists("data/" + below, fs::Root::Anywhere))
+    if cli::args().nth(5) != null {
+        process::run(f"./{name}", [])
+    }
+    println("checked")
+}

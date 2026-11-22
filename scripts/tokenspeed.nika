@@ -18,7 +18,9 @@
 // CALLS = API calls, READ / WRITE = cache read / cache write, OUT = output.
 
 use std::cli
+use std::env
 use std::fs
+use std::path
 use std::process
 use std::text
 
@@ -253,8 +255,8 @@ fn ts_module(first: String) -> String {
 }
 
 // One transcript; `ms == 0 && end == 0` when it holds no stamps.
-fn ts_agent(path: String, name: String, root: String) -> TsAgent throws {
-    let body = fs::read_to_string(path, fs::Root::Anywhere)
+fn ts_agent(at: fs::Root, path: String, name: String, root: String) -> TsAgent throws {
+    let body = fs::read_to_string(path, at)
     let mut stamps: Vec[i64] = []
     let mut turns = 0
     let mut ctx = 0
@@ -356,22 +358,23 @@ fn ts_agent(path: String, name: String, root: String) -> TsAgent throws {
     }
 }
 
-fn ts_agents(location: String, root: String) -> Vec[TsAgent] throws {
+fn ts_agents(at: fs::Root, location: String, root: String) -> Vec[TsAgent] throws {
     let mut found: Vec[TsAgent] = []
-    if fs::metadata(location.clone(), fs::Root::Anywhere).is_file() {
+    if fs::metadata(location.clone(), at).is_file() {
         let base = process::run("basename", [location.clone()]).stdout.trim().clone()
         let stem = match base.strip_suffix(".jsonl") {
             null => base.clone(),
             cut => cut,
         }
-        found.push(ts_agent(location, stem, root))
+        found.push(ts_agent(at, location, stem, root))
         return found
     }
-    for entry in fs::read_dir(location.clone(), fs::Root::Anywhere) {
+    let inside = at.join(location.clone())
+    for entry in fs::read_dir(".", inside) {
         let name = entry.to_text()
         let agent = if name.starts_with("agent-") { name.strip_suffix(".jsonl") } else { null }
         let stem = (agent ?? name.strip_suffix(".output") ?? continue)
-        let a = ts_agent(f"{location}/{name}", stem, root.clone())
+        let a = ts_agent(inside, name, stem, root.clone())
         if a.end != 0 { found.push(a) }
     }
     return found
@@ -416,10 +419,10 @@ fn ts_attribution() -> String {
 }
 
 // The file names of `COMPILER_NIKA` in scripts/self_hosting.py.
-fn ts_compiler_nika(root: String) -> String throws {
+fn ts_compiler_nika() -> String throws {
     let mut names: String = "|"
     let mut inside = false
-    for line in fs::read_to_string(f"{root}/scripts/self_hosting.py", fs::Root::Anywhere).split("\n") {
+    for line in fs::read_to_string("scripts/self_hosting.py", fs::Root::Dir(".")).split("\n") {
         if line.starts_with("COMPILER_NIKA = {") { inside = true; continue }
         if inside && line.starts_with("}") { break }
         if inside && line.starts_with("    \"") {
@@ -465,7 +468,7 @@ fn ts_version(subject: String) -> String throws {
 }
 
 fn ts_progress(root: String, since: String) -> Vec[String] throws {
-    let compiler = ts_compiler_nika(root.clone())
+    let compiler = ts_compiler_nika()
     let mut rows: Vec[String] = []
     let listed = ts_git(root.clone(), ["log", "--reverse", "--format=%h %ct %s", f"{since}..origin/develop"])
     let mut prev = ts_counts(root.clone(), since, compiler.clone())[0]
@@ -489,8 +492,8 @@ fn ts_day(end_ms: i64) -> String throws {
     return process::run("date", ["-d", f"@{end_ms / 1000}", "+%F"]).stdout.trim().clone()
 }
 
-fn ts_short(location: String, root: String) throws {
-    let agents = ts_agents(location, root.clone())
+fn ts_short(at: fs::Root, location: String, root: String) throws {
+    let agents = ts_agents(at, location, root.clone())
     if agents.len() == 0 {
         println("no transcript with a timestamp")
         process::exit(1)
@@ -508,6 +511,25 @@ fn ts_short(location: String, root: String) throws {
     println(ts_row(ts_day(a.end), a.id.clone(), a.module.clone(), a.turns, a.ctx, gone))
 }
 
+// Where claude keeps its transcripts: `$CLAUDE_CONFIG_DIR/projects`, else
+// `$HOME/.claude/projects` (the operator's, ADR-397 D1).
+fn ts_projects() -> String {
+    let conf = env::var("CLAUDE_CONFIG_DIR") ?? f"{env::var("HOME") ?? ""}/.claude"
+    return f"{conf}/projects"
+}
+
+// A transcript path from the command line, as the part below the root it
+// opens under (ADR-raw-sinks-1 D11, D14): below the projects directory, or
+// relative below the working directory; any other is refused.
+fn ts_below(arg: String) -> String throws {
+    let rest = (arg.strip_prefix(ts_projects() + "/") ?? arg).clone()
+    if !path::is_below(rest.clone()) {
+        println(f"refused: {arg} lies neither below {ts_projects()} nor below the working directory")
+        process::exit(2)
+    }
+    return rest
+}
+
 fn main() throws {
     let mut args: Vec[String] = []
     for a in cli::args() { args.push(a) }
@@ -516,12 +538,15 @@ fn main() throws {
         process::exit(2)
     }
     let root = process::run("git", ["rev-parse", "--show-toplevel"]).stdout.trim().clone()
+    let named = if args[1] == "--short" || args[1] == "--usage" { if args.len() > 2 { args[2].clone() } else { "" } } else { args[1].clone() }
+    let at = if named.starts_with(ts_projects() + "/") { fs::Root::Dir(ts_projects()) } else { fs::Root::Dir(".") }
+    let location = ts_below(named)
     if args[1] == "--short" && args.len() > 2 {
-        ts_short(args[2].clone(), root)
+        ts_short(at, location, root)
         return
     }
     if args[1] == "--usage" && args.len() > 2 {
-        let a = ts_agent(args[2].clone(), "", root)
+        let a = ts_agent(at, location, "", root)
         println(f"{a.ctx + a.out} {a.turns} {a.read} {a.write} {a.out}")
         return
     }
@@ -534,7 +559,7 @@ fn main() throws {
     println(ts_attribution() + "\n")
     println("| agent | module | turns | context tokens read (M) | written (k) | active min | Rust lines moved (attributed) | tokens per moved line | read after 150k | read after 300k |")
     println("| :--- | :--- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |")
-    let agents = ts_agents(args[1].clone(), root.clone())
+    let agents = ts_agents(at, location, root.clone())
     let mut tot = 0
     let mut over = 0
     for a in agents {

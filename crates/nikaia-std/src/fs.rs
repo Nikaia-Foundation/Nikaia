@@ -360,6 +360,21 @@ pub fn copy(
     std::fs::copy(&source, &target).map_err(|e| crate::io::IoError::of(e, from))
 }
 
+/// **A file's bytes, written from one root into another**, its permission bits
+/// kept; how many were copied. A platform primitive (ADR-platform-layer-v1
+/// D2, D4, D7 item 1): each name resolved under its own root, one copy.
+pub fn copy_between(
+    from: impl AsRef<FilePath>,
+    from_root: &Root,
+    to: impl AsRef<FilePath>,
+    to_root: &Root,
+) -> Result<u64, crate::io::IoError> {
+    let (from, to) = (from.as_ref(), to.as_ref());
+    let source = resolve(from, from_root)?;
+    let target = resolve(to, to_root)?;
+    std::fs::copy(&source, &target).map_err(|e| crate::io::IoError::of(e, from))
+}
+
 /// **What the system knows of a name** (Part III 17.1): its length and what it
 /// is, following a link to what it leads to.
 #[derive(Debug, Clone, PartialEq, Eq)]

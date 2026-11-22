@@ -1,4 +1,5 @@
-// scripts/drive.nika --named-filters FILE: the tests named after the changed
+// scripts/drive.nika --named-filters (the paths on standard input, #2577):
+// the tests named after the changed
 // scripts, which the driver runs before a suite goes to CI.
 use std::env
 use std::fs
@@ -15,8 +16,7 @@ fn root() -> String throws {
 }
 
 fn case(nikaia: String, repo: String, tmp: ref fs::Root, name: String, paths: String) throws {
-    fs::write(f"{name}", tmp, paths)
-    let out = process::run(nikaia, ["run", "scripts/drive.nika", "--", "--named-filters", f"{tmp.path().to_text()}/{name}"]; dir: repo)
+    let out = process::run(nikaia, ["run", "scripts/drive.nika", "--", "--named-filters"]; dir: repo, stdin: process::Input::Text(paths))
     println(f"== {name}")
     println(out.stdout.trim())
 }

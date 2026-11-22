@@ -1,0 +1,17 @@
+error[NK1245]: The compiler can't tell what type `Vec[String]()` is.
+  --> tests/a_constructor_with_generics_is_refused_not_lowered.nika:6:2
+   |
+ 6 | 	let mut v = Vec[String]()
+   |  ^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: `Vec` is a type, and a type written with its generics is not read as a call of its constructor.
+   = help: Write the type down on the `let` and call the constructor without them, such as `let x: Vec[String] = Vec()`.
+error[NK1245]: The compiler can't tell what type `collections::HashMap[String, String]()` is.
+  --> tests/a_constructor_with_generics_is_refused_not_lowered.nika:8:2
+   |
+ 8 | 	let mut m = collections::HashMap[String, String]()
+   |  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: `collections::HashMap` is a type, and a type written with its generics is not read as a call of its constructor.
+   = help: Write the type down on the `let` and call the constructor without them, such as `let x: collections::HashMap[String, String] = collections::HashMap()`.
+2 type errors

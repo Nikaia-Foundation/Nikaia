@@ -20,6 +20,7 @@
 
 use std::cli
 use std::fs
+use std::path
 use std::process
 use std::text
 
@@ -65,18 +66,18 @@ fn cycle_bump(line: String) -> String {
 // and `release.nika` stops on it rather than guess.
 fn cycle_released(dir: String) throws {
     let list = f"{dir}/released.txt"
-    if fs::exists(list.clone(), fs::Root::Anywhere) || !fs::exists(dir.clone(), fs::Root::Anywhere) { return }
-    for entry in fs::read_dir(dir.clone(), fs::Root::Anywhere) {
+    if fs::exists(list.clone(), fs::Root::Dir(".")) || !fs::exists(dir.clone(), fs::Root::Dir(".")) { return }
+    for entry in fs::read_dir(dir.clone(), fs::Root::Dir(".")) {
         if entry.to_text().ends_with(".report.md") { return }
     }
-    fs::write(list, fs::Root::Anywhere, "")
+    fs::write(list, fs::Root::Dir("."), "")
 }
 
 fn cycle_owner(dir: String) -> String throws {
     let file = f"{dir}/owner.txt"
-    if !fs::exists(file.clone(), fs::Root::Anywhere) { return "" }
+    if !fs::exists(file.clone(), fs::Root::Dir(".")) { return "" }
     let mut open: Vec[String] = []
-    for raw in fs::read_to_string(file, fs::Root::Anywhere).split("\n") {
+    for raw in fs::read_to_string(file, fs::Root::Dir(".")).split("\n") {
         if raw.trim() != "" { open.push(raw.trim().clone()) }
     }
     if open.len() == 0 { return "" }
@@ -85,15 +86,15 @@ fn cycle_owner(dir: String) -> String throws {
 
 fn cycle_done(dir: String, n: i64) -> String throws {
     let file = f"{dir}/owner.txt"
-    if !fs::exists(file.clone(), fs::Root::Anywhere) { return "" }
+    if !fs::exists(file.clone(), fs::Root::Dir(".")) { return "" }
     let mut kept: Vec[String] = []
     let mut i: i64 = 0
-    for raw in fs::read_to_string(file.clone(), fs::Root::Anywhere).split("\n") {
+    for raw in fs::read_to_string(file.clone(), fs::Root::Dir(".")).split("\n") {
         if raw.trim() == "" { continue }
         i += 1
         if i != n { kept.push(raw.trim().clone()) }
     }
-    fs::write(file, fs::Root::Anywhere, kept.join("\n") + if kept.len() > 0 { "\n" } else { "" })
+    fs::write(file, fs::Root::Dir("."), kept.join("\n") + if kept.len() > 0 { "\n" } else { "" })
     return ""
 }
 
@@ -119,6 +120,11 @@ fn main() throws {
         println("usage: nikaia run scripts/cycle.nika -- DIR [--apply] [--done N]")
         process::exit(2)
     }
+    // DIR and the lane's files lie below the working directory.
+    if !path::is_below(dir.clone()) {
+        println(f"refused: {dir} is not a relative path below the working directory")
+        process::exit(2)
+    }
     if done > 0 { cycle_done(dir.clone(), done) }
     cycle_released(dir.clone())
     let exe = cycle_exe()
@@ -139,10 +145,10 @@ fn main() throws {
     let mut batch = lines[1].clone()
     if batch.starts_with("OWNER ") {
         let q = (batch.strip_prefix("OWNER ") ?? "").clone()
-        if fs::exists(f"{dir}/QUESTION", fs::Root::Anywhere) {
+        if fs::exists(f"{dir}/QUESTION", fs::Root::Dir(".")) {
             batch = f"OWNER second: {q}"
         } else {
-            fs::write(f"{dir}/QUESTION", fs::Root::Anywhere, q + "\n")
+            fs::write(f"{dir}/QUESTION", fs::Root::Dir("."), q + "\n")
         }
     }
     if batch.starts_with("CUT") { println(cycle_cap(batch.clone() + " -> SUPERVISOR")) } else { println(cycle_cap(batch.clone())) }

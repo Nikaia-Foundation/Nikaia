@@ -260,6 +260,30 @@ The name is the wire name of D4 (an attribute may rename it). A variant with a
 payload is `NK1250` until its form (a tag member, an object of one member) is
 decided.
 
+### D14 — Inside an arm whose pattern names `Map(K, V)` or `List(E)`, `T()` builds the empty collection of the type `T` is.
+
+```nika
+rule Value[T] -> T = match T::kind {
+    Map(K, V) => es:list(Entry[V], ",") -> {
+        let mut m: T = T()     // a HashMap or a BTreeMap: whatever T is
+        for (k, v) in es { m.insert(k.clone(), v.clone()) }
+        m
+    }
+    ...
+}
+```
+
+The arm is checked under the kind its pattern names (D2), so the compiler
+knows there that `T` is a collection with an empty value; each copy lowers
+`T()` to the constructor of its own type. The same holds in a `match T::kind`
+arm of a generic function (ADR-330 D4). Outside such an arm `T()` stays
+`NK1117`: a type parameter has no constructor of its own. Decided by the
+owner, 2026-11-21 ([#2626](https://github.com/Nikaia-Foundation/Nikaia/issues/2626)).
+
+**Rejected.** Explicit generics in a constructor call (`HashMap[K, V]()`):
+the arm must still pick one map type, so one arm cannot serve both. An empty
+map literal typed from the `let`: new syntax for one case.
+
 **Rejected.** A library walk with a constructor from fields (Option A): a
 second way to build a struct, and a scanner outside the grammar. `field.set`:
 needs a half-built struct. A `Value` tree converted afterwards: two passes and

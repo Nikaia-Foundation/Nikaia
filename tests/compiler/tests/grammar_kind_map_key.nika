@@ -1,0 +1,32 @@
+// ADR-grammar-typed-read-v1 D6: a `Map(K, V)` arm whose key is not text
+// says why with `refuse("…")`, and the call is refused with NK1250 and that
+// text (#2599).
+use std::collections
+struct Doc { deps: collections::HashMap[i64, String], }
+grammar M {
+	rule WS = "" -> { }
+	entry rule read[T] -> T = v:Value[T] eof -> { v }
+	rule KCh -> i64 = x:any if(x != '=' && x != '\n' && x != ':') -> { 1 }
+	rule Ch -> i64 = x:any if(x != '"') -> { 1 }
+	rule Key -> String = s:text(KCh+) ":" -> { s }
+	rule Value[T] -> T = match T::kind {
+		Text => "\"" s:text(Ch*) "\"" -> { s }
+		Map(K, V) => match K::kind { Text => Pairs[T, V], else => refuse("a map's keys are text") }
+		Struct(_) => m:members[T](Key, Value[_], ";") -> { m }
+	}
+	rule Pairs[T, V] -> T = es:list(Entry[V], "\n") -> {
+		let mut m: T = collections::HashMap()
+		for (k, v) in es {
+			m.insert(k.clone(), v.clone())
+		}
+		m
+	}
+	rule Entry[V] -> (String, V) = k:text(KCh+) "=" v:Value[V] -> { (k, v) }
+}
+fn main() throws {
+	let d: Doc = M::read[Doc]("deps:1=\"a\"") catch {
+		println(f"error: {error}")
+		return
+	}
+	println(f"{d.deps.len()}")
+}

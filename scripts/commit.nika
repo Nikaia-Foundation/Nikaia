@@ -282,10 +282,10 @@ fn commit_lowered(private: String, listed: Vec[String]) -> String throws {
         let (old, _) = after.split_once("\"") ?? return f"REFUSED: the staged {index_path} has no LOWERED_DIGEST"
         let digest = commit_staged_digest(private.clone(), dir, index)
         if old == digest { continue }
-        let tmp = process::run("mktemp", []).stdout.trim().clone()
-        fs::write(tmp.clone(), fs::Root::Anywhere, index + marker + block.replace(f"LOWERED_DIGEST: &str = \"{old}\"", f"LOWERED_DIGEST: &str = \"{digest}\""))
-        let blob = commit_git(["hash-object", "-w", tmp.clone()])
-        process::run("rm", ["-f", tmp])
+        let scratch = fs::scratch()
+        fs::write("lowered.rs", scratch, index + marker + block.replace(f"LOWERED_DIGEST: &str = \"{old}\"", f"LOWERED_DIGEST: &str = \"{digest}\""))
+        let blob = commit_git(["hash-object", "-w", f"{scratch.path().to_text()}/lowered.rs"])
+        process::run("rm", ["-rf", scratch.path().to_text()])
         if blob == "" || !process::run("git", ["update-index", "--cacheinfo", f"100644,{blob},{index_path}"]; env: [("GIT_INDEX_FILE", private.clone())]).ok { return f"REFUSED: could not stage the digest of {index_path}" }
         println(f"staged LOWERED_DIGEST {digest} in {index_path}, the digest of the set as committed")
     }
@@ -317,7 +317,7 @@ fn commit_put_field(path: String, text: String, key: String, value: String) thro
         }
     }
     if !done { out.push(f"{key} {value}") }
-    fs::write(path, fs::Root::Anywhere, out.join("\n") + "\n")
+    fs::write(path, fs::Root::Dir("."), out.join("\n") + "\n")
 }
 
 // The digest of the listed files as they are (#1918): each `Files:` path
@@ -326,7 +326,7 @@ fn commit_put_field(path: String, text: String, key: String, value: String) thro
 fn commit_reviewed(files: Vec[String], partial: Vec[String]) -> String throws {
     let mut all: String = ""
     for f in files {
-        let blob = if fs::exists(f.clone(), fs::Root::Anywhere) { commit_git(["hash-object", "--", f.clone()]) } else { "absent" }
+        let blob = if fs::exists(f.clone(), fs::Root::Dir(".")) { commit_git(["hash-object", "--", f.clone()]) } else { "absent" }
         all.push_str(f"F {f} {blob}\n")
     }
     for f in partial {
@@ -396,7 +396,7 @@ fn main() throws {
         println("usage: nikaia run scripts/commit.nika -- [--dry-run] [--push] REPORT")
         process::exit(2)
     }
-    let report = fs::read_to_string(path.clone(), fs::Root::Anywhere)
+    let report = fs::read_to_string(path.clone(), fs::Root::Dir("."))
     let mut files: Vec[String] = []
     for f in commit_field(report.clone(), "Files:").split(" ") {
         if f != "" { files.push(f.clone()) }
@@ -458,7 +458,7 @@ fn main() throws {
     }
     // The private index: HEAD, the listed files whole, the staged hunks of
     // the Partial: files (#1792).
-    let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+    let tmp = fs::scratch().path().to_text()
     let private = f"{tmp}/index"
     let base = if process::run("git", ["rev-parse", "--verify", "-q", "HEAD"]).ok { "HEAD" } else { "--empty" }
     let mut ready = process::run("git", ["read-tree", base]; env: [("GIT_INDEX_FILE", private.clone())]).ok

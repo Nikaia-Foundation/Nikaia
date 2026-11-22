@@ -1,0 +1,28 @@
+// A `members` field that holds a list of text, `Vec[String]` or a list of
+// lists, takes the list its value rule read (ADR-grammar-typed-read-v1 D3,
+// #2602): the rule hands each item back as a view of the input, and the
+// field owns its text, so the emitter copies the list in item by item. It
+// handed the views' list itself to the field before, and rustc refused the
+// lowered program (NK1343).
+struct P { a: Vec[String], b: Vec[Vec[String]], n: String, }
+grammar J {
+	rule WS = "" -> { }
+	entry rule read[T] -> T = v:Value[T] eof -> { v }
+	rule Ch -> i64 = x:any if(x != '"') -> { 1 }
+	rule Key -> String = "\"" s:text(Ch*) "\"" ":" -> { s }
+	rule Value[T] -> T = match T::kind {
+		Text => "\"" s:text(Ch*) "\"" -> { s }
+		List(A) => "[" xs:list(Value[A], ",") "]" -> { xs }
+		Struct(_) => "{" m:members[T](Key, Value[_], ",") "}" -> { m }
+	}
+}
+fn main() throws {
+	let p: P = J::read[P]("{\"b\":[[\"p\"],[\"q\",\"r\"]],\"a\":[\"x\",\"y\"],\"n\":\"z\"}") catch {
+		println(f"error: {error}")
+		return
+	}
+	println(f"{p.a.len()} {p.a[0]} {p.a[1]} {p.n}")
+	for xs in p.b {
+		println(f"{xs.len()}")
+	}
+}

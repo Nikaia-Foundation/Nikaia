@@ -473,6 +473,9 @@ fn main() throws {
 	// DIR names a directory below the one it runs in, checked where it
 	// arrives and opened under it (ADR-raw-sinks-1 D12, D14): whoever runs
 	// it chooses it, and a name from outside may name any directory.
+	// Bound once more without `mut`, so the guard's proof holds where the
+	// root is joined and handed on (#2591).
+	let dir = dir
 	if !path::is_below(dir) {
 		eprintln(f"check-adr-refs: {dir} is not below the directory it runs in")
 		process::exit(2)

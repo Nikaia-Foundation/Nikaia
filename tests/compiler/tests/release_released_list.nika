@@ -37,6 +37,11 @@ fn main() throws {
     let repo = root()
     let nikaia = toolchain(repo.clone())
     let tmp = fs::scratch()
+    // The scripts run in their lane's directory, which lies below the
+    // working directory; they find the toolchain and scripts under the
+    // checkout's names.
+    process::run("ln", ["-s", f"{repo}/target", f"{tmp.path().to_text()}/target"])
+    process::run("ln", ["-s", f"{repo}/scripts", f"{tmp.path().to_text()}/scripts"])
     let lane = tmp.join("lane")
     process::run("mkdir", ["-p", lane.path().to_text()])
     write(lane, "issue-1.md.report.md", "Result: partial\nPushed: none\nChangelog: none\n")
@@ -52,9 +57,9 @@ fn main() throws {
     print(stops(nikaia.clone(), repo.clone(), lane.path().to_text()))
     let first = tmp.join("first")
     process::run("mkdir", ["-p", first.path().to_text()])
-    process::run(nikaia.clone(), ["run", "scripts/cycle.nika", "--", first.path().to_text()]; dir: repo.clone())
+    process::run(nikaia.clone(), ["run", f"{repo}/scripts/cycle.nika", "--", "first"]; dir: tmp.path().to_text())
     println(f"cycle, lane without reports: released.txt {fs::exists("released.txt", first)}")
     process::run("rm", ["-f", f"{lane.path().to_text()}/released.txt"])
-    process::run(nikaia, ["run", "scripts/cycle.nika", "--", lane.path().to_text()]; dir: repo)
+    process::run(nikaia, ["run", f"{repo}/scripts/cycle.nika", "--", "lane"]; dir: tmp.path().to_text())
     println(f"cycle, lane with reports: released.txt {fs::exists("released.txt", lane)}")
 }

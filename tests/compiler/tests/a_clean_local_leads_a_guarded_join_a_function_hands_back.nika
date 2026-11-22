@@ -1,0 +1,79 @@
+// A name bound without `mut` to a value that is not outside and reads no
+// parameter is a clean part (ADR-raw-sinks-1 D14, "joined to a part that
+// is not outside"; ADR-397 D1: the environment is the operator's), so a
+// function handing back a guarded name joined after it hands back its
+// proof, as it does for a literal or a parameter (#2471). `home` reads the
+// environment, `fixed` a literal through a binding, `stored` a function of
+// the program that reads the environment. Their twins stay `NK1308` (here
+// warnings, `raw-sinks = "warn"`): `outer` binds its lead from `cli::args`,
+// `carried` from a parameter whose argument is outside, `asked` from a
+// function that reads `cli::args`.
+// The programs run in a branch not taken.
+use std::cli
+use std::env
+use std::path
+use std::process
+
+fn home(key: String) -> String {
+    if !path::is_component(key) { return "" }
+    let base = env::var("HOME") ?? "/nikaia-none"
+    return f"{base}/{key}/bin"
+}
+
+fn fixed(key: String) -> String {
+    return "" if !path::is_component(key)
+    let base = "/nikaia-none"
+    let joined = base + "/" + key
+    return joined
+}
+
+fn outer(key: String) -> String {
+    if !path::is_component(key) { return "" }
+    let base = cli::args().nth(3) ?? "/nikaia-none"
+    return f"{base}/{key}/bin"
+}
+
+fn carried(store: String, key: String) -> String {
+    if !path::is_component(key) { return "" }
+    let base = f"{store}/target"
+    return f"{base}/{key}/bin"
+}
+
+fn store() -> String {
+    return env::var("NIKAIA_STORE") ?? "/nikaia-none"
+}
+
+fn given() -> String {
+    return cli::args().nth(4) ?? "/nikaia-none"
+}
+
+fn stored(key: String) -> String {
+    if !path::is_component(key) { return "" }
+    let base = store()
+    return f"{base}/{key}/bin"
+}
+
+fn asked(key: String) -> String {
+    if !path::is_component(key) { return "" }
+    let base = given()
+    return f"{base}/{key}/bin"
+}
+
+fn main() throws {
+    let name = cli::args().nth(1) ?? "abc"
+    let first = home(name.clone())
+    let second = fixed(name.clone())
+    let third = outer(name.clone())
+    let fourth = carried(cli::args().nth(2) ?? "/nikaia-none", name.clone())
+    let fifth = stored(name.clone())
+    let sixth = asked(name)
+    if cli::args().nth(5) != null {
+        process::run(first, [])
+        process::run(second, [])
+        process::run(third, [])
+        process::run(fourth, [])
+        process::run(fifth, [])
+        process::run(sixth, [])
+    }
+    println("built")
+}

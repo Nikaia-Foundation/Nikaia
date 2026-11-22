@@ -1,0 +1,61 @@
+// Part II 10.3, the table of `T::kind`: a map of `std` is `Map(K, V)`
+// written with its module too, `collections::HashMap[K, V]` and
+// `collections::BTreeMap[K, V]`, so a grammar's `match T::kind` reads a map
+// field (ADR-grammar-typed-read-v1 D6, #2599). The arm builds the map by
+// inserting each entry the list read into an empty map of the field's type;
+// the field's map holds text of its own, so a key or value read as a view of
+// the input is copied in with `.clone()`.
+use std::collections
+struct Doc { deps: collections::HashMap[String, String], }
+struct Sorted { deps: collections::BTreeMap[String, i64], }
+grammar M {
+	rule WS = "" -> { }
+	entry rule read[T] -> T = v:Value[T] eof -> { v }
+	rule KCh -> i64 = x:any if(x != '=' && x != '\n' && x != ':') -> { 1 }
+	rule Ch -> i64 = x:any if(x != '"') -> { 1 }
+	rule Key -> String = s:text(KCh+) ":" -> { s }
+	rule Value[T] -> T = match T::kind {
+		Text => "\"" s:text(Ch*) "\"" -> { s }
+		Map(K, V) => es:list(Entry[V], "\n") -> {
+			let mut m: T = collections::HashMap()
+			for (k, v) in es {
+				m.insert(k.clone(), v.clone())
+			}
+			m
+		}
+		Struct(_) => m:members[T](Key, Value[_], ";") -> { m }
+	}
+	rule Entry[V] -> (String, V) = k:text(KCh+) "=" v:Value[V] -> { (k, v) }
+}
+grammar B {
+	rule WS = "" -> { }
+	entry rule read[T] -> T = v:Value[T] eof -> { v }
+	rule KCh -> i64 = x:any if(x != '=' && x != '\n' && x != ':') -> { 1 }
+	rule Key -> String = s:text(KCh+) ":" -> { s }
+	rule Value[T] -> T = match T::kind {
+		I64 => d:dec[i64](digit+) -> { d }
+		Map(K, V) => es:list(Entry[V], "\n") -> {
+			let mut m: T = collections::BTreeMap()
+			for (k, v) in es {
+				m.insert(k.clone(), v)
+			}
+			m
+		}
+		Struct(_) => m:members[T](Key, Value[_], ";") -> { m }
+	}
+	rule Entry[V] -> (String, V) = k:text(KCh+) "=" v:Value[V] -> { (k, v) }
+}
+fn main() throws {
+	let d: Doc = M::read[Doc](Bytes("deps:a=\"1\"\nb=\"2\"".bytes().collect())) catch {
+		println(f"error: {error}")
+		return
+	}
+	println(f"{d.deps.len()}")
+	let s: Sorted = B::read[Sorted]("deps:c=3\na=1\nb=2") catch {
+		println(f"error: {error}")
+		return
+	}
+	for (k, v) in s.deps {
+		println(f"{k} {v}")
+	}
+}

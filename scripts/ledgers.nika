@@ -44,24 +44,26 @@ fn ledgers_names() -> Vec[String] {
 	return ["nikaia.contracts", "nikaia.derived", "nikaia.proofs", "nikaia.lock"]
 }
 
-// Keeps the `nikaia.lock` of TMP/DIR as it was copied in, under
-// TMP/committed, before a build rewrites it; a directory without one (its
+// Keeps the `nikaia.lock` of COPY/DIR as it was copied in, under
+// COPY/committed, before a build rewrites it; a directory without one (its
 // lock is git-ignored, or there is none) keeps nothing.
-fn ledgers_keep_lock(tmp: String, dir: String) throws {
+fn ledgers_keep_lock(copy: ref fs::Root, dir: String) throws {
+	if !fs::exists(f"{dir}/nikaia.lock", copy) { return }
+	let tmp = copy.path().to_text()
 	let lock = f"{tmp}/{dir}/nikaia.lock"
-	if !fs::exists(lock.clone(), fs::Root::Anywhere) { return }
 	process::run("mkdir", ["-p", f"{tmp}/committed/{dir}"])
 	process::run("cp", [lock, f"{tmp}/committed/{dir}/nikaia.lock"])
 }
 
-// Whether the build left the kept `nikaia.lock` of TMP/DIR as it was: true
+// Whether the build left the kept `nikaia.lock` of COPY/DIR as it was: true
 // for a directory that kept none. The difference, when there is one. The
 // `toolchain` line is left out of the comparison: `rust-toolchain.toml` names
 // the floating `stable` (ADR-001 D1), so the runner's rustc moves without any
 // change of ours; the line is rewritten with the next real change.
-fn ledgers_lock_current(tmp: String, dir: String) -> (bool, String) throws {
+fn ledgers_lock_current(copy: ref fs::Root, dir: String) -> (bool, String) throws {
+	if !fs::exists(f"committed/{dir}/nikaia.lock", copy) { return (true, "") }
+	let tmp = copy.path().to_text()
 	let kept = f"{tmp}/committed/{dir}/nikaia.lock"
-	if !fs::exists(kept.clone(), fs::Root::Anywhere) { return (true, "") }
 	let diff = process::run("diff", ["-u", "-I", "^toolchain = ", kept, f"{tmp}/{dir}/nikaia.lock"])
 	return (diff.ok, diff.stdout)
 }
@@ -101,9 +103,10 @@ fn ledgers_command(dir: String, locked: bool) -> Vec[String] throws {
 }
 
 // Copies the ledger directories of TREE ("" for the working tree) into a new
-// temporary directory and returns it.
-fn ledgers_copy(tree: String) -> String throws {
-	let tmp = process::run("mktemp", ["-d"]).stdout.trim().clone()
+// fresh directory of `fs::scratch()` and returns it (ADR-raw-sinks-1 D12).
+fn ledgers_copy(tree: String) -> fs::Root throws {
+	let copy = fs::scratch()
+	let tmp = copy.path().to_text()
 	let roots = "examples packages tests/page-examples"
 	let copied = if tree == "" {
 		process::run(
@@ -122,7 +125,7 @@ fn ledgers_copy(tree: String) -> String throws {
 	}
 	let here = process::run("pwd", []).stdout.trim().clone()
 	process::run("ln", ["-s", f"{here}/crates", f"{tmp}/crates"])
-	return tmp
+	return copy
 }
 
 // Runs NIKAIA with ARGS in TMP/DIR; the output, and whether it succeeded.
@@ -147,10 +150,11 @@ fn ledgers_head(body: String, n: i64) -> String {
 	return out.join("\n")
 }
 
-fn ledgers_check(nikaia: String, tmp: String) -> bool throws {
+fn ledgers_check(nikaia: String, copy: ref fs::Root) -> bool throws {
+	let tmp = copy.path().to_text()
 	let mut green = true
 	let dirs = ledgers_dirs(tmp.clone())
-	for dir in dirs { ledgers_keep_lock(tmp.clone(), dir.clone()) }
+	for dir in dirs { ledgers_keep_lock(copy, dir.clone()) }
 	for dir in dirs {
 		let (out, ok) = ledgers_build(
 			nikaia.clone(),
@@ -158,7 +162,7 @@ fn ledgers_check(nikaia: String, tmp: String) -> bool throws {
 			dir.clone(),
 			ledgers_command(dir.clone(), true),
 		)
-		let (lock_current, lock_diff) = ledgers_lock_current(tmp.clone(), dir.clone())
+		let (lock_current, lock_diff) = ledgers_lock_current(copy, dir.clone())
 		if ok && lock_current {
 			println(f"{dir}: ledger current")
 			continue
@@ -179,7 +183,9 @@ fn ledgers_check(nikaia: String, tmp: String) -> bool throws {
 	return green
 }
 
-fn ledgers_refresh(nikaia: String, tmp: String) -> bool throws {
+fn ledgers_refresh(nikaia: String, copy: ref fs::Root) -> bool throws {
+	let tmp = copy.path().to_text()
+	let here = fs::Root::Dir(".")
 	let mut green = true
 	for dir in ledgers_dirs(tmp.clone()) {
 		let (out, ok) = ledgers_build(
@@ -198,7 +204,7 @@ fn ledgers_refresh(nikaia: String, tmp: String) -> bool throws {
 		for name in ledgers_names() {
 			let path = f"{dir}/{name}"
 			let built = f"{tmp}/{path}"
-			if !fs::exists(built.clone(), fs::Root::Anywhere) { continue }
+			if !fs::exists(path.clone(), copy) { continue }
 			if process::run("git", ["check-ignore", "-q", path.clone()]).ok { continue }
 			if process::run("cmp", ["-s", built.clone(), path.clone()]).ok { continue }
 			process::run("cp", [built, path.clone()])
@@ -208,8 +214,8 @@ fn ledgers_refresh(nikaia: String, tmp: String) -> bool throws {
 		// one no entry points at fails a `--locked` build.
 		let path = f"{dir}/nikaia.proofs.d"
 		let built = f"{tmp}/{path}"
-		let has_built = fs::exists(built.clone(), fs::Root::Anywhere)
-		let has_path = fs::exists(path.clone(), fs::Root::Anywhere)
+		let has_built = fs::exists(path.clone(), copy)
+		let has_path = fs::exists(path.clone(), here)
 		if !has_built && !has_path { continue }
 		if has_built && has_path && process::run("diff", ["-rq", built.clone(), path.clone()]).ok { continue }
 		process::run("rm", ["-rf", path.clone()])
@@ -243,7 +249,8 @@ fn main() throws {
 		process::exit(2)
 	}
 	let exe = process::run("realpath", [nikaia]).stdout.trim().clone()
-	let tmp = ledgers_copy(tree)
+	let copy = ledgers_copy(tree)
+	let tmp = copy.path().to_text()
 	let mut green = true
 	if mode == "--list" {
 		for dir in ledgers_dirs(tmp.clone()) {
@@ -251,9 +258,9 @@ fn main() throws {
 			println(f"{dir}: nikaia {line}")
 		}
 	} else if mode == "--check" {
-		green = ledgers_check(exe, tmp.clone())
+		green = ledgers_check(exe, copy)
 	} else {
-		green = ledgers_refresh(exe, tmp.clone())
+		green = ledgers_refresh(exe, copy)
 	}
 	process::run("rm", ["-rf", tmp])
 	if !green { process::exit(1) }

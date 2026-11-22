@@ -1,0 +1,28 @@
+warning[NK1308]: `name` reaches the path `fs::exists` opens under `fs::Root::Anywhere`, which may name any file, and it comes from outside the program.
+   --> tests/a_path_guard_ending_in_an_own_panic_proves_nothing.nika:25:5
+    |
+ 25 |     println(fs::exists(f"data/{name}", fs::Root::Anywhere))
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: `name` comes from `cli::args`: whoever sends it chooses the value, so nothing the compiler can see says what it holds.
+    = note: A path from outside may name any file the program can reach: `../`, or one that starts at `/`.
+    = note: `raw-sinks = "warn"` lets this build through.
+    = help: Open it under a root the program chose, where it cannot leave the directory: `fs::Root::Dir(".")`, `fs::scratch()` or `root.join(...)` of one. Or check it where it arrives, `throw BadInput(name) if !path::is_component(name)` (or `path::is_below`), and open it under such a root or joined to a part that is not outside. If the program means to read paths from `args`, `untrusted-paths-read = ["args"]` under `[allow]` in the manifest builds it.
+warning[NK1308]: `cli::args().nth(2) ?? "notes.txt"` reaches the path `fs::exists` opens under `fs::Root::Anywhere`, which may name any file, through `opened`, and it comes from outside the program.
+   --> tests/a_path_guard_ending_in_an_own_panic_proves_nothing.nika:26:5
+    |
+ 26 |     println(opened(cli::args().nth(2) ?? "notes.txt"))
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: `cli::args().nth(2) ?? "notes.txt"` comes from `cli::args`: whoever sends it chooses the value, so nothing the compiler can see says what it holds.
+    = note: A path from outside may name any file the program can reach: `../`, or one that starts at `/`.
+    = note: `raw-sinks = "warn"` lets this build through.
+    = help: Open it under a root the program chose, where it cannot leave the directory: `fs::Root::Dir(".")`, `fs::scratch()` or `root.join(...)` of one. Or check it where it arrives, `throw BadInput(cli::args().nth(2) ?? "notes.txt") if !path::is_component(cli::args().nth(2) ?? "notes.txt")` (or `path::is_below`), and open it under such a root or joined to a part that is not outside. If the program means to read paths from `args`, `untrusted-paths-read = ["args"]` under `[allow]` in the manifest builds it.
+warning: Private item shadows public glob re-export.
+   --> tests/a_path_guard_ending_in_an_own_panic_proves_nothing.nika:13:1
+    |
+ 13 | fn panic(msg: String) {
+    | ^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: The name `panic` in the value namespace is supposed to be publicly re-exported here.
+    = note: But the private item here shadows it.

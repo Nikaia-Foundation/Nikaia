@@ -523,6 +523,26 @@ impl CheckState {
         self.findings.push(check_refusal("NK1245", span, f"The compiler can't tell what type `{shown}` is.", ["What is not known is not checked, so a type nothing can tell is refused rather than left to the language below."], "Write the type down where the value is made, such as `let x: T = …`, or pass it to a parameter that declares one."))
     }
 
+    /// **`NK1245`: a type written with its generics, then called**
+    /// (`Vec[String]()`, #2635): the brackets are not read as the
+    /// constructor's generics, so the value has no type the compiler can
+    /// tell, and nothing of it reaches the language below.
+    fn a_constructor_with_generics(ref mut self, world: ref CheckWorld, base: ref Expr, index: ref Expr, span: ref Span) sync {
+        let named = written_expression(world.words, base)
+        let mut generics: Vec[String] = []
+        match index {
+            Expr::Tuple(parts, _) => {
+                for part in parts {
+                    generics.push(written_expression(world.words, part))
+                }
+            },
+            else => generics.push(written_expression(world.words, index)),
+        }
+        let written = arith_shown(f"{named}[{generics.join(", ")}]")
+        self.flow.unknown_said += 1
+        self.findings.push(check_refusal("NK1245", span, f"The compiler can't tell what type `{written}()` is.", [f"`{named}` is a type, and a type written with its generics is not read as a call of its constructor."], f"Write the type down on the `let` and call the constructor without them, such as `let x: {written} = {named}()`."))
+    }
+
     fn a_name_of_an_open_comptime(ref self, world: ref CheckWorld, expr: ref Expr) -> bool sync {
         return match expr {
             Expr::Variable(n, _) => self.is_an_open_comptime(world.words.resolve(n)),

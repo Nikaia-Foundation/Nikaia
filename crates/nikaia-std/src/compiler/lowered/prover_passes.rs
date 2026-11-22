@@ -17,6 +17,11 @@ pub struct ProverAnswers {
 pub fn prover_passes(walk: &mut ProverWalk, program: &Program, words: &winnow_grammar::InternerContext, own: &Ledger, library: &Ledger, ask: &mut impl FnMut(&logic::TermArena, &[i64], i64) -> SolverAnswer, model: &mut impl FnMut(&logic::TermArena, &[i64], i64) -> Option<collections::BTreeMap<String, i64>>, escape: &mut impl FnMut(&str) -> String, holes_of: &mut impl FnMut(&Expr) -> Vec<Expr>, unaliased: &mut impl FnMut(&str) -> String, written_of: &mut impl FnMut(&Expr) -> String, condition: &mut impl FnMut(&str, &collections::BTreeSet<String>) -> Vec<logic::SolverTerm>) -> ProverAnswers {
     walk.state.std_properties = prover_std_properties(library);
     walk.state.std_ensured = prover_std_ensured(library, &walk.state.std_properties);
+    let theirs = prover_std_properties(own);
+    for (key, contract) in own.functions.iter() {
+        let signature = match contract.signature.as_ref() { Some(__nikaia_value) => __nikaia_value, None => continue };
+        if key.contains("::") && !signature.takes_a_receiver() && theirs.contains(key) { walk.state.std_properties.insert(nikaia_std::block::Text::from(key.to_string())); }
+    }
     let readers = prover_readers(program, words);
     walk.state.value_readers = prover_value_readers(&readers, own, library);
     walk.state.readers = prover_length_keepers(program, &readers, words);
