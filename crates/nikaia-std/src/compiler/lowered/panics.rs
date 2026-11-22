@@ -112,6 +112,158 @@ pub fn places_of_graph(graph: &PanicsGraph, own: &Ledger) -> collections::BTreeS
     placing
 }
 
+pub fn panics_of_unit(unit: &[String], graph: &PanicsGraph, stored: &collections::BTreeMap<String, Panics>, own: &Ledger) -> collections::BTreeMap<String, Panics> {
+    let mut answers: collections::BTreeMap<String, Panics> = collections::BTreeMap::new();
+    for name in unit.iter() {
+        let reach = match *nikaia_std::index::get(&graph.reaches, name) { Some(__nikaia_value) => __nikaia_value, None => continue };
+        answers.insert(nikaia_std::block::Text::from(name.to_string()), panics_own(reach));
+    }
+    let mut changed = true;
+    while changed {
+        changed = false;
+        for name in unit.iter() {
+            let reach = match *nikaia_std::index::get(&graph.reaches, name) { Some(__nikaia_value) => __nikaia_value, None => continue };
+            let before: Panics = nikaia_std::index::or(match *nikaia_std::index::get(&answers, name) {
+                Some(__nikaia_it) => Some(__nikaia_it.clone()),
+                None => None,
+            }, || Panics::Unknown);
+            if before == Panics::Yes { continue; }
+            let mut after: Panics = before.clone();
+            for callee in reach.calls.iter() {
+                let theirs: Panics = nikaia_std::index::or(match *nikaia_std::index::get(&answers, callee) {
+                    Some(__nikaia_it) => Some(__nikaia_it.clone()),
+                    None => None,
+                }, || nikaia_std::index::or(match *nikaia_std::index::get(&stored, callee) {
+                    Some(__nikaia_it) => Some(__nikaia_it.clone()),
+                    None => None,
+                }, || nikaia_std::index::or(match (*nikaia_std::index::get(&own.functions, callee)).as_ref().map(|__nikaia_it| &__nikaia_it.panics) {
+                    Some(__nikaia_it) => Some(__nikaia_it.copy_owned()),
+                    None => None,
+                }, || Panics::Unknown)));
+                after = after.or(&theirs);
+            }
+            if after != before {
+                answers.insert(nikaia_std::block::Text::from(name.to_string()), after);
+                changed = true;
+            }
+        }
+    }
+    answers
+}
+
+pub fn places_of_unit(unit: &[String], graph: &PanicsGraph, stored: &collections::BTreeSet<String>, settled: &collections::BTreeSet<String>, own: &Ledger) -> collections::BTreeSet<String> {
+    let mut placing: collections::BTreeSet<String> = collections::BTreeSet::new();
+    let mut members: collections::BTreeSet<String> = collections::BTreeSet::new();
+    for name in unit.iter() {
+        members.insert(nikaia_std::block::Text::from(name.to_string()));
+        let reach = match *nikaia_std::index::get(&graph.reaches, name) { Some(__nikaia_value) => __nikaia_value, None => continue };
+        if reach.places { placing.insert(nikaia_std::block::Text::from(name.to_string())); }
+    }
+    let mut changed = true;
+    while changed {
+        changed = false;
+        for name in unit.iter() {
+            if placing.contains(name) { continue; }
+            let reach = match *nikaia_std::index::get(&graph.reaches, name) { Some(__nikaia_value) => __nikaia_value, None => continue };
+            for callee in reach.calls.iter() {
+                let theirs = if members.contains(callee) { placing.contains(callee) } else if settled.contains(callee) { stored.contains(callee) } else { nikaia_std::index::or((*nikaia_std::index::get(&own.functions, callee)).as_ref().map(|__nikaia_it| __nikaia_it.places), || false) };
+                if theirs {
+                    placing.insert(nikaia_std::block::Text::from(name.to_string()));
+                    changed = true;
+                    break;
+                }
+            }
+        }
+    }
+    placing
+}
+
+pub fn panics_callees_first(graph: &PanicsGraph, own: &Ledger) -> collections::BTreeMap<String, Panics> {
+    let mut stored: collections::BTreeMap<String, Panics> = collections::BTreeMap::new();
+    for unit in panics_units(graph) {
+        let column = panics_of_unit(&unit, graph, &stored, own);
+        stored.extend(column);
+    }
+    stored
+}
+
+pub fn places_callees_first(graph: &PanicsGraph, own: &Ledger) -> collections::BTreeSet<String> {
+    let mut stored: collections::BTreeSet<String> = collections::BTreeSet::new();
+    let mut settled: collections::BTreeSet<String> = collections::BTreeSet::new();
+    for unit in panics_units(graph) {
+        let column = places_of_unit(&unit, graph, &stored, &settled, own);
+        stored.extend(column);
+        for name in unit.iter() { settled.insert(nikaia_std::block::Text::from(name.to_string())); }
+    }
+    stored
+}
+
+pub fn panics_settle(graph: &PanicsGraph, ledger: &mut Ledger) {
+    for name in places_callees_first(graph, &ledger) {
+        let contract = match ledger.functions.get_mut(&name) { Some(__nikaia_value) => __nikaia_value, None => continue };
+        contract.places = true;
+    }
+    for (name, panics) in panics_callees_first(graph, &ledger) {
+        let contract = match ledger.functions.get_mut(&name) { Some(__nikaia_value) => __nikaia_value, None => continue };
+        contract.panics = panics;
+    }
+}
+
+pub fn panics_worth(graph: &PanicsGraph, answers: &collections::BTreeMap<String, Panics>, walked: &[Vec<String>]) -> Vec<i64> {
+    let mut worth: Vec<i64> = vec![];
+    let mut at: i64 = 0;
+    for keys in walked.iter() {
+        if panics_worth_proving(graph, answers, keys) { worth.push(at); }
+        at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
+    }
+    worth
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub(crate) struct PanicsComponents {
+    pub(crate) index: collections::BTreeMap<String, i64>,
+    pub(crate) low: collections::BTreeMap<String, i64>,
+    pub(crate) open: collections::BTreeSet<String>,
+    pub(crate) stack: Vec<String>,
+    pub(crate) units: Vec<Vec<String>>,
+    pub(crate) next: i64,
+}
+
+pub fn panics_units(graph: &PanicsGraph) -> Vec<Vec<String>> {
+    let mut walk = PanicsComponents { index: collections::BTreeMap::new(), low: collections::BTreeMap::new(), open: collections::BTreeSet::new(), stack: vec![], units: vec![], next: 0 };
+    for (name, _) in graph.reaches.iter() { if !walk.index.contains_key(name) { panics_connect(graph, name, &mut walk); } }
+    walk.units
+}
+
+pub(crate) fn panics_connect(graph: &PanicsGraph, name: &str, walk: &mut PanicsComponents) {
+    walk.index.insert(nikaia_std::block::Text::from(name.to_string()), walk.next);
+    walk.low.insert(nikaia_std::block::Text::from(name.to_string()), walk.next);
+    walk.next = walk.next + 1;
+    walk.stack.push(nikaia_std::block::Text::from(name.to_string()));
+    walk.open.insert(nikaia_std::block::Text::from(name.to_string()));
+    let reach = match *nikaia_std::index::get(&graph.reaches, name) { Some(__nikaia_value) => __nikaia_value, None => return };
+    for callee in reach.calls.iter() {
+        if !graph.reaches.contains_key(callee) { continue; }
+        let mut reached: i64 = -1;
+        if !walk.index.contains_key(callee) {
+            panics_connect(graph, callee, walk);
+            reached = nikaia_std::index::or(*nikaia_std::index::get(&walk.low, callee), || -1);
+        } else if walk.open.contains(callee) { reached = nikaia_std::index::or(*nikaia_std::index::get(&walk.index, callee), || -1); }
+        let mine = nikaia_std::index::or(*nikaia_std::index::get(&walk.low, name), || 0);
+        if reached >= 0 && reached < mine { walk.low.insert(nikaia_std::block::Text::from(name.to_string()), reached); }
+    }
+    if nikaia_std::index::or(*nikaia_std::index::get(&walk.low, name), || -1) != nikaia_std::index::or(*nikaia_std::index::get(&walk.index, name), || -2) { return; }
+    let mut unit: Vec<String> = vec![];
+    loop {
+        let top = match walk.stack.pop() { Some(__nikaia_value) => __nikaia_value, None => break };
+        walk.open.remove(&top);
+        let last = top == name;
+        unit.push(top);
+        if last { break; }
+    }
+    walk.units.push(unit);
+}
+
 pub fn panics_worth_proving(graph: &PanicsGraph, answers: &collections::BTreeMap<String, Panics>, walked: &[String]) -> bool {
     for key in walked.iter() {
         let reach = match *nikaia_std::index::get(&graph.reaches, key) { Some(__nikaia_value) => __nikaia_value, None => continue };
@@ -333,3 +485,56 @@ pub(crate) fn panics_call(expr: &Expr, func: &Expr, items: &[Spanned<Item>], nam
     }
 }
 
+pub(crate) fn panics_test_node(graph: &mut PanicsGraph, name: String, sure: bool, places: bool, callees: &[&'static str]) {
+    let mut reach = PanicReach { sure, unknown: false, checks: false, places, calls: collections::BTreeSet::new() };
+    for callee in callees.iter() {
+        let callee = *callee;
+        reach.calls.insert(nikaia_std::block::Text::from(callee.to_string()));
+    }
+    graph.reaches.insert(name, reach);
+}
+
+pub(crate) fn __nikaia_test_0() -> Result<(), std::boxed::Box<dyn std::error::Error>> {
+    let mut graph = PanicsGraph { methods: collections::BTreeMap::new(), reaches: collections::BTreeMap::new() };
+    panics_test_node(&mut graph, String::from("a"), false, false, &vec!["b"]);
+    panics_test_node(&mut graph, String::from("b"), false, false, &vec!["c"]);
+    panics_test_node(&mut graph, String::from("c"), true, true, &vec![]);
+    panics_test_node(&mut graph, String::from("p"), false, false, &vec!["q"]);
+    panics_test_node(&mut graph, String::from("q"), false, false, &vec!["p"]);
+    panics_test_node(&mut graph, String::from("s"), false, false, &vec!["t"]);
+    panics_test_node(&mut graph, String::from("t"), false, false, &vec!["s", "u"]);
+    panics_test_node(&mut graph, String::from("u"), true, false, &vec!["t"]);
+    panics_test_node(&mut graph, String::from("r"), false, false, &vec!["mystery"]);
+    let mut own = Ledger::blank();
+    for name in ["a", "b", "c", "p", "q", "s", "t", "u", "r"] { own.functions.insert(nikaia_std::block::Text::from(name.to_string()), FnContract::empty()); }
+    let whole = panics_of_graph(&graph, &own);
+    let first = panics_callees_first(&graph, &own);
+    if !(whole == first) { nikaia_std::abort::assertion_failed("assert(whole == first)", None, &[("whole", (&&nikaia_std::abort::Operand(&(whole))).shown()), ("first", (&&nikaia_std::abort::Operand(&(first))).shown()), ]) };
+    if !(places_of_graph(&graph, &own) == places_callees_first(&graph, &own)) { nikaia_std::abort::assertion_failed("assert(places_of_graph(graph, own) == places_callees_first(graph, own))", None, &[("places_of_graph(graph, own)", (&&nikaia_std::abort::Operand(&(places_of_graph(&graph, &own)))).shown()), ("places_callees_first(graph, own)", (&&nikaia_std::abort::Operand(&(places_callees_first(&graph, &own)))).shown()), ]) };
+    if !(nikaia_std::index::or((*nikaia_std::index::get(&first, "a")).copied(), || Panics::No) == Panics::Yes) { nikaia_std::abort::assertion_failed("assert((first[\"a\"] ?? Panics::No) == Panics::Yes)", None, &[("first[\"a\"] ?? Panics::No", (&&nikaia_std::abort::Operand(&(nikaia_std::index::or((*nikaia_std::index::get(&first, "a")).copied(), || Panics::No)))).shown()), ("Panics::Yes", (&&nikaia_std::abort::Operand(&(Panics::Yes))).shown()), ]) };
+    if !(nikaia_std::index::or((*nikaia_std::index::get(&first, "s")).copied(), || Panics::No) == Panics::Yes) { nikaia_std::abort::assertion_failed("assert((first[\"s\"] ?? Panics::No) == Panics::Yes)", None, &[("first[\"s\"] ?? Panics::No", (&&nikaia_std::abort::Operand(&(nikaia_std::index::or((*nikaia_std::index::get(&first, "s")).copied(), || Panics::No)))).shown()), ("Panics::Yes", (&&nikaia_std::abort::Operand(&(Panics::Yes))).shown()), ]) };
+    if !(nikaia_std::index::or((*nikaia_std::index::get(&first, "p")).copied(), || Panics::Yes) == Panics::No) { nikaia_std::abort::assertion_failed("assert((first[\"p\"] ?? Panics::Yes) == Panics::No)", None, &[("first[\"p\"] ?? Panics::Yes", (&&nikaia_std::abort::Operand(&(nikaia_std::index::or((*nikaia_std::index::get(&first, "p")).copied(), || Panics::Yes)))).shown()), ("Panics::No", (&&nikaia_std::abort::Operand(&(Panics::No))).shown()), ]) };
+    if !(nikaia_std::index::or((*nikaia_std::index::get(&first, "r")).copied(), || Panics::No) == Panics::Unknown) { nikaia_std::abort::assertion_failed("assert((first[\"r\"] ?? Panics::No) == Panics::Unknown)", None, &[("first[\"r\"] ?? Panics::No", (&&nikaia_std::abort::Operand(&(nikaia_std::index::or((*nikaia_std::index::get(&first, "r")).copied(), || Panics::No)))).shown()), ("Panics::Unknown", (&&nikaia_std::abort::Operand(&(Panics::Unknown))).shown()), ]) };
+    if !(places_callees_first(&graph, &own).contains("a")) { nikaia_std::abort::assertion_failed("assert(places_callees_first(graph, own).contains(\"a\"))", None, &[]) };
+    let mut groups = 0;
+    for unit in panics_units(&graph) { if unit.len() > 1 { groups = groups + 1; } }
+    if !(groups == 2) { nikaia_std::abort::assertion_failed("assert(groups == 2)", None, &[("groups", (&&nikaia_std::abort::Operand(&(groups))).shown()), ]) };
+    let mut stored: collections::BTreeMap<String, Panics> = collections::BTreeMap::new();
+    stored.insert(String::from("b"), Panics::Yes);
+    let alone: Vec<String> = vec![String::from("a")];
+    let head = panics_of_unit(&alone, &graph, &stored, &own);
+    if !(nikaia_std::index::or((*nikaia_std::index::get(&head, "a")).copied(), || Panics::No) == nikaia_std::index::or((*nikaia_std::index::get(&whole, "a")).copied(), || Panics::No)) { nikaia_std::abort::assertion_failed("assert((head[\"a\"] ?? Panics::No) == (whole[\"a\"] ?? Panics::No))", None, &[("head[\"a\"] ?? Panics::No", (&&nikaia_std::abort::Operand(&(nikaia_std::index::or((*nikaia_std::index::get(&head, "a")).copied(), || Panics::No)))).shown()), ("whole[\"a\"] ?? Panics::No", (&&nikaia_std::abort::Operand(&(nikaia_std::index::or((*nikaia_std::index::get(&whole, "a")).copied(), || Panics::No)))).shown()), ]) };
+    let mut placing: collections::BTreeSet<String> = collections::BTreeSet::new();
+    placing.insert(String::from("b"));
+    let placed = places_of_unit(&alone, &graph, &placing, &placing, &own);
+    if !(placed.contains("a")) { nikaia_std::abort::assertion_failed("assert(placed.contains(\"a\"))", None, &[]) };
+    Ok(())
+}
+
+
+/// The `test` blocks of this file (#2082), as `nikaia test --std` runs them.
+pub(crate) fn panics_nikaia_tests() -> Vec<(&'static str, fn() -> Result<(), std::boxed::Box<dyn std::error::Error>>)> {
+    vec![
+        ("panics::the_per_function_panics_entry_gives_the_whole_package_column", __nikaia_test_0),
+    ]
+}

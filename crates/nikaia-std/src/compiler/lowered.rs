@@ -3614,7 +3614,7 @@ pub mod keep {
 }
 pub mod keeps {
     #[allow(unused_imports)]
-    pub use super::{KeepsBody, uses_in, KeepsHost, KeepsColumn, KeepsKeeper, KeepsImplRow, KeepsIndexes, KeepsFound, keeps_infer, keeps_uses_of};
+    pub use super::{KeepsBody, uses_in, KeepsHost, KeepsColumn, KeepsKeeper, KeepsImplRow, KeepsIndexes, KeepsFound, keeps_infer, keeps_of_unit, keeps_callees_first, keeps_units, keeps_uses_of};
 }
 pub mod leaves {}
 pub mod ledger {
@@ -3647,7 +3647,7 @@ pub mod libraries {
 }
 pub mod locks {
     #[allow(unused_imports)]
-    pub use super::{BodyCalls, Reaches, stored_reaches, locks_infer, free_calls, locking_of, Locking, locking};
+    pub use super::{BodyCalls, Reaches, stored_reaches, locks_infer, free_calls, locking_of, Locking, locking, locks_of_unit, locking_callees_first, callees_first};
 }
 pub mod lsp {
     #[allow(unused_imports)]
@@ -3687,7 +3687,7 @@ pub mod order {
 }
 pub mod panics {
     #[allow(unused_imports)]
-    pub use super::{PanicFacts, PanicReach, PanicsGraph, unit_panics, panics_of_graph, places_of_graph, panics_worth_proving, panics_of_task, places_of_task};
+    pub use super::{PanicFacts, PanicReach, PanicsGraph, unit_panics, panics_of_graph, places_of_graph, panics_of_unit, places_of_unit, panics_callees_first, places_callees_first, panics_settle, panics_worth, panics_units, panics_worth_proving, panics_of_task, places_of_task};
 }
 pub mod parse_errors {
     #[allow(unused_imports)]
@@ -3877,7 +3877,7 @@ pub mod threads {
 }
 pub mod throws {
     #[allow(unused_imports)]
-    pub use super::{AS_VALUE, MethodsCalled, ThrowsGraph, unit_throws, stored_throws, params_as_places, throws_given, throws_published, error_sets, error_type, Thrown, Contribution};
+    pub use super::{AS_VALUE, MethodsCalled, ThrowsGraph, throws_graph, fatal_types, throws_places, throws_record, unit_throws, stored_throws, params_as_places, throws_given, throws_published, error_sets, throws_of_unit, error_sets_callees_first, throws_callees_first, error_type, Thrown, Contribution};
 }
 pub mod tiers {}
 pub mod toml {
@@ -3886,7 +3886,7 @@ pub mod toml {
 }
 pub mod touch {
     #[allow(unused_imports)]
-    pub use super::{Reached, Reach, TouchGraph, unit_touches, touches_of_graph};
+    pub use super::{Reached, Reach, TouchGraph, unit_touches, touches_of_graph, touches_infer, in_ledger_order, touches_of_unit, touches_callees_first, touch_units, touch_kind_is_known};
 }
 pub mod traits {
     #[allow(unused_imports)]
@@ -3941,12 +3941,15 @@ pub fn nikaia_tests() -> std::vec::Vec<(std::string::String, fn() -> Result<(), 
     let mut all: std::vec::Vec<(std::string::String, fn() -> Result<(), std::boxed::Box<dyn std::error::Error>>)> = std::vec::Vec::new();
     all.extend(ast_nikaia_tests().into_iter().map(|(name, run)| (name.to_string(), run)));
     all.extend(crossing_nikaia_tests().into_iter().map(|(name, run)| (name.to_string(), run)));
+    all.extend(keeps_nikaia_tests().into_iter().map(|(name, run)| (name.to_string(), run)));
     all.extend(locks_nikaia_tests().into_iter().map(|(name, run)| (name.to_string(), run)));
     all.extend(manifest_nikaia_tests().into_iter().map(|(name, run)| (name.to_string(), run)));
     all.extend(modules_nikaia_tests().into_iter().map(|(name, run)| (name.to_string(), run)));
+    all.extend(panics_nikaia_tests().into_iter().map(|(name, run)| (name.to_string(), run)));
     all.extend(paths_nikaia_tests().into_iter().map(|(name, run)| (name.to_string(), run)));
     all.extend(signature_nikaia_tests().into_iter().map(|(name, run)| (name.to_string(), run)));
     all.extend(threads_nikaia_tests().into_iter().map(|(name, run)| (name.to_string(), run)));
+    all.extend(throws_nikaia_tests().into_iter().map(|(name, run)| (name.to_string(), run)));
     all.extend(toml_nikaia_tests().into_iter().map(|(name, run)| (name.to_string(), run)));
     all.extend(touch_nikaia_tests().into_iter().map(|(name, run)| (name.to_string(), run)));
     all.extend(ty_nikaia_tests().into_iter().map(|(name, run)| (name.to_string(), run)));
@@ -3991,4 +3994,4 @@ pub fn nikaia_run_tests(filters: &[std::string::String], list: bool, more: std::
 /// **The digest of this lowered set** (#1610): every file `lower-std` wrote
 /// beside this index, and the index above this line. Compiled into the same
 /// crate as the code it names, it is the compiler's identity for its caches.
-pub const LOWERED_DIGEST: &str = "2317888c5eb13fb81238ee46527d6fe96bd67c07fb9ab02090bc18d56a6bba70";
+pub const LOWERED_DIGEST: &str = "ae6acd389b00288f35c38ed5718cdd62dc4398931ed9aecc8cba065da6d1b2dd";

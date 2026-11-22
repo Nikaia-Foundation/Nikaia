@@ -23,3 +23,46 @@ pub trait Restart {
     fn decide(&mut self, history: Failures) -> Next;
 }
 
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Backoff {
+    pub first_delay: time::Duration,
+    pub ceiling: time::Duration,
+    pub healthy: time::Duration,
+    pub give_up_after: time::Duration,
+    cycle_failures: i64,
+    cycle_began: time::Duration,
+    seed: u64,
+}
+
+impl Backoff {
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn new() -> Backoff {
+        let nanos = time::since_epoch().in_nanos() % 1000000000;
+        Backoff { first_delay: 100i32.millis(), ceiling: 30i32.seconds(), healthy: 60i32.seconds(), give_up_after: 300i32.seconds(), cycle_failures: 0, cycle_began: 0i32.seconds(), seed: u64::try_from(nanos).unwrap_or_else(|_| panic!("the value does not fit in an `u64`")) | 1u64 }
+    }
+}
+
+impl Restart for Backoff {
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    fn decide(&mut self, history: Failures) -> Next {
+        if history.last_uptime >= self.healthy {
+            self.cycle_failures = history.consecutive - 1;
+            self.cycle_began = history.since_first;
+        }
+        let failures = history.consecutive - self.cycle_failures;
+        let lasted = nikaia_std::runtime::span_saturating_sub(history.since_first, self.cycle_began);
+        if lasted > self.give_up_after { return Next::Escalate; }
+        if failures <= 1 { return Next::Immediate; }
+        let doubled = nikaia_std::runtime::span_saturating_mul(self.first_delay, 1 << (unsafe { nikaia_std::proven::sub::<i64>(failures, 2) }).min(20));
+        let delay = nikaia_std::runtime::span_min(doubled, self.ceiling);
+        self.seed = self.seed ^ self.seed << 13;
+        self.seed = self.seed ^ self.seed >> 7;
+        self.seed = self.seed ^ self.seed << 17;
+        let quarter = delay.in_nanos() / 4;
+        let off = if quarter <= 0 { 0 } else { i64::try_from(self.seed % u64::try_from(quarter).unwrap_or_else(|_| panic!("the value does not fit in an `u64`"))).unwrap_or_else(|_| panic!("the value does not fit in an `i64`")) };
+        Next::Delay(delay - nikaia_std::runtime::span_nanos_i64(off))
+    }
+}
+
