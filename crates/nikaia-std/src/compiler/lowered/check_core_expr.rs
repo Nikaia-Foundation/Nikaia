@@ -216,6 +216,7 @@ pub(crate) fn check_core_value_of<H: CheckHost>(state: &mut CheckState, world: &
             check_core_expr_declared_method(state, expr, receiver);
             if args.is_empty() && world.words.resolve(method) == "clone" { state.a_clone_seen(world, expr, receiver, &read, span); }
             if args.is_empty() && world.words.resolve(method) == "len" { state.a_collect_only_counted(world, expr, receiver, span); }
+            if world.here.given_pushes.contains(&node_key(expr)) && read.is_a_view() && check_core_expr_pushed_cut(state, world, expr, span) { return a_string_type(); }
             read
         },
         Expr::SafeMethod { receiver, method, args, config, .. } => {

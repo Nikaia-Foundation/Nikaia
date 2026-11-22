@@ -1,0 +1,36 @@
+// A cut at a `text::Pos` (`line.after(m.end)`, `line.before(m.start)`,
+// ADR-374 D3) or a trim of a local that dies where it is pushed into the
+// caller's list owns its text (ADR-text-reuse-1 D2, #1589), as an index cut
+// does (#2291): it takes the local's buffer (`given_cut`), shrunk as it
+// leaves, so `given` takes no keep tether and its list holds `String`s; a
+// local still read after the push keeps the cut a view (`put_viewed`).
+use std::env
+use std::fs
+use std::process
+
+fn toolchain() -> String throws {
+	let exe = env::current_exe()?.display() ?? ""
+	if exe.len() > 0 { return exe }
+	return "target/fast/nikaia"
+}
+
+fn main() throws {
+	let tmp = fs::scratch()
+	let source = "fn given(mut all: Vec[String], city: String) throws {\n    let line = city + \";12\"\n    let m = line.find(\";\") ?? return\n    all.push(line.after(m.end))\n}\n\nfn heads(mut all: Vec[String], lines: Vec[String]) {\n    for each in lines {\n        let line = each + \"!\"\n        let m = line.find(\";\") ?? continue\n        all.push(line.before(m.start))\n    }\n}\n\nfn trimmed(mut all: Vec[String], lines: Vec[String]) {\n    for each in lines {\n        let line = each + \"  \"\n        all.push(line.trim())\n    }\n}\n\nfn echoed(mut all: Vec[String], city: String) throws {\n    let line = city + \";3\"\n    let m = line.find(\";\") ?? return\n    all.push(line.after(m.end))\n    println(line)\n}\n\nfn main() throws {\n    let mut all: Vec[String] = []\n    given(all, \"Hamburg\")\n    heads(all, [\"Kiel;7\", \"none\", \"Ulm;9\"])\n    trimmed(all, [\"  Essen\"])\n    let mut kept: Vec[String] = []\n    echoed(kept, \"Bonn\")\n    println(all.join(\",\"))\n    println(kept.join(\",\"))\n}\n"
+	fs::write("p.nika", tmp, source)
+	let lowered = process::run(toolchain(), ["lower", "p.nika", "-o", "p.rs"]; dir: tmp.path().to_text())
+	if lowered.stdout.contains("Lowered p.nika") == false { println(lowered.stderr) }
+	let rust = fs::read_to_string("p.rs", tmp)
+	for line in rust.lines() {
+		if line.starts_with("fn given")
+			|| line.starts_with("fn heads")
+			|| line.starts_with("fn trimmed")
+			|| line.starts_with("fn echoed")
+			|| line.contains("given_cut(")
+			|| line.contains("put_viewed") {
+				println(line.trim())
+			}
+	}
+	let ran = process::run(toolchain(), ["run", "p.nika"]; dir: tmp.path().to_text())
+	println(ran.stdout.trim())
+}

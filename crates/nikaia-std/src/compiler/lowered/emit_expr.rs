@@ -314,7 +314,18 @@ impl EmitState {
                 if copied { out.push(")"); }
                 if breaks { self.emit_expr_break_close(out, &flow); }
             },
-            Expr::MethodCall { receiver, method, args, config, .. } => { let receiver = nikaia_std::boxed::open(receiver); let method = *method; self.emit_expr_method(world, walk, out, host, node, receiver, method, args, config, depth, flow, scope)?; },
+            Expr::MethodCall { receiver, method, args, config, .. } => {
+                let receiver = nikaia_std::boxed::open(receiver); let method = *method;
+                if self.facts.pushed_cuts.contains(&at) {
+                    out.push("nikaia_std::index::shrunk({ let __cut = ");
+                    self.emit_expr_method(world, walk, out, host, node, receiver, method, args, config, depth, flow, scope)?;
+                    out.push("; let __span = nikaia_std::index::cut_span(&");
+                    self.emit_expr(world, walk, out, host, receiver, depth, flow, scope)?;
+                    out.push(", __cut); nikaia_std::index::given_cut(");
+                    self.emit_expr(world, walk, out, host, receiver, depth, flow, scope)?;
+                    out.push(", __span) })");
+                } else { self.emit_expr_method(world, walk, out, host, node, receiver, method, args, config, depth, flow, scope)?; }
+            },
             Expr::SafeMethod { receiver, method, args, config, .. } => {
                 let receiver = nikaia_std::boxed::open(receiver); let method = *method;
                 if self.facts.plain_reaches.contains(&at) { self.emit_expr_method(world, walk, out, host, node, receiver, method, args, config, depth, flow, scope)?; } else { self.emit_core_safe_method(world, walk, out, host, receiver, method, args, config, depth, flow, scope)?; }
