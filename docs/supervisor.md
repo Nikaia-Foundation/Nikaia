@@ -357,7 +357,7 @@ Moved from the former `docs/architect.md` (2026-10-31). `nikaia` here means
   | `MERGE` | - | merge `origin/develop` by hand and resolve the sources the line names (`merge left open`: finish or abort it now); restart |
   | `BATCH` | - | no `ready` issue left in the lane (every focus area empty): decide or file the waiting ones (`ready`); restart |
   | `ESCALATE` | - | fix the cause the line names; restart |
-  | `PROVED` | `DIR/proved.log` | find the commit of the range that lowered the proof figure and file it for the prover lane; the driver goes on |
+  | `PROVED` | `DIR/proved.log` | find the commit of the range that lowered the proof figure and file it for the solver lane; the driver goes on |
   | (the driver's task ended, no `WAKE` line) | the log's last 20 lines | the driver crashed: fix or file the cause the lines show; restart |
 * **The cycle of one DIR.** `nikaia run scripts/drive.nika -- DIR` with
   `run_in_background` (`--max N` agent runs, default 8; `--dry-run` shows the
@@ -634,7 +634,9 @@ own driver run:
 * **Solver lane** (owner, 2026-11-16): the issues labelled `solver`: proving.
   The solver (ADR-270), the bounds walk and the prover behind `--bounds`
   (indexes, divisors, overflow, relations between values, summaries), the
-  ledger's facts.
+  ledger's facts. The lane owns the solver and the prover alike (owner,
+  2026-11-22): there is no separate prover lane and no `prover` label; an
+  issue about the prover is labelled `solver`.
 * **CI lane, `docs/briefs/ci/`**: the issues labelled `ci`: the workflows,
   the driver's suite and the checks around them. It also checks the result
   of the z3 pipeline (`.github/workflows/z3.yml`, #1989) regularly, on the
