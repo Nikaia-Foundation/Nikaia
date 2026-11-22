@@ -136,6 +136,7 @@ pub(super) fn hollow() -> Box<CheckState> {
         handed_over: None,
         in_parallel: None,
         scoped_task: false,
+        pausing_walk: false,
         inside_unsafe: false,
         repeats: Vec::new(),
     })

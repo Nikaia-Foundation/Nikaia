@@ -1011,3 +1011,167 @@ fn tasks_in_block(block: ref Block, mut walk: TaskWalk, pauses: fn(ref Expr) -> 
         }
     }
 }
+
+/// **Every `par_iter` call and the execution chosen for it**, for
+/// `--overlaps` (ADR-async-5 D25, D32): one task per element where a `map`,
+/// `filter` or `for_each` of the walk has a lambda that pauses, named by the
+/// call in it that pauses; in pieces on the cores where none does. `fanned`
+/// answers, by a lambda's node, whether the checker handed it to the
+/// one-task-per-element entry; `pauses` whether an expression may pause.
+pub fn par_report(items: ref Vec[Spanned[Item]], names: ref winnow_grammar::InternerContext, source: ref String, fanned: fn(i64) -> bool sync, pauses: fn(ref Expr) -> bool sync) -> String {
+    let lines: Vec[ref String] = source.split("\n").collect()
+    let mut out: String = ""
+    for item in items {
+        match item.node {
+            Item::Fn { name, body, .. } => par_walks_of_function(function_name(names, name), body, lines, names, fanned, pauses, out),
+            Item::Impl { target, methods, .. } => {
+                let owner: String? = names.resolve(target.name).clone()
+                for method in methods {
+                    match method.node {
+                        Item::Fn { name, body, .. } => par_walks_of_function(keyed(owner, function_name(names, name)), body, lines, names, fanned, pauses, out),
+                        else => {}
+                    }
+                }
+            }
+            else => {}
+        }
+    }
+    return out
+}
+
+/// One `par_iter` call as the walk met it: the start of the statement it
+/// stands in, innermost, and the call that made a lambda of it pause.
+struct ParWalkSite {
+    start: i64,
+    cause: String?,
+}
+
+fn par_walks_of_function(key: ref String, body: ref Block, lines: ref Vec[ref String], names: ref winnow_grammar::InternerContext, fanned: fn(i64) -> bool sync, pauses: fn(ref Expr) -> bool sync, mut out: String) {
+    let mut sites: collections::BTreeMap[i64, ParWalkSite] = collections::BTreeMap()
+    par_walks_in_block(body, sites, names, fanned, pauses)
+    if sites.len() == 0 {
+        return
+    }
+    let count = sites.len()
+    let noun = if count == 1 { "call" } else { "calls" }
+    out.push_str(ref f"{key}: {count} `par_iter` {noun}\n")
+    let mut number = 0
+    for (_, site) in sites {
+        number += 1
+        let line = line_at(lines, site.start).0 + 1
+        let written = lines[line - 1].trim()
+        out.push_str(ref f"    par_iter {number}, line {line}: `{written}`\n")
+        let runs = match site.cause {
+            null => "in pieces on the cores: no lambda of it pauses (ADR-async-5 D25)",
+            cause => f"one task per element: a lambda of it pauses at {cause ?? ""} (ADR-async-5 D25)",
+        }
+        out.push_str(ref f"        runs        {runs}\n")
+    }
+}
+
+fn par_walks_in_block(block: ref Block, mut sites: collections::BTreeMap[i64, ParWalkSite], names: ref winnow_grammar::InternerContext, fanned: fn(i64) -> bool sync, pauses: fn(ref Expr) -> bool sync) {
+    for stmt in block.stmts {
+        let start = stmt.span.start as i64
+        let exprs = visited_in_stmt(stmt.node)
+        for each in exprs {
+            match each {
+                Expr::MethodCall { method, .. } if names.resolve(method) == "par_iter" => {
+                    let id = id_of(each) as i64
+                    let mut site = sites.get(id)?.clone() ?? ParWalkSite { start: start, cause: null }
+                    site.start = start
+                    sites.insert(id, site)
+                },
+                else => {}
+            }
+        }
+        for each in exprs {
+            let (walk, lambda) = par_lambda_step(each, names) ?? continue
+            if !fanned(id_of(lambda) as i64) {
+                continue
+            }
+            let at: i64 = id_of(walk) as i64
+            let mut site = sites.get(at)?.clone() ?? ParWalkSite { start: start, cause: null }
+            if site.cause == null {
+                site.cause = par_pausing_call(lambda, names, pauses)
+            }
+            sites.insert(at, site)
+        }
+        for each in exprs {
+            match each {
+                Expr::Closure { body, .. } => par_walks_in_block(body, sites, names, fanned, pauses),
+                else => {}
+            }
+        }
+        match stmt.node {
+            Stmt::For { body, .. } => par_walks_in_block(body, sites, names, fanned, pauses),
+            Stmt::While { body, .. } => par_walks_in_block(body, sites, names, fanned, pauses),
+            else => {}
+        }
+    }
+}
+
+/// A `map`, `filter` or `for_each` over a walk a `par_iter` call starts:
+/// that call and the step's lambda.
+fn par_lambda_step(each: ref Expr, names: ref winnow_grammar::InternerContext) -> (ref Expr, ref Expr)? {
+    let (receiver, method, args) = match each {
+        Expr::MethodCall { receiver, method, args, .. } => (receiver, names.resolve(method), args),
+        else => return null,
+    }
+    if method != "map" && method != "filter" && method != "for_each" || args.len() != 1 {
+        return null
+    }
+    let lambda: ref Expr = args[0]
+    let mut on: ref Expr = receiver
+    while true {
+        match on {
+            Expr::MethodCall { receiver: inner, method: step, .. } => {
+                if names.resolve(step) == "par_iter" {
+                    return (on, lambda)
+                }
+                on = inner
+            },
+            else => return null,
+        }
+    }
+    return null
+}
+
+/// The innermost call in a lambda that may pause, as the report names it:
+/// `` its call of `name` ``.
+fn par_pausing_call(lambda: ref Expr, names: ref winnow_grammar::InternerContext, pauses: fn(ref Expr) -> bool sync) -> String? {
+    let body: ref Block = match lambda {
+        Expr::Closure { body, .. } => body,
+        else => return null,
+    }
+    for each in visited_in_block(body) {
+        let callee: String = match each {
+            Expr::Call { func, .. } => called_key(func, names) ?? continue,
+            Expr::MethodCall { method, .. } => names.resolve(method).clone(),
+            else => continue,
+        }
+        if !pauses(each) || par_call_inside_pauses(each, pauses) {
+            continue
+        }
+        return f"its call of `{callee}`"
+    }
+    return null
+}
+
+/// Whether a call inside `call`, not `call` itself, may pause.
+fn par_call_inside_pauses(call: ref Expr, pauses: fn(ref Expr) -> bool sync) -> bool {
+    let own = id_of(call)
+    for each in visited_in_expr(call) {
+        if id_of(each) == own {
+            continue
+        }
+        let a_call = match each {
+            Expr::Call { .. } => true,
+            Expr::MethodCall { .. } => true,
+            else => false,
+        }
+        if a_call && pauses(each) {
+            return true
+        }
+    }
+    return false
+}

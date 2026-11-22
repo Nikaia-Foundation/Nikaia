@@ -1,0 +1,48 @@
+// #2500: a `par_iter` chain's `map`, `filter` and `for_each` take a lambda
+// that may pause (ADR-async-5 D24); such a chain runs one task per element,
+// under `limit:`, and its results come back in input order, whatever order
+// the tasks end in (D25, D26). The later elements sleep less, so they end
+// first. Before, the pausing lambda was refused with `NK2209`.
+use std::time
+
+fn slow(x: i64) -> i64 {
+    time::sleep((12 - 2 * x).millis())
+    return x * 10
+}
+
+fn counted(x: i64, now: SharedMut[i64], most: SharedMut[i64]) -> i64 {
+    now.update fn(mut v) { v += 1 }
+    let seen = now.get()
+    most.update fn(mut m) {
+        if seen > m {
+            m = seen
+        }
+    }
+    time::sleep(2.millis())
+    now.update fn(mut v) { v -= 1 }
+    return x + 1
+}
+
+fn later(x: i64) -> bool {
+    time::sleep((12 - 2 * x).millis())
+    return x % 2 == 1
+}
+
+fn main() throws {
+    let xs = [1, 2, 3, 4, 5]
+    let ys: Vec[i64] = xs.par_iter().map(fn(x) { slow(x) }).collect()
+    println(f"map {ys[0]} {ys[1]} {ys[2]} {ys[3]} {ys[4]}")
+    let now = SharedMut(0)
+    let most = SharedMut(0)
+    let two: Vec[i64] = xs.par_iter(limit: 2).map(fn(x) { counted(x, now, most) }).collect()
+    let peak = most.get()
+    println(f"limit 2 {two[0]} {two[4]}, {two.len()} results, at most {peak} at once")
+    let odd: Vec[i64] = xs.par_iter().filter(fn(x) { later(x) }).collect()
+    println(f"filter {odd.len()}: {odd[0]} {odd[1]} {odd[2]}")
+    xs.par_iter(limit: 1).for_each(fn(x) {
+        let y = slow(x)
+        println(f"for_each {y}") catch {}
+    })
+    let sum = xs.par_iter().map(fn(x) { slow(x) }).fold(fn() { 0 }, fn(acc, x) { acc + x }, fn(a, b) { a + b })
+    println(f"fold {sum}")
+}

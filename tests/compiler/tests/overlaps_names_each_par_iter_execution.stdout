@@ -1,0 +1,7 @@
+this program writes no `overlap { … }` block.
+main: 2 `par_iter` calls
+    par_iter 1, line 10: `let quick: Vec[i64] = xs.par_iter().map(fn(x) { x * 2 }).collect()`
+        runs        in pieces on the cores: no lambda of it pauses (ADR-async-5 D25)
+    par_iter 2, line 11: `let paused: Vec[i64] = xs.par_iter(limit: 2).map(fn(x) { slow(x) + 1 }).collect()`
+        runs        one task per element: a lambda of it pauses at its call of `slow` (ADR-async-5 D25)
+Checked main.nika

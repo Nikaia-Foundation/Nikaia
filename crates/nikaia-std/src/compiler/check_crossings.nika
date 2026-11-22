@@ -635,20 +635,52 @@ fn check_crossings_entry(state: ref CheckState, key: ref String, chained: bool) 
     return null
 }
 
+/// The counterpart in `nikaia_std::seq` that runs a `par_iter` step's
+/// pausing lambda as one task per element (ADR-async-5 D25), where `key` is
+/// one of the three steps whose lambda may pause (D24).
+fn check_crossings_fanned(key: ref String) -> String? sync {
+    if key == "Seq::map" {
+        return "fan_map"
+    }
+    if key == "Seq::filter" {
+        return "fan_filter"
+    }
+    if key == "Seq::for_each" {
+        return "fan_for_each"
+    }
+    return null
+}
+
 /// **A lambda that pauses, handed to a `std` entry**
 /// ([ADR-233](../../../docs/specification/adr/adr-233.md)): `args[lambda_at]`
 /// is the lambda, `-1` none. A lazy `map` or `filter` hands back a sequence
 /// whose step pauses (D1); the eager entries pause where they are called (D2).
 fn check_crossings_a_lambda_that_pauses_at_an_entry(mut state: CheckState, key: ref String, receiver: ref Expr, on: ref Ty, args: ref Vec[Expr], lambda_at: i64, result: Ty, span: ref Span) -> Ty sync {
-    // A `Par[T]`'s lambda may not pause at all: `NK2209` has said so.
     let parallel = match on {
         Ty::Seq { parallel, .. } => parallel,
         else => false,
     }
-    if parallel {
+    let chained = a_paused_chain(key, on)
+    // **A `par_iter` chain's `map`, `filter` and `for_each` with a lambda
+    // that pauses run one task per element** (ADR-async-5 D24, D25), and the
+    // results come back in input order (D26). A step after one that already
+    // pauses is a step of that sequence; any other lambda of a `Par[T]` may
+    // not pause at all, and `NK2209` has said so.
+    if parallel && !chained {
+        let fanned: String? = check_crossings_fanned(key)
+        if fanned == null || lambda_at < 0 || lambda_at >= args.len() as i64 {
+            return result
+        }
+        state.facts.pausing_lambdas.insert(id_of(args[lambda_at]) as i64, FactPausing::Function((fanned ?? "").clone()))
+        if key == "Seq::map" || key == "Seq::filter" {
+            return a_pausing_sequence(result, on)
+        }
+        let written = id_of(receiver) as i64
+        state.flow.settled_methods.remove(written)
+        state.flow.pausing_methods.insert(written)
+        state.a_call_that_may_pause(key, true, false, span)
         return result
     }
-    let chained = a_paused_chain(key, on)
     if lambda_at < 0 || lambda_at >= args.len() as i64 {
         // A plain lambda over a sequence that already pauses: the step still
         // does, so the result is one too.
