@@ -1,0 +1,40 @@
+warning[NK1308]: `dir.clone()` reaches the root `fs::Root::Dir(dir.clone()).join("tests")` of `fs::exists`, a directory a stranger may have chosen, and it comes from outside the program.
+   --> tests/a_join_under_a_root_from_outside_stays_a_raw_sink.nika:13:5
+    |
+ 13 |     println(fs::exists("blob", fs::Root::Dir(dir.clone()).join("tests")))
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: `dir.clone()` comes from `cli::args`: whoever sends it chooses the value, so nothing the compiler can see says what it holds.
+    = note: A root from outside keeps a path inside a directory a stranger chose, which may be `/`.
+    = note: `raw-sinks = "warn"` lets this build through.
+    = help: Build the root from a literal, `fs::scratch()` or `root.join(...)` of such a root: no check makes a directory from outside one the program chose. If the program means to read paths from `args`, `untrusted-paths-read = ["args"]` under `[allow]` in the manifest builds it.
+warning[NK1308]: `dir.clone()` reaches the root `at` of `fs::exists`, a directory a stranger may have chosen, and it comes from outside the program.
+   --> tests/a_join_under_a_root_from_outside_stays_a_raw_sink.nika:15:5
+    |
+ 15 |     println(fs::exists("blob", at))
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: `dir.clone()` comes from `cli::args`: whoever sends it chooses the value, so nothing the compiler can see says what it holds.
+    = note: A root from outside keeps a path inside a directory a stranger chose, which may be `/`.
+    = note: `raw-sinks = "warn"` lets this build through.
+    = help: Build the root from a literal, `fs::scratch()` or `root.join(...)` of such a root: no check makes a directory from outside one the program chose. If the program means to read paths from `args`, `untrusted-paths-read = ["args"]` under `[allow]` in the manifest builds it.
+warning[NK1308]: `dir` reaches the root `fs::Root::Dir(dir).join(key)` of `fs::exists`, a directory a stranger may have chosen, and it comes from outside the program.
+   --> tests/a_join_under_a_root_from_outside_stays_a_raw_sink.nika:17:5
+    |
+ 17 |     println(fs::exists("blob", fs::Root::Dir(dir).join(key)))
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: `dir` comes from `cli::args`: whoever sends it chooses the value, so nothing the compiler can see says what it holds.
+    = note: A root from outside keeps a path inside a directory a stranger chose, which may be `/`.
+    = note: `raw-sinks = "warn"` lets this build through.
+    = help: Build the root from a literal, `fs::scratch()` or `root.join(...)` of such a root: no check makes a directory from outside one the program chose. If the program means to read paths from `args`, `untrusted-paths-read = ["args"]` under `[allow]` in the manifest builds it.
+warning[NK1308]: `key` reaches the root `fs::Root::Dir(dir).join(key)` of `fs::exists`, a directory a stranger may have chosen, and it comes from outside the program.
+   --> tests/a_join_under_a_root_from_outside_stays_a_raw_sink.nika:17:5
+    |
+ 17 |     println(fs::exists("blob", fs::Root::Dir(dir).join(key)))
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: `key` comes from `cli::args`: whoever sends it chooses the value, so nothing the compiler can see says what it holds.
+    = note: A path from outside may name any file the program can reach: `../`, or one that starts at `/`.
+    = note: `raw-sinks = "warn"` lets this build through.
+    = help: Open it under a root the program chose, where it cannot leave the directory: `fs::Root::Dir(".")`, `fs::scratch()` or `root.join(...)` of one. Or check it where it arrives, `throw BadInput(key) if !path::is_component(key)` (or `path::is_below`), and open it under such a root or joined to a part that is not outside. If the program means to read paths from `args`, `untrusted-paths-read = ["args"]` under `[allow]` in the manifest builds it.
