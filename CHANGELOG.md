@@ -8,6 +8,13 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1538] — 2026-11-22
+
+**Builders' changes (#2696, #2711, #2729)**
+- Faster solver queries in the bounds walk: the question keys are written without the formatter and a known answer is no longer copied, about 5 % fewer instructions for `check --bounds` (#2696)
+- The `--bounds` report takes the proof the ledger made for a unit when it asks the same question, instead of walking the program again (sv_strategy.nika: 24 of 82 walks through loops skipped, reports unchanged)
+- Fixed: tasks on the pool (user-parallelism = yes) that read and write files no longer hang now and then, which happened when another task's poll picked up their answer.
+
 ## [0.0.1537] — 2026-11-22
 
 **Builders' changes (#2500, #2653)**
