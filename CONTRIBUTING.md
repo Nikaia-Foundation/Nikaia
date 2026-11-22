@@ -63,13 +63,17 @@ yours. The ones that matter most for a pull request:
 
 * **Base your branch on `develop`** and open the pull request against
   `develop`. `main` only moves when CI passes on `develop`.
-* **Write in Nikaia.** A new feature of the compiler, `std` or the tools is a
-  `.nika` file, not new Rust. Files under
+* **Nikaia code is preferred.** A change to the compiler, `std` or the tools
+  is best written as `.nika`. Files under
   `crates/nikaia-std/src/compiler/lowered/` are generated; change the `.nika`
-  they come from.
+  they come from. Rust is allowed as an exception, for an important bug or
+  feature that can only sensibly be done in Rust for now; say in the pull
+  request why. A pull request that changes Rust takes longer to review and is
+  less likely to be taken.
 * **Tests are `.nika` programs** with their expected `.stdout` / `.stderr`
   beside them in `tests/compiler/tests/`, run by `nikaia test`. No new
-  `#[test]`.
+  `#[test]`. Regression tests are welcome: a test that pins a bug, or a case
+  a check must keep refusing, helps even without a fix.
 * **Leave the version lines, `CHANGELOG.md` and the badges alone**; we raise
   them when we merge.
 * **Write `Fixes #N` only when the pull request finishes issue N.** For part
