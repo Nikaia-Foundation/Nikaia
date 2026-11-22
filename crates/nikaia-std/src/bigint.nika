@@ -1,0 +1,147 @@
+// crates/nikaia-std/src/bigint.nika
+//
+// `std::bigint`, written in Nikaia: an exact signed integer of any size
+// (Part I 2.2, ADR-270 D11), for a computation that may outgrow every fixed
+// width. A program names it `bigint::BigInt` after `use std::bigint`; it is
+// not in the prelude (Part I 1.3).
+//
+// A sign and a list of 64-bit digits, least significant first, with no
+// leading zero digit; zero has no digits and sign 0, so the derived `==`
+// is equality of value. Every digit step is one of the integer methods of
+// Part I 2.2: `widening_mul` for a digit's product, `overflowing_add` and
+// `overflowing_sub` for the carry and the borrow, `narrowing_div_rem` for a
+// digit's quotient. No literal, operator or `as` (ADR-294).
+
+
+/// An exact signed integer of any size.
+pub struct BigInt {
+    sign: i64,
+    digits: Vec[u64],
+}
+
+/// The magnitude without its leading zero digits.
+fn trimmed(keep digits: Vec[u64]) -> Vec[u64] sync {
+    let mut digits = digits
+    while digits.len() > 0 && digits[digits.len() - 1] == 0 {
+        digits.pop()
+    }
+    return digits
+}
+
+/// A number of this sign and magnitude, zero where the magnitude is.
+fn made(sign: i64, keep digits: Vec[u64]) -> BigInt sync {
+    let kept = trimmed(digits)
+    if kept.len() == 0 {
+        return BigInt { sign: 0, digits: [] }
+    }
+    return BigInt { sign: sign, digits: kept }
+}
+
+/// -1, 0 or 1 as `a` is below, at or above `b`, magnitudes.
+fn magnitude_compare(a: Vec[u64], b: Vec[u64]) -> i64 sync {
+    if a.len() != b.len() {
+        return if a.len() < b.len() { -1 } else { 1 }
+    }
+    let mut at = a.len()
+    while at > 0 {
+        at -= 1
+        if a[at] != b[at] {
+            return if a[at] < b[at] { -1 } else { 1 }
+        }
+    }
+    return 0
+}
+
+/// `a / d` and `a % d` for a magnitude and one digit `d`, not zero.
+fn magnitude_div_digit(a: Vec[u64], d: u64) -> (Vec[u64], u64) sync {
+    let mut quotient: Vec[u64] = []
+    for _ in 0..<a.len() {
+        quotient.push(0)
+    }
+    let mut rest: u64 = 0
+    let mut at = a.len()
+    while at > 0 {
+        at -= 1
+        let (q, r) = rest.narrowing_div_rem(a[at], d) ?? return ([], 0)
+        quotient[at] = q
+        rest = r
+    }
+    return (trimmed(quotient), rest)
+}
+
+impl BigInt {
+    /// The integer `v`, of any integer type an `i64` holds.
+    pub fn of(v: i64) -> BigInt sync {
+        return BigInt::from_wide(Wide::of(v))
+    }
+
+    /// The integer a `Wide[i64]` holds.
+    pub fn from_wide(w: Wide[i64]) -> BigInt sync {
+        let (low, high) = w.abs().halves()
+        return made(w.sign(), [low, high])
+    }
+
+    /// The value as an `i64`, or `null` where it does not fit one.
+    pub fn narrow(self) -> i64? sync {
+        if self.digits.len() == 0 {
+            return 0
+        }
+        if self.digits.len() > 1 {
+            return null
+        }
+        let d = self.digits[0]
+        if self.sign < 0 && d == 9223372036854775808 {
+            return -9223372036854775807 - 1
+        }
+        let v = d.checked_i64() ?? return null
+        return if self.sign < 0 { -v } else { v }
+    }
+
+    /// -1, 0 or 1 as the value is below, at or above zero.
+    pub fn sign(self) -> i64 sync {
+        return self.sign
+    }
+
+    /// How many bits the magnitude takes: 0 for zero, 1 for ±1.
+    pub fn bits(self) -> i64 sync {
+        let n = self.digits.len()
+        if n == 0 {
+            return 0
+        }
+        let top: i64 = self.digits[n - 1].leading_zeros()
+        return n * 64 - top
+    }
+
+    /// The value in decimal, with a `-` in front where it is negative.
+    pub fn to_text(self) -> String sync {
+        if self.sign == 0 {
+            return "0"
+        }
+        let mut chunks: Vec[u64] = []
+        let mut rest = self.digits.clone()
+        while rest.len() > 0 {
+            let (q, r) = magnitude_div_digit(rest, 10000000000000000000)
+            chunks.push(r)
+            rest = q
+        }
+        let mut text = if self.sign < 0 { "-" } else { "" }
+        let mut at = chunks.len()
+        at -= 1
+        text = text + f"{chunks[at]}"
+        while at > 0 {
+            at -= 1
+            text = text + f"{chunks[at]:019}"
+        }
+        return text
+    }
+}
+
+impl Ord for BigInt {
+    fn compare(self, other: BigInt) -> Ordering sync {
+        if self.sign != other.sign {
+            return if self.sign < other.sign { Ordering::Less } else { Ordering::Greater }
+        }
+        let order = magnitude_compare(self.digits, other.digits) * self.sign
+        return if order < 0 { Ordering::Less } else if order > 0 { Ordering::Greater } else { Ordering::Equal }
+    }
+}
