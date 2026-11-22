@@ -22,7 +22,7 @@ pub(crate) fn list_of_known(item: Ty) -> Ty {
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn bare_reference(pattern: &Pattern, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>) -> String {
+pub(crate) fn bare_reference(pattern: &Pattern, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>) -> String {
     match pattern {
         Pattern::Ref { name, generics, args } => { let name = *name; if generics.is_empty() && args.is_empty() { nikaia_std::block::Text::from(world.words.resolve(name).to_string()) } else { String::from("") } },
         _ => String::from(""),
@@ -31,7 +31,7 @@ pub(crate) fn bare_reference(pattern: &Pattern, world: &CheckWorld<'_, '_, '_, '
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn grammar_a_stream_call(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, iter: &Expr) -> bool {
+pub(crate) fn grammar_a_stream_call(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, iter: &Expr) -> bool {
     match iter {
         Expr::Call { func, args, .. } => { let func = nikaia_std::boxed::open(func); match func {
             Expr::Path(segments, _) => !args.is_empty() && grammar_a_stream_entry(world, segments),
@@ -43,7 +43,7 @@ pub(crate) fn grammar_a_stream_call(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn grammar_a_stream_entry(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, segments: &[winnow_grammar::Symbol]) -> bool {
+pub(crate) fn grammar_a_stream_entry(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, segments: &[winnow_grammar::Symbol]) -> bool {
     if segments.len() == 2 {
         let book = format!("{}", world.words.resolve(*unsafe { nikaia_std::proven::read(&segments, (0) as usize) }));
         let rule = format!("{}", world.words.resolve(*unsafe { nikaia_std::proven::read(&segments, (1) as usize) }));
@@ -71,7 +71,7 @@ pub(crate) fn grammar_a_stream_entry_in(view: &ParsedView<'_, '_, '_, '_, '_, '_
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn grammar_a_text_call(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, pattern: &Pattern, rules: &collections::BTreeSet<String>) -> bool {
+pub(crate) fn grammar_a_text_call(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, pattern: &Pattern, rules: &collections::BTreeSet<String>) -> bool {
     match pattern {
         Pattern::Ref { name, generics, args } => { let name = *name; generics.is_empty() && !args.is_empty() && (world.words.resolve(name) == "text" || world.words.resolve(name) == "bytes") && !rules.contains(world.words.resolve(name)) },
         _ => false,
@@ -80,7 +80,7 @@ pub(crate) fn grammar_a_text_call(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn grammar_a_span_call(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, pattern: &Pattern, rules: &collections::BTreeSet<String>) -> bool {
+pub(crate) fn grammar_a_span_call(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, pattern: &Pattern, rules: &collections::BTreeSet<String>) -> bool {
     match pattern {
         Pattern::Ref { name, generics, args } => { let name = *name; generics.is_empty() && args.len() == 1 && world.words.resolve(name) == "span" && !rules.contains(world.words.resolve(name)) },
         _ => false,
@@ -104,7 +104,7 @@ pub(crate) fn grammar_ungrouped(pattern: &Pattern) -> &Pattern {
 // this was written - see `contracts::sync`.
 pub(crate) fn an_offered_number_name(name: &str) -> bool { name == "i32" || name == "i64" || name == "u8" || name == "u32" || name == "u64" || name == "f32" || name == "f64" }
 
-pub(crate) fn grammar_stream_refused(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, rule: &GrammarRule, results: &collections::BTreeMap<String, Ty>, rules: &collections::BTreeSet<String>, emitted: bool) -> Option<CheckFinding> {
+pub(crate) fn grammar_stream_refused(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, rule: &GrammarRule, results: &collections::BTreeMap<String, Ty>, rules: &collections::BTreeSet<String>, emitted: bool) -> Option<CheckFinding> {
     let entry = nikaia_std::block::Text::from(world.words.resolve(rule.name).to_string());
     let wanted: Ty = nikaia_std::index::or(match *nikaia_std::index::get(&results, &entry) {
         Some(__nikaia_it) => Some(__nikaia_it.clone()),
@@ -133,7 +133,7 @@ pub(crate) fn grammar_stream_refusal(entry: &str, span: &Span, why: &str, help: 
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn grammar_stream_paths(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, pattern: &Pattern, wanted: &Ty, results: &collections::BTreeMap<String, Ty>, rules: &collections::BTreeSet<String>) -> i64 {
+pub(crate) fn grammar_stream_paths(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, pattern: &Pattern, wanted: &Ty, results: &collections::BTreeMap<String, Ty>, rules: &collections::BTreeSet<String>) -> i64 {
     match pattern {
         Pattern::Group(inner) => { let inner = nikaia_std::boxed::open(inner); return grammar_stream_paths(world, &inner.node, wanted, results, rules) },
         Pattern::Seq(parts) => {
@@ -163,7 +163,7 @@ pub(crate) fn grammar_stream_paths(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn grammar_stream_item(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, pattern: &Pattern, wanted: &Ty, results: &collections::BTreeMap<String, Ty>, rules: &collections::BTreeSet<String>) -> bool {
+pub(crate) fn grammar_stream_item(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, pattern: &Pattern, wanted: &Ty, results: &collections::BTreeMap<String, Ty>, rules: &collections::BTreeSet<String>) -> bool {
     let mut called: String = String::from("");
     match pattern {
         Pattern::Group(inner) => { let inner = nikaia_std::boxed::open(inner); return grammar_stream_item(world, &inner.node, wanted, results, rules); },
@@ -188,7 +188,7 @@ pub(crate) fn grammar_stream_item(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>
 impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn pattern_type(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, pattern: &Pattern, rules: &collections::BTreeSet<String>) -> Ty {
+    pub(crate) fn pattern_type(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, pattern: &Pattern, rules: &collections::BTreeSet<String>) -> Ty {
         match pattern {
             Pattern::Repeat { pat, rep } => { let pat = nikaia_std::boxed::open(pat); self.repeat_type(world, &pat.node, rep, rules) },
             Pattern::Group(pat) => { let pat = nikaia_std::boxed::open(pat); self.pattern_type(world, &pat.node, rules) },
@@ -206,7 +206,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn repeat_type(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, pat: &Pattern, rep: &Repeat, rules: &collections::BTreeSet<String>) -> Ty {
+    pub(crate) fn repeat_type(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, pat: &Pattern, rep: &Repeat, rules: &collections::BTreeSet<String>) -> Ty {
         if *rep == Repeat::Optional {
             let inner = self.pattern_type(world, pat, rules);
             return match inner {
@@ -220,7 +220,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn choice_type(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, alternatives: &[Spanned<Pattern>], rules: &collections::BTreeSet<String>) -> Ty {
+    pub(crate) fn choice_type(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, alternatives: &[Spanned<Pattern>], rules: &collections::BTreeSet<String>) -> Ty {
         let mut first = Ty::Unknown;
         let mut at: i64 = 0;
         while at < alternatives.len() as i64 {
@@ -235,7 +235,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn reference_type(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, name: winnow_grammar::Symbol, generics: &[Type], args: &[Spanned<Pattern>], rules: &collections::BTreeSet<String>) -> Ty {
+    pub(crate) fn reference_type(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, name: winnow_grammar::Symbol, generics: &[Type], args: &[Spanned<Pattern>], rules: &collections::BTreeSet<String>) -> Ty {
         let called = nikaia_std::block::Text::from(world.words.resolve(name).to_string());
         if rules.contains(&called) {
             return nikaia_std::index::or(match *nikaia_std::index::get(&self.rule_results, &called) {
@@ -267,7 +267,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn bindings_of(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, pattern: &Pattern, rules: &collections::BTreeSet<String>) -> Vec<CheckLocal> {
+    pub(crate) fn bindings_of(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, pattern: &Pattern, rules: &collections::BTreeSet<String>) -> Vec<CheckLocal> {
         let mut out: Vec<CheckLocal> = vec![];
         match pattern {
             Pattern::Bind { name, pat } => {
@@ -295,7 +295,7 @@ impl CheckState {
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn grammar_position_written(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, pattern: &Pattern, rules: &collections::BTreeSet<String>) -> String {
+pub(crate) fn grammar_position_written(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, pattern: &Pattern, rules: &collections::BTreeSet<String>) -> String {
     match pattern {
         Pattern::Ref { name, generics, args } => {
             let name = *name;
@@ -315,7 +315,7 @@ pub(crate) fn grammar_position_written(world: &CheckWorld<'_, '_, '_, '_, '_, '_
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn grammar_position_in_any(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, parts: &[Spanned<Pattern>], rules: &collections::BTreeSet<String>) -> String {
+pub(crate) fn grammar_position_in_any(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, parts: &[Spanned<Pattern>], rules: &collections::BTreeSet<String>) -> String {
     for part in parts.iter() {
         let found = grammar_position_written(world, &part.node, rules);
         if found != "" { return found; }
@@ -325,7 +325,7 @@ pub(crate) fn grammar_position_in_any(world: &CheckWorld<'_, '_, '_, '_, '_, '_,
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn grammar_position_of(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, named: &str) -> String {
+pub(crate) fn grammar_position_of(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, named: &str) -> String {
     let found = grammar_position_in_view(world, &world.here, named);
     if found != "" { return found; }
     for view in world.beside.iter() {
@@ -337,7 +337,7 @@ pub(crate) fn grammar_position_of(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn grammar_position_in_view(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, view: &ParsedView<'_, '_, '_, '_, '_, '_, '_>, named: &str) -> String {
+pub(crate) fn grammar_position_in_view(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, view: &ParsedView<'_, '_, '_, '_, '_, '_, '_>, named: &str) -> String {
     for item in view.items.iter() {
         match &item.node {
             Item::Grammar(def) => {
@@ -358,7 +358,7 @@ pub(crate) fn grammar_position_in_view(world: &CheckWorld<'_, '_, '_, '_, '_, '_
     String::from("")
 }
 
-pub(crate) fn grammar_positions_over_both(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, key: &str, named: &str, span: &Span) -> Option<CheckFinding> {
+pub(crate) fn grammar_positions_over_both(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, key: &str, named: &str, span: &Span) -> Option<CheckFinding> {
     let written = grammar_position_of(world, named);
     if written == "" { return None; }
     let notes: Vec<String> = vec![format!("Over text `{}` is a `text::Pos` or a `text::Match` of the input, over a `Bytes` a `u32` or a `text::Span` (ADR-374 D7); an action of the grammar is checked for one of them.", written)];
@@ -379,7 +379,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn rule_values<H: CheckHost>(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, rule: &GrammarRule) -> Vec<CheckLocal> {
+    pub(crate) fn rule_values<H: CheckHost>(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, host: &H, rule: &GrammarRule) -> Vec<CheckLocal> {
         let mut out: Vec<CheckLocal> = vec![];
         let owner: String = nikaia_std::index::or(match self.current.as_ref() {
             Some(__nikaia_it) => Some(__nikaia_it.clone()),
@@ -408,7 +408,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn grammar_values<H: CheckHost>(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, gram: &GrammarDef, pattern: &Spanned<Pattern>, rules: &collections::BTreeSet<String>, scope: Vec<CheckLocal>) -> Vec<CheckLocal> {
+    pub(crate) fn grammar_values<H: CheckHost>(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, host: &H, gram: &GrammarDef, pattern: &Spanned<Pattern>, rules: &collections::BTreeSet<String>, scope: Vec<CheckLocal>) -> Vec<CheckLocal> {
         match &pattern.node {
             Pattern::Seq(parts) => {
                 let mut now = scope;
@@ -486,7 +486,7 @@ impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    pub(crate) fn grammar_fixed<H: CheckHost>(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, value: &Expr, want: &Ty, scope: &[CheckLocal], span: &Span, what: &str, help: &str) {
+    pub(crate) fn grammar_fixed<H: CheckHost>(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, host: &H, value: &Expr, want: &Ty, scope: &[CheckLocal], span: &Span, what: &str, help: &str) {
         self.scope.push(scope.copy_owned());
         let mut word: String = String::from("bound");
         if what == "A guard" { word = String::from("guard"); }
@@ -499,7 +499,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_lent_rule_value<H: CheckHost>(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, arg: &FnArg) -> bool {
+    pub fn a_lent_rule_value<H: CheckHost>(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, host: &H, arg: &FnArg) -> bool {
         if arg.mutable || arg.keep || (*arg.ty.code).is_some() { return false; }
         let ty = host.type_of(&arg.ty);
         !ty.is_unknown() && !self.a_word_by_its_kind(world, &ty.owned())
@@ -507,7 +507,7 @@ impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    pub(crate) fn grammar_value<H: CheckHost>(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, value: &Expr, want: Ty, lent: bool, scope: &[CheckLocal], span: &Span, what: &str) {
+    pub(crate) fn grammar_value<H: CheckHost>(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, host: &H, value: &Expr, want: Ty, lent: bool, scope: &[CheckLocal], span: &Span, what: &str) {
         self.scope.push(scope.copy_owned());
         let mut found = check_core_expr(&mut *self, world, host, value, span);
         self.scope.pop();
@@ -521,7 +521,7 @@ impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    pub(crate) fn grammar_call<H: CheckHost>(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, gram: &GrammarDef, name: winnow_grammar::Symbol, args: &[Expr], config: &[ConfigArg], scope: &[CheckLocal], span: &Span) {
+    pub(crate) fn grammar_call<H: CheckHost>(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, host: &H, gram: &GrammarDef, name: winnow_grammar::Symbol, args: &[Expr], config: &[ConfigArg], scope: &[CheckLocal], span: &Span) {
         let called = nikaia_std::block::Text::from(world.words.resolve(name).to_string());
         let grammar_name = nikaia_std::block::Text::from(world.words.resolve(gram.name).to_string());
         for rule in gram.rules.iter() {
@@ -555,7 +555,7 @@ impl CheckState {
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn grammar_called_rules(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, pattern: &Pattern, rules: &collections::BTreeSet<String>, out: &mut collections::BTreeSet<String>) {
+pub(crate) fn grammar_called_rules(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, pattern: &Pattern, rules: &collections::BTreeSet<String>, out: &mut collections::BTreeSet<String>) {
     match pattern {
         Pattern::Seq(parts) => { for part in parts.iter() { grammar_called_rules(world, &part.node, rules, out); } },
         Pattern::Choice(parts) => { for part in parts.iter() { grammar_called_rules(world, &part.node, rules, out); } },
@@ -590,7 +590,7 @@ pub(crate) fn grammar_called_rules(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn grammar_streamed_rules(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, gram: &GrammarDef, results: &collections::BTreeMap<String, Ty>, rules: &collections::BTreeSet<String>) -> collections::BTreeMap<String, Ty> {
+pub(crate) fn grammar_streamed_rules(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, gram: &GrammarDef, results: &collections::BTreeMap<String, Ty>, rules: &collections::BTreeSet<String>) -> collections::BTreeMap<String, Ty> {
     let mut out: collections::BTreeMap<String, Ty> = collections::BTreeMap::new();
     for rule in gram.rules.iter() {
         if rule.stream && rule.is_entry {
@@ -607,7 +607,7 @@ pub(crate) fn grammar_streamed_rules(world: &CheckWorld<'_, '_, '_, '_, '_, '_, 
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn grammar_reached_from(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, gram: &GrammarDef, start: &str, rules: &collections::BTreeSet<String>) -> collections::BTreeSet<String> {
+pub(crate) fn grammar_reached_from(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, gram: &GrammarDef, start: &str, rules: &collections::BTreeSet<String>) -> collections::BTreeSet<String> {
     let mut seen: collections::BTreeSet<String> = collections::BTreeSet::new();
     let mut todo: Vec<String> = nikaia_std::block::List::from_array_in([nikaia_std::block::Text::from(start.to_string())], nikaia_std::block::Place::Block);
     while !todo.is_empty() {
@@ -654,7 +654,7 @@ pub(crate) fn grammar_rule_emits(rule: &GrammarRule) -> bool {
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn grammar_entry_emits(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, gram: &GrammarDef, entry: &str, rules: &collections::BTreeSet<String>) -> bool {
+pub(crate) fn grammar_entry_emits(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, gram: &GrammarDef, entry: &str, rules: &collections::BTreeSet<String>) -> bool {
     let reached = grammar_reached_from(world, gram, entry, rules);
     for rule in gram.rules.iter() { if reached.contains(world.words.resolve(rule.name)) && grammar_rule_emits(rule) { return true; } }
     false
@@ -669,7 +669,7 @@ pub(crate) enum GrammarUndo {
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn grammar_can_fail(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, pattern: &Pattern) -> bool {
+pub(crate) fn grammar_can_fail(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, pattern: &Pattern) -> bool {
     match pattern {
         Pattern::Repeat { rep, .. } => *rep != Repeat::Star && *rep != Repeat::Optional,
         Pattern::Cut => false,
@@ -688,11 +688,11 @@ pub(crate) fn grammar_can_fail(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, p
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn grammar_undo_said(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, rule: &str, what: &str) -> String { format!("{} in rule `{}`", what, rule) }
+pub(crate) fn grammar_undo_said(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, rule: &str, what: &str) -> String { format!("{} in rule `{}`", what, rule) }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn grammar_undo_in(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, pattern: &Pattern, target: &str, failing: bool, rule: &str) -> GrammarUndo {
+pub(crate) fn grammar_undo_in(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, pattern: &Pattern, target: &str, failing: bool, rule: &str) -> GrammarUndo {
     match pattern {
         Pattern::Seq(parts) => {
             let mut found = false;
@@ -814,7 +814,7 @@ pub(crate) fn grammar_undo_in(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, pa
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn grammar_undo_repeated(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, inner: GrammarUndo, rule: &str) -> GrammarUndo {
+pub(crate) fn grammar_undo_repeated(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, inner: GrammarUndo, rule: &str) -> GrammarUndo {
     match inner {
         GrammarUndo::Passed(out) => if out { GrammarUndo::Undone(grammar_undo_said(world, rule, "the end of a repetition")) } else { GrammarUndo::Passed(false) },
         _ => inner,
@@ -823,7 +823,7 @@ pub(crate) fn grammar_undo_repeated(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn grammar_undone_from(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, gram: &GrammarDef, target: &str, failing: bool, streamed: &collections::BTreeMap<String, Ty>, seen: &mut collections::BTreeSet<String>) -> Option<String> {
+pub(crate) fn grammar_undone_from(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, gram: &GrammarDef, target: &str, failing: bool, streamed: &collections::BTreeMap<String, Ty>, seen: &mut collections::BTreeSet<String>) -> Option<String> {
     let key = format!("{}/{}", target, failing);
     if seen.contains(&key) { return None; }
     seen.insert(key);
@@ -855,7 +855,7 @@ pub(crate) fn grammar_undone_from(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn grammar_emits_undone(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, gram: &GrammarDef, streamed: &collections::BTreeMap<String, Ty>) -> Vec<CheckFinding> {
+pub(crate) fn grammar_emits_undone(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, gram: &GrammarDef, streamed: &collections::BTreeMap<String, Ty>) -> Vec<CheckFinding> {
     let mut out: Vec<CheckFinding> = vec![];
     for rule in gram.rules.iter() {
         let name = nikaia_std::block::Text::from(world.words.resolve(rule.name).to_string());

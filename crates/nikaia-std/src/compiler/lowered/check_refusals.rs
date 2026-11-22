@@ -44,7 +44,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn a_fatal_type_that_is_no_error(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, target: &str, span: &Span) {
+    pub(crate) fn a_fatal_type_that_is_no_error(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, target: &str, span: &Span) {
         let own = world.own.implementations.get("Error");
         if own.is_some() && nikaia_std::index::or(match own {
             Some(__nikaia_it) => Some(__nikaia_it.contains(target)),
@@ -112,13 +112,13 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn a_constructor_nothing_describes(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, name: &str, args: &[Expr], span: &Span) {
+    pub(crate) fn a_constructor_nothing_describes(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, name: &str, args: &[Expr], span: &Span) {
         if !args.is_empty() || !world.library.types.contains_key(name) || resolve_call(world, name).is_some() { return; }
         self.findings.push(check_refusal("NK1190", span, format!("You can't call `{}(…)`: it has no constructor.", name), vec![format!("Calling `{}()` runs `{}::new` from the type's description, and that description has no `{}::new`.", name, name, name)], None));
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn nothing_declares_it(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, expr: &Expr, span: &Span) {
+    pub(crate) fn nothing_declares_it(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, expr: &Expr, span: &Span) {
         let name = match expr {
             Expr::Variable(symbol, _) => { let symbol = *symbol; nikaia_std::block::Text::from(world.words.resolve(symbol).to_string()) },
             _ => return,
@@ -130,7 +130,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn a_drop_that_throws(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, target: &str, methods: &[Spanned<Item>]) {
+    pub(crate) fn a_drop_that_throws(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, target: &str, methods: &[Spanned<Item>]) {
         if world.own.traits.contains_key("Drop") { return; }
         for method in methods.iter() {
             match &method.node {
@@ -146,7 +146,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn a_cleanup_shaped(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, target: &str, methods: &[Spanned<Item>], span: &Span) {
+    pub(crate) fn a_cleanup_shaped(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, target: &str, methods: &[Spanned<Item>], span: &Span) {
         let mut wrote_cleanup = false;
         let note: &'static str = "`impl Cleanup` has exactly one method, `fn cleanup(ref mut self)`, and it may pause and may fail.";
         for method in methods.iter() {

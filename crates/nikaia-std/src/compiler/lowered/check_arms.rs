@@ -101,7 +101,7 @@ pub(crate) fn the_plain_type_agrees(plain: Option<&Ty>, inner: &Ty) -> bool {
 impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn arms_meet_at_null(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, arms: &[CheckArm<'_>]) -> Option<Ty> {
+    pub(crate) fn arms_meet_at_null(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, arms: &[CheckArm<'_>]) -> Option<Ty> {
         let mut asked = false;
         for arm in arms.iter() { if an_arm_ends_in_null(arm) || an_arm_is_a_nullable(arm) { asked = true; } }
         if !asked { return None; }
@@ -137,7 +137,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn reads_beside_an_owned_arm(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, arms: &[CheckArm<'_>]) {
+    pub(crate) fn reads_beside_an_owned_arm(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, arms: &[CheckArm<'_>]) {
         let mut owned = false;
         for arm in arms.iter() {
             let tail = match arm.tail { Some(__nikaia_value) => __nikaia_value, None => continue };
@@ -164,7 +164,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn an_arm_beside_a_null(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, arm: &CheckArm<'_>, literals: bool, text: &Ty) {
+    pub(crate) fn an_arm_beside_a_null(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, arm: &CheckArm<'_>, literals: bool, text: &Ty) {
         let tail = match arm.tail { Some(__nikaia_value) => __nikaia_value, None => return };
         if an_arm_is_a_nullable(arm) || ends_in_null_literal(tail) { return; }
         if literals && an_arm_is_a_text_literal(arm) { self.text_literal(world, text, tail, true); }
@@ -172,7 +172,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn a_lambdas_text_is_its_own(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, want: &Ty, value: &Expr) {
+    pub(crate) fn a_lambdas_text_is_its_own(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, want: &Ty, value: &Expr) {
         match want {
             Ty::Fn { result, .. } => {
                 let result = nikaia_std::boxed::open(result);
@@ -186,7 +186,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn a_closure_ends_in(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, result: Option<&Ty>, body: &Block) {
+    pub(crate) fn a_closure_ends_in(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, result: Option<&Ty>, body: &Block) {
         let kept = match result { Some(__nikaia_value) => __nikaia_value, None => return };
         let tail = block_tail(body);
         if tail.len() == 1 { self.text_literal(world, kept, *unsafe { nikaia_std::proven::read(&tail, (0) as usize) }, true); }

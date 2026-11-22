@@ -46,6 +46,24 @@ pub fn check(parsed: &Parsed, own: &Ledger, library: &Ledger) -> Vec<Finding> {
     .collect()
 }
 
+/// `check` with the package's `ResultPackage` made once by the caller (#2685).
+pub fn check_in(
+    parsed: &Parsed,
+    own: &Ledger,
+    library: &Ledger,
+    package: &nikaia_std::compiler::views::ResultPackage,
+) -> Vec<Finding> {
+    nikaia_std::compiler::views::views_checked_in(
+        &asked(parsed, own, library),
+        package,
+        &parsed.program.items,
+        &mut |value: &Expr| own_buffer(parsed, value, own, library),
+    )
+    .into_iter()
+    .map(crate::traits::from_nikaia)
+    .collect()
+}
+
 /// What each function's result points into (ADR-283 D25, `tools/views.nika`),
 /// by ledger key: the ledger's `ref(..)`.
 pub fn result_sources(
@@ -70,6 +88,22 @@ pub fn result_sources_inferred(
 ) -> Vec<nikaia_std::compiler::views::ResultSource> {
     nikaia_std::compiler::views::result_sources_inferred(
         &asked(parsed, own, library),
+        &parsed.program.items,
+        &mut |value: &Expr| own_buffer(parsed, value, own, library),
+    )
+}
+
+/// `result_sources_inferred` with the package's part made once by the caller
+/// (#2685).
+pub fn result_sources_inferred_in(
+    parsed: &Parsed,
+    own: &Ledger,
+    library: &Ledger,
+    package: &nikaia_std::compiler::views::ResultPackage,
+) -> Vec<nikaia_std::compiler::views::ResultSource> {
+    nikaia_std::compiler::views::result_sources_inferred_in(
+        &asked(parsed, own, library),
+        package,
         &parsed.program.items,
         &mut |value: &Expr| own_buffer(parsed, value, own, library),
     )

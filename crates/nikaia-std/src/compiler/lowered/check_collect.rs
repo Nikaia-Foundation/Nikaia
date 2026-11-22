@@ -8,7 +8,7 @@ pub(crate) fn collect_default_written(default: Option<&FieldDefault>) -> String 
 }
 
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn collect_keys_unordered(beside: &collections::BTreeMap<String, Vec<Ty>>, structs: &collections::BTreeMap<String, Vec<FieldContract>>, enums: &collections::BTreeMap<String, collections::BTreeSet<String>>, payloads: &collections::BTreeMap<String, Vec<Ty>>, parameters: &collections::BTreeMap<String, Vec<String>>, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, ty: &Ty, span: &Span) -> Vec<CheckFinding> {
+pub(crate) fn collect_keys_unordered(beside: &collections::BTreeMap<String, Vec<Ty>>, structs: &collections::BTreeMap<String, Vec<FieldContract>>, enums: &collections::BTreeMap<String, collections::BTreeSet<String>>, payloads: &collections::BTreeMap<String, Vec<Ty>>, parameters: &collections::BTreeMap<String, Vec<String>>, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, ty: &Ty, span: &Span) -> Vec<CheckFinding> {
     let asking = CheckComparable { beside, structs, enums, payloads, parameters, own: world.own, library: world.library };
     let mut refused = compare_keys_with_no_order(&asking, ty, span);
     for finding in compare_keys_that_do_not_hash(&asking, ty, span) { refused.push(finding); }
@@ -18,7 +18,7 @@ pub(crate) fn collect_keys_unordered(beside: &collections::BTreeMap<String, Vec<
 impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn collect_declared(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, beside: &collections::BTreeMap<String, Vec<Ty>>, ty: &Type, span: &Span) -> Ty {
+    pub(crate) fn collect_declared(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, beside: &collections::BTreeMap<String, Vec<Ty>>, ty: &Type, span: &Span) -> Ty {
         self.spelling(world, ty, span);
         check_reflected_field_kept(&mut *self, world, ty, span, false);
         let written = written_ty(world.here.words, world.here.aliases, ty);
@@ -88,7 +88,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn collect_struct(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, beside: &collections::BTreeMap<String, Vec<Ty>>, name: winnow_grammar::Symbol, generics: &[GenericParam], fields: &[FieldDef], span: &Span) {
+    pub(crate) fn collect_struct(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, beside: &collections::BTreeMap<String, Vec<Ty>>, name: winnow_grammar::Symbol, generics: &[GenericParam], fields: &[FieldDef], span: &Span) {
         #[allow(unused_mut)] let mut order: Vec<String> = vec![];
         let mut parameters: collections::BTreeSet<String> = collections::BTreeSet::new(); #[allow(unused_mut, clippy::redundant_locals)] let mut order = order;
         order.reserve(generics.iter().size_hint().0); for generic in generics.iter() {
@@ -112,7 +112,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn collect_enum(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, beside: &collections::BTreeMap<String, Vec<Ty>>, name: winnow_grammar::Symbol, variants: &[EnumVariant], span: &Span) {
+    pub(crate) fn collect_enum(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, beside: &collections::BTreeMap<String, Vec<Ty>>, name: winnow_grammar::Symbol, variants: &[EnumVariant], span: &Span) {
         let own = world.here.text(name);
         self.nameable(&own, span, "an enum");
         for variant in variants.iter() { self.nameable(&world.here.text(variant.name), span, "a variant"); }
@@ -153,7 +153,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn collect_types(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>) {
+    pub(crate) fn collect_types(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>) {
         for other in world.beside.iter() {
             for item in other.items.iter() {
                 self.collect_types_beside(other, &item.node);

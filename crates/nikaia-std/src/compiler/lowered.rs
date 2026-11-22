@@ -3230,7 +3230,10 @@ pub mod check_core_ops {
 }
 pub mod check_core_pilot {}
 pub mod check_core_places {}
-pub mod check_core_stmt {}
+pub mod check_core_stmt {
+    #[allow(unused_imports)]
+    pub use super::{check_core_names_read};
+}
 pub mod check_core_wide {
     #[allow(unused_imports)]
     pub use super::{wide_unsigned_of};
@@ -3268,7 +3271,10 @@ pub mod check_flow {
     #[allow(unused_imports)]
     pub use super::{CheckConstant, CheckOpenNumber, CheckOpenChar, CheckUnsignedSlot, CheckUnrolling, CheckLambdaReturn, CheckFlow, CheckPlaceClone, CheckClone};
 }
-pub mod check_function {}
+pub mod check_function {
+    #[allow(unused_imports)]
+    pub use super::{check_function_field_walks};
+}
 pub mod check_glue {
     #[allow(unused_imports)]
     pub use super::{check_char_literal, check_accepted_dump_name};
@@ -3282,7 +3288,7 @@ pub mod check_host {
 pub mod check_imports {}
 pub mod check_items {
     #[allow(unused_imports)]
-    pub use super::{fields_by_base, ItemGeneric};
+    pub use super::{fields_by_base, ItemGeneric, item_contain_themselves};
 }
 pub mod check_keep_marks {
     #[allow(unused_imports)]
@@ -3321,7 +3327,10 @@ pub mod check_pauses {
     pub use super::{CheckPause};
 }
 pub mod check_places {}
-pub mod check_program {}
+pub mod check_program {
+    #[allow(unused_imports)]
+    pub use super::{check_program_package};
+}
 pub mod check_reads {}
 pub mod check_references {}
 pub mod check_refusals {}
@@ -3349,7 +3358,7 @@ pub mod check_simd {
 }
 pub mod check_state {
     #[allow(unused_imports)]
-    pub use super::{CheckKind, CheckImmutable, CheckTextPosition, CheckLocal, CheckPromises, CheckHanded, CheckGuarded, CheckTaken, CheckRead, CheckPartOut, CheckGive, CheckPendingCleanup, CheckWayOut, CheckPendingCoalesce, CheckPendingConcat, CheckPendingHandle, CheckRepeats, CheckHeldTaking, CheckSeverity, CheckLabel, CheckFinding, CheckEdit, CheckWorld, CheckCallsInATask, CheckMethodCalls, CheckCodeArg, CheckStoredCode, CheckState};
+    pub use super::{CheckKind, CheckImmutable, CheckTextPosition, CheckLocal, CheckPromises, CheckHanded, CheckGuarded, CheckTaken, CheckRead, CheckPartOut, CheckGive, CheckPendingCleanup, CheckWayOut, CheckPendingCoalesce, CheckPendingConcat, CheckPendingHandle, CheckRepeats, CheckHeldTaking, CheckSeverity, CheckLabel, CheckFinding, CheckEdit, CheckWorld, CheckPackage, CheckNamesRead, CheckCallsInATask, CheckMethodCalls, CheckCodeArg, CheckStoredCode, CheckState};
 }
 pub mod check_takes {
     #[allow(unused_imports)]
@@ -3906,7 +3915,7 @@ pub mod view_changes {
 }
 pub mod views {
     #[allow(unused_imports)]
-    pub use super::{Stored, Destination, Asked, ResultPackage, result_package, views_stored, views_checked, FieldsHeld, carrying, ResultSource, result_sources, result_sources_in, result_sources_inferred, PlacesStored, places_stored, places_stored_in};
+    pub use super::{Stored, Destination, Asked, ResultPackage, result_package, views_stored, views_stored_in, views_checked, views_checked_in, FieldsHeld, carrying, ResultSource, result_sources, result_sources_in, result_sources_inferred, result_sources_inferred_in, PlacesStored, places_stored, places_stored_in};
 }
 pub mod written {
     #[allow(unused_imports)]
@@ -3979,4 +3988,4 @@ pub fn nikaia_run_tests(filters: &[std::string::String], list: bool, more: std::
 /// **The digest of this lowered set** (#1610): every file `lower-std` wrote
 /// beside this index, and the index above this line. Compiled into the same
 /// crate as the code it names, it is the compiler's identity for its caches.
-pub const LOWERED_DIGEST: &str = "f6afa132fc9b4221e5ad7a07a7958c173d294c5f0e6bbd1d207add735043ccf7";
+pub const LOWERED_DIGEST: &str = "88e663016b4a2762167721fdac4feb783f9bb0bf80e7321d087a40487196ccc9";

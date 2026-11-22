@@ -48,7 +48,7 @@ pub(crate) fn check_core_comptime_first_type(n: &Integer, beyond: bool) -> Strin
     String::from("i64")
 }
 
-pub(crate) fn check_core_comptime_declared_below(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, want: &Ty, evaluated: Option<&BuildValue>) -> Option<String> {
+pub(crate) fn check_core_comptime_declared_below(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, want: &Ty, evaluated: Option<&BuildValue>) -> Option<String> {
     let arrives = check_core_comptime_arrives(want);
     match arrives {
         Ty::Nullable(ref inner) => {
@@ -92,7 +92,7 @@ pub(crate) fn check_core_comptime_struct_named(want: &Ty, evaluated: Option<&Bui
     None
 }
 
-pub(crate) fn check_core_comptime_value_below(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, found: &Ty, evaluated: Option<&BuildValue>) -> Option<String> {
+pub(crate) fn check_core_comptime_value_below(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, found: &Ty, evaluated: Option<&BuildValue>) -> Option<String> {
     let value = match evaluated { Some(__nikaia_value) => __nikaia_value, None => return None };
     match value {
         BuildValue::Float(_) => { return Some(String::from("f64")); },
@@ -150,7 +150,7 @@ pub(crate) fn check_core_comptime_unsized_array(want: &Ty) -> Option<String> {
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn check_core_comptime_other(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, bound: &str, narrowed: &Ty, want: &Ty, evaluated: Option<&BuildValue>, span: &Span) {
+pub(crate) fn check_core_comptime_other(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, bound: &str, narrowed: &Ty, want: &Ty, evaluated: Option<&BuildValue>, span: &Span) {
     let shape = check_core_comptime_shape(evaluated);
     if shape == 7 {
         let field = state.unwritable_field(world, want);
@@ -178,16 +178,16 @@ pub(crate) fn check_core_comptime_other(state: &mut CheckState, world: &CheckWor
     state.expect_type(world, narrowed, want, span, "const", &mut |found_text, wanted_text| { format!("This value is `{}`, but the `comptime` declares `{}`.", found_text, wanted_text) });
 }
 
-pub(crate) fn check_core_comptime_a_field_local(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, expr: &Expr) -> bool {
+pub(crate) fn check_core_comptime_a_field_local(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, expr: &Expr) -> bool {
     match expr {
         Expr::Variable(name, _) => { let name = *name; check_reflect_a_field(&nikaia_std::index::or(state.lookup(world.words.resolve(name)), || Ty::Unknown)) },
         _ => false,
     }
 }
 
-pub(crate) fn check_core_comptime_reads_a_field(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, value: &Expr) -> bool { check_core_comptime_field_local(state, world, value).is_some() }
+pub(crate) fn check_core_comptime_reads_a_field(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, value: &Expr) -> bool { check_core_comptime_field_local(state, world, value).is_some() }
 
-pub(crate) fn check_core_comptime_field_local(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, value: &Expr) -> Option<String> {
+pub(crate) fn check_core_comptime_field_local(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, value: &Expr) -> Option<String> {
     for read in check_visit_preorder(value) {
         match read {
             Expr::Variable(name, _) => {
@@ -211,7 +211,7 @@ pub(crate) fn check_core_comptime_field_local(state: &CheckState, world: &CheckW
     None
 }
 
-pub(crate) fn check_core_comptime_turned(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, value: &Expr, field: &str) -> Expr {
+pub(crate) fn check_core_comptime_turned(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, value: &Expr, field: &str) -> Expr {
     match value {
         Expr::Field { base, name, id } => {
             let base = nikaia_std::boxed::open(base); let id = *id; let name = *name;
@@ -244,7 +244,7 @@ pub(crate) fn check_core_comptime_turned(state: &CheckState, world: &CheckWorld<
     }
 }
 
-pub(crate) fn check_core_comptime_all_turned(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, values: &[Expr], field: &str) -> Vec<Expr> {
+pub(crate) fn check_core_comptime_all_turned(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, values: &[Expr], field: &str) -> Vec<Expr> {
     let mut out: Vec<Expr> = vec![];
     out.reserve(values.iter().size_hint().0); for value in values.iter() { out.push(check_core_comptime_turned(state, world, value, field)); }
     out
@@ -253,7 +253,7 @@ pub(crate) fn check_core_comptime_all_turned(state: &CheckState, world: &CheckWo
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn check_core_comptime_binding<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, name: winnow_grammar::Symbol, ty: Option<&Type>, value: &Expr, bounds: &[ConfigArg], span: &Span) -> Ty {
+pub(crate) fn check_core_comptime_binding<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, host: &H, name: winnow_grammar::Symbol, ty: Option<&Type>, value: &Expr, bounds: &[ConfigArg], span: &Span) -> Ty {
     let raised: Option<CheckRaised> = state.raised_bounds(world, bounds, span);
     let outside = state.flow.inside_a_comptime;
     state.flow.inside_a_comptime = true;
@@ -441,7 +441,7 @@ pub(crate) fn check_core_comptime_binding<H: CheckHost>(state: &mut CheckState, 
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn check_core_a_block_over_a_grammar<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, block: &Expr, target: winnow_grammar::Symbol, content: &str, span: &Span) -> Ty {
+pub(crate) fn check_core_a_block_over_a_grammar<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, host: &H, block: &Expr, target: winnow_grammar::Symbol, content: &str, span: &Span) -> Ty {
     let owner = nikaia_std::block::Text::from(world.words.resolve(target).to_string());
     let mut entry: String = String::from("");
     let mut any = false;

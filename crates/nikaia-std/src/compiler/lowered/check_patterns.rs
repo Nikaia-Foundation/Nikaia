@@ -4,7 +4,7 @@
 impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn pattern_parts(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, pattern: &MatchPattern, on: &Ty) -> collections::BTreeMap<String, Ty> {
+    pub(crate) fn pattern_parts(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, pattern: &MatchPattern, on: &Ty) -> collections::BTreeMap<String, Ty> {
         let mut out: collections::BTreeMap<String, Ty> = collections::BTreeMap::new();
         match pattern {
             MatchPattern::Or(alternatives) => {
@@ -124,7 +124,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn bind_positional(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, parts: &[MatchPattern], types: &[Ty], out: &mut collections::BTreeMap<String, Ty>) {
+    pub(crate) fn bind_positional(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, parts: &[MatchPattern], types: &[Ty], out: &mut collections::BTreeMap<String, Ty>) {
         let mut rest_at: i64 = -1;
         let mut at: i64 = 0;
         while at < parts.len() as i64 {
@@ -141,7 +141,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn named_pattern_key(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, path: &[winnow_grammar::Symbol], on: &Ty) -> String {
+    pub(crate) fn named_pattern_key(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, path: &[winnow_grammar::Symbol], on: &Ty) -> String {
         let (owner, plain) = match on {
             Ty::Named { name, args, .. } => (nikaia_std::block::Text::from(name.to_string()), args.is_empty()),
             _ => return String::from(""),
@@ -152,7 +152,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn pattern_variant(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, path: &[winnow_grammar::Symbol], owner: &str) -> String {
+    pub(crate) fn pattern_variant(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, path: &[winnow_grammar::Symbol], owner: &str) -> String {
         let mut written: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         written.reserve(path.iter().size_hint().0); for part in path.iter() {
             let part = *part;
@@ -163,7 +163,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn bind_a_part(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, part: &MatchPattern, ty: &Ty, out: &mut collections::BTreeMap<String, Ty>) {
+    pub(crate) fn bind_a_part(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, part: &MatchPattern, ty: &Ty, out: &mut collections::BTreeMap<String, Ty>) {
         match part {
             MatchPattern::Path(one) => { if one.len() == 1 { out.insert(nikaia_std::block::Text::from(world.words.resolve(*unsafe { nikaia_std::proven::read(&one, (0) as usize) }).to_string()), ty.clone()); } },
             MatchPattern::Tuple { .. } => { for (entry_name, entry_value) in self.pattern_parts(world, part, ty) { out.insert(nikaia_std::block::Text::from(entry_name.to_string()), entry_value.clone()); } },
@@ -176,7 +176,7 @@ impl CheckState {
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn pattern_names(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, pattern: &MatchPattern) -> Vec<String> {
+pub(crate) fn pattern_names(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, pattern: &MatchPattern) -> Vec<String> {
     match pattern {
         MatchPattern::Path(segments) => if segments.len() == 1 { vec![nikaia_std::block::Text::from(world.words.resolve(*unsafe { nikaia_std::proven::read(&segments, (0) as usize) }).to_string())] } else { vec![] },
         MatchPattern::Tuple { parts, .. } => names_of_parts(world, parts),
@@ -190,7 +190,7 @@ pub(crate) fn pattern_names(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, patt
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn names_of_parts(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, parts: &[MatchPattern]) -> Vec<String> {
+pub(crate) fn names_of_parts(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, parts: &[MatchPattern]) -> Vec<String> {
     let mut out: Vec<String> = vec![];
     for part in parts.iter() { for name in pattern_names(world, part) { out.push(name); } }
     out
@@ -198,7 +198,7 @@ pub(crate) fn names_of_parts(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, par
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn names_of_fields(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, fields: &[PatternField]) -> Vec<String> {
+pub(crate) fn names_of_fields(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, fields: &[PatternField]) -> Vec<String> {
     let mut out: Vec<String> = vec![];
     for field in fields.iter() { for name in pattern_names(world, &field.pat) { out.push(name); } }
     out
@@ -217,7 +217,7 @@ pub(crate) fn pattern_list_element(on: &Ty) -> Option<Ty> {
 impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn a_struct_pattern_that_leaves_fields_out(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, pattern: &MatchPattern, on: &Ty, span: &Span) {
+    pub(crate) fn a_struct_pattern_that_leaves_fields_out(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, pattern: &MatchPattern, on: &Ty, span: &Span) {
         match pattern {
             MatchPattern::Or(alternatives) => {
                 for alternative in alternatives.iter() { self.a_struct_pattern_that_leaves_fields_out(world, alternative, on, span); }

@@ -18,7 +18,7 @@ pub(crate) fn roots_in_a_binding(expr: &Expr) -> bool {
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn shapes_lends_from_a_binding(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, expr: &Expr) -> bool {
+pub(crate) fn shapes_lends_from_a_binding(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, expr: &Expr) -> bool {
     match expr {
         Expr::MethodCall { receiver, method, .. } => {
             let receiver = nikaia_std::boxed::open(receiver); let method = *method;
@@ -192,7 +192,7 @@ pub fn constructed(constructor: &str) -> Option<String> {
 impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn a_panic(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, expr: &Expr) -> bool {
+    pub(crate) fn a_panic(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, expr: &Expr) -> bool {
         match expr {
             Expr::Call { func, .. } => { let func = nikaia_std::boxed::open(func); match func {
                 Expr::Variable(name, _) => { let name = *name; world.words.resolve(name) == "panic" && self.lookup("panic").is_none() && !world.own.functions.contains_key("panic") },
@@ -203,7 +203,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn exits(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, expr: &Expr) -> bool {
+    pub fn exits(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, expr: &Expr) -> bool {
         match expr {
             Expr::Throw(_, _) => true,
             Expr::Return(_, _) => true,
@@ -214,7 +214,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn block_exits(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, block: &Block) -> bool {
+    pub(crate) fn block_exits(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, block: &Block) -> bool {
         if block.stmts.is_empty() { return false; }
         match &unsafe { nikaia_std::proven::read(&block.stmts, (nikaia_std::proven::sub::<i64>(block.stmts.len() as i64, 1)) as usize) }.node {
             Stmt::Return(_) => true,
@@ -224,7 +224,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn leaves(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, expr: &Expr) -> bool {
+    pub fn leaves(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, expr: &Expr) -> bool {
         if self.jumps(world, expr) { return true; }
         match expr {
             Expr::Block(block, _) => self.block_leaves(world, block),
@@ -234,7 +234,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn block_leaves(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, block: &Block) -> bool {
+    pub(crate) fn block_leaves(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, block: &Block) -> bool {
         if block.stmts.is_empty() { return false; }
         match &unsafe { nikaia_std::proven::read(&block.stmts, (nikaia_std::proven::sub::<i64>(block.stmts.len() as i64, 1)) as usize) }.node {
             Stmt::Return(_) => true,
@@ -246,7 +246,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn jumps(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, expr: &Expr) -> bool {
+    pub fn jumps(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, expr: &Expr) -> bool {
         let plain = matches!(expr, Expr::Throw(_, _) | Expr::Return(_, _) | Expr::Break(_) | Expr::Continue(_));
         plain || self.a_panic(world, expr)
     }

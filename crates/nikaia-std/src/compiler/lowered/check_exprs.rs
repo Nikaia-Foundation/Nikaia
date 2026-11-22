@@ -9,7 +9,7 @@ pub(crate) fn check_exprs_part_name(index: i64) -> String {
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn check_exprs_package_type(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, std_in_scope: &collections::BTreeSet<String>, name: &str) -> Option<TypeContract> {
+pub(crate) fn check_exprs_package_type(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, std_in_scope: &collections::BTreeSet<String>, name: &str) -> Option<TypeContract> {
     let parts: Vec<&str> = name.split("::").collect::<Vec<_>>();
     let head = *unsafe { nikaia_std::proven::read(&parts, (0) as usize) }; ::core::mem::drop(parts);
     if std_in_scope.contains(head) || !imports_a_package(&world.here, head) { return None; }
@@ -34,7 +34,7 @@ pub(crate) fn a_plain_str_view(ty: &Ty) -> bool {
     }
 }
 
-pub(crate) fn width_dependent(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, value: &Expr, into: &str) -> Vec<String> {
+pub(crate) fn width_dependent(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, value: &Expr, into: &str) -> Vec<String> {
     match value {
         Expr::Binary { op, lhs, rhs, .. } => { let lhs = nikaia_std::boxed::open(lhs); let rhs = nikaia_std::boxed::open(rhs); if op.is_bitwise() { width_of_binary(world, op, lhs, rhs, into) } else { vec![] } },
         Expr::Unary { op, expr, .. } => { let expr = nikaia_std::boxed::open(expr); if *op == UnaryOp::Not { vec![String::from("`!`"), format!("!({} as {})", written_expression(world.words, expr), into)] } else { vec![] } },
@@ -43,7 +43,7 @@ pub(crate) fn width_dependent(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, va
     }
 }
 
-pub(crate) fn width_of_binary(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, op: &BinaryOp, lhs: &Expr, rhs: &Expr, into: &str) -> Vec<String> {
+pub(crate) fn width_of_binary(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, op: &BinaryOp, lhs: &Expr, rhs: &Expr, into: &str) -> Vec<String> {
     let sign = binary_op_text(&op);
     let left = written_expression(world.words, lhs);
     let mut right = written_expression(world.words, rhs);
@@ -51,7 +51,7 @@ pub(crate) fn width_of_binary(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, op
     vec![format!("`{}`", sign), format!("({} as {}) {} {}", left, into, sign, right)]
 }
 
-pub(crate) fn width_of_method(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, receiver: &Expr, method: winnow_grammar::Symbol, into: &str) -> Vec<String> {
+pub(crate) fn width_of_method(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, receiver: &Expr, method: winnow_grammar::Symbol, into: &str) -> Vec<String> {
     let name = nikaia_std::block::Text::from(world.words.resolve(method).to_string());
     if !name.starts_with("wrapping_") && !name.starts_with("saturating_") && !name.starts_with("truncating_") && !name.starts_with("bits_as_") && !name.starts_with("rotate_") { return vec![]; }
     vec![format!("`{}`", name), format!("({} as {}).{}(…)", written_expression(world.words, receiver), into, name)]
@@ -60,7 +60,7 @@ pub(crate) fn width_of_method(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, re
 impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn narrow_by_width(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, value: &Expr, into: &str, span: &Span) -> bool {
+    pub(crate) fn narrow_by_width(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, value: &Expr, into: &str, span: &Span) -> bool {
         let found = width_dependent(world, value, into);
         if found.is_empty() { return false; }
         let what = nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&found, (0) as usize) }).to_string());
@@ -74,7 +74,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn a_bit_operation_beside_a_comparison(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, op: &BinaryOp, lhs: &Expr, rhs: &Expr, at: &Span) {
+    pub(crate) fn a_bit_operation_beside_a_comparison(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, op: &BinaryOp, lhs: &Expr, rhs: &Expr, at: &Span) {
         let left_bare = a_bare_bit_operation(lhs);
         let right_bare = a_bare_bit_operation(rhs);
         if !left_bare && !right_bare { return; }
@@ -88,16 +88,16 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn a_collection_in_a_hole(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, hole: &Expr, held: &Ty, spec: Option<&str>, span: &Span) {
+    pub(crate) fn a_collection_in_a_hole(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, hole: &Expr, held: &Ty, spec: Option<&str>, span: &Span) {
         if spec.is_some() && nikaia_std::index::or(spec, || "").contains('?') { return; }
         self.a_value_with_no_text(world, hole, held, span, false);
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn a_value_with_no_text_printed(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, value: &Expr, held: &Ty, span: &Span) { self.a_value_with_no_text(world, value, held, span, true); }
+    pub(crate) fn a_value_with_no_text_printed(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, value: &Expr, held: &Ty, span: &Span) { self.a_value_with_no_text(world, value, held, span, true); }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn a_value_with_no_text(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, hole: &Expr, held: &Ty, span: &Span, printed: bool) {
+    pub(crate) fn a_value_with_no_text(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, hole: &Expr, held: &Ty, span: &Span, printed: bool) {
         if !is_a_collection_type(held) {
             self.a_value_with_no_text_in_a_hole(world, hole, held, span, printed);
             return;
@@ -126,7 +126,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn a_value_with_no_text_in_a_hole(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, hole: &Expr, held: &Ty, span: &Span, printed: bool) {
+    pub(crate) fn a_value_with_no_text_in_a_hole(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, hole: &Expr, held: &Ty, span: &Span, printed: bool) {
         let written = written_expression(world.words, hole);
         let shown = match hole {
             Expr::Variable(_, _) => nikaia_std::block::Text::from(written.to_string()),
@@ -249,7 +249,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn a_loop_over_a_nullable(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, over: &Ty, iter: &Expr, span: &Span) {
+    pub(crate) fn a_loop_over_a_nullable(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, over: &Ty, iter: &Expr, span: &Span) {
         let inner = match over {
             Ty::Nullable(held) => { let held = nikaia_std::boxed::open(held); held.shown() },
             _ => return,
@@ -261,7 +261,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn a_loop_over_what_holds_no_elements(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, over: &Ty, iter: &Expr, span: &Span) {
+    pub(crate) fn a_loop_over_what_holds_no_elements(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, over: &Ty, iter: &Expr, span: &Span) {
         let name: String = match over {
             Ty::Named { name, args, .. } => if args.is_empty() { nikaia_std::block::Text::from(name.to_string()) } else { return; },
             _ => return,
@@ -277,7 +277,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn a_fallback_beside_what_a_map_holds(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, read: &Expr, held: &Ty, fallback: &Ty, span: &Span) {
+    pub(crate) fn a_fallback_beside_what_a_map_holds(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, read: &Expr, held: &Ty, fallback: &Ty, span: &Span) {
         if held.is_a_view() || fallback.is_a_view() || fallback.is_unknown() || a_plain_string(held) || self.a_word_by_its_kind(world, held) { return; }
         let name = match held {
             Ty::Named { name, .. } => nikaia_std::block::Text::from(name.to_string()),
@@ -292,7 +292,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn mixed_text_assigned(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, target: &Expr, value: &Expr, found: &Ty) -> bool {
+    pub(crate) fn mixed_text_assigned(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, target: &Expr, value: &Expr, found: &Ty) -> bool {
         let name = match target {
             Expr::Variable(name, _) => { let name = *name; nikaia_std::block::Text::from(world.words.resolve(name).to_string()) },
             _ => return false,
@@ -317,7 +317,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn owned_text_into_a_literal_binding(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, target: &Expr, found: &Ty, into: &Ty, span: &Span) -> bool {
+    pub(crate) fn owned_text_into_a_literal_binding(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, target: &Expr, found: &Ty, into: &Ty, span: &Span) -> bool {
         let name = match target {
             Expr::Variable(name, _) => { let name = *name; nikaia_std::block::Text::from(world.words.resolve(name).to_string()) },
             _ => return false,
@@ -389,13 +389,13 @@ pub(crate) fn a_parameter_binding(local: &CheckLocal) -> bool {
     at.kind == CheckKind::Parameter
 }
 
-pub(crate) fn a_variant_path(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, segments: &[winnow_grammar::Symbol]) -> bool {
+pub(crate) fn a_variant_path(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, segments: &[winnow_grammar::Symbol]) -> bool {
     if segments.len() != 2 { return false; }
     state.is_variant(world.words.resolve(*unsafe { nikaia_std::proven::read(&segments, (0) as usize) }), world.words.resolve(*unsafe { nikaia_std::proven::read(&segments, (1) as usize) }))
 }
 
 impl CheckState {
-    pub(crate) fn a_value_written_out(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, written: &Expr) -> bool {
+    pub(crate) fn a_value_written_out(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, written: &Expr) -> bool {
         match written {
             Expr::Path(segments, _) => a_variant_path(self, world, segments),
             Expr::StructLit { .. } => true,
@@ -405,7 +405,7 @@ impl CheckState {
     }
 }
 
-pub(crate) fn a_call_of_a_variant(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, func: &Expr) -> bool {
+pub(crate) fn a_call_of_a_variant(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, func: &Expr) -> bool {
     match func {
         Expr::Path(segments, _) => a_variant_path(state, world, segments),
         _ => false,

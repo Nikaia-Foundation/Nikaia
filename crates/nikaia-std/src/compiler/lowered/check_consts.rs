@@ -253,7 +253,7 @@ pub(crate) fn nth_type(declared: &[Ty], at: i64) -> Option<Ty> {
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn unwritable_payload(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, ty: &str, variant: &str, payloads: &mut impl FnMut(&str, &str) -> Option<Vec<Ty>>) -> Vec<String> {
+pub(crate) fn unwritable_payload(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, ty: &str, variant: &str, payloads: &mut impl FnMut(&str, &str) -> Option<Vec<Ty>>) -> Vec<String> {
     let carried = match payloads(ty, variant) { Some(__nikaia_value) => __nikaia_value, None => return vec![] };
     for held in carried.iter() { if rust_constant_type(world.library, held).is_none() && state.declared_below(world, held).is_none() { return vec![format!("{}::{}", ty, variant), held.text()]; } }
     vec![]
@@ -261,7 +261,7 @@ pub(crate) fn unwritable_payload(state: &CheckState, world: &CheckWorld<'_, '_, 
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn unwritable_in(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, value: &BuildValue, payloads: &mut dyn FnMut(&str, &str) -> Option<Vec<Ty>>) -> Vec<String> {
+pub(crate) fn unwritable_in(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, value: &BuildValue, payloads: &mut dyn FnMut(&str, &str) -> Option<Vec<Ty>>) -> Vec<String> {
     match value {
         BuildValue::Struct { name, fields } => {
             let own = state.unwritable_field(world, &Ty::Named { name: nikaia_std::block::Text::from(name.to_string()), args: vec![], view: false });
@@ -308,7 +308,7 @@ pub(crate) fn tuple_spelled(parts: &[String]) -> String {
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn written_below(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, value: &BuildValue, want: Option<&Ty>, payloads: &mut dyn FnMut(&str, &str) -> Option<Vec<Ty>>, float_text: &mut dyn FnMut(f64) -> String) -> Option<String> {
+pub(crate) fn written_below(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, value: &BuildValue, want: Option<&Ty>, payloads: &mut dyn FnMut(&str, &str) -> Option<Vec<Ty>>, float_text: &mut dyn FnMut(f64) -> String) -> Option<String> {
     if want.is_none() { return rust_value(value, &mut &mut *float_text); }
     let wanted: Ty = nikaia_std::index::or(want.as_ref(), || &Ty::Unknown).clone();
     match value {
@@ -374,7 +374,7 @@ impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    pub(crate) fn a_table_that_crosses(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, bound: &str, want: &Ty, pairs: &[BuildValue], span: &Span, payloads: &mut impl FnMut(&str, &str) -> Option<Vec<Ty>>, float_text: &mut impl FnMut(f64) -> String) -> CheckTable {
+    pub(crate) fn a_table_that_crosses(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, bound: &str, want: &Ty, pairs: &[BuildValue], span: &Span, payloads: &mut impl FnMut(&str, &str) -> Option<Vec<Ty>>, float_text: &mut impl FnMut(f64) -> String) -> CheckTable {
         let args = type_arguments(want);
         if args.len() != 2 { return no_table(false); }
         if !a_str_view_key(unsafe { nikaia_std::proven::read(&args, (0) as usize) }) {
