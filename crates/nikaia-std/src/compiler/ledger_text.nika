@@ -174,6 +174,10 @@ fn function_text(name: ref String, contract: ref FnContract) -> String {
     }
     if contract.fails_with.len() > 0 {
         out.push_str(f"throws = {throws_text(contract.fails_with)}\n")
+    } else if contract.throws_from.len() > 0 {
+        // The lambda decides (#2692), as `sync(f)` above.
+        let names = contract.throws_from.join(", ")
+        out.push_str(f"throws = \"throws({names})\"\n")
     }
     // **In Nikaia's spelling** (ADR-251 D4): what the result points into is
     // written `ref(a | b)` in the signature's result, and the receiver as the

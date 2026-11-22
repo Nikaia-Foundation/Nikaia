@@ -103,7 +103,10 @@ pub(crate) fn function_text(name: &str, contract: &FnContract) -> String {
         Sync::From(lambda) => { { use ::core::fmt::Write as _; let _ = out.write_fmt(format_args!("sync = \"sync({})\"\n", lambda)); }; },
         Sync::No => { },
     }
-    if !contract.fails_with.is_empty() { { use ::core::fmt::Write as _; let _ = out.write_fmt(format_args!("throws = {}\n", throws_text(&contract.fails_with))); }; }
+    if !contract.fails_with.is_empty() { { use ::core::fmt::Write as _; let _ = out.write_fmt(format_args!("throws = {}\n", throws_text(&contract.fails_with))); }; } else if !contract.throws_from.is_empty() {
+        let names = nikaia_std::block::Text::from(contract.throws_from.join(", "));
+        { use ::core::fmt::Write as _; let _ = out.write_fmt(format_args!("throws = \"throws({})\"\n", names)); };
+    }
     let spelled = spelled_of(name, contract);
     let mut borrows_said = false;
     let mut mutates_said = false;

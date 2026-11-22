@@ -1631,6 +1631,12 @@ pub struct FnContract {
     pub sync_claim: Sync,
     /// What it may fail with: the error types that can leave it (Kap 7.1).
     pub fails_with: Vec[String],
+    /// **The lambda parameters it fails through** (#2692): `throws =
+    /// "throws(f)"`, the twin of `sync = "sync(f)"`. A lambda handed there may
+    /// fail; a step that hands back a sequence then makes one whose step fails
+    /// (ADR-025 D1), and any other call fails where the lambda does. Empty
+    /// for every function that runs no lambda of the kind.
+    pub throws_from: Vec[String],
     pub touches: Vec[Touch],
     /// Whether `touches` is what somebody wrote rather than what was inferred.
     pub touches_known: bool,
@@ -1743,6 +1749,7 @@ impl FnContract {
             public: false,
             sync_claim: Sync::No,
             fails_with: [],
+            throws_from: [],
             touches: [],
             touches_known: false,
             provenance: null,
