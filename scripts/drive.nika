@@ -5163,10 +5163,13 @@ fn drive_blocked_on(report: String, handled: bool) -> Vec[String] {
 		if l.starts_with("Needs:") { needs.push(l.clone()) }
 		if l.starts_with("Found:") { found.push(l) }
 	}
-	if partial || (blocked && handled) { return drive_hash_numbers(needs.join(" ")) }
+	// A `#N` the lines only quote (a backtick or "..." span, drive_unquoted)
+	// holds nothing up: #2646's run-1 report cited ADR-361's #1634 inside its
+	// probe under `Needs: owner decision` and was held by it.
+	if partial || (blocked && handled) { return drive_hash_numbers(drive_unquoted(needs.join("\n"))) }
 	if !blocked { return [] }
 	for l in found { needs.push(l.clone()) }
-	return drive_hash_numbers(needs.join(" "))
+	return drive_hash_numbers(drive_unquoted(needs.join("\n")))
 }
 
 // The last report of brief NAME in DIR: `NAME.report.md`, else the highest
