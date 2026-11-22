@@ -744,6 +744,14 @@ impl EmitState {
                             prelude = f"{prelude}let {name} = ::nikaia_std::grammar::covered(input, {range}); "
                         }
                     }
+                    // The backend lends `_state = &mut input.state` before
+                    // the action, and the prelude above reads `input`: taken
+                    // again after it, the backend's loan ends before that
+                    // read, and an `emit` or `_state.user()` in the action
+                    // borrows the new one (#2254).
+                    if as_texts.len() > 0 || (positions && as_spans.len() > 0) {
+                        prelude = f"{prelude}let _state = &mut input.state; "
+                    }
                     // A grammar action is the rule's own body: what it ends
                     // in is what the rule hands back, so a `return` there is
                     // that value (ADR-grammar-actions-v1). The prelude opens the action's
