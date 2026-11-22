@@ -60,9 +60,9 @@ is normative and nothing may depend on it to know what a program means.
   reproduction or says it has none. The type says what kind it is (`Bug` for
   anything false — in the compiler, a specification page or an ADR — `Feature`,
   `Task`), a label says where (`libraries`, `tools`, `targets`,
-  `selfhosting`, `compiler`, `spec`, `grammar`) or which lane builds it (the
+  `selfhosting`, `compiler`, `spec`, `json`, `database`) or which lane builds it (the
   lane labels of `supervisor.md`, *Lanes*; there is no `language` label,
-  owner 2026-11-22: a question of the language itself is `spec`), exactly one **status** label says what can
+  nor `grammar`, owner 2026-11-22: a question of the language itself is `spec`), exactly one **status** label says what can
   be done with it - `ready` (decided; can be built now), `decision` (needs the
   owner first), `blocked` (waits on another issue being built, named in it),
   `wip` (being built: a lane or a driver run has it, or its build runs in the
