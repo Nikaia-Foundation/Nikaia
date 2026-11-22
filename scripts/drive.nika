@@ -5265,7 +5265,8 @@ fn drive_waits_line(n: String, waits: Vec[String], open: Vec[String]) -> String 
 	return f"SKIPPED #{n} waits for {list}"
 }
 
-// The findings of scripts/issue-check.nika on issue N's BODY (#2003): one
+// The findings of scripts/issue-check.nika on issue N's BODY, passed on its
+// standard input (`--body -`, no file, #2466) (#2003): one
 // per requirement of docs/issues.md it misses, none when its form holds.
 // KNOWN says OPEN lists the open issues (the tests' form); else the script
 // asks GitHub. A script that fails to run (it does not build, or stops
@@ -5275,18 +5276,15 @@ fn drive_waits_line(n: String, waits: Vec[String], open: Vec[String]) -> String 
 // requirement (#2466). NIKAIA_DRIVE_ISSUE_CHECK names another script (the
 // tests' broken one).
 fn drive_issue_check(n: String, body: String, known: bool, open: Vec[String]) -> Vec[String] throws {
-	let file = process::run("mktemp", []).stdout.trim().clone()
-	fs::write(file.clone(), fs::Root::Anywhere, body)
 	let script = env::var("NIKAIA_DRIVE_ISSUE_CHECK") ?? "scripts/issue-check.nika"
-	let mut args = ["run", script, "--", "--body", file.clone()]
+	let mut args = ["run", script, "--", "--body", "-"]
 	if known {
 		args.push("--open")
 		for m in open {
 			if m != n { args.push(m.clone()) }
 		}
 	}
-	let got = process::run(drive_exe(), args)
-	process::run("rm", ["-f", file])
+	let got = process::run(drive_exe(), args; stdin: process::Input::Text(body))
 	let mut out: Vec[String] = []
 	if got.ok { return out }
 	for l in got.stdout.split("\n") {
