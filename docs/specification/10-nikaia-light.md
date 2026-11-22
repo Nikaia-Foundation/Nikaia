@@ -649,12 +649,16 @@ methods above (`widening_mul` for a digit's product, `overflowing_add` for
 the carry, `narrowing_div_rem` for a digit's quotient).
 
 ```nika
-let t = BigInt::of(a).mul(BigInt::of(x)).add(BigInt::of(b).mul(BigInt::of(y)))
-let g = t.gcd(BigInt::of(d))
+use std::bigint
+let t = bigint::BigInt::of(a).mul(bigint::BigInt::of(x))
+    .add(bigint::BigInt::of(b).mul(bigint::BigInt::of(y)))
+let g = t.gcd(bigint::BigInt::of(d))
 let (q, _) = t.div_rem(g) ?? return   // (BigInt, BigInt), null for a zero divisor
 let small = q.narrow()                 // i64? where it fits
 ```
 
+* **Named** `bigint::BigInt` after `use std::bigint`, as `HashMap` (1.3):
+  it is not in the prelude.
 * **Made** with `BigInt::of(v)` from any integer type of Part I 2.2 and
   `BigInt::from_wide(w)`; read back with `narrow() -> i64?`, `sign() -> i64`,
   `bits() -> i64` and its decimal text.
