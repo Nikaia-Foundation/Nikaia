@@ -1,0 +1,3 @@
+bounds in tests/an_is_empty_guard_proves_the_first_index.nika: 2 indexes, 2 proved; 0 operations, 0 proved
+     7  xs[0]  proved
+    12  xs[0]  proved

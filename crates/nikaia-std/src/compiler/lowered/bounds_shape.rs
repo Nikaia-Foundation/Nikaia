@@ -248,7 +248,7 @@ pub(crate) fn is_empty_map(expr: &Expr, words: &winnow_grammar::InternerContext)
             let last = match func {
                 Expr::Path(segments, _) => {
                     if segments.is_empty() { return false; }
-                    nikaia_std::block::Text::from(words.resolve(*nikaia_std::index::get(&segments, nikaia_std::index::at(unsafe { nikaia_std::proven::sub::<i64>(segments.len() as i64, 1) }))).to_string())
+                    nikaia_std::block::Text::from(words.resolve(*unsafe { nikaia_std::proven::read(&segments, (nikaia_std::proven::sub::<i64>(segments.len() as i64, 1)) as usize) }).to_string())
                 },
                 Expr::Variable(n, _) => { let n = *n; nikaia_std::block::Text::from(words.resolve(n).to_string()) },
                 _ => return false,

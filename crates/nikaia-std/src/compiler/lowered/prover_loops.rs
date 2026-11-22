@@ -415,7 +415,7 @@ pub(crate) fn loop_candidates(arena: &mut logic::TermArena, record: &LoopRecord,
     let mut steady: Vec<(String, i64)> = vec![];
     for (name, deltas) in record.steps.iter() {
         if deltas.is_empty() { continue; }
-        let k = *nikaia_std::index::get(&deltas, 0);
+        let k = *unsafe { nikaia_std::proven::read(&deltas, (0) as usize) };
         let mut one = true;
         for d in deltas.iter() {
             let d = nikaia_std::num::value(d);

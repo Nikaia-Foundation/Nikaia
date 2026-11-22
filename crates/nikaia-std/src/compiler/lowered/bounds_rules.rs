@@ -697,7 +697,7 @@ pub(crate) fn rules_from_self(owner: &str, path: &str, kind: i64, lists: &collec
         return true;
     }
     let own = nikaia_std::index::or(match lists.get(owner) {
-        Some(__nikaia_it) => Some(__nikaia_it.contains(nikaia_std::index::get(&fields, 0))),
+        Some(__nikaia_it) => Some(__nikaia_it.contains(unsafe { nikaia_std::proven::read(&fields, (0) as usize) })),
         None => None,
     }, || false);
     if !own {
@@ -1953,7 +1953,7 @@ pub(crate) fn rules_loop_give(walk: &mut BoundsWalk, facts: &mut BoundsFacts, ke
 
 pub(crate) fn rules_turn_end(walk: &mut BoundsWalk, facts: &BoundsFacts, ask: &mut impl FnMut(&logic::TermArena, &[i64], i64) -> bool) {
     if !walk.checking || walk.rule_loops.is_empty() { return; }
-    let kept = (*nikaia_std::index::get(&walk.rule_loops, nikaia_std::index::at(unsafe { nikaia_std::proven::sub::<i64>(walk.rule_loops.len() as i64, 1) }))).copy_owned();
+    let kept = (*unsafe { nikaia_std::proven::read(&walk.rule_loops, (nikaia_std::proven::sub::<i64>(walk.rule_loops.len() as i64, 1)) as usize) }).copy_owned();
     for (root, at) in kept.iter() {
         let at = nikaia_std::num::value(at);
         let rule = (*nikaia_std::index::get(&walk.rules, nikaia_std::index::at(at))).clone();

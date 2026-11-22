@@ -1,0 +1,5 @@
+bounds in tests/wide_narrowed_past_its_range_stays_checked.nika: 2 indexes, 0 proved; 0 operations, 0 proved
+    10  xs[n]  checked: no fact bounds what it reads - a counter, a loop, a length, or one list as long as another (#432, #383, #388)
+    18  xs[n]  checked: no fact bounds what it reads - a counter, a loop, a length, or one list as long as another (#432, #383, #388)
+  derived  pick_product: 0 <= a, a <= xs.len(), a < xs.len(), a <= b, a < b, 0 <= b, b <= xs.len(), b < xs.len(), proved at the calls on lines 24
+  derived  pick_times: 0 <= a, a <= xs.len(), a < xs.len(), proved at the calls on lines 23

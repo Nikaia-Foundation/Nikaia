@@ -194,6 +194,7 @@ fn question_of(
                 &facts.text_bytes,
                 &facts.text_scalars,
                 &facts.summaries,
+                &facts.wide_calls,
             ),
         )
     );

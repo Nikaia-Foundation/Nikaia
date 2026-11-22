@@ -1,0 +1,2 @@
+bounds in tests/a_u32_field_cast_to_i64_fits_a_subtraction.nika: 0 indexes, 0 proved; 1 operations, 1 proved
+     9  -1 - (…)    proved

@@ -75,6 +75,16 @@ fn lin_term_in(expr: ref Expr, words: ref winnow_grammar::InternerContext, var: 
                     return built(logic::SolverTerm::Var(length ?? String()), out)
                 }
             }
+            // **A method's result**, where the walk made it a name of its
+            // own as a call's (`call_result_name`, ADR-359 D14).
+            let named = call_result_name(expr)
+            let ran = pinned(named)
+            if ran != null {
+                return built(logic::SolverTerm::Int(ran ?? 0), out)
+            }
+            if var(named) {
+                return built(logic::SolverTerm::Var(named), out)
+            }
             if !fresh {
                 return null
             }

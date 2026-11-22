@@ -278,7 +278,7 @@ impl<'a> MpBody<'a> {
     }
     pub(crate) fn ends_in_a_map(&self, segments: &[winnow_grammar::Symbol]) -> bool {
         if segments.is_empty() { return false; }
-        mp_made_name(self.words.resolve(*nikaia_std::index::get(&segments, nikaia_std::index::at(unsafe { nikaia_std::proven::sub::<i64>(segments.len() as i64, 1) }))))
+        mp_made_name(self.words.resolve(*unsafe { nikaia_std::proven::read(&segments, (nikaia_std::proven::sub::<i64>(segments.len() as i64, 1)) as usize) }))
     }
     pub(crate) fn deps(&self, e: &Expr) -> MpDep {
         match e {
@@ -648,7 +648,7 @@ impl<'a> MpBody<'a> {
         let mut todo: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         todo.reserve(dep.names.iter().size_hint().0); for n in dep.names.iter() { todo.push(nikaia_std::block::Text::from(n.to_string())); }
         while !todo.is_empty() {
-            let name = nikaia_std::block::Text::from((*nikaia_std::index::get(&todo, nikaia_std::index::at(unsafe { nikaia_std::proven::sub::<i64>(todo.len() as i64, 1) }))).to_string());
+            let name = nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&todo, (nikaia_std::proven::sub::<i64>(todo.len() as i64, 1)) as usize) }).to_string());
             todo.pop();
             if seen.contains(&name) { continue; }
             seen.insert(nikaia_std::block::Text::from(name.to_string()));
@@ -777,7 +777,7 @@ pub(crate) fn mp_lines(held: &MpHeld<'_, '_>, structs: &collections::BTreeMap<St
         #[allow(unused_mut)] let mut labels = found.copy_owned();
         labels.sort();
         #[allow(unused_mut)] let mut distinct: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block); #[allow(unused_mut, clippy::redundant_locals)] let mut labels = labels;
-        for l in labels.iter() { if distinct.is_empty() || *nikaia_std::index::get(&distinct, nikaia_std::index::at(unsafe { nikaia_std::proven::sub::<i64>(distinct.len() as i64, 1) })) != *l { distinct.push(nikaia_std::block::Text::from(l.to_string())); } }
+        for l in labels.iter() { if distinct.is_empty() || *unsafe { nikaia_std::proven::read(&distinct, (nikaia_std::proven::sub::<i64>(distinct.len() as i64, 1)) as usize) } != *l { distinct.push(nikaia_std::block::Text::from(l.to_string())); } }
         let mut said: String = String::from("keyed"); #[allow(unused_mut, clippy::redundant_locals)] let mut distinct = distinct;
         let entry = match *nikaia_std::index::get(&how, &class) {
             Some(__nikaia_it) => Some(__nikaia_it.clone()),
