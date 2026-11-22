@@ -269,7 +269,13 @@ enum Root {
 /// order. `own_buffer` says whether a `let`'s value is a buffer of its own
 /// (ADR-283) - the compiler's `tether` answers it.
 pub fn views_stored(asked: ref Asked, items: ref Vec[Spanned[Item]], own_buffer: fn(ref Expr) -> bool sync) -> Vec[Stored] {
-    let mut unit = plain_unit(result_package(asked), borrowing_types(asked.names, items), view_fields(asked.names, items))
+    return views_stored_in(asked, result_package(asked), items, own_buffer)
+}
+
+/// `views_stored` with the package's `ResultPackage` made once by the caller
+/// (#2685): a file check of a package is handed it, not one per file.
+pub fn views_stored_in(asked: ref Asked, package: ref ResultPackage, items: ref Vec[Spanned[Item]], own_buffer: fn(ref Expr) -> bool sync) -> Vec[Stored] {
+    let mut unit = plain_unit(package, borrowing_types(asked.names, items), view_fields(asked.names, items))
     method_table(asked, items, unit)
     // **The methods to their least fixpoint** (#818): a parameter handed to a
     // method on `self` is kept only if that method keeps it. Nothing is kept
@@ -310,13 +316,19 @@ pub fn views_stored(asked: ref Asked, items: ref Vec[Spanned[Item]], own_buffer:
 
 /// The refusals: every stored naked view whose destination names no buffer.
 pub fn views_checked(asked: ref Asked, items: ref Vec[Spanned[Item]], own_buffer: fn(ref Expr) -> bool sync) -> Vec[Finding] {
+    return views_checked_in(asked, result_package(asked), items, own_buffer)
+}
+
+/// `views_checked` with the package's `ResultPackage` made once by the
+/// caller (#2685).
+pub fn views_checked_in(asked: ref Asked, package: ref ResultPackage, items: ref Vec[Spanned[Item]], own_buffer: fn(ref Expr) -> bool sync) -> Vec[Finding] {
     let mut out: Vec[Finding] = []
-    for stored in views_stored(asked, items, own_buffer) {
+    for stored in views_stored_in(asked, package, items, own_buffer) {
         if !stored.carried {
             out.push(finding(stored))
         }
     }
-    rsrc_findings(asked, items, own_buffer, out)
+    rsrc_findings(asked, package, items, own_buffer, out)
     return out
 }
 
@@ -3637,7 +3649,9 @@ pub fn result_sources_inferred(asked: ref Asked, items: ref Vec[Spanned[Item]], 
     return result_sources_inferred_in(asked, result_package(asked), items, own_buffer)
 }
 
-fn result_sources_inferred_in(asked: ref Asked, package: ref ResultPackage, items: ref Vec[Spanned[Item]], own_buffer: fn(ref Expr) -> bool sync) -> Vec[ResultSource] {
+/// `result_sources_inferred` with the package's `ResultPackage` made once by
+/// the caller (#2685).
+pub fn result_sources_inferred_in(asked: ref Asked, package: ref ResultPackage, items: ref Vec[Spanned[Item]], own_buffer: fn(ref Expr) -> bool sync) -> Vec[ResultSource] {
     let unit = plain_unit(package, package_borrowing_types(asked, items), view_fields(asked.names, items))
     let mut known: collections::BTreeMap[String, ResultSrcKnown] = collections::BTreeMap()
     let mut ignored: Vec[Finding] = []
@@ -3823,8 +3837,7 @@ fn rsrc_returns_text(params: ref Vec[String], reach: ref collections::BTreeSet[S
 }
 
 // The refusals of D25 and D26 over a unit: the fixpoint first, then one report.
-fn rsrc_findings(asked: ref Asked, items: ref Vec[Spanned[Item]], own_buffer: fn(ref Expr) -> bool sync, mut out: Vec[Finding]) {
-    let package = result_package(asked)
+fn rsrc_findings(asked: ref Asked, package: ref ResultPackage, items: ref Vec[Spanned[Item]], own_buffer: fn(ref Expr) -> bool sync, mut out: Vec[Finding]) {
     let unit = plain_unit(package, package_borrowing_types(asked, items), view_fields(asked.names, items))
     let mut known: collections::BTreeMap[String, ResultSrcKnown] = collections::BTreeMap()
     rsrc_solve(unit, asked, items, own_buffer, known, out)

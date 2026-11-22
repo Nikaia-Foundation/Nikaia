@@ -58,7 +58,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn a_constructor_written_as_new(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, name: &str, span: &Span) {
+    pub(crate) fn a_constructor_written_as_new(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, name: &str, span: &Span) {
         let ty = match name.strip_suffix("::new") { Some(__nikaia_value) => __nikaia_value, None => return };
         if !world.own.functions.contains_key(name) && !world.library.functions.contains_key(name) { return; }
         self.findings.push(check_refusal("NK1149", span, format!("Make a `{}` with `{}(…)`, not `{}::new`.", ty, ty, ty), vec![String::from("In Nikaia a type's constructor has no name: it's called as the type itself.")], Some(format!("Write `{}(…)`, or just `{}` where you pass the constructor itself.", ty, ty))));

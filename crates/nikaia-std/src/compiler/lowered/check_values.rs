@@ -4,10 +4,10 @@
 impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn takes_away(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, ty: &Ty) -> bool { moves_away(ty) && !a_ledger_copies(ty, &vec![world.library]) && !self.a_dependency_copy(world, ty) && !self.a_package_copy(world, ty) }
+    pub(crate) fn takes_away(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, ty: &Ty) -> bool { moves_away(ty) && !a_ledger_copies(ty, &vec![world.library]) && !self.a_dependency_copy(world, ty) && !self.a_package_copy(world, ty) }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn a_package_copy(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, ty: &Ty) -> bool {
+    pub(crate) fn a_package_copy(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, ty: &Ty) -> bool {
         match ty {
             Ty::Named { name, args, view } => { let view = *view; !view && args.is_empty() && self.copies_in_the_package.contains(name) },
             Ty::Nullable(inner) => { let inner = nikaia_std::boxed::open(inner); self.a_package_copy(world, inner) || !self.takes_away(world, inner) },
@@ -17,16 +17,16 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn no_part_is_taken_away(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, parts: &[Ty]) -> bool {
+    pub(crate) fn no_part_is_taken_away(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, parts: &[Ty]) -> bool {
         for part in parts.iter() { if self.takes_away(world, part) { return false; } }
         true
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn copied(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, ty: &Ty) -> bool { copies_plainly(ty) || a_ledger_copies(ty, &vec![world.library]) || self.a_dependency_copy(world, ty) }
+    pub fn copied(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, ty: &Ty) -> bool { copies_plainly(ty) || a_ledger_copies(ty, &vec![world.library]) || self.a_dependency_copy(world, ty) }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn a_dependency_copy(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, ty: &Ty) -> bool {
+    pub(crate) fn a_dependency_copy(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, ty: &Ty) -> bool {
         match ty {
             Ty::Named { name, .. } => !self.structs.contains_key(name) && !self.enums.contains_key(name) && !world.parts_beside.contains_key(name) && a_ledger_copies(ty, &vec![world.own]),
             Ty::Nullable(inner) => { let inner = nikaia_std::boxed::open(inner); self.a_dependency_copy(world, inner) },
@@ -35,7 +35,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn no_number_is(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, ty: &Ty) -> bool {
+    pub(crate) fn no_number_is(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, ty: &Ty) -> bool {
         match ty {
             Ty::Named { name, args, .. } => name == "String" || name == "str" || name == "bool" || name == "char" || !args.is_empty() && !a_number_name(name) || self.structs.contains_key(name) || self.enums.contains_key(name) || world.library.types.contains_key(name),
             Ty::Tuple(_) => true,
@@ -44,7 +44,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn no_integer_is(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, ty: &Ty) -> bool { self.no_number_is(world, ty) || a_float_type(ty) }
+    pub(crate) fn no_integer_is(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, ty: &Ty) -> bool { self.no_number_is(world, ty) || a_float_type(ty) }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     pub(crate) fn a_pattern_of_owned_text(&mut self, key: &str, given: &[Expr], found: &[Ty], span: &Span) {
@@ -78,7 +78,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn a_view_of_what_does_not_copy(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, found: &Ty, want: &Ty) -> bool {
+    pub(crate) fn a_view_of_what_does_not_copy(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, found: &Ty, want: &Ty) -> bool {
         match found {
             Ty::Named { name, args, view } => { let view = *view; view && self.is_a_view_of(world, name, args, want) },
             _ => false,
@@ -86,7 +86,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn is_a_view_of(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, viewed: &str, viewed_args: &[Ty], want: &Ty) -> bool {
+    pub(crate) fn is_a_view_of(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, viewed: &str, viewed_args: &[Ty], want: &Ty) -> bool {
         match want {
             Ty::Named { name, args, view } => { let view = *view; !view && viewed == name && viewed_args == args && a_type_base(name) != "String" && a_type_base(name) != "str" && !self.copied(world, want) && !self.copies_in_the_package.contains(name) },
             _ => false,
@@ -116,7 +116,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn a_copy_under_another_name(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, receiver: &Expr, method: winnow_grammar::Symbol, args: &[Expr], span: &Span) {
+    pub(crate) fn a_copy_under_another_name(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, receiver: &Expr, method: winnow_grammar::Symbol, args: &[Expr], span: &Span) {
         let written = nikaia_std::block::Text::from(world.words.resolve(method).to_string());
         if !args.is_empty() || written != "to_owned" || !ledger_candidates(world.own, world.own_methods, &written).is_empty() { return; }
         let shown: String = match receiver {
@@ -127,7 +127,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn a_call_on_a_literal_that_adds_nothing(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, receiver: &Expr, method: winnow_grammar::Symbol, args: &[Expr], span: &Span) {
+    pub(crate) fn a_call_on_a_literal_that_adds_nothing(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, receiver: &Expr, method: winnow_grammar::Symbol, args: &[Expr], span: &Span) {
         let written = nikaia_std::block::Text::from(world.words.resolve(method).to_string());
         if !args.is_empty() || written != "to_string" && written != "clone" { return; }
         let plain = matches!(receiver, Expr::LitStr { .. });
@@ -137,7 +137,7 @@ impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    pub(crate) fn a_text_form_of_text(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, call: &Expr, receiver: &Expr, method: winnow_grammar::Symbol, args: &[Expr], on: &Ty, span: &Span) {
+    pub(crate) fn a_text_form_of_text(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, call: &Expr, receiver: &Expr, method: winnow_grammar::Symbol, args: &[Expr], on: &Ty, span: &Span) {
         if !args.is_empty() || world.words.resolve(method) != "to_string" || !check_core_method_text_receiver(on) { return; }
         let literal = matches!(receiver, Expr::LitStr { .. });
         if literal || !ledger_candidates(world.own, world.own_methods, "to_string").is_empty() { return; }
@@ -149,7 +149,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn a_chars_call(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, call: &Expr, receiver: &Expr, span: &Span) {
+    pub(crate) fn a_chars_call(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, call: &Expr, receiver: &Expr, span: &Span) {
         let at = check_span_at(world, call, span);
         for said in self.findings.iter() { if said.code == "NK1353" && said.span.start == at.start { return; } }
         let mut refused = check_refusal("NK1353", &at, String::from("`chars()` is not one of the views text is read through."), vec![String::from("Text is read through a view that names its unit: `.bytes`, `.scalars` or `.graphemes` (ADR-320). `chars()` walks the scalars without saying so.")], Some(String::from("Write `.scalars` for `.chars()`; `nikaia fix` writes it.")));
@@ -180,7 +180,7 @@ pub(crate) fn ledger_candidates(ledger: &Ledger, methods: &MethodIndex, method: 
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn a_call_dropped(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, call: &Expr, receiver: &Expr, written: &str) -> Option<CheckEdit> {
+pub(crate) fn a_call_dropped(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, call: &Expr, receiver: &Expr, written: &str) -> Option<CheckEdit> {
     let whole = match world.here.spans.get(&id_of(call)) { Some(__nikaia_value) => __nikaia_value, None => return None };
     let of = match world.here.spans.get(&id_of(receiver)) { Some(__nikaia_value) => __nikaia_value, None => return None };
     if of.start == whole.start && of.end < whole.end { return Some(CheckEdit { span: Span { start: of.end, end: whole.end }, text: String::from("") }); }
@@ -191,7 +191,7 @@ pub(crate) fn a_call_dropped(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, cal
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn chars_renamed(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, call: &Expr, receiver: &Expr) -> Option<CheckEdit> {
+pub(crate) fn chars_renamed(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, call: &Expr, receiver: &Expr) -> Option<CheckEdit> {
     let whole = match world.here.spans.get(&id_of(call)) { Some(__nikaia_value) => __nikaia_value, None => return None };
     let of = match world.here.spans.get(&id_of(receiver)) { Some(__nikaia_value) => __nikaia_value, None => return None };
     if of.start == whole.start && of.end < whole.end { return Some(CheckEdit { span: Span { start: of.end, end: whole.end }, text: String::from(".scalars") }); }

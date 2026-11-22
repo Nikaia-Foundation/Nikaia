@@ -166,7 +166,7 @@ pub(crate) fn check_core_call_on_owned(on: &Ty) -> Ty {
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn check_core_call_on_fallback<'r>(state: &CheckState, world: &CheckWorld<'r, 'r, 'r, 'r, 'r, 'r, 'r>, on: &Ty, entry: &str) -> Option<CheckResolved<'r>> {
+pub(crate) fn check_core_call_on_fallback<'r>(state: &CheckState, world: &CheckWorld<'r, 'r, 'r, 'r, 'r, 'r, 'r, 'r>, on: &Ty, entry: &str) -> Option<CheckResolved<'r>> {
     match on {
         Ty::Seq { parallel, .. } => {
             let parallel = *parallel;
@@ -195,7 +195,7 @@ pub(crate) fn check_core_call_on_fallback<'r>(state: &CheckState, world: &CheckW
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn check_core_call_on_comparable(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, on: &Ty, wants_order: bool) -> bool {
+pub(crate) fn check_core_call_on_comparable(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, on: &Ty, wants_order: bool) -> bool {
     match on {
         Ty::Named { name, args, .. } => {
             if args.is_empty() && state.type_parameters.contains_key(name) {
@@ -216,7 +216,7 @@ pub(crate) fn check_core_call_on_comparable(state: &CheckState, world: &CheckWor
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn check_core_call_on_cloned_parameter(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, on: &Ty) -> bool {
+pub(crate) fn check_core_call_on_cloned_parameter(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, on: &Ty) -> bool {
     if world.own.traits.contains_key("Clone") { return false; }
     match on {
         Ty::Named { name, args, .. } => {
@@ -234,20 +234,20 @@ pub(crate) fn check_core_call_on_cloned_parameter(state: &CheckState, world: &Ch
 }
 
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn check_core_call_on_compares(beside: &collections::BTreeMap<String, Vec<Ty>>, structs: &collections::BTreeMap<String, Vec<FieldContract>>, enums: &collections::BTreeMap<String, collections::BTreeSet<String>>, payloads: &collections::BTreeMap<String, Vec<Ty>>, parameters: &collections::BTreeMap<String, Vec<String>>, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, on: &Ty, wants_order: bool) -> bool {
+pub(crate) fn check_core_call_on_compares(beside: &collections::BTreeMap<String, Vec<Ty>>, structs: &collections::BTreeMap<String, Vec<FieldContract>>, enums: &collections::BTreeMap<String, collections::BTreeSet<String>>, payloads: &collections::BTreeMap<String, Vec<Ty>>, parameters: &collections::BTreeMap<String, Vec<String>>, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, on: &Ty, wants_order: bool) -> bool {
     let asking = CheckComparable { beside, structs, enums, payloads, parameters, own: world.own, library: world.library };
     if wants_order { return asking.orders(on); }
     asking.totally(on)
 }
 
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn check_core_call_on_clones(beside: &collections::BTreeMap<String, Vec<Ty>>, structs: &collections::BTreeMap<String, Vec<FieldContract>>, enums: &collections::BTreeMap<String, collections::BTreeSet<String>>, payloads: &collections::BTreeMap<String, Vec<Ty>>, parameters: &collections::BTreeMap<String, Vec<String>>, bounds: &collections::BTreeMap<String, Vec<String>>, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, on: &Ty) -> bool {
+pub(crate) fn check_core_call_on_clones(beside: &collections::BTreeMap<String, Vec<Ty>>, structs: &collections::BTreeMap<String, Vec<FieldContract>>, enums: &collections::BTreeMap<String, collections::BTreeSet<String>>, payloads: &collections::BTreeMap<String, Vec<Ty>>, parameters: &collections::BTreeMap<String, Vec<String>>, bounds: &collections::BTreeMap<String, Vec<String>>, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, on: &Ty) -> bool {
     let asking = CheckComparable { beside, structs, enums, payloads, parameters, own: world.own, library: world.library };
     asking.clones(on, bounds)
 }
 
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn check_core_call_on_unhashed(beside: &collections::BTreeMap<String, Vec<Ty>>, structs: &collections::BTreeMap<String, Vec<FieldContract>>, enums: &collections::BTreeMap<String, collections::BTreeSet<String>>, payloads: &collections::BTreeMap<String, Vec<Ty>>, parameters: &collections::BTreeMap<String, Vec<String>>, bounds: &collections::BTreeMap<String, Vec<String>>, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, on: &Ty) -> Option<Ty> {
+pub(crate) fn check_core_call_on_unhashed(beside: &collections::BTreeMap<String, Vec<Ty>>, structs: &collections::BTreeMap<String, Vec<FieldContract>>, enums: &collections::BTreeMap<String, collections::BTreeSet<String>>, payloads: &collections::BTreeMap<String, Vec<Ty>>, parameters: &collections::BTreeMap<String, Vec<String>>, bounds: &collections::BTreeMap<String, Vec<String>>, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, on: &Ty) -> Option<Ty> {
     match on {
         Ty::Named { name, args, .. } => {
             if args.is_empty() && bounds.contains_key(name) {
@@ -279,7 +279,7 @@ pub(crate) fn check_core_call_on_seen(on: &Ty) -> Option<Ty> {
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn check_core_call_on_undescribed<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, on: &Ty, receiver: &Expr, method: winnow_grammar::Symbol, args: &[Expr], entry: &str, type_name: &str, span: &Span) -> Ty {
+pub(crate) fn check_core_call_on_undescribed<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, host: &H, on: &Ty, receiver: &Expr, method: winnow_grammar::Symbol, args: &[Expr], entry: &str, type_name: &str, span: &Span) -> Ty {
     let bound: Option<Ty> = state.bound_that_answers(world, type_name, entry);
     if bound.is_some() {
         let answered: Ty = nikaia_std::index::or(bound, || Ty::Unknown);
@@ -381,7 +381,7 @@ pub(crate) fn check_core_call_on_self_as(ty: &Ty, parameter: &str) -> Ty {
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn check_core_call_on_takes(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, contract: &FnContract) -> bool {
+pub(crate) fn check_core_call_on_takes(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, contract: &FnContract) -> bool {
     let signature = match contract.signature.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return false };
     for (_, ty) in signature.params.iter() {
         match ty {
@@ -396,7 +396,7 @@ pub(crate) fn check_core_call_on_takes(state: &CheckState, world: &CheckWorld<'_
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn check_core_call_on_map_written(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, map_name: &str, key: &Expr, key_ty: &Ty, entry_key: bool, value: &Expr, value_ty: &Ty, give_value: bool, span: &Span) {
+pub(crate) fn check_core_call_on_map_written(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, map_name: &str, key: &Expr, key_ty: &Ty, entry_key: bool, value: &Expr, value_ty: &Ty, give_value: bool, span: &Span) {
     let local = match state.binding(map_name) { Some(__nikaia_value) => __nikaia_value, None => return };
     let id = local.id;
     let mut parts: Vec<Ty> = nikaia_std::block::list(nikaia_std::block::Place::Block);
@@ -433,7 +433,7 @@ pub(crate) fn check_core_call_on_map_held(given: &Ty) -> Ty {
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn check_core_call_on_map_part(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, map_name: &str, id: i64, keys: bool, other: String, held: &Ty, given: &Expr, given_ty: &Ty, give: bool, entry_key: bool, span: &Span) -> Ty {
+pub(crate) fn check_core_call_on_map_part(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, map_name: &str, id: i64, keys: bool, other: String, held: &Ty, given: &Expr, given_ty: &Ty, give: bool, entry_key: bool, span: &Span) -> Ty {
     let mut open: i64 = -1;
     if keys { open = nikaia_std::index::or(*nikaia_std::index::get(&state.flow.open_keys, &id), || -1); } else { open = nikaia_std::index::or(*nikaia_std::index::get(&state.flow.open_elements, &id), || -1); }
     if open >= 0 {
@@ -466,7 +466,7 @@ pub(crate) fn check_core_call_on_map_part(state: &mut CheckState, world: &CheckW
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn check_core_call_on_now_expected(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, receiver: &Expr, entry: &str, expected: Vec<Ty>) -> Vec<Ty> {
+pub(crate) fn check_core_call_on_now_expected(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, receiver: &Expr, entry: &str, expected: Vec<Ty>) -> Vec<Ty> {
     let mut map = receiver.clone();
     let mut from: i64 = 0;
     if entry == "insert" && expected.len() == 2 { from = 0; } else if (entry == "or_insert" || entry == "or_insert_with") && expected.len() == 1 {
@@ -505,7 +505,7 @@ pub(crate) fn check_core_call_on_now_expected(state: &CheckState, world: &CheckW
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn check_core_call_on_key_read(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, map: &Expr, key: &Expr, span: &Span) {
+pub(crate) fn check_core_call_on_key_read(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, map: &Expr, key: &Expr, span: &Span) {
     let name: String = match map {
         Expr::Variable(n, _) => { let n = *n; nikaia_std::block::Text::from(world.words.resolve(n).to_string()) },
         _ => return,
@@ -543,7 +543,7 @@ pub(crate) fn check_core_call_on_retyped(state: &mut CheckState, bound_name: &st
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn check_core_call_on_entry_key(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, receiver: &Expr) -> Option<Expr> {
+pub(crate) fn check_core_call_on_entry_key(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, receiver: &Expr) -> Option<Expr> {
     match receiver {
         Expr::MethodCall { method, args, .. } => {
             let method = *method;
@@ -555,7 +555,7 @@ pub(crate) fn check_core_call_on_entry_key(world: &CheckWorld<'_, '_, '_, '_, '_
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn check_core_call_on_entry_values(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, receiver: &Expr) -> i64 {
+pub(crate) fn check_core_call_on_entry_values(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, receiver: &Expr) -> i64 {
     match receiver {
         Expr::MethodCall { receiver, method, args, .. } => {
             let receiver = nikaia_std::boxed::open(receiver); let method = *method;
@@ -611,7 +611,7 @@ pub(crate) fn check_core_call_on_open(state: &CheckState, bound_name: &str) -> i
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn check_core_call_on_pushed(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, receiver: &Expr, entry: &str, args: &[Expr], found: &[Ty], span: &Span) {
+pub(crate) fn check_core_call_on_pushed(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, receiver: &Expr, entry: &str, args: &[Expr], found: &[Ty], span: &Span) {
     if state.flow.pushed_into.is_none() || state.flow.pushed_receiver != id_of(receiver) as i64 { return; }
     let pushed_name: String = nikaia_std::index::or(match state.flow.pushed_into.as_ref() {
         Some(__nikaia_it) => Some(__nikaia_it.clone()),
@@ -688,7 +688,7 @@ pub(crate) fn check_core_call_on_receiver_offset(contract: &FnContract) -> i64 {
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn check_core_call_on_given<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, key: &str, contract: &FnContract, args: &[Expr], found: &[Ty], expected: &[Ty], span: &Span) {
+pub(crate) fn check_core_call_on_given<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, host: &H, key: &str, contract: &FnContract, args: &[Expr], found: &[Ty], expected: &[Ty], span: &Span) {
     let own = world.own.functions.contains_key(key);
     let offset = check_core_call_on_receiver_offset(contract);
     let mut i: i64 = 0;
@@ -722,7 +722,7 @@ pub(crate) fn check_core_call_on_given<H: CheckHost>(state: &mut CheckState, wor
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn check_core_call_on_extended(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, key: &str, bound: &collections::BTreeMap<String, Ty>, args: &[Expr], found: &[Ty], span: &Span) {
+pub(crate) fn check_core_call_on_extended(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, key: &str, bound: &collections::BTreeMap<String, Ty>, args: &[Expr], found: &[Ty], span: &Span) {
     if !(key == "Vec::extend" || key == "collections::HashSet::extend" || key == "collections::BTreeSet::extend") || args.len() != 1 || found.len() != 1 { return; }
     let held: Ty = unviewed_type(&nikaia_std::index::or(match bound.get("T") {
         Some(__nikaia_it) => Some(__nikaia_it.clone()),
@@ -828,7 +828,7 @@ pub(crate) fn check_core_call_on_tuple_fits(parts: &[Ty], want: &Ty) -> bool {
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn check_core_call_on_member_one(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, key: &str, bound: &collections::BTreeMap<String, Ty>, args: &[Expr], found: &[Ty], at: i64, var: &str, span: &Span) {
+pub(crate) fn check_core_call_on_member_one(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, key: &str, bound: &collections::BTreeMap<String, Ty>, args: &[Expr], found: &[Ty], at: i64, var: &str, span: &Span) {
     if at >= args.len() as i64 || at >= found.len() as i64 { return; }
     let want: Ty = check_core_call_on_written(&nikaia_std::index::or(match bound.get(var) {
         Some(__nikaia_it) => Some(__nikaia_it.clone()),
@@ -862,7 +862,7 @@ pub(crate) fn check_core_call_on_extend_literal(key: &str, bound: &collections::
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn check_core_call_on_member(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, key: &str, bound: &collections::BTreeMap<String, Ty>, args: &[Expr], found: &[Ty], span: &Span) {
+pub(crate) fn check_core_call_on_member(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, key: &str, bound: &collections::BTreeMap<String, Ty>, args: &[Expr], found: &[Ty], span: &Span) {
     let entry = check_core_call_on_base(key);
     let list = key.starts_with("Vec::");
     let set = key.starts_with("collections::HashSet::") || key.starts_with("collections::BTreeSet::");
@@ -876,7 +876,7 @@ pub(crate) fn check_core_call_on_member(state: &mut CheckState, world: &CheckWor
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn check_core_call_on_described<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, on: &Ty, receiver: &Expr, method: winnow_grammar::Symbol, args: &[Expr], entry: &str, key: &str, contract: &FnContract, span: &Span) -> Ty {
+pub(crate) fn check_core_call_on_described<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, host: &H, on: &Ty, receiver: &Expr, method: winnow_grammar::Symbol, args: &[Expr], entry: &str, key: &str, contract: &FnContract, span: &Span) -> Ty {
     let node = id_of(receiver) as i64;
     state.facts.method_callees.insert(node, nikaia_std::block::Text::from(key.to_string()));
     let mut known_text = false;
@@ -1189,7 +1189,7 @@ pub(crate) fn check_core_call_on_described<H: CheckHost>(state: &mut CheckState,
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn check_core_call_on_code(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, on: &Ty, receiver: &Expr, entry: &str, span: &Span) {
+pub(crate) fn check_core_call_on_code(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, on: &Ty, receiver: &Expr, entry: &str, span: &Span) {
     let code = matches!(on, Ty::Fn { .. });
     if !code { return; }
     let written = check_walked_written(receiver, world.words);
@@ -1205,7 +1205,7 @@ pub(crate) fn check_core_call_on_code(state: &mut CheckState, world: &CheckWorld
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn check_core_call_on<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, on: &Ty, receiver: &Expr, method: winnow_grammar::Symbol, args: &[Expr], entry: &str, span: &Span) -> Ty {
+pub(crate) fn check_core_call_on<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, host: &H, on: &Ty, receiver: &Expr, method: winnow_grammar::Symbol, args: &[Expr], entry: &str, span: &Span) -> Ty {
     if entry == "full" && args.is_empty() {
         let mut an_error = false;
         match on {
@@ -1284,7 +1284,7 @@ pub(crate) fn check_core_safe_call_of_type(inner: &Ty, key: &str) -> bool {
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn check_core_safe_call_type_keys(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, inner: &Ty, name: &str) -> bool {
+pub(crate) fn check_core_safe_call_type_keys(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, inner: &Ty, name: &str) -> bool {
     for key in ledger_candidates(world.own, world.own_methods, name) { if check_core_safe_call_of_type(inner, &key) { return true; } }
     for key in ledger_candidates(world.library, world.library_methods, name) { if check_core_safe_call_of_type(inner, &key) { return true; } }
     false
@@ -1293,7 +1293,7 @@ pub(crate) fn check_core_safe_call_type_keys(world: &CheckWorld<'_, '_, '_, '_, 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn check_core_a_safe_call<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, inner: &Ty, receiver: &Expr, method: winnow_grammar::Symbol, args: &[Expr], config: &[ConfigArg], witness: i64, span: &Span) -> Ty {
+pub(crate) fn check_core_a_safe_call<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, host: &H, inner: &Ty, receiver: &Expr, method: winnow_grammar::Symbol, args: &[Expr], config: &[ConfigArg], witness: i64, span: &Span) -> Ty {
     let name: String = format!("{}", world.words.resolve(method));
     let read_within = witness >= 0 && check_core_method_connection(&inner) && name == "read";
     let within = witness >= 0 && check_core_call_on_task_handle(&inner) && name == "join" || read_within;
@@ -1385,7 +1385,7 @@ pub(crate) fn check_core_call_on_copied_entry(want: &Ty, arg: &Expr) -> Option<T
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn check_core_call_on_one_param(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, arg: &Expr) -> Option<String> {
+pub(crate) fn check_core_call_on_one_param(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, arg: &Expr) -> Option<String> {
     match arg {
         Expr::Closure { params, .. } => { if params.len() == 1 { Some(nikaia_std::block::Text::from(world.words.resolve(*unsafe { nikaia_std::proven::read(&params, (0) as usize) }).to_string())) } else { None } },
         _ => None,
@@ -1406,7 +1406,7 @@ pub(crate) fn check_core_call_on_item_copies(on: &Ty, arg: &Expr, handed: i64) -
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn check_core_call_on_a_viewed_key(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, arg: &Expr, lambda: &Ty, span: &Span) {
+pub(crate) fn check_core_call_on_a_viewed_key(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, arg: &Expr, lambda: &Ty, span: &Span) {
     let key: Ty = match lambda {
         Ty::Fn { result, .. } => { let result = nikaia_std::boxed::open(result); match match result {
             Some(__nikaia_it) => Some(__nikaia_it.copy_owned()),
@@ -1472,7 +1472,7 @@ pub(crate) fn check_core_call_on_map_retain_fn(want: &Ty, taken: &[bool]) -> Ty 
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn check_core_call_on_open_map_parts(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, receiver: &Expr) -> Vec<i64> {
+pub(crate) fn check_core_call_on_open_map_parts(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, receiver: &Expr) -> Vec<i64> {
     let mut out: Vec<i64> = vec![-1, -1];
     match receiver {
         Expr::Variable(name, _) => {
@@ -1495,7 +1495,7 @@ pub(crate) fn check_core_call_on_owned_text(ty: &Ty) -> bool {
     }
 }
 
-pub(crate) fn check_core_call_on_text_to_build(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, arg: &Expr, found: &Ty) -> bool {
+pub(crate) fn check_core_call_on_text_to_build(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, arg: &Expr, found: &Ty) -> bool {
     let made = match arg {
         Expr::LitStr { .. } => return true,
         Expr::MethodCall { method, .. } => {
@@ -1572,7 +1572,7 @@ pub(crate) fn check_core_call_on_keyless(entry: &str) -> bool { entry == "len" |
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn check_core_call_on_hashed_key(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, on: &Ty, entry: &str, span: &Span) {
+pub(crate) fn check_core_call_on_hashed_key(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, on: &Ty, entry: &str, span: &Span) {
     let (base, args) = match on.unseen() {
         Ty::Named { ref name, ref args, .. } => (type_last_segment(name), args.copy_owned()),
         _ => return,

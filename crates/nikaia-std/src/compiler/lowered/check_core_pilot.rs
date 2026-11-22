@@ -9,7 +9,7 @@ pub(crate) fn check_specialised(function: &str, on: &str) -> String {
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn check_core_grammar_call<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, key: &str, args: &[Expr], config: &[ConfigArg], span: &Span) -> Ty {
+pub(crate) fn check_core_grammar_call<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, host: &H, key: &str, args: &[Expr], config: &[ConfigArg], span: &Span) -> Ty {
     let declared: Option<FnContract> = match *nikaia_std::index::get(&world.own.functions, key) {
         Some(__nikaia_it) => Some(__nikaia_it.clone()),
         None => None,
@@ -115,7 +115,7 @@ pub(crate) fn check_core_grammar_call<H: CheckHost>(state: &mut CheckState, worl
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn check_holds_a_symbol(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, ty: &Ty, seen: &mut collections::BTreeSet<String>) -> bool {
+pub(crate) fn check_holds_a_symbol(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, ty: &Ty, seen: &mut collections::BTreeSet<String>) -> bool {
     match ty {
         Ty::Named { name, args, .. } => {
             for arg in args.iter() { if check_holds_a_symbol(state, world, arg, seen) { return true; } }
@@ -146,7 +146,7 @@ pub(crate) fn check_holds_a_symbol(state: &CheckState, world: &CheckWorld<'_, '_
     }
 }
 
-pub(crate) fn check_grammar_entry_interns(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, key: &str) -> Option<bool> {
+pub(crate) fn check_grammar_entry_interns(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, key: &str) -> Option<bool> {
     let cut = match nikaia_std::text::find_first(&key, &"::") { Some(__nikaia_value) => __nikaia_value, None => return None };
     let owner = nikaia_std::block::Text::from(key.before(cut.start).to_string());
     let rule = nikaia_std::block::Text::from(key.after(cut.end).to_string());
@@ -171,7 +171,7 @@ pub(crate) fn check_grammar_interns_in(view: &ParsedView<'_, '_, '_, '_, '_, '_,
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn check_core_a_compound_write_to_a_map_slot<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, target: &Expr, span: &Span) {
+pub(crate) fn check_core_a_compound_write_to_a_map_slot<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, host: &H, target: &Expr, span: &Span) {
     match target {
         Expr::Index { base, index, .. } => {
             let base = nikaia_std::boxed::open(base); let index = nikaia_std::boxed::open(index);
@@ -189,7 +189,7 @@ pub(crate) fn check_core_a_compound_write_to_a_map_slot<H: CheckHost>(state: &mu
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn check_core_an_instantiation<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, name: &str, call: i64, args: &[Expr], span: &Span) {
+pub(crate) fn check_core_an_instantiation<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, host: &H, name: &str, call: i64, args: &[Expr], span: &Span) {
     if !state.walks_fields.contains_key(name) { return; }
     if args.is_empty() { return; }
     let slot = check_core_slot_index(world, name);
@@ -208,7 +208,7 @@ pub(crate) fn check_core_an_instantiation<H: CheckHost>(state: &mut CheckState, 
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn check_core_instantiate(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, name: &str, call: i64, given: &Ty, literal: bool) {
+pub(crate) fn check_core_instantiate(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, name: &str, call: i64, given: &Ty, literal: bool) {
     let named: String = match given {
         Ty::Named { name, .. } => nikaia_std::block::Text::from(name.to_string()),
         _ => String::from(""),
@@ -233,7 +233,7 @@ pub(crate) fn check_core_instantiate(state: &mut CheckState, world: &CheckWorld<
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn check_core_slot_index(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, name: &str) -> i64 {
+pub(crate) fn check_core_slot_index(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, name: &str) -> i64 {
     let resolved: CheckResolved<'_> = match resolve_call(world, name) { Some(__nikaia_value) => __nikaia_value, None => return -1 };
     let signature: Signature = match match resolved.contract.signature.as_ref() {
         Some(__nikaia_it) => Some(__nikaia_it.clone()),
@@ -249,7 +249,7 @@ pub(crate) fn check_core_slot_index(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn check_core_type_argument(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, arg: &Expr, callee: &str, span: &Span) -> Ty {
+pub(crate) fn check_core_type_argument(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, arg: &Expr, callee: &str, span: &Span) -> Ty {
     match arg {
         Expr::Variable(symbol, _) => {
             let symbol = *symbol;
@@ -285,7 +285,7 @@ pub(crate) fn check_core_type_argument(state: &mut CheckState, world: &CheckWorl
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn check_core_a_mut_parameter_given_away<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, value: &Expr, span: &Span, what: &str) {
+pub(crate) fn check_core_a_mut_parameter_given_away<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, host: &H, value: &Expr, span: &Span, what: &str) {
     let name: String = match value {
         Expr::Variable(symbol, _) => { let symbol = *symbol; nikaia_std::block::Text::from(world.words.resolve(symbol).to_string()) },
         _ => return,
@@ -390,7 +390,7 @@ pub(crate) fn check_reflect_a_type(state: &CheckState, ty: &str) -> bool {
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn check_reflect_kind_of(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, side: &Expr) -> Option<String> {
+pub(crate) fn check_reflect_kind_of(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, side: &Expr) -> Option<String> {
     if check_reflect_field_kind(&state, world, side, "ty::kind") { return Some(String::from("?")); }
     if check_reflect_field_kind(&state, world, side, "ty::access") { return Some(String::from("@?")); }
     let segments = match side {
@@ -424,7 +424,7 @@ pub(crate) fn check_reflect_kind_of(state: &mut CheckState, world: &CheckWorld<'
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn check_reflect_compared(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, expr: &Expr, op: &BinaryOp, lhs: &Expr, rhs: &Expr, span: &Span) -> Option<Ty> {
+pub(crate) fn check_reflect_compared(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, expr: &Expr, op: &BinaryOp, lhs: &Expr, rhs: &Expr, span: &Span) -> Option<Ty> {
     let equality = matches!(op, BinaryOp::Eq | BinaryOp::Ne);
     if !equality { return None; }
     let left = match check_reflect_kind_of(state, world, lhs) { Some(__nikaia_value) => __nikaia_value, None => return None };
@@ -441,7 +441,7 @@ pub(crate) fn check_reflect_compared(state: &mut CheckState, world: &CheckWorld<
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn check_reflect_path(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, expr: &Expr, segments: &[winnow_grammar::Symbol], span: &Span) -> Option<Ty> {
+pub(crate) fn check_reflect_path(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, expr: &Expr, segments: &[winnow_grammar::Symbol], span: &Span) -> Option<Ty> {
     let meta = Ty::Named { name: String::from("meta::Type"), args: vec![], view: false };
     if segments.len() == 3 {
         if world.words.resolve(*unsafe { nikaia_std::proven::read(&segments, (0) as usize) }) == "meta" && world.words.resolve(*unsafe { nikaia_std::proven::read(&segments, (1) as usize) }) == "Type" && check_reflect_bare_kind(world.words.resolve(*unsafe { nikaia_std::proven::read(&segments, (2) as usize) })) {
@@ -521,7 +521,7 @@ pub(crate) fn check_reflect_a_field(ty: &Ty) -> bool {
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn check_core_field_copies(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, name: &str, callee: Option<&FnContract>) {
+pub(crate) fn check_core_field_copies(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, name: &str, callee: Option<&FnContract>) {
     let contract: FnContract = match match callee {
         Some(__nikaia_it) => Some(__nikaia_it.copy_owned()),
         None => None,
@@ -546,7 +546,7 @@ pub(crate) fn check_core_field_copies(state: &mut CheckState, world: &CheckWorld
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn check_reflected_field_kept(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, ty: &Type, span: &Span, parameter: bool) {
+pub(crate) fn check_reflected_field_kept(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, ty: &Type, span: &Span, parameter: bool) {
     let plain = parameter && !ty.is_nullable && !ty.is_slice;
     if !plain && world.words.resolve(ty.name) == "meta::Field" {
         state.findings.push(check_refusal("NK1320", span, String::from("A reflected field exists only while the program is built, so it can't be kept here."), vec![String::from("`meta::Field` stands only as a parameter's type: each call is made with the field of an unrolled turn (Part II 10.3).")], Some(String::from("Take the field as a parameter, `fn f(field: meta::Field)`, and keep what you read of it, such as `field.name`."))));
@@ -557,7 +557,7 @@ pub(crate) fn check_reflected_field_kept(state: &mut CheckState, world: &CheckWo
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn check_reflect_field_kind(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, side: &Expr, member: &str) -> bool {
+pub(crate) fn check_reflect_field_kind(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, side: &Expr, member: &str) -> bool {
     match side {
         Expr::Field { base, name, .. } => {
             let base = nikaia_std::boxed::open(base); let name = *name;
@@ -580,7 +580,7 @@ pub(crate) fn check_reflect_field_kind(state: &CheckState, world: &CheckWorld<'_
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn check_reflect_record(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, ty: &Ty) {
+pub(crate) fn check_reflect_record(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, ty: &Ty) {
     let written = check_reflect_written(ty);
     if written == "" || state.facts.type_parts.contains_key(&written) { return; }
     let kind: String = nikaia_std::index::or(match state.facts.type_kinds.get(&written) {
@@ -607,11 +607,11 @@ pub(crate) fn check_reflect_record(state: &mut CheckState, world: &CheckWorld<'_
     for part in parts.iter() { check_reflect_record(state, world, part); }
 }
 
-pub(crate) fn check_reflect_no_case(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, segments: &[winnow_grammar::Symbol]) -> bool { segments.len() == 3 && world.words.resolve(*unsafe { nikaia_std::proven::read(&segments, (0) as usize) }) == "meta" && world.words.resolve(*unsafe { nikaia_std::proven::read(&segments, (1) as usize) }) == "Type" && check_reflect_case_parts(world.words.resolve(*unsafe { nikaia_std::proven::read(&segments, (2) as usize) })) < 0 }
+pub(crate) fn check_reflect_no_case(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, segments: &[winnow_grammar::Symbol]) -> bool { segments.len() == 3 && world.words.resolve(*unsafe { nikaia_std::proven::read(&segments, (0) as usize) }) == "meta" && world.words.resolve(*unsafe { nikaia_std::proven::read(&segments, (1) as usize) }) == "Type" && check_reflect_case_parts(world.words.resolve(*unsafe { nikaia_std::proven::read(&segments, (2) as usize) })) < 0 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn check_reflect_refuse_no_case(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, side: &Expr, span: &Span) {
+pub(crate) fn check_reflect_refuse_no_case(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, side: &Expr, span: &Span) {
     match side {
         Expr::Path(segments, _) => { if check_reflect_no_case(world, segments) { state.a_kind_arm_names_no_case(world.words.resolve(*nikaia_std::index::get(&segments, 2)), span); } },
         _ => { },
@@ -669,7 +669,7 @@ pub(crate) fn check_reflect_arm(words: &winnow_grammar::InternerContext, pattern
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn check_reflect_kind_subject(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, value: &Expr) -> bool {
+pub(crate) fn check_reflect_kind_subject(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, value: &Expr) -> bool {
     if check_reflect_field_kind(&state, world, value, "ty::kind") { return true; }
     let segments = match value {
         Expr::Path(segments, _) => segments,
@@ -687,7 +687,7 @@ pub(crate) fn check_reflect_kind_subject(state: &mut CheckState, world: &CheckWo
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn check_reflect_match<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, expr: &Expr, value: &Expr, arms: &[MatchArm], span: &Span) -> Option<Ty> {
+pub(crate) fn check_reflect_match<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, host: &H, expr: &Expr, value: &Expr, arms: &[MatchArm], span: &Span) -> Option<Ty> {
     if !check_reflect_kind_subject(state, world, value) { return None; }
     state.facts.kind_matches.insert(id_of(value) as i64);
     let subject: String = match value {

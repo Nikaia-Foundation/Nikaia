@@ -10,37 +10,37 @@ pub enum CheckCrossingsPath {
     Live,
 }
 
-pub(crate) fn check_crossings_named(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, name: &str, stmt: &Stmt) -> bool {
+pub(crate) fn check_crossings_named(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, name: &str, stmt: &Stmt) -> bool {
     let mut seen: collections::BTreeSet<String> = collections::BTreeSet::new();
     names_in_statement(stmt, world.words, &mut seen);
     seen.contains(name)
 }
 
-pub(crate) fn check_crossings_named_in(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, name: &str, expr: &Expr) -> bool {
+pub(crate) fn check_crossings_named_in(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, name: &str, expr: &Expr) -> bool {
     let mut seen: collections::BTreeSet<String> = collections::BTreeSet::new();
     names_in(expr, world.words, &mut seen);
     seen.contains(name)
 }
 
-pub(crate) fn check_crossings_returned(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, name: &str, value: Option<&Expr>) -> CheckCrossingsPath {
+pub(crate) fn check_crossings_returned(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, name: &str, value: Option<&Expr>) -> CheckCrossingsPath {
     let given: &Expr = match value { Some(__nikaia_value) => __nikaia_value, None => return CheckCrossingsPath::Left };
     if check_crossings_named_in(world, name, given) { return CheckCrossingsPath::Gone; }
     CheckCrossingsPath::Left
 }
 
-pub(crate) fn check_crossings_is_name(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, name: &str, expr: &Expr) -> bool {
+pub(crate) fn check_crossings_is_name(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, name: &str, expr: &Expr) -> bool {
     match expr {
         Expr::Variable(word, _) => { let word = *word; ::core::convert::identity(match (AsRef::<str>::as_ref(&(world.words.resolve(word))), AsRef::<str>::as_ref(&(name)), ) { (__nikaia_f0, __nikaia_t, ) => __nikaia_t.len() == __nikaia_f0.len() && __nikaia_t.strip_prefix(__nikaia_f0).is_some() }) },
         _ => false,
     }
 }
 
-pub(crate) fn check_crossings_mentioned(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, name: &str, expr: &Expr) -> CheckCrossingsPath {
+pub(crate) fn check_crossings_mentioned(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, name: &str, expr: &Expr) -> CheckCrossingsPath {
     if check_crossings_named_in(world, name, expr) { return CheckCrossingsPath::Taken; }
     CheckCrossingsPath::Falls
 }
 
-pub(crate) fn check_crossings_path(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, name: &str, stmts: &[Spanned<Stmt>], from: i64, in_loop: bool) -> CheckCrossingsPath {
+pub(crate) fn check_crossings_path(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, name: &str, stmts: &[Spanned<Stmt>], from: i64, in_loop: bool) -> CheckCrossingsPath {
     let mut at = from;
     while at < stmts.len() as i64 {
         let flow = check_crossings_step(world, name, &unsafe { nikaia_std::proven::read(&stmts, (at) as usize) }.node, in_loop);
@@ -69,7 +69,7 @@ pub(crate) fn check_crossings_leaves_after(stmts: &[Spanned<Stmt>], from: i64, i
     false
 }
 
-pub(crate) fn check_crossings_keeping_join(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, name: &str, expr: &Expr) -> bool {
+pub(crate) fn check_crossings_keeping_join(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, name: &str, expr: &Expr) -> bool {
     match expr {
         Expr::MethodCall { receiver, method, config, .. } => {
             let receiver = nikaia_std::boxed::open(receiver); let method = *method;
@@ -92,7 +92,7 @@ pub(crate) fn check_crossings_keeping_join(world: &CheckWorld<'_, '_, '_, '_, '_
     }
 }
 
-pub(crate) fn check_crossings_names_cancel(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, value: &Expr) -> bool {
+pub(crate) fn check_crossings_names_cancel(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, value: &Expr) -> bool {
     match value {
         Expr::Path(parts, _) => {
             let count = parts.len() as i64;
@@ -103,7 +103,7 @@ pub(crate) fn check_crossings_names_cancel(world: &CheckWorld<'_, '_, '_, '_, '_
     }
 }
 
-pub(crate) fn check_crossings_timed_out(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, name: &str, expr: &Expr, in_loop: bool) -> Option<CheckCrossingsPath> {
+pub(crate) fn check_crossings_timed_out(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, name: &str, expr: &Expr, in_loop: bool) -> Option<CheckCrossingsPath> {
     match expr {
         Expr::TryCatch { expr: tried, handler, .. } => {
             let tried = nikaia_std::boxed::open(tried);
@@ -124,7 +124,7 @@ pub(crate) fn check_crossings_timed_out(world: &CheckWorld<'_, '_, '_, '_, '_, '
     }
 }
 
-pub(crate) fn check_crossings_handler_path(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, name: &str, stmts: &[Spanned<Stmt>], in_loop: bool) -> CheckCrossingsPath {
+pub(crate) fn check_crossings_handler_path(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, name: &str, stmts: &[Spanned<Stmt>], in_loop: bool) -> CheckCrossingsPath {
     for stmt in stmts.iter() {
         let mut flow = CheckCrossingsPath::Falls;
         let mut matched = false;
@@ -151,7 +151,7 @@ pub(crate) fn check_crossings_handler_path(world: &CheckWorld<'_, '_, '_, '_, '_
     CheckCrossingsPath::Falls
 }
 
-pub(crate) fn check_crossings_error_arms(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, name: &str, expr: &Expr, in_loop: bool) -> Option<CheckCrossingsPath> {
+pub(crate) fn check_crossings_error_arms(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, name: &str, expr: &Expr, in_loop: bool) -> Option<CheckCrossingsPath> {
     match expr {
         Expr::Match { value, arms, .. } => {
             let value = nikaia_std::boxed::open(value);
@@ -174,7 +174,7 @@ pub(crate) fn check_crossings_error_arms(world: &CheckWorld<'_, '_, '_, '_, '_, 
     }
 }
 
-pub(crate) fn check_crossings_reaches_timed_out(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, pattern: &MatchPattern) -> bool {
+pub(crate) fn check_crossings_reaches_timed_out(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, pattern: &MatchPattern) -> bool {
     match pattern {
         MatchPattern::Otherwise => return true,
         MatchPattern::Path(parts) => {
@@ -190,7 +190,7 @@ pub(crate) fn check_crossings_reaches_timed_out(world: &CheckWorld<'_, '_, '_, '
     }
 }
 
-pub(crate) fn check_crossings_step(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, name: &str, stmt: &Stmt, in_loop: bool) -> CheckCrossingsPath {
+pub(crate) fn check_crossings_step(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, name: &str, stmt: &Stmt, in_loop: bool) -> CheckCrossingsPath {
     let timed_out: Option<CheckCrossingsPath> = match stmt {
         Stmt::Expr(e) => check_crossings_timed_out(world, name, e, in_loop),
         Stmt::Let { value, .. } => check_crossings_timed_out(world, name, value, in_loop),
@@ -216,7 +216,7 @@ pub(crate) fn check_crossings_step(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_
     CheckCrossingsPath::Falls
 }
 
-pub(crate) fn check_crossings_loop_body(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, name: &str, body: &Block) -> CheckCrossingsPath {
+pub(crate) fn check_crossings_loop_body(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, name: &str, body: &Block) -> CheckCrossingsPath {
     let flow = check_crossings_path(world, name, &body.stmts, 0, true);
     if flow == CheckCrossingsPath::Left || flow == CheckCrossingsPath::Live { return flow; }
     if flow == CheckCrossingsPath::Gone { return CheckCrossingsPath::Taken; }
@@ -224,7 +224,7 @@ pub(crate) fn check_crossings_loop_body(world: &CheckWorld<'_, '_, '_, '_, '_, '
     CheckCrossingsPath::Falls
 }
 
-pub(crate) fn check_crossings_expr_path(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, name: &str, expr: &Expr, in_loop: bool) -> CheckCrossingsPath {
+pub(crate) fn check_crossings_expr_path(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, name: &str, expr: &Expr, in_loop: bool) -> CheckCrossingsPath {
     let mut branches: Vec<CheckCrossingsPath> = vec![];
     match expr {
         Expr::Throw(inner, _) => {
@@ -253,7 +253,7 @@ pub(crate) fn check_crossings_expr_path(world: &CheckWorld<'_, '_, '_, '_, '_, '
     check_crossings_joined(&branches, false)
 }
 
-pub(crate) fn check_crossings_arm(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, name: &str, arm: &MatchArm, in_loop: bool) -> CheckCrossingsPath {
+pub(crate) fn check_crossings_arm(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, name: &str, arm: &MatchArm, in_loop: bool) -> CheckCrossingsPath {
     let guard: &Expr = match arm.guard.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return check_crossings_expr_path(world, name, &arm.body, in_loop) };
     if check_crossings_named_in(world, name, guard) { return CheckCrossingsPath::Taken; }
     check_crossings_expr_path(world, name, &arm.body, in_loop)
@@ -279,7 +279,7 @@ pub(crate) fn check_crossings_joined(branches: &[CheckCrossingsPath], falls: boo
     CheckCrossingsPath::Left
 }
 
-pub(crate) fn check_crossings_spawned(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, handles: &collections::BTreeSet<i64>, stmt: &Stmt, at: i64) -> Option<String> {
+pub(crate) fn check_crossings_spawned(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, handles: &collections::BTreeSet<i64>, stmt: &Stmt, at: i64) -> Option<String> {
     match stmt {
         Stmt::Let { names, value, .. } => {
             if names.len() != 1 { return None; }
@@ -298,7 +298,7 @@ pub(crate) fn check_crossings_spawned(world: &CheckWorld<'_, '_, '_, '_, '_, '_,
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn check_crossings_a_bound_handle_is_taken(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, block: &Block) {
+pub(crate) fn check_crossings_a_bound_handle_is_taken(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, block: &Block) {
     let mut at: i64 = 0;
     for stmt in block.stmts.iter() {
         at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
@@ -321,14 +321,14 @@ pub(crate) fn check_crossings_settle(state: &mut CheckState, fails: bool, pauses
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn check_crossings_a_value_with_a_cleanup_made(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, ty: &Ty) {
+pub(crate) fn check_crossings_a_value_with_a_cleanup_made(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, ty: &Ty) {
     let held = match state.cleanup_of(world, ty) { Some(__nikaia_value) => __nikaia_value, None => return };
     check_crossings_settle(state, held.fails, held.pauses);
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn check_crossings_a_value_with_a_cleanup_dying(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, name: &str, ty: &Ty, span: &Span) -> Option<bool> {
+pub(crate) fn check_crossings_a_value_with_a_cleanup_dying(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, name: &str, ty: &Ty, span: &Span) -> Option<bool> {
     let held = match state.cleanup_of(world, ty) { Some(__nikaia_value) => __nikaia_value, None => return None };
     check_crossings_settle(state, held.fails, held.pauses);
     if held.pauses {
@@ -341,7 +341,7 @@ pub(crate) fn check_crossings_a_value_with_a_cleanup_dying(state: &mut CheckStat
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn check_crossings_a_value_with_a_cleanup_bound(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, name: &str, ty: &Ty, span: &Span) {
+pub(crate) fn check_crossings_a_value_with_a_cleanup_bound(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, name: &str, ty: &Ty, span: &Span) {
     let held = match state.cleanup_of(world, ty) { Some(__nikaia_value) => __nikaia_value, None => return };
     check_crossings_settle(state, held.fails, held.pauses);
     if held.pauses {
@@ -356,14 +356,14 @@ pub(crate) fn check_crossings_a_value_with_a_cleanup_bound(state: &mut CheckStat
 }
 
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn check_crossings_refusal(beside: &collections::BTreeMap<String, Vec<Ty>>, structs: &collections::BTreeMap<String, Vec<FieldContract>>, enums: &collections::BTreeMap<String, collections::BTreeSet<String>>, payloads: &collections::BTreeMap<String, Vec<Ty>>, parameters: &collections::BTreeMap<String, Vec<String>>, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, left: &Ty, right: &Ty, span: &Span) -> Option<CheckFinding> {
+pub(crate) fn check_crossings_refusal(beside: &collections::BTreeMap<String, Vec<Ty>>, structs: &collections::BTreeMap<String, Vec<FieldContract>>, enums: &collections::BTreeMap<String, collections::BTreeSet<String>>, payloads: &collections::BTreeMap<String, Vec<Ty>>, parameters: &collections::BTreeMap<String, Vec<String>>, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, left: &Ty, right: &Ty, span: &Span) -> Option<CheckFinding> {
     let asking = CheckComparable { beside, structs, enums, payloads, parameters, own: world.own, library: world.library };
     compare_refusal(&asking, left, right, span)
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn check_crossings_a_type_that_does_not_compare(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, left: &Ty, right: &Ty, span: &Span) {
+pub(crate) fn check_crossings_a_type_that_does_not_compare(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, left: &Ty, right: &Ty, span: &Span) {
     let refused: Option<CheckFinding> = check_crossings_refusal(&world.parts_beside, &state.structs, &state.enums, &state.enum_payloads, &state.struct_parameters, world, left, right, span);
     let finding = match refused { Some(__nikaia_value) => __nikaia_value, None => return };
     state.findings.push(finding);
@@ -371,7 +371,7 @@ pub(crate) fn check_crossings_a_type_that_does_not_compare(state: &mut CheckStat
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn check_crossings_a_type_with_no_order(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, op: &str, left: &Ty, right: &Ty, span: &Span) {
+pub(crate) fn check_crossings_a_type_with_no_order(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, op: &str, left: &Ty, right: &Ty, span: &Span) {
     for side in [left, right] {
         match side {
             Ty::Named { name, .. } => { if state.type_parameters.contains_key(name) { return; } },
@@ -385,14 +385,14 @@ pub(crate) fn check_crossings_a_type_with_no_order(state: &mut CheckState, world
 }
 
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn check_crossings_bounds(beside: &collections::BTreeMap<String, Vec<Ty>>, structs: &collections::BTreeMap<String, Vec<FieldContract>>, enums: &collections::BTreeMap<String, collections::BTreeSet<String>>, payloads: &collections::BTreeMap<String, Vec<Ty>>, parameters: &collections::BTreeMap<String, Vec<String>>, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, type_parameters: &collections::BTreeMap<String, Vec<String>>, key: &str, wanted: &collections::BTreeMap<String, Vec<String>>, bound: &collections::BTreeMap<String, Ty>, span: &Span) -> Vec<CheckFinding> {
+pub(crate) fn check_crossings_bounds(beside: &collections::BTreeMap<String, Vec<Ty>>, structs: &collections::BTreeMap<String, Vec<FieldContract>>, enums: &collections::BTreeMap<String, collections::BTreeSet<String>>, payloads: &collections::BTreeMap<String, Vec<Ty>>, parameters: &collections::BTreeMap<String, Vec<String>>, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, type_parameters: &collections::BTreeMap<String, Vec<String>>, key: &str, wanted: &collections::BTreeMap<String, Vec<String>>, bound: &collections::BTreeMap<String, Ty>, span: &Span) -> Vec<CheckFinding> {
     let asking = CheckComparable { beside, structs, enums, payloads, parameters, own: world.own, library: world.library };
     compare_standard_bounds(&asking, type_parameters, key, wanted, bound, span)
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn check_crossings_a_standard_bound_not_met(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, key: &str, bound: &collections::BTreeMap<String, Ty>, span: &Span) {
+pub(crate) fn check_crossings_a_standard_bound_not_met(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, key: &str, bound: &collections::BTreeMap<String, Ty>, span: &Span) {
     let mut wanted: collections::BTreeMap<String, Vec<String>> = collections::BTreeMap::new();
     if state.declared_bounds.contains_key(key) {
         wanted = match match state.declared_bounds.get(key) {
@@ -404,14 +404,14 @@ pub(crate) fn check_crossings_a_standard_bound_not_met(state: &mut CheckState, w
     for finding in refused.iter() { state.findings.push(finding.clone()); }
 }
 
-pub(crate) fn check_crossings_impls(beside: &collections::BTreeMap<String, Vec<Ty>>, structs: &collections::BTreeMap<String, Vec<FieldContract>>, enums: &collections::BTreeMap<String, collections::BTreeSet<String>>, payloads: &collections::BTreeMap<String, Vec<Ty>>, parameters: &collections::BTreeMap<String, Vec<String>>, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>) -> Vec<CheckFinding> {
+pub(crate) fn check_crossings_impls(beside: &collections::BTreeMap<String, Vec<Ty>>, structs: &collections::BTreeMap<String, Vec<FieldContract>>, enums: &collections::BTreeMap<String, collections::BTreeSet<String>>, payloads: &collections::BTreeMap<String, Vec<Ty>>, parameters: &collections::BTreeMap<String, Vec<String>>, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>) -> Vec<CheckFinding> {
     let asking = CheckComparable { beside, structs, enums, payloads, parameters, own: world.own, library: world.library };
     compare_language_impls(&asking, &world.here)
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn check_crossings_language_impls(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>) {
+pub(crate) fn check_crossings_language_impls(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>) {
     let refused = check_crossings_impls(&world.parts_beside, &state.structs, &state.enums, &state.enum_payloads, &state.struct_parameters, world);
     for finding in refused.iter() { state.findings.push(finding.clone()); }
 }
@@ -518,7 +518,7 @@ pub(crate) fn check_crossings_known(bound: &collections::BTreeMap<String, Ty>, n
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn check_crossings_a_call_that_hands_its_number_back(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, contract: &FnContract, bound: &collections::BTreeMap<String, Ty>, args: &[Expr]) {
+pub(crate) fn check_crossings_a_call_that_hands_its_number_back(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, contract: &FnContract, bound: &collections::BTreeMap<String, Ty>, args: &[Expr]) {
     let signature: &Signature = match contract.signature.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return };
     let result: &Ty = match signature.result.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return };
     let name: String = match result {
@@ -545,7 +545,7 @@ pub(crate) fn check_crossings_a_call_that_hands_its_number_back(state: &mut Chec
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn check_crossings_arguments<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, key: &str, written: &str, contract: &FnContract, given: &[Expr], found: &[Ty], passed: &[(String, Ty)], span: &Span) -> Ty {
+pub(crate) fn check_crossings_arguments<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, host: &H, key: &str, written: &str, contract: &FnContract, given: &[Expr], found: &[Ty], passed: &[(String, Ty)], span: &Span) -> Ty {
     let none: Vec<(String, bool, String)> = vec![];
     let keeps = match world.newly_keeps.get(key) { Some(__nikaia_value) => __nikaia_value, None => return check_arguments(state, world, host, key, written, contract, given, found, passed, &none, span) };
     check_arguments(state, world, host, key, written, contract, given, found, passed, &keeps, span)
@@ -570,7 +570,7 @@ pub(crate) fn check_deferred_union(a: &CheckDeferredPaths, b: &CheckDeferredPath
 
 pub(crate) fn check_deferred_leave(paths: &CheckDeferredPaths, found: &mut CheckDeferredFound) { if paths.fresh { found.unstarted = true; } }
 
-pub(crate) fn check_deferred_expr(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, name: &str, expr: &Expr, paths: CheckDeferredPaths, found: &mut CheckDeferredFound, jumps: &mut CheckDeferredPaths, at: &Span) -> CheckDeferredPaths {
+pub(crate) fn check_deferred_expr(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, name: &str, expr: &Expr, paths: CheckDeferredPaths, found: &mut CheckDeferredFound, jumps: &mut CheckDeferredPaths, at: &Span) -> CheckDeferredPaths {
     match expr {
         Expr::Variable(_, _) => {
             if check_crossings_named_in(world, name, expr) { return check_deferred_none(); }
@@ -643,7 +643,7 @@ pub(crate) fn check_deferred_expr(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>
     }
 }
 
-pub(crate) fn check_deferred_returned(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, name: &str, value: Option<&Expr>, paths: &CheckDeferredPaths, found: &mut CheckDeferredFound) -> CheckDeferredPaths {
+pub(crate) fn check_deferred_returned(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, name: &str, value: Option<&Expr>, paths: &CheckDeferredPaths, found: &mut CheckDeferredFound) -> CheckDeferredPaths {
     if value.is_none() {
         check_deferred_leave(paths, found);
         return check_deferred_none();
@@ -653,19 +653,19 @@ pub(crate) fn check_deferred_returned(world: &CheckWorld<'_, '_, '_, '_, '_, '_,
     check_deferred_none()
 }
 
-pub(crate) fn check_deferred_arm(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, name: &str, arm: &MatchArm, paths: CheckDeferredPaths, found: &mut CheckDeferredFound, jumps: &mut CheckDeferredPaths, at: &Span) -> CheckDeferredPaths {
+pub(crate) fn check_deferred_arm(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, name: &str, arm: &MatchArm, paths: CheckDeferredPaths, found: &mut CheckDeferredFound, jumps: &mut CheckDeferredPaths, at: &Span) -> CheckDeferredPaths {
     let guard: &Expr = match arm.guard.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return check_deferred_expr(world, name, &arm.body, paths, found, jumps, at) };
     let tested = check_deferred_expr(world, name, guard, paths, found, jumps, at);
     check_deferred_expr(world, name, &arm.body, tested, found, jumps, at)
 }
 
-pub(crate) fn check_crossings_named_in_block(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, name: &str, block: &Block) -> bool {
+pub(crate) fn check_crossings_named_in_block(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, name: &str, block: &Block) -> bool {
     for stmt in block.stmts.iter() { if check_crossings_named(world, name, &stmt.node) { return true; } }
     false
 }
 
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn check_deferred_path(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, name: &str, stmts: &[Spanned<Stmt>], from: i64, paths: CheckDeferredPaths, found: &mut CheckDeferredFound, jumps: &mut CheckDeferredPaths, in_loop: bool) -> CheckDeferredPaths {
+pub(crate) fn check_deferred_path(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, name: &str, stmts: &[Spanned<Stmt>], from: i64, paths: CheckDeferredPaths, found: &mut CheckDeferredFound, jumps: &mut CheckDeferredPaths, in_loop: bool) -> CheckDeferredPaths {
     let mut now = paths;
     let mut at = from;
     while at < stmts.len() as i64 {
@@ -699,7 +699,7 @@ pub(crate) fn check_deferred_path(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>
 }
 
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn check_deferred_jump(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, name: &str, expr: &Expr, paths: CheckDeferredPaths, found: &mut CheckDeferredFound, jumps: &mut CheckDeferredPaths, at: &Span, in_loop: bool) -> CheckDeferredPaths {
+pub(crate) fn check_deferred_jump(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, name: &str, expr: &Expr, paths: CheckDeferredPaths, found: &mut CheckDeferredFound, jumps: &mut CheckDeferredPaths, at: &Span, in_loop: bool) -> CheckDeferredPaths {
     match expr {
         Expr::Break(_) | Expr::Continue(_) => {
             if in_loop { *jumps = check_deferred_union(&jumps, &paths); } else { check_deferred_leave(&paths, found); }
@@ -709,7 +709,7 @@ pub(crate) fn check_deferred_jump(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>
     }
 }
 
-pub(crate) fn check_deferred_loop(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, name: &str, body: &Block, paths: &CheckDeferredPaths, found: &mut CheckDeferredFound) -> CheckDeferredPaths {
+pub(crate) fn check_deferred_loop(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, name: &str, body: &Block, paths: &CheckDeferredPaths, found: &mut CheckDeferredFound) -> CheckDeferredPaths {
     let mut jumps = check_deferred_none();
     let once = check_deferred_path(world, name, &body.stmts, 0, paths.clone(), found, &mut jumps, true);
     let again = check_deferred_path(world, name, &body.stmts, 0, check_deferred_union(&once, &jumps), found, &mut jumps, true);
@@ -753,7 +753,7 @@ pub(crate) fn check_started_options(expr: &Expr) -> &'static str {
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn check_crossings_a_deferred_handle_starts(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, block: &Block) {
+pub(crate) fn check_crossings_a_deferred_handle_starts(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, block: &Block) {
     let mut at: i64 = 0;
     for stmt in block.stmts.iter() {
         at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };

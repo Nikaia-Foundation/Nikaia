@@ -25,7 +25,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn a_thrown_type_with_no_error(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, thrown: &Ty, span: &Span) {
+    pub(crate) fn a_thrown_type_with_no_error(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, thrown: &Ty, span: &Span) {
         let name: String = match thrown {
             Ty::Named { name, view, .. } => { let view = *view; if view { String::from("") } else { nikaia_std::block::Text::from(name.to_string()) } },
             _ => String::from(""),
@@ -53,7 +53,7 @@ impl CheckState {
     pub(crate) fn a_handle_is_not_made_here(&mut self, handle: &str, span: &Span) { self.findings.push(check_refusal("NK1160", span, format!("You can't make a `{}` yourself: it's a handle a C library gives you.", handle), vec![format!("`{}` is declared `opaque`: only a C function can hand one out.", handle)], Some(format!("Call the function in the `extern \"C\"` block that returns a `{}`.", handle)))); }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn a_length_that_may_not_fit(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, written: &str, buffer: &Expr, span: &Span) {
+    pub(crate) fn a_length_that_may_not_fit(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, written: &str, buffer: &Expr, span: &Span) {
         let named = match buffer {
             Expr::Variable(name, _) => { let name = *name; nikaia_std::block::Text::from(world.words.resolve(name).to_string()) },
             _ => String::from("the buffer"),

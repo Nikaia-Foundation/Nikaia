@@ -52,53 +52,59 @@ pub(crate) fn check_function_reflects_on(here: &ParsedView<'_, '_, '_, '_, '_, '
     false
 }
 
-pub(crate) fn check_function_compared(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, beside: &collections::BTreeMap<String, Vec<Ty>>, structs: &collections::BTreeMap<String, Vec<FieldContract>>, enums: &collections::BTreeMap<String, collections::BTreeSet<String>>, payloads: &collections::BTreeMap<String, Vec<Ty>>, parameters: &collections::BTreeMap<String, Vec<String>>) -> CompareDeclared {
+pub(crate) fn check_function_compared(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, beside: &collections::BTreeMap<String, Vec<Ty>>, structs: &collections::BTreeMap<String, Vec<FieldContract>>, enums: &collections::BTreeMap<String, collections::BTreeSet<String>>, payloads: &collections::BTreeMap<String, Vec<Ty>>, parameters: &collections::BTreeMap<String, Vec<String>>) -> CompareDeclared {
     let asking = CheckComparable { beside, structs, enums, payloads, parameters, own: world.own, library: world.library };
     compare_declared(&asking, &world.here)
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub fn check_function_field_walks(file: &ParsedView<'_, '_, '_, '_, '_, '_, '_>, walks: &mut collections::BTreeMap<String, String>) {
+    for item in file.items.iter() {
+        match &item.node {
+            Item::Fn { name, generics, args, body, .. } => {
+                let name = *name;
+                let called = match name { Some(__nikaia_value) => __nikaia_value, None => continue };
+                let mut walked: Option<String> = None;
+                for arg in args.iter() {
+                    if walked.is_none() && file.text(arg.name) == "" && arg.ty.generics.is_empty() {
+                        let written = file.text(arg.ty.name);
+                        for g in generics.iter() { if file.text(g.name) == written { walked = Some(nikaia_std::block::Text::from(written.to_string())); } }
+                    }
+                }
+                for g in generics.iter() {
+                    if walked.is_some() { continue; }
+                    let parameter = file.text(g.name);
+                    for b in g.bounds.iter() {
+                        let b = *b;
+                        let member = match check_function_shape_member(&file.text(b)) { Some(__nikaia_value) => __nikaia_value, None => continue };
+                        if check_function_walks_the_fields_of(file, body, &parameter, &member) { walked = Some(nikaia_std::block::Text::from(parameter.to_string())); }
+                    }
+                }
+                for g in generics.iter() { if walked.is_none() && check_function_reflects_on(file, body, &file.text(g.name)) { walked = Some(nikaia_std::block::Text::from(file.text(g.name).to_string())); } }
+                let parameter = match walked { Some(__nikaia_value) => __nikaia_value, None => continue };
+                walks.insert(file.text(called), parameter);
+            },
+            _ => { },
+        }
+    }
 }
 
 impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn field_walks_in(&mut self, file: &ParsedView<'_, '_, '_, '_, '_, '_, '_>) {
-        for item in file.items.iter() {
-            match &item.node {
-                Item::Fn { name, generics, args, body, .. } => {
-                    let name = *name;
-                    let called = match name { Some(__nikaia_value) => __nikaia_value, None => continue };
-                    let mut walked: Option<String> = None;
-                    for arg in args.iter() {
-                        if walked.is_none() && file.text(arg.name) == "" && arg.ty.generics.is_empty() {
-                            let written = file.text(arg.ty.name);
-                            for g in generics.iter() { if file.text(g.name) == written { walked = Some(nikaia_std::block::Text::from(written.to_string())); } }
-                        }
-                    }
-                    for g in generics.iter() {
-                        if walked.is_some() { continue; }
-                        let parameter = file.text(g.name);
-                        for b in g.bounds.iter() {
-                            let b = *b;
-                            let member = match check_function_shape_member(&file.text(b)) { Some(__nikaia_value) => __nikaia_value, None => continue };
-                            if check_function_walks_the_fields_of(file, body, &parameter, &member) { walked = Some(nikaia_std::block::Text::from(parameter.to_string())); }
-                        }
-                    }
-                    for g in generics.iter() { if walked.is_none() && check_function_reflects_on(file, body, &file.text(g.name)) { walked = Some(nikaia_std::block::Text::from(file.text(g.name).to_string())); } }
-                    let parameter = match walked { Some(__nikaia_value) => __nikaia_value, None => continue };
-                    self.walks_fields.insert(file.text(called), parameter);
-                },
-                _ => { },
-            }
+    pub(crate) fn collect_field_walks(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>) {
+        match world.package {
+            None => {
+                check_function_field_walks(&world.here, &mut self.walks_fields);
+                for other in world.beside.iter() { check_function_field_walks(other, &mut self.walks_fields); }
+            },
+            Some(given) => { for (function, parameter) in given.walks_fields.iter() { self.walks_fields.insert(nikaia_std::block::Text::from(function.to_string()), nikaia_std::block::Text::from(parameter.to_string())); } },
         }
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn collect_field_walks(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>) {
-        self.field_walks_in(&world.here);
-        for other in world.beside.iter() { self.field_walks_in(other); }
-    }
-    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
-    // this was written - see `contracts::sync`.
-    pub(crate) fn collect_comparisons(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>) {
+    pub(crate) fn collect_comparisons(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>) {
         let found = check_function_compared(world, &world.parts_beside, &self.structs, &self.enums, &self.enum_payloads, &self.struct_parameters);
         self.facts.compares.extend(found.compares.iter().cloned());
         self.facts.compares_totally.extend(found.totally.iter().cloned());
@@ -407,7 +413,7 @@ pub(crate) fn check_function_mixed_text(here: &ParsedView<'_, '_, '_, '_, '_, '_
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn check_function_grammar<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, gram: &GrammarDef) {
+pub(crate) fn check_function_grammar<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, host: &H, gram: &GrammarDef) {
     let named = nikaia_std::block::Text::from(world.words.resolve(gram.name).to_string());
     let mut results: collections::BTreeMap<String, Ty> = collections::BTreeMap::new();
     let mut rules: collections::BTreeSet<String> = collections::BTreeSet::new();
@@ -494,7 +500,7 @@ pub(crate) fn check_function_grammar<H: CheckHost>(state: &mut CheckState, world
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn check_function_action<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, action: &Block, expected: Option<&Ty>, frame: Vec<CheckLocal>) {
+pub(crate) fn check_function_action<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, host: &H, action: &Block, expected: Option<&Ty>, frame: Vec<CheckLocal>) {
     let outer: Option<Ty> = match state.expected.as_ref() {
         Some(__nikaia_it) => Some(__nikaia_it.clone()),
         None => None,
@@ -602,17 +608,17 @@ pub(crate) fn check_function_is_branching(expr: &Expr) -> bool {
     }
 }
 
-pub(crate) fn check_function_lends(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, key: &str, at: i64) -> bool {
+pub(crate) fn check_function_lends(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, key: &str, at: i64) -> bool {
     let contract = match world.own.functions.get(key) { Some(__nikaia_value) => __nikaia_value, None => return false };
     lends_in_own(contract, at, &vec![world.library])
 }
 
-pub(crate) fn check_function_keeps(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, key: &str) -> Vec<String> {
+pub(crate) fn check_function_keeps(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, key: &str) -> Vec<String> {
     let contract = match world.own.functions.get(key) { Some(__nikaia_value) => __nikaia_value, None => return vec![] };
     contract.keeps.copy_owned()
 }
 
-pub(crate) fn check_function_options_lowered(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, key: &str) -> Vec<ConfigContract> {
+pub(crate) fn check_function_options_lowered(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, key: &str) -> Vec<ConfigContract> {
     let contract = match world.own.functions.get(key) { Some(__nikaia_value) => __nikaia_value, None => return vec![] };
     lowered_options(contract)
 }
@@ -620,7 +626,7 @@ pub(crate) fn check_function_options_lowered(world: &CheckWorld<'_, '_, '_, '_, 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn check_function_frame<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, receiver: Option<&Receiver>, args: &[FnArg], config: &[ConfigParam], spread: Option<winnow_grammar::Symbol>, target: Option<&str>, key: &str, parameters: &collections::BTreeSet<String>) -> Vec<CheckLocal> {
+pub(crate) fn check_function_frame<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, host: &H, receiver: Option<&Receiver>, args: &[FnArg], config: &[ConfigParam], spread: Option<winnow_grammar::Symbol>, target: Option<&str>, key: &str, parameters: &collections::BTreeSet<String>) -> Vec<CheckLocal> {
     let mut frame: Vec<CheckLocal> = vec![];
     let mut offset: i64 = 0;
     if receiver.is_some() {
@@ -681,7 +687,7 @@ pub(crate) fn check_function_frame<H: CheckHost>(state: &mut CheckState, world: 
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn check_function_handed_back<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, body: &Block, expected: Option<&Ty>, tail: &Ty) -> (bool, bool) {
+pub(crate) fn check_function_handed_back<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, host: &H, body: &Block, expected: Option<&Ty>, tail: &Ty) -> (bool, bool) {
     let mut tail_lent = false;
     let mut tail_view = false;
     if expected.is_none() || body.stmts.is_empty() { return (false, false); }
@@ -720,7 +726,7 @@ pub(crate) fn check_function_handed_back<H: CheckHost>(state: &mut CheckState, w
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn check_function_tail_checks<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, body: &Block, expected: &Ty, tail: Ty, lending: bool, tail_view: bool, span: &Span) {
+pub(crate) fn check_function_tail_checks<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, host: &H, body: &Block, expected: &Ty, tail: Ty, lending: bool, tail_view: bool, span: &Span) {
     let last = nikaia_std::index::get(&body.stmts, nikaia_std::index::at(unsafe { nikaia_std::proven::sub::<i64>(body.stmts.len() as i64, 1) }));
     let nullable = check_function_is_nullable(expected);
     let tail_nullable = check_function_is_nullable(&tail) && !tail.is_a_view();
@@ -746,7 +752,7 @@ pub(crate) fn check_function_tail_checks<H: CheckHost>(state: &mut CheckState, w
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn check_function_wrap_tail<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, shown: &Ty, expected: &Ty, value: &Expr, span: &Span) {
+pub(crate) fn check_function_wrap_tail<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, host: &H, shown: &Ty, expected: &Ty, value: &Expr, span: &Span) {
     let nullable = check_function_is_nullable(expected);
     let branches = check_function_is_branching(value);
     let how = check_widened_slot(state, world, host, shown, expected, Some(value), span);
@@ -779,7 +785,7 @@ pub(crate) fn check_function_hands_nothing(state: &mut CheckState, body: &Block,
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn check_function_function<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, item: &Item, at: &Span, target: Option<&str>) {
+pub(crate) fn check_function_function<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, host: &H, item: &Item, at: &Span, target: Option<&str>) {
     match item {
         Item::Fn { name, generics, receiver, args, config, spread, ret_type, body, can_throw, is_sync, sync_by, is_extern, .. } => {
             let can_throw = *can_throw; let is_extern = *is_extern; let is_sync = *is_sync; let name = *name; let spread = *spread;
@@ -792,7 +798,7 @@ pub(crate) fn check_function_function<H: CheckHost>(state: &mut CheckState, worl
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn check_function_fn<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, name: Option<winnow_grammar::Symbol>, generics: &[GenericParam], receiver: Option<&Receiver>, args: &[FnArg], config: &[ConfigParam], spread: Option<winnow_grammar::Symbol>, ret_type: Option<&Type>, body: &Block, can_throw: bool, is_sync: bool, sync_by: &[winnow_grammar::Symbol], is_extern: bool, at: &Span, target: Option<&str>) {
+pub(crate) fn check_function_fn<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, host: &H, name: Option<winnow_grammar::Symbol>, generics: &[GenericParam], receiver: Option<&Receiver>, args: &[FnArg], config: &[ConfigParam], spread: Option<winnow_grammar::Symbol>, ret_type: Option<&Type>, body: &Block, can_throw: bool, is_sync: bool, sync_by: &[winnow_grammar::Symbol], is_extern: bool, at: &Span, target: Option<&str>) {
     let mut own_name: String = String::from("new");
     match name {
         Some(sym) => { own_name = nikaia_std::block::Text::from(world.words.resolve(sym).to_string()); },

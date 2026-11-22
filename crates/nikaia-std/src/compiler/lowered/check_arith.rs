@@ -71,7 +71,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn an_environment_entry_invalid<H: CheckHost>(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, key: &str, config: &[ConfigArg], span: &Span) {
+    pub(crate) fn an_environment_entry_invalid<H: CheckHost>(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, host: &H, key: &str, config: &[ConfigArg], span: &Span) {
         if key != "process::run" { return; }
         for option in config.iter() {
             let named = world.words.resolve(option.name);
@@ -92,7 +92,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn a_byte_set_written_empty(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, key: &str, args: &[Expr], span: &Span) {
+    pub(crate) fn a_byte_set_written_empty(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, key: &str, args: &[Expr], span: &Span) {
         if key != "bytes::ByteSet" || args.len() != 1 { return; }
         match unsafe { nikaia_std::proven::read(&args, (0) as usize) } {
             Expr::ListLit { items, .. } => {
@@ -105,7 +105,7 @@ impl CheckState {
             _ => { },
         }
     }
-    pub(crate) fn an_operator_needs_a_bound(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, op: &BinaryOp, left: &Ty, right: &Ty, at: &Span) {
+    pub(crate) fn an_operator_needs_a_bound(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, op: &BinaryOp, left: &Ty, right: &Ty, at: &Span) {
         let ordering = *op == BinaryOp::Lt || *op == BinaryOp::Le || *op == BinaryOp::Gt || *op == BinaryOp::Ge;
         for ty in [left.clone(), right.clone()] {
             let name: String = match ty {
@@ -149,7 +149,7 @@ pub(crate) fn arith_symbol(op: &BinaryOp) -> String {
     }
 }
 
-pub(crate) fn arith_extend_text(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, target: &Expr, value: &Expr, compound: bool) -> String {
+pub(crate) fn arith_extend_text(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, target: &Expr, value: &Expr, compound: bool) -> String {
     if !compound { return String::from("a.extend(b)"); }
     match target {
         Expr::Variable(bound, _) => { let bound = *bound; format!("{}.extend({})", world.words.resolve(bound), written_expression(world.words, value)) },
@@ -170,7 +170,7 @@ pub(crate) fn arith_a_plain_number(ty: &Ty) -> bool {
     }
 }
 
-pub(crate) fn arith_a_variable(side: &Expr, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>) -> Option<String> {
+pub(crate) fn arith_a_variable(side: &Expr, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>) -> Option<String> {
     match side {
         Expr::Variable(bound, _) => { let bound = *bound; Some(nikaia_std::block::Text::from(world.words.resolve(bound).to_string())) },
         _ => None,
@@ -188,14 +188,14 @@ pub(crate) fn arith_a_number_literal(expr: &Expr) -> bool {
 
 pub(crate) fn arith_an_int_literal(expr: &Expr) -> bool { matches!(expr, Expr::LitInt { .. }) }
 
-pub(crate) fn arith_a_named_call(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, expr: &Expr, called: &str) -> bool {
+pub(crate) fn arith_a_named_call(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, expr: &Expr, called: &str) -> bool {
     match expr {
         Expr::Call { func, .. } => { let func = nikaia_std::boxed::open(func); arith_the_variable_named(world, func, called) },
         _ => false,
     }
 }
 
-pub(crate) fn arith_the_variable_named(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, expr: &Expr, name: &str) -> bool {
+pub(crate) fn arith_the_variable_named(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, expr: &Expr, name: &str) -> bool {
     match expr {
         Expr::Variable(n, _) => { let n = *n; world.words.resolve(n) == name },
         _ => false,
@@ -256,7 +256,7 @@ impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    pub(crate) fn arithmetic_on_something_that_has_none(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, op: &BinaryOp, left_expr: &Expr, left: &Ty, right_expr: &Expr, right: &Ty, compound: bool, span: &Span) {
+    pub(crate) fn arithmetic_on_something_that_has_none(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, op: &BinaryOp, left_expr: &Expr, left: &Ty, right_expr: &Expr, right: &Ty, compound: bool, span: &Span) {
         let symbol = arith_symbol(&op);
         let left_collection = is_a_collection_type(left);
         if !left_collection && !is_a_collection_type(right) {
@@ -298,7 +298,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn a_unary_operator_on_the_wrong_type(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, negation: bool, found: &Ty, span: &Span) {
+    pub(crate) fn a_unary_operator_on_the_wrong_type(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, negation: bool, found: &Ty, span: &Span) {
         if found.is_unknown() { return; }
         let seen = found.unseen();
         let mut wrong = is_text_type(&seen) || is_a_collection_type(&seen) || declared_with_no_arithmetic(&world.here, &seen).is_some();
@@ -319,7 +319,7 @@ impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    pub(crate) fn arithmetic_on_a_declared_type(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, symbol: &str, side: &Expr, ty: &Ty, other_side: &Expr, other: &Ty, at: i64, compound: bool, span: &Span) {
+    pub(crate) fn arithmetic_on_a_declared_type(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, symbol: &str, side: &Expr, ty: &Ty, other_side: &Expr, other: &Ty, at: i64, compound: bool, span: &Span) {
         let kind = match declared_with_no_arithmetic(&world.here, ty) { Some(__nikaia_value) => __nikaia_value, None => return };
         let seen = ty.unseen();
         let name = match seen {
@@ -348,7 +348,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn a_value_of_no_known_type(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, expr: &Expr, span: &Span) {
+    pub(crate) fn a_value_of_no_known_type(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, expr: &Expr, span: &Span) {
         let open = arith_a_number_literal(expr) || self.number_shaped(world, expr) || self.a_call_of_open_members(world, expr) || self.a_name_of_an_open_comptime(world, expr) || self.a_member_of_an_open_argument(world, expr) || self.a_coalesce_of_numbers(world, expr) || arith_a_named_call(world, expr, "asset");
         let said = arith_a_name(expr);
         let structural = arith_structural(expr) || arith_a_named_call(world, expr, "panic") || self.a_standing_member(world, expr);
@@ -369,7 +369,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn a_constructor_with_generics(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, base: &Expr, index: &Expr, span: &Span) {
+    pub(crate) fn a_constructor_with_generics(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, base: &Expr, index: &Expr, span: &Span) {
         let named = written_expression(world.words, base);
         let mut generics: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         match index {
@@ -382,7 +382,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn a_name_of_an_open_comptime(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, expr: &Expr) -> bool {
+    pub(crate) fn a_name_of_an_open_comptime(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, expr: &Expr) -> bool {
         match expr {
             Expr::Variable(n, _) => { let n = *n; self.is_an_open_comptime(world.words.resolve(n)) },
             _ => false,
@@ -396,7 +396,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn a_coalesce_of_numbers(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, expr: &Expr) -> bool {
+    pub(crate) fn a_coalesce_of_numbers(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, expr: &Expr) -> bool {
         match expr {
             Expr::Coalesce { fallback, .. } => { let fallback = nikaia_std::boxed::open(fallback); self.number_shaped(world, fallback) || self.jumps(world, fallback) },
             _ => false,
@@ -404,7 +404,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn a_standing_member(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, expr: &Expr) -> bool {
+    pub(crate) fn a_standing_member(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, expr: &Expr) -> bool {
         if self.flow.unrolling.is_some() { return false; }
         match expr {
             Expr::MethodCall { method, .. } => { let method = *method; world.words.resolve(method) == "of" },
@@ -414,7 +414,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn a_call_of_open_members(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, expr: &Expr) -> bool {
+    pub(crate) fn a_call_of_open_members(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, expr: &Expr) -> bool {
         let args = match expr {
             Expr::Call { args, .. } => args,
             _ => return false,
@@ -425,7 +425,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn a_member_of_an_unknown(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, expr: &Expr) -> bool {
+    pub(crate) fn a_member_of_an_unknown(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, expr: &Expr) -> bool {
         match expr {
             Expr::Field { base, .. } => { let base = nikaia_std::boxed::open(base); self.is_an_unknown_name(world, base) },
             Expr::MethodCall { receiver, .. } => { let receiver = nikaia_std::boxed::open(receiver); self.is_an_unknown_name(world, receiver) },
@@ -434,7 +434,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn a_member_of_an_unknown_lambda_parameter(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, expr: &Expr, span: &Span) {
+    pub(crate) fn a_member_of_an_unknown_lambda_parameter(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, expr: &Expr, span: &Span) {
         let base: &Expr = match expr {
             Expr::Field { base, .. } => { let base = nikaia_std::boxed::open(base); base },
             Expr::MethodCall { receiver, .. } => { let receiver = nikaia_std::boxed::open(receiver); receiver },
@@ -452,7 +452,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn is_an_unknown_name(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, expr: &Expr) -> bool {
+    pub(crate) fn is_an_unknown_name(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, expr: &Expr) -> bool {
         match expr {
             Expr::Variable(n, _) => { let n = *n; self.is_a_name_bound_unknown(world.words.resolve(n)) },
             _ => false,

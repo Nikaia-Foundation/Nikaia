@@ -45,7 +45,7 @@ pub(crate) fn check_core_method_text_items(on: &Ty) -> bool {
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn check_core_method_receiver_name(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, receiver: &Expr) -> Option<String> {
+pub(crate) fn check_core_method_receiver_name(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, receiver: &Expr) -> Option<String> {
     match receiver {
         Expr::Variable(name, _) => {
             let name = *name;
@@ -58,7 +58,7 @@ pub(crate) fn check_core_method_receiver_name(world: &CheckWorld<'_, '_, '_, '_,
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn check_core_method_pushed_into(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, receiver: &Expr, method: &str, count: i64) -> Option<String> {
+pub(crate) fn check_core_method_pushed_into(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, receiver: &Expr, method: &str, count: i64) -> Option<String> {
     let push = method == "push" && count == 1;
     let insert = method == "insert" && count == 2;
     let or_insert = method == "or_insert" && count == 1;
@@ -96,7 +96,7 @@ pub(crate) fn check_core_method_map_opened(state: &mut CheckState, name: &str) {
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn check_core_method_an_empty_map_read(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, receiver: &Expr, method: &str) -> i64 {
+pub(crate) fn check_core_method_an_empty_map_read(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, receiver: &Expr, method: &str) -> i64 {
     let reads = method == "len" || method == "is_empty" || method == "contains_key" || method == "get" || method == "keys" || method == "values" || method == "iter" || method == "clear" || method == "remove";
     if !reads { return -1; }
     let name: String = match check_core_method_receiver_name(world, receiver) { Some(__nikaia_value) => __nikaia_value, None => return -1 };
@@ -108,7 +108,7 @@ pub(crate) fn check_core_method_an_empty_map_read(state: &CheckState, world: &Ch
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn check_core_method_witness(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, method: &str, config: &[ConfigArg]) -> i64 {
+pub(crate) fn check_core_method_witness(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, method: &str, config: &[ConfigArg]) -> i64 {
     let mut wanted: &'static str = "";
     if method == "set" { wanted = "after"; } else if method == "join" || method == "read" { wanted = "within"; } else { return -1; }
     let mut at: i64 = 0;
@@ -121,7 +121,7 @@ pub(crate) fn check_core_method_witness(world: &CheckWorld<'_, '_, '_, '_, '_, '
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn check_core_method_on_timeout(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, method: &str, config: &[ConfigArg], witness: i64) -> i64 {
+pub(crate) fn check_core_method_on_timeout(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, method: &str, config: &[ConfigArg], witness: i64) -> i64 {
     if method != "join" || witness < 0 { return -1; }
     let mut at: i64 = 0;
     while at < config.len() as i64 {
@@ -172,7 +172,7 @@ pub(crate) fn check_core_method_ledger_type(on: &Ty, bytes: bool) -> String {
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn check_core_method_own_type(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, on: &Ty, written: &str) -> String {
+pub(crate) fn check_core_method_own_type(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, on: &Ty, written: &str) -> String {
     match on {
         Ty::Named { name, args, .. } => { if args.is_empty() && resolve_method(world, &format!("{}::{}", name, written)).is_some() { nikaia_std::block::Text::from(name.to_string()) } else { String::from("") } },
         _ => String::from(""),
@@ -272,7 +272,7 @@ pub(crate) fn check_core_method_connection(ty: &Ty) -> bool {
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn check_core_method_text_local(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, arg: &Expr) -> bool {
+pub(crate) fn check_core_method_text_local(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, arg: &Expr) -> bool {
     let name: String = match check_core_method_receiver_name(world, arg) { Some(__nikaia_value) => __nikaia_value, None => return false };
     let local: CheckLocal = match state.binding(&name) { Some(__nikaia_value) => __nikaia_value, None => return false };
     check_core_method_str_view(&local.ty) || check_core_method_string(&local.ty)
@@ -280,7 +280,7 @@ pub(crate) fn check_core_method_text_local(state: &CheckState, world: &CheckWorl
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn check_core_method_a_field_of(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, on: &Ty, name: &str) -> bool {
+pub(crate) fn check_core_method_a_field_of(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, on: &Ty, name: &str) -> bool {
     match on {
         Ty::Named { name: owner, .. } => {
             let fields: Vec<FieldContract> = match state.fields_of(world, owner) { Some(__nikaia_value) => __nikaia_value, None => return false };
@@ -293,7 +293,7 @@ pub(crate) fn check_core_method_a_field_of(state: &CheckState, world: &CheckWorl
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn check_core_method_changes(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, on: &Ty, receiver: &Expr, name: &str, span: &Span) {
+pub(crate) fn check_core_method_changes(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, on: &Ty, receiver: &Expr, name: &str, span: &Span) {
     if check_core_method_a_field_of(&state, world, on, name) { return; }
     let root: String = match state.rooted_at(world, receiver) { Some(__nikaia_value) => __nikaia_value, None => return };
     let mut count = 0;
@@ -335,7 +335,7 @@ pub(crate) fn check_core_method_a_part(expr: &Expr) -> bool {
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn check_core_method_resolved(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, on: &Ty, receiver: &Expr, args: &[Expr]) {
+pub(crate) fn check_core_method_resolved(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, on: &Ty, receiver: &Expr, args: &[Expr]) {
     let last: Option<String> = match state.flow.last_resolved.as_ref() {
         Some(__nikaia_it) => Some(__nikaia_it.clone()),
         None => None,
@@ -423,7 +423,7 @@ pub(crate) fn check_core_method_text_receiver(on: &Ty) -> bool {
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn check_core_method_called<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, expr: &Expr, on: Ty, receiver: &Expr, method: winnow_grammar::Symbol, args: &[Expr], written: &str, span: &Span) -> Ty {
+pub(crate) fn check_core_method_called<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, host: &H, expr: &Expr, on: Ty, receiver: &Expr, method: winnow_grammar::Symbol, args: &[Expr], written: &str, span: &Span) -> Ty {
     let name: String = format!("{}", world.words.resolve(method));
     let outer_receiver: Option<String> = match state.set_receiver.as_ref() {
         Some(__nikaia_it) => Some(__nikaia_it.clone()),
@@ -724,7 +724,7 @@ pub(crate) fn check_core_method_restamped(ty: Ty, restamp: bool) -> Ty {
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn check_core_method_or_default(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, expr: &Expr, value: Ty, span: &Span) {
+pub(crate) fn check_core_method_or_default(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, expr: &Expr, value: Ty, span: &Span) {
     let name: String = match value {
         Ty::Named { ref name, .. } => nikaia_std::block::Text::from(name.to_string()),
         Ty::Unknown => return,
@@ -765,7 +765,7 @@ pub(crate) fn check_core_method_cloned(state: &mut CheckState, expr: &Expr, on: 
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn check_core_method_text_extend(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, on: &Ty, arg: &Expr) {
+pub(crate) fn check_core_method_text_extend(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, on: &Ty, arg: &Expr) {
     let symbol = match arg {
         Expr::Variable(symbol, _) => { let symbol = *symbol; symbol },
         _ => return,
@@ -790,7 +790,7 @@ pub(crate) fn check_core_method_one_item(name: &str) -> bool { name == "filter" 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn check_core_method<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, expr: &Expr, safe: bool, receiver: &Expr, method: winnow_grammar::Symbol, args: &[Expr], config: &[ConfigArg], span: &Span) -> Ty {
+pub(crate) fn check_core_method<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, host: &H, expr: &Expr, safe: bool, receiver: &Expr, method: winnow_grammar::Symbol, args: &[Expr], config: &[ConfigArg], span: &Span) -> Ty {
     let name: String = format!("{}", world.words.resolve(method));
     let adds = name == "push" || name == "insert" || name == "push_front" || name == "push_back" || name == "extend" || name == "append";
     let mut code_keys: Vec<String> = vec![];
@@ -818,7 +818,7 @@ pub(crate) fn check_core_method<H: CheckHost>(state: &mut CheckState, world: &Ch
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn check_core_method_deadline(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, receiver: &Expr, config: &[ConfigArg], found: Ty) -> Ty {
+pub(crate) fn check_core_method_deadline(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, receiver: &Expr, config: &[ConfigArg], found: Ty) -> Ty {
     let key = match match state.facts.method_callees.get(&(id_of(receiver) as i64)) {
         Some(__nikaia_it) => Some(__nikaia_it.clone()),
         None => None,
@@ -843,7 +843,7 @@ pub(crate) fn check_core_method_deadline(state: &CheckState, world: &CheckWorld<
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn check_core_method_code_lent(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, arg: &Expr) {
+pub(crate) fn check_core_method_code_lent(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, arg: &Expr) {
     match arg {
         Expr::Variable(bound, _) => {
             let bound = *bound;
@@ -866,7 +866,7 @@ pub(crate) fn check_core_method_code_lent(state: &mut CheckState, world: &CheckW
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn check_core_method_walked<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, expr: &Expr, safe: bool, receiver: &Expr, method: winnow_grammar::Symbol, args: &[Expr], config: &[ConfigArg], span: &Span) -> Ty {
+pub(crate) fn check_core_method_walked<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, host: &H, expr: &Expr, safe: bool, receiver: &Expr, method: winnow_grammar::Symbol, args: &[Expr], config: &[ConfigArg], span: &Span) -> Ty {
     let name: String = format!("{}", world.words.resolve(method));
     let pushed: Option<String> = check_core_method_pushed_into(&state, world, receiver, &name, args.len() as i64);
     let is_pushed = pushed.is_some();
@@ -1048,7 +1048,7 @@ pub(crate) fn check_core_method_walked<H: CheckHost>(state: &mut CheckState, wor
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn check_core_method_a_handle_taken(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, on: &Ty, receiver: &Expr, name: &str, args: &[Expr], config: &[ConfigArg], span: &Span) {
+pub(crate) fn check_core_method_a_handle_taken(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, on: &Ty, receiver: &Expr, name: &str, args: &[Expr], config: &[ConfigArg], span: &Span) {
     if !args.is_empty() || !config.is_empty() || !check_core_method_task_handle(on) { return; }
     if name != "join" && name != "cancel" && name != "detach" { return; }
     let plain = matches!(receiver, Expr::Variable(_, _));
@@ -1091,7 +1091,7 @@ pub(crate) fn check_core_method_text_views(ty: &Ty) -> bool {
 impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn check_core_method_on_a_text_slot(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, receiver: &Expr, on: &Ty) -> bool {
+    pub(crate) fn check_core_method_on_a_text_slot(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, receiver: &Expr, on: &Ty) -> bool {
         let text_view = match on {
             Ty::Named { name, args, view } => { let view = *view; view && args.is_empty() && name == TEXT_VIEW },
             _ => false,

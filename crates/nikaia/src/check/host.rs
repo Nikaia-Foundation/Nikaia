@@ -19,6 +19,9 @@ pub(super) struct Host<'a> {
     pub(super) reads: &'a Reads,
     pub(super) own: &'a Ledger,
     pub(super) library: &'a Ledger,
+    /// The package's facts, made once for all its files (#2685), or `None`
+    /// where each check makes its own.
+    pub(super) package: Option<&'a super::PackageFacts>,
 }
 
 impl Host<'_> {
@@ -472,7 +475,12 @@ impl CheckWalkedPasses for Host<'_> {
     }
 
     fn view_findings(&self) -> Vec<Finding> {
-        crate::views::check(self.parsed, self.own, self.library)
+        match self.package {
+            Some(package) => {
+                crate::views::check_in(self.parsed, self.own, self.library, &package.results)
+            }
+            None => crate::views::check(self.parsed, self.own, self.library),
+        }
     }
 
     fn view_change_findings(
@@ -502,12 +510,24 @@ impl CheckWalkedPasses for Host<'_> {
         Option<Vec<nikaia_std::compiler::buffers::BufferPlan>>,
         Vec<Finding>,
     ) {
-        let plans = crate::contracts::keep::buffer_plans(
-            self.parsed,
-            Some(&crate::contracts::keep::beside(self.beside)),
-            self.own,
-            self.library,
-        );
+        let plans = match self.package {
+            // The views the package declares and the ledgers' method
+            // indexes, made once for all its files (#2685).
+            Some(package) => crate::contracts::keep::buffer_plans_indexed(
+                self.parsed,
+                Some(&package.keep),
+                self.own,
+                self.library,
+                &package.own_methods,
+                &package.library_methods,
+            ),
+            None => crate::contracts::keep::buffer_plans(
+                self.parsed,
+                Some(&crate::contracts::keep::beside(self.beside)),
+                self.own,
+                self.library,
+            ),
+        };
         let std = crate::contracts::std_ledger();
         let kept = (std::ptr::eq(self.library, std) || self.library == std).then(|| plans.clone());
         (kept, crate::contracts::tether::refusals_of(plans))

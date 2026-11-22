@@ -105,7 +105,7 @@ pub(crate) fn check_arguments_holds_text_inside(ty: &Ty, depth: i64) -> bool {
 impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn check_arguments_a_comptime(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, given: Option<&Expr>) -> bool {
+    pub(crate) fn check_arguments_a_comptime(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, given: Option<&Expr>) -> bool {
         let value = match given { Some(__nikaia_value) => __nikaia_value, None => return false };
         match value {
             Expr::Unary { op, expr, .. } => { let expr = nikaia_std::boxed::open(expr); match op {
@@ -158,7 +158,7 @@ pub(crate) fn check_arguments_a_byte_set(ty: &Ty) -> bool {
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn check_arguments_named(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, value: Option<&Expr>) -> Option<String> {
+pub(crate) fn check_arguments_named(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, value: Option<&Expr>) -> Option<String> {
     let given = match value { Some(__nikaia_value) => __nikaia_value, None => return None };
     match given {
         Expr::Variable(name, _) => { let name = *name; Some(nikaia_std::block::Text::from(world.words.resolve(name).to_string())) },
@@ -169,7 +169,7 @@ pub(crate) fn check_arguments_named(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn check_arguments_named_for_positional(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, key: &str, signature: &Signature, keeps: &[String], wanted: &[(String, Ty)], given: &[Expr], passed: &[(String, Ty)], help: String, span: &Span) -> CheckFinding {
+pub(crate) fn check_arguments_named_for_positional(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, key: &str, signature: &Signature, keeps: &[String], wanted: &[(String, Ty)], given: &[Expr], passed: &[(String, Ty)], help: String, span: &Span) -> CheckFinding {
     #[allow(unused_mut)] let mut names: Vec<String> = vec![];
     names.reserve(wanted.iter().size_hint().0); for (n, _) in wanted.iter() { names.push(nikaia_std::block::Text::from(n.to_string())); }
     let mut takes: String = String::from("no arguments"); #[allow(unused_mut, clippy::redundant_locals)] let mut names = names;
@@ -200,7 +200,7 @@ pub(crate) fn check_arguments_named_for_positional(state: &CheckState, world: &C
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn check_arguments<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, key: &str, written: &str, contract: &FnContract, given: &[Expr], found: &[Ty], passed: &[(String, Ty)], keeps: &[(String, bool, String)], span: &Span) -> Ty {
+pub(crate) fn check_arguments<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, host: &H, key: &str, written: &str, contract: &FnContract, given: &[Expr], found: &[Ty], passed: &[(String, Ty)], keeps: &[(String, bool, String)], span: &Span) -> Ty {
     let signature = match contract.signature.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return Ty::Unknown };
     let wanted = call_arguments(signature);
     if (wanted.len() as i64) != found.len() as i64 {
@@ -599,7 +599,7 @@ pub(crate) fn check_arguments_mut_differs(found: &Ty, want: &Ty) -> i64 {
 impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn lends_where_a_function_type_reads(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, given: Option<&Expr>, found: &Ty, want: &Ty) -> bool {
+    pub(crate) fn lends_where_a_function_type_reads(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, given: Option<&Expr>, found: &Ty, want: &Ty) -> bool {
         let value = match given { Some(__nikaia_value) => __nikaia_value, None => return false };
         let name = match value {
             Expr::Variable(ident, _) => { let ident = *ident; nikaia_std::block::Text::from(world.words.resolve(ident).to_string()) },

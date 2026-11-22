@@ -160,7 +160,7 @@ pub(crate) fn check_walked_written(value: &Expr, words: &winnow_grammar::Interne
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn check_walked_seed(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>) {
+pub(crate) fn check_walked_seed(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>) {
     for item in world.here.items.iter() {
         match &item.node {
             Item::Grammar(def) => {
@@ -187,7 +187,7 @@ pub(crate) fn check_walked_prefix_into(key: &str, prefixes: &mut collections::BT
     prefixes.insert(nikaia_std::block::Text::from(key.before(cut.start).to_string()));
 }
 
-pub(crate) fn check_walked_payload_of(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, ty: &str, variant: &str) -> Option<Vec<Ty>> {
+pub(crate) fn check_walked_payload_of(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, ty: &str, variant: &str) -> Option<Vec<Ty>> {
     let here = check_payload_in(&world.here, ty, variant);
     if here.is_some() { return std::convert::identity(here); }
     for view in world.beside.iter() {
@@ -197,7 +197,7 @@ pub(crate) fn check_walked_payload_of(world: &CheckWorld<'_, '_, '_, '_, '_, '_,
     None
 }
 
-pub(crate) fn check_walked_place_of(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, place: &str, here: i64) -> CheckPlace {
+pub(crate) fn check_walked_place_of(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, place: &str, here: i64) -> CheckPlace {
     let none = CheckPlace { at: -1, function: None };
     let rest = nikaia_std::block::Text::from(match place.strip_prefix('@') { Some(__nikaia_value) => __nikaia_value, None => return none }.to_string());
     let colon = match nikaia_std::text::find_first(&rest, &":") { Some(__nikaia_value) => __nikaia_value, None => return none };
@@ -226,7 +226,7 @@ pub(crate) fn check_walked_function_at(view: &ParsedView<'_, '_, '_, '_, '_, '_,
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn check_walked_declared(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, ty: &Type, span: &Span) -> Ty {
+pub(crate) fn check_walked_declared(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, ty: &Type, span: &Span) -> Ty {
     state.spelling(world, ty, span);
     let written = written_ty(world.here.words, world.here.aliases, ty);
     let refused = collect_keys_unordered(&world.parts_beside, &state.structs, &state.enums, &state.enum_payloads, &state.struct_parameters, world, &written, span);
@@ -305,7 +305,7 @@ pub(crate) fn check_walked_views<P: CheckWalkedPasses>(state: &mut CheckState, p
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 #[inline(never)]
-pub fn check_walked_walk<H: CheckHost, P: CheckWalkedPasses>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, passes: &P, harvesting: bool, computes: bool) {
+pub fn check_walked_walk<H: CheckHost, P: CheckWalkedPasses>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, host: &H, passes: &P, harvesting: bool, computes: bool) {
     check_walked_seed(state, world);
     let dsl_drivers: collections::BTreeSet<String> = drivers(world.here.words, world.here.items).into_iter().collect();
     state.dsl_drivers = dsl_drivers;

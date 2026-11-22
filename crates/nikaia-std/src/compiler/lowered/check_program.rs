@@ -3,7 +3,7 @@
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn check_program_body<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, body: &Block) {
+pub(crate) fn check_program_body<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, host: &H, body: &Block) {
     let outer: Option<Ty> = match state.expected.as_ref() {
         Some(__nikaia_it) => Some(__nikaia_it.clone()),
         None => None,
@@ -37,7 +37,7 @@ pub(crate) fn check_program_extern_convention(state: &mut CheckState, abi: &str,
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn check_program_impl<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, target: &Type, methods: &[Spanned<Item>]) {
+pub(crate) fn check_program_impl<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, host: &H, target: &Type, methods: &[Spanned<Item>]) {
     let mut outer: collections::BTreeMap<String, Vec<String>> = collections::BTreeMap::new();
     for name in host.impl_parameters(target) { outer.insert(name, vec![]); }
     let mut arguments: Vec<Ty> = vec![];
@@ -54,9 +54,9 @@ pub(crate) fn check_program_impl<H: CheckHost>(state: &mut CheckState, world: &C
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn check_program_program<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H) {
+pub(crate) fn check_program_program<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, host: &H) {
     check_defaults_item_constants(state, world, host);
-    state.types_that_contain_themselves(&world.here, &world.beside);
+    state.types_that_contain_themselves(world);
     check_attributes_all(state, world, host);
     for item in world.here.items.iter() {
         match &item.node {
@@ -113,7 +113,7 @@ pub(crate) fn check_program_program<H: CheckHost>(state: &mut CheckState, world:
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn check_program_trait_methods(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>) -> collections::BTreeMap<String, String> {
+pub(crate) fn check_program_trait_methods(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>) -> collections::BTreeMap<String, String> {
     let mut groups: collections::BTreeMap<String, String> = collections::BTreeMap::new();
     for item in world.here.items.iter() {
         match &item.node {
@@ -142,7 +142,7 @@ pub(crate) fn check_program_trait_methods(world: &CheckWorld<'_, '_, '_, '_, '_,
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn check_program_instantiations_beside<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H) {
+pub(crate) fn check_program_instantiations_beside<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, host: &H) {
     if state.flow.harvesting || world.beside.is_empty() { return; }
     let mut mine: collections::BTreeSet<String> = collections::BTreeSet::new();
     for item in world.here.items.iter() {
@@ -163,7 +163,7 @@ pub(crate) fn check_program_instantiations_beside<H: CheckHost>(state: &mut Chec
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn check_program_turns<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, item: &Item, span: &Span, name: &str, on: &str, fields: &[FieldContract]) {
+pub(crate) fn check_program_turns<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, host: &H, item: &Item, span: &Span, name: &str, on: &str, fields: &[FieldContract]) {
     for field in fields.iter() {
         let before = state.findings.len() as i64;
         let outer: Option<CheckUnrolling> = match state.flow.unrolling.as_ref() {
@@ -208,7 +208,7 @@ pub(crate) fn check_program_turns<H: CheckHost>(state: &mut CheckState, world: &
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn check_program_unroll<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H) {
+pub(crate) fn check_program_unroll<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, host: &H) {
     check_program_copies_called(state, world);
     let mut instantiations: Vec<(String, String, Vec<FieldContract>)> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     instantiations.reserve(state.facts.unrolled.iter().size_hint().0); for ((name, on), fields) in state.facts.unrolled.iter() { instantiations.push((nikaia_std::block::Text::from(name.to_string()), nikaia_std::block::Text::from(on.to_string()), fields.copy_owned())); }
@@ -232,7 +232,7 @@ pub(crate) fn check_program_unroll<H: CheckHost>(state: &mut CheckState, world: 
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn check_program_field_copies<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H) {
+pub(crate) fn check_program_field_copies<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, host: &H) {
     let mut walked: collections::BTreeSet<(String, String)> = collections::BTreeSet::new();
     loop {
         let mut pending: Vec<(String, String, Vec<FieldContract>)> = nikaia_std::block::list(nikaia_std::block::Place::Block);
@@ -259,7 +259,7 @@ pub(crate) fn check_program_field_copies<H: CheckHost>(state: &mut CheckState, w
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn check_program_copies_called(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>) {
+pub(crate) fn check_program_copies_called(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>) {
     let mut pending: Vec<(String, String)> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     pending.reserve(state.facts.unrolled.iter().size_hint().0); for (key, _) in state.facts.unrolled.iter() { pending.push(key.clone()); }
     while !pending.is_empty() {
@@ -301,7 +301,7 @@ pub(crate) fn check_program_reached(state: &CheckState, on: &str) -> Vec<String>
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn check_program_slot_calls(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, name: &str) -> Vec<String> {
+pub(crate) fn check_program_slot_calls(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, name: &str) -> Vec<String> {
     let mut out: Vec<String> = vec![];
     for item in world.here.items.iter() {
         match &item.node {
@@ -340,7 +340,7 @@ pub(crate) fn check_program_slot_calls(state: &CheckState, world: &CheckWorld<'_
     out
 }
 
-pub(crate) fn check_program_declares(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, name: &str) -> bool {
+pub(crate) fn check_program_declares(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, name: &str) -> bool {
     for item in world.here.items.iter() {
         match &item.node {
             Item::Fn { name: written, .. } => {
@@ -352,5 +352,13 @@ pub(crate) fn check_program_declares(world: &CheckWorld<'_, '_, '_, '_, '_, '_, 
         }
     }
     false
+}
+
+pub fn check_program_package(files: &[ParsedView<'_, '_, '_, '_, '_, '_, '_>]) -> CheckPackage {
+    let mut walks_fields: collections::BTreeMap<String, String> = collections::BTreeMap::new();
+    for file in files.iter() { check_function_field_walks(file, &mut walks_fields); }
+    let mut boxed_members: collections::BTreeMap<String, collections::BTreeSet<String>> = collections::BTreeMap::new();
+    item_contain_themselves(files, &mut boxed_members);
+    CheckPackage { names_read: check_core_names_read(files, true), walks_fields, boxed_members }
 }
 
