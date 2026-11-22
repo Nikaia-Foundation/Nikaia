@@ -3524,7 +3524,7 @@ pub mod emit_out {
 pub mod emit_pattern {}
 pub mod emit_program {
     #[allow(unused_imports)]
-    pub use super::{EMIT_PROGRAM_COUNTING_HEAP};
+    pub use super::{EMIT_PROGRAM_COUNTING_HEAP, EMIT_PROGRAM_RECURSION_LIMIT};
 }
 pub mod emit_reach {
     #[allow(unused_imports)]
@@ -3988,4 +3988,4 @@ pub fn nikaia_run_tests(filters: &[std::string::String], list: bool, more: std::
 /// **The digest of this lowered set** (#1610): every file `lower-std` wrote
 /// beside this index, and the index above this line. Compiled into the same
 /// crate as the code it names, it is the compiler's identity for its caches.
-pub const LOWERED_DIGEST: &str = "9430a8f6365293b43b8ea8e3d102a4e0c441690976d864dea047d70d2f2d17ef";
+pub const LOWERED_DIGEST: &str = "169f1c43ba9269ea90fc88aa0f8637708b4bf13d475a15ae7efba08b285996ca";

@@ -36,8 +36,8 @@ impl EmitState {
     }
     pub(crate) fn lifetime_args(&self, name: &str, lifetime: &str) -> String {
         let slots = match self.view_slots.get(name) { Some(__nikaia_value) => __nikaia_value, None => return nikaia_std::block::Text::from(lifetime.to_string()) };
-        #[allow(unused_mut)] let mut parts: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block); #[allow(clippy::redundant_locals)] let slots = slots;
-        let mut at: i64 = 0; #[allow(clippy::redundant_locals)] let slots = slots; #[allow(unused_mut, clippy::redundant_locals)] let mut parts = parts;
+        let mut parts: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block); #[allow(clippy::redundant_locals)] let slots = slots;
+        let mut at: i64 = 0;
         while ((at) as usize) < slots.len() {
             parts.push(nikaia_std::block::Text::from(lifetime.to_string()));
             at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
@@ -190,6 +190,21 @@ impl EmitState {
                 out.push(&format!("            {}::{}(e) => {},\n", name, variant, held));
             }
             out.push("        }\n    }\n}\n\n");
+            if !borrows {
+                for (narrower, small) in self.sums.iter() {
+                    if (narrower.len() as i64) >= members.len() as i64 || self.is_std && !self.sums_written.contains(small) { continue; }
+                    let mut inside = true;
+                    for member in narrower.iter() { if !nikaia_std::list::contains(&members, &member) || self.borrows_named(world, member) { inside = false; } }
+                    if inside {
+                        let mut cases: String = String::from("");
+                        for member in narrower.iter() {
+                            let variant = sum_variant(member);
+                            cases = format!("{}            {}::{}(e) => {}::{}(e),\n", cases, small, variant, name, variant);
+                        }
+                        out.push(&format!("impl From<{}> for {} {{\n    fn from(error: {}) -> {} {{\n        match error {{\n{}        }}\n    }}\n}}\n\n", small, name, small, name, cases));
+                    }
+                }
+            }
             if !borrows {
                 let mut read: String = String::from("");
                 let mut taken: String = String::from("");

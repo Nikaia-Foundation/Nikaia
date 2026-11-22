@@ -590,7 +590,7 @@ impl EmitState {
         if listed.is_none() { return Err(nikaia_std::error::throwing(EmitRefused { message: format!("There's no error set called `{}`.", sum), at: Some(flow.statement) }, &"emit_core_match_over_a_sum")); }
         let members = match listed { Some(__nikaia_value) => __nikaia_value, None => return Ok(()) };
         let mut home: Vec<i64> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-        let mut catch_all = 0; #[allow(clippy::redundant_locals)] let members = members;
+        let mut catch_all = 0;
         home.reserve(arms.iter().size_hint().0); for arm in arms.iter() {
             let mut at: i64 = -1;
             let member = member_of(world.words, &self.declared_errors, world.library, &arm.pattern);
@@ -610,7 +610,7 @@ impl EmitState {
         let inner = nikaia_std::block::Text::from("    ".repeat(nikaia_std::count::of(depth + 2))); #[allow(clippy::redundant_locals)] let members = members;
         let close = nikaia_std::block::Text::from("    ".repeat(nikaia_std::count::of(depth)));
         out.push("match error {\n");
-        let mut m: i64 = 0; #[allow(clippy::redundant_locals)] let members = members;
+        let mut m: i64 = 0;
         for member in members.iter() {
             let own = self.name_of_error(world, member) != 0;
             let inside = EmitFlow { caught_named: own, ..flow };
@@ -671,7 +671,7 @@ impl EmitState {
         let __keep_frame = nikaia_std::tether::Keep::new();
         #[allow(unused_mut)] let mut members: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         let mut home: Vec<i64> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-        let mut catch_all = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut members = members;
+        let mut catch_all = 0;
         home.reserve(arms.iter().size_hint().0); for arm in arms.iter() {
             let mut at: i64 = -1;
             let member = member_of(world.words, &self.declared_errors, world.library, &arm.pattern);

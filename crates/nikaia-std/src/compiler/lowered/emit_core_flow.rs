@@ -177,7 +177,7 @@ impl EmitState {
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn emit_core_closure<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, node: &Expr, params: &[winnow_grammar::Symbol], mutable: &[winnow_grammar::Symbol], body: &Block, depth: i64, flow: &EmitFlow, scope: &EmitScope) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
-        #[allow(unused_mut)] let mut names: Vec<String> = vec![];
+        let mut names: Vec<String> = vec![];
         names.reserve(params.iter().size_hint().0); for p in params.iter() {
             let p = *p;
             names.push(emit_local_name(&self.facts.comptime_names, &emit_text(world, p)));
@@ -194,14 +194,14 @@ impl EmitState {
         if pauses { out.push("async "); }
         let pattern = self.facts.filter_patterns.contains(&node_key(node));
         let mut takes_out = false;
-        let mut place: i64 = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut names = names;
+        let mut place: i64 = 0;
         while place < names.len() as i64 {
             if self.facts.copied_item_params.contains(&(node_key(node), place)) || self.facts.copied_mut_item_params.contains(&(node_key(node), place)) { takes_out = true; }
             place = unsafe { nikaia_std::proven::add::<i64>(place, 1) };
         }
         if pattern && names.len() == 1 { out.push(&format!("|&{}| ", *unsafe { nikaia_std::proven::read(&names, (0) as usize) })); } else if takes_out {
-            #[allow(unused_mut)] let mut written: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-            let mut at = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut written = written;
+            let mut written: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
+            let mut at = 0;
             for name in names.iter() {
                 if self.facts.copied_item_params.contains(&(node_key(node), at)) { written.push(format!("&{}", name)); } else if self.facts.copied_mut_item_params.contains(&(node_key(node), at)) { written.push(format!("&mut {}", name)); } else { written.push(nikaia_std::block::Text::from(name.to_string())); }
                 at += 1;
@@ -237,6 +237,14 @@ impl EmitState {
         let return_tail = if valueless { EmitTail::Statement } else { EmitTail::Return };
         let leaves = emit_a_body_that_leaves(world, body);
         if !copied && self.facts.failing_lambdas.contains(&node_key(node)) {
+            let through: Option<Vec<String>> = match self.facts.failing_through_lambdas.get(&node_key(node)) {
+                Some(__nikaia_it) => Some(__nikaia_it.clone()),
+                None => None,
+            };
+            if through.is_some() {
+                let thrown: Vec<String> = nikaia_std::index::or(through, || vec![].into());
+                out.push(&format!("-> {}<_, {}> ", self.rust_result(), self.channel_of(world, &thrown, true, "'_", "'static", false)));
+            }
             out.push(if leaves { "{ " } else { "{ let __nikaia_done = " });
             self.emit_core_block(world, walk, out, host, body, depth, EmitFlow { can_throw: true, ..inside }, &inside_scope, &value_tail)?;
             out.push(if leaves { " }" } else { "; Ok(__nikaia_done) }" });
@@ -276,8 +284,8 @@ impl EmitState {
             }, || vec![].into());
             spelled = emit_core_flow_typed_names(names, &by_use);
         }
-        #[allow(unused_mut)] let mut bound: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block); #[allow(unused_mut, clippy::redundant_locals)] let mut spelled = spelled;
-        let mut k: i64 = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut spelled = spelled; #[allow(unused_mut, clippy::redundant_locals)] let mut bound = bound;
+        let mut bound: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block); #[allow(unused_mut, clippy::redundant_locals)] let mut spelled = spelled;
+        let mut k: i64 = 0;
         for p in params.iter() {
             let p = *p;
             let name = nikaia_std::block::Text::from((*nikaia_std::index::get(&spelled, (k) as usize)).to_string());
@@ -909,13 +917,13 @@ impl EmitState {
             let held = match value { Some(__nikaia_value) => __nikaia_value, None => return Ok(()) };
             let is_null = matches!(held, Expr::LitNull(_));
             let either = call_returns_either(world.words, world.items, &scope.function) && !is_null && !self.facts.mixed_choices.contains(&node_key(held)) && !self.facts.mixed_leaves.contains_key(&node_key(held)) && !never_a_value(held);
-            if flow.can_throw { out.push("return Ok("); } else { out.push("return "); }
+            if flow.returns_out { out.push("return Ok(::std::option::Option::Some("); } else if flow.can_throw { out.push("return Ok("); } else { out.push("return "); }
             if either { out.push("nikaia_std::either_text::either("); }
             self.emit_expr(world, walk, out, host, held, depth, flow, scope)?;
             if either { out.push(")"); }
             if !self.facts.wrapped.contains_key(&node_key(held)) && !self.facts.some_tails.contains(&node_key(held)) && self.either_into_owned(world, held, &scope.function, -1) { out.push(".into()"); }
-            if flow.can_throw { out.push(")"); }
-        } else if flow.can_throw { out.push("return Ok(())"); } else { out.push("return"); }
+            if flow.returns_out { out.push("))"); } else if flow.can_throw { out.push(")"); }
+        } else if flow.returns_out { out.push("return Ok(::std::option::Option::Some(()))"); } else if flow.can_throw { out.push("return Ok(())"); } else { out.push("return"); }
         Ok(())
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -1149,8 +1157,8 @@ pub(crate) fn emit_catch_is_a_join(world: &EmitWorld<'_, '_, '_, '_>, guarded: &
 pub(crate) fn emit_flow_operated(expr: &Expr) -> bool { matches!(expr, Expr::Binary { .. } | Expr::Unary { .. }) }
 
 pub(crate) fn emit_core_flow_typed_names(names: &[String], given: &[Ty]) -> Vec<String> {
-    #[allow(unused_mut)] let mut out: Vec<String> = vec![];
-    let mut at: i64 = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut out = out;
+    let mut out: Vec<String> = vec![];
+    let mut at: i64 = 0;
     for name in names.iter() {
         let mut spelled: String = String::from("_");
         if at < given.len() as i64 { spelled = plain_rust_spelling(unsafe { nikaia_std::proven::read(&given, (at) as usize) }); }

@@ -747,7 +747,7 @@ pub(crate) fn check_core_list_literal<H: CheckHost>(state: &mut CheckState, worl
     }
     let mut founds: Vec<Ty> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     #[allow(unused_mut)] let mut integers: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-    let mut j: i64 = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut integers = integers;
+    let mut j: i64 = 0;
     for item in items.iter() {
         let mut found: Ty = (*unsafe { nikaia_std::proven::read(&walked, (j) as usize) }).clone();
         match item {

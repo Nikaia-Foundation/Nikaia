@@ -1200,7 +1200,7 @@ pub(crate) fn origins_of(expr: &Expr, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_
     let none: collections::BTreeSet<(i64, String)> = collections::BTreeSet::new();
     match expr {
         Expr::Variable(name, _) => { let name = *name; origins_of_local(ask.names.resolve(name), &walk) },
-        Expr::MethodCall { .. } => method_origins(expr, ask, &mut &mut *holes_of, &mut &mut *unaliased, walk),
+        Expr::MethodCall { .. } => if ask.given.contains(&node_key(expr)) { none } else { method_origins(expr, ask, &mut &mut *holes_of, &mut &mut *unaliased, walk) },
         Expr::SafeMethod { .. } => method_origins(expr, ask, &mut &mut *holes_of, &mut &mut *unaliased, walk),
         Expr::Call { func, args, .. } => { let func = nikaia_std::boxed::open(func); call_origins(func, args, ask, &mut &mut *holes_of, &mut &mut *unaliased, walk) },
         Expr::Field { base, .. } => { let base = nikaia_std::boxed::open(base); origins_of(base, ask, &mut &mut *holes_of, &mut &mut *unaliased, walk) },

@@ -43,7 +43,7 @@ pub fn pause_chain(graph: &collections::BTreeMap<String, SyncReach>, holds: &col
     let mut came_from: collections::BTreeMap<String, String> = collections::BTreeMap::new(); #[allow(unused_mut, clippy::redundant_locals)] let mut queue = queue;
     let mut seen: collections::BTreeSet<String> = collections::BTreeSet::new(); #[allow(unused_mut, clippy::redundant_locals)] let mut queue = queue;
     seen.insert(nikaia_std::block::Text::from(start.to_string()));
-    let mut next: i64 = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut queue = queue;
+    let mut next: i64 = 0;
     while ((next) as usize) < queue.len() {
         let at = nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&queue, (next) as usize) }).to_string());
         next = unsafe { nikaia_std::proven::add::<i64>(next, 1) };

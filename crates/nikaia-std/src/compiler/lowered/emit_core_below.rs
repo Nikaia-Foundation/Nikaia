@@ -295,6 +295,28 @@ impl EmitState {
         match expr {
             Expr::Overlap(block, _) => Some(call_joined_throws(world.words, world.aliases, &self.own_contracts, world.library, &emit_branch_values(block))),
             Expr::Select(arms, _) => Some(call_joined_throws(world.words, world.aliases, &self.own_contracts, world.library, &emit_arm_values(arms))),
+            Expr::MethodCall { .. } => self.emit_failing_through_set(expr),
+            _ => None,
+        }
+    }
+    pub(crate) fn emit_failing_through_set(&self, expr: &Expr) -> Option<Vec<String>> {
+        match expr {
+            Expr::MethodCall { receiver, args, .. } => {
+                let receiver = nikaia_std::boxed::open(receiver);
+                let on = node_key(receiver);
+                if self.facts.failing_through_calls.contains_key(&on) {
+                    for arg in args.iter() {
+                        let set: Option<Vec<String>> = match self.facts.failing_through_lambdas.get(&node_key(arg)) {
+                            Some(__nikaia_it) => Some(__nikaia_it.clone()),
+                            None => None,
+                        };
+                        if set.is_some() { return std::convert::identity(set); }
+                    }
+                    return None;
+                }
+                if self.facts.failing_item_receivers.contains(&on) { return self.emit_failing_through_set(receiver); }
+                return None;
+            },
             _ => None,
         }
     }

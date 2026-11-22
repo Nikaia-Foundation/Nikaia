@@ -297,12 +297,17 @@ pub struct EmitFlow {
     /// reads a field of what it bound hands a copy of it on, since the arm
     /// binds by reference and the outer `match` would move out of it.
     pub subject_copies: bool,
+    /// **A `return` leaves the body of a `for` over a `@stream` call that
+    /// runs as the parser's `each`** (ADR-grammar-typed-read-v1 D7, #2708):
+    /// the body is a closure of its own, so a `return` there hands its value
+    /// out as `Ok(Some(value))`, and the `for` returns it after the parse.
+    pub returns_out: bool,
 }
 
 impl EmitFlow {
     /// Nothing around: no statement, no flag.
     pub fn plain() -> EmitFlow {
-        return EmitFlow { can_throw: false, caught: false, caught_named: false, in_a_place: false, arms_are_statements: false, statement: -1, handled_here: false, in_lambda: false, widen: false, inferred: false, in_loop: false, breaks_to: -1, subject_copies: false }
+        return EmitFlow { can_throw: false, caught: false, caught_named: false, in_a_place: false, arms_are_statements: false, statement: -1, handled_here: false, in_lambda: false, widen: false, inferred: false, in_loop: false, breaks_to: -1, subject_copies: false, returns_out: false }
     }
 
     fn inside_a_loop(keep self) -> EmitFlow {

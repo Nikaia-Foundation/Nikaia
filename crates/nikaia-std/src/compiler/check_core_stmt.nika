@@ -2596,8 +2596,16 @@ fn check_core_stmt_for[H: CheckHost](mut state: CheckState, world: ref CheckWorl
     if owned {
         state.facts.owned_loops.insert(span.start as i64)
     }
+    // **A `for` over a `@stream` call lends each item from the input**
+    // (ADR-grammar-typed-read-v1 D7, ADR-views-v4 D5, #2708): the item is a
+    // view, as a list's element is in a walk over the place, so one kept past
+    // its turn is copied with `.clone()`. A `mut` head owns a copy of it.
+    let streamed = !mutable && bindings.len() == 1 && shape.len() == 0 && a_sequence_type(over) && (grammar_a_stream_call(world, iter) || check_core_stmt_a_stream_let_walked(state, world, iter, span))
+    if streamed {
+        state.facts.lent_stream_loops.insert(span.start as i64)
+    }
     // **A `for` over a place lends** (ADR-094 D4).
-    let lent = is_a_place(iter) && !owned
+    let lent = (is_a_place(iter) && !owned) || streamed
     // **`mut` in front of the head** (ADR-views-v4 D24-D26): over elements the loop
     // owns (a range, `drain()`, a produced sequence) every name is a `let mut`
     // of the turn. Over a place, the element is a view of it (D2, step 2).
@@ -2874,11 +2882,73 @@ fn check_core_stmt_jump(mut state: CheckState, word: ref String, span: ref Span)
     return Ty::Unknown
 }
 
+/// **A `let` bound to a `@stream` call** (ADR-grammar-typed-read-v1 D7,
+/// #2708): one name, no type, no `mut`, and every value handed to the call a
+/// literal or a name that cannot change, so that the call made where the
+/// `for` that walks the name stands reads what it would have read here. A
+/// `for` over that name lends its items as one over the call does
+/// (`check_core_stmt_for`); a sequence is walked once (ADR-105 D2), so that
+/// `for` is the only one.
+fn check_core_stmt_a_stream_let(mut state: CheckState, world: ref CheckWorld, names: ref Vec[winnow_grammar::Symbol], shape: ref Vec[i64], mutable: bool, ty: ref Type?, value: ref Expr, span: ref Span) sync {
+    if names.len() != 1 || shape.len() != 0 || mutable || ty != null || !grammar_a_stream_call(world, value) {
+        return
+    }
+    let fixed = match value {
+        Expr::Call { args, config, .. } => {
+            let mut all = true
+            for arg in args {
+                all = all && check_core_stmt_a_fixed_value(state, world, arg)
+            }
+            for option in config {
+                all = all && check_core_stmt_a_fixed_value(state, world, option.value)
+            }
+            all
+        },
+        else => false,
+    }
+    if !fixed {
+        return
+    }
+    let bound = state.binding(f"{world.words.resolve(names[0])}") ?? return
+    state.facts.stream_lets.insert(bound.id, span.start as i64)
+}
+
+/// Whether `iter` names a `let` bound to a `@stream` call
+/// (`check_core_stmt_a_stream_let`), which this `for` then walks.
+fn check_core_stmt_a_stream_let_walked(mut state: CheckState, world: ref CheckWorld, iter: ref Expr, span: ref Span) -> bool sync {
+    let name = match iter {
+        Expr::Variable(name, _) => f"{world.words.resolve(name)}",
+        else => return false,
+    }
+    let bound = state.binding(name) ?? return false
+    let at = state.facts.stream_lets.get(bound.id) ?? return false
+    state.facts.stream_let_loops.insert(span.start as i64, at)
+    state.facts.walked_stream_lets.insert(at)
+    return true
+}
+
+/// A literal, or a name bound without `mut` that is no `mut` parameter.
+fn check_core_stmt_a_fixed_value(state: ref CheckState, world: ref CheckWorld, value: ref Expr) -> bool sync {
+    return match value {
+        Expr::LitStr { .. } => true,
+        Expr::LitBool(_, _) => true,
+        Expr::Variable(name, _) => match state.binding(f"{world.words.resolve(name)}") {
+            null => false,
+            local => local.without_mut != null && !local.changing && !local.written_mut,
+        },
+        else => false,
+    }
+}
+
 /// **A statement, walked**: one function per variant.
 fn check_core_stmt[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, stmt: ref Stmt, span: ref Span) -> Ty sync {
     state.flow.literal_receivers.clear()
     return match stmt {
-        Stmt::Let { names, shape, mutable, mut_names, deep, ty, value } => check_core_stmt_let(state, world, host, names, shape, mutable, mut_names, deep, ty, value, span),
+        Stmt::Let { names, shape, mutable, mut_names, deep, ty, value } => {
+            let typed = check_core_stmt_let(state, world, host, names, shape, mutable, mut_names, deep, ty, value, span)
+            check_core_stmt_a_stream_let(state, world, names, shape, mutable, ty, value, span)
+            typed
+        },
         // **`comptime` is a `let` that has to fold** (ADR-287 D4, D5).
         Stmt::Comptime { name, ty, value, bounds } => check_core_comptime_binding(state, world, host, name, ty, value, bounds, span),
         Stmt::Assign { target, op, value, .. } => check_core_stmt_assign(state, world, host, target, op, value, span),
@@ -3592,6 +3662,11 @@ fn check_core_text_as_one(name: ref String) -> String {
 /// anywhere in it, or to one the checker does not know.
 fn check_core_a_binding_naming(state: ref CheckState, name: ref String, viewed: ref String) -> bool sync {
     let found = state.binding(name) ?? return true
+    // **An open number is a number** whatever type it takes (#2425): `let
+    // mut k = 0` holds no text, so the list is not bound again after it.
+    if found.open_number != null {
+        return false
+    }
     return check_core_ty_names(found.ty, viewed)
 }
 

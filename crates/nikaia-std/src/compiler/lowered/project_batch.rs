@@ -8,7 +8,7 @@ pub(crate) fn project_batch_module(k: i64, rust: &str) -> Option<String> {
     Some(nikaia_std::block::Text::from(nikaia_std::concat::plus(nikaia_std::block::Text::from(nikaia_std::concat::plus(nikaia_std::block::Text::from(nikaia_std::concat::plus(format!("pub mod p{} ", k), "{\n")), rust)), "\n}\n")))
 }
 
-pub(crate) fn project_batch_header() -> String { String::from("#![allow(warnings)]\n#[global_allocator]\nstatic NIKAIA_HEAP: nikaia_std::block::Counting = nikaia_std::block::Counting;\n") }
+pub(crate) fn project_batch_header() -> String { nikaia_std::block::Text::from(nikaia_std::concat::plus(nikaia_std::block::Text::from(nikaia_std::concat::plus("#![allow(warnings)]\n", EMIT_PROGRAM_RECURSION_LIMIT)), "#[global_allocator]\nstatic NIKAIA_HEAP: nikaia_std::block::Counting = nikaia_std::block::Counting;\n")) }
 
 pub(crate) fn project_batch_ranges(names: &[String], modules: &[String]) -> String {
     let mut first = project_batch_header().lines().count() as i64 + 1;

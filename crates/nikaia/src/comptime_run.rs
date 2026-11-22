@@ -169,7 +169,8 @@ impl tree::ComptimeLowerHost for LowerHost<'_> {
             .fold(crate::emit::Needs::none(), |acc, unit| {
                 acc.join(&crate::emit::needs_of(unit))
             });
-        needs.preamble()
+        // The program is its crate's root (#2714).
+        needs.preamble(true)
     }
 
     fn emit_unit(

@@ -575,17 +575,22 @@ pub(crate) fn walk_block(unit: &Unit, asked: &Asked<'_, '_, '_>, block: &Block, 
                 stores(unit, asked, value, &span, &mut &mut *own_buffer, here);
             },
             Stmt::Assign { target, value, .. } => {
-                if mentions(unit, asked, &here, value) {
-                    match target {
-                        Expr::Variable(name, _) => {
-                            let name = *name;
-                            here.carriers.insert(nikaia_std::block::Text::from(asked.names.resolve(name).to_string()));
-                        },
-                        _ => { assigned(unit, asked, target, &span, here); },
+                if a_literal_set_into_a_place(asked, &here, target, value) {
+                    stores(unit, asked, target, &span, &mut &mut *own_buffer, here);
+                    descend(unit, asked, value, &span, &mut &mut *own_buffer, here);
+                } else {
+                    if mentions(unit, asked, &here, value) {
+                        match target {
+                            Expr::Variable(name, _) => {
+                                let name = *name;
+                                here.carriers.insert(nikaia_std::block::Text::from(asked.names.resolve(name).to_string()));
+                            },
+                            _ => { assigned(unit, asked, target, &span, here); },
+                        }
                     }
+                    stores(unit, asked, target, &span, &mut &mut *own_buffer, here);
+                    stores(unit, asked, value, &span, &mut &mut *own_buffer, here);
                 }
-                stores(unit, asked, target, &span, &mut &mut *own_buffer, here);
-                stores(unit, asked, value, &span, &mut &mut *own_buffer, here);
             },
             Stmt::Return(value) => { handed_back_maybe(unit, asked, (value).as_ref(), &span, &mut &mut *own_buffer, here); },
             Stmt::Emit(expr) => { stores(unit, asked, expr, &span, &mut &mut *own_buffer, here); },
@@ -968,9 +973,24 @@ pub(crate) fn a_push_into_a_local(asked: &Asked<'_, '_, '_>, here: &Here, receiv
 }
 
 pub(crate) fn a_push_into_a_place(asked: &Asked<'_, '_, '_>, here: &Here, receiver: &Expr, method: winnow_grammar::Symbol) -> bool {
-    if asked.names.resolve(method) != "push" { return false; }
+    let name = asked.names.resolve(method);
+    if name != "push" && name != "push_back" && name != "push_front" && name != "insert" { return false; }
     match receiver {
         Expr::Variable(n, _) => { let n = *n; here.places.contains(asked.names.resolve(n)) },
+        _ => false,
+    }
+}
+
+pub(crate) fn a_literal_set_into_a_place(asked: &Asked<'_, '_, '_>, here: &Here, target: &Expr, value: &Expr) -> bool {
+    match value {
+        Expr::StructLit { .. } => { },
+        _ => { return false; },
+    }
+    match target {
+        Expr::Index { base, .. } => { let base = nikaia_std::boxed::open(base); match base {
+            Expr::Variable(n, _) => { let n = *n; here.places.contains(asked.names.resolve(n)) },
+            _ => false,
+        } },
         _ => false,
     }
 }
@@ -2292,7 +2312,7 @@ pub(crate) fn rsrc_result_is_receivers(asked: &Asked<'_, '_, '_>, signature: &Si
     if signature.params.is_empty() || unsafe { nikaia_std::proven::read(&signature.params, (0) as usize) }.0 != "self" { return false; }
     #[allow(unused_mut)] let mut wanted: Vec<String> = vec![];
     rsrc_ty_names(&result, &mut wanted);
-    let mut generics = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut wanted = wanted;
+    let mut generics = 0;
     let mut receiver: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut wanted = wanted;
     rsrc_ty_names(&unsafe { nikaia_std::proven::read(&signature.params, (0) as usize) }.1, &mut receiver);
     for name in wanted.iter() {
@@ -2384,7 +2404,7 @@ pub(crate) fn rsrc_function(unit: &Unit, asked: &Asked<'_, '_, '_>, subject: Opt
             let params = rsrc_params(asked, (receiver).as_ref(), args, config);
             let self_name: &'static str = "self";
             #[allow(unused_mut)] let mut sources: Vec<String> = vec![];
-            let mut position: i64 = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut sources = sources;
+            let mut position: i64 = 0;
             if receiver.is_some() {
                 position = 1;
                 if takes_a_view_of_itself(Option::as_ref(receiver)) { sources.push(nikaia_std::block::Text::from(self_name.to_string())); } else if subject.is_some() {
@@ -2699,7 +2719,7 @@ pub(crate) fn places_of(unit: &Unit, asked: &Asked<'_, '_, '_>, subject: Option<
             };
             let mut places = rsrc_none();
             #[allow(unused_mut)] let mut sources: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-            let mut position: i64 = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut sources = sources;
+            let mut position: i64 = 0;
             if receiver.is_some() {
                 position = 1;
                 let taken = match receiver { Some(__nikaia_value) => __nikaia_value, None => return };

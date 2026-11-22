@@ -575,6 +575,77 @@ pub(crate) fn check_core_call_on_entry_values(state: &CheckState, world: &CheckW
     -1
 }
 
+pub(crate) fn check_core_call_on_throws_through(contract: &FnContract) -> Vec<i64> {
+    let mut out: Vec<i64> = vec![];
+    if contract.throws_from.is_empty() { return out; }
+    let signature = match contract.signature.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return out };
+    let mut at: i64 = 0;
+    for (name, _) in call_arguments(signature) {
+        if nikaia_std::list::contains(&contract.throws_from, &name) { out.push(at); }
+        at += 1;
+    }
+    out
+}
+
+pub(crate) fn check_core_call_on_unfailing_fn(ty: &Ty) -> Ty {
+    match ty {
+        Ty::Fn { params, result, is_sync, spelled, .. } => { let result = nikaia_std::boxed::open(result); let is_sync = *is_sync; Ty::Fn { params: params.copy_owned(), result: nikaia_std::block::Boxed::new(match result {
+            Some(__nikaia_it) => Some(__nikaia_it.copy_owned()),
+            None => None,
+        }), is_sync, can_throw: false, spelled: spelled.clone() } },
+        _ => ty.clone(),
+    }
+}
+
+pub(crate) fn check_core_call_on_failing_fn(ty: &Ty) -> Ty {
+    match ty {
+        Ty::Fn { params, result, is_sync, spelled, .. } => { let result = nikaia_std::boxed::open(result); let is_sync = *is_sync; Ty::Fn { params: params.copy_owned(), result: nikaia_std::block::Boxed::new(match result {
+            Some(__nikaia_it) => Some(__nikaia_it.copy_owned()),
+            None => None,
+        }), is_sync, can_throw: true, spelled: spelled.clone() } },
+        _ => ty.clone(),
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn check_core_call_on_failed_through(state: &mut CheckState, args: &[Expr], through: &[i64], seen: &CheckGuarded, key: &str, on: &Ty, node: i64, lazy: bool) -> bool {
+    let mut failed = false;
+    for at in through.iter() {
+        let at = nikaia_std::num::value(at);
+        if at >= args.len() as i64 { continue; }
+        let arg = nikaia_std::index::get(&args, nikaia_std::index::at(at));
+        let a_lambda = matches!(arg, Expr::Closure { .. });
+        if !a_lambda || !state.flow.last_lambda_fails { continue; }
+        failed = true;
+        let mut thrown: Vec<String> = vec![];
+        thrown.reserve(seen.thrown.iter().size_hint().0); for error in seen.thrown.iter() { thrown.push(nikaia_std::block::Text::from(error.to_string())); }
+        if seen.unanswered || thrown.is_empty() { thrown = vec![String::from("?")]; }
+        state.facts.failing_lambdas.insert(id_of(arg) as i64);
+        state.facts.failing_through_lambdas.insert(id_of(arg) as i64, thrown);
+    }
+    if !failed { return false; }
+    let kind: i64 = if key == "Seq::map" { 1 } else if key == "Seq::filter" { 2 } else if key == "Seq::for_each" { 3 } else { 4 };
+    state.facts.failing_through_calls.insert(node, kind);
+    if !lazy {
+        state.flow.opaque_methods.remove(&node);
+        let added = state.flow.fallible_methods.insert(node);
+        if state.flow.guarded.is_some() {
+            let held: Option<CheckGuarded> = match state.flow.guarded.as_ref() {
+                Some(__nikaia_it) => Some(__nikaia_it.clone()),
+                None => None,
+            };
+            let mut guarded = nikaia_std::index::or(held, || CheckGuarded::nothing());
+            guarded.fallible = true;
+            guarded.unanswered = guarded.unanswered || seen.unanswered;
+            guarded.thrown.extend(seen.thrown.iter().cloned());
+            state.flow.guarded = Some(guarded);
+        }
+    }
+    true
+}
+
 pub(crate) fn check_core_call_on_hands_back_a_sequence(contract: &FnContract) -> bool {
     let signature = match contract.signature.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return false };
     let result = match signature.result.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return false };
@@ -969,6 +1040,7 @@ pub(crate) fn check_core_call_on_described<H: CheckHost>(state: &mut CheckState,
     let pauses = !contract.sync_claim.is_sync() && !sync_close || walks_a_pausing_step;
     state.method_pauses(node, pauses);
     let hands_back_a_sequence = check_core_call_on_hands_back_a_sequence(contract);
+    if shape_failing_items(on) { state.facts.failing_item_receivers.insert(node); }
     if walks_a_pausing_step && hands_back_a_sequence { state.facts.pausing_walks.insert(node); }
     let seq_throws = match on {
         Ty::Seq { can_throw, .. } => { let can_throw = *can_throw; can_throw },
@@ -1060,13 +1132,42 @@ pub(crate) fn check_core_call_on_described<H: CheckHost>(state: &mut CheckState,
         { let __nikaia_stored = check_core_call_on_unviewed_fn(unsafe { nikaia_std::proven::read(&expected, (0) as usize) }); unsafe { nikaia_std::proven::write(&mut expected, (0) as usize, __nikaia_stored) }; }
         for index in 0..handed { state.facts.copied_item_params.insert((id_of(unsafe { nikaia_std::proven::read(&args, (0) as usize) }) as i64, index)); }
     }
+    let through = check_core_call_on_throws_through(contract);
+    for at in through.iter() {
+        let at = nikaia_std::num::value(at);
+        if at < expected.len() as i64 { { let __nikaia_stored = check_core_call_on_failing_fn(unsafe { nikaia_std::proven::read(&expected, (at) as usize) }); unsafe { nikaia_std::proven::write(&mut expected, (at) as usize, __nikaia_stored) }; } }
+    }
+    let outer_guarded: Option<CheckGuarded> = match state.flow.guarded.as_ref() {
+        Some(__nikaia_it) => Some(__nikaia_it.clone()),
+        None => None,
+    };
+    let outer_caught = state.flow.caught;
+    if !through.is_empty() {
+        state.flow.guarded = Some(CheckGuarded::nothing());
+        state.flow.last_lambda_fails = false;
+        if hands_back_a_sequence { state.flow.caught = true; }
+    }
     let callee: Option<FnContract> = Some(contract.clone());
     state.call_keepers = nikaia_std::index::or(match world.keepers.get(key) {
         Some(__nikaia_it) => Some(__nikaia_it.clone()),
         None => None,
     }, || collections::BTreeMap::new().into());
-    let found = check_core_arguments_bound(state, world, host, args, &patterns, &mut bound, &mut expected, world.own.functions.contains_key(key), (callee).as_ref(), span);
+    let mut found = check_core_arguments_bound(state, world, host, args, &patterns, &mut bound, &mut expected, world.own.functions.contains_key(key), (callee).as_ref(), span);
     state.call_keepers.clear();
+    let mut failed_through = false;
+    if !through.is_empty() {
+        for at in through.iter() {
+            let at = nikaia_std::num::value(at);
+            if at < found.len() as i64 { { let __nikaia_stored = check_core_call_on_unfailing_fn(unsafe { nikaia_std::proven::read(&found, (at) as usize) }); unsafe { nikaia_std::proven::write(&mut found, (at) as usize, __nikaia_stored) }; } }
+        }
+        let seen: CheckGuarded = nikaia_std::index::or(match state.flow.guarded.as_ref() {
+            Some(__nikaia_it) => Some(__nikaia_it.clone()),
+            None => None,
+        }, || CheckGuarded::nothing());
+        state.flow.caught = outer_caught;
+        state.flow.guarded = outer_guarded;
+        failed_through = check_core_call_on_failed_through(state, args, &through, &seen, key, on, node, hands_back_a_sequence);
+    }
     if world.own.functions.contains_key(key) { check_core_call_code_args(state, world, (callee).as_ref(), key, args, span); } else { check_core_call_std_code_args(state, world, (callee).as_ref(), key, args, parallel, span); }
     if parallel && (entry == "map" || entry == "filter" || entry == "for_each") && args.len() == 1 { check_walks_a_lambda_against_itself(state, world, on, unsafe { nikaia_std::proven::read(&args, (0) as usize) }, span); }
     if key == "Par::fold" && args.len() >= 3 {
@@ -1181,7 +1282,13 @@ pub(crate) fn check_core_call_on_described<H: CheckHost>(state: &mut CheckState,
     let substituted = substitute(&result, &bound);
     state.flow.text_slot = views_text_slots(&result, &bound, true);
     state.flow.text_walk = views_text_slots(&result, &bound, false);
-    let shaped = shape_through(contract, on, &found, substituted);
+    let mut shaped = shape_through(contract, on, &found, substituted);
+    if failed_through && hands_back_a_sequence {
+        shaped = match shaped {
+            Ty::Seq { ref item, is_sync, pauses, parallel, shape, .. } => { let item = nikaia_std::boxed::open(item); Ty::Seq { item: nikaia_std::block::Boxed::new(item.clone()), is_sync, pauses, can_throw: true, parallel, shape: Shape { failing_items: true, ..shape } } },
+            _ => shaped,
+        };
+    }
     let paused = check_crossings_a_lambda_that_pauses_at_an_entry(state, key, receiver, on, args, lambda_at, shaped, span);
     let receiver_seen = state.flow.stamped_receivers.contains(&(id_of(receiver) as i64));
     state.stamped_through(contract, &found, receiver_seen, paused)

@@ -23,8 +23,8 @@ pub(crate) fn emit_call_claim_held(claim: &FactClaim) -> bool {
 pub(crate) fn emit_call_owner(function: &str) -> Option<String> {
     let parts: Vec<&str> = function.split("::").collect::<Vec<_>>();
     if parts.len() < 2 { return None; }
-    #[allow(unused_mut)] let mut owner: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block); #[allow(clippy::redundant_locals)] let parts = parts;
-    let mut n: i64 = 0; #[allow(clippy::redundant_locals)] let parts = parts; #[allow(unused_mut, clippy::redundant_locals)] let mut owner = owner;
+    let mut owner: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block); #[allow(clippy::redundant_locals)] let parts = parts;
+    let mut n: i64 = 0;
     for part in parts.iter() {
         let part = *part;
         if n < unsafe { nikaia_std::proven::sub::<i64>(parts.len() as i64, 1) } { owner.push(nikaia_std::block::Text::from(part.to_string())); }
@@ -545,6 +545,7 @@ impl EmitState {
                 if flow.caught { question = ""; }
                 let mut pieces = false;
                 let mut streamed = false;
+                let mut stream_item: String = String::from("");
                 let mut options: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
                 let contract = self.own_contracts.functions.get(&format!("{}{}::{}", package, book, rule));
                 if contract.is_some() {
@@ -553,7 +554,16 @@ impl EmitState {
                     match &held.signature {
                         Some(signature) => {
                             match &signature.result {
-                                Some(result) => { streamed = a_sequence_type(result); },
+                                Some(result) => {
+                                    streamed = a_sequence_type(result);
+                                    stream_item = match result {
+                                        Ty::Seq { item, .. } => { let item = nikaia_std::boxed::open(item); match item {
+                                            Ty::Named { name, .. } => nikaia_std::block::Text::from(name.to_string()),
+                                            _ => String::from(""),
+                                        } },
+                                        _ => String::from(""),
+                                    };
+                                },
                                 None => { },
                             }
                             options.reserve(signature.config.iter().size_hint().0); for option in signature.config.iter() { options.push(nikaia_std::block::Text::from(option.name.to_string())); }
@@ -562,9 +572,21 @@ impl EmitState {
                     }
                 }
                 if streamed {
-                    out.push(&format!("Ok::<_, nikaia_std::grammar::ParseError>({}{}(::std::convert::AsRef::<[u8]>::as_ref(&*", package, emit_stream_walk_name(&book, &rule)));
-                    self.emit_expr(world, walk, out, host, unsafe { nikaia_std::proven::read(&args, (0) as usize) }, depth, flow, scope)?;
-                    out.push(").to_vec()");
+                    let each_body: Option<EmitOut> = match walk.each_body {
+                        None => None,
+                        Some(ref held) => Some(held.clone()),
+                    };
+                    walk.each_body = None;
+                    if each_body.is_some() {
+                        out.push(&format!("{}{}(::std::convert::AsRef::<[u8]>::as_ref(&*", package, emit_stream_each_name(&book, &rule)));
+                        self.emit_expr(world, walk, out, host, unsafe { nikaia_std::proven::read(&args, (0) as usize) }, depth, flow, scope)?;
+                        out.push(")");
+                    } else {
+                        if self.emit_stream_item_views(&stream_item) { self.emit_stream_thread_refused(&walk, &format!("{}{}::{}", package, book, rule), &stream_item, Some(flow.statement))?; }
+                        out.push(&format!("Ok::<_, nikaia_std::grammar::ParseError>({}{}(::std::convert::AsRef::<[u8]>::as_ref(&*", package, emit_stream_walk_name(&book, &rule)));
+                        self.emit_expr(world, walk, out, host, unsafe { nikaia_std::proven::read(&args, (0) as usize) }, depth, flow, scope)?;
+                        out.push(").to_vec()");
+                    }
                     for i in 1..args.len() as i64 {
                         out.push(", ");
                         self.emit_expr(world, walk, out, host, unsafe { nikaia_std::proven::read(&args, (i) as usize) }, depth, flow, scope)?;
@@ -591,7 +613,10 @@ impl EmitState {
                         }
                     }
                     if !table { out.push(", ::std::option::Option::None"); }
-                    out.push(&format!(")){}", question));
+                    match each_body {
+                        None => { out.push(&format!(")){}", question)); },
+                        Some(ref body) => { out.push_around(&format!(", |__wg_one| {{ __NIKAIA_EACH_BODY__ }}){}", question), "__NIKAIA_EACH_BODY__", body); },
+                    }
                     return Ok(true);
                 }
                 if args.len() != 1 { return Ok(false); }
@@ -1181,6 +1206,8 @@ impl EmitState {
         let arriving = (joined_key.starts_with("TaskHandle::join") || joined_key.starts_with("task::ChildHandle::join")) && self.method_can_fail(on_node);
         if arriving { out.push("nikaia_std::error::arrived("); }
         let (kind, entry) = emit_call_pausing_entry(&self.facts, args);
+        let mut through_prefix: &'static str = "";
+        let mut through_suffix: &'static str = "";
         let rust_text = kind == 0 && !timed && !boxed && answers_rust_text(&written, args.len() as i64) && emit_callee_is_std_text((*nikaia_std::index::get(&self.facts.method_callees, &on_node)).map(std::ops::Deref::deref)) && self.on_block_types() && !self.method_pauses(on_node) && !self.method_can_fail(on_node) && walk.compared_receiver != on_node;
         if rust_text { out.push(&block_text_open(self.on_block_types())); }
         if kind == 1 {
@@ -1195,6 +1222,10 @@ impl EmitState {
             self.emit_core_receiver(world, walk, out, host, receiver, depth, flow, scope, false)?;
             out.push(&format!(".{}(", entry));
         } else {
+            let (through_written, through_open, through_close) = self.emit_call_failing_through(on_node, &name, &flow)?;
+            if AsRef::<str>::as_ref(&(through_written)) != AsRef::<str>::as_ref(&("")) { written = nikaia_std::block::Text::from(through_written.to_string()); }
+            through_prefix = through_open;
+            through_suffix = through_close;
             let stepping = name == "map" && walk.stepping_receiver == on_node;
             if stepping { walk.stepping_receiver = -1; }
             let mut on_fused = false;
@@ -1204,7 +1235,7 @@ impl EmitState {
                 if on_fused { walk.fused.insert(node_key(on)); }
             }
             self.emit_core_receiver(world, walk, out, host, receiver, depth, flow, scope, false)?;
-            if stepping && !on_fused { out.push(".into_iter()"); }
+            if stepping && !on_fused || nikaia_std::index::or(self.facts.failing_through_calls.get(&on_node), || 0) == 4 { out.push(".into_iter()"); }
             if name == "len" && on_fused { written = String::from("count"); }
             if name == "collect" && args.is_empty() && self.facts.text_slot_collects.contains(&on_node) { out.push(".map(|s| ::core::convert::AsRef::<str>::as_ref(s))"); }
             out.push(&format!(".{}", written));
@@ -1226,7 +1257,8 @@ impl EmitState {
             Some(__nikaia_it) => Some(__nikaia_it.clone()),
             None => None,
         }, || "Seq::collect".into()) != "Seq::collect";
-        if name == "collect" && args.is_empty() && !declared && !own && !self.method_pauses(on_node) { out.push("::<Vec<_>>"); }
+        let failing_items = self.facts.failing_item_receivers.contains(&on_node);
+        if name == "collect" && args.is_empty() && !own && !self.method_pauses(on_node) && failing_items { out.push(&if declared { format!("::<{}<_, _>>", self.rust_result()) } else { format!("::<{}<Vec<_>, _>>", self.rust_result()) }); } else if name == "collect" && args.is_empty() && !declared && !own && !self.method_pauses(on_node) { out.push("::<Vec<_>>"); }
         if name == "sum" && args.is_empty() && receiver.is_some() {
             let summed = nikaia_std::index::or(*nikaia_std::index::get(&self.facts.summed, &on_node), || "");
             if summed != "" { out.push(&format!("::<{}>", summed)); }
@@ -1241,7 +1273,9 @@ impl EmitState {
             Some(__nikaia_it) => Some(__nikaia_it.clone()),
             None => None,
         };
+        out.push(through_prefix);
         self.emit_core_args(world, walk, out, host, &name, args, &takes, depth, flow, scope)?;
+        out.push(through_suffix);
         walk.hold_args = None;
         let keeping = keeping_method_key(&self.own_contracts, &self.own_methods, (emit_call_owner(&scope.function)).as_deref(), emit_call_on_self(world, receiver), &name);
         if keeping.is_some() {
@@ -1266,6 +1300,7 @@ impl EmitState {
         }
         out.push(")");
         if rust_text { out.push(&block_text_close(self.on_block_types())); }
+        if kind == 0 && nikaia_std::index::or(self.facts.failing_through_calls.get(&on_node), || 0) == 4 { out.push(&format!(".collect::<{}<Vec<_>, _>>()", self.rust_result())); }
         if (name == "iter" || name == "first" || name == "last" || name == "get") && receiver.is_some() {
             let on = match receiver { Some(__nikaia_value) => __nikaia_value, None => return Ok(()) };
             if self.reads_through_handle(world, &walk, &scope.function, on) { out.push(".map(|held| held.get())"); }
@@ -1296,6 +1331,21 @@ impl EmitState {
         if flow.can_throw && !flow.caught && fails { out.push("?"); }
         if length && !fails { out.push(" as i64"); }
         Ok(())
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub(crate) fn emit_call_failing_through(&self, on_node: i64, name: &str, flow: &EmitFlow) -> Result<(&'static str, &'static str, &'static str), nikaia_std::error::Thrown<EmitRefused>> {
+        let through = nikaia_std::index::or(self.facts.failing_through_calls.get(&on_node), || 0);
+        if self.facts.failing_item_receivers.contains(&on_node) {
+            if through != 0 { return Err(nikaia_std::error::throwing(EmitRefused { message: format!("`{}` is given a lambda that can fail, over a sequence whose elements can already fail; only one step of a chain can fail so far. Collect the sequence first, with `… .collect() catch {{ … }}`, and walk the list.", name), at: Some(flow.statement) }, &"emit_call_failing_through")); }
+            if name == "map" { return Ok(("", "|__nikaia_item| __nikaia_item.map(", ")")); }
+            if name == "filter" { return Ok(("", "|__nikaia_item| match __nikaia_item { Ok(__nikaia_kept) => (", ")(__nikaia_kept), Err(_) => true }")); }
+            if name == "take" || name == "skip" || name == "step_by" || name == "collect" { return Ok(("", "", "")); }
+            return Err(nikaia_std::error::throwing(EmitRefused { message: format!("`{}` can't be used yet on a sequence whose elements can fail. Walk it with `for x in … {{ … }}`, or collect it first with `… .collect() catch {{ … }}`.", name), at: Some(flow.statement) }, &"emit_call_failing_through"));
+        }
+        if through == 2 { return Ok(("filter_map", "|__nikaia_item| match (", ")(&__nikaia_item) { Ok(true) => Some(Ok(__nikaia_item)), Ok(false) => None, Err(__nikaia_error) => Some(Err(__nikaia_error)) }")); }
+        if through == 3 { return Ok(("try_for_each", "", "")); }
+        Ok(("", "", ""))
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
@@ -1574,8 +1624,8 @@ pub(crate) fn emit_tuple_part_copy(i: i64, word: &str) -> String {
 }
 
 pub(crate) fn emit_tuple_part_copies(parts: &[String]) -> String {
-    let copies: Vec<String> = parts.iter().enumerate().map(|(at, item)| (at as i64, item)).map(|__nikaia_tuple117783| {
-        let (i, word) = __nikaia_tuple117783;
+    let copies: Vec<String> = parts.iter().enumerate().map(|(at, item)| (at as i64, item)).map(|__nikaia_tuple123403| {
+        let (i, word) = __nikaia_tuple123403;
         emit_tuple_part_copy(i, word)
     }).collect::<Vec<_>>();
     if copies.len() == 1 { return format!("({},)", *unsafe { nikaia_std::proven::read(&copies, (0) as usize) }); }

@@ -1,6 +1,6 @@
 # Nikaia Language Specification
 **Part I: The Language Core**
-**Version:** 0.0.1539 (Draft)
+**Version:** 0.0.1542 (Draft)
 **Date:** 2026-11-22
 
 ---
@@ -3072,7 +3072,12 @@ A parameter the function changes in place says `mut` in the declaration,
 refused with `NK1138`. A `mut` parameter handed to another `mut` parameter is
 passed straight on. A `mut` parameter given away whole is `NK1131`: it stays
 the caller's, so the way out is `.clone()` or taking it `keep`. A callee that
-wants a changeable copy writes `let mut v = x` inside.
+wants a changeable copy writes `let mut v = x` inside. **A `mut` parameter may
+receive views of another lent parameter**, `out.push(Event { value: n })`, as a
+result may be one ([ADR-views-v4](adr/adr-views-v4.md) D32): the source is
+inferred from the body, the parameter it views stays lent, not `keep`, and
+the caller may give its argument up but neither change it nor hand it over
+while what it passed for `out` lives.
 
 **A part taken out of a `mut` parameter is given back before the function is
 left**, and one taken out of a `let mut` view of a place before the view's block
@@ -3213,7 +3218,9 @@ place a buffer moves to while a view of it lives, and who owns it is read off
 the program:
 
 * **the caller's frame**, wherever a frame outlives the views — handed back,
-  kept in a `mut` parameter, or kept by a list outside a loop. This costs
+  kept in a `mut` parameter (a view of another parameter put into it is
+  tethered to that argument while the `mut` one lives, [ADR-views-v4](adr/adr-views-v4.md)
+  D32), or kept by a list outside a loop. This costs
   nothing, works across any number of calls, and the body may pause;
 * **a handle that travels with the value**, where no frame outlives it — a task;
 * **a handle per view**, where a container keeps views across a loop and drops

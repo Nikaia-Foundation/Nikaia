@@ -51,8 +51,8 @@ pub fn differing_lines(expected: &str, produced: &str) -> String {
     }
     let mut marks: Vec<scalar> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     #[allow(unused_mut)] let mut lines: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block); #[allow(unused_mut, clippy::redundant_locals)] let mut a = a; #[allow(unused_mut, clippy::redundant_locals)] let mut b = b;
-    let mut x: i64 = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut a = a; #[allow(unused_mut, clippy::redundant_locals)] let mut b = b; #[allow(unused_mut, clippy::redundant_locals)] let mut lines = lines;
-    let mut y: i64 = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut a = a; #[allow(unused_mut, clippy::redundant_locals)] let mut b = b; #[allow(unused_mut, clippy::redundant_locals)] let mut lines = lines;
+    let mut x: i64 = 0;
+    let mut y: i64 = 0;
     while ((x) as usize) < a.len() || ((y) as usize) < b.len() {
         if ((x) as usize) < a.len() && ((y) as usize) < b.len() && *unsafe { nikaia_std::proven::read(&a, (x) as usize) } == *unsafe { nikaia_std::proven::read(&b, (y) as usize) } {
             marks.push(' ');

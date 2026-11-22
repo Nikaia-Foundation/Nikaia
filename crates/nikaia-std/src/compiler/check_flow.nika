@@ -433,6 +433,9 @@ pub struct CheckFlow {
     pub lambda_firsts: collections::BTreeMap[i64, i64],
     /// The first parameter's binding of the lambda checked last.
     pub last_lambda_first: i64,
+    /// Whether the body of the lambda checked last was seen to fail, a
+    /// `catch` inside it taken into account (#2736).
+    pub last_lambda_fails: bool,
     /// How many `NK1245`s this walk has said (or stood back for).
     pub unknown_said: i64,
     /// What such a list holds, where nothing can change it (D26).
@@ -655,6 +658,7 @@ impl CheckFlow {
             unknown_lambda_params: collections::BTreeSet(),
             lambda_firsts: collections::BTreeMap(),
             last_lambda_first: -1,
+            last_lambda_fails: false,
             unknown_said: 0,
             list_constants: collections::BTreeMap(),
             overflowed: collections::BTreeSet(),

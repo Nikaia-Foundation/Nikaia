@@ -450,7 +450,7 @@ pub(crate) fn lg_below(search: &mut LgSearch, depth: i64, chosen: &mut Vec<LgPar
         all_lits.push(here.lits.copy_owned());
     }
     #[allow(unused_mut)] let mut lits: Vec<String> = vec![];
-    let mut at: i64 = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut lits = lits;
+    let mut at: i64 = 0;
     for part in clause.parts.iter() {
         let part = *part;
         let pivot = lg_negation(&lg_literal(&search.arena, &part));

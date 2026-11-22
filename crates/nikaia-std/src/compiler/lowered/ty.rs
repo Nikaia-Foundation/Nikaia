@@ -50,10 +50,11 @@ pub struct Shape {
     pub replays: bool,
     pub timed: bool,
     pub one_at_a_time: bool,
+    pub failing_items: bool,
 }
 
 impl Shape {
-    pub fn none() -> Shape { Shape { ends: false, sized: false, replays: false, timed: false, one_at_a_time: false } }
+    pub fn none() -> Shape { Shape { ends: false, sized: false, replays: false, timed: false, one_at_a_time: false, failing_items: false } }
     pub fn meets(&self, wanted: &Shape) -> bool { self.missing(wanted).is_empty() }
     pub fn missing(&self, wanted: &Shape) -> Vec<String> {
         let mut words: Vec<String> = vec![];
@@ -481,7 +482,7 @@ pub fn parse(written: &str) -> Ty {
 
 pub fn split_args(written: &str) -> Vec<String> {
     #[allow(unused_mut)] let mut parts: Vec<String> = vec![];
-    let mut depth = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut parts = parts;
+    let mut depth = 0;
     let mut current: String = String::from(""); #[allow(unused_mut, clippy::redundant_locals)] let mut parts = parts;
     for c in written.chars() {
         if c == '[' || c == '(' {
@@ -690,7 +691,7 @@ pub(crate) fn a_sequence(written: &str, word: &str, parallel: bool) -> Option<Ty
     if is_sync && pauses { return None; }
     if !tail.is_empty() { return None; }
     let item = parse(&between(&c, 1, close));
-    let shape = Shape { ends, sized, replays, timed: false, one_at_a_time: false };
+    let shape = Shape { ends, sized, replays, timed: false, one_at_a_time: false, failing_items: false };
     Some(Ty::Seq { item: nikaia_std::block::Boxed::new(item), is_sync, pauses, can_throw, parallel, shape })
 }
 

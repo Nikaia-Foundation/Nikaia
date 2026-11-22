@@ -836,7 +836,7 @@ pub(crate) fn check_core_method_deadline(state: &CheckState, world: &CheckWorld<
     }
     if !within && !one { return found; }
     match found {
-        Ty::Seq { ref item, is_sync, pauses, can_throw, parallel, shape } => { let item = nikaia_std::boxed::open(item); Ty::Seq { item: nikaia_std::block::Boxed::new(item.clone()), is_sync, pauses, can_throw, parallel, shape: Shape { ends: shape.ends, sized: shape.sized, replays: shape.replays, timed: shape.timed || within, one_at_a_time: shape.one_at_a_time || one } } },
+        Ty::Seq { ref item, is_sync, pauses, can_throw, parallel, shape } => { let item = nikaia_std::boxed::open(item); Ty::Seq { item: nikaia_std::block::Boxed::new(item.clone()), is_sync, pauses, can_throw, parallel, shape: Shape { ends: shape.ends, sized: shape.sized, replays: shape.replays, timed: shape.timed || within, one_at_a_time: shape.one_at_a_time || one, failing_items: shape.failing_items } } },
         _ => found,
     }
 }
@@ -1038,7 +1038,7 @@ pub(crate) fn check_core_method_walked<H: CheckHost>(state: &mut CheckState, wor
     }
     if name == "chars" && args.is_empty() && config.is_empty() && check_core_method_text_receiver(&on) {
         state.a_chars_call(world, expr, receiver, span);
-        return Ty::Seq { item: nikaia_std::block::Boxed::new(check_core_method_named("scalar")), is_sync: true, pauses: false, can_throw: false, parallel: false, shape: Shape { ends: true, sized: false, replays: false, timed: false, one_at_a_time: false } };
+        return Ty::Seq { item: nikaia_std::block::Boxed::new(check_core_method_named("scalar")), is_sync: true, pauses: false, can_throw: false, parallel: false, shape: Shape { ends: true, sized: false, replays: false, timed: false, one_at_a_time: false, failing_items: false } };
     }
     if state.check_core_method_on_a_text_slot(world, receiver, &on) { return check_core_method_called(state, world, host, expr, Ty::Named { name: nikaia_std::block::Text::from(TEXT.to_string()), args: vec![], view: true }, receiver, method, args, &name, span); }
     check_core_method_a_handle_taken(state, world, &on, receiver, &name, args, config, span);

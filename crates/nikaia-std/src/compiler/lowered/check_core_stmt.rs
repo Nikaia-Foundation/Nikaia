@@ -927,7 +927,7 @@ pub(crate) fn check_core_stmt_let<H: CheckHost>(state: &mut CheckState, world: &
         let single: String = format!("{}", world.words.resolve(*unsafe { nikaia_std::proven::read(&names, (0) as usize) }));
         check_crossings_a_value_with_a_cleanup_bound(state, world, &single, &found, span);
     }
-    #[allow(unused_mut)] let mut bound_names: Vec<String> = vec![];
+    let mut bound_names: Vec<String> = vec![];
     bound_names.reserve(names.iter().size_hint().0); for n in names.iter() {
         let n = *n;
         bound_names.push(format!("{}", world.words.resolve(n)));
@@ -941,7 +941,7 @@ pub(crate) fn check_core_stmt_let<H: CheckHost>(state: &mut CheckState, world: &
         seen_through = !found.fits(&want) && state.fits_through_deref(world, &found, &want);
         seen_through = seen_through || check_core_stmt_a_whole_run_viewed(&found, &want);
     }
-    let mut element_view: i64 = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut bound_names = bound_names;
+    let mut element_view: i64 = 0;
     if names.len() == 1 && ty.is_some() {
         let t: &Type = match ty { Some(__nikaia_value) => __nikaia_value, None => return check_core_stmt_unit() };
         let want = written_ty(world.words, world.here.aliases, t);
@@ -1847,7 +1847,9 @@ pub(crate) fn check_core_stmt_for<H: CheckHost>(state: &mut CheckState, world: &
     };
     let owned = is_a_place(iter) && a_seq;
     if owned { state.facts.owned_loops.insert(span.start as i64); }
-    let lent = is_a_place(iter) && !owned;
+    let streamed = !mutable && bindings.len() == 1 && shape.is_empty() && a_sequence_type(&over) && (grammar_a_stream_call(world, iter) || check_core_stmt_a_stream_let_walked(state, world, iter, span));
+    if streamed { state.facts.lent_stream_loops.insert(span.start as i64); }
+    let lent = is_a_place(iter) && !owned || streamed;
     let mut mut_view = false;
     let mut walked_list: String = String::from("");
     if !mutable && lent && check_core_stmt_a_list_type(&over) { walked_list = nikaia_std::index::or(dotted_path(world, iter), || "".into()); }
@@ -1856,8 +1858,8 @@ pub(crate) fn check_core_stmt_for<H: CheckHost>(state: &mut CheckState, world: &
     if value_only { unwritable = ""; }
     if unwritable != "" { state.a_for_mut_that_cannot_write(unwritable, iter, world, span); } else if mutable && lent {
         let list: Option<String> = dotted_path(world, iter);
-        #[allow(unused_mut)] let mut names: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-        let mut index: i64 = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut names = names;
+        let mut names: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
+        let mut index: i64 = 0;
         names.reserve(bindings.iter().size_hint().0); for b in bindings.iter() {
             let b = *b;
             let marked = !mut_names.is_empty() && *nikaia_std::index::get(&mut_names, (index) as usize);
@@ -2028,10 +2030,62 @@ pub(crate) fn check_core_stmt_jump(state: &mut CheckState, word: &str, span: &Sp
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn check_core_stmt_a_stream_let(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, names: &[winnow_grammar::Symbol], shape: &[i64], mutable: bool, ty: Option<&Type>, value: &Expr, span: &Span) {
+    if names.len() != 1 || !shape.is_empty() || mutable || ty.is_some() || !grammar_a_stream_call(world, value) { return; }
+    let fixed = match value {
+        Expr::Call { args, config, .. } => {
+            let mut all = true;
+            for arg in args.iter() { all = all && check_core_stmt_a_fixed_value(&state, world, arg); }
+            for option in config.iter() { all = all && check_core_stmt_a_fixed_value(&state, world, &option.value); }
+            all
+        },
+        _ => false,
+    };
+    if !fixed { return; }
+    let bound = match state.binding(&format!("{}", world.words.resolve(*unsafe { nikaia_std::proven::read(&names, (0) as usize) }))) { Some(__nikaia_value) => __nikaia_value, None => return };
+    state.facts.stream_lets.insert(bound.id, span.start as i64);
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn check_core_stmt_a_stream_let_walked(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, iter: &Expr, span: &Span) -> bool {
+    let name = match iter {
+        Expr::Variable(name, _) => { let name = *name; format!("{}", world.words.resolve(name)) },
+        _ => return false,
+    };
+    let bound = match state.binding(&name) { Some(__nikaia_value) => __nikaia_value, None => return false };
+    let at = match state.facts.stream_lets.get(&bound.id) { Some(__nikaia_value) => nikaia_std::num::value(__nikaia_value), None => return false };
+    state.facts.stream_let_loops.insert(span.start as i64, at);
+    state.facts.walked_stream_lets.insert(at);
+    true
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn check_core_stmt_a_fixed_value(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, value: &Expr) -> bool {
+    match value {
+        Expr::LitStr { .. } => true,
+        Expr::LitBool(_, _) => true,
+        Expr::Variable(name, _) => { let name = *name; match state.binding(&format!("{}", world.words.resolve(name))) {
+            None => false,
+            Some(ref local) => local.without_mut.is_some() && !local.changing && !local.written_mut,
+        } },
+        _ => false,
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
 pub(crate) fn check_core_stmt<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, host: &H, stmt: &Stmt, span: &Span) -> Ty {
     state.flow.literal_receivers.clear();
     match stmt {
-        Stmt::Let { names, shape, mutable, mut_names, deep, ty, value } => { let deep = *deep; let mutable = *mutable; check_core_stmt_let(state, world, host, names, shape, mutable, mut_names, deep, (ty).as_ref(), value, span) },
+        Stmt::Let { names, shape, mutable, mut_names, deep, ty, value } => {
+            let deep = *deep; let mutable = *mutable;
+            let typed = check_core_stmt_let(state, world, host, names, shape, mutable, mut_names, deep, (ty).as_ref(), value, span);
+            check_core_stmt_a_stream_let(state, world, names, shape, mutable, (ty).as_ref(), value, span);
+            typed
+        },
         Stmt::Comptime { name, ty, value, bounds } => { let name = *name; check_core_comptime_binding(state, world, host, name, (ty).as_ref(), value, bounds, span) },
         Stmt::Assign { target, op, value, .. } => check_core_stmt_assign(state, world, host, target, (op).as_ref(), value, span),
         Stmt::While { cond, body } => check_core_stmt_while(state, world, host, cond, body, span),
@@ -2608,6 +2662,7 @@ pub(crate) fn check_core_text_as_one(name: &str) -> String {
 // this was written - see `contracts::sync`.
 pub(crate) fn check_core_a_binding_naming(state: &CheckState, name: &str, viewed: &str) -> bool {
     let found = match state.binding(name) { Some(__nikaia_value) => __nikaia_value, None => return true };
+    if found.open_number.is_some() { return false; }
     check_core_ty_names(&found.ty, viewed)
 }
 

@@ -467,7 +467,7 @@ pub(crate) fn sv_cnf_test_show(name: &str, arena: &TermArena, facts: &[i64], goa
         };
         return nikaia_std::block::Text::from(nikaia_std::concat::plus(out, format!("  refused: {}\n", reason)));
     } };
-    let mut a: i64 = 0; #[allow(clippy::redundant_locals)] let cnf = cnf;
+    let mut a: i64 = 0;
     while ((a) as usize) < cnf.query.atoms.len() {
         let atom = (*unsafe { nikaia_std::proven::read(&cnf.query.atoms, (a) as usize) }).clone();
         if *nikaia_std::index::get(&cnf.definition, (a) as usize) { out = nikaia_std::block::Text::from(nikaia_std::concat::plus(out, format!("  a{}: definition {} <= 0\n", a, sv_cnf_test_row(&atom.row, &cnf.names)))); } else {
@@ -492,17 +492,17 @@ pub(crate) fn sv_cnf_test_show(name: &str, arena: &TermArena, facts: &[i64], goa
     out = nikaia_std::block::Text::from(nikaia_std::concat::plus(out, format!("  clauses: {}\n", nikaia_std::block::Text::from(texts.join(" ")))));
     let mut vars: Vec<i64> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     let mut free: Vec<i64> = vec![];
-    let mut c: i64 = 0; #[allow(clippy::redundant_locals)] let cnf = cnf;
+    let mut c: i64 = 0;
     while c < cnf.names.len() as i64 {
         let n = nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&cnf.names, (c) as usize) }).to_string());
         if n.starts_with("quot#") { free.push(c); } else if !n.starts_with("def#") { vars.push(c); }
         c = unsafe { nikaia_std::proven::add::<i64>(c, 1) };
     }
-    let mut total: i64 = 1; #[allow(clippy::redundant_locals)] let cnf = cnf;
+    let mut total: i64 = 1;
     for _ in vars.iter() { total = total * 5; }
-    let mut agree = 0; #[allow(clippy::redundant_locals)] let cnf = cnf;
-    let mut models = 0; #[allow(clippy::redundant_locals)] let cnf = cnf;
-    let mut code: i64 = 0; #[allow(clippy::redundant_locals)] let cnf = cnf;
+    let mut agree = 0;
+    let mut models = 0;
+    let mut code: i64 = 0;
     while code < total {
         let mut values: Vec<i64> = vec![];
         values.reserve(cnf.names.iter().size_hint().0); for _ in cnf.names.iter() { values.push(0); }

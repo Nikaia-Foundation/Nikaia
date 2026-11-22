@@ -141,7 +141,7 @@ pub(crate) fn dump_variants(shapes: &Shapes, ty: &Ty, name: &str, expr: &str, de
     for variant in variants.iter() {
         if variant.named { return uncrossable(ty, &format!("`{}::{}` has named fields, and variants with named fields can't be computed at build time yet", name, variant.name)); }
         #[allow(unused_mut)] let mut bound: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-        let mut at: i64 = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut bound = bound;
+        let mut at: i64 = 0;
         while ((at) as usize) < variant.carried.len() {
             bound.push(format!("__nikaia_p{}", at));
             at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
@@ -153,7 +153,7 @@ pub(crate) fn dump_variants(shapes: &Shapes, ty: &Ty, name: &str, expr: &str, de
         }
         { use ::core::fmt::Write as _; let _ = out.write_fmt(format_args!("{}    {} => {{\n", pad, pattern)); };
         { use ::core::fmt::Write as _; let _ = out.write_fmt(format_args!("{}        out.push_str(\"(v {} {}\");\n", pad, name, variant.name)); };
-        let mut i: i64 = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut bound = bound;
+        let mut i: i64 = 0;
         while ((i) as usize) < bound.len() {
             { use ::core::fmt::Write as _; let _ = out.write_fmt(format_args!("{}        out.push(' ');\n", pad)); };
             let refused = dump(shapes, unsafe { nikaia_std::proven::read(&variant.carried, (i) as usize) }, unsafe { nikaia_std::proven::read(&bound, (i) as usize) }, depth + 2, out);

@@ -348,9 +348,9 @@ pub(crate) struct FmtShape {
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 pub(crate) fn fmt_shape(toks: &[FmtToken]) -> FmtShape {
-    #[allow(unused_mut)] let mut stack: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-    let mut under: i64 = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut stack = stack;
-    let mut bars = 0; #[allow(unused_mut, clippy::redundant_locals)] let mut stack = stack;
+    let mut stack: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
+    let mut under: i64 = 0;
+    let mut bars = 0;
     let mut depth: Vec<i64> = vec![];
     let mut barred: Vec<bool> = vec![];
     for k in 0..toks.len() as i64 {

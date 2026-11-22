@@ -370,6 +370,13 @@ impl EmitState {
         // **A body that leaves at its end has no `Ok` after it** (#1369).
         let leaves = emit_a_body_that_leaves(world, body)
         if !copied && self.facts.failing_lambdas.contains(node_key(node)) {
+            // **A lambda a `std` step fails through names its `Result`**
+            // (#2736): the walk below takes any, so nothing else says which.
+            let through: Vec[String]? = self.facts.failing_through_lambdas.get(node_key(node))?.clone()
+            if through != null {
+                let thrown: Vec[String] = through ?? []
+                out.push(f"-> {self.rust_result()}<_, {self.channel_of(world, thrown, true, "'_", "'static", false)}> ")
+            }
             out.push(if leaves { "{ " } else { "{ let __nikaia_done = " })
             self.emit_core_block(world, walk, out, host, body, depth, inside with { can_throw: true }, inside_scope, value_tail)
             out.push(if leaves { " }" } else { "; Ok(__nikaia_done) }" })
@@ -1440,7 +1447,9 @@ impl EmitState {
                 else => false,
             }
             let either = call_returns_either(world.words, world.items, scope.function) && !is_null && !self.facts.mixed_choices.contains(node_key(held)) && !self.facts.mixed_leaves.contains_key(node_key(held)) && !never_a_value(held)
-            if flow.can_throw {
+            if flow.returns_out {
+                out.push("return Ok(::std::option::Option::Some(")
+            } else if flow.can_throw {
                 out.push("return Ok(")
             } else {
                 out.push("return ")
@@ -1455,9 +1464,13 @@ impl EmitState {
             if !self.facts.wrapped.contains_key(node_key(held)) && !self.facts.some_tails.contains(node_key(held)) && self.either_into_owned(world, held, scope.function, -1) {
                 out.push(".into()")
             }
-            if flow.can_throw {
+            if flow.returns_out {
+                out.push("))")
+            } else if flow.can_throw {
                 out.push(")")
             }
+        } else if flow.returns_out {
+            out.push("return Ok(::std::option::Option::Some(()))")
         } else if flow.can_throw {
             out.push("return Ok(())")
         } else {
