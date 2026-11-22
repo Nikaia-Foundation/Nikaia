@@ -26,9 +26,8 @@
 use anyhow::{Context, Result, anyhow};
 use std::collections::{BTreeMap, BTreeSet};
 use std::ffi::OsString;
-use std::io::Read;
 use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
+use std::process::Command;
 
 /// `[package]` of the generated manifest.
 #[derive(Debug, Clone)]
@@ -344,27 +343,6 @@ pub fn write_if_changed(path: &Path, contents: &str) -> Result<bool> {
     Ok(true)
 }
 
-/// How `cargo` is invoked for a generated project.
-#[derive(Debug, Clone)]
-pub struct Cargo {
-    pub manifest: PathBuf,
-    /// Where Cargo puts its own artifacts. `None` leaves Cargo to its default,
-    /// which is what lets `CARGO_TARGET_DIR` still be honoured.
-    pub target_dir: Option<PathBuf>,
-    /// The program Cargo runs in place of `rustc`, **for workspace members
-    /// only** (ADR-002 D1).
-    pub wrapper: PathBuf,
-    /// Handed to the wrapper, since Cargo owns its argument list and nothing
-    /// else can reach it.
-    pub env: Vec<(String, OsString)>,
-    /// Each one handed to Cargo as `--config`: what the compiler itself sets
-    /// in Cargo's configuration, such as the CPU level's `rustflags`.
-    pub config: Vec<String>,
-    /// Removed from the child's environment: `RUSTFLAGS` where `env` carries
-    /// `CARGO_ENCODED_RUSTFLAGS` in its place (#753).
-    pub unset: Vec<String>,
-}
-
 /// **Refuse an old toolchain in this compiler's words**
 /// ([ADR-288](../../../docs/specification/adr/adr-288.md) D27).
 ///
@@ -465,111 +443,6 @@ pub fn rustc_version() -> &'static str {
 fn version_parts(text: &str) -> Option<(u32, u32)> {
     let mut parts = text.split(['.', '-']);
     Some((parts.next()?.parse().ok()?, parts.next()?.parse().ok()?))
-}
-
-impl Cargo {
-    /// Runs `cargo <subcommand>`, inheriting stdio so the user sees Cargo's own
-    /// progress and `rustc`'s diagnostics as they happen.
-    ///
-    /// `after` is passed through following `--`, which is how `cargo run` takes
-    /// a program's arguments.
-    pub fn run(&self, subcommand: &str, args: &[String], after: &[String]) -> Result<i32> {
-        let mut command = Command::new(cargo_binary());
-        command.current_dir(crate::cache::Layout::where_tools_start());
-        command.arg(subcommand);
-        command.arg("--manifest-path").arg(&self.manifest);
-        if let Some(dir) = &self.target_dir {
-            command.arg("--target-dir").arg(dir);
-        }
-        for config in &self.config {
-            command.arg("--config").arg(config);
-        }
-        command.args(args);
-        if !after.is_empty() {
-            command.arg("--").args(after);
-        }
-        command.env("RUSTC_WORKSPACE_WRAPPER", &self.wrapper);
-        for name in &self.unset {
-            command.env_remove(name);
-        }
-        for (name, value) in &self.env {
-            command.env(name, value);
-        }
-
-        let status = command
-            .status()
-            .with_context(|| format!("running `cargo {subcommand}`"))?;
-        Ok(status.code().unwrap_or(1))
-    }
-
-    /// The same, with `--message-format=json`, handing back what the backend
-    /// said instead of letting it reach the terminal.
-    ///
-    /// **The one channel a frontend can read a backend diagnostic on.** Cargo's
-    /// human-readable rendering goes to stderr already formatted and spanned
-    /// against a generated file, which is the thing a language frontend must not
-    /// let a user see; `--message-format=json` puts every `rustc` diagnostic on
-    /// *stdout*, one JSON object per line, where something can trade its byte
-    /// offsets for places in the source the user wrote.
-    ///
-    /// Only stdout is captured. Cargo's progress ("Compiling", "Finished") and
-    /// anything it says about resolution stay on stderr and still reach the
-    /// user as they happen, because none of that is about the program's text.
-    ///
-    /// Never used for `run`: the program's own output is on stdout too, and a
-    /// compiler that swallowed it to read diagnostics would be reading the wrong
-    /// thing at the worst moment.
-    pub fn messages(&self, subcommand: &str, args: &[String]) -> Result<(i32, String)> {
-        let mut command = Command::new(cargo_binary());
-        command.current_dir(crate::cache::Layout::where_tools_start());
-        command.arg(subcommand);
-        command.arg("--manifest-path").arg(&self.manifest);
-        if let Some(dir) = &self.target_dir {
-            command.arg("--target-dir").arg(dir);
-        }
-        for config in &self.config {
-            command.arg("--config").arg(config);
-        }
-        command.arg("--message-format=json");
-        command.args(args);
-        command.env("RUSTC_WORKSPACE_WRAPPER", &self.wrapper);
-        for name in &self.unset {
-            command.env_remove(name);
-        }
-        for (name, value) in &self.env {
-            command.env(name, value);
-        }
-        // **stdout piped, stderr inherited, and spelling both out is the point.**
-        // `Command::output` pipes *both*, which would swallow Cargo's progress
-        // and - worse - anything it says that is not a `rustc` diagnostic at
-        // all: a manifest it cannot parse, a dependency it cannot resolve. Those
-        // are not about the program's text, nobody translates them, and a build
-        // that failed in silence is the one outcome worse than an untranslated
-        // error.
-        command.stdout(Stdio::piped());
-        command.stderr(Stdio::inherit());
-
-        let mut child = command
-            .spawn()
-            .with_context(|| format!("running `cargo {subcommand}`"))?;
-        let mut messages = String::new();
-        if let Some(stdout) = child.stdout.as_mut() {
-            stdout
-                .read_to_string(&mut messages)
-                .context("reading what the backend said")?;
-        }
-        let status = child
-            .wait()
-            .with_context(|| format!("waiting for `cargo {subcommand}`"))?;
-        Ok((status.code().unwrap_or(1), messages))
-    }
-}
-
-/// The `cargo` to drive. `CARGO` is set by Cargo itself when the compiler is
-/// run from a build script or a test, and naming the same one avoids driving a
-/// second toolchain by accident.
-fn cargo_binary() -> OsString {
-    std::env::var_os("CARGO").unwrap_or_else(|| OsString::from("cargo"))
 }
 
 /// One `rustc` invocation, as Cargo handed it to the wrapper.

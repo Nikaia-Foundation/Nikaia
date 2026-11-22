@@ -1,0 +1,10 @@
+defaults: id>0=true stdout=out stderr=err
+dir: /
+env: set
+env_remove: []
+env_clear: ONLY=this
+stdin: fed in
+inherited out
+stdout: []
+stderr: kept []
+invalid entry: Other sh: the environment has entries no platform accepts: the name "" in `env` is empty

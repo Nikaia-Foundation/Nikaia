@@ -655,10 +655,21 @@ impl CheckState {
             Expr::Variable(symbol, _) => world.words.resolve(symbol).clone(),
             else => return,
         }
-        if ty.is_a_view() || !is_text_type(ty) {
+        if !is_text_type(ty) {
             return
         }
         let node = node_key(side)
+        // **An item a walk lends is read as `str`** (#2392): below it is a
+        // reference to what the list holds, `&&str` where the list's text
+        // lowered to views, and `+` takes no such side.
+        let walked = self.binding(name)
+        if walked != null && self.flow.lent_text_params.contains(walked?.id ?? -1) {
+            self.facts.lent_concatenated.insert(node)
+            return
+        }
+        if ty.is_a_view() {
+            return
+        }
         let bound = self.frame_of(name)
         if bound < 0 {
             self.facts.lent_concatenated.insert(node)

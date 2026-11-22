@@ -5,9 +5,11 @@
 // each member's own sources, the ledgers, the generated files and the
 // switches, the toolchain checks, the choice between `run_fast`, the built
 // program and `cargo run`, the environment handed to Cargo and a C library's
-// outputs. Moved from Rust (ADR-294, #125, P5c). The program, the lowering,
-// the members' manifests, the generated workspace, Cargo and what reads its
-// JSON stay Rust, behind `ProjectDriveHost`; members are named by index.
+// outputs. Moved from Rust (ADR-294, #125, P5c); the target directory, the
+// sweep of the shared tree and Cargo itself, assembled and run, followed
+// (#2608, ADR-platform-layer-v1 D5). The program, the lowering, the members'
+// manifests, the generated workspace and what reads Cargo's JSON stay Rust,
+// behind `ProjectDriveHost`; members are named by index.
 
 use std::env
 use std::fs
@@ -38,7 +40,7 @@ pub struct ProjectDriveFast {
 
 /// What `project_drive_drive_to` asks of the compiler (`project.rs`'s
 /// `DriveHost`): it holds the project, the build's arguments and the Rust
-/// values made on the way (the members, the lowerings, the workspace, Cargo);
+/// values made on the way (the members, the lowerings, the workspace);
 /// a refusal of a `throws` method is kept there and handed back unchanged.
 pub trait ProjectDriveHost {
     /// The project's entry point (`src/main.nika` under its root).
@@ -137,19 +139,23 @@ pub trait ProjectDriveHost {
     fn allowlist(ref self) -> fs::Path? sync throws
     /// The `--cpu` flags for `rustc`, null where none.
     fn cpu_rustflags(ref self) -> String? sync throws
-    /// Makes the Cargo of this build: `manifest`, `env`, the variables to
-    /// `unset`, and whether it builds in the shared directory of the user's
-    /// cache (ADR-002 D4).
-    fn make_cargo(ref self, manifest: ref fs::Path, env: ref Vec[(String, String)], unset: ref Vec[String], shared: bool) sync throws
-    /// The directory Cargo builds `manifest` in, `shared` as `make_cargo`
-    /// takes it: the tree of the user's cache, or where Cargo puts it unasked
-    /// (ADR-platform-layer-v1 D2, D7 item 2).
-    fn target_dir(ref self, manifest: ref fs::Path, shared: bool) -> fs::Path sync throws
+    /// **The tree of the user's cache for this build's target and switches**
+    /// (ADR-002 D4, `Sysroot::rlib_cache`), where a build that asked for no
+    /// directory of its own builds: a path handed through
+    /// (ADR-platform-layer-v1 D2); `project_drive_target_dir` chooses it.
+    fn rlib_cache(ref self) -> fs::Path sync throws
+    /// **Where Cargo and every tool rustup starts are started** (ADR-325
+    /// D1): a directory of the compiler's own under the user cache.
+    fn where_tools_start(ref self) -> fs::Path sync
+    /// **This compiler's own binary**, which Cargo runs in place of `rustc`
+    /// (ADR-002 D1): one platform call. Not `env::current_exe`, which names
+    /// the `nikaia` that started this one where one did (ADR-program-path-1).
+    fn own_exe(ref self) -> fs::Path sync throws
+    /// What the build hands Cargo as `--config`: the CPU level's
+    /// `rustflags` (a value of the settings, handed through).
+    fn cargo_config(ref self) -> Vec[String] sync
     /// Whether the package is built as a C library.
     fn is_library(ref self) -> bool sync
-    /// Cargo's `verb` (`build`, or `check` for `nikaia check --rustc`) with
-    /// `args`: its exit code and its JSON messages.
-    fn cargo_messages(ref self, verb: ref String, args: ref Vec[String]) -> (i32, String) sync throws
     /// Holds the user cache to its limit.
     fn settle(ref self) sync
     /// Says what the backend said, against the `.nika` line it was about.
@@ -165,8 +171,12 @@ pub trait ProjectDriveHost {
     /// Records the versions Cargo resolved in `nikaia.lock`: why it could
     /// not, or null.
     fn record_resolved_dependencies(ref self) -> String? sync
-    /// `cargo run` with `args` and the program's arguments: its exit code.
-    fn cargo_run(ref self, args: ref Vec[String]) -> i32 sync throws
+    /// The program's own arguments, which `cargo run` hands it after `--`.
+    fn program_args(ref self) -> Vec[String] sync
+    /// What `nikaia run` hands the program it starts in its environment
+    /// (ADR-program-path-1 D3): this `nikaia`, and the file the program
+    /// stands in as.
+    fn launch_vars(ref self) -> Vec[(String, String)] sync
     /// Runs `binary` with the program's arguments: its exit code.
     fn run_directly(ref self, binary: ref fs::Path) -> i32 sync throws
 }
@@ -463,7 +473,7 @@ pub fn project_drive_drive_to[H: ProjectDriveHost](host: ref H, subcommand: Stri
             unset.push("RUSTFLAGS")
         },
     }
-    host.make_cargo(manifest, env, unset, shared)
+    let cargo = project_drive_make_cargo(host, manifest, env, unset, shared)
 
     // **`build` first, always, and its diagnostics read rather than
     // relayed** (ADR-005 D7, Part III C.1). Cargo's stderr is Rust about a
@@ -508,7 +518,7 @@ pub fn project_drive_drive_to[H: ProjectDriveHost](host: ref H, subcommand: Stri
     // sources), the sysroot of `std`'s sources and the target directory; for
     // a batch of test programs, the batch's directory, which holds its list,
     // its carrier and its programs (`project_tests_batches`).
-    let mut roots: Vec[fs::Path] = [host.project_root(), host.std_sources(), host.target_dir(manifest, shared)]
+    let mut roots: Vec[fs::Path] = [host.project_root(), host.std_sources(), project_drive_target_dir(host, manifest, shared)]
     for member in members {
         if !roots.contains(member.root) {
             roots.push(member.root.clone())
@@ -529,7 +539,7 @@ pub fn project_drive_drive_to[H: ProjectDriveHost](host: ref H, subcommand: Stri
         false => null,
     }
     let (built_code, messages) = match fresh {
-        null => host.cargo_messages(verb, build_args),
+        null => project_drive_cargo_messages(host, cargo, verb, build_args),
         said => (0, said.clone()),
     }
     // Cargo ran: the record now names this build, or none at all (a
@@ -603,7 +613,7 @@ pub fn project_drive_drive_to[H: ProjectDriveHost](host: ref H, subcommand: Stri
         // Where there is none the old path is taken, so this can only remove
         // a duplicate and never lose a run.
         code = match binary {
-            null => host.cargo_run(build_args),
+            null => project_drive_cargo_run(host, cargo, build_args),
             path => host.run_directly(path),
         }
     }
@@ -840,7 +850,7 @@ fn project_drive_cargo_env[H: ProjectDriveHost](host: ref H, manifest: ref fs::P
     let mut env = host.settings_env()
     env.push(("NIKAIA_RUSTC_WRAPPER", "1"))
     env.push(("NIKAIA_GEN_DIR", host.gen_dir().to_text()))
-    env.push(("NIKAIA_TARGET_DIR", host.target_dir(manifest, shared).to_text()))
+    env.push(("NIKAIA_TARGET_DIR", project_drive_target_dir(host, manifest, shared).to_text()))
     // The program's crate is named for its project in the shared directory
     // (#495), and its generated file keeps its package's name.
     if shared {
@@ -867,6 +877,240 @@ fn project_drive_cargo_env[H: ProjectDriveHost](host: ref H, manifest: ref fs::P
         list => env.push(("NIKAIA_ALLOW_READ_FROM_LIST", list.to_text())),
     }
     return env
+}
+
+/// **How Cargo is started for one build** (moved from the orchestrator's
+/// `Cargo`, ADR-platform-layer-v1 D5): the manifest, the `--target-dir`
+/// handed to it (null leaves Cargo to its own choice, which is what lets
+/// `CARGO_TARGET_DIR` still be honoured), this compiler as the wrapper Cargo
+/// runs for workspace members only (ADR-002 D1), the environment handed to
+/// the wrapper, each `--config`, and the variables taken out of Cargo's
+/// environment (`RUSTFLAGS` where `env` carries `CARGO_ENCODED_RUSTFLAGS`,
+/// #753).
+struct ProjectDriveCargo {
+    manifest: fs::Path,
+    target_dir: fs::Path?,
+    wrapper: fs::Path,
+    env: Vec[(String, String)],
+    config: Vec[String],
+    unset: Vec[String],
+}
+
+/// **The directory Cargo builds `manifest` in** (ADR-002 D4), which the
+/// wrapper learns as `NIKAIA_TARGET_DIR` (ADR-raw-sinks-1 D17.6): the tree of
+/// the user's cache for this build's settings when `shared`, else where
+/// Cargo puts it unasked, `CARGO_TARGET_DIR` (relative to where the tools
+/// start, since Cargo is started there) or `target` beside the manifest.
+fn project_drive_target_dir[H: ProjectDriveHost](host: ref H, manifest: ref fs::Path, shared: bool) -> fs::Path sync throws {
+    if shared {
+        return host.rlib_cache()
+    }
+    match env::var("CARGO_TARGET_DIR") {
+        null => {},
+        dir => return host.where_tools_start().join(dir),
+    }
+    let here: fs::Path = "."
+    return (manifest.parent() ?? here).join("target")
+}
+
+/// **Makes the Cargo of this build**: `manifest`, the wrapper's `env`, the
+/// variables to `unset`, and whether it builds in the `shared` tree of the
+/// user's cache, which it sweeps first (`project_drive_sweep_programs`).
+fn project_drive_make_cargo[H: ProjectDriveHost](host: ref H, manifest: ref fs::Path, env: ref Vec[(String, String)], unset: ref Vec[String], shared: bool) -> ProjectDriveCargo throws {
+    let mut target_dir: fs::Path? = null
+    if shared {
+        let tree = project_drive_target_dir(host, manifest, shared)
+        project_drive_sweep_programs(tree, host.root_tag(), host.project_root())
+        target_dir = tree
+    }
+    return ProjectDriveCargo {
+        manifest: manifest.clone(),
+        target_dir: target_dir,
+        wrapper: host.own_exe(),
+        env: env.clone(),
+        config: host.cargo_config(),
+        unset: unset.clone(),
+    }
+}
+
+/// What a shared tree records of the project each tag belongs to.
+comptime PROJECT_DRIVE_PROJECTS: ref String = ".nikaia-projects"
+
+/// **A program's artifacts leave a shared tree with its project** (moved
+/// from the orchestrator's `cache::sweep_programs`). Every project builds its
+/// program in the one tree, under a crate name that ends in the project's
+/// tag (`<name>_<tag>`), and Cargo lifts its binary out as `<name>-<tag>`.
+/// The binaries are tens of megabytes each, and a deleted project left them
+/// there for ever: a test suite that builds hundreds of throwaway projects
+/// grew the tree by gigabytes a run. So a build records which directory its
+/// `tag` belongs to, and removes what every tag whose directory is gone left
+/// in the tree. A project that no longer exists is not building, so nothing
+/// is taken from a build in flight. Failure is a fuller disk, never a failed
+/// build.
+fn project_drive_sweep_programs(tree: ref fs::Path, tag: ref String, project: ref fs::Path) {
+    let records = tree.join(PROJECT_DRIVE_PROJECTS)
+    fs::create_dir(records, fs::Root::Anywhere; recursive: true) catch {}
+    fs::write(records.join(tag), fs::Root::Anywhere, project.to_text()) catch {}
+    let names = fs::read_dir(records, fs::Root::Anywhere) catch { return }
+    let mut gone: Vec[String] = []
+    for name in names {
+        let root = fs::read_to_string(records.join(name), fs::Root::Anywhere) catch { continue }
+        let root_path: fs::Path = root
+        if !(fs::exists(root_path, fs::Root::Anywhere) catch { false }) {
+            gone.push(name.display())
+        }
+    }
+    if gone.len() == 0 {
+        return
+    }
+    let subs: Vec[String] = ["", "deps", ".fingerprint", "incremental", "build"]
+    for dir in project_drive_profile_dirs(tree) {
+        for sub in subs {
+            let at = if sub.len() == 0 { dir.clone() } else { dir.join(sub) }
+            let entries = fs::read_dir(at, fs::Root::Anywhere) catch { continue }
+            for entry in entries {
+                // The crate is `<name>_<tag>`; the binary Cargo lifts out of
+                // `deps/` is `<name>-<tag>`.
+                let name = entry.display()
+                if gone.iter().any(fn(tag) { name.contains(f"_{tag}") || name.contains(f"-{tag}") }) {
+                    let path = at.join(entry)
+                    fs::remove(path, fs::Root::Anywhere; recursive: project_drive_is_dir(path)) catch {}
+                }
+            }
+        }
+    }
+    for tag in gone {
+        fs::remove(records.join(tag), fs::Root::Anywhere) catch {}
+    }
+}
+
+/// The profile directories of a Cargo target directory, `debug/` and
+/// `<triple>/debug/` and their kin: the ones that hold a `deps/`, or a
+/// `build/` under the layout Cargo 1.100 always uses (#2136), where each
+/// crate is in `build/<crate>/<hash>/`.
+fn project_drive_profile_dirs(tree: ref fs::Path) -> Vec[fs::Path] sync {
+    let mut out: Vec[fs::Path] = []
+    for dir in project_drive_child_dirs(tree) {
+        if project_drive_is_profile(dir) {
+            out.push(dir.clone())
+        } else {
+            for inner in project_drive_child_dirs(dir) {
+                if project_drive_is_profile(inner) {
+                    out.push(inner.clone())
+                }
+            }
+        }
+    }
+    return out
+}
+
+/// Whether `dir` is a profile directory of a Cargo target directory.
+fn project_drive_is_profile(dir: ref fs::Path) -> bool sync {
+    return project_drive_is_dir(dir.join("deps")) || project_drive_is_dir(dir.join("build"))
+}
+
+/// The directories directly below `dir`; none where it cannot be read.
+fn project_drive_child_dirs(dir: ref fs::Path) -> Vec[fs::Path] sync {
+    let names = fs::read_dir(dir, fs::Root::Anywhere) catch { return [] }
+    return names.iter().map(fn(name) { dir.join(name) }).filter(fn(path) { project_drive_is_dir(path) }).collect()
+}
+
+/// Whether `path` is a directory; false where it cannot be read.
+fn project_drive_is_dir(path: ref fs::Path) -> bool sync {
+    let meta = fs::metadata(path, fs::Root::Anywhere) catch { return false }
+    return meta.is_dir()
+}
+
+/// **Cargo's command line** for `verb`: the manifest, the target directory
+/// where one was chosen, each `--config`, the JSON channel where `json`, the
+/// build's `args`, and `after` following `--`, which is how `cargo run` takes
+/// a program's arguments.
+fn project_drive_cargo_args(cargo: ref ProjectDriveCargo, verb: ref String, json: bool, args: ref Vec[String], after: ref Vec[String]) -> Vec[String] sync throws {
+    let mut all: Vec[String] = [verb.clone(), "--manifest-path", cargo.manifest.to_text()]
+    match cargo.target_dir {
+        null => {},
+        dir => {
+            all.push("--target-dir")
+            all.push(dir.to_text())
+        },
+    }
+    for config in cargo.config {
+        all.push("--config")
+        all.push(config.clone())
+    }
+    if json {
+        all.push("--message-format=json")
+    }
+    for arg in args {
+        all.push(arg.clone())
+    }
+    if after.len() > 0 {
+        all.push("--")
+        for arg in after {
+            all.push(arg.clone())
+        }
+    }
+    return all
+}
+
+/// **Cargo's environment**: this compiler as `RUSTC_WORKSPACE_WRAPPER`, then
+/// the wrapper's own variables, a later pair replacing an earlier one, then
+/// `more`.
+fn project_drive_cargo_vars(cargo: ref ProjectDriveCargo, more: ref Vec[(String, String)]) -> Vec[(String, String)] sync throws {
+    let mut vars: Vec[(String, String)] = [("RUSTC_WORKSPACE_WRAPPER", cargo.wrapper.to_text())]
+    for pair in cargo.env {
+        vars.push(pair.clone())
+    }
+    for pair in more {
+        vars.push(pair.clone())
+    }
+    return vars
+}
+
+/// The `cargo` to drive: `CARGO`, set by Cargo itself when the compiler is
+/// run from a build script or a test (naming the same one avoids driving a
+/// second toolchain by accident), else `cargo` on the `PATH`.
+fn project_drive_cargo_program() -> String sync {
+    return env::var("CARGO") ?? "cargo"
+}
+
+/// A program's exit code as Cargo's caller reads it: `1` for one ended by a
+/// signal, which has none, since claiming success is the one answer that
+/// must not be given.
+fn project_drive_exit_code(code: i64) -> i32 sync {
+    if code < 0 {
+        return 1
+    }
+    return code as i32
+}
+
+/// **Cargo's `verb` with `--message-format=json`** (`build`, or `check` for
+/// `nikaia check --rustc`): its exit code and what the backend said.
+/// **stdout captured, stderr inherited, and spelling both out is the point**:
+/// every `rustc` diagnostic is one JSON object a line on stdout, where the
+/// translator can trade its offsets for places in the source the user wrote
+/// (ADR-005 D7, Part III C.1); Cargo's progress and what it says that is not
+/// a diagnostic (a manifest it cannot parse, a dependency it cannot resolve)
+/// stay on stderr and reach the user as they happen, since a build that
+/// failed in silence is worse than an untranslated error. Never `run`: the
+/// program's own output is on stdout too.
+fn project_drive_cargo_messages[H: ProjectDriveHost](host: ref H, cargo: ref ProjectDriveCargo, verb: ref String, args: ref Vec[String]) -> (i32, String) throws {
+    let after: Vec[String] = []
+    let more: Vec[(String, String)] = []
+    let ran = process::run(project_drive_cargo_program(), project_drive_cargo_args(cargo, verb, true, args, after); dir: host.where_tools_start().display(), env: project_drive_cargo_vars(cargo, more), env_remove: cargo.unset.clone(), stderr: process::Stream::Inherited) catch {
+        throw ProjectDriveRefusal::Failed(f"running `cargo {verb}`: {error}")
+    }
+    return (project_drive_exit_code(ran.code), ran.stdout.clone())
+}
+
+/// **`cargo run`** with `args` and the program's own arguments, every stream
+/// the caller's, so the user sees Cargo's progress and the program as they
+/// happen, and the program gets what `nikaia run` hands it: its exit code.
+fn project_drive_cargo_run[H: ProjectDriveHost](host: ref H, cargo: ref ProjectDriveCargo, args: ref Vec[String]) -> i32 throws {
+    let ran = process::run(project_drive_cargo_program(), project_drive_cargo_args(cargo, "run", false, args, host.program_args()); dir: host.where_tools_start().display(), env: project_drive_cargo_vars(cargo, host.launch_vars()), env_remove: cargo.unset.clone(), stdin: process::Input::Inherited, stdout: process::Stream::Inherited, stderr: process::Stream::Inherited) catch {
+        throw ProjectDriveRefusal::Failed(f"running `cargo run`: {error}")
+    }
+    return project_drive_exit_code(ran.code)
 }
 
 /// Whether `[package]` key `key` of `nikaia.toml` is one a published crate
@@ -1022,7 +1266,7 @@ fn project_drive_rust_crate(name: ref String) -> String {
 /// `project_drive_rust_manifest`. The next build overwrites each file.
 /// Under `check --rustc` (`checking`, #1657) Cargo's `check` runs on the
 /// entry's crate, what rustc said is reported, and no directory is printed.
-fn project_drive_rust_library[H: ProjectDriveHost](host: ref H, members: ref Vec[ProjectMembersMember], rust: ref Vec[String], checking: bool) -> i32 sync throws {
+fn project_drive_rust_library[H: ProjectDriveHost](host: ref H, members: ref Vec[ProjectMembersMember], rust: ref Vec[String], checking: bool) -> i32 throws {
     let target = host.own_dir().parent() ?? throw ProjectDriveRefusal::Failed(f"{host.own_dir().display()} has no directory")
     let made = target.join("rust-library")
     let features = host.features()
@@ -1057,18 +1301,17 @@ fn project_drive_rust_library[H: ProjectDriveHost](host: ref H, members: ref Vec
     // **Every feature alone, the core, and all together** (D6): what rustc
     // refuses is the feature's, reported on its root.
     // Cargo's own wrapper is left out: the crate is plain Rust now.
-    if checked != null || checking {
-        let check_dir = env::var("CARGO_TARGET_DIR") ?? target.join("rust-library-check").display()
-        let mut check_env: Vec[(String, String)] = []
-        check_env.push(("CARGO_TARGET_DIR", check_dir))
-        check_env.push(("RUSTC_WORKSPACE_WRAPPER", ""))
-        let unset: Vec[String] = []
-        host.make_cargo(crate_dir.join("Cargo.toml"), check_env, unset, false)
-    }
+    let check_dir = env::var("CARGO_TARGET_DIR") ?? target.join("rust-library-check").display()
+    let mut check_env: Vec[(String, String)] = []
+    check_env.push(("CARGO_TARGET_DIR", check_dir))
+    check_env.push(("RUSTC_WORKSPACE_WRAPPER", ""))
+    let unset: Vec[String] = []
+    let check_manifest = crate_dir.join("Cargo.toml")
     let applied = checked ?? {
         if checking {
+            let cargo = project_drive_make_cargo(host, check_manifest, check_env, unset, false)
             let args: Vec[String] = ["--quiet"]
-            let (code, said) = host.cargo_messages("check", args)
+            let (code, said) = project_drive_cargo_messages(host, cargo, "check", args)
             host.report(said)
             return code
         }
@@ -1082,10 +1325,11 @@ fn project_drive_rust_library[H: ProjectDriveHost](host: ref H, members: ref Vec
     if applied.names.len() > 1 {
         runs.push(("*", ["--all-features"]))
     }
+    let cargo = project_drive_make_cargo(host, check_manifest, check_env, unset, false)
     for run in runs {
         let mut args: Vec[String] = ["--quiet"]
         for arg in run.1 { args.push(arg.clone()) }
-        let (code, said) = host.cargo_messages("check", args)
+        let (code, said) = project_drive_cargo_messages(host, cargo, "check", args)
         if code == 0 { continue }
         // A feature alone is that feature's; the core or all together is the
         // feature whose item rustc names, else the table's.

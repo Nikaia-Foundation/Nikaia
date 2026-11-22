@@ -8,6 +8,17 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1547] — 2026-11-22
+
+**Builders' changes (#2608, #2748)**
+- The outer build's choices move into Nikaia: project_drive.nika chooses Cargo's target directory, sweeps gone projects' programs out of the shared rlib tree and runs Cargo through std::process; the Rust host hands only platform values (rlib cache path, tools directory, own executable, CPU config, program arguments and variables). A dropped `catch` around a call with a failing argument no longer lowers to a unit wrapped in Ok.
+- process::spawn takes run's options (dir, env, env_remove, env_clear, stdin, stdout, stderr); a stream may be process::Stream::Discarded or process::Stream::File(path) for run and spawn; Child::id(); a spawned child outlives the program (ADR-243 D11)
+
+## [0.0.1546] — 2026-11-22
+
+**check, emit, par: a par_iter walk whose lambda fails runs every element and keeps every failure, the first in input order thrown with the others as its secondary list (#2736), #2681)**
+- A `par_iter` walk whose lambda can fail runs every element: the first failure in input order is thrown, and the others are its `secondary` list (ADR-async-5 D26); a failing `filter` on `par_iter` compiles at `user_parallelism = yes`.
+
 ## [0.0.1545] — 2026-11-22
 
 **Builders' changes (#2118, #2581, #2582, #2583, #2584, #2586)**

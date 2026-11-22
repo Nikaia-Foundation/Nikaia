@@ -5,7 +5,7 @@
 // this was written - see `contracts::sync`.
 pub fn indented(full: &str) -> String {
     let mut out = String::from("\n  and then:");
-    for line in full.lines() { out = nikaia_std::block::Text::from(nikaia_std::concat::plus(nikaia_std::block::Text::from(nikaia_std::concat::plus(out, "\n  ")), line)); }
+    for line in full.lines() { out = nikaia_std::block::Text::from(nikaia_std::concat::plus(nikaia_std::block::Text::from(nikaia_std::concat::plus(out, "\n  ")), ::core::convert::AsRef::<str>::as_ref(&*line))); }
     out
 }
 
