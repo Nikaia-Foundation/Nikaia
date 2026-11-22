@@ -693,12 +693,25 @@ pub fn to_lowercase(s: &str, place: Place) -> Text {
 pub trait Needle {
     /// Where it is found in `s`, and what it matched, as `match_indices`.
     fn found_in(self, s: &str) -> impl Iterator<Item = (usize, &str)>;
+    /// The one ASCII byte it is, if it is one: what `str::replace` rewrites
+    /// byte for byte.
+    #[inline]
+    fn one_byte(&self) -> Option<u8> {
+        None
+    }
 }
 
 impl Needle for &str {
     #[inline]
     fn found_in(self, s: &str) -> impl Iterator<Item = (usize, &str)> {
         s.match_indices(self)
+    }
+    #[inline]
+    fn one_byte(&self) -> Option<u8> {
+        match self.as_bytes() {
+            [byte] => Some(*byte),
+            _ => None,
+        }
     }
 }
 
@@ -707,6 +720,10 @@ impl Needle for &String {
     fn found_in(self, s: &str) -> impl Iterator<Item = (usize, &str)> {
         s.match_indices(self.as_str())
     }
+    #[inline]
+    fn one_byte(&self) -> Option<u8> {
+        self.as_str().one_byte()
+    }
 }
 
 impl Needle for &Text {
@@ -714,12 +731,20 @@ impl Needle for &Text {
     fn found_in(self, s: &str) -> impl Iterator<Item = (usize, &str)> {
         s.match_indices(self.as_str())
     }
+    #[inline]
+    fn one_byte(&self) -> Option<u8> {
+        self.as_str().one_byte()
+    }
 }
 
 impl Needle for char {
     #[inline]
     fn found_in(self, s: &str) -> impl Iterator<Item = (usize, &str)> {
         s.match_indices(self)
+    }
+    #[inline]
+    fn one_byte(&self) -> Option<u8> {
+        u8::try_from(*self).ok().filter(u8::is_ascii)
     }
 }
 
@@ -759,6 +784,28 @@ pub fn replace_in<N: Needle + Copy>(text: &mut Text, from: N, to: &str) {
 /// needle, which matches between every two characters, is made as
 /// [`replacen`] makes it.
 pub fn replacen_in<N: Needle + Copy>(text: &mut Text, from: N, to: &str, count: usize) {
+    // One ASCII byte for one is rewritten where it stands, as `str::replace`
+    // does it, with no search (#1589): both are whole characters, so the
+    // text stays UTF-8.
+    if let (Some(old), [new]) = (from.one_byte(), to.as_bytes()) {
+        if count == usize::MAX {
+            for byte in text.bytes.iter_mut() {
+                if *byte == old {
+                    *byte = *new;
+                }
+            }
+        } else {
+            for byte in text
+                .bytes
+                .iter_mut()
+                .filter(|byte| **byte == old)
+                .take(count)
+            {
+                *byte = *new;
+            }
+        }
+        return;
+    }
     let mut found = 0;
     let mut matched = 0;
     let mut empty = false;
