@@ -106,11 +106,11 @@ those of the Rust entry. Tokens are given once per program.
 | fasta | Nikaia, `--cpu=x86-64-v3` | 80.6 | 1.063 | 77.7 | 1.029 | 3.02 |  |
 | fasta | Nikaia for speed, `--cpu=x86-64` | 27.5 | 0.015 | 20.2 | 0.016 | 0.78 | 773 |
 | fasta | Nikaia for speed, `--cpu=x86-64-v3` | 27.5 | 0.015 | 20.2 | 0.015 | 0.78 |  |
-| k-nucleotide | Rust entry 7, `target-cpu=ivybridge` | 359.5 | 0.215 | 314.0 | 0.218 | 1.00 | 1543 |
-| k-nucleotide | Nikaia, `--cpu=x86-64` | 923.7 | 0.203 | 869.1 | 0.170 | 2.77 | 509 |
+| k-nucleotide | Rust entry 7, `target-cpu=ivybridge` | 359.5 | 0.215 | 314.3 | 0.247 | 1.00 | 1543 |
+| k-nucleotide | Nikaia, `--cpu=x86-64` | 923.7 | 0.203 | 869.1 | 0.170 | 2.76 | 509 |
 | k-nucleotide | Nikaia, `--cpu=x86-64-v3` | 953.6 | 0.162 | 822.0 | 0.174 | 2.62 |  |
-| k-nucleotide | Nikaia for speed, `--cpu=x86-64` | 398.6 | 0.174 | 351.2 | 0.174 | 1.12 | 630 |
-| k-nucleotide | Nikaia for speed, `--cpu=x86-64-v3` | 370.4 | 0.174 | 337.0 | 0.174 | 1.07 |  |
+| k-nucleotide | Nikaia for speed, `--cpu=x86-64` | 349.6 | 0.167 | 295.0 | 0.174 | 0.94 | 634 |
+| k-nucleotide | Nikaia for speed, `--cpu=x86-64-v3` | 321.4 | 0.167 | 280.8 | 0.176 | 0.89 |  |
 | reverse-complement | Rust entry 1, `target-cpu=ivybridge` | 1.9 | 0.000 | 1.9 | 0.000 | 1.00 | 1966 |
 | reverse-complement | Rust entry 1, one thread, `target-cpu=ivybridge` | 1.9 | 0.000 | 1.9 | 0.000 | 1.00 |  |
 | reverse-complement | Nikaia, `--cpu=x86-64` | 45.5 | 0.069 | 40.4 | 0.069 | 20.86 | 385 |
@@ -168,13 +168,16 @@ figure has moved since, the paragraph says so.
   was added the same algorithm in plain Rust counted 84.1 against Nikaia's
   97.3, all of the extra in `Text::push`. Since then `Text::push` is inlined
   at the call site (#1864), and the plain row fell from 3.66x to 3.08x.
-* **k-nucleotide**, 2.77x and 1.12x. The input is the one fasta wrote for
+* **k-nucleotide**, 2.76x and 0.94x. The input is the one fasta wrote for
   the run, so both programs read it with `trusted: true` (ADR-365 D2) and
   their maps take the fast hash, as Rust's foldhash is; with the keyed
   SipHash-1-3 of untrusted input they counted 6.37x and 3.14x. When it was
   added, the plain program also spent 545 instructions a letter in UTF-8
   checks of each cut of the input; it fell from 8.08x to 6.37x once a cut of
-  a text's own bytes read back as text without the check.
+  a text's own bytes read back as text without the check. The program for
+  speed fell from 1.12x to 0.94x when `count` refused `k < 1` as well: only
+  then is `k - 1` a valid index, and the compiler drops the bounds check on
+  each letter's read.
 * **reverse-complement**, 20.9x and 5.5x. The same two algorithms in plain
   Rust count 39.2 and 15.3 a letter. The entry's algorithm makes the gap: it
   uses SSSE3 `pshufb` as a run-time complement table on 16 bytes at a time,
