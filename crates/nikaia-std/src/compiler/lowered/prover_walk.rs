@@ -1151,6 +1151,12 @@ pub(crate) fn prover_filled(scope: &mut ProverScope, fills: &collections::BTreeM
     }
 }
 
+pub(crate) fn prover_whole_element(walk: &mut ProverWalk, inner: &mut ProverScope, name: &str, unsigned: bool) {
+    inner.ints.insert(nikaia_std::block::Text::from(name.to_string()));
+    inner.loose.insert(nikaia_std::block::Text::from(name.to_string()));
+    if unsigned { inner.not_negative(&mut walk.arena, name); }
+}
+
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn prover_for(walk: &mut ProverWalk, bindings: &[winnow_grammar::Symbol], mutable: bool, iter: &Expr, body: &Block, span: Span, scope: &mut ProverScope, at: &ProverWhere, nested: &ProverWhere, program: &Program, words: &winnow_grammar::InternerContext, own: &Ledger, library: &Ledger, ask: &mut dyn FnMut(&logic::TermArena, &[i64], i64) -> SolverAnswer, model: &mut dyn FnMut(&logic::TermArena, &[i64], i64) -> Option<collections::BTreeMap<String, i64>>, escape: &mut dyn FnMut(&str) -> String, holes_of: &mut dyn FnMut(&Expr) -> Vec<Expr>, unaliased: &mut dyn FnMut(&str) -> String, written_of: &mut dyn FnMut(&Expr) -> String, condition: &mut dyn FnMut(&str, &collections::BTreeSet<String>) -> Vec<logic::SolverTerm>) {
     prover_expr(walk, iter, span, &scope, nested, program, words, own, library, &mut &mut *ask, &mut &mut *model, &mut &mut *escape, &mut &mut *holes_of, &mut &mut *unaliased, &mut &mut *written_of, &mut &mut *condition);
@@ -1219,7 +1225,13 @@ pub(crate) fn prover_for(walk: &mut ProverWalk, bindings: &[winnow_grammar::Symb
         match walk.state.whole_lets.get(&(span.start as i64)) {
             None => { },
             Some(element) => {
-                if has_a_length(element) { inner.has_length(&mut walk.arena, words.resolve(*unsafe { nikaia_std::proven::read(&bindings, (0) as usize) }), None); } else {
+                if has_a_length(element) { inner.has_length(&mut walk.arena, words.resolve(*unsafe { nikaia_std::proven::read(&bindings, (0) as usize) }), None); } else if is_whole_number(element) {
+                    let unsigned = element.starts_with('u');
+                    match iter {
+                        Expr::Range { .. } => { },
+                        _ => { prover_whole_element(walk, &mut inner, words.resolve(*unsafe { nikaia_std::proven::read(&bindings, (0) as usize) }), unsigned); },
+                    }
+                } else {
                     let kind = nikaia_std::block::Text::from(element.to_string());
                     let mut not_params: collections::BTreeSet<String> = collections::BTreeSet::new();
                     prover_parameter_fields(walk, &mut inner, &mut not_params, words.resolve(*unsafe { nikaia_std::proven::read(&bindings, (0) as usize) }), &kind, false, program, words);
