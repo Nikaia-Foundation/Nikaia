@@ -469,6 +469,11 @@ impl EmitState {
         }
         if streamed {
             let rule = match entered { Some(__nikaia_value) => __nikaia_value, None => return Ok(()) };
+            let item_name = match rule.ret_type {
+                None => String::from(""),
+                Some(ref ty) => emit_text(world, ty.name),
+            };
+            if self.emit_stream_item_views(&item_name) { self.emit_stream_thread_refused(&walk, &format!("{}::{}", name, rule_name), &item_name, Some(flow.statement))?; }
             out.push("Ok::<_, nikaia_std::grammar::ParseError>({ let __wg_source = ::std::convert::AsRef::<[u8]>::as_ref(&*");
             self.emit_expr(world, walk, out, host, input, depth, flow, scope)?;
             out.push(").to_vec(); ");

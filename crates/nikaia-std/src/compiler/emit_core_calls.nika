@@ -825,6 +825,7 @@ impl EmitState {
                 // drives it, with this build's parallelism.
                 let mut pieces = false
                 let mut streamed = false
+                let mut stream_item: String = ""
                 let mut options: Vec[String] = []
                 let contract = self.own_contracts.functions.get(f"{package}{book}::{rule}")
                 if contract != null {
@@ -836,7 +837,16 @@ impl EmitState {
                     match held.signature {
                         signature => {
                             match signature.result {
-                                result => { streamed = a_sequence_type(result) },
+                                result => {
+                                    streamed = a_sequence_type(result)
+                                    stream_item = match result {
+                                        Ty::Seq { item, .. } => match item {
+                                            Ty::Named { name, .. } => name.clone(),
+                                            else => "",
+                                        },
+                                        else => "",
+                                    }
+                                },
                                 null => {},
                             }
                             for option in signature.config {
@@ -862,6 +872,9 @@ impl EmitState {
                         self.emit_expr(world, walk, out, host, args[0], depth, flow, scope)
                         out.push(")")
                     } else {
+                        if self.emit_stream_item_views(stream_item) {
+                            self.emit_stream_thread_refused(walk, f"{package}{book}::{rule}", stream_item, flow.statement)
+                        }
                         out.push(f"Ok::<_, nikaia_std::grammar::ParseError>({package}{emit_stream_walk_name(book, rule)}(::std::convert::AsRef::<[u8]>::as_ref(&*")
                         self.emit_expr(world, walk, out, host, args[0], depth, flow, scope)
                         out.push(").to_vec()")

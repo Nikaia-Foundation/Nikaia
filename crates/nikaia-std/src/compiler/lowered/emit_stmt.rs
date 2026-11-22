@@ -329,6 +329,20 @@ impl EmitState {
         let here = flow.at(at);
         self.write_keep_prelude(walk, out, &scope.function, at, depth);
         self.emit_core_hold_temporaries(world, walk, out, host, node, span, depth, &tail, here, scope)?;
+        walk.stream_use = match node {
+            Stmt::Let { names, value, .. } => match value {
+                Expr::Call { .. } => if names.len() == 1 { format!("is held in `{}` and not walked by one `for` alone", emit_text(world, *unsafe { nikaia_std::proven::read(&names, (0) as usize) })) } else { String::from("is held in a name") },
+                _ => String::from(""),
+            },
+            Stmt::Return(value) => match value {
+                None => String::from(""),
+                Some(given) => match given {
+                    Expr::Call { .. } => String::from("is handed back"),
+                    _ => String::from(""),
+                },
+            },
+            _ => String::from(""),
+        };
         match node {
             Stmt::Let { names, shape, mutable, mut_names, ty, value, .. } => {
                 let mutable = *mutable;
@@ -944,9 +958,11 @@ impl EmitState {
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn emit_stmt_for_walked<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, bindings: &[winnow_grammar::Symbol], shape: &[i64], mutable: bool, mut_names: &[bool], iter: &Expr, body: &Block, at: i64, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
-        if self.emit_stmt_each_walk(world, iter, at, &flow) && self.emit_stmt_for_each(world, walk, out, host, bindings, shape, mutable, mut_names, iter, body, at, depth, flow, scope)? { return Ok(()); }
+        let each = self.emit_stmt_each_walk(world, iter, at, &flow);
+        if each && self.emit_stmt_for_each(world, walk, out, host, bindings, shape, mutable, mut_names, iter, body, at, depth, flow, scope)? { return Ok(()); }
+        walk.stream_use = if each || self.facts.pausing_loops.contains(&at) { String::from("is walked by a `for` whose body pauses") } else if flow.caught { String::from("is walked by a `for` inside a `catch`") } else if !flow.can_throw { String::from("is walked by a `for` in a function that doesn't throw") } else if self.facts.timed_loops.contains(&at) { String::from("is walked by a `for` with a time limit") } else { String::from("is walked by a `for` that can't run inside the parser's walk") };
         let fallible = self.facts.fallible_loops.contains(&at);
-        #[allow(unused_mut)] let mut each: Vec<String> = vec![];
+        let mut each: Vec<String> = vec![];
         for one in bindings.iter() {
             let one = *one;
             let local = self.emit_stmt_local(&emit_text(world, one));
@@ -959,16 +975,16 @@ impl EmitState {
         };
         let values_only = map_view && each.len() == 2 && *unsafe { nikaia_std::proven::read(&each, (0) as usize) } == "_";
         if values_only { each.remove(0); }
-        let mut written: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut each = each;
+        let mut written: Vec<String> = vec![];
         let mut index: i64 = 0;
         for one in each.iter() {
             let marked = mut_names.is_empty() || *nikaia_std::index::get(&mut_names, nikaia_std::index::at(if values_only { unsafe { nikaia_std::proven::add::<i64>(index, 1) } } else { index }));
             index = unsafe { nikaia_std::proven::add::<i64>(index, 1) };
             if mutable && !viewed && one != "_" && marked { written.push(format!("mut {}", one)); } else { written.push(nikaia_std::block::Text::from(one.to_string())); }
         }
-        let names = nikaia_std::block::Text::from(written.join(", ")); #[allow(unused_mut, clippy::redundant_locals)] let mut each = each;
+        let names = nikaia_std::block::Text::from(written.join(", "));
         let bound = emit_stmt_tuple_pattern(&written, shape);
-        let mut allowed = ""; #[allow(unused_mut, clippy::redundant_locals)] let mut each = each;
+        let mut allowed = "";
         if mutable && !viewed && each.len() > 1 { allowed = "#[allow(unused_mut)] "; }
         let plain = emit_stmt_tuple_pattern(&each, shape);
         if self.facts.pausing_loops.contains(&at) {

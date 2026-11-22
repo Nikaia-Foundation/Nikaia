@@ -5357,7 +5357,7 @@ pub(crate) fn walk_grammar(def: &GrammarDef, ask: &TierAsk<'_, '_, '_, '_, '_, '
             walk_action((alt.action).as_ref(), ask, walk);
             close_tier_scope(walk);
         }
-        if rule.stream { own_stream_items((rule.ret_type).as_ref(), ask, walk); }
+        if rule.stream && def.public && rule.args.is_empty() && rule.config.is_empty() { own_stream_items((rule.ret_type).as_ref(), ask, walk); }
     }
 }
 

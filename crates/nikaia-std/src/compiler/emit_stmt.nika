@@ -448,6 +448,22 @@ impl EmitState {
         let here = flow.at(at)
         self.write_keep_prelude(walk, out, scope.function, at, depth)
         self.emit_core_hold_temporaries(world, walk, out, host, node, span, depth, tail, here, scope)
+        // **How a `@stream` call the statement makes is used**, named by
+        // `NK1359` where it keeps the parser's thread (#2708).
+        walk.stream_use = match node {
+            Stmt::Let { names, value, .. } => match value {
+                Expr::Call { .. } => if names.len() == 1 { f"is held in `{emit_text(world, names[0])}` and not walked by one `for` alone" } else { "is held in a name" },
+                else => "",
+            },
+            Stmt::Return(value) => match value {
+                null => "",
+                given => match given {
+                    Expr::Call { .. } => "is handed back",
+                    else => "",
+                },
+            },
+            else => "",
+        }
         match node {
             Stmt::Let { names, shape, mutable, mut_names, ty, value, .. } => {
                 // **A `let` bound to a `@stream` call one `for` walks** is
@@ -1275,8 +1291,22 @@ impl EmitState {
     /// The `for` over `iter`, once a `@stream` call its `let` held stands in
     /// for the name (#2708).
     fn emit_stmt_for_walked[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, bindings: ref Vec[winnow_grammar::Symbol], shape: ref Vec[i64], mutable: bool, mut_names: ref Vec[bool], iter: ref Expr, body: ref Block, at: i64, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
-        if self.emit_stmt_each_walk(world, iter, at, flow) && self.emit_stmt_for_each(world, walk, out, host, bindings, shape, mutable, mut_names, iter, body, at, depth, flow, scope) {
+        let each = self.emit_stmt_each_walk(world, iter, at, flow)
+        if each && self.emit_stmt_for_each(world, walk, out, host, bindings, shape, mutable, mut_names, iter, body, at, depth, flow, scope) {
             return
+        }
+        // **Why the walk keeps the parser's thread**, which `NK1359` names
+        // where the items view the input (#2708).
+        walk.stream_use = if each || self.facts.pausing_loops.contains(at) {
+            "is walked by a `for` whose body pauses"
+        } else if flow.caught {
+            "is walked by a `for` inside a `catch`"
+        } else if !flow.can_throw {
+            "is walked by a `for` in a function that doesn't throw"
+        } else if self.facts.timed_loops.contains(at) {
+            "is walked by a `for` with a time limit"
+        } else {
+            "is walked by a `for` that can't run inside the parser's walk"
         }
         // **A step that can fail is bound before it is unwrapped** (ADR-025
         // D1): a `_` there takes a hidden name, which `let _ = _?` cannot read.

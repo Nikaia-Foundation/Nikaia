@@ -545,6 +545,7 @@ impl EmitState {
                 if flow.caught { question = ""; }
                 let mut pieces = false;
                 let mut streamed = false;
+                let mut stream_item: String = String::from("");
                 let mut options: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
                 let contract = self.own_contracts.functions.get(&format!("{}{}::{}", package, book, rule));
                 if contract.is_some() {
@@ -553,7 +554,16 @@ impl EmitState {
                     match &held.signature {
                         Some(signature) => {
                             match &signature.result {
-                                Some(result) => { streamed = a_sequence_type(result); },
+                                Some(result) => {
+                                    streamed = a_sequence_type(result);
+                                    stream_item = match result {
+                                        Ty::Seq { item, .. } => { let item = nikaia_std::boxed::open(item); match item {
+                                            Ty::Named { name, .. } => nikaia_std::block::Text::from(name.to_string()),
+                                            _ => String::from(""),
+                                        } },
+                                        _ => String::from(""),
+                                    };
+                                },
                                 None => { },
                             }
                             options.reserve(signature.config.iter().size_hint().0); for option in signature.config.iter() { options.push(nikaia_std::block::Text::from(option.name.to_string())); }
@@ -572,6 +582,7 @@ impl EmitState {
                         self.emit_expr(world, walk, out, host, unsafe { nikaia_std::proven::read(&args, (0) as usize) }, depth, flow, scope)?;
                         out.push(")");
                     } else {
+                        if self.emit_stream_item_views(&stream_item) { self.emit_stream_thread_refused(&walk, &format!("{}{}::{}", package, book, rule), &stream_item, Some(flow.statement))?; }
                         out.push(&format!("Ok::<_, nikaia_std::grammar::ParseError>({}{}(::std::convert::AsRef::<[u8]>::as_ref(&*", package, emit_stream_walk_name(&book, &rule)));
                         self.emit_expr(world, walk, out, host, unsafe { nikaia_std::proven::read(&args, (0) as usize) }, depth, flow, scope)?;
                         out.push(").to_vec()");
@@ -1588,8 +1599,8 @@ pub(crate) fn emit_tuple_part_copy(i: i64, word: &str) -> String {
 }
 
 pub(crate) fn emit_tuple_part_copies(parts: &[String]) -> String {
-    let copies: Vec<String> = parts.iter().enumerate().map(|(at, item)| (at as i64, item)).map(|__nikaia_tuple118742| {
-        let (i, word) = __nikaia_tuple118742;
+    let copies: Vec<String> = parts.iter().enumerate().map(|(at, item)| (at as i64, item)).map(|__nikaia_tuple119493| {
+        let (i, word) = __nikaia_tuple119493;
         emit_tuple_part_copy(i, word)
     }).collect::<Vec<_>>();
     if copies.len() == 1 { return format!("({},)", *unsafe { nikaia_std::proven::read(&copies, (0) as usize) }); }

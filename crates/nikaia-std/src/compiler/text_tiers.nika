@@ -7539,7 +7539,7 @@ fn walk_grammar(def: ref GrammarDef, ask: ref TierAsk, mut walk: TierWalk) {
             walk_action(alt.action, ask, walk)
             close_tier_scope(walk)
         }
-        if rule.stream {
+        if rule.stream && def.public && rule.args.len() == 0 && rule.config.len() == 0 {
             own_stream_items(rule.ret_type, ask, walk)
         }
     }
@@ -7572,9 +7572,16 @@ fn bind_rule_value(name: winnow_grammar::Symbol, ty: ref Type, ask: ref TierAsk,
     bind_tier_local(ask.names.resolve(name).clone(), local, walk)
 }
 
-/// **A stream entry's items are owned** (ADR-grammar-typed-read-v1 D7, amended
-/// 2026-11-08): an item outlives the step that read it, so the text its type
-/// holds is text of its own, never a view of the input.
+/// **A stream entry a Rust reader may read hands over owned items**
+/// (ADR-grammar-typed-read-v1 D7, #2708): the reader a package offered to
+/// Rust writes (`emit_stream_readers`) parses frames of a `std::io::Read`, so
+/// the item outlives the frame it was read from, and the text its type holds
+/// is text of its own. That is an entry of a `pub grammar` that takes no
+/// values; this pass runs before the build's settings are known, so it is
+/// every such entry. Any other entry's items view the input as the action
+/// that builds them does (ADR-views-v4 D5): its type is tethered, and a walk
+/// that would carry one off the input's loan is `NK1359`
+/// (`emit_stream_thread_refused`).
 fn own_stream_items(ret_type: ref Type?, ask: ref TierAsk, mut walk: TierWalk) {
     let ty = ret_type ?? return
     let item = ask.names.resolve(ty.name).clone()
