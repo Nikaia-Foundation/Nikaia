@@ -1,0 +1,34 @@
+// A name `get` hands back past a jump is a reference to the element (D30),
+// also where the element is a generic struct (#2240): a `match` on its field
+// binds its parts as views, so a `match` inside on one of them binds by
+// reference, without a `ref` Rust refuses.
+enum In { Call { func: In, n: i64 }, Leaf(i64), Other }
+enum Out { Expr(In), Ret }
+struct Spanned[T] { node: T, at: i64 }
+struct Block { stmts: Vec[Spanned[Out]] }
+
+fn is_leaf(e: ref In) -> bool {
+    return match e {
+        In::Leaf(_) => true,
+        else => false,
+    }
+}
+
+fn always(block: ref Block, at: i64) -> bool {
+    let got = block.stmts.get(at) ?? return false
+    return match got.node {
+        Out::Ret => true,
+        Out::Expr(inner) => match inner {
+            In::Call { func, .. } => is_leaf(func),
+            else => false,
+        },
+        else => false,
+    }
+}
+
+fn main() throws {
+    let b = Block { stmts: [Spanned { node: Out::Expr(In::Call { func: In::Leaf(1), n: 1 }), at: 0 }, Spanned { node: Out::Expr(In::Other), at: 1 }] }
+    println(always(b, 0))
+    println(always(b, 1))
+    println(always(b, 2))
+}

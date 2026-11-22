@@ -1,0 +1,38 @@
+// A parameter named like a function another file of the package declares is
+// the parameter wherever the body reads it, under `==` too (Part I, a name
+// a body binds shadows one from outside it): `crate_name == "crate"` in
+// `text.nika` compares the text, where `manifest.nika` declares
+// `pub fn crate_name(key: String) -> String`. #2296 reported NK1188 "You
+// can't compare two `fn(key: String) -> String sync` values with `==`." for
+// this shape in std's per-file check (ledger_text.nika's description_text
+// beside manifest.nika's crate_name); it compares the text on 6a790ae8a,
+// and this pins it.
+use std::env
+use std::fs
+use std::process
+
+// The running `nikaia` (`env::current_exe`, ADR-program-path-1 D3).
+fn toolchain() -> String throws {
+    return env::current_exe()?.display() ?? "target/fast/nikaia"
+}
+
+fn main() throws {
+    let nikaia = toolchain()
+    let scratch = fs::scratch()
+    let tmp = f"{scratch.path().display()}"
+    fs::create_dir("src", scratch)
+    fs::write("nikaia.toml", scratch, "[package]\nname = \"p\"\nversion = \"0.1.0\"\n")
+    fs::write("src/manifest.nika", scratch, "pub fn crate_name(key: String) -> String {\n    return key.replace(\"-\", \"_\")\n}\n")
+    fs::write("src/text.nika", scratch, "pub struct Entry {\n    pub public: bool,\n}\n\npub fn described(entries: Vec[Entry], crate_name: String) -> i64 {\n    let mut n = 0\n    for contract in entries {\n        if crate_name == \"crate\" && !contract.public {\n            n += 1\n        }\n    }\n    if \"crate\" != crate_name {\n        n += 10\n    }\n    return n\n}\n")
+    fs::write("src/main.nika", scratch, "fn main() throws {\n    let entries = [Entry { public: false }, Entry { public: true }]\n    println(f\"{described(entries, crate_name(\"crate\"))}\")\n    println(f\"{described([Entry { public: false }], crate_name(\"my-crate\"))}\")\n}\n")
+    let out = process::run(nikaia, ["run"]; dir: tmp.clone(), env: [("RUST_BACKTRACE", "0")])
+    println(f"exit {out.code}")
+    for line in out.stdout.lines() {
+        println(line)
+    }
+    for line in out.stderr.lines() {
+        if line.contains("NK") || line.contains(" --> ") {
+            println(line.replace(tmp, "TMP").trim())
+        }
+    }
+}

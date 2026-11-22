@@ -1,0 +1,21 @@
+// #2294: a `@stream` entry the emitter refuses is refused with the
+// emitter's words, not as `NK1127` at another function's build-time
+// default, whose program around it the lowering refused for the same entry.
+struct Lim { depth: i64 }
+
+fn default_lim() -> Lim { return Lim { depth: 3 } }
+
+grammar G {
+    rule WS = "" -> { }
+    @stream entry rule items(lim: Lim = default_lim()) -> i64 = A(lim.depth)* B(lim.depth)* eof
+    rule A(left: i64) = "a" -> { emit left }
+    rule B(left: i64) = "b" -> { emit left + 1 }
+}
+
+fn count(input: ref Bytes; lim: Lim = default_lim()) -> i64 { return lim.depth }
+
+fn main() throws {
+    let b = Bytes([97, 98])
+    for x in G::items(b) { println(x) }
+    println(count(b))
+}

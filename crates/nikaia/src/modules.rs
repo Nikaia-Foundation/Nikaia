@@ -344,7 +344,7 @@ fn package_ledger_noted(
     dependency: Option<&Dependency>,
     library: &crate::contracts::Ledger,
 ) -> (crate::contracts::Ledger, crate::contracts::sync::Noted) {
-    let (own, _, noted) = package_ledger_checked(units, dependency, library);
+    let (own, _, noted) = package_ledger_checked(units, &[], dependency, library);
     (own, noted)
 }
 
@@ -352,6 +352,7 @@ fn package_ledger_noted(
 /// one (`None` for a shipped ledger).
 fn package_ledger_checked(
     units: &[Unit],
+    beside: &[&Parsed],
     dependency: Option<&Dependency>,
     library: &crate::contracts::Ledger,
 ) -> (
@@ -380,7 +381,7 @@ fn package_ledger_checked(
         .collect();
     let infer = || {
         crate::proofs::with_units(files, || {
-            crate::contracts::Ledger::infer_package_noted(&parsed, library)
+            crate::contracts::infer_package_beside(&parsed, beside, library)
         })
     };
     let (mut own, checked, noted) = match (dependency, units.first()) {
@@ -1002,8 +1003,23 @@ impl collecting::ModulesProgramHost for ProgramHost<'_> {
         to: i64,
         library: &crate::contracts::Ledger,
     ) -> crate::contracts::Ledger {
-        let (own, checked, noted) =
-            package_ledger_checked(&self.units[from as usize..to as usize], None, library);
+        // **The dependencies' units beside them** (#2255): a default of the
+        // program's that calls into one is compiled with its module.
+        let beside: Vec<&Parsed> = self
+            .units
+            .iter()
+            .enumerate()
+            .filter(|(at, unit)| {
+                (*at < from as usize || *at >= to as usize) && unit.package.is_some()
+            })
+            .map(|(_, unit)| &unit.parsed)
+            .collect();
+        let (own, checked, noted) = package_ledger_checked(
+            &self.units[from as usize..to as usize],
+            &beside,
+            None,
+            library,
+        );
         *self.checked.borrow_mut() = checked.map(|checked| (from, checked));
         self.paused_by_code.borrow_mut().extend(noted.by_code);
         self.beyond_the_column.borrow_mut().extend(

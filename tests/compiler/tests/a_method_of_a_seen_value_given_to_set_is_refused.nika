@@ -1,0 +1,11 @@
+// A method called on a `Seen[T]` hands back a seen value (ADR-281 D23, which
+// names `stand.abs()` as stamped, #2334): a `set` given it is refused like a
+// `set` given `k + 1`, of a number and of a list.
+fn main() throws {
+	let n: SharedMut[i64] = SharedMut(0)
+	let k = n.get()
+	n.set(k.abs())
+	let order: SharedMut[Vec[i64]] = SharedMut([1])
+	let seen = order.get()
+	n.set(seen.first() ?? 0)
+}

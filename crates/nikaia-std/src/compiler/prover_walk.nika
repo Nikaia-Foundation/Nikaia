@@ -79,7 +79,7 @@ fn prover_bodies(mut walk: ProverWalk, program: ref Program, words: ref winnow_g
 /// the top holds where the action runs. An action has no callers, so a claim
 /// in it is proved there or refused.
 fn prover_action(mut walk: ProverWalk, def: ref GrammarDef, rule: ref GrammarRule, pattern: ref Pattern, action: ref Block, program: ref Program, words: ref winnow_grammar::InternerContext, own: ref Ledger, library: ref Ledger, ask: fn(ref logic::TermArena, ref Vec[i64], i64) -> SolverAnswer sync, model: fn(ref logic::TermArena, ref Vec[i64], i64) -> collections::BTreeMap[String, i64]? sync, escape: fn(ref String) -> String sync, holes_of: fn(ref Expr) -> Vec[Expr] sync, unaliased: fn(ref String) -> String sync, written_of: fn(ref Expr) -> String sync, condition: fn(ref String, ref collections::BTreeSet[String]) -> Vec[logic::SolverTerm] sync) sync {
-    let at = ProverWhere { function: null, params: collections::BTreeSet(), no_precondition: "a grammar action has no callers", top: true, free: false, posts: false, lambda: true, throws_out: true }
+    let at = ProverWhere { function: null, params: collections::BTreeSet(), no_precondition: "a grammar action has no callers", top: true, free: false, posts: false, lambda: true, throws_out: true, public: false }
     let mut scope = ProverScope::unknown()
     for arg in rule.args {
         let name = words.resolve(arg.name).clone()
@@ -201,7 +201,7 @@ fn prover_bound_number(def: ref GrammarDef, pattern: ref Pattern, words: ref win
 /// A test's or a bench's body: every claim in it is the test's verdict (D11).
 fn prover_test(mut walk: ProverWalk, body: ref Block, program: ref Program, words: ref winnow_grammar::InternerContext, own: ref Ledger, library: ref Ledger, ask: fn(ref logic::TermArena, ref Vec[i64], i64) -> SolverAnswer sync, model: fn(ref logic::TermArena, ref Vec[i64], i64) -> collections::BTreeMap[String, i64]? sync, escape: fn(ref String) -> String sync, holes_of: fn(ref Expr) -> Vec[Expr] sync, unaliased: fn(ref String) -> String sync, written_of: fn(ref Expr) -> String sync, condition: fn(ref String, ref collections::BTreeSet[String]) -> Vec[logic::SolverTerm] sync) {
     walk.state.in_test = true
-    let at = ProverWhere { function: null, params: collections::BTreeSet(), no_precondition: "a test has no callers", top: true, free: false, posts: false, lambda: false, throws_out: true }
+    let at = ProverWhere { function: null, params: collections::BTreeSet(), no_precondition: "a test has no callers", top: true, free: false, posts: false, lambda: false, throws_out: true, public: false }
     let mut scope = ProverScope::unknown()
     prover_block(walk, body, scope, at, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition)
     walk.state.in_test = false
@@ -333,7 +333,7 @@ fn prover_function(mut walk: ProverWalk, item: ref Spanned[Item], owner: String?
                 no_precondition = "A method of a trait's implementation can't have a precondition: a call through the trait doesn't know it, and there is no second entry to check it."
             }
             let free = !has_owner && !was_a_test
-            let at = ProverWhere { function: claim_text_of(key), params: params, no_precondition: no_precondition, top: true, free: free, posts: !was_a_test && !of_a_trait, lambda: false, throws_out: can_throw }
+            let at = ProverWhere { function: claim_text_of(key), params: params, no_precondition: no_precondition, top: true, free: free, posts: !was_a_test && !of_a_trait, lambda: false, throws_out: can_throw, public: is_public && !was_a_test && (key ?? "") != "main" }
             walk.state.in_test = was_a_test
             // **A result summary** (ADR-359 D1, D14): every exit of the body
             // of a free function, or of a method no trait's call can reach,
@@ -3096,7 +3096,10 @@ fn raw_sink_part(mut walk: ProverWalk, sink: ref ParamSink, shown: ref String, p
         raw_sink_finding(walk, sink, shown, part, span, scope, words, library, holes_of, written_of)
         return
     }
-    if !walk.state.collecting || !at.free {
+    if walk.state.collecting && !at.free {
+        return
+    }
+    if !walk.state.collecting && !at.public {
         return
     }
     match part {
@@ -3109,6 +3112,20 @@ fn raw_sink_part(mut walk: ProverWalk, sink: ref ParamSink, shown: ref String, p
     }
     let from = carried_param(part, scope, words, library, walk.state, holes_of) ?? return
     if raw_sink_passes(walk, sink.guard, part, scope, words, ask) {
+        return
+    }
+    // **A `pub` function's parameter at a raw sink is data from outside**
+    // (ADR-raw-sinks-1 D6, #2366): reported in its body in pass 2, as well
+    // as at each call that hands it data from outside.
+    if !walk.state.collecting {
+        let before = walk.findings.len()
+        raw_sink_finding(walk, sink, shown, part, span, scope, words, library, holes_of, written_of)
+        if walk.findings.len() > before {
+            let mut said = walk.findings.pop() ?? return
+            let function = carrying_function(at.function) ?? "this function"
+            said.notes[0] = f"`{from}` is a parameter of the `pub` function `{function}`: a caller the compiler cannot see chooses the value, so nothing here says what it holds."
+            walk.findings.push(said)
+        }
         return
     }
     let owner = carrying_function(at.function) ?? return

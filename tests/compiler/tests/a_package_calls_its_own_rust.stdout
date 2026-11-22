@@ -9,14 +9,6 @@ error[NK1171]: `words` has no function called `thrice`.
     |
     = note: What can be called is what is written down: `words::thrice` is in no declaration, ledger or description this program reads.
     = help: Did you mean `words::twice`?
-error[NK1171]: `words` has no function called `thrice`.
-   --> src/demo.nika:10:5
-    |
- 10 |     return words::thrice(words::thrice(x))
-    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-    |
-    = note: What can be called is what is written down: `words::thrice` is in no declaration, ledger or description this program reads.
-    = help: Did you mean `words::twice`?
 error[NK2504]: `words::thrice` is the package's own Rust and has no description yet.
    --> src/demo.nika:10:5
     |
@@ -35,16 +27,7 @@ error[NK2202]: `nine` is `sync`, but it calls `words::thrice`, which can pause.
     = note: A `sync` function promises that it never pauses and does no I/O.
     = note: `words::thrice` isn't declared `sync` in this program.
     = help: Remove `sync` from `nine`, or move the call out of it.
-error[NK2202]: `nine` is `sync`, but it calls `words::thrice`, which can pause.
-   --> src/demo.nika:10:12
-    |
- 10 |     return words::thrice(words::thrice(x))
-    |            ^^^^^^^^^^^^^ this can pause
-    |
-    = note: A `sync` function promises that it never pauses and does no I/O.
-    = note: `words::thrice` isn't declared `sync` in this program.
-    = help: Remove `sync` from `nine`, or move the call out of it.
-2 type errors, 1 Rust crate nothing describes, 2 calls a `sync` function may not make
+1 type error, 1 Rust crate nothing describes, 1 call a `sync` function may not make
 --- pub = true: exit 1
 error[NK2508]: `words::twice` is described with `pub = true`, and the package's own Rust stays the package's.
   --> contracts/crate.contracts:5:1

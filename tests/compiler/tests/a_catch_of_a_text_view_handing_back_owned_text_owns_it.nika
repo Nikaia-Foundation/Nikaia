@@ -1,0 +1,20 @@
+// A view of text guarded by a `catch` whose block hands back text of its own
+// is owned (ADR-282 D4, Part I 7.1, #2353): the block supplies the value.
+use std::fs
+
+fn main() throws {
+    let root = fs::scratch()
+    let data: Vec[u8] = [97, 255]
+    fs::write("bad", root, data)
+    let bad = fs::map("bad", root)
+    let t = bad.text() catch { error.message() }
+    println(f"text: {t.len() > 0}")
+    let b = fs::read("bad", root)
+    let u: String = b.text() catch { error.message() }
+    println(f"read: {u.len() > 0}")
+    let good: Vec[u8] = [104, 105]
+    fs::write("good", root, good)
+    let g = fs::read("good", root)
+    let v = g.text() catch { error.message() }
+    println(f"good: {v}")
+}

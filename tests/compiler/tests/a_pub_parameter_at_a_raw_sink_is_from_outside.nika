@@ -1,0 +1,39 @@
+// A `pub` function's parameter that reaches a raw sink is data from outside
+// (ADR-raw-sinks-1 D6, #2366): its callers are out of sight, so the body is
+// warned where the parameter meets the sink (`raw-sinks = "warn"`, the
+// default), though every call here hands a literal. `run_it` hands its
+// parameter to the program `process::run` runs, `list_raw` to the start of
+// an argument; `list_guarded` checks its argument where it arrives
+// (`process::is_operand`, D18) and draws nothing, nor does the private
+// `run_private`, whose callers are all in sight.
+use std::cli
+use std::process
+
+pub fn run_it(name: String) throws {
+    process::run(name, [])
+}
+
+pub fn list_raw(dir: String) throws {
+    process::run("ls", [dir])
+}
+
+pub fn list_guarded(dir: String) throws {
+    if !process::is_operand(dir) {
+        process::exit(2)
+    }
+    process::run("ls", [dir])
+}
+
+fn run_private(name: String) throws {
+    process::run(name, [])
+}
+
+fn main() throws {
+    if cli::args().nth(5) != null {
+        run_it("true")
+        list_raw("src")
+        list_guarded("src")
+        run_private("true")
+    }
+    println("built")
+}

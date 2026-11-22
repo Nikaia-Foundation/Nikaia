@@ -1,0 +1,11 @@
+/// A struct of this package and the function that makes it, taken as an
+/// option's default by a program of another package in
+/// `tests/an_option_defaults_to_a_dependencys_struct.nika` (#2255).
+pub struct LimitsBeside {
+    pub depth: i64,
+    pub bytes: i64,
+}
+
+pub fn limits_beside() -> LimitsBeside {
+    return LimitsBeside { depth: 128, bytes: 4096 }
+}
