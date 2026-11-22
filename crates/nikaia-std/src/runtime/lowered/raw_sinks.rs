@@ -11,10 +11,23 @@ pub fn is_plain(part: &str) -> bool {
     true
 }
 
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub fn is_operand(text: &str) -> bool { !text.starts_with('-') }
+
 pub(crate) fn __nikaia_test_0() -> Result<(), std::boxed::Box<dyn std::error::Error>> {
     let markup = html::Raw::escaped("a < b & c");
     if !(markup.as_str() == "a &lt; b &amp; c") { nikaia_std::abort::assertion_failed("assert(markup.as_str() == \"a &lt; b &amp; c\")", None, &[("markup.as_str()", (&&nikaia_std::abort::Operand(&(markup.as_str()))).shown()), ]) };
     if !(html::Raw::new(markup.as_str()).as_str() == "a &lt; b &amp; c") { nikaia_std::abort::assertion_failed("assert(html::Raw(markup.as_str()).as_str() == \"a &lt; b &amp; c\")", None, &[("html::Raw(markup.as_str()).as_str()", (&&nikaia_std::abort::Operand(&(html::Raw::new(markup.as_str()).as_str()))).shown()), ]) };
+    Ok(())
+}
+
+pub(crate) fn __nikaia_test_1() -> Result<(), std::boxed::Box<dyn std::error::Error>> {
+    if !(is_operand("file.txt")) { nikaia_std::abort::assertion_failed("assert(is_operand(\"file.txt\"))", None, &[]) };
+    if !(is_operand("")) { nikaia_std::abort::assertion_failed("assert(is_operand(\"\"))", None, &[]) };
+    if !(is_operand("a-b")) { nikaia_std::abort::assertion_failed("assert(is_operand(\"a-b\"))", None, &[]) };
+    if !(!is_operand("-rf")) { nikaia_std::abort::assertion_failed("assert(!is_operand(\"-rf\"))", None, &[]) };
+    if !(!is_operand("--checkpoint-action=exec=sh")) { nikaia_std::abort::assertion_failed("assert(!is_operand(\"--checkpoint-action=exec=sh\"))", None, &[]) };
     Ok(())
 }
 
@@ -23,5 +36,6 @@ pub(crate) fn __nikaia_test_0() -> Result<(), std::boxed::Box<dyn std::error::Er
 pub(crate) fn raw_sinks_nikaia_tests() -> Vec<(&'static str, fn() -> Result<(), std::boxed::Box<dyn std::error::Error>>)> {
     vec![
         ("raw_sinks::escaped_text_becomes_markup", __nikaia_test_0),
+        ("raw_sinks::an_operand_does_not_start_with_a_dash", __nikaia_test_1),
     ]
 }

@@ -340,6 +340,7 @@ fn prover_function(mut walk: ProverWalk, item: ref Spanned[Item], owner: String?
             // that the walk reads in full.
             walk.state.summing = []
             walk.state.unsummed = was_a_test || of_a_trait || key == null || !prover_summable(body)
+            walk.state.option_lists.clear()
             let leaves = prover_block(walk, body, scope, at, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition)
             walk.state.in_test = false
             let summed_key = key?.clone() ?? ""
@@ -401,6 +402,7 @@ fn prover_block(mut walk: ProverWalk, block: ref Block, mut scope: ProverScope, 
         if looped {
             prover_filled(scope, outside_fills(stmt.node, scope.tainted, scope.sources, words, library, walk.state, holes_of))
         }
+        raw_sink_option_list(walk, stmt.node, scope, words, library, holes_of, ask, written_of)
         if prover_stmt(walk, stmt, scope, at, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition) {
             return true
         }
@@ -2845,6 +2847,9 @@ fn prover_raw_sink(mut walk: ProverWalk, callee: ref String, args: ref Vec[Expr]
         for part in parts {
             raw_sink_part(walk, sink, sink.sink, part, span, scope, at, program, words, library, holes_of, ask, written_of)
         }
+        if args.len() > 1 {
+            raw_sink_options(walk, args[1], "", span, scope, at, program, words, library, holes_of, ask, written_of)
+        }
     } else if callee.starts_with("fs::") && library.functions.contains_key(callee) {
         for (i, written) in args.iter().enumerate() {
             let mut joins: Vec[Expr] = []
@@ -2966,6 +2971,15 @@ fn raw_sink_through(mut walk: ProverWalk, callee: ref String, args: ref Vec[Expr
             continue
         }
         let shown = f"{sink.sink}, through `{callee}`"
+        if sink.kind == "options" {
+            raw_sink_options(walk, all[sink.index], f", through `{callee}`", span, scope, at, program, words, library, holes_of, ask, written_of)
+            continue
+        }
+        if sink.kind == "option" {
+            let first = raw_sink_first_part(all[sink.index], written_of) ?? continue
+            raw_sink_part(walk, sink, shown, first, span, scope, at, program, words, library, holes_of, ask, written_of)
+            continue
+        }
         if sink.root_part {
             raw_sink_root_through(walk, sink, shown, all[sink.index], span, scope, at, program, words, library, holes_of, ask, written_of)
             continue
@@ -3146,11 +3160,169 @@ fn raw_sink_finding(mut walk: ProverWalk, sink: ref ParamSink, shown: ref String
     } else if sink.kind == "sql" {
         notes.push("SQL from outside can carry a statement of its own: `x; DROP TABLE users`.")
         help = f"Hand it to the statement as a value, a hole `:name` in the text and `{first}` under `\"name\"` in `execute`'s `parameters`; or, where it names a table or a column, check it where it arrives: `throw BadInput({first}) if !db::is_identifier({first})`, after which it is proved. If the program means to send SQL from outside, `untrusted-sql = true` under `[allow]` in the manifest builds it."
+    } else if sink.kind == "option" {
+        notes.push("A program reads an argument that starts with `-` as an option, and an option can name a program to run or a file to write: `-rf`, `--checkpoint-action=exec=sh`.")
+        help = f"Check it where it arrives: `if !process::is_operand({first}) {{ process::exit(2) }}`, after which it is proved; or put a literal `\"--\"` before it in the list, which ends the options: `[\"--\", {first}]`. If the program means to pass options from outside, `untrusted-option = true` under `[allow]` in the manifest builds it."
+    } else if sink.kind == "options" {
+        notes.push("A program reads an argument that starts with `-` as an option, and a list filled from outside may hold one: `-rf`, `--checkpoint-action=exec=sh`.")
+        help = f"Push into `{first}` only values checked where they arrive, `if !process::is_operand(name) {{ process::exit(2) }}`, or push a literal `\"--\"` first, which ends the options. If the program means to pass options from outside, `untrusted-option = true` under `[allow]` in the manifest builds it."
     } else {
         notes.push("No check makes a stranger's choice of program safe: a name is looked up on `PATH`, a path runs that file.")
         help = "Name the program with a literal, or choose it with a `match` whose arms are literals: `let editor = match env::var(\"EDITOR\") ?? \"\" { \"vim\" => \"vim\", \"nano\" => \"nano\", else => \"vi\", }`. If the program means to run a program from outside, `untrusted-program = true` under `[allow]` in the manifest builds it."
     }
     walk.findings.push(Finding { code: "NK1308", span: span, message: f"`{first}` reaches {shown}, and it comes from outside the program.", notes: notes, help: help, warning: false, labels: [] })
+}
+
+/// **The arguments of `process::run`** (ADR-raw-sinks-1 D18): the start of
+/// each element of a list literal is a raw sink, its guard
+/// `process::is_operand`; a literal `"--"` proves every element after it.
+/// A list built out of sight is one part, passed where the walk saw every
+/// value from outside pushed into it proved or after a `"--"`
+/// (`ProverState::option_lists`). `through` follows the sink's name where
+/// the list reaches it through a call (`, through `f``).
+fn raw_sink_options(mut walk: ProverWalk, list: ref Expr, through: ref String, span: Span, scope: ref ProverScope, at: ref ProverWhere, program: ref Program, words: ref winnow_grammar::InternerContext, library: ref Ledger, holes_of: fn(ref Expr) -> Vec[Expr] sync, ask: fn(ref logic::TermArena, ref Vec[i64], i64) -> SolverAnswer sync, written_of: fn(ref Expr) -> String sync) {
+    match list {
+        Expr::ListLit { items, .. } => {
+            let sink = ParamSink { index: -1, kind: "option", sink: "the start of an argument of `process::run`, which the program may read as an option", operation: "", root_part: false, guard: "process::is_operand" }
+            let shown = f"{sink.sink}{through}"
+            for item in items {
+                if raw_sink_double_dash(item, written_of) {
+                    return
+                }
+                let first = raw_sink_first_part(item, written_of) ?? continue
+                raw_sink_part(walk, sink, shown, first, span, scope, at, program, words, library, holes_of, ask, written_of)
+            }
+        },
+        else => {
+            let name = raw_sink_name(list, words) ?? ""
+            let state = walk.state.option_lists[name] ?? 2
+            if state < 2 {
+                return
+            }
+            let sink = ParamSink { index: -1, kind: "options", sink: "the arguments of `process::run`, each of which the program may read as an option", operation: "", root_part: false, guard: "" }
+            raw_sink_part(walk, sink, f"{sink.sink}{through}", list, span, scope, at, program, words, library, holes_of, ask, written_of)
+        },
+    }
+}
+
+/// Whether an element of a list is the literal `"--"`, which ends the
+/// options (ADR-raw-sinks-1 D18 item 3).
+fn raw_sink_double_dash(item: ref Expr, written_of: fn(ref Expr) -> String sync) -> bool {
+    return match item {
+        Expr::LitStr { .. } => written_of(item) == "\"--\"",
+        else => false,
+    }
+}
+
+/// **The part an argument starts with** (ADR-raw-sinks-1 D18 item 1): the
+/// first hole of an f-string or the left operand of `+`, through an empty
+/// literal; null where it starts with a literal piece, which the program
+/// wrote (`f"-I{dir}"`, `"--output=" + name`).
+fn raw_sink_first_part(expr: ref Expr, written_of: fn(ref Expr) -> String sync) -> Expr? {
+    match expr {
+        Expr::LitInterpolated { parts, .. } => {
+            for part in parts {
+                match part {
+                    FPart::Text(text) => {
+                        if !text.is_empty() {
+                            return null
+                        }
+                    },
+                    FPart::Hole { expr, .. } => {
+                        return raw_sink_first_part(expr, written_of)
+                    },
+                }
+            }
+            return null
+        },
+        Expr::Binary { op, lhs, rhs, .. } => {
+            if op != BinaryOp::Add {
+                return expr.clone()
+            }
+            if written_of(lhs) == "\"\"" {
+                return raw_sink_first_part(rhs, written_of)
+            }
+            return raw_sink_first_part(lhs, written_of)
+        },
+        Expr::LitStr { .. } => return null,
+        else => return expr.clone(),
+    }
+}
+
+/// **A list that fills the arguments of `process::run`, followed**
+/// (ADR-raw-sinks-1 D18, `ProverState::option_lists`): a `let` of one name
+/// to a list literal starts it, judged by its elements as the sink judges
+/// them; a `push` of a literal `"--"` ends its options, of a value from
+/// outside whose start is not proved opens it; any other changing call
+/// handed a value from outside opens it, and an assignment forgets it.
+fn raw_sink_option_list(mut walk: ProverWalk, stmt: ref Stmt, scope: ref ProverScope, words: ref winnow_grammar::InternerContext, library: ref Ledger, holes_of: fn(ref Expr) -> Vec[Expr] sync, ask: fn(ref logic::TermArena, ref Vec[i64], i64) -> SolverAnswer sync, written_of: fn(ref Expr) -> String sync) {
+    match stmt {
+        Stmt::Let { names, value, .. } => {
+            for name in names {
+                walk.state.option_lists.remove(words.resolve(name))
+            }
+            if names.len() != 1 {
+                return
+            }
+            match value {
+                Expr::ListLit { items, .. } => {
+                    let mut state = 0
+                    for item in items {
+                        if state == 0 {
+                            state = raw_sink_option_pushed(walk, item, scope, words, library, holes_of, ask, written_of)
+                        }
+                    }
+                    walk.state.option_lists.insert(words.resolve(names[0]).clone(), state)
+                },
+                else => {},
+            }
+        },
+        Stmt::Assign { target, op, .. } => {
+            if op == null {
+                let name = raw_sink_name(target, words) ?? return
+                walk.state.option_lists.remove(name)
+            }
+        },
+        Stmt::Expr(inner) => {
+            let call = match inner {
+                Expr::Try(call, _) => call,
+                else => inner,
+            }
+            match call {
+                Expr::MethodCall { receiver, method, args, .. } => {
+                    let name = match receiver {
+                        Expr::Variable(name, _) => words.resolve(name).clone(),
+                        else => return,
+                    }
+                    let state = walk.state.option_lists[name] ?? return
+                    if state != 0 {
+                        return
+                    }
+                    if words.resolve(method) == "push" && args.len() == 1 {
+                        walk.state.option_lists.insert(name, raw_sink_option_pushed(walk, args[0], scope, words, library, holes_of, ask, written_of))
+                    } else if any_from_outside(args, scope.tainted, words, library, walk.state, holes_of) {
+                        walk.state.option_lists.insert(name, 2)
+                    }
+                },
+                else => {},
+            }
+        },
+        else => {},
+    }
+}
+
+/// What a value put into a followed list makes of it (`raw_sink_option_list`):
+/// 1 for a literal `"--"`, 2 for a value from outside whose start is not
+/// proved `process::is_operand`, else 0.
+fn raw_sink_option_pushed(mut walk: ProverWalk, item: ref Expr, scope: ref ProverScope, words: ref winnow_grammar::InternerContext, library: ref Ledger, holes_of: fn(ref Expr) -> Vec[Expr] sync, ask: fn(ref logic::TermArena, ref Vec[i64], i64) -> SolverAnswer sync, written_of: fn(ref Expr) -> String sync) -> i64 {
+    if raw_sink_double_dash(item, written_of) {
+        return 1
+    }
+    let first = raw_sink_first_part(item, written_of) ?? return 0
+    if raw_sink_outside(first, scope, words, library, walk.state, holes_of) && !raw_sink_passes(walk, "process::is_operand", first, scope, words, ask) {
+        return 2
+    }
+    return 0
 }
 
 /// Whether a part of a raw sink's text comes from outside the program and is
