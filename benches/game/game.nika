@@ -444,7 +444,7 @@ fn tokens(repo: String, nikaia: String, source: String) -> String throws {
 	if source.len() == 0 { return "" }
 	let r = process::run(
 		nikaia,
-		["run", f"{repo}/scripts/tokens.nika", "--", f"{repo}/{source}"]; dir: repo,
+		["run", "scripts/tokens.nika", "--", source]; dir: repo,
 	)
 	let fields: Vec[String] = r.stdout.trim().split_whitespace().collect()
 	return fields[0].clone()
