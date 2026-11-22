@@ -1,0 +1,21 @@
+// A path from outside that reaches `fs::Root::Anywhere` unproved builds
+// under `raw-sinks = "warn"`, the default, with `NK1308` as a warning, and is
+// checked where it runs as under `Dir(".")` (ADR-raw-sinks-1 D7): `../x`
+// leaves `.`, so the call throws `io::IoError::Outside`. A literal path is
+// not from outside, and `Anywhere` hands it on as written.
+use std::cli
+use std::fs
+use std::io
+
+fn main() throws {
+    let name = cli::args().nth(1) ?? "../x"
+    let there = fs::exists(name, fs::Root::Anywhere) catch {
+        match error {
+            io::IoError::Outside(_) => println("Outside"),
+            else => println("another error"),
+        }
+        false
+    }
+    println(there)
+    println(fs::exists("../no-file-of-issue-2524", fs::Root::Anywhere))
+}

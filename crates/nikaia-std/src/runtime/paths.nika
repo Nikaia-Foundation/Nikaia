@@ -13,6 +13,8 @@
 // emitter writes such a method call as a call of the function here
 // (`emit_core_calls.nika`, `emit_call_span_function`), since `fs::Root` is the
 // Rust enum of `fs.rs` and a method on it is not declared from a `.nika` file.
+// `root_confined` is the root the emitter hands an `fs` call whose path from
+// outside `raw-sinks = "warn"` checks when it runs (`emit_core_args.nika`).
 
 use std::fs
 
@@ -85,5 +87,17 @@ pub fn root_path(root: ref fs::Root) -> fs::Path sync {
     return match root {
         fs::Root::Dir(dir) => dir.clone(),
         fs::Root::Anywhere => here,
+    }
+}
+
+/// **The root a path from outside is checked under** (ADR-raw-sinks-1 D7):
+/// under `raw-sinks = "warn"` the emitter hands an `fs` call this in place of
+/// a root `Anywhere` that a path from outside reaches unproved, so a path
+/// that leaves `.` throws `io::IoError::Outside`; a `Dir` stays itself.
+pub fn root_confined(root: ref fs::Root) -> fs::Root sync {
+    let here: fs::Path = "."
+    return match root {
+        fs::Root::Dir(dir) => fs::Root::Dir(dir.clone()),
+        fs::Root::Anywhere => fs::Root::Dir(here),
     }
 }

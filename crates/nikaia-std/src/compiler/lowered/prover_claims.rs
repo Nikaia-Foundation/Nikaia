@@ -27,6 +27,12 @@ impl ParamSink {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct RawPathCheck {
+    pub root: i64,
+    pub helps: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct OutsideIndex {
     pub at: i64,
     pub written: String,
