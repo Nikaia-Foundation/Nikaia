@@ -705,16 +705,19 @@ names and list indices on its stack are the value's path (`$.contacts[3].email`)
 
 **An entry marked `@stream`**, whose body repeats an item on a fixed path,
 hands its items over one at a time instead of a list (D7); a generic `@frame`
-rule may be folded in parallel (10.7). The call is a sequence walked once:
+rule may be folded in parallel (10.7). The call is a sequence:
 `for ev in Yaml::events(bytes)` takes each item as the parser produces it, and
-a `break` stops the parse. The items are owned and do not borrow from the
-input. The entry declares the item's type, and its body is one alternative
+a `break` stops the parse; the call may also be held, passed on, handed back,
+stored, given to a task and combined. An item views the input it is parsed from
+and lives as long as the input (Part I 6.6). A sequence walked twice parses twice,
+unless the compiler collects it once. How each walk runs is the compiler's
+choice, and the ledger names it. The entry declares the item's type, and its body is one alternative
 without an action, as a `par_fold`'s is: exactly one element, through its
 sequences and groups, repeats a rule of that type (`item*`, `item+`,
 `list(item, ",")`), and the rest is matched and dropped
 (`@stream entry rule events -> Event = "---" event*`); any other body is
 `NK1349`. `@stream` on a rule that is not an entry is refused where it stands. A Rust user of a rust-library also gets `parse_<rule>_reader` over a
-`std::io::Read` where a feature reaches the entry (ADR-393 D4); a Nikaia entry
+`std::io::Read` where a feature reaches the entry (ADR-393 D4), whose items are an owned form of the item type; a Nikaia entry
 takes `String` or `Bytes`.
 
 **An action may not pause.** A call that can pause is refused where it stands
