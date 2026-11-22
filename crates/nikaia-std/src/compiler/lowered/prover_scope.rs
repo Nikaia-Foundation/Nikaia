@@ -15,6 +15,8 @@ pub struct ProverScope {
     pub joined: collections::BTreeSet<String>,
     pub roots: collections::BTreeMap<String, Expr>,
     pub root_joins: collections::BTreeMap<String, Vec<Expr>>,
+    pub starts: collections::BTreeMap<String, Expr>,
+    pub start_names: collections::BTreeMap<String, String>,
     pub locals: collections::BTreeSet<String>,
     pub facts: Vec<i64>,
     pub entry: collections::BTreeMap<String, i64>,
@@ -44,7 +46,7 @@ pub struct ProverBits {
 }
 
 impl ProverScope {
-    pub fn unknown() -> ProverScope { ProverScope { ints: collections::BTreeSet::new(), tainted: collections::BTreeSet::new(), sources: collections::BTreeMap::new(), carried: collections::BTreeSet::new(), carried_from: collections::BTreeMap::new(), joined: collections::BTreeSet::new(), roots: collections::BTreeMap::new(), root_joins: collections::BTreeMap::new(), locals: collections::BTreeSet::new(), facts: vec![], entry: collections::BTreeMap::new(), path: None, exact: false, loose: collections::BTreeSet::new(), calls_of: collections::BTreeMap::new(), summed: collections::BTreeMap::new(), leaned: collections::BTreeMap::new(), mutables: collections::BTreeSet::new(), fixed: collections::BTreeSet::new(), loops: vec![], around: vec![], history: vec![], bits: collections::BTreeMap::new(), maps: collections::BTreeSet::new(), guards: collections::BTreeMap::new(), held: collections::BTreeMap::new(), failed: collections::BTreeMap::new(), known_from: collections::BTreeMap::new() } }
+    pub fn unknown() -> ProverScope { ProverScope { ints: collections::BTreeSet::new(), tainted: collections::BTreeSet::new(), sources: collections::BTreeMap::new(), carried: collections::BTreeSet::new(), carried_from: collections::BTreeMap::new(), joined: collections::BTreeSet::new(), roots: collections::BTreeMap::new(), root_joins: collections::BTreeMap::new(), starts: collections::BTreeMap::new(), start_names: collections::BTreeMap::new(), locals: collections::BTreeSet::new(), facts: vec![], entry: collections::BTreeMap::new(), path: None, exact: false, loose: collections::BTreeSet::new(), calls_of: collections::BTreeMap::new(), summed: collections::BTreeMap::new(), leaned: collections::BTreeMap::new(), mutables: collections::BTreeSet::new(), fixed: collections::BTreeSet::new(), loops: vec![], around: vec![], history: vec![], bits: collections::BTreeMap::new(), maps: collections::BTreeSet::new(), guards: collections::BTreeMap::new(), held: collections::BTreeMap::new(), failed: collections::BTreeMap::new(), known_from: collections::BTreeMap::new() } }
     pub(crate) fn at_the_entry() -> ProverScope {
         let mut scope = ProverScope::unknown();
         scope.path = Some(vec![]);
@@ -73,6 +75,14 @@ impl ProverScope {
         self.joined.remove(name);
         self.roots.remove(name);
         self.root_joins.remove(name);
+        self.starts.remove(name);
+        self.start_names.remove(name);
+        let mut started: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
+        for (bound, start) in self.start_names.iter() { if start == name { started.push(nikaia_std::block::Text::from(bound.to_string())); } }
+        for bound in started.iter() {
+            self.starts.remove(bound);
+            self.start_names.remove(bound);
+        }
         self.entry.remove(name);
         self.entry.remove(&length);
         self.fixed.remove(name);
@@ -317,6 +327,8 @@ impl ProverScope {
         scope.joined = self.joined.copy_owned();
         scope.roots = self.roots.copy_owned();
         scope.root_joins = self.root_joins.copy_owned();
+        scope.starts = self.starts.copy_owned();
+        scope.start_names = self.start_names.copy_owned();
         scope.locals = self.locals.copy_owned();
         scope.maps = self.maps.copy_owned();
         scope

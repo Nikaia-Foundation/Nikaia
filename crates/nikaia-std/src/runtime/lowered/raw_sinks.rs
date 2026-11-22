@@ -13,7 +13,7 @@ pub fn is_plain(part: &str) -> bool {
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn is_operand(text: &str) -> bool { !text.starts_with('-') }
+pub fn is_operand(text: &str) -> bool { !text.starts_with('-') && !text.starts_with('/') }
 
 pub(crate) fn __nikaia_test_0() -> Result<(), std::boxed::Box<dyn std::error::Error>> {
     let markup = html::Raw::escaped("a < b & c");
@@ -26,8 +26,12 @@ pub(crate) fn __nikaia_test_1() -> Result<(), std::boxed::Box<dyn std::error::Er
     if !(is_operand("file.txt")) { nikaia_std::abort::assertion_failed("assert(is_operand(\"file.txt\"))", None, &[]) };
     if !(is_operand("")) { nikaia_std::abort::assertion_failed("assert(is_operand(\"\"))", None, &[]) };
     if !(is_operand("a-b")) { nikaia_std::abort::assertion_failed("assert(is_operand(\"a-b\"))", None, &[]) };
+    if !(is_operand("a/b")) { nikaia_std::abort::assertion_failed("assert(is_operand(\"a/b\"))", None, &[]) };
+    if !(is_operand("./x")) { nikaia_std::abort::assertion_failed("assert(is_operand(\"./x\"))", None, &[]) };
     if !(!is_operand("-rf")) { nikaia_std::abort::assertion_failed("assert(!is_operand(\"-rf\"))", None, &[]) };
     if !(!is_operand("--checkpoint-action=exec=sh")) { nikaia_std::abort::assertion_failed("assert(!is_operand(\"--checkpoint-action=exec=sh\"))", None, &[]) };
+    if !(!is_operand("/G:secrets.txt")) { nikaia_std::abort::assertion_failed("assert(!is_operand(\"/G:secrets.txt\"))", None, &[]) };
+    if !(!is_operand("/etc/passwd")) { nikaia_std::abort::assertion_failed("assert(!is_operand(\"/etc/passwd\"))", None, &[]) };
     Ok(())
 }
 
@@ -36,6 +40,6 @@ pub(crate) fn __nikaia_test_1() -> Result<(), std::boxed::Box<dyn std::error::Er
 pub(crate) fn raw_sinks_nikaia_tests() -> Vec<(&'static str, fn() -> Result<(), std::boxed::Box<dyn std::error::Error>>)> {
     vec![
         ("raw_sinks::escaped_text_becomes_markup", __nikaia_test_0),
-        ("raw_sinks::an_operand_does_not_start_with_a_dash", __nikaia_test_1),
+        ("raw_sinks::an_operand_starts_with_neither_a_dash_nor_a_slash", __nikaia_test_1),
     ]
 }
