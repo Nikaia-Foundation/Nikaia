@@ -5265,6 +5265,11 @@ fn wrapper_lower(
     }
     settings.build.counts_heap = program && root.is_none();
     let manifest = Manifest::find(source)?;
+    // **The application's `[allow]`** (ADR-raw-sinks-1 D4, D5), which the
+    // environment does not carry: `Settings::resolve` reads it the same way.
+    // Without it a path from outside the manifest admits would still be
+    // opened as under `Dir(".")` here (ADR-raw-sinks-1 D7).
+    settings.words.allow = manifest.file().allow.clone();
     // **A package built for its own test program** (ADR-403 D4): the drive
     // names it in `TESTS_OF_VAR`, and its library is lowered with every item
     // `pub`.

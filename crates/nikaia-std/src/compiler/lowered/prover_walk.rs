@@ -49,7 +49,7 @@ pub(crate) fn prover_bodies(walk: &mut ProverWalk, program: &Program, words: &wi
 // this was written - see `contracts::sync`.
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn prover_action(walk: &mut ProverWalk, def: &GrammarDef, rule: &GrammarRule, pattern: &Pattern, action: &Block, program: &Program, words: &winnow_grammar::InternerContext, own: &Ledger, library: &Ledger, ask: &mut impl FnMut(&logic::TermArena, &[i64], i64) -> SolverAnswer, model: &mut impl FnMut(&logic::TermArena, &[i64], i64) -> Option<collections::BTreeMap<String, i64>>, escape: &mut impl FnMut(&str) -> String, holes_of: &mut impl FnMut(&Expr) -> Vec<Expr>, unaliased: &mut impl FnMut(&str) -> String, written_of: &mut impl FnMut(&Expr) -> String, condition: &mut impl FnMut(&str, &collections::BTreeSet<String>) -> Vec<logic::SolverTerm>) {
-    let at = ProverWhere { function: None, params: collections::BTreeSet::new(), no_precondition: Some(String::from("a grammar action has no callers")), top: true, free: false, posts: false, lambda: true, throws_out: true };
+    let at = ProverWhere { function: None, params: collections::BTreeSet::new(), no_precondition: Some(String::from("a grammar action has no callers")), top: true, free: false, posts: false, lambda: true, throws_out: true, public: false };
     let mut scope = ProverScope::unknown();
     for arg in rule.args.iter() {
         let name = nikaia_std::block::Text::from(words.resolve(arg.name).to_string());
@@ -136,7 +136,7 @@ pub(crate) fn prover_bound_number(def: &GrammarDef, pattern: &Pattern, words: &w
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn prover_test(walk: &mut ProverWalk, body: &Block, program: &Program, words: &winnow_grammar::InternerContext, own: &Ledger, library: &Ledger, ask: &mut impl FnMut(&logic::TermArena, &[i64], i64) -> SolverAnswer, model: &mut impl FnMut(&logic::TermArena, &[i64], i64) -> Option<collections::BTreeMap<String, i64>>, escape: &mut impl FnMut(&str) -> String, holes_of: &mut impl FnMut(&Expr) -> Vec<Expr>, unaliased: &mut impl FnMut(&str) -> String, written_of: &mut impl FnMut(&Expr) -> String, condition: &mut impl FnMut(&str, &collections::BTreeSet<String>) -> Vec<logic::SolverTerm>) {
     walk.state.in_test = true;
-    let at = ProverWhere { function: None, params: collections::BTreeSet::new(), no_precondition: Some(String::from("a test has no callers")), top: true, free: false, posts: false, lambda: false, throws_out: true };
+    let at = ProverWhere { function: None, params: collections::BTreeSet::new(), no_precondition: Some(String::from("a test has no callers")), top: true, free: false, posts: false, lambda: false, throws_out: true, public: false };
     let mut scope = ProverScope::unknown();
     prover_block(walk, body, &mut scope, &at, program, words, own, library, &mut *ask, &mut *model, &mut *escape, &mut *holes_of, &mut *unaliased, &mut *written_of, &mut *condition);
     walk.state.in_test = false;
@@ -223,7 +223,7 @@ pub(crate) fn prover_function(walk: &mut ProverWalk, item: &Spanned<Item>, owner
             let mut no_precondition: Option<String> = None;
             if of_a_trait { no_precondition = Some(String::from("A method of a trait's implementation can't have a precondition: a call through the trait doesn't know it, and there is no second entry to check it.")); }
             let free = !has_owner && !was_a_test;
-            let at = ProverWhere { function: claim_text_of((key).as_deref()), params, no_precondition, top: true, free, posts: !was_a_test && !of_a_trait, lambda: false, throws_out: can_throw };
+            let at = ProverWhere { function: claim_text_of((key).as_deref()), params, no_precondition, top: true, free, posts: !was_a_test && !of_a_trait, lambda: false, throws_out: can_throw, public: is_public && !was_a_test && nikaia_std::index::or(key.as_deref(), || "") != "main" };
             walk.state.in_test = was_a_test;
             walk.state.summing = vec![];
             walk.state.unsummed = was_a_test || of_a_trait || key.is_none() || !prover_summable(body);
@@ -2214,7 +2214,8 @@ pub(crate) fn raw_sink_part(walk: &mut ProverWalk, sink: &ParamSink, shown: &str
         raw_sink_finding(walk, sink, shown, part, span, scope, words, library, &mut *holes_of, &mut *written_of);
         return;
     }
-    if !walk.state.collecting || !at.free { return; }
+    if walk.state.collecting && !at.free { return; }
+    if !walk.state.collecting && !at.public { return; }
     match part {
         Expr::Variable(name, _) => {
             let name = *name;
@@ -2224,6 +2225,17 @@ pub(crate) fn raw_sink_part(walk: &mut ProverWalk, sink: &ParamSink, shown: &str
     }
     let from = match carried_param(part, scope, words, library, &walk.state, &mut *holes_of) { Some(__nikaia_value) => __nikaia_value, None => return };
     if raw_sink_passes(walk, &sink.guard, part, scope, words, &mut *ask) { return; }
+    if !walk.state.collecting {
+        let before = walk.findings.len() as i64;
+        raw_sink_finding(walk, sink, shown, part, span, scope, words, library, &mut *holes_of, &mut *written_of);
+        if (walk.findings.len() as i64) > before {
+            let mut said = match walk.findings.pop() { Some(__nikaia_value) => __nikaia_value, None => return };
+            let function = nikaia_std::index::or(carrying_function((at.function).as_deref()), || "this function".into());
+            { let __nikaia_stored = format!("`{}` is a parameter of the `pub` function `{}`: a caller the compiler cannot see chooses the value, so nothing here says what it holds.", from, function); nikaia_std::index::set(&mut said.notes, 0usize, __nikaia_stored); }
+            walk.findings.push(said);
+        }
+        return;
+    }
     let owner = match carrying_function((at.function).as_deref()) { Some(__nikaia_value) => __nikaia_value, None => return };
     let function = match free_function(program, words, &owner) { Some(__nikaia_value) => __nikaia_value, None => return };
     let mut index: i64 = -1;

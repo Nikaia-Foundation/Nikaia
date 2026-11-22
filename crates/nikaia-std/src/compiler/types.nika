@@ -228,8 +228,8 @@ fn item_types(names: ref winnow_grammar::InternerContext, item: ref Item, known:
                 written_at(names, arg.ty, known, true, span, out)
                 widths_written(names, arg.ty, is_extern, span, out)
                 if !is_extern {
-                    types_word_by_ref(names, arg.ty, plain, "parameter", span, out)
-                    types_text_by_ref(names, arg.ty, "parameter", views, f"param {key} {at}", span, out)
+                    types_word_by_ref(names, arg.ty, plain, "parameter", span, arg.span, names.resolve(arg.name).clone(), out)
+                    types_text_by_ref(names, arg.ty, "parameter", views, f"param {key} {at}", span, arg.span, names.resolve(arg.name).clone(), out)
                 }
                 at += 1
             }
@@ -238,15 +238,15 @@ fn item_types(names: ref winnow_grammar::InternerContext, item: ref Item, known:
                 written_at(names, option.ty, known, true, span, out)
                 widths_written(names, option.ty, is_extern, span, out)
                 if !is_extern {
-                    types_word_by_ref(names, option.ty, plain, "parameter", span, out)
-                    types_text_by_ref(names, option.ty, "parameter", views, "", span, out)
+                    types_word_by_ref(names, option.ty, plain, "parameter", span, span, names.resolve(option.name).clone(), out)
+                    types_text_by_ref(names, option.ty, "parameter", views, "", span, span, names.resolve(option.name).clone(), out)
                 }
             }
             maybe_written(names, ret_type, known, span, out)
             widths_written_maybe(names, ret_type, is_extern, span, out)
             if !is_extern {
-                types_word_by_ref_maybe(names, ret_type, plain, span, out)
-                types_text_by_ref_maybe(names, ret_type, "result", views, f"result {key}", span, out)
+                types_word_by_ref_maybe(names, ret_type, plain, span, span, "", out)
+                types_text_by_ref_maybe(names, ret_type, "result", views, f"result {key}", span, span, "", out)
             }
             block_types(names, body, known, views, plain, out)
         }
@@ -255,9 +255,9 @@ fn item_types(names: ref winnow_grammar::InternerContext, item: ref Item, known:
             for field in fields {
                 written_at(names, field.ty, known, false, span, out)
                 widths_written(names, field.ty, is_extern, span, out)
-                types_word_by_ref(names, field.ty, plain, "field", span, out)
+                types_word_by_ref(names, field.ty, plain, "field", span, field.span, names.resolve(field.name).clone(), out)
                 if !is_extern {
-                    types_text_by_ref(names, field.ty, "field", views, f"field {of} {names.resolve(field.name)}", span, out)
+                    types_text_by_ref(names, field.ty, "field", views, f"field {of} {names.resolve(field.name)}", span, field.span, names.resolve(field.name).clone(), out)
                 }
             }
         }
@@ -273,7 +273,7 @@ fn item_types(names: ref winnow_grammar::InternerContext, item: ref Item, known:
                             widths_written(names, ty, false, span, out)
                             // A payload is a position as a field is (#680).
                             if !is_extern {
-                                types_text_by_ref(names, ty, "payload", views, f"variant {of} {names.resolve(variant.name)} {at}", span, out)
+                                types_text_by_ref(names, ty, "payload", views, f"variant {of} {names.resolve(variant.name)} {at}", span, span, "", out)
                             }
                             at += 1
                         }
@@ -306,12 +306,12 @@ fn item_types(names: ref winnow_grammar::InternerContext, item: ref Item, known:
                 for arg in method.node.args {
                     written_at(names, arg.ty, here, true, method.span, out)
                     widths_written(names, arg.ty, false, method.span, out)
-                    types_word_by_ref(names, arg.ty, plain, "parameter", method.span, out)
-                    types_text_by_ref(names, arg.ty, "parameter", views, "", method.span, out)
+                    types_word_by_ref(names, arg.ty, plain, "parameter", method.span, arg.span, names.resolve(arg.name).clone(), out)
+                    types_text_by_ref(names, arg.ty, "parameter", views, "", method.span, arg.span, names.resolve(arg.name).clone(), out)
                 }
                 maybe_written(names, method.node.ret_type, here, method.span, out)
                 widths_written_maybe(names, method.node.ret_type, false, method.span, out)
-                types_word_by_ref_maybe(names, method.node.ret_type, plain, method.span, out)
+                types_word_by_ref_maybe(names, method.node.ret_type, plain, method.span, method.span, "", out)
                 // **A body-less result's `ref` is not redundant** (ADR-views-v4
                 // D8, D14, #1224): with no body to infer it from, a written
                 // `ref` is what makes the result a view until the `ref`
@@ -332,8 +332,8 @@ fn item_types(names: ref winnow_grammar::InternerContext, item: ref Item, known:
         Item::Grammar(def) => {
             for rule in def.rules {
                 for arg in rule.args {
-                    types_word_by_ref(names, arg.ty, plain, "parameter", arg.span, out)
-                    types_text_by_ref(names, arg.ty, "parameter", views, "", arg.span, out)
+                    types_word_by_ref(names, arg.ty, plain, "parameter", arg.span, arg.span, names.resolve(arg.name).clone(), out)
+                    types_text_by_ref(names, arg.ty, "parameter", views, "", arg.span, arg.span, names.resolve(arg.name).clone(), out)
                 }
             }
         }
@@ -351,19 +351,19 @@ fn item_types(names: ref winnow_grammar::InternerContext, item: ref Item, known:
 // same declaration, so `Vec[ref i64]` says nothing `Vec[i64]` does not. A
 // walk over copied values yields the values (ADR-231 D1), and a list of views
 // of them would be written in the language below as one the walk never made.
-fn types_word_by_ref(names: ref winnow_grammar::InternerContext, ty: ref Type, plain: ref collections::BTreeSet[String], position: ref String, span: ref Span, mut out: Vec[Finding]) {
+fn types_word_by_ref(names: ref winnow_grammar::InternerContext, ty: ref Type, plain: ref collections::BTreeSet[String], position: ref String, span: ref Span, at: ref Span, word: String, mut out: Vec[Finding]) {
     for inner in ty.generics {
-        types_word_by_ref(names, inner, plain, "type argument", span, out)
+        types_word_by_ref(names, inner, plain, "type argument", span, at, word.clone(), out)
     }
     if ty.code != null {
         let code = ty.code ?? return
-        types_word_by_ref_maybe(names, code.result, plain, span, out)
+        types_word_by_ref_maybe(names, code.result, plain, span, at, word.clone(), out)
     }
-    types_word_by_ref_here(names, ty, plain, position, span, out)
+    types_word_by_ref_here(names, ty, plain, position, span, at, word, out)
 }
 
 // The type itself, not its arguments.
-fn types_word_by_ref_here(names: ref winnow_grammar::InternerContext, ty: ref Type, plain: ref collections::BTreeSet[String], position: ref String, span: ref Span, mut out: Vec[Finding]) {
+fn types_word_by_ref_here(names: ref winnow_grammar::InternerContext, ty: ref Type, plain: ref collections::BTreeSet[String], position: ref String, span: ref Span, at: ref Span, word: String, mut out: Vec[Finding]) {
     if !ty.is_view || ty.is_mut || ty.is_slice || ty.is_tuple || ty.generics.len() > 0 {
         return
     }
@@ -382,11 +382,25 @@ fn types_word_by_ref_here(names: ref winnow_grammar::InternerContext, ty: ref Ty
     if ty.is_nullable {
         written = f"{name}?"
     }
-    out.push(refusal("NK1257", span.clone(), f"A `{name}` is copied at a read, so a {position} can't be a `ref {written}`.", ["A number, a `bool`, a `scalar` and an enum whose variants hold nothing are copied at a read (ADR-279 D8): the copy is never dearer than a pointer, so `ref` on one says nothing. Only an `extern \"C\"` declaration writes it, as the pointer C expects."], f"Write `{written}` without `ref`; a parameter the function changes is `mut name: {written}`."))
+    let mut found = refusal("NK1257", span.clone(), f"A `{name}` is copied at a read, so a {position} can't be a `ref {written}`.", ["A number, a `bool`, a `scalar` and an enum whose variants hold nothing are copied at a read (ADR-279 D8): the copy is never dearer than a pointer, so `ref` on one says nothing. Only an `extern \"C\"` declaration writes it, as the pointer C expects."], f"Write `{written}` without `ref`; a parameter the function changes is `mut name: {written}`.")
+    found.labels = declared_label(at, word, f"written `ref {written}`")
+    out.push(found)
 }
 
-fn types_word_by_ref_maybe(names: ref winnow_grammar::InternerContext, ty: ref Type?, plain: ref collections::BTreeSet[String], span: ref Span, mut out: Vec[Finding]) {
-    types_word_by_ref(names, ty ?? return, plain, "result", span, out)
+fn types_word_by_ref_maybe(names: ref winnow_grammar::InternerContext, ty: ref Type?, plain: ref collections::BTreeSet[String], span: ref Span, at: ref Span, word: String, mut out: Vec[Finding]) {
+    types_word_by_ref(names, ty ?? return, plain, "result", span, at, word, out)
+}
+
+// **Each declaration is its own finding** (#2719): a finding's span is the
+// whole item, so two parameters of one signature written alike printed the
+// same, and a finding is said once where it would print the same (#2247).
+// A label at the declaration's own name tells them apart; a position with
+// no name of its own (a result, a `let`) passes `""` and gets none.
+fn declared_label(at: ref Span, word: String, text: String) -> Vec[CheckLabel] {
+    if word.len() == 0 {
+        return []
+    }
+    return [CheckLabel { span: at.clone(), word: word.clone(), text: text.clone(), main: true }]
 }
 
 // **`ref String` inside Nikaia says what `String` says** (ADR-282 D2): text
@@ -396,7 +410,7 @@ fn types_word_by_ref_maybe(names: ref winnow_grammar::InternerContext, ty: ref T
 // warning `NK1261`. The program means what it means with `String`, and is
 // still held to the view.
 @inline(never)
-fn types_text_by_ref(names: ref winnow_grammar::InternerContext, ty: ref Type, position: String, views: ref collections::BTreeSet[String], key: String, span: ref Span, mut out: Vec[Finding]) {
+fn types_text_by_ref(names: ref winnow_grammar::InternerContext, ty: ref Type, position: String, views: ref collections::BTreeSet[String], key: String, span: ref Span, at: ref Span, word: String, mut out: Vec[Finding]) {
     // A position `text_tiers` made a view was written `String`.
     if views.contains(key) {
         return
@@ -417,11 +431,11 @@ fn types_text_by_ref(names: ref winnow_grammar::InternerContext, ty: ref Type, p
     if position == "`let`" {
         help = f"Write `{written}` without `ref` where the value is text of its own, and leave the type out where it is a view."
     }
-    out.push(Finding { code: "NK1261", span: span.clone(), message: f"`ref` is redundant here: a {position} written `ref {written}` says what `{written}` already says.", notes: ["Text is a view wherever a view suffices, and the ledger records whether a published parameter is lent or kept and what a result points into (ADR-282 D2). Only an `extern \"C\"` declaration and a `pub extern fn` write `ref String`, as the pointer C expects."], help: help, warning: true, labels: [] })
+    out.push(Finding { code: "NK1261", span: span.clone(), message: f"`ref` is redundant here: a {position} written `ref {written}` says what `{written}` already says.", notes: ["Text is a view wherever a view suffices, and the ledger records whether a published parameter is lent or kept and what a result points into (ADR-282 D2). Only an `extern \"C\"` declaration and a `pub extern fn` write `ref String`, as the pointer C expects."], help: help, warning: true, labels: declared_label(at, word, f"written `ref {written}`") })
 }
 
-fn types_text_by_ref_maybe(names: ref winnow_grammar::InternerContext, ty: ref Type?, position: String, views: ref collections::BTreeSet[String], key: String, span: ref Span, mut out: Vec[Finding]) {
-    types_text_by_ref(names, ty ?? return, position, views, key, span, out)
+fn types_text_by_ref_maybe(names: ref winnow_grammar::InternerContext, ty: ref Type?, position: String, views: ref collections::BTreeSet[String], key: String, span: ref Span, at: ref Span, word: String, mut out: Vec[Finding]) {
+    types_text_by_ref(names, ty ?? return, position, views, key, span, at, word, out)
 }
 
 // The program's enums whose variants hold nothing: words by their kind too.
@@ -493,14 +507,14 @@ fn block_types(names: ref winnow_grammar::InternerContext, block: ref Block, kno
         match stmt.node {
             Stmt::Let { ty, value, .. } => {
                 maybe_written(names, ty, known, stmt.span, out)
-                types_text_by_ref_maybe(names, ty, "`let`", views, f"let {stmt.span.start}", stmt.span, out)
+                types_text_by_ref_maybe(names, ty, "`let`", views, f"let {stmt.span.start}", stmt.span, stmt.span, "", out)
                 widths_written_maybe(names, ty, false, stmt.span, out)
                 // The annotation's own `ref` is refused where the value is
                 // read (`check_core_stmt`); its arguments are refused here.
                 if ty != null {
                     let annotated: ref Type = ty ?? continue
                     for inner in annotated.generics {
-                        types_word_by_ref(names, inner, plain, "type argument", stmt.span, out)
+                        types_word_by_ref(names, inner, plain, "type argument", stmt.span, stmt.span, "", out)
                     }
                 }
                 blocks_types(names, value, known, views, plain, out)

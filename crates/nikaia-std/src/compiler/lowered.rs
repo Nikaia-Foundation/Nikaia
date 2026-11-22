@@ -3405,7 +3405,7 @@ pub mod comptime_driver {
 }
 pub mod comptime_tree {
     #[allow(unused_imports)]
-    pub use super::{VALUE_FN, NOT_COMPUTED_YET, comptime_keeps, comptime_sub_program, TURN_MARK, comptime_unit_without_its_constants, comptime_drop_readers, comptime_constants_of, comptime_readers_dropped, comptime_value_fn_names, comptime_declared_of, comptime_as_built, ComptimeLowerHost, comptime_lowered_units, comptime_without_foreign, comptime_dependency_modules, comptime_by_package, COMPTIME_NOT_LOWERED, COMPTIME_NOT_READ, COMPTIME_NOT_CARRIED, NOWHERE, ComptimeDriven, COMPTIME_STOPPED_AT, ComptimeLowered, ComptimeDeclared, ComptimeComputeHost, comptime_value_computed, COMPTIME_VALUE_DIR, comptime_computed};
+    pub use super::{VALUE_FN, NOT_COMPUTED_YET, comptime_keeps, comptime_sub_program, TURN_MARK, comptime_unit_without_its_constants, comptime_drop_readers, comptime_constants_of, comptime_readers_dropped, comptime_value_fn_names, comptime_declared_of, comptime_as_built, ComptimeLowerHost, comptime_lowered_units, comptime_without_foreign, comptime_dependency_modules, comptime_by_package, COMPTIME_NOT_LOWERED, COMPTIME_NOT_READ, COMPTIME_NOT_CARRIED, NOWHERE, ComptimeDriven, COMPTIME_STOPPED_AT, ComptimeLowered, ComptimeRefusal, ComptimeDeclared, ComptimeComputeHost, comptime_value_computed, COMPTIME_VALUE_DIR, comptime_computed};
 }
 pub mod contract_changes {
     #[allow(unused_imports)]
@@ -3591,7 +3591,7 @@ pub mod grammar_decode {
 }
 pub mod grammar_run {
     #[allow(unused_imports)]
-    pub use super::{GrammarRunHost, grammar_run_compile_and_run, GrammarDriverHost, grammar_run_driver, grammar_run_dump};
+    pub use super::{GrammarRunHost, grammar_run_compile_and_run, GrammarDriverHost, grammar_run_driver, grammar_run_dump, grammar_run_dump_shaped, grammar_run_shapes_empty, grammar_run_shapes_add, grammar_run_shapes_qualified, grammar_run_shapes};
 }
 pub mod grammar_types {
     #[allow(unused_imports)]
@@ -3988,4 +3988,4 @@ pub fn nikaia_run_tests(filters: &[std::string::String], list: bool, more: std::
 /// **The digest of this lowered set** (#1610): every file `lower-std` wrote
 /// beside this index, and the index above this line. Compiled into the same
 /// crate as the code it names, it is the compiler's identity for its caches.
-pub const LOWERED_DIGEST: &str = "40fe479cbef0c8648184519de57b7f94497a3587c1cd191c50326ec680316eac";
+pub const LOWERED_DIGEST: &str = "77c7c3b727e87810350e046cb93e781a4ed779c2590a6bec72014aa24dc88040";

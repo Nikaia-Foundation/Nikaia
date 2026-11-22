@@ -707,6 +707,11 @@ pub fn comptime_dependency_modules[H: ComptimeLowerHost](host: ref H, packages: 
         let wanted: String? = name.clone()
         let theirs: Vec[i64] = (0..<host.unit_count()).filter(fn(u) { host.package_of(u) == wanted }).collect()
         rust.push_str(f"pub mod {name} {{\n#[allow(unused_imports)]\nuse nikaia_std::prelude::*;\n")
+        // **A package's `grammar` is a `grammar!` in its module** (#2255:
+        // `yaml`'s were E0433 here), and a `use` at the top of the program
+        // does not reach into a module. The bundle always carries
+        // `winnow_grammar` (`COMPTIME_BUNDLE_NAMED`).
+        rust.push_str("#[allow(unused_imports)]\nuse winnow_grammar::grammar;\n")
         // The block types the package's files are lowered to (#490).
         rust.push_str(block_types_import(true))
         for at in theirs {
@@ -749,8 +754,13 @@ pub comptime NOWHERE: ref String = "This check has no place to compile build-tim
 pub enum ComptimeDriven {
     /// The program, ready to compile.
     Program(String),
-    /// The emitter refused the units, or the driver could not be written.
+    /// The driver could not be written, or the units not lowered for no
+    /// refusal of the emitter.
     NotLowered,
+    /// The emitter refused the program's own code (#2294), in its words, at
+    /// the byte of the value's file it is about, or -1 where it is about
+    /// another file or no place.
+    Refused { message: String, at: i64 },
     /// The value's type has no form that crosses back, and why.
     Uncrossed { ty: String, because: String },
     /// The value's type cannot be handed back, for another reason.
@@ -766,6 +776,15 @@ pub comptime COMPTIME_STOPPED_AT: ref String = "@"
 pub struct ComptimeLowered {
     pub rust: String,
     pub rows: Vec[(i64, i64, i64)],
+}
+
+/// **What the emitter said where it refused a run's unit** (#2294): its
+/// words, the byte of the unit it is about (-1 where it named none) and the
+/// unit, by the index the host handed out.
+pub struct ComptimeRefusal {
+    pub message: String,
+    pub at: i64,
+    pub unit: i64,
 }
 
 /// One `comptime` a file declares, as `comptime_worked_out_ahead` reads it.
@@ -820,6 +839,10 @@ pub trait ComptimeComputeHost {
     /// steps counted (`comptime_lowered_units`); `null` where the emitter
     /// refused one.
     fn lowered_units(ref self, units: ref Vec[i64], here: i64, derived: ref Ledger, packages: ref collections::BTreeMap[String, Ledger]) -> ComptimeLowered? sync
+    /// What the emitter said where the last `lowered_alone` or
+    /// `lowered_units` came to `null` because it refused a unit, taken: asked
+    /// again, `null`.
+    fn lowering_refused(ref self) -> ComptimeRefusal? sync
     /// The dump of a value of type `ty` (`grammar_run_dump`) over unit
     /// `unit`, written to `out`; the wall where it has none.
     fn dump(ref self, unit: i64, ty: ref Ty, mut out: String) -> CheckWall? sync
@@ -997,6 +1020,7 @@ pub fn comptime_computed[H: ComptimeComputeHost](host: ref H, here: i64, bound: 
     let program = match comptime_driven(host, units, here, derived, packages, ty) {
         ComptimeDriven::Program(program) => program,
         ComptimeDriven::NotLowered => return not_here(COMPTIME_NOT_LOWERED),
+        ComptimeDriven::Refused { message, at } => return CheckComputed::Refused { message: message, at: at },
         ComptimeDriven::Uncrossed { ty, because } => {
             return CheckComputed::NotHere(f"Its type `{ty}` can't be handed back from the program that computes it: {because}")
         },
@@ -1058,7 +1082,14 @@ fn comptime_driven[H: ComptimeComputeHost](host: ref H, units: ref Vec[i64], her
         1 => host.lowered_alone(units[here], derived),
         else => host.lowered_units(units, here, derived, packages),
     }
-    let lowered = found ?? return ComptimeDriven::NotLowered
+    // **A refusal of the program's own code is said as the program's**
+    // (#2294): the whole program is lowered after the check and refused in
+    // the same words, and a value that runs code beside it was `NK1127`'s
+    // *this compiler's fault* instead, the only error the reader saw.
+    let lowered = found ?? return match host.lowering_refused() {
+        null => ComptimeDriven::NotLowered,
+        refused => ComptimeDriven::Refused { message: refused.message.clone(), at: if refused.unit == units[here] { refused.at } else { -1 } },
+    }
     let mut dump: String = ""
     let wall = host.dump(units[here], ty, dump)
     match wall {

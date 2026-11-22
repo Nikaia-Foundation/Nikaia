@@ -1513,6 +1513,10 @@ pub fn check_core_flow_try_catch<H: CheckHost>(state: &mut CheckState, world: &C
         state.facts.nullable_catches.insert(node_key(guarded_expr));
         return Ty::Nullable(nikaia_std::block::Boxed::new(answers.clone()));
     }
+    if !state.block_leaves(world, handler) && a_plain_str_view(&answers) && a_plain_string(&value) {
+        state.facts.owned_catches.insert(node_key(guarded_expr));
+        return value;
+    }
     if state.block_leaves(world, handler) || value.is_unknown() || value.fits(&answers) {
         if a_type_variable(&answers) && a_plain_string(&value) {
             state.facts.owned_catches.insert(node_key(guarded_expr));

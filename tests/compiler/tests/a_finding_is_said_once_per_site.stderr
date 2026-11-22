@@ -1,0 +1,18 @@
+error[NK1117]: There's no function called `nope`.
+   --> tests/a_finding_is_said_once_per_site.nika:16:2
+    |
+ 16 | 	println(f"{nope(nope(quad(2)))}")
+    |  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: A function called by its name alone is one of yours or one that's always available. A function from a package is called with the package's name in front: `package::name(…)`.
+    = help: Declare it with `fn nope(…)`, or call it through the package that has it.
+error[NK2202]: `quad` is `sync`, but it calls `twice`, which can pause.
+   --> tests/a_finding_is_said_once_per_site.nika:12:9
+    |
+ 12 | 	return twice(twice(x))
+    |         ^^^^^ this can pause
+    |
+    = note: A `sync` function promises that it never pauses and does no I/O.
+    = note: `twice` isn't declared `sync` in this program.
+    = help: Remove `sync` from `quad`, or move the call out of it.
+1 type error, 1 call a `sync` function may not make

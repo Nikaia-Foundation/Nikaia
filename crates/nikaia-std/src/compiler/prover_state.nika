@@ -1511,6 +1511,10 @@ pub struct ProverWhere {
     pub lambda: bool,
     /// The function `throws`, so a call in it may leave it.
     pub throws_out: bool,
+    /// A `pub` function's body (not `main`'s nor a test's), whose callers
+    /// the compiler cannot see: a parameter that reaches a raw sink is data
+    /// from outside here (ADR-raw-sinks-1 D6).
+    pub public: bool,
 }
 
 impl ProverWhere {

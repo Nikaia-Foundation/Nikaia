@@ -993,16 +993,16 @@ pub(crate) fn prover_binds_anywhere(block: &Block, name: &str, words: &winnow_gr
 
 pub(crate) fn always_leaves(block: &Block, leaving: &ProverLeaving, words: &winnow_grammar::InternerContext) -> bool {
     let last = match block.stmts.last() { Some(__nikaia_value) => __nikaia_value, None => return false };
-    match last.node {
+    match &last.node {
         Stmt::Return(_) => true,
         Stmt::Break => true,
         Stmt::Continue => true,
-        Stmt::Expr(ref inner) => match *inner {
+        Stmt::Expr(inner) => match inner {
             Expr::Throw(_, _) => true,
             Expr::Return(_, _) => true,
             Expr::Break(_) => true,
             Expr::Continue(_) => true,
-            Expr::Call { ref func, .. } => { let func = nikaia_std::boxed::open(func); leaving.leaves(func, &collections::BTreeSet::new(), words) },
+            Expr::Call { func, .. } => { let func = nikaia_std::boxed::open(func); leaving.leaves(func, &collections::BTreeSet::new(), words) },
             _ => false,
         },
         _ => false,

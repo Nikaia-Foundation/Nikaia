@@ -480,7 +480,25 @@ pub fn unit_violations(program: ref Program, names: ref winnow_grammar::Interner
             else => {}
         }
     }
-    return found
+    return once_per_site(found)
+}
+
+/// **A call is refused once where it would print the same** (#2247): a
+/// violation's span is the statement the call stands in, so two calls of one
+/// name there (`twice(twice(x))`) gave two refusals no reader could tell
+/// apart. The first stays; one that differs in caller, callee or kind stays too.
+fn once_per_site(found: Vec[Violation]) -> Vec[Violation] sync {
+    let mut said: collections::BTreeSet[String] = collections::BTreeSet()
+    let mut kept: Vec[Violation] = []
+    for v in found {
+        let key = f"{v.span.start}\n{v.span.end}\n{v.caller}\n{v.promise}\n{v.callee}\n{v.from_library}\n{v.unpromised}\n{v.construct}"
+        if said.contains(key) {
+            continue
+        }
+        said.insert(key)
+        kept.push(v.clone())
+    }
+    return kept
 }
 
 /// **Which of the free functions `wanted` pause** (#2316), each by the calls

@@ -89,6 +89,19 @@ pub(crate) fn check_core_stmt_a_get(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
+pub(crate) fn check_core_stmt_a_lending_read(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, read: &Expr) -> bool {
+    match read {
+        Expr::MethodCall { method, .. } => {
+            let method = *method;
+            let name = world.words.resolve(method);
+            name == "get" || name == "first" || name == "last"
+        },
+        _ => false,
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
 pub(crate) fn check_core_stmt_an_index(read: &Expr) -> bool { matches!(read, Expr::Index { .. }) }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -104,7 +117,7 @@ pub(crate) fn check_core_stmt_a_map_index(state: &CheckState, read: &Expr) -> bo
 // this was written - see `contracts::sync`.
 pub(crate) fn check_core_stmt_got(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, value: &Expr) -> bool {
     match value {
-        Expr::Coalesce { value: read, fallback, .. } => { let read = nikaia_std::boxed::open(read); let fallback = nikaia_std::boxed::open(fallback); check_core_stmt_a_get(world, read) && (state.jumps(world, fallback) || check_core_stmt_got(state, world, fallback)) },
+        Expr::Coalesce { value: read, fallback, .. } => { let read = nikaia_std::boxed::open(read); let fallback = nikaia_std::boxed::open(fallback); check_core_stmt_a_lending_read(world, read) && (state.jumps(world, fallback) || check_core_stmt_got(state, world, fallback)) },
         _ => false,
     }
 }
@@ -131,7 +144,7 @@ pub(crate) fn check_core_stmt_got_by_a_match(state: &CheckState, world: &CheckWo
         Expr::Match { value: read, arms, .. } => { let read = nikaia_std::boxed::open(read); (read, arms) },
         _ => return false,
     };
-    if !check_core_stmt_a_get(world, read) || arms.len() != 2 { return false; }
+    if !check_core_stmt_a_lending_read(world, read) || arms.len() != 2 { return false; }
     let mut jumps = false;
     let mut hands_back = false;
     for arm in arms.iter() {
@@ -1783,7 +1796,7 @@ pub(crate) fn check_core_stmt_for<H: CheckHost>(state: &mut CheckState, world: &
     state.pausing_step(&over, span);
     state.a_sequence_is_walked(iter, &over, span, world);
     let mut elements = elements_walked(&over, width);
-    if width > 1 && !stepped_fallibly { let refused = state.a_tuple_pattern_that_does_not_fit(&element_walked(&over, 1), width, "A `for`", span); }
+    if width > 1 && !stepped_fallibly { let refused = state.a_tuple_pattern_that_does_not_fit(&element_walked(&over.unseen(), 1), width, "A `for`", span); }
     if !shape.is_empty() { elements = state.nested_pattern_parts(world, &elements, shape, bindings.len() as i64, "A `for`", span); }
     if bindings.len() == 1 && elements.len() == 1 {
         match *unsafe { nikaia_std::proven::read(&elements, (0) as usize) } {
