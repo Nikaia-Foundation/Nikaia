@@ -212,11 +212,11 @@ pub fn paused(pause: &Pause) -> Shown {
     let ledger = if pause.from_library { "`std`" } else { "this program" };
     let article = an_or_a(&callee);
     #[allow(unused_mut)] let mut notes: Vec<String> = vec![String::from("A `sync` function promises that it never pauses and does no I/O.")];
-    if pause.construct {
+    if pause.construct && callee == "async" { notes.push(String::from("An `async` form waits for the tasks it starts, which is a pause.")); } else if pause.construct {
         let capital = said(&article);
         notes.push(format!("{} `{}` block waits for its branches to finish, which is a pause.", capital, callee));
     } else { notes.push(format!("`{}` isn't declared `sync` in {}.", callee, ledger)); }
-    let message = if pause.construct { format!("`{}` is `{}`, but it contains {} `{}` block, which can pause.", caller, promise, article, callee) } else { format!("`{}` is `{}`, but it calls `{}`, which can pause.", caller, promise, callee) }; #[allow(unused_mut, clippy::redundant_locals)] let mut notes = notes;
+    let message = if pause.construct && callee == "async" { format!("`{}` is `{}`, but it contains an `async` form, which can pause.", caller, promise) } else if pause.construct { format!("`{}` is `{}`, but it contains {} `{}` block, which can pause.", caller, promise, article, callee) } else { format!("`{}` is `{}`, but it calls `{}`, which can pause.", caller, promise, callee) }; #[allow(unused_mut, clippy::redundant_locals)] let mut notes = notes;
     Shown { warning: false, code: String::from("NK2202"), message, notes, help: Some(format!("Remove `{}` from `{}`, or move the call out of it.", promise, caller)), span: pause.span.clone(), labels: vec![Marked { span: pause.span.clone(), word: nikaia_std::block::Text::from(callee.to_string()), text: String::from("this can pause"), main: true }], edit: None }
 }
 

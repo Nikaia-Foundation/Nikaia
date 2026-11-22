@@ -8,6 +8,13 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1539] — 2026-11-22
+
+**Builders' changes (#2511, #2513)**
+- The build warns (`NK2119`) where a `par_iter()` call the committed ledger recorded as running in pieces has a lambda that can now pause; the ledger's new `par_iter` column records each call's execution
+- A `sync` function whose body holds an `async` form, `async e` or `async { … }`, is refused with NK2202 at that form, and such a body is no longer inferred `sync` (ADR-288 D1, D32, ADR-async-5).
+- none (the contract key changes no program yet); for the catch fix: "A `catch` around a walk of a sequence that can fail, such as `io::lines().collect()`, is accepted (it was NK1134)."
+
 ## [0.0.1538] — 2026-11-22
 
 **Builders' changes (#2696, #2711, #2729)**

@@ -93,6 +93,7 @@ signature = "(xs: Vec[i64], f: fn(i64))"
 pub = true
 sync = "inferred"
 at_once = ["f"]
+par_iter = ["pieces"]
 panics = true
 touches = []
 signature = "(xs: Vec[i64], f: fn(i64) sync)"

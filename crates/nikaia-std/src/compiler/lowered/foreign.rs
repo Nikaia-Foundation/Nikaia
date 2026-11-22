@@ -94,6 +94,8 @@ pub(crate) fn expression_paths(expr: &Expr, span: &Span, names: &winnow_grammar:
         Expr::Dsl { .. } => { found.seen.push(Seen::Opaque { span: span.clone() }); },
         Expr::Overlap(_, _) => { found.seen.push(Seen::Joins { construct: String::from("overlap"), span: span.clone() }); },
         Expr::Select(_, _) => { found.seen.push(Seen::Joins { construct: String::from("select"), span: span.clone() }); },
+        Expr::Async(_, _, _, _) => { found.seen.push(Seen::Joins { construct: String::from("async"), span: span.clone() }); },
+        Expr::AsyncGroup(_, _, _, _, _) => { found.seen.push(Seen::Joins { construct: String::from("async"), span: span.clone() }); },
         Expr::Call { func, args, config, .. } => { let func = nikaia_std::boxed::open(func); a_named_call(func, args, config, span, names, &mut &mut *root_at, found); },
         _ => { },
     }
