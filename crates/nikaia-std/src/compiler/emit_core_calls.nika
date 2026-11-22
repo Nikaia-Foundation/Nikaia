@@ -1756,6 +1756,8 @@ impl EmitState {
             out.push("nikaia_std::error::arrived(")
         }
         let (kind, entry) = emit_call_pausing_entry(self.facts, args)
+        let mut through_prefix: String = ""
+        let mut through_suffix: String = ""
         // **On the block types, Rust's `String` answer is made a block's
         // text** (#490): around the plain call, which is all these are.
         // Not where the call is only compared (`compared_receiver`).
@@ -1775,6 +1777,14 @@ impl EmitState {
             self.emit_core_receiver(world, walk, out, host, receiver, depth, flow, scope, false)
             out.push(f".{entry}(")
         } else {
+            // **A lambda a step fails through, and a walk of the failing
+            // elements it makes** (#2736): what `failing_through` answers.
+            let (through_written, through_open, through_close) = self.emit_call_failing_through(on_node, name, flow)
+            if through_written != "" {
+                written = through_written.clone()
+            }
+            through_prefix = through_open
+            through_suffix = through_close
             // **A list's `map` whose result goes straight into the next step
             // runs element by element with it** (ADR-342 D1): a `len()` of it
             // counts the walk, and a `map` of it is one more step of the walk,
@@ -1792,7 +1802,7 @@ impl EmitState {
                 }
             }
             self.emit_core_receiver(world, walk, out, host, receiver, depth, flow, scope, false)
-            if stepping && !on_fused {
+            if (stepping && !on_fused) || (self.facts.failing_through_calls.get(on_node) ?? 0) == 4 {
                 out.push(".into_iter()")
             }
             if name == "len" && on_fused {
@@ -1837,7 +1847,12 @@ impl EmitState {
         }
         // **Nor a type's own `collect`** (#1975): it builds what it declares.
         let own = (self.facts.method_callees[on_node]?.clone() ?? "Seq::collect") != "Seq::collect"
-        if name == "collect" && args.len() == 0 && !declared && !own && !self.method_pauses(on_node) {
+        // **A walk of failing elements is collected into a `Result`**
+        // (#2736): the first failure ends it, and nothing after is computed.
+        let failing_items = self.facts.failing_item_receivers.contains(on_node)
+        if name == "collect" && args.len() == 0 && !own && !self.method_pauses(on_node) && failing_items {
+            out.push(if declared { f"::<{self.rust_result()}<_, _>>" } else { f"::<{self.rust_result()}<Vec<_>, _>>" })
+        } else if name == "collect" && args.len() == 0 && !declared && !own && !self.method_pauses(on_node) {
             out.push("::<Vec<_>>")
         }
         // **And a sequence's `sum` names what it hands back** (#1007): Rust
@@ -1859,7 +1874,9 @@ impl EmitState {
         // keeper's widest value needs, so that every element is one type (D15).
         self.emit_call_hold(world, walk, host, receiver, scope, flow)
         walk.method_callee = self.facts.method_callees[on_node]?.clone()
+        out.push(through_prefix)
         self.emit_core_args(world, walk, out, host, name, args, takes, depth, flow, scope)
+        out.push(through_suffix)
         walk.hold_args = null
         // **And a method that takes a keep is given one** (D2).
         let keeping = keeping_method_key(self.own_contracts, self.own_methods, emit_call_owner(scope.function), emit_call_on_self(world, receiver), name)
@@ -1904,6 +1921,11 @@ impl EmitState {
         out.push(")")
         if rust_text {
             out.push(block_text_close(self.on_block_types()))
+        }
+        // **A list's own `map` with a failing lambda is the list's walk
+        // collected into a `Result`** (#2736): it fails at the first failure.
+        if kind == 0 && (self.facts.failing_through_calls.get(on_node) ?? 0) == 4 {
+            out.push(f".collect::<{self.rust_result()}<Vec<_>, _>>()")
         }
         // **What hands back an element of a held list reads it through its
         // handle** (ADR-283 D17), as the brackets and a `for` do.
@@ -1971,6 +1993,44 @@ impl EmitState {
         if length && !fails {
             out.push(" as i64")
         }
+    }
+
+    /// **A method a failing lambda passes through, or one on a walk of
+    /// failing elements** (#2736, ADR-025 D1): the name written in its place,
+    /// or `""` for its own, and what goes before and after its arguments.
+    ///
+    /// A step whose lambda fails makes a walk of the language below's
+    /// `Result`s: `map` as it stands (its closure hands back a `Result`),
+    /// `filter` as a `filter_map` that keeps the failure as an element, and
+    /// `for_each` as `try_for_each`, which stops at the first failure. Over
+    /// such a walk, a `map` or a `filter` that cannot fail works inside each
+    /// `Result`; `take`, `skip` and `step_by` count elements, failed or not,
+    /// and `collect` (the caller) gathers into a `Result`. Every other walk of
+    /// it is refused with a line, as a walk of a pausing one is.
+    fn emit_call_failing_through(ref self, on_node: i64, name: ref String, flow: EmitFlow) -> (String, String, String) sync throws {
+        let through = self.facts.failing_through_calls.get(on_node) ?? 0
+        if self.facts.failing_item_receivers.contains(on_node) {
+            if through != 0 {
+                throw EmitRefused { message: f"`{name}` is given a lambda that can fail, over a sequence whose elements can already fail; only one step of a chain can fail so far. Collect the sequence first, with `… .collect() catch {{ … }}`, and walk the list.", at: flow.statement }
+            }
+            if name == "map" {
+                return ("", "|__nikaia_item| __nikaia_item.map(", ")")
+            }
+            if name == "filter" {
+                return ("", "|__nikaia_item| match __nikaia_item { Ok(__nikaia_kept) => (", ")(__nikaia_kept), Err(_) => true }")
+            }
+            if name == "take" || name == "skip" || name == "step_by" || name == "collect" {
+                return ("", "", "")
+            }
+            throw EmitRefused { message: f"`{name}` can't be used yet on a sequence whose elements can fail. Walk it with `for x in … {{ … }}`, or collect it first with `… .collect() catch {{ … }}`.", at: flow.statement }
+        }
+        if through == 2 {
+            return ("filter_map", "|__nikaia_item| match (", ")(&__nikaia_item) { Ok(true) => Some(Ok(__nikaia_item)), Ok(false) => None, Err(__nikaia_error) => Some(Err(__nikaia_error)) }")
+        }
+        if through == 3 {
+            return ("try_for_each", "", "")
+        }
+        return ("", "", "")
     }
 
     /// `text.scalars.collect()`, asked for at its size (ADR-320 D3). `true`

@@ -1,6 +1,7 @@
 // **`NK1354` is not said over a lambda that throws** (#1975): without the
-// list, its failure would come between the turns of the body. The lambda is
-// refused (`NK2606`); the `for` keeps its `.collect()`.
+// list, its failure would come between the turns of the body. The `for`
+// keeps its `.collect()`, which fails before the first turn where the lambda
+// does (#2736: it was refused as `NK2606`).
 enum Big { Too }
 
 impl Error for Big {

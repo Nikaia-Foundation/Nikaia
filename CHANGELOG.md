@@ -8,6 +8,17 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1541] — 2026-11-22
+
+**Builders' changes (#1589)**
+- Replacing one ASCII character by one in a text's own buffer rewrites the bytes where they stand, with no search: `x = x.replace(";", ",")` over 10^6 lines now costs 1,341 M instructions, below the copy before (1,405 M) and Rust's `str::replace` (1,368 M).
+- A trim or a cut at a position (`line.after(m.end)`, `line.trim()`) pushed into a caller's list takes the dying local's buffer, as an index cut does: the function takes no keep tether (ADR-text-reuse-1 D2).
+
+## [0.0.1540] — 2026-11-22
+
+**check, emit: a lambda that can fail, handed to map, filter or for_each where the contract says throws(f), fails the call or the walk where it fails (#2736)**
+- Lambdas that can fail work in `map`, `filter` and `for_each`: a list's `map` and a sequence's `for_each` fail where the lambda fails, a sequence's `map` and `filter` make a sequence that fails at that element when it is walked (`collect`, `for`); the walk stops at the first failure. Was NK2606.
+
 ## [0.0.1539] — 2026-11-22
 
 **Builders' changes (#2511, #2513)**

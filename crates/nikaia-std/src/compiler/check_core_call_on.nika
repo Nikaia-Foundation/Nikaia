@@ -741,6 +741,92 @@ fn check_core_call_on_entry_values(state: ref CheckState, world: ref CheckWorld,
     return -1
 }
 
+/// **The positions among a call's arguments of the lambdas the callee fails
+/// through** (`throws = "throws(f)"`, #2736).
+fn check_core_call_on_throws_through(contract: ref FnContract) -> Vec[i64] {
+    let mut out: Vec[i64] = []
+    if contract.throws_from.len() == 0 {
+        return out
+    }
+    let signature = contract.signature ?? return out
+    let mut at = 0
+    for (name, _) in call_arguments(signature) {
+        if contract.throws_from.contains(name) {
+            out.push(at)
+        }
+        at += 1
+    }
+    return out
+}
+
+/// A function type that cannot fail, otherwise the same.
+fn check_core_call_on_unfailing_fn(ty: ref Ty) -> Ty {
+    return match ty {
+        Ty::Fn { params, result, is_sync, spelled, .. } => Ty::Fn { params: params.clone(), result: result?.clone(), is_sync: is_sync, can_throw: false, spelled: spelled.clone() },
+        else => ty.clone(),
+    }
+}
+
+/// A function type that may fail, otherwise the same.
+fn check_core_call_on_failing_fn(ty: ref Ty) -> Ty {
+    return match ty {
+        Ty::Fn { params, result, is_sync, spelled, .. } => Ty::Fn { params: params.clone(), result: result?.clone(), is_sync: is_sync, can_throw: true, spelled: spelled.clone() },
+        else => ty.clone(),
+    }
+}
+
+/// **Where a lambda the callee fails through did fail** (#2736): it hands
+/// back a `Result` (`failing_lambdas`), naming what it fails with; a call
+/// that runs it to the end fails with that, at once, and so does a `catch`
+/// around it have it to handle; one that hands back a walk leaves it to the
+/// walk. `seen` is what the lambda's body was found to throw.
+fn check_core_call_on_failed_through(mut state: CheckState, args: ref Vec[Expr], through: ref Vec[i64], seen: ref CheckGuarded, key: ref String, on: ref Ty, node: i64, lazy: bool) -> bool sync {
+    let mut failed = false
+    for at in through {
+        if at >= args.len() {
+            continue
+        }
+        let arg = args[at]
+        let a_lambda = match arg {
+            Expr::Closure { .. } => true,
+            else => false,
+        }
+        if !a_lambda || !state.flow.last_lambda_fails {
+            continue
+        }
+        failed = true
+        let mut thrown: Vec[String] = []
+        for error in seen.thrown {
+            thrown.push(error.clone())
+        }
+        if seen.unanswered || thrown.len() == 0 {
+            thrown = ["?"]
+        }
+        state.facts.failing_lambdas.insert(id_of(arg) as i64)
+        state.facts.failing_through_lambdas.insert(id_of(arg) as i64, thrown)
+    }
+    if !failed {
+        return false
+    }
+    let kind = if key == "Seq::map" { 1 } else if key == "Seq::filter" { 2 } else if key == "Seq::for_each" { 3 } else { 4 }
+    state.facts.failing_through_calls.insert(node, kind)
+    if !lazy {
+        // **The call fails where the lambda does** (ADR-023 D8): its `?` is
+        // written, and an enclosing `catch` has what the lambda threw.
+        state.flow.opaque_methods.remove(node)
+        let added = state.flow.fallible_methods.insert(node)
+        if state.flow.guarded != null {
+            let held: CheckGuarded? = state.flow.guarded?.clone()
+            let mut guarded = held ?? CheckGuarded::nothing()
+            guarded.fallible = true
+            guarded.unanswered = guarded.unanswered || seen.unanswered
+            guarded.thrown.extend(seen.thrown.clone())
+            state.flow.guarded = guarded
+        }
+    }
+    return true
+}
+
 /// Whether the entry hands back a sequence.
 fn check_core_call_on_hands_back_a_sequence(contract: ref FnContract) -> bool {
     let signature = contract.signature ?? return false
@@ -1251,6 +1337,11 @@ fn check_core_call_on_described[H: CheckHost](mut state: CheckState, world: ref 
     let pauses = (!contract.sync_claim.is_sync() && !sync_close) || walks_a_pausing_step
     state.method_pauses(node, pauses)
     let hands_back_a_sequence = check_core_call_on_hands_back_a_sequence(contract)
+    // **A walk of failing elements is worked on inside each `Result`**
+    // (#2736): the lowering is told which calls stand on one.
+    if shape_failing_items(on) {
+        state.facts.failing_item_receivers.insert(node)
+    }
     if walks_a_pausing_step && hands_back_a_sequence {
         state.facts.pausing_walks.insert(node)
     }
@@ -1400,10 +1491,44 @@ fn check_core_call_on_described[H: CheckHost](mut state: CheckState, world: ref 
             state.facts.copied_item_params.insert((id_of(args[0]) as i64, index))
         }
     }
+    // **A lambda handed where the contract says `throws(f)` may fail**
+    // (#2736): the parameter's type allows it, and what it fails with is
+    // gathered apart, to go where the call puts it.
+    let through = check_core_call_on_throws_through(contract)
+    for at in through {
+        if at < expected.len() {
+            expected[at] = check_core_call_on_failing_fn(expected[at])
+        }
+    }
+    let outer_guarded: CheckGuarded? = state.flow.guarded?.clone()
+    let outer_caught = state.flow.caught
+    if through.len() > 0 {
+        state.flow.guarded = CheckGuarded::nothing()
+        state.flow.last_lambda_fails = false
+        // **A step that hands back a walk fails where the walk is taken**
+        // (ADR-025 D1), not here: the lambda's failure is the walk's.
+        if hands_back_a_sequence {
+            state.flow.caught = true
+        }
+    }
     let callee: FnContract? = contract.clone()
     state.call_keepers = world.keepers.get(key)?.clone() ?? collections::BTreeMap()
-    let found = check_core_arguments_bound(state, world, host, args, patterns, bound, expected, world.own.functions.contains_key(key), callee, span)
+    let mut found = check_core_arguments_bound(state, world, host, args, patterns, bound, expected, world.own.functions.contains_key(key), callee, span)
     state.call_keepers.clear()
+    let mut failed_through = false
+    if through.len() > 0 {
+        // The signature's type, without `throws`, is what the lambda is
+        // weighed against: its failure is the call's, said above.
+        for at in through {
+            if at < found.len() {
+                found[at] = check_core_call_on_unfailing_fn(found[at])
+            }
+        }
+        let seen: CheckGuarded = state.flow.guarded?.clone() ?? CheckGuarded::nothing()
+        state.flow.caught = outer_caught
+        state.flow.guarded = outer_guarded
+        failed_through = check_core_call_on_failed_through(state, args, through, seen, key, on, node, hands_back_a_sequence)
+    }
     if world.own.functions.contains_key(key) {
         check_core_call_code_args(state, world, callee, key, args, span)
     } else {
@@ -1564,7 +1689,15 @@ fn check_core_call_on_described[H: CheckHost](mut state: CheckState, world: ref 
     let substituted = substitute(result, bound)
     state.flow.text_slot = views_text_slots(result, bound, true)
     state.flow.text_walk = views_text_slots(result, bound, false)
-    let shaped = shape_through(contract, on, found, substituted)
+    let mut shaped = shape_through(contract, on, found, substituted)
+    // **The walk a failing lambda's step makes fails at each element**
+    // (#2736, ADR-025 D1).
+    if failed_through && hands_back_a_sequence {
+        shaped = match shaped {
+            Ty::Seq { item, is_sync, pauses, parallel, shape, .. } => Ty::Seq { item: item.clone(), is_sync: is_sync, pauses: pauses, can_throw: true, parallel: parallel, shape: shape with { failing_items: true } },
+            else => shaped,
+        }
+    }
     let paused = check_crossings_a_lambda_that_pauses_at_an_entry(state, key, receiver, on, args, lambda_at, shaped, span)
     return state.stamped_through(contract, found, paused)
 }

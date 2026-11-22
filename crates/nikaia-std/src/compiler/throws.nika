@@ -509,8 +509,17 @@ fn thrown_in_block(block: ref Block, names: ref winnow_grammar::InternerContext,
             else => {}
         }
         match stmt.node {
-            Stmt::For { body, .. } => thrown_in_block(body, names, holes_of, contribution_of, in_a_handler, out),
-            Stmt::While { body, .. } => thrown_in_block(body, names, holes_of, contribution_of, in_a_handler, out),
+            // **A lambda in a loop's head is walked too** (#2736), as one
+            // in a `let`'s value is: `for d in xs.iter().map(fn(x) { f(x) })`
+            // fails with what `f` does.
+            Stmt::For { iter, body, .. } => {
+                thrown_in_blocks(iter, names, holes_of, contribution_of, in_a_handler, out)
+                thrown_in_block(body, names, holes_of, contribution_of, in_a_handler, out)
+            }
+            Stmt::While { cond, body, .. } => {
+                thrown_in_blocks(cond, names, holes_of, contribution_of, in_a_handler, out)
+                thrown_in_block(body, names, holes_of, contribution_of, in_a_handler, out)
+            }
             Stmt::Let { value, .. } => thrown_in_blocks(value, names, holes_of, contribution_of, in_a_handler, out),
             Stmt::Comptime { value, .. } => thrown_in_blocks(value, names, holes_of, contribution_of, in_a_handler, out),
             Stmt::Expr(value) => thrown_in_blocks(value, names, holes_of, contribution_of, in_a_handler, out),
