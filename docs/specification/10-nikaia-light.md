@@ -4063,16 +4063,18 @@ form, in this order.**
 
 ```nika
 let page = async http::get(url) catch { Page::empty() }   // the fallback
-let size = page.len() catch { 0 }                          // a catch where it arrives
 let h = async(handle) fn { crawl(site) } catch { [] }     // a handle's fallback
 let found = h.join() catch { [] }                          // a catch where it arrives
 ```
 
 1. **In the task.** A `catch` inside the task's expression or lambda is the
    task's own and runs at once, when the task fails.
-2. **Where it arrives.** Otherwise the failure is held, and nothing runs for it
-   until it arrives: at the mention that waits, for the value form, or at
-   `h.join()`, for a handle. A `catch` that encloses that point handles it.
+2. **Where it arrives, for a handle.** Otherwise a handle's failure is held,
+   and nothing runs for it until it arrives at `h.join()`; a `catch` that
+   encloses the join handles it. A value form's failure has no such place: it
+   is waited for before the whole statement that first names it (above), so a
+   `catch` inside that statement does not enclose the wait. Its handlers are
+   the task's own `catch` and the fallback.
 3. **The fallback.** Otherwise the `catch` written directly after the `async`
    expression runs, the last handler before the receiver: for the value form
    at the wait point, its value becoming the value; for a handle inside the
@@ -4087,9 +4089,7 @@ is not a failure and runs no fallback. `task::OverBudget` is one and runs it,
 and so is `task::TimedOut` from a deadline (`within:` above). The
 `task::TimedOut` of a `join(within:)` whose own limit ran out is the join's
 error, not the task's: it meets a `catch` around the join, and no fallback runs
-for it (8.2). Which handler runs depends on the path that reaches the
-mention. Once a `catch` where the failure arrived has taken it, a later mention
-of `x` on that path is refused unless the binding has a fallback (`NK2118`).
+for it (8.2). A handle a `join` took is used up: a later use is `NK2105`.
 The function throws what the fallback throws, or the task's whole set where
 there is no fallback.
 
