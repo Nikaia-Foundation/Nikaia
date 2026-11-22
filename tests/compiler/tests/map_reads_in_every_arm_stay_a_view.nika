@@ -1,0 +1,19 @@
+// A `match` whose arms are all a map's read is the view a lone read is
+// (ADR-293 D15, #2170): handed back as an `i64?` of its own, it is refused
+// as `let n = m[k]; return n` is, not left to rustc.
+
+use std::collections
+
+fn pick(m: collections::BTreeMap[String, i64], k: String, lit: bool) -> i64? {
+    let n = match lit {
+        true => m[k],
+        else => m[k],
+    }
+    return n
+}
+
+fn main() throws {
+    let mut m: collections::BTreeMap[String, i64] = collections::BTreeMap()
+    m.insert("a", 5)
+    println(f"{pick(m, "a", true) ?? 0}")
+}

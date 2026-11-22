@@ -166,6 +166,25 @@ impl EmitOut {
         self.shift_entries(at, text.len())
     }
 
+    /// **Writes `text` with `inner` in place of `marker`** (ADR-300 D9,
+    /// #2199): `inner`'s map entries move to where it lands, so a body
+    /// wrapped in text of its own (a task's closure) keeps its `.nika` lines.
+    /// A `text` without `marker` is written as it is.
+    pub fn push_around(ref mut self, text: ref String, marker: ref String, inner: ref EmitOut) {
+        if !text.contains(marker) {
+            self.buf.push_str(text)
+            return
+        }
+        let at = text.find(marker) ?? return
+        self.buf.push_str(text.before(at.start))
+        let offset = self.buf.len()
+        self.buf.push_str(inner.buf)
+        for entry in inner.entries {
+            self.entries.push(EmitMapEntry { start: entry.start + offset, end: entry.end + offset, source: Span { start: entry.source.start, end: entry.source.end }, unit: entry.unit })
+        }
+        self.buf.push_str(text.after(at.end))
+    }
+
     /// Append a scratch buffer, moving its map entries into place. Order is
     /// preserved, so "innermost first" survives.
     pub fn append(ref mut self, other: EmitOut) {

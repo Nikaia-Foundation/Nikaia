@@ -1,0 +1,8 @@
+error[NK1104]: You're returning an `i64?` whose content is a view, but the function is declared to return an `i64?` whose content is its own.
+   --> tests/map_reads_in_every_arm_stay_a_view.nika:12:12
+    |
+ 12 |     return n
+    |            ^
+    |
+    = help: Make it an `i64?`.
+1 type error

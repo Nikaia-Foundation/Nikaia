@@ -1,0 +1,3 @@
+tests/abort_a_panic_in_a_task_body_names_its_line.nika:16: a task stopped: attempt to divide by zero
+tests/abort_a_panic_in_a_task_body_names_its_line.nika:23: a task stopped: attempt to divide by zero
+tests/abort_a_panic_in_a_task_body_names_its_line.nika:30: a task stopped: attempt to divide by zero

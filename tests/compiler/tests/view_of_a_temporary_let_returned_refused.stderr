@@ -1,0 +1,31 @@
+error[NK1104]: You're returning a view of a `String`, but the function is declared to return a `String` of its own.
+  --> tests/view_of_a_temporary_let_returned_refused.nika:6:12
+   |
+ 6 |     return rest
+   |            ^^^^
+   |
+   = note: This is a view: it points into text that something else owns.
+   = note: The function returns it, and the caller keeps it after the call ends, so it needs text of its own.
+   = note: Nikaia never copies text behind your back: a copy costs as much as the text is long, so it's written where it happens.
+   = help: Write `.clone()` to copy it here.
+error[NK1104]: This function returns a view of a `String`, but it's declared to return a `String` of its own.
+   --> tests/view_of_a_temporary_let_returned_refused.nika:11:5
+    |
+ 11 |     rest
+    |     ^^^^
+    |
+    = note: This is a view: it points into text that something else owns.
+    = note: The function returns it, and the caller keeps it after the call ends, so it needs text of its own.
+    = note: Nikaia never copies text behind your back: a copy costs as much as the text is long, so it's written where it happens.
+    = help: Write `.clone()` to copy it here.
+error[NK1104]: You're returning a view of a `String`, but the function is declared to return a `String` of its own.
+   --> tests/view_of_a_temporary_let_returned_refused.nika:17:12
+    |
+ 17 |     return again
+    |            ^^^^^
+    |
+    = note: This is a view: it points into text that something else owns.
+    = note: The function returns it, and the caller keeps it after the call ends, so it needs text of its own.
+    = note: Nikaia never copies text behind your back: a copy costs as much as the text is long, so it's written where it happens.
+    = help: Write `.clone()` to copy it here.
+3 type errors
