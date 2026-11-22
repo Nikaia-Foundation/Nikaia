@@ -1547,7 +1547,7 @@ pub(crate) fn check_core_call_on_hashed_key(state: &mut CheckState, world: &Chec
         _ => return,
     };
     if base != "HashMap" && base != "HashSet" || args.is_empty() || check_core_call_on_keyless(entry) { return; }
-    for name in check_core_call_on_parameters_in(&state, nikaia_std::index::get(&args, 0)) {
+    for name in check_core_call_on_parameters_in(&state, unsafe { nikaia_std::proven::read(&args, (0) as usize) }) {
         let bounds = match state.type_parameters.get(&name) { Some(__nikaia_value) => __nikaia_value, None => continue };
         let mut allowed = false;
         for bound in bounds.iter() { if !world.own.traits.contains_key(bound) && bound == "Hash" { allowed = true; } }

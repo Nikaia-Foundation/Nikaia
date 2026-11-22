@@ -31,7 +31,11 @@ pub(crate) fn free_function(program: &Program, words: &winnow_grammar::InternerC
     None
 }
 
-pub(crate) fn own_method(program: &Program, words: &winnow_grammar::InternerContext, owner: &str, wanted: &str) -> Option<FreeFunction> {
+pub(crate) fn own_method(program: &Program, words: &winnow_grammar::InternerContext, owner: &str, wanted: &str) -> Option<FreeFunction> { own_impl_function(program, words, owner, wanted, true) }
+
+pub(crate) fn own_associated(program: &Program, words: &winnow_grammar::InternerContext, owner: &str, wanted: &str) -> Option<FreeFunction> { own_impl_function(program, words, owner, wanted, false) }
+
+pub(crate) fn own_impl_function(program: &Program, words: &winnow_grammar::InternerContext, owner: &str, wanted: &str, with_receiver: bool) -> Option<FreeFunction> {
     for item in program.items.iter() {
         match &item.node {
             Item::Impl { methods, target, trait_name } => {
@@ -41,7 +45,7 @@ pub(crate) fn own_method(program: &Program, words: &winnow_grammar::InternerCont
                         match &method.node {
                             Item::Fn { name, receiver, args, config, ret_type, can_throw, .. } => {
                                 let can_throw = *can_throw; let name = *name;
-                                if receiver.is_some() && named_as((name).as_ref(), words, wanted) {
+                                if (receiver.is_some()) == with_receiver && named_as((name).as_ref(), words, wanted) {
                                     #[allow(unused_mut)] let mut params: Vec<String> = vec![];
                                     params.reserve(args.iter().size_hint().0); for arg in args.iter() { params.push(nikaia_std::block::Text::from(words.resolve(arg.name).to_string())); }
                                     let mut options: Vec<(String, Expr)> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut params = params;

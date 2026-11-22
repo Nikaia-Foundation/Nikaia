@@ -933,6 +933,10 @@ pub(crate) fn check_core_method_walked<H: CheckHost>(state: &mut CheckState, wor
         check_core_places_array_length(state, id_of(receiver) as i64, &on);
         if state.elements_take_space(&on) { state.facts.sized_lengths.insert(id_of(receiver) as i64); }
     }
+    if args.is_empty() && name == "is_empty" && check_core_method_counted(&on) {
+        state.facts.std_lengths.insert(id_of(receiver) as i64);
+        if state.elements_take_space(&on) { state.facts.sized_lengths.insert(id_of(receiver) as i64); }
+    }
     if name == "get" && (check_core_method_a_map(&on) || check_core_method_a_list(&on)) {
         state.flow.read_a_map = true;
         state.facts.map_gets.insert(id_of(expr) as i64);

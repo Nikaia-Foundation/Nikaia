@@ -1,0 +1,37 @@
+// What `add`, `sub` and `mul(k)` of `Wide`s tell the bounds walk past `??
+// return` (#2647, ADR-270 D11): the exact sum, difference and product by a
+// constant of the values they were made from, so `narrow()` of a bounded one
+// bounds the index.
+fn pick_sum(xs: ref Vec[i64], a: i64, b: i64) -> i64? {
+	if a < 0 || a >= 5 || b < 0 || b >= 5 || xs.len() < 10 {
+		return null
+	}
+	let w = Wide::of(a).add(Wide::of(b)) ?? return null
+	let n = w.narrow() ?? return null
+	return xs[n]
+}
+
+fn pick_difference(xs: ref Vec[i64], a: i64, b: i64) -> i64? {
+	if a < 5 || a >= 10 || b < 0 || b > 5 || xs.len() < 10 {
+		return null
+	}
+	let w = Wide::of(a).sub(Wide::of(b)) ?? return null
+	let n = w.narrow() ?? return null
+	return xs[n]
+}
+
+fn pick_times(xs: ref Vec[i64], a: i64) -> i64? {
+	if a < 0 || a >= 5 || xs.len() < 10 {
+		return null
+	}
+	let w = Wide::of(a).mul(2) ?? return null
+	let n = w.narrow() ?? return null
+	return xs[n]
+}
+
+fn main() throws {
+	let xs: Vec[i64] = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+	println(pick_sum(xs, 3, 4) ?? 0)
+	println(pick_difference(xs, 9, 2) ?? 0)
+	println(pick_times(xs, 4) ?? 0)
+}

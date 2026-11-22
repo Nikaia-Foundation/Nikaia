@@ -1362,7 +1362,7 @@ pub(crate) fn method_sources(ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_, '_, '_,
 pub(crate) fn sources_of_a_method(contract: &FnContract, into: &mut collections::BTreeSet<i64>) -> bool {
     if contract.borrows.is_empty() { return false; }
     let signature = match contract.signature.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return false };
-    if signature.params.is_empty() || nikaia_std::index::get(&signature.params, 0).0 != "self" { return false; }
+    if signature.params.is_empty() || unsafe { nikaia_std::proven::read(&signature.params, (0) as usize) }.0 != "self" { return false; }
     for b in contract.borrows.iter() {
         let mut found = false;
         let mut at: i64 = 0;

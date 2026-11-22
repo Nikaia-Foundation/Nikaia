@@ -1,0 +1,57 @@
+// **No `NK1385` where the bound is not evident** (#1933): a loop that also
+// pushes a literal, a text with room ahead already, a loop over another
+// source than the one pushed, a push in a nested loop, and a text changed
+// otherwise after its loop.
+fn spaced(s: String) -> String {
+    let mut out = String()
+    for c in s.scalars {
+        out.push(c)
+        out.push(' ')
+    }
+    return out
+}
+
+fn sized(s: String) -> String {
+    let mut out = String(capacity: s.len())
+    for c in s.scalars {
+        out.push(c)
+    }
+    return out
+}
+
+fn crossed(s: String, t: String) -> String {
+    let mut out = String()
+    for i in 0..<t.len() {
+        if i < s.len() {
+            out.push_str(s.bytes[i..<(i + 1)].text() catch { "" })
+        }
+    }
+    return out
+}
+
+fn squared(s: String) -> String {
+    let mut out = String()
+    for _c in s.scalars {
+        for d in s.scalars {
+            out.push(d)
+        }
+    }
+    return out
+}
+
+fn ended(s: String) -> String {
+    let mut out = String()
+    for c in s.scalars {
+        out.push(c)
+    }
+    out.push_str("!")
+    return out
+}
+
+fn main() throws {
+    println(spaced("ab"))
+    println(sized("ab"))
+    println(crossed("abc", "xy"))
+    println(squared("ab"))
+    println(ended("ab"))
+}

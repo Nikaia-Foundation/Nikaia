@@ -90,7 +90,7 @@ impl EmitState {
     // this was written - see `contracts::sync`.
     pub(crate) fn emit_async_body_group(&self, body: &Block) -> i64 {
         if body.stmts.is_empty() { return 0; }
-        let group = -1 - unsafe { nikaia_std::proven::read(&body.stmts, (0) as usize) }.span.start as i64;
+        let group = unsafe { nikaia_std::proven::sub::<i64>(-1, nikaia_std::proven::read(&body.stmts, (0) as usize).span.start as i64) };
         if self.facts.async_waits.values().any(|wait| { wait.group == group }) { return group; }
         0
     }
@@ -368,7 +368,7 @@ impl EmitState {
                     }
                 }
                 let mut source_name: Option<winnow_grammar::Symbol> = None;
-                if source_at.is_some() { source_name = Some(nikaia_std::index::get(&args, nikaia_std::index::at(nikaia_std::index::or(source_at, || 0))).name); } else if !several_at.is_empty() { source_name = Some(nikaia_std::index::get(&args, nikaia_std::index::at(*nikaia_std::index::get(&several_at, 0))).name); } else if source_option.is_some() { source_name = Some(nikaia_std::index::get(&config, nikaia_std::index::at(nikaia_std::index::or(source_option, || 0))).name); }
+                if source_at.is_some() { source_name = Some(nikaia_std::index::get(&args, nikaia_std::index::at(nikaia_std::index::or(source_at, || 0))).name); } else if !several_at.is_empty() { source_name = Some(nikaia_std::index::get(&args, nikaia_std::index::at(*unsafe { nikaia_std::proven::read(&several_at, (0) as usize) })).name); } else if source_option.is_some() { source_name = Some(nikaia_std::index::get(&config, nikaia_std::index::at(nikaia_std::index::or(source_option, || 0))).name); }
                 let source_kept = source_name.is_some() && has_kept && self.tethered_position(&key, "<result>");
                 let shared = source_name.is_some() && !source_kept;
                 let mut lifted_whole = false;

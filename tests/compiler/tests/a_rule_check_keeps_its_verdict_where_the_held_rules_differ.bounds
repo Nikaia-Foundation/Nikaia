@@ -1,0 +1,6 @@
+bounds in tests/a_rule_check_keeps_its_verdict_where_the_held_rules_differ.nika: 4 indexes, 3 proved; 1 operations, 1 proved
+    28  self.a.len() - 1   proved
+    36  self.a[self.c[k]]  proved
+    36  self.c[k]          proved
+    43  self.b[self.c[k]]  checked: a value read out of a list, of which the walk knows no fact (#797, #798): an element of a named list (ADR-306 D7, D21)
+    43  self.c[k]          proved

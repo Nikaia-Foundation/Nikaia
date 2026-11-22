@@ -1,0 +1,384 @@
+// crates/nikaia-std/src/compiler/check_room_ahead.nika
+//
+// **`NK1385`: a text built by pushes from a source that bounds it** (#1933,
+// owner 2026-11-21, route a). A `let mut out = String()` (or `""`) whose
+// every change is a `push` or `push_str`, inside one loop over a source `s`,
+// of a part of `s`, grows to at most `s.len()` bytes: the warning names
+// `String(capacity: s.len())`, the room ahead Part I offers (*Room ahead is
+// an option of the constructor*), and `nikaia fix` writes it. The compiler
+// does not reserve silently: a capacity is a promise about memory, and
+// programs say their promises (ADR-149 D5).
+//
+// **Only where the bound is evident**, as data: the loop is `for x in s.VIEW`,
+// `for i in 0..<s.len()` or `while i < n` with `n` the length of `s` (or of a
+// view of it); what is pushed is the loop's item or a part of `s` (an index
+// or a cut of `s` or of a view of it, `s.between(p, q)`, `s.before(p)`,
+// `s.after(p)`); after the loop `out` is only handed back. Anything else
+// pushed, any other change, a push in a nested loop or a loop over another
+// source says nothing.
+
+use std::collections
+
+// The source a loop walks: its name, and the name of the loop's item where the
+// loop walks a view of it (`for c in s.scalars`), else "".
+struct RoomSource {
+    name: String,
+    item: String,
+    kind: String,
+}
+
+impl CheckState {
+    /// **Each `let mut` of an empty text in `block`**, asked as the block's
+    /// walk ends.
+    fn a_text_without_room(ref mut self, world: ref CheckWorld, block: ref Block) sync {
+        let mut at = 0
+        for stmt in block.stmts {
+            let out = room_empty_text(world, stmt.node) ?? ""
+            if out != "" {
+                self.a_text_without_room_at(world, block, at, out, stmt.span)
+            }
+            at += 1
+        }
+    }
+
+    // The `let` of `out` at `at`: the one loop after it that mentions `out`,
+    // and nothing after that loop but a hand-back.
+    fn a_text_without_room_at(ref mut self, world: ref CheckWorld, block: ref Block, at: i64, out: String, span: ref Span) sync {
+        let count = block.stmts.len() as i64
+        let mut loop_at = -1
+        let mut later = at + 1
+        while later < count {
+            let node = block.stmts[later].node
+            if room_binds(world, node, out) {
+                return
+            }
+            let mut named: collections::BTreeSet[String] = collections::BTreeSet()
+            names_in_statement(node, world.words, named)
+            if named.contains(out) {
+                if loop_at < 0 {
+                    loop_at = later
+                } else if !room_handed_back(world, node, out) {
+                    return
+                }
+            }
+            later += 1
+        }
+        if loop_at < 0 {
+            return
+        }
+        let source = room_loop_source(world, block, loop_at, block.stmts[loop_at].node) ?? return
+        if source.name == out {
+            return
+        }
+        let body = room_loop_body(block.stmts[loop_at].node) ?? return
+        if room_pushes(world, block, loop_at, body, out, source) <= 0 {
+            return
+        }
+        for said in self.findings {
+            if said.code == "NK1385" && said.span.start == span.start {
+                return
+            }
+        }
+        let room = f"String(capacity: {source.name}.len())"
+        let mut warned = check_refusal("NK1385", span, f"`{out}` starts with no room and grows by a push of a part of `{source.name}` in the `{source.kind}` loop over `{source.name}`: it asks for memory again as it grows.", [f"Every change to `{out}` pushes a part of `{source.name}`, so it ends at most `{source.name}.len()` bytes long; a capacity is a promise about memory, and programs say their promises (ADR-149 D5)."], f"Give it the room ahead: `{room}`; `nikaia fix` writes it.")
+        warned.severity = CheckSeverity::Warning
+        warned.edit = room_edit(world, stmt_value(block.stmts[at].node), room)
+        self.findings.push(warned)
+    }
+}
+
+// The name a `let mut NAME = String()` or `= ""` binds, else `null`.
+fn room_empty_text(world: ref CheckWorld, stmt: ref Stmt) -> String? sync {
+    match stmt {
+        Stmt::Let { names, mutable, value, .. } => {
+            if !mutable || names.len() != 1 {
+                return null
+            }
+            let empty = match value {
+                Expr::LitStr { text, .. } => text == "",
+                Expr::Call { func, args, config, .. } => args.len() == 0 && config.len() == 0 && room_named(world, func) == "String",
+                else => false,
+            }
+            if empty {
+                return world.words.resolve(names[0]).clone()
+            }
+        },
+        else => {},
+    }
+    return null
+}
+
+// The value of a `let`, else `null`.
+fn stmt_value(stmt: ref Stmt) -> ref Expr? sync {
+    match stmt {
+        Stmt::Let { value, .. } => return value,
+        else => {},
+    }
+    return null
+}
+
+// **The edit `NK1385` suggests**: the empty text's value replaced by the room.
+fn room_edit(world: ref CheckWorld, value: ref Expr?, room: ref String) -> CheckEdit? sync {
+    let at = world.here.spans.get(id_of(value ?? return null)) ?? return null
+    return CheckEdit { span: Span { start: at.start, end: at.end }, text: room.clone() }
+}
+
+// A plain name, `String` or `s`, as written; else "".
+fn room_named(world: ref CheckWorld, expr: ref Expr) -> String sync {
+    match expr {
+        Expr::Variable(symbol, _) => return world.words.resolve(symbol).clone(),
+        Expr::Path(segments, _) => {
+            if segments.len() == 1 {
+                return world.words.resolve(segments[0]).clone()
+            }
+        },
+        else => {},
+    }
+    return ""
+}
+
+// Whether `stmt` is a `let` that binds `name` again.
+fn room_binds(world: ref CheckWorld, stmt: ref Stmt, name: ref String) -> bool sync {
+    match stmt {
+        Stmt::Let { names, .. } => {
+            for one in names {
+                if world.words.resolve(one) == name {
+                    return true
+                }
+            }
+        },
+        else => {},
+    }
+    return false
+}
+
+// `return out`, or `out` as the block's value.
+fn room_handed_back(world: ref CheckWorld, stmt: ref Stmt, out: ref String) -> bool sync {
+    return match stmt {
+        Stmt::Return(value) => room_named(world, value ?? return false) == out,
+        Stmt::Expr(value) => room_named(world, value) == out,
+        else => false,
+    }
+}
+
+// The body of a `for` or a `while`.
+fn room_loop_body(stmt: ref Stmt) -> ref Block? sync {
+    match stmt {
+        Stmt::For { body, .. } => return body,
+        Stmt::While { body, .. } => return body,
+        else => {},
+    }
+    return null
+}
+
+// **The source a loop walks**: `for x in s.VIEW` (its item is `x`),
+// `for i in 0..<LEN` and `while i < LEN`, where `LEN` is the length of `s`.
+fn room_loop_source(world: ref CheckWorld, block: ref Block, upto: i64, stmt: ref Stmt) -> RoomSource? sync {
+    match stmt {
+        Stmt::For { bindings, iter, .. } => {
+            match iter {
+                Expr::Range { end, inclusive, .. } => {
+                    if inclusive {
+                        return null
+                    }
+                    let name = room_length_of(world, block, upto, end) ?? return null
+                    return RoomSource { name: name, item: "", kind: "for" }
+                },
+                else => {},
+            }
+            if bindings.len() != 1 {
+                return null
+            }
+            let name = room_view_of(world, block, upto, iter) ?? return null
+            return RoomSource { name: name, item: world.words.resolve(bindings[0]).clone(), kind: "for" }
+        },
+        Stmt::While { cond, .. } => {
+            match cond {
+                Expr::Binary { op, rhs, .. } => {
+                    match op {
+                        BinaryOp::Lt => {},
+                        else => return null,
+                    }
+                    let name = room_length_of(world, block, upto, rhs) ?? return null
+                    return RoomSource { name: name, item: "", kind: "while" }
+                },
+                else => {},
+            }
+        },
+        else => {},
+    }
+    return null
+}
+
+// The source whose length `expr` is: `s.len()`, `s.VIEW.len()`, `v.len()`
+// where `v` is a view of `s`, either cast, or a name a `let` before `upto`
+// binds to one of them.
+fn room_length_of(world: ref CheckWorld, block: ref Block, upto: i64, expr: ref Expr) -> String? sync {
+    match expr {
+        Expr::Cast { expr, .. } => return room_length_of(world, block, upto, expr),
+        Expr::MethodCall { receiver, method, args, .. } => {
+            if args.len() != 0 || world.words.resolve(method) != "len" {
+                return null
+            }
+            return room_view_of(world, block, upto, receiver) ?? room_source_name(world, block, upto, receiver)
+        },
+        Expr::Variable(..) => {
+            let bound_at = room_let_at(world, block, upto, room_named(world, expr))
+            if bound_at < 0 {
+                return null
+            }
+            return room_length_of(world, block, bound_at, stmt_value(block.stmts[bound_at].node) ?? return null)
+        },
+        else => {},
+    }
+    return null
+}
+
+// The source `expr` is a view of: `s.bytes`, `s.scalars`, `s.graphemes`, or a
+// name a `let` before `upto` binds to one.
+fn room_view_of(world: ref CheckWorld, block: ref Block, upto: i64, expr: ref Expr) -> String? sync {
+    match expr {
+        Expr::Field { base, name, .. } => {
+            let view = world.words.resolve(name)
+            if view == "bytes" || view == "scalars" || view == "graphemes" {
+                let source = room_named(world, base)
+                if source != "" {
+                    return source
+                }
+            }
+        },
+        Expr::Variable(..) => {
+            let bound_at = room_let_at(world, block, upto, room_named(world, expr))
+            if bound_at < 0 {
+                return null
+            }
+            return room_view_of(world, block, bound_at, stmt_value(block.stmts[bound_at].node) ?? return null)
+        },
+        else => {},
+    }
+    return null
+}
+
+// A plain name that is the source itself.
+fn room_source_name(world: ref CheckWorld, block: ref Block, upto: i64, expr: ref Expr) -> String? sync {
+    let name = room_named(world, expr)
+    if name == "" {
+        return null
+    }
+    return name
+}
+
+// Where the last `let NAME = …` before `upto` stands; -1 where there is none
+// or it is a `let mut`.
+fn room_let_at(world: ref CheckWorld, block: ref Block, upto: i64, name: String) -> i64 sync {
+    let mut found = -1
+    let mut at = 0
+    for stmt in block.stmts {
+        if at >= upto {
+            break
+        }
+        match stmt.node {
+            Stmt::Let { names, mutable, .. } => {
+                if names.len() == 1 && world.words.resolve(names[0]) == name {
+                    found = if mutable { -1 } else { at }
+                }
+            },
+            else => {},
+        }
+        at += 1
+    }
+    return found
+}
+
+// **The pushes onto `out` in `body`**, each of a part of `source`; -1 where
+// anything else changes or reads `out` (or a push lies in a nested loop or a
+// lambda), else how many.
+fn room_pushes(world: ref CheckWorld, block: ref Block, upto: i64, body: ref Block, out: ref String, source: ref RoomSource) -> i64 sync {
+    let mut count = 0
+    for stmt in body.stmts {
+        let mut named: collections::BTreeSet[String] = collections::BTreeSet()
+        names_in_statement(stmt.node, world.words, named)
+        if !named.contains(out) {
+            continue
+        }
+        let more = match stmt.node {
+            Stmt::Expr(value) => room_pushes_in(world, block, upto, value, out, source),
+            else => -1,
+        }
+        if more < 0 {
+            return -1
+        }
+        count += more
+    }
+    return count
+}
+
+// One statement's value: a push onto `out`, or an `if` whose branches push.
+fn room_pushes_in(world: ref CheckWorld, block: ref Block, upto: i64, value: ref Expr, out: ref String, source: ref RoomSource) -> i64 sync {
+    match value {
+        Expr::MethodCall { receiver, method, args, config, .. } => {
+            let name = world.words.resolve(method)
+            if room_named(world, receiver) != out || (name != "push" && name != "push_str") || args.len() != 1 || config.len() != 0 {
+                return -1
+            }
+            let mut named: collections::BTreeSet[String] = collections::BTreeSet()
+            names_in(args[0], world.words, named)
+            if named.contains(out) || !room_part_of(world, block, upto, args[0], source) {
+                return -1
+            }
+            return 1
+        },
+        Expr::If { cond, then_branch, else_branch, .. } => {
+            let mut named: collections::BTreeSet[String] = collections::BTreeSet()
+            names_in(cond, world.words, named)
+            if named.contains(out) {
+                return -1
+            }
+            let then = room_pushes(world, block, upto, then_branch, out, source)
+            if then < 0 {
+                return -1
+            }
+            let other = room_pushes(world, block, upto, else_branch ?? return then, out, source)
+            if other < 0 {
+                return -1
+            }
+            return then + other
+        },
+        else => {},
+    }
+    return -1
+}
+
+// **Whether `expr` is a part of the source**: the loop's item, an index or a
+// cut of the source or of a view of it, `s.between(p, q)`, `s.before(p)` or
+// `s.after(p)`, a `text()` of a cut, or a `try` of one.
+fn room_part_of(world: ref CheckWorld, block: ref Block, upto: i64, expr: ref Expr, source: ref RoomSource) -> bool sync {
+    match expr {
+        Expr::Variable(..) => return source.item != "" && room_named(world, expr) == source.item,
+        Expr::Try(inner, _) => return room_part_of(world, block, upto, inner, source),
+        Expr::Index { base, .. } => return room_rooted(world, block, upto, base, source),
+        Expr::MethodCall { receiver, method, .. } => {
+            let name = world.words.resolve(method)
+            if name == "between" || name == "before" || name == "after" {
+                return room_named(world, receiver) == source.name
+            }
+            if name == "text" {
+                return match receiver {
+                    Expr::Index { base, .. } => room_rooted(world, block, upto, base, source),
+                    else => false,
+                }
+            }
+        },
+        else => {},
+    }
+    return false
+}
+
+// The source itself, or a view of it.
+fn room_rooted(world: ref CheckWorld, block: ref Block, upto: i64, expr: ref Expr, source: ref RoomSource) -> bool sync {
+    if room_named(world, expr) == source.name {
+        return true
+    }
+    let viewed = room_view_of(world, block, upto, expr) ?? return false
+    return viewed == source.name
+}

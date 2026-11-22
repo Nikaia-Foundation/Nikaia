@@ -1,0 +1,7 @@
+bounds in tests/wide_add_narrowed_keeps_the_range_of_its_sum.nika: 3 indexes, 3 proved; 0 operations, 0 proved
+    11  xs[n]  proved
+    20  xs[n]  proved
+    29  xs[n]  proved
+  derived  pick_difference: 0 <= a, a <= xs.len(), a < xs.len(), 0 <= b, b <= xs.len(), b < xs.len(), b <= a, b < a, proved at the calls on lines 35
+  derived  pick_sum: 0 <= a, a <= xs.len(), a < xs.len(), a <= b, a < b, 0 <= b, b <= xs.len(), b < xs.len(), proved at the calls on lines 34
+  derived  pick_times: 0 <= a, a <= xs.len(), a < xs.len(), proved at the calls on lines 36

@@ -1,0 +1,14 @@
+/// A `u32` field cast to `i64` lies inside what a `u32` holds (#2629):
+/// `-1 - at.start as i64` fits an `i64`, which no fact says of the field
+/// but its type.
+pub struct Span {
+	pub start: u32,
+}
+
+pub fn group_of(at: ref Span) -> i64 {
+	return -1 - at.start as i64
+}
+
+fn main() throws {
+	println(f"{group_of(Span { start: 7 })}")
+}

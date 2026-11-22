@@ -50,6 +50,9 @@ pub struct BoundsContext {
 	/// The method calls on a type `std`'s ledger describes, by node, with the
 	/// type's name as the ledger keys it (ADR-314 D3, ADR-375 D5).
 	pub std_receivers: collections::BTreeMap[i64, String],
+	/// [`CheckFacts::wide_calls`]: each call of `std`'s `Wide[T]`, by the
+	/// method call's node or the maker's callee, as `"entry T"` (#2647).
+	pub wide_calls: collections::BTreeMap[i64, String],
 	/// [`CheckFacts::simd_loads`]: a vector's load, by the called path's
 	/// node, with the bytes it reads (minus the most, for a `Lanes`).
 	pub simd_loads: collections::BTreeMap[i64, i64],
@@ -2678,6 +2681,12 @@ fn bounding_fits(
 		if bounding_proves(walk, facts, goal, ask) {
 			return true
 		}
+		// **What the type of each name read holds** (#2629): `-1 - at as
+		// i64` with `at: u32` fits, which no fact says of `at` but its type.
+		let typed = bounding_typed_goal(walk, t, goal)
+		if typed != null && bounding_proves(walk, facts, typed ?? 0, ask) {
+			return true
+		}
 		// **A difference of two values not below zero** lies in
 		// `-hi..=hi`, inside a signed type (#1516): `n - i` after a loop
 		// whose counter stops at `n` or past its start.
@@ -2798,6 +2807,34 @@ fn bounding_relatives(
 		}
 	}
 	return out
+}
+
+/// **`goal`, or a name `t` reads outside what its type holds** (#2629):
+/// each name of a whole-number type the solver can state, a field `u32`
+/// as a parameter's; `null` where `t` reads none.
+fn bounding_typed_goal(mut walk: BoundsWalk, t: i64, goal: i64) -> i64? {
+	let mut read: collections::BTreeSet[String] = collections::BTreeSet()
+	walk.arena.variables(t, read)
+	let mut parts: Vec[i64] = []
+	for y in read {
+		let ty = walk.typed.get(y) ?? continue
+		let held = Range::held_by_type(ty) ?? continue
+		let lo = held.lo ?? continue
+		let hi = held.hi ?? continue
+		if lo < 0 - solvable() || hi > solvable() {
+			continue
+		}
+		let v = walk.arena.var(y)
+		let low = walk.arena.int(lo)
+		let high = walk.arena.int(hi)
+		parts.push(walk.arena.lt(v, low))
+		parts.push(walk.arena.gt(v, high))
+	}
+	if parts.is_empty() {
+		return null
+	}
+	parts.push(goal)
+	return walk.arena.or(parts)
 }
 
 /// `linear + ranged` (or `linear - ranged` where `subtracts`) inside `lo..=hi`:
@@ -3468,6 +3505,145 @@ fn bounding_division_halves(
 		parts.push(walk.arena.equal(back, whole))
 	}
 	return walk.arena.and(parts)
+}
+
+/// **The exact value of a `Wide[T]`** (#2647, ADR-270 D11 as amended
+/// 2026-11-21: what fits `T` again is exact), as a term over the `T` values
+/// it was made from: `Wide::of(v)` is `v`, `Wide::product(a, b)` is `a * b`
+/// (a number of its own within the product of the two intervals, where
+/// neither side is a constant), and a name the walk holds is that name.
+/// What `add`, `sub`, `mul` and `neg` give past a `?? return` is in
+/// [`bounding_wide_some`]. Null for any other expression, or one the checker
+/// recorded as no call of `std`'s `Wide`.
+fn bounding_wide(
+	mut walk: BoundsWalk,
+	expr: ref Expr,
+	facts: ref BoundsFacts,
+	context: ref BoundsContext,
+	program: ref Program,
+	words: ref winnow_grammar::InternerContext,
+	ask: fn(ref logic::TermArena, ref Vec[i64], i64) -> bool sync,
+) -> i64? {
+	match expr {
+		Expr::Coalesce { value: inner, fallback, .. } => {
+			if bounding_leaves(fallback) {
+				return bounding_wide_some(walk, inner, facts, context, program, words, ask)
+			}
+		},
+		Expr::Variable(name, _) => {
+			let text = words.resolve(name)
+			if facts.ints.contains(text) {
+				return walk.arena.var(text)
+			}
+		},
+		Expr::Call { func, args, .. } => {
+			let recorded = context.wide_calls[node_key(func)] ?? return null
+			if recorded.starts_with("of ") && args.len() == 1 {
+				return bounding_lin(walk, args[0], facts, context, program, words)
+			}
+			if recorded.starts_with("product ") && args.len() == 2 {
+				let a = bounding_lin(walk, args[0], facts, context, program, words)
+				let b = bounding_lin(walk, args[1], facts, context, program, words)
+				if a != null && b != null {
+					let exact = bounding_product(walk, a ?? 0, b ?? 0)
+					if exact != null {
+						return exact
+					}
+				}
+				let left = bounding_range(walk, args[0], facts, context, program, words, ask) ?? return null
+				let right = bounding_range(walk, args[1], facts, context, program, words, ask) ?? return null
+				let both = left.mul(right)
+				let lo = both.lo ?? return null
+				let hi = both.hi ?? return null
+				if lo < 0 - solvable() || hi > solvable() {
+					return null
+				}
+				let name = f"product#{walk.codes}"
+				walk.codes += 1
+				let v = walk.arena.var(name)
+				let least = walk.arena.int(lo)
+				let most = walk.arena.int(hi)
+				let low = walk.arena.ge(v, least)
+				let high = walk.arena.le(v, most)
+				walk.axioms.insert(name, [low, high])
+				return v
+			}
+		},
+		else => {},
+	}
+	return null
+}
+
+/// **The value of a `Wide[T]` method that may give `null`, where it gives
+/// one** (#2647): `x.add(y)` and `x.sub(y)` are the exact sum and difference,
+/// `x.mul(k)` the product by a constant `k`, `x.neg()` the negation. Read
+/// only under a `?? return` that leaves where the value is missing.
+fn bounding_wide_some(
+	mut walk: BoundsWalk,
+	expr: ref Expr,
+	facts: ref BoundsFacts,
+	context: ref BoundsContext,
+	program: ref Program,
+	words: ref winnow_grammar::InternerContext,
+	ask: fn(ref logic::TermArena, ref Vec[i64], i64) -> bool sync,
+) -> i64? {
+	match expr {
+		Expr::MethodCall { receiver, args, .. } => {
+			let recorded = context.wide_calls[node_key(expr)] ?? return null
+			let (entry, _) = recorded.split_once(" ") ?? return null
+			let on = bounding_wide(walk, receiver, facts, context, program, words, ask) ?? return null
+			if entry == "neg" && args.is_empty() {
+				return walk.arena.neg(on)
+			}
+			if args.len() != 1 {
+				return null
+			}
+			if entry == "mul" {
+				let k = bounding_lin(walk, args[0], facts, context, program, words) ?? return null
+				return bounding_product(walk, on, k)
+			}
+			let other = bounding_wide(walk, args[0], facts, context, program, words, ask) ?? return null
+			return match entry {
+				"add" => walk.arena.add(on, other),
+				"sub" => walk.arena.sub(on, other),
+				else => null,
+			}
+		},
+		else => {},
+	}
+	return null
+}
+
+/// **What `let n = w.narrow() ?? return` binds**: past it the value fits
+/// `T`, and is `w`'s exact value ([`bounding_wide`]), so `n` is that term
+/// (#2647). Null where `value` is no such call.
+fn bounding_narrowed(
+	mut walk: BoundsWalk,
+	value: ref Expr,
+	facts: ref BoundsFacts,
+	context: ref BoundsContext,
+	program: ref Program,
+	words: ref winnow_grammar::InternerContext,
+	ask: fn(ref logic::TermArena, ref Vec[i64], i64) -> bool sync,
+) -> i64? {
+	match value {
+		Expr::Coalesce { value: inner, fallback, .. } => {
+			if !bounding_leaves(fallback) {
+				return null
+			}
+			match inner {
+				Expr::MethodCall { receiver, args, .. } => {
+					let recorded = context.wide_calls[node_key(inner)] ?? return null
+					if recorded.starts_with("narrow ") && args.is_empty() {
+						return bounding_wide(walk, receiver, facts, context, program, words, ask)
+					}
+				},
+				else => {},
+			}
+		},
+		else => {},
+	}
+	return null
 }
 
 /// **`expr` as a linear term**, where it is one.
@@ -4780,7 +4956,37 @@ fn bounding_claim(
 		},
 		else => {},
 	}
+	let empty = bounding_emptiness(walk, expr, context, words, true)
+	if empty != null {
+		return empty
+	}
 	return bounding_comparison(walk, expr, facts, context, program, words)
+}
+
+/// **`xs.is_empty()` as a fact of `xs.len()`** (#2629): `len <= 0` where it
+/// holds (`empty`), `len > 0` where it does not, of a list `std` counts.
+fn bounding_emptiness(
+	mut walk: BoundsWalk,
+	expr: ref Expr,
+	context: ref BoundsContext,
+	words: ref winnow_grammar::InternerContext,
+	empty: bool,
+) -> i64? {
+	match expr {
+		Expr::MethodCall { receiver, method, args, .. } => {
+			if !args.is_empty() || words.resolve(method) != "is_empty" {
+				return null
+			}
+			let path = path_of(receiver, words) ?? return null
+			let length = bounding_length(walk, receiver, path, context) ?? return null
+			let zero = walk.arena.int(0)
+			if empty {
+				return walk.arena.le(length, zero)
+			}
+			return walk.arena.gt(length, zero)
+		},
+		else => return null,
+	}
 }
 
 /// **What holds where `expr` is false**: a formula `!expr` implies, by the
@@ -4853,7 +5059,7 @@ fn bounding_denial(
 		},
 		else => {},
 	}
-	return null
+	return bounding_emptiness(walk, expr, context, words, false)
 }
 
 /// **A `bool` name as a number** (ADR-361 D4, #1634): `1` where it is
@@ -8028,10 +8234,33 @@ fn bounding_let(
 	if names.len() == 2 {
 		halves = bounding_halves(walk, names, value, facts, context, program, words)
 	}
+	// **A `Wide[T]`, and a value `narrow() ?? return` takes out of one, is
+	// the exact value it was made from** (#2647), read before the names move.
+	let mut wide_term: i64? = null
+	if names.len() == 1 {
+		wide_term = bounding_narrowed(walk, value, facts, context, program, words, ask)
+		let named = match value {
+			Expr::Variable(_, _) => true,
+			else => false,
+		}
+		if wide_term == null && !named {
+			wide_term = bounding_wide(walk, value, facts, context, program, words, ask)
+		}
+	}
 	for symbol in names {
 		let name = words.resolve(symbol)
 		bounding_forget(walk, facts, name)
 		facts.ints.remove(name)
+	}
+	if wide_term != null {
+		let exact = wide_term ?? 0
+		let held = words.resolve(names[0])
+		if !walk.arena.mentions(exact, held) {
+			facts.ints.insert(held.clone())
+			let v = walk.arena.var(held)
+			let fact = walk.arena.equal(v, exact)
+			bounding_push(walk, facts, fact)
+		}
 	}
 	if halves != null {
 		facts.ints.insert(words.resolve(names[0]).clone())
@@ -9935,10 +10164,13 @@ fn bounding_expr(
 			}
 			let frame = called_function_frame(func, context, words)
 			let callee = callee_params(func, context.around, words)
+			// **`std`'s `Wide` makers take their values and change none**
+			// (#2647): `Wide::of(a)` keeps what holds of `a`.
+			let handing = !context.wide_calls.contains_key(node_key(func))
 			if walk.checking && loaded == 0 {
 				let mut handed: Vec[String] = []
 				for at in 0..<args.len() {
-					if hands_on(callee, at) {
+					if hands_on(callee, at) && handing {
 						handed.push(path_of(args[at], words) ?? continue)
 					}
 				}
@@ -9964,7 +10196,7 @@ fn bounding_expr(
 			for at in 0..<args.len() {
 				let handed = path_of(args[at], words) ?? continue
 				// A load reads its bytes and changes nothing.
-				if hands_on(callee, at) && loaded == 0 {
+				if hands_on(callee, at) && handing && loaded == 0 {
 					bounding_forget(walk, facts, handed)
 				}
 			}
