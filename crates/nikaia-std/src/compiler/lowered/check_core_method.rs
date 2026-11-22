@@ -635,7 +635,8 @@ pub(crate) fn check_core_method_called<H: CheckHost>(state: &mut CheckState, wor
             _ => { },
         }
     }
-    let open_items = state.open_items_of(world, receiver).is_some();
+    let a_range = matches!(receiver, Expr::Range { .. });
+    let open_items = a_range || state.open_items_of(world, receiver).is_some();
     if binds_hands_a_view(&name) && args.len() == 1 {
         match on {
             Ty::Seq { ref item, .. } => {
