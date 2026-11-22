@@ -143,6 +143,7 @@ impl CheckState {
         self.facts.compares.extend(found.compares.clone())
         self.facts.compares_totally.extend(found.totally.clone())
         self.facts.hashes.extend(found.hashes.clone())
+        self.facts.uncloned.extend(found.uncloned.clone())
     }
 }
 

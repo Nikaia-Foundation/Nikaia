@@ -326,7 +326,7 @@ panics = false
 touches = ["file(path) read"]
 throws = ["io::IoError"]
 provenance = "untrusted"
-signature = "(path: ref fs::Path, root: ref fs::Root; trusted: bool = false) -> Mapped"
+signature = "(path: ref fs::Path, root: ref fs::Root; trusted: bool = false) -> fs::Mapped"
 
 # The mapped file, as bytes.
 #
@@ -341,7 +341,7 @@ sync = true
 # An unnamed read conflicts with every file touch, which is the safe direction:
 # `[]` would claim an `fs::write` to the same file may be reordered across it.
 touches = ["file read"]
-signature = "(self: ref Mapped) -> ref(self) Bytes"
+signature = "(self: ref fs::Mapped) -> ref(self) Bytes"
 
 # The mapped file, as text (ADR-016 D5): the first call checks the whole of it
 # and fails with `NotText` at the earliest byte that is not UTF-8; every later
@@ -353,7 +353,7 @@ sync = true
 # Reading the text reads the file, as `deref` does.
 touches = ["file read"]
 throws = ["io::IoError"]
-signature = "(self: ref Mapped) -> ref(self) String"
+signature = "(self: ref fs::Mapped) -> ref(self) String"
 
 # The whole of a file, as bytes.
 #

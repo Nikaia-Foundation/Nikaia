@@ -1,0 +1,16 @@
+// A struct holding a handle that does not copy has no copy either (Part I
+// 4.7, #2238): `.clone()` on it is refused, as on the handle itself.
+use std::net
+
+struct Peer {
+	connection: net::Connection,
+	sent: i64,
+}
+
+fn twin(p: ref Peer) -> Peer {
+	return p.clone()
+}
+
+fn main() throws {
+	println("x")
+}

@@ -170,7 +170,8 @@ impl EmitState {
     }
     pub fn derives(&self, world: &EmitWorld<'_, '_, '_, '_>, name: winnow_grammar::Symbol) -> String {
         let text = nikaia_std::block::Text::from(world.words.resolve(name).to_string());
-        let mut parts: Vec<&'static str> = vec!["Debug", "Clone"];
+        let mut parts: Vec<&'static str> = vec!["Debug"];
+        if !self.facts.uncloned.contains(&text) { parts.push("Clone"); }
         if self.facts.copies.contains(&text) { parts.push("Copy"); }
         if self.facts.compares.contains(&text) {
             parts.push("PartialEq");

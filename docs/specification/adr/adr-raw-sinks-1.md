@@ -194,6 +194,28 @@ function that throws already: in one that does not, `warn` does not lower the
 site, and it stays `NK1308`, because a site whose check cannot throw is a
 breach with no check at all.
 
+`db::raw` is checked where it is made, too (supervisor's decision on
+[#2705](https://github.com/Nikaia-Foundation/Nikaia/issues/2705), November 22,
+2026). The `Raw` value keeps only its joined text, so by `execute` the parts
+are gone; the rule for `html::Raw` above applies to `db::raw(...)` as it
+stands: each unproved outside part is checked with `db::is_identifier` at the
+site, and a part that fails throws `db::NotIdentifier { part }` from it, the
+part escaped as the log escapes it. The `db` package declares that error, as
+`NullInField` is declared. The site throws only in a function that throws
+already, else it stays `NK1308`. `execute` stays as it is.
+
+The thrown error is in the function's throw set before the prover has run
+(supervisor's decision on
+[#2704](https://github.com/Nikaia-Foundation/Nikaia/issues/2704), November 22,
+2026). The throw set is inferred before the claim prover decides which sites
+it proves, so under `warn` the inference counts every `html::Raw(...)` and
+`db::raw(...)` site with a part that is not a literal or a constant as
+throwing the sink's error. The set may then be wider than what the program
+can throw where the prover later proves the part; it is never narrower. The
+prover's proof removes only the check at the site, not the entry in the set.
+Under `error` nothing changes: a site is proved or refused, and no sink error
+enters any set.
+
 ### D8 — It is switched on when our own code builds under it.
 
 As ADR-396 D4: the build that adds `NK1308` and `NK1309` also makes every site
@@ -453,6 +475,23 @@ none:
    The host hands those three roots through as accessors on
    `ProjectDriveHost` (ADR-platform-layer-v1 D5, D7); choosing them stays
    in the Rust host until the outer build moves to Nikaia (#125).
+   What the roots are (supervisor's decisions on
+   [#2700](https://github.com/Nikaia-Foundation/Nikaia/issues/2700) and
+   [#2699](https://github.com/Nikaia-Foundation/Nikaia/issues/2699),
+   November 22, 2026):
+   * **The `std` sources are the sysroot's `crates/` directory**
+     (`Sysroot::resolve().root()`), not `std_dir()`: `std` builds with its
+     path dependencies under `crates/unsafe/`, and their files are in every
+     program's dep-info.
+   * **The project's root includes its members.** Each member's root
+     (`ProjectMembersMember.root`, a path dependency the manifest names) is
+     a root of the record as the project's root is: the manifest the operator
+     wrote chose it.
+   * **A test batch adds its own directory.** For a `nikaia test` batch the
+     directory of the batch, which holds its carrier project and its
+     programs, is a root: `nikaia test` made it (D12), and it names the
+     programs in `NIKAIA_TEST_BATCH`.
+   No other root is added; a path below none of these still means no record.
 8. **The manifest lies beside the sources, not above them.** The manifest of
    item 5 is `crates/nikaia-std/trust/nikaia.toml`. A `nikaia.toml` in a
    directory above the `std` sources would make every one of them a member of

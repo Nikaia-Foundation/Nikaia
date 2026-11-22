@@ -10,7 +10,19 @@ pub(crate) fn check_program_body<H: CheckHost>(state: &mut CheckState, world: &C
     };
     state.expected = None;
     state.scope.push(vec![]);
+    let outer_grown = state.flow.grown_text.copy_owned();
+    state.flow.grown_text = check_function_grown_text(&world.here, body);
+    let outer_kept = state.flow.kept_names.copy_owned();
+    state.flow.kept_names = check_function_kept_names(world.here.words, body);
+    let outer_mixed = state.flow.mixed_text.copy_owned();
+    state.flow.mixed_text = check_function_mixed_text(&world.here, body, &state.flow.grown_text);
+    let outer_lone = state.flow.lone_texts.copy_owned();
+    state.flow.lone_texts = lone_texts_of(world.here.words, body);
     check_core_block(state, world, host, body);
+    state.flow.grown_text = outer_grown;
+    state.flow.kept_names = outer_kept;
+    state.flow.mixed_text = outer_mixed;
+    state.flow.lone_texts = outer_lone;
     state.scope.pop();
     state.expected = outer;
 }

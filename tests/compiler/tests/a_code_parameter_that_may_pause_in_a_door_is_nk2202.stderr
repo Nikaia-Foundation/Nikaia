@@ -1,0 +1,9 @@
+error[NK2202]: `f` can pause, but you're holding a lock here.
+  --> tests/a_code_parameter_that_may_pause_in_a_door_is_nk2202.nika:7:32
+   |
+ 7 |     return list.access fn(v) { v.len() + f() }
+   |                                ^^^^^^^^^^^^^
+   |
+   = note: While the lock is held, every other task that needs the value waits, so a pause here makes all of them wait too.
+   = help: Call `f` before taking the lock and pass its value in, or after it with what the block returned.
+1 pause with a lock held

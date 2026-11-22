@@ -2470,6 +2470,10 @@ fn still_sources(value: ref Expr, ask: ref TierAsk, mut walk: TierWalk, mut out:
             still_sources(first, ask, walk, out)
             still_sources(fallback, ask, walk, out)
         }
+        Expr::TryCatch { expr: guarded, handler, .. } => {
+            still_sources(guarded, ask, walk, out)
+            still_tail(handler, ask, walk, out)
+        }
         else => {
             let read_from = text_source_word(value, ask, walk) ?? return
             out.push(read_from)
@@ -6123,9 +6127,16 @@ fn tier_expr(expr: ref Expr, ask: ref TierAsk, mut walk: TierWalk) -> Kinds {
             }
             out
         }
-        Expr::TryCatch { expr, handler, .. } => {
-            let out = tier_expr(expr, ask, walk)
-            kinds_joined(out, tier_block(handler, ask, walk))
+        // **A handler's value stands beside the guarded one** (Part I 7.1),
+        // as an `if`'s branches do: beside text of its own, a view of static
+        // text in either keeps text of its own (ADR-282 D29, #2220).
+        Expr::TryCatch { expr: guarded, handler, .. } => {
+            let first = tier_expr(guarded, ask, walk)
+            let out = kinds_joined(first, tier_block(handler, ask, walk))
+            if beside_its_own(out) {
+                kept_unseen(expr, ask, walk)
+            }
+            out
         }
         Expr::Try(inner, _) => tier_expr(inner, ask, walk),
         Expr::Async(inner, _, _, _) => tier_expr(inner, ask, walk),
