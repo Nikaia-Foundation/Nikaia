@@ -7376,25 +7376,9 @@ signature = "(self: ref Listener, handler: fn(net::Connection) throws; connectio
 # --- `supervisor`: tasks restarted when they end (ADR-328, Part II 12.8) -------
 #
 # **`policy:` takes a value of `supervisor::Restart`**, a trait a program
-# implements. The trait and the types it speaks in are Nikaia
-# (`src/supervisor.nika`), and their entries are among the inferred ones at the
-# end of this file; `std`'s default, `supervisor::Backoff`, is here.
-
-# **`std`'s default policy** (ADR-328 D5): the first failure restarted at once,
-# then after a delay that grows, with jitter, up to a ceiling; a new cycle after
-# an attempt that ran long enough; giving up when a cycle lasts too long.
-[type."supervisor::Backoff"]
-pub = true
-crosses = true
-
-# `std`'s default policy, the value `policy:` has where a child names none.
-[fn."supervisor::Backoff"]
-pub = true
-sync = true
-touches = []
-signature = "() -> supervisor::Backoff"
-
-[impl."supervisor::Restart for supervisor::Backoff"]
+# implements. The trait, the types it speaks in and `std`'s default,
+# `supervisor::Backoff`, are Nikaia (`src/supervisor.nika`), and their entries
+# are among the inferred ones at the end of this file.
 
 # One of Unicode's four normalisation forms (UAX #15), which `s.normalized`
 # takes (ADR-320 D10): `Nfc` and `Nfd` compose and decompose by canonical
@@ -7967,6 +7951,36 @@ pub = true
 sync = true
 signature = "(ref self, history: supervisor::Failures) -> supervisor::Next"
 keeps = ["history"]
+
+# **`std`'s default policy** (ADR-328, Part II 12.8): the first failure is
+# restarted at once, then after a delay that grows, with jitter, up to a
+# ceiling; an attempt that ran long enough starts a new cycle; a cycle that
+# lasts too long gives up.
+[type."supervisor::Backoff"]
+pub = true
+crosses = true
+compares = true
+copies = true
+fields = ["pub first_delay: time::Duration", "pub ceiling: time::Duration", "pub healthy: time::Duration", "pub give_up_after: time::Duration", "cycle_failures: i64", "cycle_began: time::Duration", "seed: u64"]
+
+# `supervisor::Backoff()`: `std`'s default policy, the value `policy:` has
+# where a child names none.
+[fn."supervisor::Backoff::new"]
+pub = true
+panics = false
+sync = true
+signature = "() -> supervisor::Backoff"
+
+# One failure, from the supervisor's history of the child.
+[fn."supervisor::Backoff::decide"]
+pub = false
+panics = true
+sync = true
+touches = []
+signature = "(ref mut self, history: supervisor::Failures) -> supervisor::Next"
+keeps = ["history"]
+
+[impl."supervisor::Restart for supervisor::Backoff"]
 
 # --- `simd`: vectors a program holds (ADR-377, provisional) ------------------
 #

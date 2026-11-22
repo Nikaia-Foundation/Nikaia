@@ -1199,6 +1199,11 @@ impl EmitState {
             out.push(")");
             return Ok(());
         }
+        let made = nikaia_std::index::or(option.default.strip_suffix("()"), || "");
+        if made != "" && !made.contains('(') && !world.library.functions.contains_key(made) && world.library.functions.contains_key(&format!("{}::new", made)) {
+            out.push(&format!("{}::new()", made));
+            return Ok(());
+        }
         out.push(&option.default);
         Ok(())
     }
@@ -1895,7 +1900,7 @@ impl EmitState {
                         named = true;
                     }
                 }
-                if !named { out.push("nikaia_std::supervisor::Backoff()"); }
+                if !named { out.push("nikaia_std::supervisor::Backoff::new()"); }
                 out.push("))");
                 return Ok(true);
             },

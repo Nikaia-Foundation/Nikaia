@@ -1,7 +1,7 @@
 // crates/nikaia-std/src/runtime/restart_policy.nika
 //
 // **`std`'s default restart policy, asked by hand** (ADR-328 D5): the tests
-// of `supervisor::Backoff`, which is Rust (`src/supervision.rs`). A test
+// of `supervisor::Backoff`, written in `src/supervisor.nika` (#2118). A test
 // block hands it a supervisor's history written out, so neither the delays
 // nor the 300 s a cycle lasts before it gives up are waited for (#2304).
 

@@ -6,7 +6,7 @@
 pub(crate) fn failure(n: i64, ran: time::Duration, since: time::Duration) -> supervisor::Failures { supervisor::Failures { last_uptime: ran, consecutive: n, since_first: since } }
 
 pub(crate) fn __nikaia_test_0() -> Result<(), std::boxed::Box<dyn std::error::Error>> {
-    let mut policy = supervisor::Backoff();
+    let mut policy = supervisor::Backoff::new();
     let first = { use nikaia_std::supervisor::Restart as _; policy.decide(failure(1, 0i32.seconds(), 0i32.seconds())) };
     if !(first == supervisor::Next::Immediate) { nikaia_std::abort::assertion_failed("assert(first == supervisor::Next::Immediate)", None, &[("first", (&&nikaia_std::abort::Operand(&(first))).shown()), ("supervisor::Next::Immediate", (&&nikaia_std::abort::Operand(&(supervisor::Next::Immediate))).shown()), ]) };
     let ceiling = 30i32.seconds();
@@ -28,7 +28,7 @@ pub(crate) fn __nikaia_test_0() -> Result<(), std::boxed::Box<dyn std::error::Er
 }
 
 pub(crate) fn __nikaia_test_1() -> Result<(), std::boxed::Box<dyn std::error::Error>> {
-    let mut policy = supervisor::Backoff();
+    let mut policy = supervisor::Backoff::new();
     let first = { use nikaia_std::supervisor::Restart as _; policy.decide(failure(1, 0i32.seconds(), 0i32.seconds())) };
     if !(first == supervisor::Next::Immediate) { nikaia_std::abort::assertion_failed("assert(first == supervisor::Next::Immediate)", None, &[("first", (&&nikaia_std::abort::Operand(&(first))).shown()), ("supervisor::Next::Immediate", (&&nikaia_std::abort::Operand(&(supervisor::Next::Immediate))).shown()), ]) };
     let second = { use nikaia_std::supervisor::Restart as _; policy.decide(failure(2, 0i32.seconds(), 0i32.seconds())) };
