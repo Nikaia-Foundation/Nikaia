@@ -1,0 +1,25 @@
+// A declared set or list only literals flow into, compared with one holding
+// text of its own, is text of its own inside (ADR-282 D29, D13): both sides
+// of `==` are one Rust type. Before the fix rustc refused it, NK1343.
+use std::collections
+
+fn made(word: String) -> collections::BTreeSet[String] {
+    let mut set: collections::BTreeSet[String] = collections::BTreeSet()
+    set.insert(f"{word}")
+    return set
+}
+
+fn made_list(word: String) -> Vec[String] {
+    return [f"{word}"]
+}
+
+fn main() throws {
+    let mut expected: collections::BTreeSet[String] = collections::BTreeSet()
+    expected.insert("E")
+    println(made("E") == expected)
+    println(expected != made("F"))
+    let mut listed: Vec[String] = []
+    listed.push("E")
+    println(made_list("E") == listed)
+    println(listed < made_list("F"))
+}

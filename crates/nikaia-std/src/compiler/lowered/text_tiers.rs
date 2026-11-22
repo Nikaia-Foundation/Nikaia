@@ -1579,6 +1579,11 @@ pub(crate) fn kept_unseen(value: &Expr, ask: &TierAsk<'_, '_, '_, '_, '_, '_, '_
     }
 }
 
+pub(crate) fn compared_whole(value: &Expr, ask: &TierAsk<'_, '_, '_, '_, '_, '_, '_>, walk: &mut TierWalk) {
+    let found = match source_of(value, ask, walk) { Some(__nikaia_value) => __nikaia_value, None => return };
+    if a_followed(ask.names, &found.ty) { demote_inside(&found.owner, &found.ty, &mut vec![], ask, walk); }
+}
+
 pub(crate) fn literals_beside_null(value: &Expr) -> bool {
     let mut tails: Vec<Expr> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     match value {
@@ -4434,6 +4439,11 @@ pub(crate) fn tier_expr(expr: &Expr, ask: &TierAsk<'_, '_, '_, '_, '_, '_, '_>, 
             tier_expr(rhs, ask, walk);
             let adds = matches!(op, BinaryOp::Add);
             if adds && left.still { kept_unseen(lhs, ask, walk); }
+            let compares = matches!(op, BinaryOp::Eq | BinaryOp::Ne | BinaryOp::Lt | BinaryOp::Le | BinaryOp::Gt | BinaryOp::Ge);
+            if compares {
+                compared_whole(lhs, ask, walk);
+                compared_whole(rhs, ask, walk);
+            }
             owned_kinds()
         },
         Expr::Cast { expr, .. } => {

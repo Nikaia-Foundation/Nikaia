@@ -1929,6 +1929,13 @@ impl EmitState {
             out.push(")")
             return
         }
+        // **A type's anonymous constructor** (#2118): `supervisor::Backoff()`,
+        // `std`'s default policy, is `Backoff::new()` below, as at a call.
+        let made = option.default.strip_suffix("()") ?? ""
+        if made != "" && !made.contains("(") && !world.library.functions.contains_key(made) && world.library.functions.contains_key(f"{made}::new") {
+            out.push(f"{made}::new()")
+            return
+        }
         out.push(option.default)
     }
 
@@ -2939,7 +2946,7 @@ impl EmitState {
                     }
                 }
                 if !named {
-                    out.push("nikaia_std::supervisor::Backoff()")
+                    out.push("nikaia_std::supervisor::Backoff::new()")
                 }
                 out.push("))")
                 return true

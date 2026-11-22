@@ -16,14 +16,25 @@
 //!
 //! **When, a policy decides** (D5): a value of a type implementing
 //! [`Restart`], `std`'s default [`Backoff`] where the child names none. The
-//! trait and the types it speaks in are Nikaia, `supervisor.nika`, lowered to
-//! `supervisor.rs` and included here.
+//! trait, the types it speaks in and `Backoff` are Nikaia, `supervisor.nika`,
+//! lowered to `supervisor.rs` and included here.
 
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
 use crate::task::TaskHandle;
 
-include!("supervisor.rs");
+/// The lowered half, in a module of its own so that only it lifts the crate's
+/// `deny(unsafe_code)` for the emitter's `proven` calls (ADR-218 D5), as
+/// `std::text`'s does; it reads spans with `time`'s methods. A lint of the
+/// lowered text is allowed here, not fixed in it (`Backoff::new` has no
+/// `Default`: `Backoff()` is how Nikaia makes one).
+#[allow(unsafe_code, clippy::new_without_default)]
+mod lowered {
+    #[allow(unused_imports)]
+    use crate::time::{DurationExt, DurationIn};
+    include!("supervisor.rs");
+}
+pub use lowered::*;
 
 /// Which siblings restart with a child that crashed.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -374,88 +385,5 @@ impl std::future::Future for FirstEnded<'_> {
             }
         }
         std::task::Poll::Pending
-    }
-}
-
-/// **`std`'s default policy** (ADR-328, Part II 12.8): the first failure is
-/// restarted at once, then after a delay that grows, with jitter, up to a
-/// ceiling; an attempt that ran long enough starts a new cycle; a cycle that
-/// lasts too long gives up.
-///
-/// **The numbers are starting values**, not measured: what a service on one
-/// machine tolerates. A program that needs others passes another policy.
-///
-/// **Its cycle is its own**: the supervisor's history counts the child's whole
-/// life, and an attempt that ran [`Backoff::healthy`] long starts a new cycle
-/// here, kept as where in that history it began.
-#[derive(Debug, Clone)]
-pub struct Backoff {
-    /// The second failure's delay; each after it doubles.
-    pub first_delay: Duration,
-    /// No delay is longer.
-    pub ceiling: Duration,
-    /// An attempt that ran this long ends the cycle: it was healthy.
-    pub healthy: Duration,
-    /// A cycle that lasts longer than this gives up.
-    pub give_up_after: Duration,
-    /// The failures before this cycle, and how long after the first failure
-    /// it began.
-    cycle_from: (i64, Duration),
-    seed: u64,
-}
-
-/// `supervisor::Backoff()`: `std`'s default policy, the value `policy:` has
-/// where a child names none.
-#[allow(non_snake_case)]
-pub fn Backoff() -> Backoff {
-    Backoff::default()
-}
-
-impl Default for Backoff {
-    fn default() -> Self {
-        Backoff {
-            first_delay: Duration::from_millis(100),
-            ceiling: Duration::from_secs(30),
-            healthy: Duration::from_secs(60),
-            give_up_after: Duration::from_secs(300),
-            cycle_from: (0, Duration::ZERO),
-            seed: std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .map(|d| d.subsec_nanos() as u64)
-                .unwrap_or(1)
-                | 1,
-        }
-    }
-}
-
-impl Restart for Backoff {
-    /// One failure, from the supervisor's history of the child.
-    fn decide(&mut self, history: Failures) -> Next {
-        if history.last_uptime >= self.healthy {
-            self.cycle_from = (history.consecutive - 1, history.since_first);
-        }
-        let failures = history.consecutive - self.cycle_from.0;
-        let lasted = history.since_first.saturating_sub(self.cycle_from.1);
-        if lasted > self.give_up_after {
-            return Next::Escalate;
-        }
-        if failures <= 1 {
-            return Next::Immediate;
-        }
-        let doubled = self
-            .first_delay
-            .saturating_mul(1u32 << (failures - 2).min(20) as u32);
-        let delay = doubled.min(self.ceiling);
-        // **Jitter**, so that children that crashed together do not restart
-        // together: up to a quarter less, never more than the ceiling.
-        self.seed ^= self.seed << 13;
-        self.seed ^= self.seed >> 7;
-        self.seed ^= self.seed << 17;
-        let quarter = delay / 4;
-        let off = match quarter.as_nanos() as u64 {
-            0 => 0,
-            n => self.seed % n,
-        };
-        Next::Delay(delay - Duration::from_nanos(off))
     }
 }

@@ -187,7 +187,7 @@ pub fn locks_infer(mut ledger: Ledger, units: ref Vec[ParsedView], library: ref 
     }
     declared.extend(ledger.types.keys().cloned())
     declared.extend(library.types.keys().cloned())
-    let answer = locking_of(graph, declared, library, ledger)
+    let answer = locking_callees_first(graph, declared, library, ledger)
     for (name, holds) in answer.functions {
         let mut contract = ledger.functions.get(name) ?? continue
         contract.touches_a_lock = holds
@@ -227,7 +227,8 @@ fn declared_types(items: ref Vec[Spanned[Item]], names: ref winnow_grammar::Inte
     }
 }
 
-/// The fixpoint over a graph the walk built.
+/// The fixpoint over a graph the walk built, the whole package at once: the
+/// reference the callees-first route is held to (ADR-100 D7).
 pub fn locking_of(graph: ref collections::BTreeMap[String, Reaches], declared: ref collections::BTreeSet[String], library: ref Ledger, own: ref Ledger) -> Locking {
     let mut itself: collections::BTreeMap[String, Lock] = collections::BTreeMap()
     let mut callees: collections::BTreeMap[String, collections::BTreeSet[String]] = collections::BTreeMap()
@@ -370,7 +371,7 @@ pub fn locking(itself: ref collections::BTreeMap[String, Lock], callees: ref col
             }
             let mut reached = Lock::No
             for callee in called {
-                reached = reached.or(theirs_of(touches, library, declared, callee))
+                reached = reached.or(theirs_of(touches, nothing_stored(), library, declared, callee))
             }
             let grown = before.or(reached)
             if grown != before {
@@ -379,6 +380,13 @@ pub fn locking(itself: ref collections::BTreeMap[String, Lock], callees: ref col
             }
         }
     }
+    return settled(touches, own)
+}
+
+/// **The answer the ledger records**, from every node's final column: a
+/// function this package describes keeps its own, and a function field's
+/// column is doubted where the field is published.
+fn settled(touches: ref collections::BTreeMap[String, Lock], own: ref Ledger) -> Locking {
     let mut answer = Locking { functions: collections::BTreeMap(), fields: collections::BTreeMap() }
     for (name, holds) in touches {
         if name.starts_with("field:") {
@@ -401,13 +409,147 @@ pub fn locking(itself: ref collections::BTreeMap[String, Lock], callees: ref col
 /// ADR-140 D2), in this package before the library. A variant is a value and
 /// opens no door; a callee no ledger describes is the doubt an unresolvable
 /// method is, reached from the other side.
-fn theirs_of(touches: ref collections::BTreeMap[String, Lock], library: ref Ledger, declared: ref collections::BTreeSet[String], callee: ref String) -> Lock {
+/// `touches` holds the columns being derived, `stored` those already final
+/// (ADR-100 D7): a callee is read from the first that has it.
+fn theirs_of(touches: ref collections::BTreeMap[String, Lock], stored: ref collections::BTreeMap[String, Lock], library: ref Ledger, declared: ref collections::BTreeSet[String], callee: ref String) -> Lock {
     let constructed = f"{callee}::new"
     for key in [callee.clone(), constructed] {
-        let found = touches[key]?.clone() ?? described(library, key) ?? continue
+        let found = touches[key]?.clone() ?? stored[key]?.clone() ?? described(library, key) ?? continue
         return found
     }
     return if is_a_variant(declared, callee) { Lock::No } else { Lock::Undecided }
+}
+
+/// No column stored yet: the whole-package fixpoint derives every node itself.
+fn nothing_stored() -> collections::BTreeMap[String, Lock] {
+    return collections::BTreeMap()
+}
+
+/// **One function's final column, or its recursive group's** (ADR-100 D7):
+/// `unit` is the function, or the strongly connected component it is a part
+/// of, `graph` what each body reaches, and `stored` the final columns of the
+/// callees outside the unit. The least fixpoint runs inside the unit only; a
+/// callee neither in it nor stored is read as `locking` reads it, from the
+/// library's ledger, as a variant or as the doubt. Answers every node of the
+/// unit, a function field's raw column included.
+pub fn locks_of_unit(unit: ref Vec[String], graph: ref collections::BTreeMap[String, Reaches], stored: ref collections::BTreeMap[String, Lock], declared: ref collections::BTreeSet[String], library: ref Ledger) -> collections::BTreeMap[String, Lock] {
+    let mut touches: collections::BTreeMap[String, Lock] = collections::BTreeMap()
+    for name in unit {
+        let itself = graph[name]?.itself?.clone() ?? Lock::No
+        touches.insert(name.clone(), itself)
+    }
+    let mut changed = true
+    while changed {
+        changed = false
+        for name in unit {
+            let before = touches[name]?.clone() ?? Lock::No
+            if before.holds() {
+                continue
+            }
+            let reaches = graph[name] ?? continue
+            let mut reached = Lock::No
+            for callee in reaches.callees {
+                reached = reached.or(theirs_of(touches, stored, library, declared, callee))
+            }
+            let grown = before.or(reached)
+            if grown != before {
+                touches.insert(name.clone(), grown)
+                changed = true
+            }
+        }
+    }
+    return touches
+}
+
+/// **The whole package, callees first** (ADR-100 D7): the graph's strongly
+/// connected components in reverse topological order, each derived by
+/// `locks_of_unit` from the columns its callees already have. The least
+/// fixpoint is unique, so this answers what `locking_of` answers.
+pub fn locking_callees_first(graph: ref collections::BTreeMap[String, Reaches], declared: ref collections::BTreeSet[String], library: ref Ledger, own: ref Ledger) -> Locking {
+    let mut stored: collections::BTreeMap[String, Lock] = collections::BTreeMap()
+    for unit in callees_first(graph, library) {
+        let column = locks_of_unit(unit, graph, stored, declared, library)
+        stored.extend(column)
+    }
+    return settled(stored, own)
+}
+
+/// The node of the graph a call reaches, by the order `theirs_of` reads a
+/// callee in: the name as written, then, where no library describes it, the
+/// anonymous constructor's key. None where the call leaves the graph.
+fn edge_of(graph: ref collections::BTreeMap[String, Reaches], library: ref Ledger, callee: ref String) -> String? {
+    if graph.contains_key(callee) {
+        return callee.clone()
+    }
+    if library.functions.contains_key(callee) {
+        return null
+    }
+    let constructed = f"{callee}::new"
+    if graph.contains_key(constructed) {
+        return constructed
+    }
+    return null
+}
+
+/// Tarjan's walk over the call graph: each node's visit number and lowest
+/// reachable one, the nodes still open, and the components in the order they
+/// close, which is callees first.
+struct Components {
+    index: collections::BTreeMap[String, i64],
+    low: collections::BTreeMap[String, i64],
+    open: collections::BTreeSet[String],
+    stack: Vec[String],
+    units: Vec[Vec[String]],
+    next: i64,
+}
+
+/// The graph's recursive groups, each a unit, in reverse topological order: a
+/// unit comes after every unit it calls into.
+pub fn callees_first(graph: ref collections::BTreeMap[String, Reaches], library: ref Ledger) -> Vec[Vec[String]] {
+    let mut walk = Components { index: collections::BTreeMap(), low: collections::BTreeMap(), open: collections::BTreeSet(), stack: [], units: [], next: 0 }
+    for (name, _) in graph {
+        if !walk.index.contains_key(name) {
+            connect(graph, library, name, walk)
+        }
+    }
+    return walk.units
+}
+
+fn connect(graph: ref collections::BTreeMap[String, Reaches], library: ref Ledger, name: ref String, mut walk: Components) {
+    walk.index.insert(name.clone(), walk.next)
+    walk.low.insert(name.clone(), walk.next)
+    walk.next = walk.next + 1
+    walk.stack.push(name.clone())
+    walk.open.insert(name.clone())
+    let reaches = graph[name] ?? return
+    for callee in reaches.callees {
+        let to = edge_of(graph, library, callee) ?? continue
+        let mut reached = -1
+        if !walk.index.contains_key(to) {
+            connect(graph, library, to, walk)
+            reached = walk.low[to] ?? -1
+        } else if walk.open.contains(to) {
+            reached = walk.index[to] ?? -1
+        }
+        let mine = walk.low[name] ?? 0
+        if reached >= 0 && reached < mine {
+            walk.low.insert(name.clone(), reached)
+        }
+    }
+    if (walk.low[name] ?? -1) != (walk.index[name] ?? -2) {
+        return
+    }
+    let mut unit: Vec[String] = []
+    while true {
+        let top = walk.stack.pop() ?? break
+        walk.open.remove(top)
+        let last = top == name
+        unit.push(top)
+        if last {
+            break
+        }
+    }
+    walk.units.push(unit)
 }
 
 /// What a library's ledger says a function does about locks, where it says.
@@ -488,4 +630,49 @@ test "the locks entry answers a call chain, a recursive pair and an unknown call
     assert((answer.functions["q"] ?? Lock::Holds) == Lock::No)
     assert((answer.functions["r"] ?? Lock::No) == Lock::Undecided)
     assert(with_owner("Config", "set") == "Config::set")
+}
+
+/// **The per-function entry answers what the whole-package entry answers**
+/// (ADR-100 D7, ADR-403 D3): on a call chain into a door, a recursive pair
+/// that opens none, a recursive group of three one of whose members opens a
+/// door, and a call nothing describes. The chain's head is derived from its callee's
+/// stored column alone, each pair as one unit.
+test "the per-function locks entry gives the whole-package column" {
+    let mut graph: collections::BTreeMap[String, Reaches] = collections::BTreeMap()
+    locks_test_node(graph, "a", Lock::No, "b")
+    locks_test_node(graph, "b", Lock::No, "c")
+    locks_test_node(graph, "c", Lock::Holds, null)
+    locks_test_node(graph, "p", Lock::No, "q")
+    locks_test_node(graph, "q", Lock::No, "p")
+    locks_test_node(graph, "s", Lock::No, "t")
+    let mut both = Reaches { itself: Lock::No, callees: collections::BTreeSet() }
+    both.callees.insert("s")
+    both.callees.insert("u")
+    graph.insert("t", both)
+    locks_test_node(graph, "u", Lock::Holds, "t")
+    locks_test_node(graph, "r", Lock::No, "mystery")
+    let mut own = Ledger::blank()
+    for name in ["a", "b", "c", "p", "q", "s", "t", "u", "r"] {
+        own.functions.insert(with_owner("", name), FnContract::empty())
+    }
+    let whole = locking_of(graph, collections::BTreeSet(), Ledger::blank(), own)
+    let first = locking_callees_first(graph, collections::BTreeSet(), Ledger::blank(), own)
+    assert(whole.functions == first.functions)
+    assert(whole.fields == first.fields)
+    assert((first.functions["s"] ?? Lock::No) == Lock::Holds)
+    assert((first.functions["p"] ?? Lock::Holds) == Lock::No)
+    let units = callees_first(graph, Ledger::blank())
+    let mut pair = 0
+    for unit in units {
+        if unit.len() > 1 {
+            pair = pair + 1
+        }
+    }
+    // `p, q` and `s, t, u` are the recursive groups.
+    assert(pair == 2)
+    let mut stored: collections::BTreeMap[String, Lock] = collections::BTreeMap()
+    stored.insert("b", Lock::Holds)
+    let alone: Vec[String] = [with_owner("", "a")]
+    let head = locks_of_unit(alone, graph, stored, collections::BTreeSet(), Ledger::blank())
+    assert((head["a"] ?? Lock::No) == (whole.functions["a"] ?? Lock::No))
 }

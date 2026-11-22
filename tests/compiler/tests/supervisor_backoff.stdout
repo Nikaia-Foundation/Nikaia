@@ -1,0 +1,19 @@
+first delay 100 ms, ceiling 30 s
+healthy 60 s, gives up after 300 s
+failure 1 immediate: true
+failure 2: at most 100 ms, at least three quarters of it: true
+failure 3: at most 200 ms, at least three quarters of it: true
+failure 4: at most 400 ms, at least three quarters of it: true
+failure 5: at most 800 ms, at least three quarters of it: true
+failure 6: at most 1600 ms, at least three quarters of it: true
+failure 7: at most 3200 ms, at least three quarters of it: true
+failure 8: at most 6400 ms, at least three quarters of it: true
+failure 9: at most 12800 ms, at least three quarters of it: true
+failure 10: at most 25600 ms, at least three quarters of it: true
+failure 11: at most 30000 ms, at least three quarters of it: true
+failure 12: at most 30000 ms, at least three quarters of it: true
+failure 13: at most 30000 ms, at least three quarters of it: true
+failure 14: at most 30000 ms, at least three quarters of it: true
+failure 15: at most 30000 ms, at least three quarters of it: true
+300 s into the cycle, still a delay: true
+301 s into the cycle escalates: true

@@ -1642,9 +1642,14 @@ pub(crate) fn emit_tuple_part_copies(parts: &[String]) -> String {
 }
 
 pub(crate) fn emit_call_library_trait(world: &EmitWorld<'_, '_, '_, '_>, key: &str) -> String {
-    for (trait_name, _) in world.library.implementations.iter() {
-        let method = match key.strip_prefix(&*format!("{}::", trait_name)) { Some(__nikaia_value) => __nikaia_value, None => continue };
-        if trait_name.contains("::") && !method.contains("::") { return nikaia_std::block::Text::from(trait_name.to_string()); }
+    for (trait_name, types) in world.library.implementations.iter() {
+        if !trait_name.contains("::") { continue; }
+        let method = nikaia_std::index::or(key.strip_prefix(&*format!("{}::", trait_name)), || "");
+        if method != "" && !method.contains("::") { return nikaia_std::block::Text::from(trait_name.to_string()); }
+        for ty in types.iter() {
+            let own = match key.strip_prefix(&*format!("{}::", ty)) { Some(__nikaia_value) => __nikaia_value, None => continue };
+            if own != "" && !own.contains("::") && world.library.functions.contains_key(&format!("{}::{}", trait_name, own)) { return nikaia_std::block::Text::from(trait_name.to_string()); }
+        }
     }
     String::from("")
 }
