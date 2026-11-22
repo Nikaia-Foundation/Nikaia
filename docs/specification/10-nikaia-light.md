@@ -3211,6 +3211,9 @@ struct Reading { name: String, temp: i32 }   // `name` a view where views flow i
 
 `--tethers` (on `nikaia build` and `nikaia lower`) prints where each buffer lives and why, and changes nothing;
 a change is a ledger diff in review.
+It also prints, one line per site with file and line, each cut that takes its source's buffer and
+each `replace` that works in its source's buffer (ADR-text-reuse-1 D5); the language server shows
+the same line as an inlay hint there.
 
 There is no struct with lifetime parameters in Nikaia.
 
