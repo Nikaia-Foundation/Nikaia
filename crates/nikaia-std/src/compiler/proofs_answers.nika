@@ -224,8 +224,17 @@ fn proofs_write_term(arena: ref logic::TermArena, id: i64, mut out: String) {
     }
     match arena.nodes[id] {
         logic::SolverTerm::Bool(value) => out.push_str(if value { "T" } else { "F" }),
-        logic::SolverTerm::Int(value) => out.push_str(f"i{value},"),
-        logic::SolverTerm::Var(name) => out.push_str(f"v{name.len()}:{name}"),
+        logic::SolverTerm::Int(value) => {
+            out.push_str("i")
+            logic::lg_write_int(value, out)
+            out.push_str(",")
+        }
+        logic::SolverTerm::Var(name) => {
+            out.push_str("v")
+            logic::lg_write_int(name.len(), out)
+            out.push_str(":")
+            out.push_str(name)
+        }
         logic::SolverTerm::Add(a, b) => proofs_write_two("+", arena, a, b, out),
         logic::SolverTerm::Sub(a, b) => proofs_write_two("-", arena, a, b, out),
         logic::SolverTerm::Mul(a, b) => proofs_write_two("*", arena, a, b, out),
@@ -244,7 +253,9 @@ fn proofs_write_term(arena: ref logic::TermArena, id: i64, mut out: String) {
             proofs_write_term(arena, a, out)
         }
         logic::SolverTerm::Quot(a, k) => {
-            out.push_str(f"q{k},")
+            out.push_str("q")
+            logic::lg_write_int(k, out)
+            out.push_str(",")
             proofs_write_term(arena, a, out)
         }
         logic::SolverTerm::And(parts) => proofs_write_all("&", arena, parts, out),
@@ -260,16 +271,19 @@ fn proofs_write_two(tag: ref String, arena: ref logic::TermArena, a: i64, b: i64
 }
 
 fn proofs_write_all(tag: ref String, arena: ref logic::TermArena, parts: ref Vec[i64], mut out: String) {
-    out.push_str(f"{tag}{parts.len()},")
+    out.push_str(tag)
+    logic::lg_write_int(parts.len(), out)
+    out.push_str(",")
     for part in parts {
         proofs_write_term(arena, part, out)
     }
 }
 
 /// What a question written so came to, if the open book still holds the
-/// entry it came from; the key is marked asked, as a lookup would.
+/// entry it came from; the key is marked asked, as a lookup would. Read in
+/// place: only the answer is copied out (#2696).
 fn proofs_known(mut t: ProofsThread, written: ref String) -> ProofsAsked? {
-    let held = t.known.get(written)?.clone() ?? return null
+    let held = t.known.get(written) ?? return null
     let mut book = t.book ?? return null
     let entry = book.entries.get(held.key) ?? return null
     if entry != held.entry {
@@ -315,7 +329,7 @@ pub fn proofs_ask(mut t: ProofsThread, arena: ref logic::TermArena, facts: ref V
         let held = recorded?.clone() ?? ProofsEntry::Unknown("")
         let asked = proofs_read(normal, held)
         if asked != null {
-            t.known.insert(written.clone(), ProofsKnown { key: key.clone(), entry: held.clone(), asked: asked.clone() })
+            t.known.insert(written, ProofsKnown { key: key.clone(), entry: held.clone(), asked: asked.clone() })
             proofs_dump(normal, asked)
             proofs_remember(t, key, asked, recorded)
             return asked
@@ -328,7 +342,7 @@ pub fn proofs_ask(mut t: ProofsThread, arena: ref logic::TermArena, facts: ref V
     if entry != null {
         // What a read of this entry comes to: the search checked the same
         // certificate or model.
-        t.known.insert(written.clone(), ProofsKnown { key: key.clone(), entry: entry.clone(), asked: found.asked.clone() })
+        t.known.insert(written, ProofsKnown { key: key.clone(), entry: entry.clone(), asked: found.asked.clone() })
     }
     let place = proofs_here(t)
     let mut book = t.book ?? return found.asked
