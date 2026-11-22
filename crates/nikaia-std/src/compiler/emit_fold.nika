@@ -40,16 +40,25 @@ impl EmitState {
         // it once per accumulator. A function's or a type's name, or a
         // lambda, is that maker as written; any other expression is the
         // starting value, and is handed over as a lambda that makes it.
+        // A name the checker found holding a value, a binding beside the
+        // fold (#2423), is a starting value too: copied out each call, since
+        // the maker is called once per accumulator.
+        let held = self.facts.fold_value_inits.contains(id_of(spec.init) as i64)
         let maker = match spec.init {
-            Expr::Variable(..) => true,
-            Expr::Path(..) => true,
+            Expr::Variable(..) => !held,
+            Expr::Path(..) => !held,
             Expr::Closure { .. } => true,
             else => false,
         }
-        if !maker {
+        if held {
+            out.push("|| (")
+        } else if !maker {
             out.push("|| ")
         }
         self.emit_expr(world, walk, out, host, spec.init, 0, EmitFlow::plain(), EmitScope::plain())
+        if held {
+            out.push(").clone()")
+        }
         out.push(", ")
         self.emit_fold_step(world, walk, out, host, spec.step)
         match spec.merge {

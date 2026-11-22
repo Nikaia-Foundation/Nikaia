@@ -185,9 +185,18 @@ pub(crate) fn check_defaults_item_constants<H: CheckHost>(state: &mut CheckState
 // this was written - see `contracts::sync`.
 pub(crate) fn check_defaults_fold<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, host: &H, gram: &GrammarDef, spec: &FoldSpec, span: &Span) {
     let item = check_defaults_item_of(host, gram, spec);
+    let promised = CheckPromises { may_pause: true, may_fail: true };
     let named: Option<Ty> = state.a_named_fold_part_that_may_pause(world, &spec.init, span);
-    let built = check_core_expr(state, world, host, &spec.init, span);
+    let mut built: Ty = Ty::Unknown;
+    match &spec.init {
+        Expr::Closure { params, mutable, body, .. } => {
+            let (tail, _) = check_core_lambda(state, world, host, params, mutable, body, &vec![], &promised, span);
+            built = Ty::Fn { params: vec![], result: nikaia_std::block::Boxed::new(Some(tail)), is_sync: true, can_throw: false, spelled: CodeNames::none() };
+        },
+        _ => { built = check_core_expr(state, world, host, &spec.init, span); },
+    }
     let mut acc: Ty = built.clone();
+    let mut makes = false;
     match built {
         Ty::Fn { ref result, .. } => {
             let result = nikaia_std::boxed::open(result);
@@ -195,6 +204,7 @@ pub(crate) fn check_defaults_fold<H: CheckHost>(state: &mut CheckState, world: &
                 Some(__nikaia_it) => Some(__nikaia_it.clone()),
                 None => None,
             }, || Ty::Unknown);
+            makes = true;
         },
         _ => { },
     }
@@ -203,8 +213,10 @@ pub(crate) fn check_defaults_fold<H: CheckHost>(state: &mut CheckState, world: &
             Some(__nikaia_it) => Some(__nikaia_it.clone()),
             None => None,
         }, || Ty::Unknown);
+        makes = true;
     }
-    let promised = CheckPromises { may_pause: true, may_fail: true };
+    let a_name = matches!(spec.init, Expr::Variable(..) | Expr::Path(..));
+    if a_name && !makes && wholly_known(&built) { state.facts.fold_value_inits.insert(id_of(&spec.init) as i64); }
     let mut owner: String = String::from("fold");
     if spec.merge.is_some() { owner = String::from("par_fold"); }
     check_defaults_fold_part(state, world, host, &spec.step, &vec![acc.clone(), item], "step", &owner, &acc, &promised, span);

@@ -24,9 +24,16 @@ impl EmitState {
         let rule = emit_text(world, spec.rule);
         let name = if spec.merge.is_some() { "par_fold" } else { "fold" };
         out.push(&format!("{}({}, ", name, rule));
-        let maker = matches!(spec.init, Expr::Variable(..) | Expr::Path(..) | Expr::Closure { .. });
-        if !maker { out.push("|| "); }
+        let held = self.facts.fold_value_inits.contains(&(id_of(&spec.init) as i64));
+        let maker = match &spec.init {
+            Expr::Variable(..) => !held,
+            Expr::Path(..) => !held,
+            Expr::Closure { .. } => true,
+            _ => false,
+        };
+        if held { out.push("|| ("); } else if !maker { out.push("|| "); }
         self.emit_expr(world, walk, out, host, &spec.init, 0, EmitFlow::plain(), &EmitScope::plain())?;
+        if held { out.push(").clone()"); }
         out.push(", ");
         self.emit_fold_step(world, walk, out, host, &spec.step)?;
         match &spec.merge {
