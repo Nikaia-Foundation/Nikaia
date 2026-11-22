@@ -39,6 +39,11 @@ pub struct ProverWalk {
     /// (ADR-396 D5), by where it stands and how it is written: the last
     /// walk's, for `--bounds`.
     pub outside: collections::BTreeMap[(i64, String), OutsideIndex],
+    /// **Each call that hands a path from outside to `fs::Root::Anywhere`
+    /// unproved** (ADR-raw-sinks-1 D7), by the id of the root as the call
+    /// writes it: the root's index and each `NK1308`'s help, which names the
+    /// `[allow]` key and source.
+    pub raw_paths: collections::BTreeMap[i64, RawPathCheck],
 }
 
 /// **Every body of the program, walked once**: each function and method,
@@ -2908,6 +2913,9 @@ fn prover_raw_sink(mut walk: ProverWalk, callee: ref String, args: ref Vec[Expr]
             if !anywhere && !root_outside {
                 continue
             }
+            // D7: what the walk refuses under `Anywhere` is kept by the
+            // call, for `raw-sinks = "warn"` to check where it runs.
+            let before = walk.findings.len()
             for j in first..<i {
                 let mut parts: Vec[Expr] = []
                 raw_sink_parts(args[j], holes_of, parts)
@@ -2925,6 +2933,16 @@ fn prover_raw_sink(mut walk: ProverWalk, callee: ref String, args: ref Vec[Expr]
                 for part in parts {
                     raw_sink_part(walk, sink, sink.sink, part, span, scope, at, program, words, library, holes_of, ask, written_of)
                 }
+            }
+            if anywhere && walk.findings.len() > before {
+                let call = node_key(written)
+                let mut kept = walk.raw_paths.remove(call) ?? RawPathCheck { root: i, helps: [] }
+                for one in walk.findings[before..] {
+                    if one.code == "NK1308" {
+                        kept.helps.push((one.help ?? "").clone())
+                    }
+                }
+                walk.raw_paths.insert(call, kept)
             }
         }
     } else {

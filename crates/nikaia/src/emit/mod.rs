@@ -472,8 +472,13 @@ pub fn emit_module_body_at(
     // The facts of a check already run as `check::propagation_against` would
     // run it, or `None` for the emitter to run it.
     checked: Option<crate::check::CheckFacts>,
+    // **The calls whose path from outside is checked where they run**
+    // (ADR-raw-sinks-1 D7), by the id of the root the call writes, opened
+    // as `Dir(".")` instead: what the check let through under
+    // `raw-sinks = "warn"`.
+    raw_path_checks: std::collections::BTreeMap<i64, i64>,
 ) -> Result<Lowered> {
-    Emitter::with_contracts(
+    let mut emitter = Emitter::with_contracts(
         parsed,
         beside,
         build,
@@ -484,8 +489,9 @@ pub fn emit_module_body_at(
         checked,
         None,
     )
-    .for_entry(entry)
-    .items_only()
+    .for_entry(entry);
+    emitter.s.raw_path_checks = raw_path_checks;
+    emitter.items_only()
 }
 
 /// **The names a call must not hand a fast map to** (ADR-010 D9, barriers):
@@ -1095,13 +1101,30 @@ pub fn task_report(
         None,
         None,
     );
-    nikaia_std::compiler::order::task_report(
+    let tasks = nikaia_std::compiler::order::task_report(
         &parsed.program.items,
         &parsed.interner,
         source,
         &emitter.s.facts.async_waits,
         &mut |task: &Expr| emitter.s.task_pauses(&emitter.world, task),
-    )
+    );
+    // Every `par_iter` call and the execution chosen for it (ADR-async-5
+    // D25, D32): the lambdas the checker handed to a `fan_*` entry.
+    let fanned = &emitter.s.facts.pausing_lambdas;
+    tasks
+        + &nikaia_std::compiler::order::par_report(
+            &parsed.program.items,
+            &parsed.interner,
+            source,
+            &mut |lambda: i64| {
+                matches!(
+                    fanned.get(&lambda),
+                    Some(nikaia_std::compiler::check_facts::FactPausing::Function(entry))
+                        if entry.starts_with("fan_")
+                )
+            },
+            &mut |call: &Expr| emitter.s.task_pauses(&emitter.world, call),
+        )
 }
 
 pub(crate) fn visit_block<'a>(block: &'a Block, f: &mut impl FnMut(&'a Expr)) {

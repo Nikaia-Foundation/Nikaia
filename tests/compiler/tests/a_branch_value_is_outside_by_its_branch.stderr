@@ -1,7 +1,7 @@
 warning[NK1308]: `branch` reaches the path `fs::exists` opens under `fs::Root::Anywhere`, which may name any file, and it comes from outside the program.
-   --> tests/a_branch_value_is_outside_by_its_branch.nika:29:5
+   --> tests/a_branch_value_is_outside_by_its_branch.nika:30:5
     |
- 29 |     println(fs::exists(branch, fs::Root::Anywhere))
+ 30 |     println(fs::exists(branch, fs::Root::Anywhere))
     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
     |
     = note: `branch` comes from `cli::args`: whoever sends it chooses the value, so nothing the compiler can see says what it holds.
@@ -9,9 +9,9 @@ warning[NK1308]: `branch` reaches the path `fs::exists` opens under `fs::Root::A
     = note: `raw-sinks = "warn"` lets this build through.
     = help: Open it under a root the program chose, where it cannot leave the directory: `fs::Root::Dir(".")`, `fs::scratch()` or `root.join(...)` of one. Or check it where it arrives, `throw BadInput(branch) if !path::is_component(branch)` (or `path::is_below`), and open it under such a root or joined to a part that is not outside. If the program means to read paths from `args`, `untrusted-paths-read = ["args"]` under `[allow]` in the manifest builds it.
 warning[NK1308]: `arm` reaches the path `fs::exists` opens under `fs::Root::Anywhere`, which may name any file, and it comes from outside the program.
-   --> tests/a_branch_value_is_outside_by_its_branch.nika:34:5
+   --> tests/a_branch_value_is_outside_by_its_branch.nika:35:5
     |
- 34 |     println(fs::exists(arm, fs::Root::Anywhere))
+ 35 |     println(fs::exists(arm, fs::Root::Anywhere))
     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
     |
     = note: `arm` comes from `cli::args`: whoever sends it chooses the value, so nothing the compiler can see says what it holds.
@@ -19,9 +19,9 @@ warning[NK1308]: `arm` reaches the path `fs::exists` opens under `fs::Root::Anyw
     = note: `raw-sinks = "warn"` lets this build through.
     = help: Open it under a root the program chose, where it cannot leave the directory: `fs::Root::Dir(".")`, `fs::scratch()` or `root.join(...)` of one. Or check it where it arrives, `throw BadInput(arm) if !path::is_component(arm)` (or `path::is_below`), and open it under such a root or joined to a part that is not outside. If the program means to read paths from `args`, `untrusted-paths-read = ["args"]` under `[allow]` in the manifest builds it.
 warning[NK1308]: `block` reaches the path `fs::exists` opens under `fs::Root::Anywhere`, which may name any file, and it comes from outside the program.
-   --> tests/a_branch_value_is_outside_by_its_branch.nika:39:5
+   --> tests/a_branch_value_is_outside_by_its_branch.nika:40:5
     |
- 39 |     println(fs::exists(block, fs::Root::Anywhere))
+ 40 |     println(fs::exists(block, fs::Root::Anywhere))
     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
     |
     = note: `block` comes from `cli::args`: whoever sends it chooses the value, so nothing the compiler can see says what it holds.

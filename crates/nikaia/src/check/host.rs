@@ -454,6 +454,7 @@ impl CheckWalkedPasses for Host<'_> {
             std_claims: proved.std_claims,
             outside: proved.outside,
             summaries: proved.summaries,
+            raw_paths: proved.raw_paths,
         }
     }
 

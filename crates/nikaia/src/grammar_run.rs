@@ -367,6 +367,7 @@ impl nikaia_std::compiler::grammar_run::GrammarDriverHost for Driver<'_> {
             false,
             &crate::assets::Reads::none(),
             None,
+            std::collections::BTreeMap::new(),
         )
         .map(|body| body.rust)
         .map_err(|error| format!("{error:#}").into())

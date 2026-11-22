@@ -1,0 +1,25 @@
+// #2500: `async xs.par_iter() … .collect()` is one task of the enclosing
+// group, its elements the tasks of the call's group (ADR-async-5 D31): the
+// line after the chain runs while the elements still wait, so it sees none
+// of them done, and the results wait for every element.
+use std::time
+
+fn fetch(x: i64, done: SharedMut[i64]) -> i64 {
+    time::sleep(20.millis())
+    done.update fn(mut n) { n += 1 }
+    return x * 2
+}
+
+fn main() throws {
+    let xs = [1, 2, 3]
+    let done = SharedMut(0)
+    let pages = async xs.par_iter().map(fn(x) { fetch(x, done) }).collect()
+    let seen = done.get()
+    println(f"{xs.len()} requests started, {seen} done")
+    let all: Vec[i64] = pages
+    let after = done.get()
+    println(f"{after} done")
+    for page in all {
+        println(f"page {page}")
+    }
+}

@@ -212,7 +212,7 @@ fn prove_state(pinned: ref collections::BTreeMap[String, i64], comptimes: ref Pr
 /// (ADR-269 D15, D17); the checked entries (D20), what the ledger publishes
 /// (D18), and how a claim no walk reached is held.
 fn prove_walked(program: ref Program, words: ref winnow_grammar::InternerContext, own: ref Ledger, library: ref Ledger, claims: ref collections::BTreeSet[(i64, i64)], state: ProverState, ask: fn(ref logic::TermArena, ref Vec[i64], i64) -> SolverAnswer sync, model: fn(ref logic::TermArena, ref Vec[i64], i64) -> collections::BTreeMap[String, i64]? sync, escape: fn(ref String) -> String sync, holes_of: fn(ref Expr) -> Vec[Expr] sync, unaliased: fn(ref String) -> String sync, written_of: fn(ref Expr) -> String sync, condition: fn(ref String, ref collections::BTreeSet[String]) -> Vec[logic::SolverTerm] sync) -> ProveWalked sync {
-    let mut walk = ProverWalk { state: state, arena: logic::TermArena::empty(), held: collections::BTreeMap(), reaches: collections::BTreeMap(), findings: [], claims: claims.clone(), std_claims: collections::BTreeMap(), outside: collections::BTreeMap() }
+    let mut walk = ProverWalk { state: state, arena: logic::TermArena::empty(), held: collections::BTreeMap(), reaches: collections::BTreeMap(), findings: [], claims: claims.clone(), std_claims: collections::BTreeMap(), outside: collections::BTreeMap(), raw_paths: collections::BTreeMap() }
     let answers = prover_passes(walk, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition)
     return ProveWalked { walk: walk, answers: answers, summaries: collections::BTreeMap() }
 }

@@ -989,6 +989,7 @@ pub(crate) fn check_core_call_on_described<H: CheckHost>(state: &mut CheckState,
     state.flow.paused_args = vec![];
     let outer_parallel: Option<i64> = state.in_parallel;
     let outer_scoped = state.scoped_task;
+    let outer_pausing = state.pausing_walk;
     let parallel = match on {
         Ty::Seq { parallel, .. } => { let parallel = *parallel; parallel },
         _ => false,
@@ -997,6 +998,7 @@ pub(crate) fn check_core_call_on_described<H: CheckHost>(state: &mut CheckState,
         let depth = state.scope.len() as i64;
         state.in_parallel = Some(nikaia_std::index::or(state.in_parallel, || depth));
         state.scoped_task = false;
+        state.pausing_walk = key == "Seq::map" || key == "Seq::filter" || key == "Seq::for_each";
     }
     if key == "task::Scope::spawn" {
         check_crossings_a_task_of_a_scope(state, args);
@@ -1085,6 +1087,7 @@ pub(crate) fn check_core_call_on_described<H: CheckHost>(state: &mut CheckState,
     state.flow.walk_lent = state.a_walk_that_lends(contract, receiver);
     state.in_parallel = outer_parallel;
     state.scoped_task = outer_scoped;
+    state.pausing_walk = outer_pausing;
     if (entry == "get" || entry == "contains_key" || entry == "remove" || entry == "entry") && args.len() == 1 { check_core_call_on_key_read(state, world, receiver, unsafe { nikaia_std::proven::read(&args, (0) as usize) }, span); }
     check_core_call_on_pushed(state, world, receiver, entry, args, &found, span);
     expected = check_core_call_on_now_expected(&state, world, receiver, entry, expected);

@@ -463,14 +463,33 @@ pub(crate) fn check_crossings_entry(state: &CheckState, key: &str, chained: bool
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
+pub(crate) fn check_crossings_fanned(key: &str) -> Option<&'static str> {
+    if key == "Seq::map" { return Some("fan_map"); }
+    if key == "Seq::filter" { return Some("fan_filter"); }
+    if key == "Seq::for_each" { return Some("fan_for_each"); }
+    None
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn check_crossings_a_lambda_that_pauses_at_an_entry(state: &mut CheckState, key: &str, receiver: &Expr, on: &Ty, args: &[Expr], lambda_at: i64, result: Ty, span: &Span) -> Ty {
     let parallel = match on {
         Ty::Seq { parallel, .. } => { let parallel = *parallel; parallel },
         _ => false,
     };
-    if parallel { return result; }
     let chained = a_paused_chain(key, on);
+    if parallel && !chained {
+        let fanned: Option<&'static str> = check_crossings_fanned(key);
+        if fanned.is_none() || lambda_at < 0 || lambda_at >= args.len() as i64 { return result; }
+        state.facts.pausing_lambdas.insert(id_of(unsafe { nikaia_std::proven::read(&args, (lambda_at) as usize) }) as i64, FactPausing::Function(nikaia_std::block::Text::from(nikaia_std::index::or(fanned, || "").to_string())));
+        if key == "Seq::map" || key == "Seq::filter" { return a_pausing_sequence(result, on); }
+        let written = id_of(receiver) as i64;
+        state.flow.settled_methods.remove(&written);
+        state.flow.pausing_methods.insert(written);
+        state.a_call_that_may_pause(key, true, false, span);
+        return result;
+    }
     if lambda_at < 0 || lambda_at >= args.len() as i64 {
         if chained { return a_pausing_sequence(result, on); }
         return result;
