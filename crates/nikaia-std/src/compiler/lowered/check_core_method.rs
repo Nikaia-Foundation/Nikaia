@@ -489,7 +489,10 @@ pub(crate) fn check_core_method_called<H: CheckHost>(state: &mut CheckState, wor
             Expr::MethodCall { receiver: made_on, method: made_by, .. } => {
                 let made_on = nikaia_std::boxed::open(made_on); let made_by = *made_by;
                 let made = world.words.resolve(made_by);
-                if (made == "replace" || made == "replacen") && state.facts.text_replaces.contains(&(id_of(made_on) as i64)) { state.facts.replaced_in_place.insert(id_of(receiver) as i64); }
+                if (made == "replace" || made == "replacen") && state.facts.text_replaces.contains(&(id_of(made_on) as i64)) {
+                    state.facts.replaced_in_place.insert(id_of(receiver) as i64);
+                    let said = state.facts.narrated.insert((span.start as i64, format!("{} works in the buffer the {} before it made", name, made)));
+                }
             },
             _ => { },
         }

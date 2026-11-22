@@ -916,7 +916,10 @@ impl CheckState {
             if self.a_clone_read_after(one) { continue; }
             let mut lent = false;
             for loan in self.flow.clone_loans.iter() { if loan.1 == one.binding && self.a_view_read_after(&loan.0, one) { lent = true; } }
-            if !lent { self.facts.replaced_last_uses.insert(one.node); }
+            if !lent {
+                self.facts.replaced_last_uses.insert(one.node);
+                let said = self.facts.narrated.insert((one.span.start as i64, format!("replace works in the buffer of {}", one.name)));
+            }
         }
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before

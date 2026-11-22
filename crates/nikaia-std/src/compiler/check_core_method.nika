@@ -664,6 +664,7 @@ fn check_core_method_called[H: CheckHost](mut state: CheckState, world: ref Chec
                 let made = world.words.resolve(made_by)
                 if (made == "replace" || made == "replacen") && state.facts.text_replaces.contains(id_of(made_on) as i64) {
                     state.facts.replaced_in_place.insert(id_of(receiver) as i64)
+                    let said = state.facts.narrated.insert((span.start as i64, f"{name} works in the buffer the {made} before it made"))
                 }
             },
             else => {}

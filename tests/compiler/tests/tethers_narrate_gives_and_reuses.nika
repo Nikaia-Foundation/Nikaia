@@ -1,0 +1,29 @@
+// ADR-text-reuse-1 D5 (#2514): `--tethers` prints one line per give and per
+// reuse, with file and line: a grown cut takes its source's buffer (`rest
+// takes the buffer of line`), and `t = t.replace(..)`, a `replace` at the
+// last use of a `let`'s text and a `replace` on what a `replace` made work in
+// a buffer already there. A cut of a literal is copied, so it narrates
+// nothing.
+use std::env
+use std::fs
+use std::process
+
+fn toolchain() -> String throws {
+    let exe = env::current_exe()?.display() ?? ""
+    if exe.len() > 0 { return exe }
+    return "target/fast/nikaia"
+}
+
+fn main() throws {
+    let tmp = fs::scratch()
+    let program = "fn tail_of(keep line: String) -> String {\n    let m = line.find(\";\") ?? return line\n    let mut rest = line.after(m.end)\n    rest += \"!\"\n    return rest\n}\n\nfn shorter(s: String) -> String {\n    let mut t = s.replace(\"a\", \"b\")\n    t = t.replace(\"cc\", \"c\")\n    return t\n}\n\nfn chained(s: String) -> String {\n    return s.replace(\"a\", \"b\").replace(\"b\", \"cd\")\n}\n\nfn copied() -> String {\n    let line = \"Kiel;7\"\n    let m = line.find(\";\") ?? return \"\"\n    let mut rest = line.after(m.end)\n    rest += \"?\"\n    return rest\n}\n\nfn main() throws {\n    println(tail_of(f\"Hamburg;{12}\"))\n    println(shorter(\"accbcc\"))\n    println(chained(\"abab\"))\n    println(copied())\n}\n"
+    fs::write("main.nika", tmp, program)
+    let out = process::run(toolchain(), ["lower", "--tethers", "main.nika"]; dir: tmp.path().to_text())
+    for line in out.stdout.lines() {
+        if line.starts_with("main.nika:") {
+            println(line)
+        }
+    }
+    println(f"exit {out.code}")
+    print(out.stderr)
+}

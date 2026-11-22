@@ -3842,7 +3842,7 @@ pub mod template {
 }
 pub mod tether {
     #[allow(unused_imports)]
-    pub use super::{RESULT_POSITION, INPUT_POSITION, Buffer, PackageTypes, declare_unit, a_parse_that_views, function_views, makes_a_buffer, tethers_report};
+    pub use super::{RESULT_POSITION, INPUT_POSITION, Buffer, PackageTypes, declare_unit, a_parse_that_views, function_views, makes_a_buffer, narrated_lines, reuses_report, tethers_report};
 }
 pub mod text_tiers {
     #[allow(unused_imports)]
@@ -3963,4 +3963,4 @@ pub fn nikaia_run_tests(filters: &[std::string::String], list: bool, more: std::
 /// **The digest of this lowered set** (#1610): every file `lower-std` wrote
 /// beside this index, and the index above this line. Compiled into the same
 /// crate as the code it names, it is the compiler's identity for its caches.
-pub const LOWERED_DIGEST: &str = "8159b56cea2aed9d2bfbee27f8818230d3f5135992e4a66a0b50fde85c6f0946";
+pub const LOWERED_DIGEST: &str = "35b76e48541e0855a85e16f815e84658f021b26f970f120bc762d2bb3c698eeb";

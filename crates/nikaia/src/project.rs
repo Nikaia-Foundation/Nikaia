@@ -1102,53 +1102,74 @@ pub fn definition(
     alone: bool,
     offset: i64,
 ) -> Option<(String, crate::ast::Span, String)> {
-    let (found, _) =
-        diagnostics::collecting(|| -> Result<Option<(String, crate::ast::Span, String)>> {
-            let (manifest, packages) = match alone {
-                true => (Manifest::default(), Vec::new()),
-                false => (Manifest::find(input)?, packages_of_file(input)?),
-            };
-            let settings = Settings::resolve(&manifest, None, None)?;
-            with_lower_host(
-                input,
-                &settings,
-                true,
-                &packages,
-                None,
-                open,
-                alone,
-                |host, _| {
-                    use project_lower::ProjectLowerHost;
-                    host.read_program().ok()?;
-                    host.infer_program().ok()?;
-                    // A refusal still leaves the facts of what was checked.
-                    let _ = project_lower::project_lower_check(host);
-                    let program = host.program.borrow();
-                    let program = program.as_ref()?;
-                    let at = program.units.iter().position(|unit| unit.path == input)?;
-                    let facts = host.unit_facts.borrow();
-                    let facts = facts.get(&at)?;
-                    let views: Vec<_> = program
-                        .units
-                        .iter()
-                        .map(|unit| crate::check::parsed_view_of(&unit.parsed))
-                        .collect();
-                    let (file, span, name) = nikaia_std::compiler::check_declared::declared_site(
-                        &views, at as i64, facts, offset,
-                    )?;
-                    Some((
-                        program.units[file as usize].path.display().to_text(),
-                        span,
-                        name,
-                    ))
-                },
-            )
-        });
+    checked_unit(input, open, alone, |program, at, facts| {
+        let views: Vec<_> = program
+            .units
+            .iter()
+            .map(|unit| crate::check::parsed_view_of(&unit.parsed))
+            .collect();
+        let (file, span, name) =
+            nikaia_std::compiler::check_declared::declared_site(&views, at as i64, facts, offset)?;
+        Some((
+            program.units[file as usize].path.display().to_text(),
+            span,
+            name,
+        ))
+    })
+}
+
+/// **What the check of `input` narrated** (ADR-text-reuse-1 D5, #2514): each
+/// give and each reuse, by the first byte of its site, for the language
+/// server's inlay hints; read and checked as [`definition`] does.
+pub fn narrated(input: &Path, open: &modules::Open, alone: bool) -> BTreeSet<(i64, String)> {
+    checked_unit(input, open, alone, |_, _, facts| {
+        Some(facts.narrated.clone())
+    })
+    .unwrap_or_default()
+}
+
+/// `input`'s program read and checked as [`diagnose`] does, and `ask` handed
+/// it with `input`'s unit and the facts its check left; nothing where `input`
+/// was not checked (it does not parse).
+fn checked_unit<R>(
+    input: &Path,
+    open: &modules::Open,
+    alone: bool,
+    ask: impl FnOnce(&modules::Program, usize, &check::CheckFacts) -> Option<R>,
+) -> Option<R> {
+    let (found, _) = diagnostics::collecting(|| -> Result<Option<R>> {
+        let (manifest, packages) = match alone {
+            true => (Manifest::default(), Vec::new()),
+            false => (Manifest::find(input)?, packages_of_file(input)?),
+        };
+        let settings = Settings::resolve(&manifest, None, None)?;
+        with_lower_host(
+            input,
+            &settings,
+            true,
+            &packages,
+            None,
+            open,
+            alone,
+            |host, _| {
+                use project_lower::ProjectLowerHost;
+                host.read_program().ok()?;
+                host.infer_program().ok()?;
+                // A refusal still leaves the facts of what was checked.
+                let _ = project_lower::project_lower_check(host);
+                let program = host.program.borrow();
+                let program = program.as_ref()?;
+                let at = program.units.iter().position(|unit| unit.path == input)?;
+                let facts = host.unit_facts.borrow();
+                ask(program, at, facts.get(&at)?)
+            },
+        )
+    });
     found.ok().flatten()
 }
 
 /// What `nikaia lsp` asks of the compiler (`tools/lsp.nika`, #1347):
-/// [`diagnose`] and [`definition`].
+/// [`diagnose`], [`definition`] and [`narrated`].
 pub struct Lsp;
 
 impl nikaia_std::compiler::lsp::LspHost for Lsp {
@@ -1170,6 +1191,15 @@ impl nikaia_std::compiler::lsp::LspHost for Lsp {
         offset: i64,
     ) -> Option<(String, crate::ast::Span, String)> {
         definition(Path::new(entry), open, alone, offset)
+    }
+
+    fn narrated(
+        &self,
+        entry: &str,
+        open: &BTreeMap<String, String>,
+        alone: bool,
+    ) -> BTreeSet<(i64, String)> {
+        narrated(Path::new(entry), open, alone)
     }
 }
 
@@ -2679,6 +2709,26 @@ struct ExplainHost<'a> {
     library: &'static Ledger,
 }
 
+impl ExplainHost<'_> {
+    /// The check's walk of unit `at`, the other units beside it.
+    fn propagation(&self, at: usize) -> crate::check::CheckFacts {
+        let program = self.program;
+        crate::check::propagation_against(
+            &program.units[at].parsed,
+            &program
+                .units
+                .iter()
+                .enumerate()
+                .filter(|(other, _)| *other != at)
+                .map(|(_, other)| &other.parsed)
+                .collect::<Vec<_>>(),
+            &program.contracts,
+            &program.described,
+            self.reads,
+        )
+    }
+}
+
 impl project_check::ProjectCheckExplainHost for ExplainHost<'_> {
     fn units(&self) -> i64 {
         self.program.units.len() as i64
@@ -2734,21 +2784,18 @@ impl project_check::ProjectCheckExplainHost for ExplainHost<'_> {
                 // Which handovers duplicate a handle is the check's (ADR-312
                 // D2, #1502); an explanation runs before it, so it asks the
                 // check's walk the emitter asks.
-                Some(&crate::check::propagation_against(
-                    &unit.parsed,
-                    &program
-                        .units
-                        .iter()
-                        .enumerate()
-                        .filter(|(other, _)| *other != at as usize)
-                        .map(|(_, other)| &other.parsed)
-                        .collect::<Vec<_>>(),
-                    &program.contracts,
-                    &program.described,
-                    self.reads,
-                )),
+                Some(&self.propagation(at as usize)),
             ),
-            "tethers" => crate::contracts::tether::report(&unit.parsed, &program.contracts),
+            // Then each give and each reuse the check's walk narrated
+            // (ADR-text-reuse-1 D5, #2514).
+            "tethers" => {
+                crate::contracts::tether::report(&unit.parsed, &program.contracts)
+                    + &nikaia_std::compiler::tether::reuses_report(
+                        &self.propagation(at as usize).narrated,
+                        &unit.source,
+                        &unit.path.display().to_text(),
+                    )
+            }
             "asserts" => crate::check::claims_report(
                 &unit.parsed,
                 &unit.source,

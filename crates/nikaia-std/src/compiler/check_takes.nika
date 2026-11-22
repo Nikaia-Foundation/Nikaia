@@ -1435,6 +1435,7 @@ impl CheckState {
             }
             if !lent {
                 self.facts.replaced_last_uses.insert(one.node)
+                let said = self.facts.narrated.insert((one.span.start as i64, f"replace works in the buffer of {one.name}"))
             }
         }
     }
