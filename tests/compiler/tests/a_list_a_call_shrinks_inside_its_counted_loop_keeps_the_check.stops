@@ -1,0 +1,1 @@
+tests/a_list_a_call_shrinks_inside_its_counted_loop_keeps_the_check.nika:38: the program stopped: index out of bounds: the len is 1 but the index is 2
