@@ -7,26 +7,21 @@ security instructions the agent had, and the rules of the repository.
 
 ## The model and its reasoning effort
 
-A pull request made with an AI agent is made with at least:
+A pull request made with an AI agent is made with **Claude Opus 5.5 at
+reasoning effort `medium` or higher**, for every part of the repository.
+Claude Sonnet 5.5 and smaller models are not accepted.
 
-| Part of the repository | Model | Reasoning effort |
-|---|---|---|
-| Tests, documentation, the guide, the website, `tools/*.nika` | Claude Sonnet 5.5, or a model of the same strength | `medium` |
-| The compiler and `std` (`crates/`, `crates/nikaia-std/src/compiler/*.nika`) | Claude Sonnet 5.5, or a model of the same strength | `high` |
-| What decides whether a program is safe: the prover, bounds-check removal, the raw-sink checks, the code generator, everything that writes `unsafe` | Claude Opus 5.5, or a model of the same strength | `high` |
-
-These match what our own agents run, and our agents get a written brief with
-the facts of the task; yours starts with less, so the effort is one step
-higher. A smaller model or a lower effort produces changes that look right and
-are not, and in the last row such a change can open a memory-safety hole in
-every program the compiler builds.
+Our own agents work from a written brief with the facts of the task; yours
+starts with less. A smaller model or a lower effort produces changes that look
+right and are not, and in the compiler such a change can open a memory-safety
+hole in every program it builds.
 
 Name the model and the effort in the description of the pull request:
 
     Model: <name and version>
     Effort: <low | medium | high | ...>
 
-A pull request without these lines, or made below the table, is closed with a
+A pull request without these lines, or made with a smaller model or a lower effort, is closed with a
 note asking for a new run.
 
 ## What your agent must be told about security
