@@ -256,22 +256,48 @@ fn check_defaults_item_constants[H: CheckHost](mut state: CheckState, world: ref
 /// of the function it names.
 fn check_defaults_fold[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, gram: ref GrammarDef, spec: ref FoldSpec, span: ref Span) sync {
     let item = check_defaults_item_of(host, gram, spec)
-    let named: Ty? = state.a_named_fold_part_that_may_pause(world, spec.init, span)
-    let built = check_core_expr(state, world, host, spec.init, span)
-    // A function's name - `Summary` is its constructor, `Summary::new` -
-    // builds what its signature hands back; anything else is the value.
-    let mut acc: Ty = built.clone()
-    match built {
-        Ty::Fn { result, .. } => { acc = result?.clone() ?? Ty::Unknown },
-        else => {},
-    }
-    if named != null {
-        acc = named?.clone() ?? Ty::Unknown
-    }
     // **`NK2209` is the rule here and not `NK2206`**: no parameter type says
     // `sync` about this lambda, the language does, and the action rule inside
     // it names the call that breaks it.
     let promised = CheckPromises { may_pause: true, may_fail: true }
+    let named: Ty? = state.a_named_fold_part_that_may_pause(world, spec.init, span)
+    let mut built: Ty = Ty::Unknown
+    match spec.init {
+        // **A maker `fn { … }`** (Part II 12.6, #2423) is handed nothing, and
+        // what it hands back is the accumulator: typed as the step is, not
+        // as a lambda nothing declares the type of.
+        Expr::Closure { params, mutable, body, .. } => {
+            let (tail, _) = check_core_lambda(state, world, host, params, mutable, body, [], promised, span)
+            built = Ty::Fn { params: [], result: tail, is_sync: true, can_throw: false, spelled: CodeNames::none() }
+        },
+        else => { built = check_core_expr(state, world, host, spec.init, span) },
+    }
+    // A function's name - `Summary` is its constructor, `Summary::new` -
+    // builds what its signature hands back; anything else is the value.
+    let mut acc: Ty = built.clone()
+    let mut makes = false
+    match built {
+        Ty::Fn { result, .. } => {
+            acc = result?.clone() ?? Ty::Unknown
+            makes = true
+        },
+        else => {},
+    }
+    if named != null {
+        acc = named?.clone() ?? Ty::Unknown
+        makes = true
+    }
+    // **A name that holds a value** (#2423) - a binding beside the fold - is
+    // the accumulator's first value, as a literal is (#704 item 7), not a
+    // maker the fold calls.
+    let a_name = match spec.init {
+        Expr::Variable(..) => true,
+        Expr::Path(..) => true,
+        else => false,
+    }
+    if a_name && !makes && wholly_known(built) {
+        state.facts.fold_value_inits.insert(id_of(spec.init) as i64)
+    }
     let mut owner = "fold"
     if spec.merge != null {
         owner = "par_fold"

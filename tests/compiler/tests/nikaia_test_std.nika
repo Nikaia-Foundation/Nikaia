@@ -2,10 +2,11 @@
 // `.nika` files, compiled into `nikaia` (no `cfg(test)` build of
 // `nikaia-std`): `--list` names them, `--filter` runs those whose name holds
 // the text, one line each and a summary, and a filter that names none fails.
+use std::env
 use std::process
 
 fn toolchain() -> String throws {
-    let exe = process::run("sh", ["-c", "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\""]).stdout.trim().clone()
+    let exe = env::current_exe()?.display() ?? ""
     if exe.len() > 0 { return exe }
     return "target/fast/nikaia"
 }

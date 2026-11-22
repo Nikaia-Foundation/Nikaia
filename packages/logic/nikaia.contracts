@@ -565,7 +565,7 @@ signature = "(ref mut self, query: ref SvQuery, log: ref Vec[SvStep], step: ref 
 
 [fn."SvSat::above"]
 sync = "inferred"
-panics = true
+panics = false
 touches = []
 signature = "(ref self, a: u32, b: u32) -> bool"
 
@@ -653,7 +653,7 @@ signature = "(ref self) -> i64"
 
 [fn."SvSat::heap_down"]
 sync = "inferred"
-panics = true
+panics = false
 touches = []
 signature = "(ref mut self, start: i64)"
 
@@ -665,7 +665,7 @@ signature = "(ref mut self, v: u32)"
 
 [fn."SvSat::heap_pop"]
 sync = "inferred"
-panics = true
+panics = false
 touches = []
 signature = "(ref mut self) -> u32"
 
