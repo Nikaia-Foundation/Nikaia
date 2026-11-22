@@ -477,7 +477,8 @@ fn check_core_method_resolved(mut state: CheckState, world: ref CheckWorld, on: 
     // recorded for this receiver: a method called in the argument resolved
     // after it and took `last_resolved`, `names.contains(g.trim())`.
     let callee: String = state.facts.method_callees.get(id_of(receiver) as i64)?.clone() ?? last?.clone() ?? ""
-    if (callee == "Vec::contains" || callee == "Array::contains") && args.len() == 1 {
+    // A search by halving asks the same way (#2389): `names.binary_search("b")`.
+    if (callee == "Vec::contains" || callee == "Array::contains" || callee == "Vec::binary_search") && args.len() == 1 {
         // A literal is text as well (`names.contains("?")`).
         let text = match args[0] {
             Expr::Variable(_, _) => check_core_method_text_local(state, world, args[0]),

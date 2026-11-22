@@ -2545,8 +2545,10 @@ fn check_core_stmt_for[H: CheckHost](mut state: CheckState, world: ref CheckWorl
     if bindings.len() == 1 && elements.len() == 1 {
         match elements[0] {
             Ty::Named { name, args, .. } => {
-                // A struct element has the fields of a parameter's type.
-                if has_a_length(name) || (args.is_empty() && !is_whole_number(name)) {
+                // A struct element has the fields of a parameter's type, and
+                // a whole-number element is a whole number of the prover
+                // (ADR-396 D2, #2393).
+                if has_a_length(name) || args.is_empty() {
                     state.facts.whole_lets.insert(span.start as i64, name.clone())
                 }
             },
