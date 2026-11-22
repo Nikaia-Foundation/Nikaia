@@ -56,6 +56,13 @@ Security rules for this contribution to Nikaia:
 We read every pull request for hidden instructions and for changes that weaken
 a check, and close one that has either.
 
+A check, *PR guard* (`.github/workflows/pr-guard.yml`), marks a pull request
+that touches the safety checks, the code generator, `unsafe`, CI, build
+scripts, dependencies or the expected output of a test, or that carries
+invisible characters or hidden comments. It labels it `security-review` and,
+for an outside author, fails until a maintainer has read it. That is no
+judgement on the work; it only says where we look first.
+
 ## The rules of the repository
 
 `CLAUDE.md` holds the working rules every agent here follows; give it to
