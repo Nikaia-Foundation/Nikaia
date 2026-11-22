@@ -202,13 +202,13 @@ pub fn prove_outside(program: &Program, words: &winnow_grammar::InternerContext,
     let mut state = ProverState::fresh();
     state.method_callees = method_callees.copy_owned();
     state.field_owners = field_owners.copy_owned();
-    let first = prover_outside(program, words, library, &state, &mut *holes_of);
+    let first = prover_outside(program, words, own, library, &state, &mut *holes_of);
     state.outside.returning = first.returning;
     state.outside.valued = first.valued;
     state.outside.leads = first.leads;
     let bound = unsafe { nikaia_std::proven::add::<i64>(program.items.len() as i64, 2) };
     for _ in 0..bound {
-        let found = prover_outside(program, words, library, &state, &mut *holes_of);
+        let found = prover_outside(program, words, own, library, &state, &mut *holes_of);
         let settled = (found.results.len() as i64) == state.outside.results.len() as i64 && (found.fields.len() as i64) == state.outside.fields.len() as i64;
         state.outside = found;
         if settled { break; }

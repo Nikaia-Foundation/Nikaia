@@ -452,6 +452,12 @@ fn grammar_types_choose(value: ref Expr, arms: ref Vec[GrammarArm], span: ref Sp
             continue
         }
         let mut inner = bound.clone()
+        // **In a `Map` or `List` arm, `T()` is the empty collection of the
+        // type `T` is** (ADR-grammar-typed-read-v1 D14): the copy keeps that
+        // the subject has a constructor, under a key no parameter can name.
+        if case == "Map" || case == "List" {
+            inner.insert(f"$new {subject}", ty.clone())
+        }
         let parts = grammar_types_parts(ty, kind)
         let mut index: i64 = 0
         for name in names {
@@ -1038,7 +1044,7 @@ fn grammar_types_walk_expr(mut expr: Expr, words: ref winnow_grammar::InternerCo
         else => {},
     }
     if walk.putting {
-        grammar_types_put_in(expr, words, walk)
+        grammar_types_put_in(expr, words, intern, walk)
     } else {
         grammar_types_ask(expr, words, intern, walk)
     }
@@ -1064,10 +1070,15 @@ fn grammar_types_put_written(mut ty: Type?, bound: ref collections::BTreeMap[Str
 
 /// An expression with the copy's types put in: the type of a cast, and a
 /// parameter standing as a name or as a path's head.
-fn grammar_types_put_in(mut expr: Expr, words: ref winnow_grammar::InternerContext, walk: ref GrammarTypesWalk) {
+fn grammar_types_put_in(mut expr: Expr, words: ref winnow_grammar::InternerContext, intern: fn(ref String) -> winnow_grammar::Symbol sync, walk: ref GrammarTypesWalk) {
     match expr {
         Expr::Cast { expr: inner, ty, id } => {
             expr = Expr::Cast { expr: inner, ty: grammar_types_put(ty, walk.bound, words), id: id }
+            return
+        },
+        Expr::Call { func, args, config, id } => {
+            let made: Expr? = grammar_types_constructor(func, args.len() + config.len(), walk.bound, words, intern)
+            expr = Expr::Call { func: made ?? func, args: args, config: config, id: id }
             return
         },
         else => {},
@@ -1084,6 +1095,31 @@ fn grammar_types_put_in(mut expr: Expr, words: ref winnow_grammar::InternerConte
         },
         else => {},
     }
+}
+
+/// **`T()` in a `Map` or `List` arm, the call of the constructor of the type
+/// `T` is in the copy** (ADR-grammar-typed-read-v1 D14): `T` is put as that
+/// type's name, without its generics, which the value's place gives it
+/// (`let m: T = T()`). `null` for any other call, so `T()` outside such an
+/// arm stays the call of a function nothing declares (`NK1117`).
+fn grammar_types_constructor(func: ref Expr, given: i64, bound: ref collections::BTreeMap[String, Type], words: ref winnow_grammar::InternerContext, intern: fn(ref String) -> winnow_grammar::Symbol sync) -> Expr? {
+    if given != 0 {
+        return null
+    }
+    let (name, id) = match func {
+        Expr::Variable(name, id) => (name, id),
+        else => return null,
+    }
+    let ty: Type = bound.get(f"$new {words.resolve(name)}")?.clone() ?? return null
+    let written = f"{words.resolve(ty.name)}"
+    let mut segments: Vec[winnow_grammar::Symbol] = []
+    for part in written.split("::") {
+        segments.push(intern(part))
+    }
+    if segments.len() == 1 {
+        return Expr::Variable(segments[0], id)
+    }
+    return Expr::Path(segments, id)
 }
 
 /// The type a name, or a path's head, stands for in the copy, where it is

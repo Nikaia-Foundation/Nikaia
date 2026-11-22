@@ -125,21 +125,21 @@ fn syntax_test(key: String) throws {
 	let mut best_len = 0
 	let mut by_text: String = ""
 	let mut by_text_len = 0
-	for entry in fs::read_dir("tests/compiler/tests", fs::Root::Anywhere) {
+	let tests = fs::Root::Dir(".").join("tests/compiler/tests")
+	for entry in fs::read_dir(".", tests) {
 		let name = entry.to_text()
 		if !name.ends_with(".nika") { continue }
-		let path = f"tests/compiler/tests/{name}"
 		if name.to_lowercase().contains(by_name.clone()) {
-			let n = fs::read_to_string(path.clone(), fs::Root::Anywhere).len()
+			let n = fs::read_to_string(name.clone(), tests).len()
 			if best == "" || n < best_len {
-				best = path
+				best = name
 				best_len = n
 			}
 		} else if best == "" {
-			let text = fs::read_to_string(path.clone(), fs::Root::Anywhere)
+			let text = fs::read_to_string(name.clone(), tests)
 			if text.to_lowercase().contains(key.clone())
 				&& (by_text == "" || text.len() < by_text_len) {
-					by_text = path
+					by_text = name
 					by_text_len = text.len()
 				}
 		}
@@ -149,10 +149,10 @@ fn syntax_test(key: String) throws {
 		println("== example test: nothing")
 		return
 	}
-	println(f"== example test: {best}")
+	println(f"== example test: tests/compiler/tests/{best}")
 	let lines: Vec[String] = fs::read_to_string(
 		best.clone(),
-		fs::Root::Anywhere,
+		tests,
 	).trim().split("\n").collect()
 	let mut n = 0
 	for l in lines {
@@ -164,12 +164,12 @@ fn syntax_test(key: String) throws {
 		n = n + 1
 	}
 	let out = best.replace(".nika", ".stdout")
-	if fs::exists(out.clone(), fs::Root::Anywhere) {
+	if fs::exists(out.clone(), tests) {
 		let expected: Vec[String] = fs::read_to_string(
 			out.clone(),
-			fs::Root::Anywhere,
+			tests,
 		).trim().split("\n").collect()
-		println(f"-- expected output in {out}, {expected.len()} lines")
+		println(f"-- expected output in tests/compiler/tests/{out}, {expected.len()} lines")
 	}
 }
 

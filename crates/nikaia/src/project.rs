@@ -4662,12 +4662,7 @@ impl project_drive::ProjectDriveHost for DriveHost<'_> {
         let project = self.project;
         let cargo = self.held((|| {
             let target_dir = if shared {
-                let tree = Sysroot::resolve().rlib_cache(
-                    &project.settings.words.target,
-                    &project.codegen(),
-                    &project.settings.words.reentrancy_check,
-                    &project.settings.cpu_key()?,
-                );
+                let tree = cargo_target_dir(project, manifest, shared)?;
                 orchestrator::cache::sweep_programs(&tree, &project.root_tag(), &project.root);
                 Some(tree)
             } else {
@@ -4692,6 +4687,10 @@ impl project_drive::ProjectDriveHost for DriveHost<'_> {
         })())?;
         *self.cargo.borrow_mut() = Some(cargo);
         Ok(())
+    }
+
+    fn target_dir(&self, manifest: &Path, shared: bool) -> HostResult<PathBuf> {
+        self.held(cargo_target_dir(self.project, manifest, shared))
     }
 
     fn is_library(&self) -> bool {
@@ -4852,6 +4851,27 @@ fn run_directly(
 /// triple they pass Cargo as `--target`: the two bundles
 /// (`tools/comptime_bundle.nika`) and every grammar run's parser.
 ///
+/// **The directory Cargo builds `manifest` in** (ADR-002 D4), which the
+/// wrapper learns as `NIKAIA_TARGET_DIR` (ADR-raw-sinks-1 D17.6): the tree of
+/// the user's cache for these settings when `shared`, else where Cargo puts
+/// it unasked, `CARGO_TARGET_DIR` (relative to where the tools start) or
+/// `target` beside the manifest. The choosing Rust that stays until the outer
+/// build moves (ADR-platform-layer-v1 D5, D6).
+fn cargo_target_dir(project: &Project, manifest: &Path, shared: bool) -> Result<PathBuf> {
+    if shared {
+        return Ok(Sysroot::resolve().rlib_cache(
+            &project.settings.words.target,
+            &project.codegen(),
+            &project.settings.words.reentrancy_check,
+            &project.settings.cpu_key()?,
+        ));
+    }
+    match std::env::var_os("CARGO_TARGET_DIR").filter(|dir| !dir.is_empty()) {
+        Some(dir) => Ok(Layout::where_tools_start().join(dir)),
+        None => Ok(manifest.parent().unwrap_or(Path::new(".")).join("target")),
+    }
+}
+
 /// **The tree a program with no settings is built in** (`Sysroot::rlib_cache`,
 /// ADR-002 D4), with the program's `--target` and the profile a generated
 /// workspace gives its dependencies, so Cargo compiles `std` there once for the

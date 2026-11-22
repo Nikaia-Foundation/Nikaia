@@ -1,0 +1,6 @@
+copied: 19 bytes
+executable: true
+same bytes: true
+to outside: Outside ../escaped
+escaped made: false
+from outside: Outside ../run

@@ -341,6 +341,7 @@ pub(crate) fn grammar_types_choose(value: &Expr, arms: &[GrammarArm], span: &Spa
         let (case, names) = match read { Some(__nikaia_value) => __nikaia_value, None => continue };
         if case != "" && case != kind { continue; }
         let mut inner = bound.copy_owned();
+        if case == "Map" || case == "List" { inner.insert(format!("$new {}", subject), ty.clone()); }
         let parts = grammar_types_parts(&ty, &kind);
         let mut index: i64 = 0;
         for name in names.iter() {
@@ -815,7 +816,7 @@ pub(crate) fn grammar_types_walk_expr(expr: &mut Expr, words: &winnow_grammar::I
         Expr::Spawn { body, .. } => { let body = nikaia_std::boxed::open(body); grammar_types_walk_expr(&mut *body, words, &mut &mut *intern, walk); },
         _ => { },
     }
-    if walk.putting { grammar_types_put_in(expr, words, &walk); } else { grammar_types_ask(expr, words, &mut &mut *intern, walk); }
+    if walk.putting { grammar_types_put_in(expr, words, &mut &mut *intern, &walk); } else { grammar_types_ask(expr, words, &mut &mut *intern, walk); }
 }
 
 pub(crate) fn grammar_types_visit_stmt(stmt: &mut Stmt, words: &winnow_grammar::InternerContext, walk: &GrammarTypesWalk) {
@@ -829,11 +830,17 @@ pub(crate) fn grammar_types_visit_stmt(stmt: &mut Stmt, words: &winnow_grammar::
 
 pub(crate) fn grammar_types_put_written(ty: &mut Option<Type>, bound: &collections::BTreeMap<String, Type>, words: &winnow_grammar::InternerContext) { if ty.is_some() { *ty = Some(grammar_types_put(ty.as_ref().unwrap(), bound, words)); } }
 
-pub(crate) fn grammar_types_put_in(expr: &mut Expr, words: &winnow_grammar::InternerContext, walk: &GrammarTypesWalk) {
+pub(crate) fn grammar_types_put_in(expr: &mut Expr, words: &winnow_grammar::InternerContext, intern: &mut impl FnMut(&str) -> winnow_grammar::Symbol, walk: &GrammarTypesWalk) {
     match expr {
         Expr::Cast { expr: _, .. } => {
             let Expr::Cast { expr: inner, ty, id } = std::mem::replace(expr, Expr::LitNull(Default::default())) else { unreachable!("the pattern matched it") }; let inner = nikaia_std::boxed::open(inner);
             *expr = Expr::Cast { expr: nikaia_std::block::Boxed::new(inner), ty: grammar_types_put(&ty, &walk.bound, words), id };
+            return;
+        },
+        Expr::Call { .. } => {
+            let Expr::Call { func, args, config, id } = std::mem::replace(expr, Expr::LitNull(Default::default())) else { unreachable!("the pattern matched it") }; let func = nikaia_std::boxed::open(func);
+            let made: Option<Expr> = grammar_types_constructor(&func, unsafe { nikaia_std::proven::add::<i64>(args.len() as i64, config.len() as i64) }, &walk.bound, words, &mut *intern);
+            *expr = Expr::Call { func: nikaia_std::block::Boxed::new(nikaia_std::index::or(made, || func.into())), args, config, id };
             return;
         },
         _ => { },
@@ -852,6 +859,23 @@ pub(crate) fn grammar_types_put_in(expr: &mut Expr, words: &winnow_grammar::Inte
         },
         _ => { },
     }
+}
+
+pub(crate) fn grammar_types_constructor(func: &Expr, given: i64, bound: &collections::BTreeMap<String, Type>, words: &winnow_grammar::InternerContext, intern: &mut impl FnMut(&str) -> winnow_grammar::Symbol) -> Option<Expr> {
+    if given != 0 { return None; }
+    let (name, id) = match func {
+        Expr::Variable(name, id) => { let id = *id; let name = *name; (name, id) },
+        _ => return None,
+    };
+    let ty: Type = match match bound.get(&format!("$new {}", words.resolve(name))) {
+        Some(__nikaia_it) => Some(__nikaia_it.clone()),
+        None => None,
+    } { Some(__nikaia_value) => __nikaia_value, None => return None };
+    let written = format!("{}", words.resolve(ty.name));
+    let mut segments: Vec<winnow_grammar::Symbol> = vec![];
+    for part in written.split("::") { segments.push(intern(part)); }
+    if segments.len() == 1 { return Some(Expr::Variable(*unsafe { nikaia_std::proven::read(&segments, (0) as usize) }, id)); }
+    Some(Expr::Path(segments, id))
 }
 
 pub(crate) fn grammar_types_head(expr: &Expr, bound: &collections::BTreeMap<String, Type>, words: &winnow_grammar::InternerContext) -> Option<winnow_grammar::Symbol> {

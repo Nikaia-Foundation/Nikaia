@@ -19,11 +19,11 @@ fn toolchain(repo: String) -> String throws {
 }
 
 // The driver with `args`, its output with the scratch directory as `T`.
-fn drive(nikaia: String, repo: String, tmp: ref fs::Root, args: Vec[String]) -> String throws {
+fn drive(nikaia: String, repo: String, tmp: ref fs::Root, lane: String, args: Vec[String]) -> String throws {
     let mut all: Vec[String] = ["run", "scripts/drive.nika", "--"]
     for a in args { all.push(a.clone()) }
     let out = process::run(nikaia, all; dir: repo)
-    return out.stdout.trim().replace(tmp.path().to_text(), "T")
+    return out.stdout.trim().replace(f"{repo}/{lane}", "T").replace(lane.clone(), "T")
 }
 
 // The `current` line of a focus text.
@@ -32,23 +32,35 @@ fn current(text: String) -> String {
     return text.clone()
 }
 
+// A lane of this test's own under the checkout's target/drive-test/ (#2577):
+// drive opens every name under fs::Root::Dir("."), the checkout it runs in, so
+// it gets the lane's names relative to it. The scratch directory's name keeps
+// the two runs of `--both-settings` apart.
+fn test_lane(repo: String, name: String) -> String throws {
+    let id = fs::scratch().path().file_name()?.to_text() ?? "run"
+    let lane = f"target/drive-test/{name}/{id}"
+    fs::create_dir(lane, fs::Root::Dir(repo); recursive: true)
+    return lane
+}
+
 fn main() throws {
-    let tmp = fs::scratch()
     let repo = root()
+    let lane = test_lane(repo.clone(), "focus_rotation")
+    let tmp = fs::Root::Dir(f"{repo}/{lane}")
     let nikaia = toolchain(repo.clone())
-    let focus = f"{tmp.path().to_text()}/focus.txt"
+    let focus = f"{lane}/focus.txt"
     fs::write("focus.txt", tmp, "block 3\narea prover docs/briefs/prover 1213\narea selfhosting docs/briefs\narea bugs docs/briefs/bugs\ncurrent prover 2\n")
-    println(f"next: {current(drive(nikaia.clone(), repo.clone(), tmp, ["--focus-next", focus.clone()]))}")
+    println(f"next: {current(drive(nikaia.clone(), repo.clone(), tmp, lane.clone(), ["--focus-next", focus.clone()]))}")
     // An area line's optional fourth word is the lane issue, by name or by DIR.
-    println(drive(nikaia.clone(), repo.clone(), tmp, ["--focus-issue", focus.clone(), "prover", "/abs/docs/briefs/prover", "selfhosting", "nothing"]))
-    println(f"skip selfhosting: {current(drive(nikaia.clone(), repo.clone(), tmp, ["--focus-next", focus.clone(), "selfhosting"]))}")
+    println(drive(nikaia.clone(), repo.clone(), tmp, lane.clone(), ["--focus-issue", focus.clone(), "prover", "/abs/docs/briefs/prover", "selfhosting", "nothing"]))
+    println(f"skip selfhosting: {current(drive(nikaia.clone(), repo.clone(), tmp, lane.clone(), ["--focus-next", focus.clone(), "selfhosting"]))}")
     fs::write("focus.txt", tmp, "block 2\narea prover docs/briefs/prover\narea selfhosting docs/briefs\narea bugs docs/briefs/bugs\ncurrent bugs 1\n")
-    let wrapped = drive(nikaia.clone(), repo.clone(), tmp, ["--focus-next", focus.clone()])
+    let wrapped = drive(nikaia.clone(), repo.clone(), tmp, lane.clone(), ["--focus-next", focus.clone()])
     println(f"wrap: {current(wrapped.clone())} (block line kept: {wrapped.starts_with("block 2\n")})")
-    println(f"only the current one left: {current(drive(nikaia.clone(), repo.clone(), tmp, ["--focus-next", focus.clone(), "prover", "selfhosting"]))}")
-    println(f"all empty: {drive(nikaia.clone(), repo.clone(), tmp, ["--focus-next", focus.clone(), "prover", "selfhosting", "bugs"])}")
+    println(f"only the current one left: {current(drive(nikaia.clone(), repo.clone(), tmp, lane.clone(), ["--focus-next", focus.clone(), "prover", "selfhosting"]))}")
+    println(f"all empty: {drive(nikaia.clone(), repo.clone(), tmp, lane.clone(), ["--focus-next", focus.clone(), "prover", "selfhosting", "bugs"])}")
     fs::write("focus.txt", tmp, "block 3\narea prover docs/briefs/prover\narea bugs docs/briefs/bugs\n")
-    println(f"no current line: {current(drive(nikaia.clone(), repo.clone(), tmp, ["--focus-next", focus.clone()]))}")
+    println(f"no current line: {current(drive(nikaia.clone(), repo.clone(), tmp, lane.clone(), ["--focus-next", focus.clone()]))}")
 
     // The log line of a block of three briefs; a fourth brief is left unrun.
     let d = tmp.join("area")
@@ -61,14 +73,14 @@ fn main() throws {
     fs::write("a.md.report.md", d, "Result: done\n")
     fs::write("b.report.md", d, "Result: partial (two steps left)\n")
     fs::write("c.md.report.md", d, "Result: blocked\n")
-    fs::write("tokens.txt", d, f"{d.path().to_text()}/old.md 999 9\n{d.path().to_text()}/a.md 1000 10\n{d.path().to_text()}/b.md 200 4\n{d.path().to_text()}/c.md 30 2\n")
+    fs::write("tokens.txt", d, f"{lane}/area/old.md 999 9\n{lane}/area/a.md 1000 10\n{lane}/area/b.md 200 4\n{lane}/area/c.md 30 2\n")
     fs::write("cost.txt", d, "2026-11-01 1.5\n2026-11-01 0.255\n")
-    let briefs = [f"{d.path().to_text()}/a.md", f"{d.path().to_text()}/b.md", f"{d.path().to_text()}/c.md"]
-    let mut args: Vec[String] = ["--focus-log", d.path().to_text(), "prover"]
+    let briefs = [f"{lane}/area/a.md", f"{lane}/area/b.md", f"{lane}/area/c.md"]
+    let mut args: Vec[String] = ["--focus-log", f"{lane}/area", "prover"]
     for b in briefs { args.push(b.clone()) }
-    println(f"log: {drive(nikaia.clone(), repo.clone(), tmp, args.clone())}")
+    println(f"log: {drive(nikaia.clone(), repo.clone(), tmp, lane.clone(), args.clone())}")
     args[2] = "bugs"
-    println(f"log, bugs: {drive(nikaia.clone(), repo.clone(), tmp, args)}")
+    println(f"log, bugs: {drive(nikaia.clone(), repo.clone(), tmp, lane.clone(), args)}")
 
     // The first unrun brief with a `Blocks:` line runs before a block.
     let bugs = tmp.join("bugs")
@@ -78,7 +90,8 @@ fn main() throws {
     fs::write("b2.md", bugs, "# b2, no blocking line\n")
     fs::write("b3.md", bugs, "# b3\n  Blocks: y2.md\n")
     fs::write("batch.txt", bugs, "b1.md\nb2.md\nb3.md\n")
-    println(f"blocks: {drive(nikaia.clone(), repo.clone(), tmp, ["--blocks", bugs.path().to_text()])}")
+    println(f"blocks: {drive(nikaia.clone(), repo.clone(), tmp, lane.clone(), ["--blocks", f"{lane}/bugs"])}")
     fs::write("b3.md.report.md", bugs, "Result: done\n")
-    println(f"blocks, all run: {drive(nikaia.clone(), repo.clone(), tmp, ["--blocks", bugs.path().to_text()])}")
+    println(f"blocks, all run: {drive(nikaia.clone(), repo.clone(), tmp, lane.clone(), ["--blocks", f"{lane}/bugs"])}")
+    fs::remove(lane, fs::Root::Dir(repo); recursive: true)
 }

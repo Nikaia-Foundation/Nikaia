@@ -35,6 +35,17 @@ fn lane(nikaia: String, repo: String, dir: String, name: String, ago: i64, task:
     println(f"{name}: {out.stdout.trim().replace(dir, "DIR")}")
 }
 
+// A lane of this test's own under the checkout's target/drive-test/ (#2577):
+// drive opens every name under fs::Root::Dir("."), the checkout it runs in, so
+// it gets the lane's names relative to it. The scratch directory's name keeps
+// the two runs of `--both-settings` apart.
+fn test_lane(repo: String, name: String) -> String throws {
+    let id = fs::scratch().path().file_name()?.to_text() ?? "run"
+    let lane = f"target/drive-test/{name}/{id}"
+    fs::create_dir(lane, fs::Root::Dir(repo); recursive: true)
+    return lane
+}
+
 fn main() throws {
     let repo = root()
     let nikaia = toolchain()
@@ -43,26 +54,28 @@ fn main() throws {
     case(nikaia.clone(), repo.clone(), "limit 0", 60, "0")
     case(nikaia.clone(), repo.clone(), "limit 120, an hour and 50 in", 6600, "120")
     // A lane without runs: a run is taken as 60 minutes.
-    let empty = fs::scratch()
-    lane(nikaia.clone(), repo.clone(), empty.path().to_text(), "no runs, 50 min in", 3030, "")
-    lane(nikaia.clone(), repo.clone(), empty.path().to_text(), "no runs, 65 min in", 3930, "")
+    let empty = test_lane(repo.clone(), "drive_time_up/empty")
+    lane(nikaia.clone(), repo.clone(), empty.clone(), "no runs, 50 min in", 3030, "")
+    lane(nikaia.clone(), repo.clone(), empty.clone(), "no runs, 65 min in", 3930, "")
     // Runs of 40 minutes (posted to run.json), of 10 and of 100 (duration_ms
     // only, no posted marker): the median counts, not the longest (#2022: a
     // lane with one long run stopped after 22 minutes of merges).
-    let runs = fs::scratch()
+    let runs = test_lane(repo.clone(), "drive_time_up/runs")
+    let runs_root = fs::Root::Dir(f"{repo}/{runs}")
     let now = text::parse_i64(process::run("date", ["+%s"]).stdout.trim()) ?? 0
-    process::run("sh", ["-c", f"cd {runs.path().to_text()} && echo '\"duration_ms\":45000,' > a.md.run.json && touch a.md.posted && touch -d @{now - 3000} a.md.posted && touch -d @{now - 600} a.md.run.json && echo '\"duration_ms\":600000,' > b.md.run.json && echo '\"duration_ms\":6000000,' > c.md.run.json"])
+    process::run("sh", ["-c", f"cd {repo}/{runs} && echo '\"duration_ms\":45000,' > a.md.run.json && touch a.md.posted && touch -d @{now - 3000} a.md.posted && touch -d @{now - 600} a.md.run.json && echo '\"duration_ms\":600000,' > b.md.run.json && echo '\"duration_ms\":6000000,' > c.md.run.json"])
     for b in ["a", "b", "c", "missing"] {
-        process::run(nikaia.clone(), ["run", "scripts/drive.nika", "--", "--run-record", runs.path().to_text(), f"{runs.path().to_text()}/{b}.md"]; dir: repo.clone())
+        process::run(nikaia.clone(), ["run", "scripts/drive.nika", "--", "--run-record", runs.clone(), f"{runs}/{b}.md"]; dir: repo.clone())
     }
     let today = process::run("date", ["+%F"]).stdout.trim().clone()
-    print(fs::read_to_string("runs.txt", runs).replace(today, "DATE"))
+    print(fs::read_to_string("runs.txt", runs_root).replace(today, "DATE"))
     // The run files are not read: only runs.txt counts.
-    process::run("sh", ["-c", f"rm -f {runs.path().to_text()}/*.run.json"])
-    lane(nikaia.clone(), repo.clone(), runs.path().to_text(), "runs of 40, 22 min in", 1350, "")
-    lane(nikaia.clone(), repo.clone(), runs.path().to_text(), "runs of 40, 75 min in", 4530, "")
-    lane(nikaia.clone(), repo.clone(), runs.path().to_text(), "runs of 40, 85 min in", 5130, "")
-    lane(nikaia.clone(), repo.clone(), runs.path().to_text(), "runs of 40, 85 min in, task 180", 5130, "180")
-    lane(nikaia, repo, runs.path().to_text(), "runs of 40, 110 min in", 6630, "")
-    process::run("rm", ["-rf", empty.path().to_text(), runs.path().to_text()])
+    process::run("sh", ["-c", f"rm -f {repo}/{runs}/*.run.json"])
+    lane(nikaia.clone(), repo.clone(), runs.clone(), "runs of 40, 22 min in", 1350, "")
+    lane(nikaia.clone(), repo.clone(), runs.clone(), "runs of 40, 75 min in", 4530, "")
+    lane(nikaia.clone(), repo.clone(), runs.clone(), "runs of 40, 85 min in", 5130, "")
+    lane(nikaia.clone(), repo.clone(), runs.clone(), "runs of 40, 85 min in, task 180", 5130, "180")
+    lane(nikaia, repo.clone(), runs.clone(), "runs of 40, 110 min in", 6630, "")
+    fs::remove(empty, fs::Root::Dir(repo.clone()); recursive: true)
+    fs::remove(runs, fs::Root::Dir(repo); recursive: true)
 }

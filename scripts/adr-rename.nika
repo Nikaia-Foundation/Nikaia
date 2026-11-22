@@ -311,11 +311,16 @@ fn main() throws {
 	// TABLE and DIR name files below the directory it runs in, checked where
 	// they arrive and opened under it (ADR-raw-sinks-1 D12, D14): whoever
 	// runs it chooses them, and a name from outside may name any file.
-	for name in [table_file.clone(), root.clone()] {
-		if !path::is_below(name) {
-			eprintln(f"adr-rename: {name} is not below the directory it runs in")
-			process::exit(2)
-		}
+	if !path::is_below(table_file) {
+		eprintln(f"adr-rename: {table_file} is not below the directory it runs in")
+		process::exit(2)
+	}
+	// Bound once more without `mut`, so the guard's proof holds where the
+	// root is joined and handed to `rename_walk` (#2591).
+	let root = root
+	if !path::is_below(root) {
+		eprintln(f"adr-rename: {root} is not below the directory it runs in")
+		process::exit(2)
 	}
 	let here = fs::Root::Dir(".")
 	let table = rename_table(fs::read_to_string(table_file, here.clone()))

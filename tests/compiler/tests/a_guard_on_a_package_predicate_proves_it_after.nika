@@ -1,0 +1,35 @@
+// A free function of a dependency that answers a `bool` and changes nothing
+// is a named property (ADR-381 D1, D3), as one of `std` or of the program
+// is: after the guard `return if !db::is_identifier(name)`,
+// `db::is_identifier(name)` is a fact, so the `assert` after it is proved
+// (the precondition of `db::raw`, ADR-raw-sinks-1 D2, #1253). It was
+// `NK1300` while only `std`'s ledger named the properties a path calls.
+use std::env
+use std::fs
+use std::process
+
+// The running `nikaia` (`env::current_exe`, ADR-program-path-1 D3).
+fn toolchain() -> String throws {
+    return env::current_exe()?.display() ?? "target/fast/nikaia"
+}
+
+fn root() -> String throws {
+    return env::current_main()?.parent()?.parent()?.parent()?.parent()?.display() ?? "../.."
+}
+
+fn main() throws {
+    let nikaia = toolchain()
+    let repo = root()
+    let scratch = fs::scratch()
+    let tmp = f"{scratch.path().display()}"
+    fs::create_dir("src", scratch)
+    fs::write("nikaia.toml", scratch, f"[package]\nname = \"p\"\nversion = \"0.1.0\"\n\n[dependencies]\ndb = {{ path = \"{repo}/packages/db\" }}\n")
+    fs::write("src/main.nika", scratch, "use db\n\nfn shown(name: String) throws {\n    if !db::is_identifier(name) {\n        println(\"refused\")\n        return\n    }\n    assert(db::is_identifier(name))\n    println(name)\n}\n\nfn main() throws {\n    shown(\"users\")\n    shown(\"1; DROP\")\n}\n")
+    let out = process::run(nikaia, ["check", "src/main.nika"]; dir: tmp.clone(), env: [("RUST_BACKTRACE", "0")])
+    println(f"exit {out.code}")
+    for line in f"{out.stdout}{out.stderr}".lines() {
+        if line.contains("NK") || line.contains(" --> ") {
+            println(line.replace(tmp, "TMP").replace(repo, "REPO").trim())
+        }
+    }
+}

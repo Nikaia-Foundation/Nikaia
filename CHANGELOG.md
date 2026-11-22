@@ -8,6 +8,34 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1529] — 2026-11-22
+
+**Builders' changes (#2469, #2471, #2472, #2473, #2481, #2482, #2485, #2526, #2577, #2590, #2591)**
+- db::raw is a raw sink (NK1308): outside text in it is refused unless guarded by db::is_identifier or allowed by `untrusted-sql = true`; a guard on a dependency's pure bool function now proves it after.
+- A path guard whose refusing branch ends in process::exit(..) now proves the name after it, as one ending in return does (ADR-raw-sinks-1 D14)
+- scripts/agent.nika passes the raw path sink check by proof: its files open under `fs::Root::Dir(".")`, `--dir` must be a relative path below the working directory, and the transcript path is built in Nikaia from the environment.
+- A local bound from a literal, the environment or a proved function result now leads a guarded path join a function hands back, without NK1308.
+- scripts/batch.nika, cycle.nika, commit.nika and ledgers.nika pass the raw path sink check by proof: batch and cycle take DIR only as a relative path below the working directory, all four open their files under `fs::Root::Dir(".")` or a `fs::scratch()` root, and no `mktemp` is left.
+- scripts/batch.nika takes its DIR only as a relative path below the working directory and opens its files under `fs::Root::Dir(".")`.
+- scripts/cycle.nika takes its DIR only as a relative path below the working directory and opens its files under `fs::Root::Dir(".")`.
+- scripts/commit.nika opens its report and the listed files under `fs::Root::Dir(".")` and makes its temporary files with `fs::scratch()` instead of `mktemp`.
+- The small scripts pass the raw path sink check by proof: their argument paths are guarded with path::is_below and opened under fs::Root::Dir("."); java_binding.nika and pre-push.nika run the checkout's nikaia by a literal path, and java_binding.nika's --exe is gone, from CI too
+- scripts/tokenspeed.nika opens a transcript under the claude projects directory (from the environment) or below the working directory, refuses any other path, and reads directory names under a root joined to the directory.
+- scripts/release.nika and scripts/status.nika refuse a reports directory that is not a relative path below the working directory, open its files under `fs::Root::Dir(".")` and read its report names under a root joined to it; status.nika lists the directory with `fs::read_dir` instead of `ls`.
+- scripts/move_tests.nika and scripts/analysis_scale.nika refuse a path argument that is not relative below the working directory and open it under `fs::Root::Dir(".")`; syntax.nika reads the example tests under a root joined to tests/compiler/tests; facts-collect.nika opens the debriefs it finds under `fs::Root::Dir(".")`.
+- scripts/gate.nika and scripts/proved.nika open their paths under a literal root; proved.nika refuses a report path outside the working directory, and drive.nika writes the bounds report into the worktree it measures
+- scripts/grammar_arrow.nika, tokens.nika, where.nika (--outline) and probe.nika (--file) refuse a path outside the working directory (exit 2); where.nika reads the files it walks under the directory walked
+- scripts/java_binding.nika drops --exe and runs target/release/nikaia, else target/fast/nikaia, with bind --project; pre-push.nika runs the page examples with the build's literal path and test --project; CI's Java binding step no longer passes --exe
+- `fs::copy_between(from, from_root, to, to_root)` copies a file from one root into another and keeps its permission bits. It is the first platform primitive (ADR-platform-layer-v1 D7 item 1). Its raw-sink check (NK1308) judges each name under its own root.
+- `fs::copy_between(from, from_root, to, to_root)` copies a file from one root into another, each name resolved under its own root, and keeps its permission bits: the first platform primitive (ADR-platform-layer-v1 D4, D7 item 1; added Rust: `fs::copy_between` in crates/nikaia-std/src/fs.rs, one `std::fs::copy`, listed for #557 / #125 by D6).
+- The raw-sink check (`NK1308`) of `fs::copy_between` judges each name under its own root: an outside `from` under a clean `from_root` passes, an outside `to` is a write (`untrusted-paths-write`), and a root a function takes at `to_root` is judged where it is passed.
+- The wrapper learns the directory Cargo builds in: `NIKAIA_TARGET_DIR`, set beside `NIKAIA_GEN_DIR`, names the shared cache tree or the `CARGO_TARGET_DIR` a build asked for.
+- Path guards: a guard whose branch calls an own `panic` or a package's `process::exit` no longer counts as a proof (NK1308 stays) (#2485)
+- Website: the safety page names the raw-sink rule (ADR-raw-sinks-1), marked specified, not built yet.
+- drive.nika reads a test hook's directory and second file under the checkout (fs::Root::Dir("."), ADR-raw-sinks-1 D11); its tests pass lanes under target/drive-test/
+- A path guard on a clone proves the name: `path::is_below(d.clone())` and `path::is_component(d.clone())` now prove `d` for a later sink, as the guard on `d` does (ADR-raw-sinks-1 D14).
+- A root from outside passed to a function is a raw sink at the call: `listed(fs::Root::Dir(d))`, where `listed` opens a path under its parameter, now draws NK1308 as `fs::read_dir(".", fs::Root::Dir(d))` does, through any number of functions that hand the root on; a name bound to a root is judged through a `.clone()` too.
+
 ## [0.0.1528] — 2026-11-22
 
 **escape_scalar in escapes.nika answers which numbers name a character; the char_of parameters and BtHost::char_of go (#2672)**

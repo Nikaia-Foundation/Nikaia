@@ -1,0 +1,8 @@
+error[NK1250]: `M::read[Doc]` can't read a `i64`: a map's keys are text.
+   --> tests/grammar_kind_map_key.nika:27:15
+    |
+ 27 | 	let d: Doc = M::read[Doc]("deps:1=\"a\"") catch {
+    |               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: The arm `else` of the `match` in `Value` refuses it with `refuse(…)` (ADR-grammar-typed-read-v1 D6), reached by `M::read[Doc]` then `Value[Doc]` then `Value[collections::HashMap[i64, String]]`.
+    = help: Call it with a type the grammar reads.

@@ -27,27 +27,40 @@ fn summary(indexes: String, operations: String) -> String {
     return s
 }
 
-fn measure(nikaia: String, repo: String, tmp: ref fs::Root, version: String, sha: String, indexes: String, operations: String) throws {
+fn measure(nikaia: String, repo: String, tmp: ref fs::Root, lane: String, version: String, sha: String, indexes: String, operations: String) throws {
     fs::write("summary.txt", tmp, summary(indexes, operations))
-    let out = process::run(nikaia, ["run", "scripts/drive.nika", "--", "--proved-lines", tmp.path().to_text(), version, sha, f"{tmp.path().to_text()}/summary.txt"]; dir: repo)
-    println(out.stdout.trim().replace(tmp.path().to_text(), "T"))
+    let out = process::run(nikaia, ["run", "scripts/drive.nika", "--", "--proved-lines", lane.clone(), version, sha, f"{lane}/summary.txt"]; dir: repo)
+    println(out.stdout.trim().replace(f"{repo}/{lane}", "T").replace(lane.clone(), "T"))
+}
+
+// A lane of this test's own under the checkout's target/drive-test/ (#2577):
+// drive opens every name under fs::Root::Dir("."), the checkout it runs in, so
+// it gets the lane's names relative to it. The scratch directory's name keeps
+// the two runs of `--both-settings` apart.
+fn test_lane(repo: String, name: String) -> String throws {
+    let id = fs::scratch().path().file_name()?.to_text() ?? "run"
+    let lane = f"target/drive-test/{name}/{id}"
+    fs::create_dir(lane, fs::Root::Dir(repo); recursive: true)
+    return lane
 }
 
 fn main() throws {
     let repo = root()
+    let lane = test_lane(repo.clone(), "drive_proved")
+    let tmp = fs::Root::Dir(f"{repo}/{lane}")
     let nikaia = toolchain()
-    let tmp = fs::scratch()
-    measure(nikaia.clone(), repo.clone(), tmp, "0.0.10", "aaaaaaaa1111", "1500/2000", "900/1000")
+    measure(nikaia.clone(), repo.clone(), tmp, lane.clone(), "0.0.10", "aaaaaaaa1111", "1500/2000", "900/1000")
     // Up: no wake.
-    measure(nikaia.clone(), repo.clone(), tmp, "0.0.11", "bbbbbbbb2222", "1510/2000", "901/1000")
+    measure(nikaia.clone(), repo.clone(), tmp, lane.clone(), "0.0.11", "bbbbbbbb2222", "1510/2000", "901/1000")
     // Down by 0.2 points exactly: no wake.
-    measure(nikaia.clone(), repo.clone(), tmp, "0.0.12", "cccccccc3333", "1506/2000", "899/1000")
+    measure(nikaia.clone(), repo.clone(), tmp, lane.clone(), "0.0.12", "cccccccc3333", "1506/2000", "899/1000")
     // Down by more: the wake names the range.
-    measure(nikaia.clone(), repo.clone(), tmp, "0.0.13", "dddddddd4444", "1490/2000", "880/1000")
+    measure(nikaia.clone(), repo.clone(), tmp, lane.clone(), "0.0.13", "dddddddd4444", "1490/2000", "880/1000")
     println(fs::read_to_string("proved.log", tmp).trim())
     // The driver prints what a measurement left, a fall as a WAKE line.
     fs::write("proved.out", tmp, "PROVED 0.0.13 dddddddd: indexes 1490/2000 74.50 % (-0.80), left 605; since 0.0.12 cccccccc\nPROVED FELL dddddddd: indexes -0.80 points since 0.0.12 cccccccc, in cccccccc..dddddddd\n")
-    let shown = process::run(nikaia.clone(), ["run", "scripts/drive.nika", "--", "--proved-report", tmp.path().to_text()]; dir: repo)
-    println(shown.stdout.trim().replace(tmp.path().to_text(), "T"))
+    let shown = process::run(nikaia.clone(), ["run", "scripts/drive.nika", "--", "--proved-report", lane.clone()]; dir: repo)
+    println(shown.stdout.trim().replace(f"{repo}/{lane}", "T").replace(lane.clone(), "T"))
     println(f"proved.out left: {fs::exists("proved.out", tmp)}")
+    fs::remove(lane, fs::Root::Dir(repo); recursive: true)
 }

@@ -24,7 +24,7 @@ fn toolchain(repo: String) -> String throws {
 // The prompt of a dry run, without its first line (the brief's path) and
 // without the options after it.
 fn prompt(nikaia: String, repo: String, tmp: ref fs::Root, brief: String) -> String throws {
-    let out = process::run(nikaia, ["run", f"{repo}/scripts/agent.nika", "--", f"{tmp.path().to_text()}/{brief}", "--dry-run"]; dir: tmp.path().to_text())
+    let out = process::run(nikaia, ["run", f"{repo}/scripts/agent.nika", "--", brief.clone(), "--dry-run"]; dir: tmp.path().to_text())
     if !out.ok { return f"code={out.code} {out.stdout.trim()}" }
     let lines = out.stdout.split("\n").collect()
     let mut kept: Vec[String] = []

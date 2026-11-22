@@ -12,7 +12,7 @@ fn root() -> String throws {
 }
 
 fn first(nikaia: String, repo: String, tmp: ref fs::Root) -> String throws {
-    let out = process::run(nikaia, ["run", "scripts/batch.nika", "--", tmp.path().to_text()]; dir: repo)
+    let out = process::run(nikaia, ["run", f"{repo}/scripts/batch.nika", "--", "."]; dir: tmp.path().to_text())
     return out.stdout.trim().split("\n").collect()[0].replace(tmp.path().to_text(), "T")
 }
 
@@ -38,6 +38,11 @@ fn main() throws {
     let tmp = fs::scratch()
     let repo = root()
     let nikaia = toolchain(repo.clone())
+    // The scripts run in their lane's directory, which lies below the
+    // working directory; they find the toolchain and scripts under the
+    // checkout's names.
+    process::run("ln", ["-s", f"{repo}/target", f"{tmp.path().to_text()}/target"])
+    process::run("ln", ["-s", f"{repo}/scripts", f"{tmp.path().to_text()}/scripts"])
     fs::write("batch.txt", tmp, "a.md\n")
     fs::write("a.md", tmp, "body\n")
     fs::write("released.txt", tmp, "")
@@ -50,7 +55,7 @@ fn main() throws {
     let words = last.split(" ").collect()
     println(f"appended: {words[0]} DATE {words[2]} {words[3]} {words[4]} {words[5]}")
     print(f"review.txt: {read(tmp, "review.txt")}")
-    let status = process::run(nikaia.clone(), ["run", "scripts/status.nika", "--", tmp.path().to_text()]; dir: repo.clone())
+    let status = process::run(nikaia.clone(), ["run", f"{repo}/scripts/status.nika", "--", "."]; dir: tmp.path().to_text())
     println(f"status: {status.stdout.trim().split("\n").collect()[2]}")
     println(f"again: {first(nikaia.clone(), repo.clone(), tmp)}")
     println(f"lines after a second run: {read(tmp, "a.report.md").trim().split("\n").count()}")

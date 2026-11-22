@@ -1,0 +1,22 @@
+-- stdin in the text
+exit 0
+warning[NK1308]: `name` reaches the text of `db::raw`, sent to the database as SQL, and it comes from outside the program.
+--> src/main.nika:7:5
+= note: `raw-sinks = "warn"` lets this build through.
+= help: Hand it to the statement as a value, a hole `:name` in the text and `name` under `"name"` in `execute`'s `parameters`; or, where it names a table or a column, check it where it arrives: `throw BadInput(name) if !db::is_identifier(name)`, after which it is proved. If the program means to send SQL from outside, `untrusted-sql = true` under `[allow]` in the manifest builds it.
+-- stdin joined by +
+exit 0
+warning[NK1308]: `name` reaches the text of `db::raw`, sent to the database as SQL, and it comes from outside the program.
+--> src/main.nika:7:5
+= note: `raw-sinks = "warn"` lets this build through.
+= help: Hand it to the statement as a value, a hole `:name` in the text and `name` under `"name"` in `execute`'s `parameters`; or, where it names a table or a column, check it where it arrives: `throw BadInput(name) if !db::is_identifier(name)`, after which it is proved. If the program means to send SQL from outside, `untrusted-sql = true` under `[allow]` in the manifest builds it.
+-- a literal text
+exit 0
+-- after the guard db::is_identifier
+exit 0
+-- a whole number
+exit 0
+-- a match whose arms are literals
+exit 0
+-- [allow] untrusted-sql
+exit 0

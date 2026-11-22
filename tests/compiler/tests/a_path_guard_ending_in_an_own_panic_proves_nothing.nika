@@ -1,0 +1,30 @@
+// A guard proves a name only where its refusing branch never comes back
+// (ADR-raw-sinks-1 D14, #2485). The prelude's `panic` does not, but this
+// program has a `panic` of its own that returns: a guard ending in it
+// proves nothing, so `name` after it stays `NK1308` (here a warning under
+// `raw-sinks = "warn"`), in `main` and in a function handed the name. A
+// guard ending in `process::exit` after `use std::process` still proves
+// `below`. The runs sit in a branch not taken.
+use std::cli
+use std::fs
+use std::path
+use std::process
+
+fn panic(msg: String) {
+    eprintln(msg) catch {}
+}
+
+fn opened(name: String) -> bool throws {
+    if !path::is_component(name) { panic("bad name") }
+    return fs::exists(f"data/{name}", fs::Root::Anywhere)
+}
+
+fn main() throws {
+    let name = cli::args().nth(1) ?? "notes.txt"
+    if !path::is_component(name) { panic("bad name") }
+    println(fs::exists(f"data/{name}", fs::Root::Anywhere))
+    println(opened(cli::args().nth(2) ?? "notes.txt"))
+    let below = cli::args().nth(3) ?? "notes.txt"
+    if !path::is_below(below) { process::exit(2) }
+    println(fs::exists("data/" + below, fs::Root::Anywhere))
+}

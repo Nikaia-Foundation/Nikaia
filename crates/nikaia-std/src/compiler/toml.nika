@@ -1,0 +1,122 @@
+// crates/nikaia-std/src/compiler/toml.nika
+//
+// **TOML read into a declared struct** (ADR-grammar-typed-read-v1, #2602).
+//
+// `Toml::read[T]` reads a TOML document into the struct `T` the caller
+// declares: the struct says which keys there are, which a document must give
+// and which it may leave out, and the grammar reads each key by its field's
+// type (Part II 10.3, `T::kind`). A key the struct does not name, a field
+// given twice, a field missing and a value of the wrong type are refused with
+// the line and column, by `members` (ADR-grammar-typed-read-v1 D3).
+//
+// **What it reads.** Comments, blank lines, bare and quoted keys, `[table]`
+// headers at the root, a table also inline (`k = { a = 1 }`), text in double
+// or single quotes, integers, `true`/`false`, lists over several lines with a
+// trailing comma, and a field that is optional (`T?`) or has a default.
+// **What it refuses rather than misreads**: an escape in a double-quoted
+// string (a backslash is no text character here), and a dotted header
+// (`[a.b]`): a grammar keeps no state (Part II 10.8), and `members` hands its
+// value rule no key, so the header's first part cannot pick the field whose
+// table the rest names (#2602, filed as a decision).
+//
+// **Each line owns its end.** A value is followed by its own `END` (spaces, a
+// comment, the line break and the blank lines after it), so the separator of
+// `members` is empty: a separator that consumed a line break would put the
+// parser's furthest failure past the key, and `members`' own refusals ("is
+// missing", "is given twice") would lose to it.
+
+/// **A TOML document read into a declared struct** (ADR-grammar-typed-read-v1,
+/// #2602): `Toml::read[T](text)` gives the `T` the document describes, or
+/// throws the first place it does not.
+pub grammar Toml {
+    rule WS = "" -> { }
+    entry rule read[T: Struct] -> T = GAP m:members[T](RootKey, Line[_], empty) eof -> { m }
+    rule SP = (" " | "\t")* -> { }
+    rule COMMENT = "#" (x:any if(x != '\n'))* -> { }
+    rule GAP = (SP COMMENT? line_ending)* -> { }
+    rule END = SP COMMENT? (line_ending GAP | eof) -> { }
+    rule AS = (" " | "\t" | line_ending | COMMENT)* -> { }
+    rule BareCh -> i64 = x:any if((x >= 'a' && x <= 'z') || (x >= 'A' && x <= 'Z') || (x >= '0' && x <= '9') || x == '_' || x == '-') -> { 1 }
+    rule StrCh -> i64 = x:any if(x != '"' && x != '\\' && x != '\n') -> { 1 }
+    rule LitCh -> i64 = x:any if(x != '\'' && x != '\n') -> { 1 }
+    rule KeyName -> String = s:text(BareCh+) -> { s } | "\"" s:text(StrCh*) "\"" -> { s } | "'" s:text(LitCh*) "'" -> { s }
+    rule LineKey -> String = SP not("[") k:KeyName SP "=" SP -> { k }
+    rule RootKey -> String = SP "[" SP k:KeyName SP "]" -> { k } | k:LineKey -> { k }
+    rule InlineKey -> String = AS k:KeyName SP "=" SP -> { k }
+    rule Line[T] -> T = match T::kind {
+        Maybe(A) => v:Line[A] -> { v }
+        Struct(_) => v:Inline[T] END -> { v } | END m:members[T](LineKey, Line[_], empty) -> { m }
+        else => v:Value[T] END -> { v }
+    }
+    rule Value[T] -> T = match T::kind {
+        Text => "\"" s:text(StrCh*) "\"" -> { s } | "'" s:text(LitCh*) "'" -> { s }
+        I64 => n:dec[i64](text("-"? digit+)) -> { n }
+        Bool => "true" -> { true } | "false" -> { false }
+        List(A) => "[" AS xs:list(Item[A], ",") ","? AS "]" -> { xs }
+        Maybe(A) => v:Value[A] -> { v }
+        Struct(_) => v:Inline[T] -> { v }
+    }
+    rule Item[A] -> A = AS v:Value[A] AS -> { v }
+    rule Inline[S: Struct] -> S = "{" m:members[S](InlineKey, Value[_], AS ",") AS "}" -> { m }
+}
+
+struct TomlPackage {
+    name: String,
+    version: String,
+    edition: i64 = 2026,
+    publish: bool = false,
+    authors: Vec[String],
+}
+
+struct TomlBuild {
+    artifact: String?,
+}
+
+struct TomlManifest {
+    package: TomlPackage,
+    build: TomlBuild?,
+}
+
+/// What `read` gave, one line: the fields of the manifest, or the first line
+/// of the refusal.
+fn toml_said(given: String) -> String {
+    let m: TomlManifest = Toml::read[TomlManifest](given) catch {
+        for line in f"{error}".split("\n") {
+            return f"error: {line}"
+        }
+        return "error"
+    }
+    let art = m.build?.artifact ?? "-"
+    let authors = m.package.authors.join(",")
+    return f"{m.package.name} {m.package.version} {m.package.edition} {m.package.publish} [{authors}] {art}"
+}
+
+test "toml_reads_a_declared_struct" {
+    let full = toml_said("# a manifest\n[package]\nname = \"demo\"  # the name\nversion = '0.1.0'\nedition = 2025\npublish = true\nauthors = [\n    \"a\",\n    \"b\", # the second\n]\n\n[build]\nartifact = \"lib\"\n")
+    assert(full == "demo 0.1.0 2025 true [a,b] lib")
+    let inline = toml_said("package = { name = \"i\", version = \"2\", authors = [] }")
+    assert(inline == "i 2 2026 false [] -")
+    let empty_build = toml_said("[package]\n\"name\" = \"x\"\nversion = \"1\"\nauthors = [\"c\"]\n\n[build]\n")
+    assert(empty_build == "x 1 2026 false [c] -")
+}
+
+test "toml_refuses_what_the_struct_does_not_say" {
+    let at_end = toml_said("[package]\nname = \"x\"\nauthors = []\n")
+    assert(at_end == "error: the field `version` is missing at line 4, column 1")
+    let before_table = toml_said("[package]\nname = \"x\"\nauthors = []\n\n[build]\n")
+    assert(before_table == "error: the field `version` is missing at line 5, column 1")
+    // `members` checks a field given twice after the whole table is read,
+    // so the refusal names the table's end, not the second key.
+    let twice = toml_said("[package]\nname = \"x\"\nname = \"y\"\nversion = \"1\"\nauthors = []\n")
+    assert(twice == "error: the field `name` is given twice at line 6, column 1")
+    let unknown_key = toml_said("[package]\nname = \"x\"\nversion = \"1\"\nauthors = []\nlicense = \"MIT\"\n")
+    assert(unknown_key == "error: the member `license` names no field at line 5, column 11")
+    let unknown_table = toml_said("[package]\nname = \"x\"\nversion = \"1\"\nauthors = []\n[tools]\n")
+    assert(unknown_table == "error: the member `tools` names no field at line 5, column 8")
+    let root_key = toml_said("name = \"x\"\n")
+    assert(root_key == "error: the member `name` names no field at line 1, column 8")
+    let escape = toml_said("[package]\nname = \"a\\\"b\"\nversion = \"1\"\nauthors = []\n")
+    assert(escape.starts_with("error: "))
+    let dotted = toml_said("[package.inner]\n")
+    assert(dotted.starts_with("error: "))
+}

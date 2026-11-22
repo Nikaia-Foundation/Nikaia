@@ -20,9 +20,6 @@ fn root() -> String throws {
 fn main() throws {
     let repo = root()
     let nikaia = toolchain()
-    let log = "target/drive_queue_fixed_log.txt"
-    fs::write(f"{log}", fs::Root::Dir(repo.clone()), "redo: the bundle again\n\nFixes #1800\nrevert: the bundle\n\nReopens #1700, #1800\ndocs: a citation\n\nFixes #1662\n\nCo-Authored-By: x\ndrive: two\n\nFixes #1500, #1501\nPart of #1400\nthe fix for #1300 waits\nbundle: lean\n\nFixes #1700\n")
-    let out = process::run(nikaia, ["run", "scripts/drive.nika", "--", "--fixed-in", log.clone(), "1662", "1400", "1501", "1300", "166", "1500", "1700", "1800"]; dir: repo)
+    let out = process::run(nikaia, ["run", "scripts/drive.nika", "--", "--fixed-in", "1662", "1400", "1501", "1300", "166", "1500", "1700", "1800"]; dir: repo, stdin: process::Input::Text("redo: the bundle again\n\nFixes #1800\nrevert: the bundle\n\nReopens #1700, #1800\ndocs: a citation\n\nFixes #1662\n\nCo-Authored-By: x\ndrive: two\n\nFixes #1500, #1501\nPart of #1400\nthe fix for #1300 waits\nbundle: lean\n\nFixes #1700\n"))
     println(out.stdout.trim())
-    fs::remove(f"{log}", fs::Root::Dir(repo.clone()))
 }
