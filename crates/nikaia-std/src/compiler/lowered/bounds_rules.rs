@@ -1625,6 +1625,7 @@ pub(crate) fn rules_element_facts(walk: &mut BoundsWalk, facts: &mut BoundsFacts
     bounding_push(&walk, facts, present);
     for fact in stated.iter() {
         let fact = nikaia_std::num::value(fact);
+        let fact = bounding_each_unguarded(walk, &list, fact);
         bounding_push(&walk, facts, fact);
     }
 }

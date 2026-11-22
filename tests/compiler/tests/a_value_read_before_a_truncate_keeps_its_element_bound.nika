@@ -1,0 +1,46 @@
+/// A value read out of a list whose every element a rule bounds keeps that
+/// bound when the list shrinks afterwards (#1631): `heap_pop`'s `top` is
+/// read before `truncate`, and still indexes `place` without a check.
+pub struct Heap {
+	place: Vec[i64],
+	heap: Vec[u32],
+}
+
+fn heap_of(vars: u32) -> Heap {
+	let mut h = Heap { place: [], heap: [] }
+	let mut v: u32 = 0
+	while v < vars {
+		h.place.push(-1)
+		h.insert(v)
+		v += 1
+	}
+	return h
+}
+
+impl Heap {
+	fn insert(ref mut self, v: u32) {
+		self.place[v as i64] = self.heap.len()
+		self.heap.push(v)
+	}
+
+	pub fn pop(ref mut self) -> i64 sync {
+		if self.heap.len() == 0 {
+			return -1
+		}
+		let top = self.heap[0]
+		let last = self.heap.len() - 1
+		let moved = self.heap[last]
+		self.heap[0] = moved
+		self.place[moved as i64] = 0
+		self.heap.truncate(last)
+		self.place[top as i64] = -1
+		return top as i64
+	}
+}
+
+fn main() throws {
+	let mut h = heap_of(3)
+	let a = h.pop()
+	let b = h.pop()
+	println(f"{a} {b} {h.place[0]} {h.place[2]}")
+}

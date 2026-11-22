@@ -2293,6 +2293,7 @@ fn rules_element_facts(mut walk: BoundsWalk, mut facts: BoundsFacts, name: ref S
     let present = bounding_each_present(walk, list)
     bounding_push(walk, facts, present)
     for fact in stated {
+        let fact = bounding_each_unguarded(walk, list, fact)
         bounding_push(walk, facts, fact)
     }
 }
