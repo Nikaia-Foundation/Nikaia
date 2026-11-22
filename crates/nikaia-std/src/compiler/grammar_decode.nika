@@ -82,7 +82,7 @@ impl GrCursor {
     }
 
     /// `"…"` with Rust's escapes, decoded by the one function that reads them.
-    fn quoted(ref mut self, char_of: fn(i64) -> scalar? sync) -> String {
+    fn quoted(ref mut self) -> String {
         self.expect('"')
         let mut written: String = ""
         if self.failed {
@@ -108,7 +108,7 @@ impl GrCursor {
                 self.at += 1
             }
         }
-        let decoded = decoded(written, char_of)
+        let decoded = decoded(written)
         if decoded == null {
             self.fail(f"`{written}` contains an escape the compiler can't read")
             return written
@@ -118,9 +118,9 @@ impl GrCursor {
 }
 
 /// What the sub-program printed, as a value.
-pub fn gr_decode(source: ref String, char_of: fn(i64) -> scalar? sync) -> GrDecoded {
+pub fn gr_decode(source: ref String) -> GrDecoded {
     let mut at = GrCursor { chars: source.scalars.collect(), at: 0, detail: "", failed: false }
-    let value = gr_read(at, char_of)
+    let value = gr_read(at)
     if at.failed || value == null {
         return GrDecoded::Unreadable(at.detail.clone())
     }
@@ -128,14 +128,14 @@ pub fn gr_decode(source: ref String, char_of: fn(i64) -> scalar? sync) -> GrDeco
 }
 
 /// The items of a list, a payload or the parts of a constructor, up to the `)`.
-fn gr_items(mut at: GrCursor, char_of: fn(i64) -> scalar? sync) -> Vec[BuildValue] {
+fn gr_items(mut at: GrCursor) -> Vec[BuildValue] {
     let mut items: Vec[BuildValue] = []
     while true {
         at.skip_blanks()
         if at.failed || at.at >= at.chars.len() || at.peek_is(')') {
             break
         }
-        let item = gr_read(at, char_of)
+        let item = gr_read(at)
         if item == null {
             break
         }
@@ -144,7 +144,7 @@ fn gr_items(mut at: GrCursor, char_of: fn(i64) -> scalar? sync) -> Vec[BuildValu
     return items
 }
 
-fn gr_read(mut at: GrCursor, char_of: fn(i64) -> scalar? sync) -> BuildValue? {
+fn gr_read(mut at: GrCursor) -> BuildValue? {
     at.skip_blanks()
     at.expect('(')
     at.skip_blanks()
@@ -153,7 +153,7 @@ fn gr_read(mut at: GrCursor, char_of: fn(i64) -> scalar? sync) -> BuildValue? {
     }
     let tag = at.word()
     at.skip_blanks()
-    let value = gr_shaped(tag, at, char_of) ?? return null
+    let value = gr_shaped(tag, at) ?? return null
     at.skip_blanks()
     at.expect(')')
     if at.failed {
@@ -163,7 +163,7 @@ fn gr_read(mut at: GrCursor, char_of: fn(i64) -> scalar? sync) -> BuildValue? {
 }
 
 /// What a shape's tag says is next, up to its closing bracket.
-fn gr_shaped(tag: ref String, mut at: GrCursor, char_of: fn(i64) -> scalar? sync) -> BuildValue? {
+fn gr_shaped(tag: ref String, mut at: GrCursor) -> BuildValue? {
     if tag == "i" {
         let digits = at.word()
         // A magnitude and a sign, as the build keeps every integer
@@ -194,20 +194,20 @@ fn gr_shaped(tag: ref String, mut at: GrCursor, char_of: fn(i64) -> scalar? sync
         // **A `std` type as its constructor and the parts it takes** (ADR-318
         // D5): `(c time::Duration::new (i 30) (i 0))`.
         let constructor = at.word()
-        let parts = gr_items(at, char_of)
+        let parts = gr_items(at)
         return BuildValue::Constant { constructor: constructor, parts: parts }
     } else if tag == "v" {
         let ty = at.word()
         at.skip_blanks()
         let variant = at.word()
-        let payload = gr_items(at, char_of)
+        let payload = gr_items(at)
         return BuildValue::Variant { ty: ty, variant: variant, payload: payload }
     } else if tag == "s" {
-        return BuildValue::Text(at.quoted(char_of))
+        return BuildValue::Text(at.quoted())
     } else if tag == "l" {
-        return BuildValue::List(gr_items(at, char_of))
+        return BuildValue::List(gr_items(at))
     } else if tag == "p" {
-        return BuildValue::Tuple(gr_items(at, char_of))
+        return BuildValue::Tuple(gr_items(at))
     } else if tag == "t" {
         let name = at.word()
         let mut fields: collections::BTreeMap[String, BuildValue] = collections::BTreeMap()
@@ -219,7 +219,7 @@ fn gr_shaped(tag: ref String, mut at: GrCursor, char_of: fn(i64) -> scalar? sync
             at.at += 1
             at.skip_blanks()
             let field = at.word()
-            let held = gr_read(at, char_of)
+            let held = gr_read(at)
             if held == null {
                 return null
             }

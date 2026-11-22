@@ -7,23 +7,16 @@ pub(crate) fn text_key(expr: &Expr) -> i64 { id_of(expr) as i64 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn ascii_scalar(n: i64) -> Option<scalar> {
-    if n < 0 || n > 127 { return None; }
-    Some((u8::try_from(n).unwrap_or_else(|_| panic!("the value does not fit in an `u8`"))) as scalar)
-}
-
-// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
-// this was written - see `contracts::sync`.
 pub(crate) fn literal_is_a_byte(written: &str) -> bool {
     if a_high_byte(written).is_some() { return true; }
-    let text = match decoded(written, &mut |n| { ascii_scalar(n) }) { Some(__nikaia_value) => __nikaia_value, None => return false };
+    let text = match decoded(written) { Some(__nikaia_value) => __nikaia_value, None => return false };
     (text.chars().count() as i64) == 1 && text.len() == 1
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 pub(crate) fn check_byte_literal(written: &str) -> String {
-    let text = nikaia_std::index::or(decoded(written, &mut |n| { ascii_scalar(n) }), || "".into());
+    let text = nikaia_std::index::or(decoded(written), || "".into());
     let mut byte: i64 = nikaia_std::index::or(a_high_byte(written), || -1);
     for b in text.bytes() { if byte < 0 { byte = b as i64; } }
     if byte < 0 { byte = 0; }

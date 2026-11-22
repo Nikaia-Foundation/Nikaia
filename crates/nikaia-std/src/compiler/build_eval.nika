@@ -42,20 +42,16 @@ pub struct BtRead {
     pub denied: Denied?,
 }
 
-/// What the evaluator asks of the compiler.
+/// What the evaluator asks of the compiler: what Nikaia cannot hold - the
+/// names a walk above this one worked out, what a build may read, and the run
+/// of a grammar.
 pub trait BtHost {
-    /// What a symbol of file `unit` is.
-    fn text(ref self, unit: i64, symbol: winnow_grammar::Symbol) -> String sync
-    /// Which numbers name a character: Unicode's table.
-    fn char_of(ref self, n: i64) -> scalar? sync
     /// What a name outside a build-time body is worth: a `comptime` already
     /// evaluated, or a `let` whose value folded.
     fn known(ref self, name: ref String) -> BuildValue? sync
-    /// The initialiser of the `comptime` item `name` of file `unit`.
-    fn constant(ref self, unit: i64, name: ref String) -> Expr? sync
-    /// Whether `ty::variant` names a variant of an `enum` the program declares.
-    fn variant_of(ref self, unit: i64, ty: ref String, variant: ref String) -> bool sync
-    fn run_grammar(ref self, unit: i64, which: ref String, rule: ref String, input: ref String) -> BtRan sync
+    /// The entry `rule` of the grammar `which`, declared in file `at`, run on
+    /// `input`; `result` is what the rule hands back.
+    fn run_grammar(ref self, at: i64, which: ref String, rule: ref String, result: ref Ty, input: ref String) -> BtRan sync
     fn read(ref self, path: ref String) -> BtRead sync
 }
 
@@ -106,9 +102,12 @@ fn bt_not_folded(what: String) -> BtRefusal {
 }
 
 /// What an initialiser comes to.
-pub fn bt_evaluate[H: BtHost](expr: ref Expr, host: ref H) -> BuildValue sync throws {
+///
+/// `units` are the program's files: 0 the one being checked, then the files
+/// beside it, where a constant, a variant or a grammar may be declared.
+pub fn bt_evaluate[H: BtHost](expr: ref Expr, units: ref Vec[ParsedView], host: ref H) -> BuildValue sync throws {
     let mut state = BtState { unit: 0, resolving: [] }
-    return bt_expr(expr, host, state)
+    return bt_expr(expr, host, units, state)
 }
 
 /// A float as the source wrote it.
@@ -120,13 +119,13 @@ fn bt_float(written: ref String) -> f64 throws {
     return number ?? 0.0
 }
 
-fn bt_expr[H: BtHost](expr: ref Expr, host: ref H, mut state: BtState) -> BuildValue sync throws {
+fn bt_expr[H: BtHost](expr: ref Expr, host: ref H, units: ref Vec[ParsedView], mut state: BtState) -> BuildValue sync throws {
     return match expr {
         Expr::LitInt { value, negative, .. } => BuildValue::Int(integer(value, negative)),
         Expr::LitFloat(written, _) => BuildValue::Float(bt_float(written)),
         Expr::LitBool(value, _) => BuildValue::Bool(value),
         Expr::LitStr { text, .. } => {
-            let decoded = decoded(text) fn(n) { host.char_of(n) }
+            let decoded = decoded(text)
             if decoded == null {
                 throw BtRefusal::Unevaluable
             }
@@ -135,75 +134,75 @@ fn bt_expr[H: BtHost](expr: ref Expr, host: ref H, mut state: BtState) -> BuildV
         Expr::Tuple(parts, _) => {
             let mut held: Vec[BuildValue] = []
             for part in parts {
-                held.push(bt_expr(part, host, state))
+                held.push(bt_expr(part, host, units, state))
             }
             BuildValue::Tuple(held)
         },
         // **`f"…"` is text with code in it** (ADR-309), and the code is Nikaia,
         // so this evaluator can read it.
-        Expr::LitInterpolated { parts, .. } => bt_interpolated(parts, host, state),
+        Expr::LitInterpolated { parts, .. } => bt_interpolated(parts, host, units, state),
         // **A variant that carries nothing**: `Shade::Odd`, which is a value and
         // not a call.
         Expr::Path(path, _) => {
             if path.len() != 2 {
                 throw BtRefusal::Unevaluable
             }
-            let ty = host.text(state.unit, path[0])
-            let variant = host.text(state.unit, path[1])
-            if !host.variant_of(state.unit, ty, variant) {
+            let ty = units[state.unit].text(path[0])
+            let variant = units[state.unit].text(path[1])
+            if !bt_variant_of(units, state.unit, ty, variant) {
                 throw BtRefusal::Unevaluable
             }
             BuildValue::Variant { ty: ty, variant: variant, payload: [] }
         },
-        Expr::Variable(symbol, _) => bt_variable(symbol, host, state),
-        Expr::Unary { .. } => bt_unary_expr(expr, host, state),
-        Expr::Binary { .. } => bt_binary_expr(expr, host, state),
+        Expr::Variable(symbol, _) => bt_variable(symbol, host, units, state),
+        Expr::Unary { .. } => bt_unary_expr(expr, host, units, state),
+        Expr::Binary { .. } => bt_binary_expr(expr, host, units, state),
         // **An `if` is an expression always** (Part I 3.1), so it is one here too.
-        Expr::If { cond, then_branch, else_branch, .. } => bt_if_value(cond, then_branch, else_branch, host, state),
+        Expr::If { cond, then_branch, else_branch, .. } => bt_if_value(cond, then_branch, else_branch, host, units, state),
         // **A list literal is the aggregate's only constructor here** (ADR-135).
         Expr::ListLit { items, .. } => {
             let mut values: Vec[BuildValue] = []
             for item in items {
-                values.push(bt_expr(item, host, state))
+                values.push(bt_expr(item, host, units, state))
             }
             BuildValue::List(values)
         },
         Expr::Index { base, index, .. } => {
-            let on = bt_expr(base, host, state)
-            let at = bt_expr(index, host, state)
+            let on = bt_expr(base, host, units, state)
+            let at = bt_expr(index, host, units, state)
             bt_element(on, at)
         },
         // Kap 4.2's literal. The shorthand `Point { x, y }` names locals, and an
         // initialiser folded here has none.
         Expr::StructLit { name, fields, .. } => {
-            let ty = host.text(state.unit, name)
+            let ty = units[state.unit].text(name)
             let mut held: collections::BTreeMap[String, BuildValue] = collections::BTreeMap()
             for field in fields {
-                let written = host.text(state.unit, field.name)
+                let written = units[state.unit].text(field.name)
                 let given = field.value?.clone()
                 if given != null {
-                    held.insert(written, bt_expr(given ?? Expr::LitNull(fresh_id()), host, state))
+                    held.insert(written, bt_expr(given ?? Expr::LitNull(fresh_id()), host, units, state))
                 } else {
                     throw BtRefusal::Unevaluable
                 }
             }
             BuildValue::Struct { name: ty, fields: held }
         },
-        Expr::Field { base, name, .. } => bt_field(base, name, host, state),
+        Expr::Field { base, name, .. } => bt_field(base, name, host, units, state),
         // **A method is a call**, compiled and run where it is computed at all
         // (ADR-321 D1).
         Expr::MethodCall { method, .. } => {
-            throw bt_not_folded(f".{host.text(state.unit, method)}()")
+            throw bt_not_folded(f".{units[state.unit].text(method)}()")
         },
-        Expr::Call { func, args, config, .. } => bt_call_expr(func, args, config, host, state),
+        Expr::Call { func, args, config, .. } => bt_call_expr(func, args, config, host, units, state),
         else => {
             throw BtRefusal::Unevaluable
         },
     }
 }
 
-fn bt_variable[H: BtHost](symbol: winnow_grammar::Symbol, host: ref H, mut state: BtState) -> BuildValue sync throws {
-    let name = host.text(state.unit, symbol)
+fn bt_variable[H: BtHost](symbol: winnow_grammar::Symbol, host: ref H, units: ref Vec[ParsedView], mut state: BtState) -> BuildValue sync throws {
+    let name = units[state.unit].text(symbol)
     // **The checking file's scope**, which holds what the walk above this one
     // has already worked out.
     let known = host.known(name)
@@ -213,21 +212,21 @@ fn bt_variable[H: BtHost](symbol: winnow_grammar::Symbol, host: ref H, mut state
     // …and otherwise the **item**, read from the file that wrote it. A constant
     // is an item, so it is visible wherever its file is - which is what makes
     // a forward reference a program.
-    return bt_constant_item(name, host, state)
+    return bt_constant_item(name, host, units, state)
 }
 
-fn bt_unary_expr[H: BtHost](whole: ref Expr, host: ref H, mut state: BtState) -> BuildValue sync throws {
+fn bt_unary_expr[H: BtHost](whole: ref Expr, host: ref H, units: ref Vec[ParsedView], mut state: BtState) -> BuildValue sync throws {
     return match whole {
-        Expr::Unary { op, expr, .. } => bt_unary(op, bt_expr(expr, host, state)),
+        Expr::Unary { op, expr, .. } => bt_unary(op, bt_expr(expr, host, units, state)),
         else => {
             throw BtRefusal::Unevaluable
         },
     }
 }
 
-fn bt_binary_expr[H: BtHost](whole: ref Expr, host: ref H, mut state: BtState) -> BuildValue sync throws {
+fn bt_binary_expr[H: BtHost](whole: ref Expr, host: ref H, units: ref Vec[ParsedView], mut state: BtState) -> BuildValue sync throws {
     return match whole {
-        Expr::Binary { op, lhs, rhs, .. } => bt_binary(op, lhs, rhs, host, state),
+        Expr::Binary { op, lhs, rhs, .. } => bt_binary(op, lhs, rhs, host, units, state),
         else => {
             throw BtRefusal::Unevaluable
         },
@@ -256,8 +255,8 @@ fn bt_unary(op: ref UnaryOp, inner: ref BuildValue) -> BuildValue throws {
     }
 }
 
-fn bt_if_value[H: BtHost](cond: ref Expr, then_branch: ref Block, else_branch: ref Block?, host: ref H, mut state: BtState) -> BuildValue sync throws {
-    let verdict = bt_expr(cond, host, state)
+fn bt_if_value[H: BtHost](cond: ref Expr, then_branch: ref Block, else_branch: ref Block?, host: ref H, units: ref Vec[ParsedView], mut state: BtState) -> BuildValue sync throws {
+    let verdict = bt_expr(cond, host, units, state)
     let yes = match verdict {
         BuildValue::Bool(held) => held,
         else => {
@@ -265,20 +264,20 @@ fn bt_if_value[H: BtHost](cond: ref Expr, then_branch: ref Block, else_branch: r
         },
     }
     if yes {
-        return bt_branch(then_branch, host, state)
+        return bt_branch(then_branch, host, units, state)
     }
     let taken = else_branch ?? throw BtRefusal::Unevaluable
-    return bt_branch(taken, host, state)
+    return bt_branch(taken, host, units, state)
 }
 
 /// **A branch that is a value**, and nothing else: a block with statements is
 /// code, compiled and run with the program (ADR-321 D1).
-fn bt_branch[H: BtHost](block: ref Block, host: ref H, mut state: BtState) -> BuildValue sync throws {
+fn bt_branch[H: BtHost](block: ref Block, host: ref H, units: ref Vec[ParsedView], mut state: BtState) -> BuildValue sync throws {
     if block.stmts.len() != 1 {
         throw bt_not_folded("{ … }")
     }
     return match block.stmts[0].node {
-        Stmt::Expr(inner) => bt_expr(inner, host, state),
+        Stmt::Expr(inner) => bt_expr(inner, host, units, state),
         else => {
             throw bt_not_folded("{ … }")
         },
@@ -297,9 +296,9 @@ fn bt_element(on: ref BuildValue, index_value: ref BuildValue) -> BuildValue thr
     }
 }
 
-fn bt_field[H: BtHost](base: ref Expr, name: winnow_grammar::Symbol, host: ref H, mut state: BtState) -> BuildValue sync throws {
-    let on = bt_expr(base, host, state)
-    let field = host.text(state.unit, name)
+fn bt_field[H: BtHost](base: ref Expr, name: winnow_grammar::Symbol, host: ref H, units: ref Vec[ParsedView], mut state: BtState) -> BuildValue sync throws {
+    let on = bt_expr(base, host, units, state)
+    let field = units[state.unit].text(name)
     return match on {
         BuildValue::Struct { fields, .. } => {
             let found = fields.get(field)
@@ -314,7 +313,7 @@ fn bt_field[H: BtHost](base: ref Expr, name: winnow_grammar::Symbol, host: ref H
     }
 }
 
-fn bt_call_expr[H: BtHost](func: ref Expr, args: ref Vec[Expr], config: ref Vec[ConfigArg], host: ref H, mut state: BtState) -> BuildValue sync throws {
+fn bt_call_expr[H: BtHost](func: ref Expr, args: ref Vec[Expr], config: ref Vec[ConfigArg], host: ref H, units: ref Vec[ParsedView], mut state: BtState) -> BuildValue sync throws {
     return match func {
         // **A grammar's entry, run by compiling the parser it generates** (issue
         // #178), or a variant with a payload, which is written the same way.
@@ -323,28 +322,29 @@ fn bt_call_expr[H: BtHost](func: ref Expr, args: ref Vec[Expr], config: ref Vec[
             if config.len() > 0 || path.len() != 2 {
                 throw bt_not_folded("a call")
             }
-            let parser = host.text(state.unit, path[0])
-            let rule = host.text(state.unit, path[1])
+            let parser = units[state.unit].text(path[0])
+            let rule = units[state.unit].text(path[1])
             // An `enum` this program declares wins, because a grammar and an
             // `enum` under one name is a name declared twice and `NK1148`'s to
             // refuse, not this walk's.
-            if host.variant_of(state.unit, parser, rule) {
+            if bt_variant_of(units, state.unit, parser, rule) {
                 let mut payload: Vec[BuildValue] = []
                 for arg in args {
-                    payload.push(bt_expr(arg, host, state))
+                    payload.push(bt_expr(arg, host, units, state))
                 }
                 return BuildValue::Variant { ty: parser, variant: rule, payload: payload }
             }
             if args.len() != 1 {
                 throw bt_not_folded(f"{parser}::{rule}(…)")
             }
-            let input = match bt_expr(args[0], host, state) {
+            let input = match bt_expr(args[0], host, units, state) {
                 BuildValue::Text(held) => held,
                 else => {
                     throw BtRefusal::Unevaluable
                 },
             }
-            let ran = host.run_grammar(state.unit, parser, rule, input)
+            let (at, result) = bt_rule_of(units, state.unit, parser, rule) ?? throw bt_not_folded(f"{parser}::{rule}(…)")
+            let ran = host.run_grammar(at, parser, rule, result, input)
             if !ran.found {
                 throw bt_not_folded(f"{parser}::{rule}(…)")
             }
@@ -356,7 +356,7 @@ fn bt_call_expr[H: BtHost](func: ref Expr, args: ref Vec[Expr], config: ref Vec[
             value ?? BuildValue::Bool(false)
         },
         Expr::Variable(symbol, _) => {
-            let name = host.text(state.unit, symbol)
+            let name = units[state.unit].text(symbol)
             // **`asset("…")` is answered before the arguments are** (ADR-310 D3,
             // D7). A name that folds to `"config.json"` is a path that was
             // *computed*, and reading it would make *named in the code*
@@ -372,12 +372,12 @@ fn bt_call_expr[H: BtHost](func: ref Expr, args: ref Vec[Expr], config: ref Vec[
     }
 }
 
-fn bt_binary[H: BtHost](op: ref BinaryOp, lhs: ref Expr, rhs: ref Expr, host: ref H, mut state: BtState) -> BuildValue sync throws {
+fn bt_binary[H: BtHost](op: ref BinaryOp, lhs: ref Expr, rhs: ref Expr, host: ref H, units: ref Vec[ParsedView], mut state: BtState) -> BuildValue sync throws {
     // **`&&` and `||` short-circuit**, which is not an optimisation here: a body
     // may guard a call with one, and evaluating the far side of a guard is how a
     // build-time evaluator reaches what the guard was keeping it away from.
     if op == BinaryOp::And || op == BinaryOp::Or {
-        let left = match bt_expr(lhs, host, state) {
+        let left = match bt_expr(lhs, host, units, state) {
             BuildValue::Bool(held) => held,
             else => {
                 throw BtRefusal::Unevaluable
@@ -389,15 +389,15 @@ fn bt_binary[H: BtHost](op: ref BinaryOp, lhs: ref Expr, rhs: ref Expr, host: re
         if op == BinaryOp::Or && left {
             return BuildValue::Bool(true)
         }
-        return match bt_expr(rhs, host, state) {
+        return match bt_expr(rhs, host, units, state) {
             BuildValue::Bool(right) => BuildValue::Bool(right),
             else => {
                 throw BtRefusal::Unevaluable
             },
         }
     }
-    let left = bt_expr(lhs, host, state)
-    let right = bt_expr(rhs, host, state)
+    let left = bt_expr(lhs, host, units, state)
+    let right = bt_expr(rhs, host, units, state)
     return bt_operate(op, left, right)
 }
 
@@ -417,7 +417,7 @@ fn bt_operate(op: ref BinaryOp, left: ref BuildValue, right: ref BuildValue) -> 
 /// `bool` its word, and text its own written form. **A format spec is not
 /// read.** `f"{n:>8}"` asks for a width, and what that means is `std::fmt`'s
 /// rather than this language's.
-fn bt_interpolated[H: BtHost](parts: ref Vec[FPart], host: ref H, mut state: BtState) -> BuildValue sync throws {
+fn bt_interpolated[H: BtHost](parts: ref Vec[FPart], host: ref H, units: ref Vec[ParsedView], mut state: BtState) -> BuildValue sync throws {
     // Built from the parts the grammar parsed (ADR-309 D6, D9): each run of text
     // as written, and each hole as `{}` or `{:spec}`.
     let mut format: String = ""
@@ -433,7 +433,7 @@ fn bt_interpolated[H: BtHost](parts: ref Vec[FPart], host: ref H, mut state: BtS
                 } else {
                     format.push_str("{}")
                 }
-                values.push(bt_expr(expr, host, state))
+                values.push(bt_expr(expr, host, units, state))
             },
         }
     }
@@ -520,14 +520,14 @@ fn bt_flush[H: BtHost](chunk: ref String, mut out: String, host: ref H) sync thr
     if chunk.len() == 0 {
         return
     }
-    let decoded = decoded(chunk) fn(n) { host.char_of(n) }
+    let decoded = decoded(chunk)
     if decoded == null {
         throw BtRefusal::Unevaluable
     }
     out.push_str(decoded ?? "")
 }
 
-/// **A constant of this file, worked out on demand.**
+/// **A constant of this program, worked out on demand.**
 ///
 /// The one lookup that makes a constant behave like the item it is. A function
 /// declared below its caller has always been callable - items are
@@ -537,7 +537,7 @@ fn bt_flush[H: BtHost](chunk: ref String, mut out: String, host: ref H) sync thr
 /// **And the ring is refused by name.** `comptime A = B` beside `comptime B = A`
 /// has no base case to reach, so it is not the call depth that catches it - the
 /// stack of names being worked out is, and it can say which ones.
-fn bt_constant_item[H: BtHost](name: ref String, host: ref H, mut state: BtState) -> BuildValue sync throws {
+fn bt_constant_item[H: BtHost](name: ref String, host: ref H, units: ref Vec[ParsedView], mut state: BtState) -> BuildValue sync throws {
     for held in state.resolving {
         if held == name {
             let mut ring = state.resolving.clone()
@@ -545,13 +545,106 @@ fn bt_constant_item[H: BtHost](name: ref String, host: ref H, mut state: BtState
             throw BtRefusal::Circular { ring: ring }
         }
     }
-    let value = host.constant(state.unit, name) ?? throw BtRefusal::Unevaluable
+    let (at, value) = bt_constant_of(units, state.unit, name) ?? throw BtRefusal::Unevaluable
     state.resolving.push(name.clone())
+    // The initialiser is read in the file that wrote it: its names are that
+    // file's (Part I 9.1).
+    let from = state.unit
+    state.unit = at
     // A refusal ends the whole evaluation, so the ring need not be unwound on the
     // way out.
-    let out = bt_expr(value, host, state)
+    let out = bt_expr(value, host, units, state)
+    state.unit = from
     state.resolving.pop()
     return out
+}
+
+/// The files a name is looked for in, by their place in `units`: the one the
+/// body being read came from, and then every file beside the one being checked.
+fn bt_reach(units: ref Vec[ParsedView], unit: i64) -> Vec[i64] {
+    return [unit].iter().chain(1..<units.len() as i64).collect()
+}
+
+/// **The `comptime` item `name`**, in the first file in reach that declares
+/// it: that file's place in `units`, and its initialiser. A name declared in
+/// one file of a package is visible in every other (Part I 9.1).
+fn bt_constant_of(units: ref Vec[ParsedView], unit: i64, name: ref String) -> (i64, Expr)? {
+    for at in bt_reach(units, unit) {
+        let value = bt_comptime_in(units[at], name) ?? continue
+        return (at, value)
+    }
+    return null
+}
+
+/// The initialiser of the `comptime` item `name` of file `file`.
+fn bt_comptime_in(file: ref ParsedView, name: ref String) -> Expr? {
+    for item in file.items {
+        match item.node {
+            Item::Comptime { name: declared, value, .. } => {
+                if file.text(declared) == name {
+                    return value.clone()
+                }
+            },
+            else => {},
+        }
+    }
+    return null
+}
+
+/// Whether `ty::variant` names a variant of an `enum` the program declares.
+fn bt_variant_of(units: ref Vec[ParsedView], unit: i64, ty: ref String, variant: ref String) -> bool {
+    return bt_reach(units, unit).iter().any(fn(at) { bt_declares_variant(units[at], ty, variant) })
+}
+
+/// Whether file `file` declares an `enum` `ty` with a variant `variant`.
+fn bt_declares_variant(file: ref ParsedView, ty: ref String, variant: ref String) -> bool {
+    for item in file.items {
+        match item.node {
+            Item::Enum { name, variants, .. } => {
+                if file.text(name) == ty && variants.iter().any(fn(held) { file.text(held.name) == variant }) {
+                    return true
+                }
+            },
+            else => {},
+        }
+    }
+    return false
+}
+
+/// **The file a grammar was declared in, and what its entry rule hands back**:
+/// the first file in reach whose grammar `which` has an entry rule `rule`
+/// with a result type.
+fn bt_rule_of(units: ref Vec[ParsedView], unit: i64, which: ref String, rule: ref String) -> (i64, Ty)? {
+    for at in bt_reach(units, unit) {
+        let result = bt_entry_result(units[at], which, rule) ?? continue
+        return (at, result)
+    }
+    return null
+}
+
+/// What the entry rule `rule` of the grammar `which` in file `file` hands
+/// back: nothing where the file has no such rule, or the first it has names no
+/// type.
+fn bt_entry_result(file: ref ParsedView, which: ref String, rule: ref String) -> Ty? {
+    for item in file.items {
+        match item.node {
+            Item::Grammar(def) => {
+                if file.text(def.name) != which {
+                    continue
+                }
+                for held in def.rules {
+                    if held.is_entry && file.text(held.name) == rule {
+                        return match held.ret_type {
+                            null => null,
+                            ty => written_ty(file.words, file.aliases, ty),
+                        }
+                    }
+                }
+            },
+            else => {},
+        }
+    }
+    return null
 }
 
 /// **The file a build reads** (ADR-310 D3): a string literal and nothing else
@@ -568,7 +661,7 @@ fn bt_asset[H: BtHost](args: ref Vec[Expr], host: ref H) -> BuildValue sync thro
             throw BtRefusal::PathIsComputed
         },
     }
-    let path = decoded(written) fn(n) { host.char_of(n) }
+    let path = decoded(written)
     if path == null {
         throw BtRefusal::PathIsComputed
     }

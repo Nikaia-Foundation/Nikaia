@@ -451,10 +451,13 @@ fn the_refusal_and_the_decoder_read_one_set() {
         "plain",
     ] {
         assert!(
-            nikaia::build_time::an_escape_nothing_names(literal).is_none(),
+            nikaia_std::compiler::escapes::an_escape_nothing_names(literal).is_none(),
             "{literal}"
         );
-        assert!(nikaia::build_time::decoded(literal).is_some(), "{literal}");
+        assert!(
+            nikaia_std::compiler::escapes::decoded(literal).is_some(),
+            "{literal}"
+        );
     }
     for literal in [
         "\\q",
@@ -471,10 +474,13 @@ fn the_refusal_and_the_decoder_read_one_set() {
         "a\\",
     ] {
         assert!(
-            nikaia::build_time::an_escape_nothing_names(literal).is_some(),
+            nikaia_std::compiler::escapes::an_escape_nothing_names(literal).is_some(),
             "{literal}"
         );
-        assert!(nikaia::build_time::decoded(literal).is_none(), "{literal}");
+        assert!(
+            nikaia_std::compiler::escapes::decoded(literal).is_none(),
+            "{literal}"
+        );
     }
 }
 

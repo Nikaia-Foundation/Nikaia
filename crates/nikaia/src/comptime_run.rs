@@ -30,10 +30,10 @@ use std::process::Command;
 use std::sync::OnceLock;
 
 use crate::ast::Expr;
-use crate::build_time::Value;
 use crate::contracts::ty::Ty;
 use crate::grammar_run::Wall;
 use crate::parser::Parsed;
+use nikaia_std::compiler::build_values::BuildValue as Value;
 
 use nikaia_std::compiler::comptime_tree as tree;
 /// The name the sub-program hands the value back under. **The sub-program's
@@ -241,13 +241,12 @@ pub(crate) fn lowered_units(
 
 /// **A file without its foreign parts** (ADR-321 D14,
 /// `comptime_without_foreign`): what `ledger` says may not run while the
-/// program is built (`build_time::may_not_run`) goes.
+/// program is built (`bt_may_not_run`) goes.
 pub(crate) fn without_foreign(parsed: &Parsed, ledger: &crate::contracts::Ledger) -> Parsed {
     let runs = |key: &str| {
-        ledger
-            .functions
-            .get(key)
-            .is_none_or(|contract| crate::build_time::may_not_run(contract).is_none())
+        ledger.functions.get(key).is_none_or(|contract| {
+            nikaia_std::compiler::build_eval::bt_may_not_run(contract).is_none()
+        })
     };
     let mut kept = parsed.keeping(|_| true);
     tree::comptime_without_foreign(&mut kept.program.items, &parsed.interner, &mut &runs);
@@ -718,9 +717,14 @@ impl tree::ComptimeComputeHost for ComputeHost<'_> {
         let reads = crate::assets::Reads::none();
         let known = std::cell::RefCell::new(known);
         let so_far = |name: &str| (known.borrow_mut())(name);
-        crate::build_time::BuildTime::new(self.files[at as usize], self.files, &reads, &so_far)
-            .evaluate(value)
-            .ok()
+        crate::build_eval_host::evaluate(
+            value,
+            self.files[at as usize],
+            self.files,
+            &reads,
+            &so_far,
+        )
+        .ok()
     }
 
     fn ty_of(&self, at: i64, written: &crate::ast::Type) -> Ty {
