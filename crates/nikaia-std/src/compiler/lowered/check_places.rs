@@ -101,7 +101,7 @@ impl CheckState {
                 let name = *name;
                 let word = nikaia_std::block::Text::from(world.words.resolve(name).to_string());
                 let local = match self.binding(&word) { Some(__nikaia_value) => __nikaia_value, None => return false };
-                !local.lent && !local.ty.is_a_view() && !self.lent_here(&word)
+                !local.lent && !local.ty.is_a_view() && !self.lent_here(&word) && !self.got_past_a_jump.contains(&word)
             },
             _ => false,
         }

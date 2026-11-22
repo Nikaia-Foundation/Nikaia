@@ -159,7 +159,10 @@ impl CheckState {
             Expr::Variable(name, _) => {
                 let word = world.words.resolve(name).clone()
                 let local = self.binding(word) ?? return false
-                !local.lent && !local.ty.is_a_view() && !self.lent_here(word)
+                // A name `get`, `first` or `last` handed back past a jump is
+                // a reference to the element (D30, #2240), whatever type it
+                // was given: its parts are views, as through a view's.
+                !local.lent && !local.ty.is_a_view() && !self.lent_here(word) && !self.got_past_a_jump.contains(word)
             }
             else => false,
         }
