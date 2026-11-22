@@ -1,0 +1,29 @@
+// `std`'s default restart policy, `supervisor::Backoff()`, asked by hand
+// (#2118): a failure after an attempt that ran `healthy` (60 s) starts a new
+// cycle, so it restarts at once, the next is delayed from `first_delay`
+// again, and the cycle's age counts from where it began.
+use std::supervisor
+use std::time
+
+fn failure(n: i64, ran: time::Duration, since: time::Duration) -> supervisor::Failures {
+    return supervisor::Failures { last_uptime: ran, consecutive: n, since_first: since }
+}
+
+fn delay_of(next: supervisor::Next) -> String {
+    return match next {
+        supervisor::Next::Immediate => "immediate",
+        supervisor::Next::Delay(d) => if d.in_millis() >= 75 && d.in_millis() <= 100 { "a first delay" } else { "another delay" },
+        supervisor::Next::Escalate => "escalate",
+    }
+}
+
+fn main() throws {
+    let mut policy = supervisor::Backoff()
+    println(f"failure 1: {delay_of(policy.decide(failure(1, 0.seconds(), 0.seconds())))}")
+    println(f"failure 2: {delay_of(policy.decide(failure(2, 0.seconds(), 1.seconds())))}")
+    println(f"failure 3: {delay_of(policy.decide(failure(3, 0.seconds(), 2.seconds())))}")
+    println(f"failure 4 after 61 s up: {delay_of(policy.decide(failure(4, 61.seconds(), 400.seconds())))}")
+    println(f"failure 5: {delay_of(policy.decide(failure(5, 0.seconds(), 401.seconds())))}")
+    println(f"failure 6, 300 s into the new cycle: {delay_of(policy.decide(failure(6, 0.seconds(), 700.seconds())))}")
+    println(f"failure 7, 301 s into it: {delay_of(policy.decide(failure(7, 0.seconds(), 701.seconds())))}")
+}

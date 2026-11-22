@@ -87,7 +87,7 @@ use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 //
 // ## What the table knows
 //
-// A closed list, like `touch::KINDS` and for the same reason: a name this file
+// A closed list, like `KNOWN_KINDS` in `order.nika` and for the same reason: a name this file
 // does not know is answered `Undecided`, and a name it knows wrongly would be a
 // typo that bought a crossing. The list grows when a type needs it, never
 // speculatively (ADR-288 D11).

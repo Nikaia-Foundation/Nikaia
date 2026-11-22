@@ -1,0 +1,7 @@
+failure 1: immediate
+failure 2: a first delay
+failure 3: another delay
+failure 4 after 61 s up: immediate
+failure 5: a first delay
+failure 6, 300 s into the new cycle: another delay
+failure 7, 301 s into it: escalate

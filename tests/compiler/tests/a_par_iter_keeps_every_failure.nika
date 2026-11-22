@@ -1,0 +1,60 @@
+// **A `par_iter` walk whose lambda fails keeps every failure** (ADR-async-5
+// D26, Part II 12.6, #2681): every element runs, the first failure in input
+// order is thrown where the call returns, and the later ones are its
+// `secondary` list, in input order, at both settings of `user_parallelism`:
+// through `map` and `filter` into `collect`, through `for_each`, and with
+// `limit:`. Where nothing fails the values come back in input order. A
+// sequence's `iter()` stops at the first failure instead (#2736).
+enum Bad { Oops(i64) }
+
+impl Error for Bad {
+	fn message(ref self) -> String {
+		return match self {
+			Bad::Oops(n) => f"element {n} failed",
+		}
+	}
+}
+
+fn work(n: i64) -> i64 throws {
+	if n > 5 {
+		throw Bad::Oops(n)
+	}
+	return n * 2
+}
+
+fn keep(n: i64) -> bool throws {
+	if n > 5 {
+		throw Bad::Oops(n)
+	}
+	return n != 2
+}
+
+fn main() throws {
+	let xs = [1, 7, 2, 8, 3, 9]
+	let mapped: Vec[i64] = xs.par_iter().map(fn(x) { work(x) }).collect() catch {
+		println(error.full())
+		[]
+	}
+	println(f"map: {mapped.len()}")
+	let kept: Vec[i64] = xs.par_iter().filter(fn(x) { keep(x) }).collect() catch {
+		println(error.full())
+		[]
+	}
+	println(f"filter: {kept.len()}")
+	xs.par_iter().for_each(fn(x) { work(x) }) catch {
+		println(error.full())
+	}
+	let limited: Vec[i64] = xs.par_iter(limit: 2).map(fn(x) { work(x) }).collect() catch {
+		println(error.full())
+		[]
+	}
+	println(f"limit: {limited.len()}")
+	let fine = [1, 2, 3, 4]
+	let doubled: Vec[i64] = fine.par_iter().map(fn(x) { work(x) }).collect() catch { [] }
+	println(f"{doubled[0]} {doubled[1]} {doubled[2]} {doubled[3]}")
+	let first: Vec[i64] = xs.iter().map(fn(x) { work(x) }).collect() catch {
+		println(error.full())
+		[]
+	}
+	println(f"iter: {first.len()}")
+}

@@ -34,15 +34,16 @@ use super::{Ledger, UNNAMED_ERROR};
 use crate::ast::Expr;
 use crate::check::MethodCalls;
 use crate::parser::Parsed;
-use nikaia_std::compiler::throws::{self as nika, MethodsCalled, ThrowsGraph};
+use nikaia_std::compiler::throws as nika;
 
 /// Give every `throws` function of this package its `fails_with`.
 ///
-/// **The walk, the graph and the fixpoint are Nikaia** (`tools/throws.nika`,
-/// #125). What stays here is handing in each unit, what one expression
-/// reaches (`sync`'s single answer, ADR-288) and the type checker's method
-/// calls as plain data, and writing the answer into the ledger. A callee the
-/// graph does not hold still has the set the ledger gives it (ADR-grammar-actions-v1 D6).
+/// **The walk, the graph, the places, the fixpoint and the answer written
+/// into the ledger are Nikaia** (`compiler/throws.nika`, #125, ADR-100 D7).
+/// What stays here is handing in each unit with what one expression reaches
+/// (`sync`'s single answer, ADR-288, read from the Rust `Parsed`) and what a
+/// task contributes. A callee the graph does not hold still has the set the
+/// ledger gives it (ADR-grammar-actions-v1 D6).
 pub fn infer(
     ledger: &mut Ledger,
     units: &[&Parsed],
@@ -51,52 +52,9 @@ pub fn infer(
     stored: &BTreeMap<String, crate::check::StoredCode>,
     checked: &[crate::check::Checked],
 ) {
-    let mut graph = ThrowsGraph {
-        methods: resolved
-            .iter()
-            .map(|(key, calls)| {
-                let called = MethodsCalled {
-                    resolved: calls.resolved.clone(),
-                    unseen: calls.unresolved || calls.code_fails,
-                    fields: calls.fields_called.clone(),
-                    swallowed: calls.swallowed.clone(),
-                };
-                (key.clone(), called)
-            })
-            .collect(),
-        direct: BTreeMap::new(),
-        calls: BTreeMap::new(),
-        fatal_calls: BTreeMap::new(),
-        fatal: fatal_types(ledger, library),
-    };
+    let mut graph = nika::throws_graph(ledger, library, resolved);
     let fatal = graph.fatal.clone();
-    // **Each function field, name and parameter of code is a place of the
-    // graph** (ADR-351 D1, D3, D4).
-    let mut stored = stored.clone();
-    let open = nika::params_as_places(ledger, &mut stored);
-    let stored = &stored;
-    let places: BTreeSet<String> = stored.keys().cloned().collect();
-    for (field, code) in stored {
-        nika::stored_throws(
-            field,
-            &code.resolved,
-            code.unresolved,
-            &code.free,
-            &code.thrown,
-            ledger,
-            library,
-            &mut graph,
-        );
-    }
-    // **A parameter whose callers this package does not all see is
-    // `from(F::p)`** (ADR-351 D4): its callers replace it with what they hand.
-    for key in &open {
-        graph
-            .direct
-            .entry(key.clone())
-            .or_default()
-            .insert(format!("from({key})"));
-    }
+    let places = nika::throws_places(ledger, library, &mut stored.clone(), &mut graph);
     for (at, parsed) in units.iter().copied().enumerate() {
         let own: &Ledger = ledger;
         let facts = super::panics::task_facts(checked.get(at).map(|c| &c.facts));
@@ -115,22 +73,7 @@ pub fn infer(
             &mut graph,
         );
     }
-    for (name, errors) in nika::error_sets(
-        &graph.direct,
-        &graph.calls,
-        &graph.fatal_calls,
-        &fatal,
-        ledger,
-        &places,
-    ) {
-        if places.contains(&name) {
-            ledger.code_throws.insert(name, errors);
-            continue;
-        }
-        if let Some(contract) = ledger.functions.get_mut(&name) {
-            contract.fails_with = nika::throws_published(&name, &errors);
-        }
-    }
+    nika::throws_record(ledger, &graph, &places);
 }
 
 /// What `async e` contributes: `task::Crashed` where its task can panic,
@@ -174,18 +117,6 @@ fn crashed(
         errors,
         fatal: Vec::new(),
         result: None,
-    }
-}
-
-/// The ledger's key of a function, `Owner::name` for a method.
-#[allow(dead_code)]
-fn function_key(parsed: &Parsed, name: Option<&winnow_grammar::Symbol>, owner: &str) -> String {
-    let own = name
-        .map(|symbol| parsed.interner.resolve(*symbol).to_text())
-        .unwrap_or_else(|| "new".to_text());
-    match owner {
-        "" => own,
-        _ => format!("{owner}::{own}"),
     }
 }
 
@@ -279,18 +210,6 @@ fn from_given(
                 out.extend(library.functions[&name].fails_with.iter().cloned())
             }
             _ => out.push(UNNAMED_ERROR.to_text()),
-        }
-    }
-    out
-}
-
-/// **The fatal error types** (ADR-345 D1): every type an `impl Fatal` names,
-/// in this package or a library.
-pub fn fatal_types(own: &Ledger, library: &Ledger) -> BTreeSet<String> {
-    let mut out = BTreeSet::new();
-    for ledger in [own, library] {
-        if let Some(types) = ledger.implementations.get("Fatal") {
-            out.extend(types.iter().cloned());
         }
     }
     out

@@ -1774,6 +1774,19 @@ impl EmitState {
         if timed {
             out.push("nikaia_std::par::ended(")
         }
+        // **A `par_iter` walk keeps every failure** (ADR-async-5 D26, #2681):
+        // its `collect` gathers each element as a value or a failure, and its
+        // `for_each` each `()` or failure, and `par::kept_failures` throws the
+        // first in input order with the others as its `secondary` list.
+        let kept_end = self.facts.kept_failure_ends.contains(on_node) && !self.method_pauses(on_node)
+        let kept_collect = kept_end && name == "collect" && args.len() == 0
+        let kept_each = kept_end && (self.facts.failing_through_calls.get(on_node) ?? 0) == 3
+        if kept_collect {
+            let declared_into = receiver != null && self.facts.collected_into.contains(node_key(receiver ?? return))
+            out.push(if declared_into { "nikaia_std::par::kept_failures(" } else { "nikaia_std::par::kept_failures::<Vec<_>, _, _>(" })
+        } else if kept_each {
+            out.push("nikaia_std::par::kept_failures::<(), _, _>(")
+        }
         // **A handle's `join` is where its task's failure arrives**
         // (ADR-async-5 D23): `error::arrived` records it, on the failure's
         // path alone.
@@ -1809,6 +1822,9 @@ impl EmitState {
             let (through_written, through_open, through_close) = self.emit_call_failing_through(on_node, name, flow)
             if through_written != "" {
                 written = through_written.clone()
+            }
+            if kept_each {
+                written = "map"
             }
             through_prefix = through_open
             through_suffix = through_close
@@ -1877,7 +1893,9 @@ impl EmitState {
         // **A walk of failing elements is collected into a `Result`**
         // (#2736): the first failure ends it, and nothing after is computed.
         let failing_items = self.facts.failing_item_receivers.contains_key(on_node)
-        if name == "collect" && args.len() == 0 && !own && !self.method_pauses(on_node) && failing_items {
+        if kept_collect {
+            out.push("::<Vec<_>>")
+        } else if name == "collect" && args.len() == 0 && !own && !self.method_pauses(on_node) && failing_items {
             out.push(if declared { f"::<{self.rust_result()}<_, _>>" } else { f"::<{self.rust_result()}<Vec<_>, _>>" })
         } else if name == "collect" && args.len() == 0 && !declared && !own && !self.method_pauses(on_node) {
             out.push("::<Vec<_>>")
@@ -2000,6 +2018,11 @@ impl EmitState {
                 throw EmitRefused { message: f"This lambda calls `{name}`, which can pause, but the compiler knows nothing about what the lambda is passed to, so it can't let it pause. Call `{name}` outside the lambda and pass in the value.", at: flow.statement }
             }
             out.push(emit_async_pause(walk))
+        }
+        if kept_each {
+            out.push(".collect::<Vec<_>>())")
+        } else if kept_collect {
+            out.push(")")
         }
         if arriving {
             out.push(f", &{rust_string(scope.origin)})")
@@ -2453,12 +2476,24 @@ fn emit_tuple_part_copies(parts: ref Vec[String]) -> String {
 /// **The trait a method call's ledger key names, where a library `impl` gives
 /// it a type** (#2304): `supervisor::Restart` for `supervisor::Restart::decide`,
 /// else `""`. Only a trait of a module, the path the language below writes
-/// under `nikaia_std::`.
+/// under `nikaia_std::`. A key of the implementing type names the trait too
+/// where the trait has the method (#2118): `supervisor::Backoff::decide`, the
+/// entry a `std` module written in Nikaia is inferred with, is the trait's
+/// `decide` in the language below.
 fn emit_call_library_trait(world: ref EmitWorld, key: ref String) -> String {
-    for (trait_name, _) in world.library.implementations {
-        let method = key.strip_prefix(f"{trait_name}::") ?? continue
-        if trait_name.contains("::") && !method.contains("::") {
+    for (trait_name, types) in world.library.implementations {
+        if !trait_name.contains("::") {
+            continue
+        }
+        let method = key.strip_prefix(f"{trait_name}::") ?? ""
+        if method != "" && !method.contains("::") {
             return trait_name.clone()
+        }
+        for ty in types {
+            let own = key.strip_prefix(f"{ty}::") ?? continue
+            if own != "" && !own.contains("::") && world.library.functions.contains_key(f"{trait_name}::{own}") {
+                return trait_name.clone()
+            }
         }
     }
     return ""

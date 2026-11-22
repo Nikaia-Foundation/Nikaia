@@ -1202,6 +1202,13 @@ impl EmitState {
         }
         let timed = self.facts.timed_ends.contains(&on_node);
         if timed { out.push("nikaia_std::par::ended("); }
+        let kept_end = self.facts.kept_failure_ends.contains(&on_node) && !self.method_pauses(on_node);
+        let kept_collect = kept_end && name == "collect" && args.is_empty();
+        let kept_each = kept_end && nikaia_std::index::or(self.facts.failing_through_calls.get(&on_node), || 0) == 3;
+        if kept_collect {
+            let declared_into = receiver.is_some() && self.facts.collected_into.contains(&node_key(match receiver { Some(__nikaia_value) => __nikaia_value, None => return Ok(()) }));
+            out.push(if declared_into { "nikaia_std::par::kept_failures(" } else { "nikaia_std::par::kept_failures::<Vec<_>, _, _>(" });
+        } else if kept_each { out.push("nikaia_std::par::kept_failures::<(), _, _>("); }
         let joined_key = nikaia_std::index::or(*nikaia_std::index::get(&self.facts.method_callees, &on_node), || "");
         let arriving = (joined_key.starts_with("TaskHandle::join") || joined_key.starts_with("task::ChildHandle::join")) && self.method_can_fail(on_node);
         if arriving { out.push("nikaia_std::error::arrived("); }
@@ -1224,6 +1231,7 @@ impl EmitState {
         } else {
             let (through_written, through_open, through_close) = self.emit_call_failing_through(on_node, &name, &flow)?;
             if AsRef::<str>::as_ref(&(through_written)) != AsRef::<str>::as_ref(&("")) { written = nikaia_std::block::Text::from(through_written.to_string()); }
+            if kept_each { written = String::from("map"); }
             through_prefix = through_open;
             through_suffix = through_close;
             let stepping = name == "map" && walk.stepping_receiver == on_node;
@@ -1258,7 +1266,7 @@ impl EmitState {
             None => None,
         }, || "Seq::collect".into()) != "Seq::collect";
         let failing_items = self.facts.failing_item_receivers.contains_key(&on_node);
-        if name == "collect" && args.is_empty() && !own && !self.method_pauses(on_node) && failing_items { out.push(&if declared { format!("::<{}<_, _>>", self.rust_result()) } else { format!("::<{}<Vec<_>, _>>", self.rust_result()) }); } else if name == "collect" && args.is_empty() && !declared && !own && !self.method_pauses(on_node) { out.push("::<Vec<_>>"); }
+        if kept_collect { out.push("::<Vec<_>>"); } else if name == "collect" && args.is_empty() && !own && !self.method_pauses(on_node) && failing_items { out.push(&if declared { format!("::<{}<_, _>>", self.rust_result()) } else { format!("::<{}<Vec<_>, _>>", self.rust_result()) }); } else if name == "collect" && args.is_empty() && !declared && !own && !self.method_pauses(on_node) { out.push("::<Vec<_>>"); }
         if name == "sum" && args.is_empty() && receiver.is_some() {
             let summed = nikaia_std::index::or(*nikaia_std::index::get(&self.facts.summed, &on_node), || "");
             if summed != "" { out.push(&format!("::<{}>", summed)); }
@@ -1322,6 +1330,7 @@ impl EmitState {
             if flow.in_lambda { return Err(nikaia_std::error::throwing(EmitRefused { message: format!("This lambda calls `{}`, which can pause, but the compiler knows nothing about what the lambda is passed to, so it can't let it pause. Call `{}` outside the lambda and pass in the value.", name, name), at: Some(flow.statement) }, &"emit_core_method_call_body")); }
             out.push(&emit_async_pause(&walk));
         }
+        if kept_each { out.push(".collect::<Vec<_>>())"); } else if kept_collect { out.push(")"); }
         if arriving { out.push(&format!(", &{})", rust_string(&scope.origin))); }
         if timed {
             if length { out.push(" as i64"); }
@@ -1624,8 +1633,8 @@ pub(crate) fn emit_tuple_part_copy(i: i64, word: &str) -> String {
 }
 
 pub(crate) fn emit_tuple_part_copies(parts: &[String]) -> String {
-    let copies: Vec<String> = parts.iter().enumerate().map(|(at, item)| (at as i64, item)).map(|__nikaia_tuple123411| {
-        let (i, word) = __nikaia_tuple123411;
+    let copies: Vec<String> = parts.iter().enumerate().map(|(at, item)| (at as i64, item)).map(|__nikaia_tuple124660| {
+        let (i, word) = __nikaia_tuple124660;
         emit_tuple_part_copy(i, word)
     }).collect::<Vec<_>>();
     if copies.len() == 1 { return format!("({},)", *unsafe { nikaia_std::proven::read(&copies, (0) as usize) }); }
@@ -1633,9 +1642,14 @@ pub(crate) fn emit_tuple_part_copies(parts: &[String]) -> String {
 }
 
 pub(crate) fn emit_call_library_trait(world: &EmitWorld<'_, '_, '_, '_>, key: &str) -> String {
-    for (trait_name, _) in world.library.implementations.iter() {
-        let method = match key.strip_prefix(&*format!("{}::", trait_name)) { Some(__nikaia_value) => __nikaia_value, None => continue };
-        if trait_name.contains("::") && !method.contains("::") { return nikaia_std::block::Text::from(trait_name.to_string()); }
+    for (trait_name, types) in world.library.implementations.iter() {
+        if !trait_name.contains("::") { continue; }
+        let method = nikaia_std::index::or(key.strip_prefix(&*format!("{}::", trait_name)), || "");
+        if method != "" && !method.contains("::") { return nikaia_std::block::Text::from(trait_name.to_string()); }
+        for ty in types.iter() {
+            let own = match key.strip_prefix(&*format!("{}::", ty)) { Some(__nikaia_value) => __nikaia_value, None => continue };
+            if own != "" && !own.contains("::") && world.library.functions.contains_key(&format!("{}::{}", trait_name, own)) { return nikaia_std::block::Text::from(trait_name.to_string()); }
+        }
     }
     String::from("")
 }
