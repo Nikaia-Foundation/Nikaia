@@ -1,0 +1,3 @@
+bounds in tests/a_task_whose_index_a_private_summary_proves_needs_no_throws.nika: 1 indexes, 1 proved; 1 operations, 0 proved
+    21  t[0]   proved
+    27  a + b  checked: no fact bounds what it reads - a counter, a loop, a length, or one list as long as another (#432, #383, #388)
