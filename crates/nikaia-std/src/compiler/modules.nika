@@ -10,6 +10,7 @@
 use std::collections
 use std::fs
 use std::hash
+use std::text
 
 /// The names a file declares: what one package's namespace counts
 /// (ADR-286 D1). A method belongs to its type and a grammar's rule to its
@@ -218,7 +219,9 @@ pub fn lost_sync(contracts: ref Ledger, theirs: ref collections::BTreeMap[String
 
 /// **ADR-288 D32's warning for one function**, said whatever the committed
 /// ledger holds: `lost_sync_against` keeps it where that ledger says the
-/// function could not pause.
+/// function could not pause. **A `par_iter` call's** (ADR-async-5 D32,
+/// `NK2119`) is keyed `FUNCTION#par_iter N`, and kept where that ledger says
+/// the call ran in pieces: one list, so the build cache stores both alike.
 pub struct SyncLost {
     pub key: String,
     pub said: String,
@@ -262,12 +265,73 @@ pub fn lost_sync_all(contracts: ref Ledger, theirs: ref collections::BTreeMap[St
 pub fn lost_sync_against(all: ref Vec[SyncLost], committed: ref Ledger) -> String {
     let mut out: String = ""
     for lost in all {
-        let before = committed.functions[lost.key] ?? continue
-        if inferred_sync(before.sync_claim) {
-            out.push_str(lost.said)
+        match lost.key.find(par_site_mark()) {
+            null => {
+                let before = committed.functions[lost.key] ?? continue
+                if inferred_sync(before.sync_claim) {
+                    out.push_str(lost.said)
+                }
+            },
+            at => {
+                let found = at ?? continue
+                let function = lost.key.before(found.start)
+                let number = text::parse_i64(lost.key.after(found.end)) ?? continue
+                let before = committed.functions[function] ?? continue
+                if number >= 1 && number <= before.par_iter.len() as i64 && before.par_iter[number - 1] == "pieces" {
+                    out.push_str(lost.said)
+                }
+            },
         }
     }
     return out
+}
+
+/// What joins a function's key and a `par_iter` call's number in the key of
+/// its `SyncLost`.
+fn par_site_mark() -> String sync {
+    return "#par_iter "
+}
+
+/// **ADR-async-5 D32's warning** (`NK2119`) for every `par_iter` call of the
+/// program's own that runs one task per element, at the statement of the
+/// lambda that makes it pause, with the calls that lead there: said whatever
+/// the committed ledger holds, `lost_sync_against` keeps it where that ledger
+/// says the call ran in pieces. A lambda written to pause from the start is
+/// recorded so in the first ledger, and is never warned of.
+pub fn lost_pieces_all(sites: ref Vec[ParSite], pauses: ref collections::BTreeMap[String, ModulesPause], render: fn(ref CheckFinding) -> String sync) -> Vec[SyncLost] {
+    let mut out: Vec[SyncLost] = []
+    for site in sites {
+        let pause = site.pausing ?? continue
+        let message = f"`par_iter` {site.number} of `{site.function}` ran in pieces on the cores, and now runs one task per element: a lambda of it can pause."
+        let help = f"If the walk should use the cores, move the call of `{pause.callee}` out of the lambda; if it may pause, commit `nikaia.contracts`, and this is not said again."
+        let mut notes: Vec[String] = [f"Its call of `{pause.callee}` can pause, so the lambda does."]
+        match pauses.get(pause.callee) {
+            null => {},
+            why => {
+                let way = why ?? continue
+                if way.chain.len() > 1 {
+                    notes.push(f"{pause_path(way.chain)}, which pauses here.")
+                }
+                match way.site {
+                    null => {},
+                    at => notes.push(f"{(at ?? continue).what} can pause."),
+                }
+            },
+        }
+        let finding = CheckFinding { severity: CheckSeverity::Warning, span: Span { start: pause.span.start, end: pause.span.end }, code: "NK2119", message: message, notes: notes, help: help, labels: [], edit: null }
+        out.push(SyncLost { key: f"{site.function}{par_site_mark()}{site.number}", said: render(finding) })
+    }
+    return out
+}
+
+/// **The ledger's `par_iter` column** (ADR-async-5 D32): each function's
+/// calls, `"pieces"` or `"tasks"`, in their order.
+pub fn par_iter_column(mut ledger: Ledger, sites: ref Vec[ParSite]) {
+    for site in sites {
+        let mut contract = ledger.functions[site.function] ?? continue
+        let runs = if site.pausing == null { "pieces" } else { "tasks" }
+        contract.par_iter.push(runs.clone())
+    }
 }
 
 /// **The way from a function to the statement that makes it pause**

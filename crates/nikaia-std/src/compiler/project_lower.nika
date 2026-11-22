@@ -82,6 +82,13 @@ pub trait ProjectLowerHost {
     /// What each `pub` function would be warned of had the committed ledger
     /// said it could not pause (ADR-288 D5, `lost_sync_all`).
     fn sync_lost(ref self) -> Vec[SyncLost] sync
+    /// **Every `par_iter` call of the program's own files** and the execution
+    /// its check chose (ADR-async-5 D32, `par_sites_checked`), once every unit
+    /// is checked: the ledger's `par_iter` column.
+    fn par_sites(ref self) -> Vec[ParSite] sync
+    /// What each of those that runs one task per element would be warned of
+    /// had the committed ledger said it ran in pieces (`lost_pieces_all`).
+    fn pieces_lost(ref self) -> Vec[SyncLost] sync
     /// **The impls that keep each parameter of the program's own trait
     /// methods** (ADR-277 D17), each said with the statement that keeps it.
     fn keepers(ref self) -> collections::BTreeMap[String, collections::BTreeMap[String, Vec[String]]] sync
@@ -253,14 +260,21 @@ fn project_lower_made[H: ProjectLowerHost](host: ref H) -> ProjectLowerArtifacts
     // Read off the program before the lowering takes it, as it was read
     // before the cache was asked.
     let promise = host.could_promise()
-    let lost = host.sync_lost()
+    let mut lost = host.sync_lost()
     let keepers = host.keepers()
     let theirs = host.theirs()
     let mut warnings = project_lower_check(host)
+    // **How each `par_iter` call runs** (ADR-async-5 D32), as the check of
+    // each unit found it: into the ledger, and `NK2119` beside `NK2211`.
+    let sites = host.par_sites()
+    for each in host.pieces_lost() {
+        lost.push(each)
+    }
     let rust = host.emit()
     // **The contract the `assert`s make** (ADR-269 D18): the prover decided
     // it while the program was checked, and the ledger publishes it.
-    let ledger = project_lower_published(host.contracts(), host.published())
+    let mut ledger = project_lower_published(host.contracts(), host.published())
+    par_iter_column(ledger, sites)
     let (text, derived) = host.render(ledger)
 
     // **An entry nothing read** ([ADR-310](../../docs/specification/adr/adr-310.md)

@@ -1631,6 +1631,12 @@ pub struct FnContract {
     pub sync_claim: Sync,
     /// What it may fail with: the error types that can leave it (Kap 7.1).
     pub fails_with: Vec[String],
+    /// **The lambda parameters it fails through** (#2692): `throws =
+    /// "throws(f)"`, the twin of `sync = "sync(f)"`. A lambda handed there may
+    /// fail; a step that hands back a sequence then makes one whose step fails
+    /// (ADR-025 D1), and any other call fails where the lambda does. Empty
+    /// for every function that runs no lambda of the kind.
+    pub throws_from: Vec[String],
     pub touches: Vec[Touch],
     /// Whether `touches` is what somebody wrote rather than what was inferred.
     pub touches_known: bool,
@@ -1672,6 +1678,12 @@ pub struct FnContract {
     /// time, takes a lambda that changes what it captures; one of these
     /// refuses it (`NK2104`), whichever file or package calls.
     pub at_once: Vec[String],
+    /// **How each `par_iter` call of its body runs** (ADR-async-5 D25, D32;
+    /// Part III 13.5 `par_iter`): `"pieces"` on the cores, or `"tasks"`, one
+    /// task per element, in the order the calls stand. The build reads the
+    /// committed entry and warns (`NK2119`) where a call that ran in pieces
+    /// has a lambda that can now pause. Empty where the body makes none.
+    pub par_iter: Vec[String],
     /// **The parameters a Rust entry takes as `&OsStr`** (Part III 13.5
     /// `os_text`, 15.2): each `ref String` in the signature, handed over as
     /// `std::ffi::OsStr::new(arg)` (#2351). Empty where none is one.
@@ -1743,6 +1755,7 @@ impl FnContract {
             public: false,
             sync_claim: Sync::No,
             fails_with: [],
+            throws_from: [],
             touches: [],
             touches_known: false,
             provenance: null,
@@ -1755,6 +1768,7 @@ impl FnContract {
             by_value: [],
             keeps: [],
             at_once: [],
+            par_iter: [],
             os_text: [],
             mutates: false,
             touches_a_lock: Lock::No,

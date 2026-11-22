@@ -128,6 +128,16 @@ impl CheckState {
     /// rule and code as a `for` over the same sequence, a step that can fail
     /// fails the function around it.
     fn a_walk_of_a_failing_sequence(ref mut self, world: ref CheckWorld, method: winnow_grammar::Symbol, span: ref Span) sync {
+        // **A `catch` around it has something to handle** (#2692): it was
+        // `NK1134`, "Nothing here can fail". The sequence's type says that a
+        // step fails and not with what, so the set is unanswered.
+        if self.flow.guarded != null {
+            let held: CheckGuarded? = self.flow.guarded?.clone()
+            let mut guarded = held ?? CheckGuarded::nothing()
+            guarded.fallible = true
+            guarded.unanswered = true
+            self.flow.guarded = guarded
+        }
         if self.flow.throwing || self.flow.caught || self.inside_an_action != null {
             return
         }

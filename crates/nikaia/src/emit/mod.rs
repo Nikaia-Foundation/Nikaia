@@ -530,7 +530,7 @@ pub fn needs_of(parsed: &Parsed) -> Needs {
 /// program, and the tests read the same file - so failing to parse it here
 /// means treating the input as untrusted, which is the safe direction
 /// (ADR-010 D1) and never a silent upgrade.
-fn std_ledger() -> &'static crate::contracts::Ledger {
+pub(crate) fn std_ledger() -> &'static crate::contracts::Ledger {
     crate::contracts::std_ledger()
 }
 

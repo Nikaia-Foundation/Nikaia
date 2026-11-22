@@ -1,0 +1,7 @@
+fn one() -> i64 { return 1 }
+fn two() -> i64 sync {
+    let a = async one()
+    let b = one()
+    return a + b
+}
+fn main() throws { println(f"{two()}") }
