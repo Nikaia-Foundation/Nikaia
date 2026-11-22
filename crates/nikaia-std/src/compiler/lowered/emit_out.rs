@@ -101,6 +101,21 @@ impl EmitOut {
         self.buf.insert_str(nikaia_std::count::of(at), text);
         self.shift_entries(at, text.len() as i64);
     }
+    pub fn push_around(&mut self, text: &str, marker: &str, inner: &EmitOut) {
+        if !text.contains(AsRef::<str>::as_ref(marker)) {
+            self.buf.push_str(text);
+            return;
+        }
+        let at = match nikaia_std::text::find_first(&text, &marker) { Some(__nikaia_value) => __nikaia_value, None => return };
+        self.buf.push_str(text.before(at.start));
+        let offset = self.buf.len() as i64;
+        self.buf.push_str(&inner.buf);
+        for entry in inner.entries.iter() {
+            let entry = *entry;
+            self.entries.push(EmitMapEntry { start: entry.start + offset, end: entry.end + offset, source: Span { start: entry.source.start, end: entry.source.end }, unit: entry.unit });
+        }
+        self.buf.push_str(text.after(at.end));
+    }
     pub fn append(&mut self, other: &EmitOut) {
         let offset = self.buf.len() as i64;
         self.buf.push_str(&other.buf);

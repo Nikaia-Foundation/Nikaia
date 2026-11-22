@@ -1,0 +1,13 @@
+// A list of lists of text literals kept as a `Vec[Vec[String]]` of its own
+// builds each `String` where it is kept, as a flat list of them does
+// (ADR-282 D4, #2184).
+pub fn runs() -> Vec[Vec[String]] sync {
+    let r: Vec[Vec[String]] = [["b"], ["c", "d"]]
+    return r
+}
+
+fn main() throws {
+    for words in runs() {
+        print(words.len())
+    }
+}

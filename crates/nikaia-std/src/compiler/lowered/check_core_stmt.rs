@@ -27,6 +27,59 @@ pub(crate) fn check_core_stmt_a_map_read(value: &Expr) -> bool { matches!(value,
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
+pub(crate) fn check_core_stmt_reads_in_arms(state: &CheckState, value: &Expr) -> i64 {
+    let mut reads: i64 = 0;
+    match value {
+        Expr::Match { arms, .. } => {
+            for arm in arms.iter() {
+                let found = check_core_stmt_reads_in_arms(state, &arm.body);
+                if found < 0 { return -1; }
+                reads += found;
+            }
+            return reads;
+        },
+        Expr::If { then_branch, else_branch, .. } => {
+            for tail in block_tail(then_branch) {
+                let found = check_core_stmt_reads_in_arms(state, tail);
+                if found < 0 { return -1; }
+                reads += found;
+            }
+            let other = match else_branch { Some(__nikaia_value) => __nikaia_value, None => return -1 };
+            for tail in block_tail(other) {
+                let found = check_core_stmt_reads_in_arms(state, tail);
+                if found < 0 { return -1; }
+                reads += found;
+            }
+            return reads;
+        },
+        Expr::Block(block, _) => {
+            for tail in block_tail(block) {
+                let found = check_core_stmt_reads_in_arms(state, tail);
+                if found < 0 { return -1; }
+                reads += found;
+            }
+            return reads;
+        },
+        _ => { },
+    }
+    if ends_in_null(value) { return 0; }
+    let node = id_of(value) as i64;
+    if state.flow.map_read_sites.contains(&node) && !state.facts.copied_reads.contains(&node) && !state.facts.copied_walks.contains(&node) { return 1; }
+    -1
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn check_core_stmt_arms_all_reads(state: &CheckState, value: &Expr) -> bool {
+    match value {
+        Expr::Match { .. } => check_core_stmt_reads_in_arms(state, value) > 0,
+        Expr::If { .. } => check_core_stmt_reads_in_arms(state, value) > 0,
+        _ => false,
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
 pub(crate) fn check_core_stmt_a_get(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, read: &Expr) -> bool {
     match read {
         Expr::MethodCall { method, .. } => { let method = *method; world.words.resolve(method) == "get" },
@@ -848,7 +901,7 @@ pub(crate) fn check_core_stmt_let<H: CheckHost>(state: &mut CheckState, world: &
     state.a_narrowed_read_given_up(value);
     let was_read = state.flow.read_a_map;
     state.flow.read_a_map = outer_read;
-    let of_a_map = was_read && check_core_stmt_a_map_read(value);
+    let of_a_map = was_read && (check_core_stmt_a_map_read(value) || check_core_stmt_arms_all_reads(&state, value));
     let element_read = check_core_stmt_element_read(&state, world, value);
     let got = check_core_stmt_got(&state, world, value);
     let got_by_a_match = !got && check_core_stmt_got_by_a_match(&state, world, value);

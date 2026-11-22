@@ -1601,9 +1601,22 @@ nothing else.
 | 2026-11-21 | 248cd4 | check | 6 | 0.2 | 0 | - | |
 | 2026-11-22 | e76866 | check | 127 | 15.6 | 0 | - | |
 | 2026-11-22 | 1dd910 | check | 96 | 9.9 | 0 | - | |
+| 2026-11-21 | da80a6 | check | 25 | 1.2 | 0 | - | |
+| 2026-11-21 | 328ae4 | check | 80 | 4.5 | 0 | - | |
+| 2026-11-22 | 9d803a | check | 84 | 5.1 | 0 | - | |
+| 2026-11-22 | 684fda | check | 62 | 4.2 | 0 | - | |
+| 2026-11-22 | 2df7dd | check | 53 | 3.6 | 0 | - | |
+| 2026-11-22 | 180aab | check | 53 | 3.6 | 0 | - | |
+| 2026-11-22 | 6e31a5 | check | 19 | 0.8 | 0 | - | |
+| 2026-11-22 | 79c6fd | check | 40 | 2.3 | 0 | - | |
+| 2026-11-22 | 45e3ad | check | 58 | 3.6 | 0 | - | |
 | 2026-11-22 | 4e87a2 | check | 58 | 4.5 | 0 | - | |
 | 2026-11-22 | f26293 | check | 49 | 3.3 | 0 | - | |
 | 2026-11-22 | a0a1af | check | 19 | 0.8 | 0 | - | |
+| 2026-11-22 | aa5edc | check | 92 | 6.2 | 0 | - | |
+| 2026-11-22 | 47812d | check | 117 | 9.1 | 0 | - | |
+| 2026-11-22 | 4c8fd2 | check | 66 | 5.2 | 0 | - | |
+| 2026-11-22 | 6a3d11 | check | 26 | 1.2 | 0 | - | |
 
 Moved lines are attributed by `scripts/tokenspeed.nika`: commits in the agent's
 window that changed a file it edited (Edit/Write/`git add` in its transcript)

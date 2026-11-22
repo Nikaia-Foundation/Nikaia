@@ -598,6 +598,18 @@ pub(crate) fn check_texts_text_for(element: &Ty, item: &Expr) -> bool {
         _ => { },
     }
     if a_plain_string(element) { return a_text_literal_expr(item); }
+    match element {
+        Ty::Named { name, args, view } => {
+            let view = *view;
+            if !view && name == "Vec" && args.len() == 1 {
+                return match item {
+                    Expr::ListLit { items: nested, .. } => !nested.is_empty() && check_texts_all_text(unsafe { nikaia_std::proven::read(&args, (0) as usize) }, nested),
+                    _ => false,
+                };
+            }
+        },
+        _ => { },
+    }
     let each: Vec<Ty> = match element {
         Ty::Tuple(each) => each.copy_owned(),
         _ => vec![],

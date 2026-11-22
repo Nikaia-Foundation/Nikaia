@@ -774,6 +774,20 @@ fn check_texts_text_for(element: ref Ty, item: ref Expr) -> bool sync {
     if a_plain_string(element) {
         return a_text_literal_expr(item)
     }
+    // **A list of lists of text written out is too** (#2184): `[["b"],
+    // ["c"]]` kept as a `Vec[Vec[String]]` of its own builds each `String`,
+    // as `[[';'], ['\n']]` is a list of lists of bytes.
+    match element {
+        Ty::Named { name, args, view } => {
+            if !view && name == "Vec" && args.len() == 1 {
+                return match item {
+                    Expr::ListLit { items: nested, .. } => nested.len() > 0 && check_texts_all_text(args[0], nested),
+                    else => false,
+                }
+            }
+        },
+        else => {},
+    }
     let each: Vec[Ty] = match element {
         Ty::Tuple(each) => each.clone(),
         else => [],

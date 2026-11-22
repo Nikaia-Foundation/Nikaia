@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1531] — 2026-11-22
+
+**ledger: prove a unit's bounds with the result summaries its check proves (#2684)**
+- Bounds: the ledger's proof of a unit reads the private functions' result summaries the emitter's does, so a cold build takes the ledger's proof instead of proving again, and a task whose index a summary proves is no longer said to panic.
+
 ## [0.0.1530] — 2026-11-22
 
 **Builders' changes (#2514, #2649)**
