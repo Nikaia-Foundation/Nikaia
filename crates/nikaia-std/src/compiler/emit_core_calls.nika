@@ -1130,7 +1130,7 @@ impl EmitState {
     /// parameter or a `ref mut self` receiver anywhere in it.
     fn emit_lends_mut(ref self, world: ref EmitWorld, expr: ref Expr, name: ref String) -> bool {
         for each in visited_in_expr(expr) {
-            let lent = self.facts.mut_args.contains(node_key(each)) || self.facts.mut_receivers.contains(node_key(each))
+            let lent = self.facts.mut_args.contains(node_key(each)) || self.facts.relent_args.contains(node_key(each)) || self.facts.mut_receivers.contains(node_key(each))
             if lent && (root_of(world.words, each) ?? "") == name {
                 return true
             }

@@ -213,6 +213,7 @@ impl CheckState {
         // (ADR-382 D5, bit 16).
         if !viewed && self.a_name_that_changes(world, given_expr) {
             check_narrow_written_through(self, given_expr)
+            self.facts.relent_args.insert(id_of(given_expr) as i64)
             return true
         }
         // **The caller's name is changed there** (Part I 6.5, #734): a

@@ -776,7 +776,7 @@ impl EmitState {
     }
     pub(crate) fn emit_lends_mut(&self, world: &EmitWorld<'_, '_, '_, '_>, expr: &Expr, name: &str) -> bool {
         for each in visited_in_expr(expr) {
-            let lent = self.facts.mut_args.contains(&node_key(each)) || self.facts.mut_receivers.contains(&node_key(each));
+            let lent = self.facts.mut_args.contains(&node_key(each)) || self.facts.relent_args.contains(&node_key(each)) || self.facts.mut_receivers.contains(&node_key(each));
             if lent && nikaia_std::index::or(root_of(world.words, each), || "".into()) == name { return true; }
         }
         false
@@ -1588,8 +1588,8 @@ pub(crate) fn emit_tuple_part_copy(i: i64, word: &str) -> String {
 }
 
 pub(crate) fn emit_tuple_part_copies(parts: &[String]) -> String {
-    let copies: Vec<String> = parts.iter().enumerate().map(|(at, item)| (at as i64, item)).map(|__nikaia_tuple118691| {
-        let (i, word) = __nikaia_tuple118691;
+    let copies: Vec<String> = parts.iter().enumerate().map(|(at, item)| (at as i64, item)).map(|__nikaia_tuple118742| {
+        let (i, word) = __nikaia_tuple118742;
         emit_tuple_part_copy(i, word)
     }).collect::<Vec<_>>();
     if copies.len() == 1 { return format!("({},)", *unsafe { nikaia_std::proven::read(&copies, (0) as usize) }); }

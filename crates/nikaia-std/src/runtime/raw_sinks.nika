@@ -8,7 +8,8 @@
 // sink's precondition is proved from it. `std` runs no shell, so it has no
 // shell precondition (ADR-raw-sinks-1 D9).
 //
-// `src/html.rs` re-exports `is_plain` as `nikaia_std::html::is_plain`;
+// `src/html.rs` re-exports `is_plain` as `nikaia_std::html::is_plain`, and
+// `src/process.rs` `is_operand` as `nikaia_std::process::is_operand`;
 // `std.contracts` writes its entry by hand, as for `env::vars`.
 // `db::is_identifier` is the `db` package's (`packages/db/src/main.nika`).
 
@@ -34,10 +35,28 @@ pub fn is_plain(part: ref String) -> bool sync {
     return true
 }
 
+/// Whether `text` is read as an operand, not as an option: it does not start
+/// with `-` (ADR-raw-sinks-1 D18, the precondition of the start of each
+/// argument of `process::run`). The empty text is one. A guard
+/// `if !process::is_operand(name) { process::exit(2) }` makes it a fact.
+pub fn is_operand(text: ref String) -> bool sync {
+    return !text.starts_with("-")
+}
+
 /// The safe way in: escape first, and the result is markup by construction,
 /// not escaped twice when it is written out again (`src/html.rs`, #2304).
 test "escaped text becomes markup" {
     let markup = html::Raw::escaped("a < b & c")
     assert(markup.as_str() == "a &lt; b &amp; c")
     assert(html::Raw(markup.as_str()).as_str() == "a &lt; b &amp; c")
+}
+
+/// A word that starts with `-` is an option, anything else an operand
+/// (ADR-raw-sinks-1 D18).
+test "an operand does not start with a dash" {
+    assert(is_operand("file.txt"))
+    assert(is_operand(""))
+    assert(is_operand("a-b"))
+    assert(!is_operand("-rf"))
+    assert(!is_operand("--checkpoint-action=exec=sh"))
 }
