@@ -1,9 +1,0 @@
-error[NK2606]: This lambda can fail, but the parameter it's passed to doesn't say `throws`.
-   --> tests/a_collect_over_a_throwing_lambda_is_not_warned.nika:21:5
-    |
- 21 |     for d in xs.iter().map(fn(x) { twice(x) }).collect() {
-    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-    |
-    = note: A failure passes straight through a call, and here it has nowhere to go: the parameter's type says the lambda never fails.
-    = help: Handle it inside the lambda with `… catch { … }`, or add `throws` to the parameter's type.
-1 other error

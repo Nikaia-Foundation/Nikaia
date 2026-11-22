@@ -3,10 +3,10 @@
 // caller the failure reaches (one calling `generic[T]()` too), a caller of a
 // function that already said `throws` too; a function that only computes, a
 // comment and a Markdown block of another language stay as written. The
-// migrated file checks but for one place the tool does not move: a lambda
-// that prints, handed to a parameter that does not say `throws` (`for_each`),
-// is NK2606. The tool names each such lambda, in a `.nika` file and in a
-// Markdown block, and writes nothing into it (supervisor, 2026-11-07).
+// tool names each lambda that prints, in a `.nika` file and in a Markdown
+// block, and writes nothing into it (supervisor, 2026-11-07); the migrated
+// file checks, since `for_each` fails where its lambda does (#2736: it was
+// NK2606).
 use std::env
 use std::fs
 use std::process

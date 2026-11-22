@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1540] — 2026-11-22
+
+**check, emit: a lambda that can fail, handed to map, filter or for_each where the contract says throws(f), fails the call or the walk where it fails (#2736)**
+- Lambdas that can fail work in `map`, `filter` and `for_each`: a list's `map` and a sequence's `for_each` fail where the lambda fails, a sequence's `map` and `filter` make a sequence that fails at that element when it is walked (`collect`, `for`); the walk stops at the first failure. Was NK2606.
+
 ## [0.0.1539] — 2026-11-22
 
 **Builders' changes (#2511, #2513)**

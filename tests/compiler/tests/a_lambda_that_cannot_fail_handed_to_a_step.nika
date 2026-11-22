@@ -1,0 +1,16 @@
+// A lambda that cannot fail, handed where the callee says `throws(f)`,
+// costs nothing: the call cannot fail, and needs no `catch` (#2736).
+fn twice(x: i64) -> i64 {
+    return x * 2
+}
+
+fn main() throws {
+    let xs = [1, 2, 3]
+    let ys: Vec[i64] = xs.clone().map(fn(x) { twice(x) })
+    println(ys.len())
+    let zs: Vec[i64] = xs.iter().map(fn(x) { twice(x) }).filter(fn(x) { x > 2 }).collect()
+    println(zs.len())
+    let mut total = 0
+    xs.iter().for_each(fn(x) { total += x })
+    println(total)
+}

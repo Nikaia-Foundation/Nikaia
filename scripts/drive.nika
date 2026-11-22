@@ -383,7 +383,7 @@ fn drive_wake_line(dir: String, said: String) -> String throws {
 	} else if body.starts_with("PROVED FELL ") {
 		kind = "PROVED"
 		read = drive_wake_in(dir, "proved.log")
-		act = "find the commit of the range that lowered the proof figure and file it for the prover lane"
+		act = "find the commit of the range that lowered the proof figure and file it for the solver lane"
 	} else if body.starts_with("BATCH DONE") || body.starts_with("focus: every area empty") {
 		kind = "BATCH"
 		act = "no ready issue left in the lane, decide or file the waiting ones (`ready`), then restart the driver"

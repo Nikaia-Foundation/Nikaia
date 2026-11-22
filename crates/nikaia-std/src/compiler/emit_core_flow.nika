@@ -370,6 +370,13 @@ impl EmitState {
         // **A body that leaves at its end has no `Ok` after it** (#1369).
         let leaves = emit_a_body_that_leaves(world, body)
         if !copied && self.facts.failing_lambdas.contains(node_key(node)) {
+            // **A lambda a `std` step fails through names its `Result`**
+            // (#2736): the walk below takes any, so nothing else says which.
+            let through: Vec[String]? = self.facts.failing_through_lambdas.get(node_key(node))?.clone()
+            if through != null {
+                let thrown: Vec[String] = through ?? []
+                out.push(f"-> {self.rust_result()}<_, {self.channel_of(world, thrown, true, "'_", "'static", false)}> ")
+            }
             out.push(if leaves { "{ " } else { "{ let __nikaia_done = " })
             self.emit_core_block(world, walk, out, host, body, depth, inside with { can_throw: true }, inside_scope, value_tail)
             out.push(if leaves { " }" } else { "; Ok(__nikaia_done) }" })
