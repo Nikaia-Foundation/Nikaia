@@ -477,10 +477,12 @@ pub(crate) fn check_core_lambda<H: CheckHost>(state: &mut CheckState, world: &Ch
     state.scope.pop();
     state.repeats.pop();
     state.flow.last_lambda_first = first;
+    state.flow.last_lambda_fails = false;
     let mut paused = false;
     if seen.is_some() {
         let handed = match seen { Some(__nikaia_value) => __nikaia_value, None => return (tail, false) };
         paused = handed.pauses;
+        state.flow.last_lambda_fails = handed.fails;
         state.a_handler_that_does_more_than_the_type_allows(promised, &handed, span);
     }
     (tail, paused)

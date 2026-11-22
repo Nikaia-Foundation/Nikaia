@@ -237,6 +237,14 @@ impl EmitState {
         let return_tail = if valueless { EmitTail::Statement } else { EmitTail::Return };
         let leaves = emit_a_body_that_leaves(world, body);
         if !copied && self.facts.failing_lambdas.contains(&node_key(node)) {
+            let through: Option<Vec<String>> = match self.facts.failing_through_lambdas.get(&node_key(node)) {
+                Some(__nikaia_it) => Some(__nikaia_it.clone()),
+                None => None,
+            };
+            if through.is_some() {
+                let thrown: Vec<String> = nikaia_std::index::or(through, || vec![].into());
+                out.push(&format!("-> {}<_, {}> ", self.rust_result(), self.channel_of(world, &thrown, true, "'_", "'static", false)));
+            }
             out.push(if leaves { "{ " } else { "{ let __nikaia_done = " });
             self.emit_core_block(world, walk, out, host, body, depth, EmitFlow { can_throw: true, ..inside }, &inside_scope, &value_tail)?;
             out.push(if leaves { " }" } else { "; Ok(__nikaia_done) }" });

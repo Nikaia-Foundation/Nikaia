@@ -361,6 +361,32 @@ impl EmitState {
         return match expr {
             Expr::Overlap(block, _) => call_joined_throws(world.words, world.aliases, self.own_contracts, world.library, emit_branch_values(block)),
             Expr::Select(arms, _) => call_joined_throws(world.words, world.aliases, self.own_contracts, world.library, emit_arm_values(arms)),
+            Expr::MethodCall { .. } => self.emit_failing_through_set(expr),
+            else => null,
+        }
+    }
+
+    /// **What a call a failing lambda passes through fails with** (#2736):
+    /// the lambda's set, at the call that runs it or at a walk of the
+    /// failing elements its step made, a step back along the chain.
+    fn emit_failing_through_set(ref self, expr: ref Expr) -> Vec[String]? {
+        return match expr {
+            Expr::MethodCall { receiver, args, .. } => {
+                let on = node_key(receiver)
+                if self.facts.failing_through_calls.contains_key(on) {
+                    for arg in args {
+                        let set: Vec[String]? = self.facts.failing_through_lambdas.get(node_key(arg))?.clone()
+                        if set != null {
+                            return set
+                        }
+                    }
+                    return null
+                }
+                if self.facts.failing_item_receivers.contains(on) {
+                    return self.emit_failing_through_set(receiver)
+                }
+                return null
+            },
             else => null,
         }
     }

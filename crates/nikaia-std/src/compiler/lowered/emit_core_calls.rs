@@ -1181,6 +1181,8 @@ impl EmitState {
         let arriving = (joined_key.starts_with("TaskHandle::join") || joined_key.starts_with("task::ChildHandle::join")) && self.method_can_fail(on_node);
         if arriving { out.push("nikaia_std::error::arrived("); }
         let (kind, entry) = emit_call_pausing_entry(&self.facts, args);
+        let mut through_prefix: &'static str = "";
+        let mut through_suffix: &'static str = "";
         let rust_text = kind == 0 && !timed && !boxed && answers_rust_text(&written, args.len() as i64) && emit_callee_is_std_text((*nikaia_std::index::get(&self.facts.method_callees, &on_node)).map(std::ops::Deref::deref)) && self.on_block_types() && !self.method_pauses(on_node) && !self.method_can_fail(on_node) && walk.compared_receiver != on_node;
         if rust_text { out.push(&block_text_open(self.on_block_types())); }
         if kind == 1 {
@@ -1195,6 +1197,10 @@ impl EmitState {
             self.emit_core_receiver(world, walk, out, host, receiver, depth, flow, scope, false)?;
             out.push(&format!(".{}(", entry));
         } else {
+            let (through_written, through_open, through_close) = self.emit_call_failing_through(on_node, &name, &flow)?;
+            if AsRef::<str>::as_ref(&(through_written)) != AsRef::<str>::as_ref(&("")) { written = nikaia_std::block::Text::from(through_written.to_string()); }
+            through_prefix = through_open;
+            through_suffix = through_close;
             let stepping = name == "map" && walk.stepping_receiver == on_node;
             if stepping { walk.stepping_receiver = -1; }
             let mut on_fused = false;
@@ -1204,7 +1210,7 @@ impl EmitState {
                 if on_fused { walk.fused.insert(node_key(on)); }
             }
             self.emit_core_receiver(world, walk, out, host, receiver, depth, flow, scope, false)?;
-            if stepping && !on_fused { out.push(".into_iter()"); }
+            if stepping && !on_fused || nikaia_std::index::or(self.facts.failing_through_calls.get(&on_node), || 0) == 4 { out.push(".into_iter()"); }
             if name == "len" && on_fused { written = String::from("count"); }
             if name == "collect" && args.is_empty() && self.facts.text_slot_collects.contains(&on_node) { out.push(".map(|s| ::core::convert::AsRef::<str>::as_ref(s))"); }
             out.push(&format!(".{}", written));
@@ -1226,7 +1232,8 @@ impl EmitState {
             Some(__nikaia_it) => Some(__nikaia_it.clone()),
             None => None,
         }, || "Seq::collect".into()) != "Seq::collect";
-        if name == "collect" && args.is_empty() && !declared && !own && !self.method_pauses(on_node) { out.push("::<Vec<_>>"); }
+        let failing_items = self.facts.failing_item_receivers.contains(&on_node);
+        if name == "collect" && args.is_empty() && !own && !self.method_pauses(on_node) && failing_items { out.push(&if declared { format!("::<{}<_, _>>", self.rust_result()) } else { format!("::<{}<Vec<_>, _>>", self.rust_result()) }); } else if name == "collect" && args.is_empty() && !declared && !own && !self.method_pauses(on_node) { out.push("::<Vec<_>>"); }
         if name == "sum" && args.is_empty() && receiver.is_some() {
             let summed = nikaia_std::index::or(*nikaia_std::index::get(&self.facts.summed, &on_node), || "");
             if summed != "" { out.push(&format!("::<{}>", summed)); }
@@ -1241,7 +1248,9 @@ impl EmitState {
             Some(__nikaia_it) => Some(__nikaia_it.clone()),
             None => None,
         };
+        out.push(through_prefix);
         self.emit_core_args(world, walk, out, host, &name, args, &takes, depth, flow, scope)?;
+        out.push(through_suffix);
         walk.hold_args = None;
         let keeping = keeping_method_key(&self.own_contracts, &self.own_methods, (emit_call_owner(&scope.function)).as_deref(), emit_call_on_self(world, receiver), &name);
         if keeping.is_some() {
@@ -1266,6 +1275,7 @@ impl EmitState {
         }
         out.push(")");
         if rust_text { out.push(&block_text_close(self.on_block_types())); }
+        if kind == 0 && nikaia_std::index::or(self.facts.failing_through_calls.get(&on_node), || 0) == 4 { out.push(&format!(".collect::<{}<Vec<_>, _>>()", self.rust_result())); }
         if (name == "iter" || name == "first" || name == "last" || name == "get") && receiver.is_some() {
             let on = match receiver { Some(__nikaia_value) => __nikaia_value, None => return Ok(()) };
             if self.reads_through_handle(world, &walk, &scope.function, on) { out.push(".map(|held| held.get())"); }
@@ -1296,6 +1306,21 @@ impl EmitState {
         if flow.can_throw && !flow.caught && fails { out.push("?"); }
         if length && !fails { out.push(" as i64"); }
         Ok(())
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub(crate) fn emit_call_failing_through(&self, on_node: i64, name: &str, flow: &EmitFlow) -> Result<(&'static str, &'static str, &'static str), nikaia_std::error::Thrown<EmitRefused>> {
+        let through = nikaia_std::index::or(self.facts.failing_through_calls.get(&on_node), || 0);
+        if self.facts.failing_item_receivers.contains(&on_node) {
+            if through != 0 { return Err(nikaia_std::error::throwing(EmitRefused { message: format!("`{}` is given a lambda that can fail, over a sequence whose elements can already fail; only one step of a chain can fail so far. Collect the sequence first, with `… .collect() catch {{ … }}`, and walk the list.", name), at: Some(flow.statement) }, &"emit_call_failing_through")); }
+            if name == "map" { return Ok(("", "|__nikaia_item| __nikaia_item.map(", ")")); }
+            if name == "filter" { return Ok(("", "|__nikaia_item| match __nikaia_item { Ok(__nikaia_kept) => (", ")(__nikaia_kept), Err(_) => true }")); }
+            if name == "take" || name == "skip" || name == "step_by" || name == "collect" { return Ok(("", "", "")); }
+            return Err(nikaia_std::error::throwing(EmitRefused { message: format!("`{}` can't be used yet on a sequence whose elements can fail. Walk it with `for x in … {{ … }}`, or collect it first with `… .collect() catch {{ … }}`.", name), at: Some(flow.statement) }, &"emit_call_failing_through"));
+        }
+        if through == 2 { return Ok(("filter_map", "|__nikaia_item| match (", ")(&__nikaia_item) { Ok(true) => Some(Ok(__nikaia_item)), Ok(false) => None, Err(__nikaia_error) => Some(Err(__nikaia_error)) }")); }
+        if through == 3 { return Ok(("try_for_each", "", "")); }
+        Ok(("", "", ""))
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
@@ -1574,8 +1599,8 @@ pub(crate) fn emit_tuple_part_copy(i: i64, word: &str) -> String {
 }
 
 pub(crate) fn emit_tuple_part_copies(parts: &[String]) -> String {
-    let copies: Vec<String> = parts.iter().enumerate().map(|(at, item)| (at as i64, item)).map(|__nikaia_tuple117783| {
-        let (i, word) = __nikaia_tuple117783;
+    let copies: Vec<String> = parts.iter().enumerate().map(|(at, item)| (at as i64, item)).map(|__nikaia_tuple121693| {
+        let (i, word) = __nikaia_tuple121693;
         emit_tuple_part_copy(i, word)
     }).collect::<Vec<_>>();
     if copies.len() == 1 { return format!("({},)", *unsafe { nikaia_std::proven::read(&copies, (0) as usize) }); }

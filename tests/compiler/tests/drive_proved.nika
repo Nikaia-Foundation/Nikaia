@@ -59,7 +59,7 @@ fn main() throws {
     println(fs::read_to_string("proved.log", tmp).trim())
     // The driver prints what a measurement left, a fall as a WAKE line.
     fs::write("proved.out", tmp, "PROVED 0.0.13 dddddddd: indexes 1490/2000 74.50 % (-0.80), left 605; since 0.0.12 cccccccc\nPROVED FELL dddddddd: indexes -0.80 points since 0.0.12 cccccccc, in cccccccc..dddddddd\n")
-    let shown = process::run(nikaia.clone(), ["run", "scripts/drive.nika", "--", "--proved-report", lane.clone()]; dir: repo)
+    let shown = process::run(nikaia, ["run", "scripts/drive.nika", "--", "--proved-report", lane.clone()]; dir: repo)
     println(shown.stdout.trim().replace(f"{repo}/{lane}", "T").replace(lane.clone(), "T"))
     println(f"proved.out left: {fs::exists("proved.out", tmp)}")
     fs::remove(lane, fs::Root::Dir(repo); recursive: true)
