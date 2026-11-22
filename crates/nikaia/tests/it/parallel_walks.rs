@@ -71,8 +71,9 @@ fn a_parallel_walk_means_the_same_at_both_settings() {
     assert!(at_yes.contains("nikaia_std::par::iter(&xs)"), "{at_yes}");
 }
 
-/// **D2: a parallel lambda may not pause** - `NK2209`, Part II 12.6's demand
-/// in the code Part III gives it.
+/// **D2: a fold's lambda may not pause** - `NK2209`, Part II 12.6's demand
+/// in the code Part III gives it, kept for `fold` by ADR-async-5 D29 (a
+/// `map`'s lambda may pause since D24, and runs one task per element).
 #[test]
 fn a_pause_in_a_parallel_lambda_is_refused() {
     let finding = refused(
@@ -85,8 +86,8 @@ fn a_pause_in_a_parallel_lambda_is_refused() {
          \n\
          fn main() {\n\
          \x20   let xs: Vec[i64] = [1, 2]\n\
-         \x20   let ys = xs.par_iter().map(fn(x) { slow(x) }).collect()\n\
-         \x20   println(f\"{ys.len()}\")\n\
+         \x20   let ys = xs.par_iter().fold(fn { 0 }, fn(acc, x) { acc + slow(x) }, fn(a, b) { a + b })\n\
+         \x20   println(f\"{ys}\")\n\
          }\n",
         "NK2209",
     );

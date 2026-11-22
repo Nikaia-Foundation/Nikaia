@@ -363,7 +363,7 @@ fn check_core_value_of[H: CheckHost](mut state: CheckState, world: ref CheckWorl
             // **A name of a block that ends before the group does** (async-3
             // D2, #986): the task runs on past that block, so it takes it.
             if state.flow.async_group != null {
-                state.a_task_takes_inner_names(world, inner, span)
+                state.a_task_takes_inner_names(world, inner, id_of(expr) as i64, span)
             }
             // **A task changes no name bound outside it** (D7, #1229): it
             // runs beside everything after its start, whatever else does.

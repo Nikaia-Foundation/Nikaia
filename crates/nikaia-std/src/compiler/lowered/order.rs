@@ -704,3 +704,145 @@ pub(crate) fn tasks_in_block(block: &Block, walk: &mut TaskWalk, pauses: &mut dy
     }
 }
 
+pub fn par_report(items: &[Spanned<Item>], names: &winnow_grammar::InternerContext, source: &str, fanned: &mut impl FnMut(i64) -> bool, pauses: &mut impl FnMut(&Expr) -> bool) -> String {
+    let lines: Vec<&str> = source.split("\n").collect::<Vec<_>>();
+    let mut out: String = String::from(""); #[allow(clippy::redundant_locals)] let lines = lines;
+    for item in items.iter() {
+        match &item.node {
+            Item::Fn { name, body, .. } => { let name = *name; par_walks_of_function(&function_name(names, name), body, &lines, names, &mut *fanned, &mut *pauses, &mut out); },
+            Item::Impl { target, methods, .. } => {
+                let owner: Option<String> = Some(nikaia_std::block::Text::from(names.resolve(target.name).to_string()));
+                for method in methods.iter() {
+                    match &method.node {
+                        Item::Fn { name, body, .. } => { let name = *name; par_walks_of_function(&keyed((owner).as_deref(), &function_name(names, name)), body, &lines, names, &mut *fanned, &mut *pauses, &mut out); },
+                        _ => { },
+                    }
+                }
+            },
+            _ => { },
+        }
+    }
+    out
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub(crate) struct ParWalkSite {
+    pub(crate) start: i64,
+    pub(crate) cause: Option<String>,
+}
+
+pub(crate) fn par_walks_of_function(key: &str, body: &Block, lines: &[&str], names: &winnow_grammar::InternerContext, fanned: &mut impl FnMut(i64) -> bool, pauses: &mut impl FnMut(&Expr) -> bool, out: &mut String) {
+    let mut sites: collections::BTreeMap<i64, ParWalkSite> = collections::BTreeMap::new();
+    par_walks_in_block(body, &mut sites, names, &mut *fanned, &mut *pauses);
+    if sites.is_empty() { return; }
+    let count = sites.len() as i64;
+    let noun = if count == 1 { "call" } else { "calls" };
+    out.push_str(&format!("{}: {} `par_iter` {}\n", key, count, noun));
+    let mut number = 0;
+    for (_, site) in sites.iter() {
+        number += 1;
+        let line = line_at(lines, site.start).0 + 1;
+        let written = (*nikaia_std::index::get(&lines, nikaia_std::index::at(line - 1))).trim();
+        out.push_str(&format!("    par_iter {}, line {}: `{}`\n", number, line, written));
+        let runs = match &site.cause {
+            None => String::from("in pieces on the cores: no lambda of it pauses (ADR-async-5 D25)"),
+            Some(cause) => format!("one task per element: a lambda of it pauses at {} (ADR-async-5 D25)", cause),
+        };
+        out.push_str(&format!("        runs        {}\n", runs));
+    }
+}
+
+pub(crate) fn par_walks_in_block(block: &Block, sites: &mut collections::BTreeMap<i64, ParWalkSite>, names: &winnow_grammar::InternerContext, fanned: &mut dyn FnMut(i64) -> bool, pauses: &mut dyn FnMut(&Expr) -> bool) {
+    for stmt in block.stmts.iter() {
+        let start = stmt.span.start as i64;
+        let exprs = visited_in_stmt(&stmt.node);
+        for each in exprs.iter() {
+            let each = *each;
+            match each {
+                Expr::MethodCall { method, .. } if { let method = *method; names.resolve(method) == "par_iter" } => {
+                    let id = id_of(each) as i64;
+                    let mut site = nikaia_std::index::or(match sites.get(&id) {
+                        Some(__nikaia_it) => Some(__nikaia_it.clone()),
+                        None => None,
+                    }, || ParWalkSite { start, cause: None });
+                    site.start = start;
+                    sites.insert(id, site);
+                },
+                _ => { },
+            }
+        }
+        for each in exprs.iter() {
+            let each = *each;
+            let (walk, lambda) = match par_lambda_step(each, names) { Some(__nikaia_value) => __nikaia_value, None => continue };
+            if !fanned(id_of(lambda) as i64) { continue; }
+            let at: i64 = id_of(walk) as i64;
+            let mut site = nikaia_std::index::or(match sites.get(&at) {
+                Some(__nikaia_it) => Some(__nikaia_it.clone()),
+                None => None,
+            }, || ParWalkSite { start, cause: None });
+            if site.cause.is_none() { site.cause = par_pausing_call(lambda, names, &mut &mut *pauses); }
+            sites.insert(at, site);
+        }
+        for each in exprs.iter() {
+            let each = *each;
+            match each {
+                Expr::Closure { body, .. } => { par_walks_in_block(body, sites, names, &mut &mut *fanned, &mut &mut *pauses); },
+                _ => { },
+            }
+        } ::core::mem::drop(exprs);
+        match &stmt.node {
+            Stmt::For { body, .. } => { par_walks_in_block(body, sites, names, &mut &mut *fanned, &mut &mut *pauses); },
+            Stmt::While { body, .. } => { par_walks_in_block(body, sites, names, &mut &mut *fanned, &mut &mut *pauses); },
+            _ => { },
+        }
+    }
+}
+
+pub(crate) fn par_lambda_step<'r>(each: &'r Expr, names: &'r winnow_grammar::InternerContext) -> Option<(&'r Expr, &'r Expr)> {
+    let (receiver, method, args) = match each {
+        Expr::MethodCall { receiver, method, args, .. } => { let receiver = nikaia_std::boxed::open(receiver); let method = *method; (receiver, names.resolve(method), args) },
+        _ => return None,
+    };
+    if AsRef::<str>::as_ref(&(method)) != AsRef::<str>::as_ref(&("map")) && AsRef::<str>::as_ref(&(method)) != AsRef::<str>::as_ref(&("filter")) && AsRef::<str>::as_ref(&(method)) != AsRef::<str>::as_ref(&("for_each")) || args.len() != 1 { return None; }
+    let lambda: &Expr = unsafe { nikaia_std::proven::read(&args, (0) as usize) };
+    let mut on: &Expr = receiver;
+    loop {
+        match on {
+            Expr::MethodCall { receiver: inner, method: step, .. } => {
+                let inner = nikaia_std::boxed::open(inner); let step = *step;
+                if names.resolve(step) == "par_iter" { return Some((on, lambda)); }
+                on = inner;
+            },
+            _ => { return None; },
+        }
+    }
+    None
+}
+
+pub(crate) fn par_pausing_call(lambda: &Expr, names: &winnow_grammar::InternerContext, pauses: &mut impl FnMut(&Expr) -> bool) -> Option<String> {
+    let body: &Block = match lambda {
+        Expr::Closure { body, .. } => body,
+        _ => return None,
+    };
+    for each in visited_in_block(body) {
+        let callee: String = match each {
+            Expr::Call { func, .. } => { let func = nikaia_std::boxed::open(func); match called_key(func, names) { Some(__nikaia_value) => __nikaia_value, None => continue } },
+            Expr::MethodCall { method, .. } => { let method = *method; nikaia_std::block::Text::from(names.resolve(method).to_string()) },
+            _ => continue,
+        };
+        if !pauses(each) || par_call_inside_pauses(each, &mut *pauses) { continue; }
+        return Some(format!("its call of `{}`", callee));
+    }
+    None
+}
+
+pub(crate) fn par_call_inside_pauses(call: &Expr, pauses: &mut impl FnMut(&Expr) -> bool) -> bool {
+    let own = id_of(call);
+    for each in visited_in_expr(call) {
+        if id_of(each) == own { continue; }
+        let a_call = matches!(each, Expr::Call { .. } | Expr::MethodCall { .. });
+        if a_call && pauses(each) { return true; }
+    }
+    false
+}
+

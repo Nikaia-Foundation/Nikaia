@@ -415,6 +415,7 @@ pub struct CheckState {
     pub handed_over: Option<CheckHanded>,
     pub in_parallel: Option<i64>,
     pub scoped_task: bool,
+    pub pausing_walk: bool,
     pub inside_unsafe: bool,
     pub repeats: Vec<CheckRepeats>,
     pub set_receiver: Option<String>,

@@ -16,7 +16,7 @@ impl CheckState {
         if !pauses { return; }
         let mut because: Option<String> = None;
         if unpromised { because = Some(nikaia_std::block::Text::from(callee.to_string())); }
-        let pause = CheckPause { what: format!("`{}`", callee), unpromised: because, before_walk: format!("Call `{}` before the walk and pass the values in, or walk with `iter()`, whose lambda may pause.", callee), before_door: format!("Call `{}` before taking the lock and pass its value in, or after it with what the block returned.", callee) };
+        let pause = CheckPause { what: format!("`{}`", callee), unpromised: because, before_walk: format!("Call `{}` in a `map` before this step, whose lambda may pause: `xs.par_iter().map(…).fold(…)`. Or call it before the walk and pass the values in.", callee), before_door: format!("Call `{}` before taking the lock and pass its value in, or after it with what the block returned.", callee) };
         self.a_pause(&pause, span);
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -45,8 +45,8 @@ impl CheckState {
             why = not_promised_note(nikaia_std::index::or(pause.unpromised.as_deref(), || ""));
         }
         self.note_a_pause();
-        if self.in_parallel.is_some() && !self.scoped_task {
-            let mut parallel: Vec<String> = vec![String::from("A `par_iter()` lambda runs on every core at once, and a core that waits holds up its share of the work, so the lambda must never pause.")];
+        if self.in_parallel.is_some() && !self.scoped_task && !self.pausing_walk {
+            let mut parallel: Vec<String> = vec![String::from("Only the lambda of a `par_iter()` chain's `map`, `filter` or `for_each` may pause, and runs one task per element; this one runs on every core at once, and a core that waits holds up its share of the work, so it must never pause (ADR-async-5 D29).")];
             if pause.unpromised.is_some() { parallel.push(nikaia_std::block::Text::from(why.to_string())); }
             self.findings.push(check_refusal("NK2209", span, format!("{} {}, but this runs on several cores at once.", capitalised(&pause.what), pauses), parallel, Some(nikaia_std::block::Text::from(pause.before_walk.to_string()))));
         }

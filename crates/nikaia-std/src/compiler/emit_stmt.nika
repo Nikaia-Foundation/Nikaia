@@ -240,6 +240,7 @@ impl EmitState {
             let st = rendered.mark()
             let keeps = walk.async_keeps
             let rests = walk.async_rests.len()
+            let hoisted = walk.async_hoisted.len()
             walk.async_keeps = false
             self.emit_stmt(world, walk, rendered, host, block.stmts[0].node, block.stmts[0].span, depth, tail, flow, scope)
             walk.async_keeps = keeps
@@ -253,6 +254,7 @@ impl EmitState {
                 return
             }
             walk.async_rests.truncate(rests)
+            walk.async_hoisted.truncate(hoisted)
             walk.preluded = declared
             walk.async_bound = bound
         }
@@ -329,7 +331,6 @@ impl EmitState {
             self.emit_async_joins(walk, out, block.stmts[i].span.start as i64, inner_pad)
             let here = tail.at(i, last)
             walk.async_keeps = i < last
-            let before = walk.async_rests.len()
             let st = out.mark()
             self.emit_stmt(world, walk, out, host, block.stmts[i].node, block.stmts[i].span, depth + 1, here, flow, scope)
             out.record(block.stmts[i].span, st)
@@ -339,8 +340,8 @@ impl EmitState {
             let ending = i == last && walk.async_rests.len() > rests
             if ending && here.is_value() {
                 let mut at = st
-                if walk.async_rests.len() > before {
-                    let cell = walk.async_rests[walk.async_rests.len() - 1].clone()
+                if walk.async_declared != "" {
+                    let cell = walk.async_declared.clone()
                     let declared = f"let {cell} = nikaia_std::task::Rest::new(); "
                     match out.buf.find(declared) {
                         null => {},
@@ -1577,12 +1578,37 @@ impl EmitState {
 
 /// **The cells a statement's bound pausing tasks asked for** (Part I 8.2,
 /// #987), declared before it: `let __rest_N = nikaia_std::task::Rest::new();`.
+/// **A gated one in a block inside its group is declared in the group's own
+/// block** (#2653), before the statement there that holds it: the group's
+/// gate polls it to the group's end. It is still finished at the end of its
+/// own block. `async_declared` names the cell the block's value is taken
+/// after: the first of its own, else the last it brought up.
 fn emit_stmt_declare_rests(mut walk: EmitWalk, mut out: EmitOut, mark: i64, kept: i64) {
     let mut declared = ""
+    let below = walk.async_top >= 0 && walk.statements_open > walk.async_top
+    walk.async_declared = ""
     while walk.async_kept.len() > kept {
         let cell = walk.async_kept.pop() ?? break
-        declared = f"let {cell} = nikaia_std::task::Rest::new(); {declared}"
+        if below && walk.async_gated.contains(cell) {
+            walk.async_hoisted.push(cell.clone())
+        } else {
+            declared = f"let {cell} = nikaia_std::task::Rest::new(); {declared}"
+            walk.async_declared = cell.clone()
+        }
         walk.async_rests.push(cell)
+    }
+    if walk.async_top >= 0 && walk.statements_open == walk.async_top && walk.async_hoisted.len() > 0 {
+        let mut brought = String()
+        let mut last = String()
+        for cell in walk.async_hoisted {
+            brought = f"{brought}let {cell} = nikaia_std::task::Rest::new(); "
+            last = cell.clone()
+        }
+        walk.async_hoisted.clear()
+        declared = f"{brought}{declared}"
+        if walk.async_declared == "" {
+            walk.async_declared = last
+        }
     }
     if declared != "" {
         out.insert_at(mark, declared)

@@ -535,6 +535,11 @@ pub struct CheckFacts {
     pub kept_results: collections::BTreeMap[i64, String],
     pub kept_hulls: collections::BTreeMap[i64, Vec[String]],
     pub kept_owned: collections::BTreeMap[i64, Vec[String]],
+    /// **The names a task of `async e` takes** (ADR-async-5 D2, #2653), by
+    /// the `async` node: those bound in a block inside its group, numbers and
+    /// views among them, which the lowering moves into the task, since its
+    /// rest may outlive their block under a gate.
+    pub task_takes: collections::BTreeMap[i64, Vec[String]],
     pub field_calls: collections::BTreeMap[i64, bool],
     pub kept_calls: collections::BTreeMap[i64, (bool, bool)],
     pub kept_args: collections::BTreeSet[i64],
@@ -1057,6 +1062,7 @@ impl CheckFacts {
             kept_results: collections::BTreeMap(),
             kept_hulls: collections::BTreeMap(),
             kept_owned: collections::BTreeMap(),
+            task_takes: collections::BTreeMap(),
             field_calls: collections::BTreeMap(),
             kept_calls: collections::BTreeMap(),
             kept_args: collections::BTreeSet(),

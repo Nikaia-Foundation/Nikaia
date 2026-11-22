@@ -5,9 +5,11 @@
 //! `user_parallelism = yes`; at `no` the compiler writes the list's own
 //! `iter()` and nothing here is used. So a program means the same at both
 //! settings: `collect` keeps the list's order, `count` counts in `usize` as
-//! `Iterator::count` does, and what the lambda may do - not pause
-//! (`NK2209`), not change a name outside it (`NK2107`) - is asked by the
-//! checker at both.
+//! `Iterator::count` does, and what the lambda may do - not change a name
+//! outside it (`NK2107`), and for `fold`'s, not pause (`NK2209`) - is asked
+//! by the checker at both. A `map`, `filter` or `for_each` whose lambda
+//! pauses runs one task per element instead, `seq::fan_map` and its
+//! siblings over the walk made here ([`Fanned`], ADR-async-5 D25).
 //!
 //! **What rayon has only for a walk whose length is known** - `take`, `skip`,
 //! `step_by`, `rev`, `zip` - goes through a list here, so it works after a
@@ -244,8 +246,8 @@ impl Run {
 /// **The elements of `items` on every core at once, under the walk's
 /// options** (`xs.par_iter(limit:, within:, admission:, piece:)`,
 /// ADR-async-5 D15, D27, ADR-372 D6). `admission:` names the strategy of a
-/// walk whose lambdas pause; a `par_iter` lambda never pauses, so it is read
-/// and does nothing else.
+/// walk whose lambdas pause; its tasks ([`Fanned`]) run under `limit:` alone
+/// so far, so the strategy is read and does nothing else.
 #[track_caller]
 pub fn gated<'a, T: Sync, A>(
     items: &'a [T],
@@ -290,14 +292,16 @@ pub fn gated_in_order<I: Iterator, A>(
     if let Some(n) = piece {
         at_least_one("piece", n);
     }
+    let mut cap = None;
     if let Some(n) = limit {
-        at_least_one("limit", n);
+        cap = Some(at_least_one("limit", n));
     }
     TIMED_OUT.with(|t| t.set(false));
     InOrder {
         walk,
         deadline: within.map(|span| Instant::now() + span),
         done: false,
+        limit: cap,
     }
 }
 
@@ -306,7 +310,38 @@ pub struct InOrder<I> {
     walk: I,
     deadline: Option<Instant>,
     done: bool,
+    /// The `limit:` written, for a step whose lambda pauses ([`Fanned`]).
+    limit: Option<usize>,
 }
+
+/// **A `par_iter` walk handed to a step whose lambda pauses**
+/// (ADR-async-5 D25): its elements, and the `limit:` its tasks run under.
+/// Each shape `par_iter()` lowers to is one, at both settings.
+pub trait Fanned: IntoIterator {
+    /// How many of its tasks may run at once; open where `limit:` is not
+    /// written.
+    fn task_limit(&self) -> Option<usize> {
+        None
+    }
+}
+
+impl<I: ParallelIterator> Fanned for Par<I> {
+    fn task_limit(&self) -> Option<usize> {
+        self.1.limit
+    }
+}
+
+impl<I: Iterator> Fanned for InOrder<I> {
+    fn task_limit(&self) -> Option<usize> {
+        self.limit
+    }
+}
+
+impl<'a, T> Fanned for std::slice::Iter<'a, T> {}
+
+impl<'a, T: 'a + Copy, I: Iterator<Item = &'a T>> Fanned for std::iter::Copied<I> {}
+
+impl<'a, T: 'a + Clone, I: Iterator<Item = &'a T>> Fanned for std::iter::Cloned<I> {}
 
 impl<I> InOrder<I> {
     /// Whether an element may still start; the first that may not says so
@@ -321,6 +356,36 @@ impl<I> InOrder<I> {
             return false;
         }
         true
+    }
+}
+
+impl<'a, T: 'a, I: Iterator<Item = &'a T>> InOrder<I> {
+    /// The elements copied, the walk's options kept: ahead of
+    /// `Iterator::copied`, so a step whose lambda pauses still reads the
+    /// `limit:` ([`Fanned`]).
+    pub fn copied(self) -> InOrder<std::iter::Copied<I>>
+    where
+        T: Copy,
+    {
+        InOrder {
+            walk: self.walk.copied(),
+            deadline: self.deadline,
+            done: self.done,
+            limit: self.limit,
+        }
+    }
+
+    /// The elements cloned, the walk's options kept, as [`InOrder::copied`].
+    pub fn cloned(self) -> InOrder<std::iter::Cloned<I>>
+    where
+        T: Clone,
+    {
+        InOrder {
+            walk: self.walk.cloned(),
+            deadline: self.deadline,
+            done: self.done,
+            limit: self.limit,
+        }
     }
 }
 

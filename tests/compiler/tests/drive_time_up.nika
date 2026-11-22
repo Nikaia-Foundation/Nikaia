@@ -24,14 +24,14 @@ fn root() -> String throws {
 fn case(nikaia: String, repo: String, name: String, ago: i64, limit: String) throws {
     let now = text::parse_i64(process::run("date", ["+%s"]).stdout.trim()) ?? 0
     let started = f"{now - ago}"
-    let out = process::run(nikaia, ["run", "scripts/drive.nika", "--", "--time-up"]; dir: repo, env: [("NIKAIA_DRIVE_STARTED", started), ("NIKAIA_DRIVE_LIMIT_MIN", limit)])
+    let out = process::run(nikaia, ["run", "scripts/drive.nika", "--", "--time-up"]; dir: repo, env: [("NIKAIA_DRIVE_STARTED", started), ("NIKAIA_DRIVE_LIMIT_MIN", limit), ("NIKAIA_DRIVE_TASK_MIN", "120")])
     println(f"{name}: {out.stdout.trim()}")
 }
 
 fn lane(nikaia: String, repo: String, dir: String, name: String, ago: i64, task: String) throws {
     let now = text::parse_i64(process::run("date", ["+%s"]).stdout.trim()) ?? 0
     let started = f"{now - ago}"
-    let out = process::run(nikaia, ["run", "scripts/drive.nika", "--", "--time-up", dir.clone()]; dir: repo, env: [("NIKAIA_DRIVE_STARTED", started), ("NIKAIA_DRIVE_TASK_MIN", task)])
+    let out = process::run(nikaia, ["run", "scripts/drive.nika", "--", "--time-up", dir.clone()]; dir: repo, env: [("NIKAIA_DRIVE_STARTED", started), ("NIKAIA_DRIVE_TASK_MIN", task), ("NIKAIA_DRIVE_LIMIT_MIN", "105")])
     println(f"{name}: {out.stdout.trim().replace(dir, "DIR")}")
 }
 
