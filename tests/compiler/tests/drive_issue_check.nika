@@ -31,6 +31,25 @@ fn run(repo: String, nikaia: String, script: String, args: Vec[String]) throws {
     println(f"exit {out.code}")
 }
 
+// issue-check run with `--body -` and BODY on standard input (#2466).
+fn run_stdin(repo: String, nikaia: String, body: String, args: Vec[String]) throws {
+    let mut all: Vec[String] = ["run", "scripts/issue-check.nika", "--", "--body", "-"]
+    for a in args { all.push(a.clone()) }
+    let out = process::run(nikaia, all; dir: repo, stdin: process::Input::Text(body))
+    println(out.stdout.trim())
+    println(f"exit {out.code}")
+}
+
+// drive.nika run with NIKAIA_DRIVE_ISSUE_CHECK naming CHECK, the form check
+// it runs in place of scripts/issue-check.nika (#2466).
+fn run_check(repo: String, nikaia: String, check: String, args: Vec[String]) throws {
+    let mut all: Vec[String] = ["run", "scripts/drive.nika", "--"]
+    for a in args { all.push(a.clone()) }
+    let out = process::run(nikaia, all; dir: repo, env: [("NIKAIA_DRIVE_ISSUE_CHECK", check)])
+    println(out.stdout.trim())
+    println(f"exit {out.code}")
+}
+
 // A lane of this test's own under the checkout's target/drive-test/ (#2577):
 // drive opens every name under fs::Root::Dir("."), the checkout it runs in, so
 // it gets the lane's names relative to it. The scratch directory's name keeps
@@ -53,12 +72,19 @@ fn main() throws {
     let bad = f"{lane}/bad.md"
     fs::write("bad.md", dir, "## Problem\n\nIt breaks.\n\n**To build**\n\n1. Use the key decided in #904.\n2. Then #905, which is closed.\n\n**Done when:** the test passes.\n")
     run(repo.clone(), nikaia.clone(), "scripts/issue-check.nika", ["--body", bad, "--open", "904"])
+    // The same bodies on standard input give the same rows (#2466).
+    run_stdin(repo.clone(), nikaia.clone(), fs::read_to_string("good.md", dir), ["--open", "900", "901", "902", "903"])
+    run_stdin(repo.clone(), nikaia.clone(), fs::read_to_string("bad.md", dir), ["--open", "904"])
     let none = f"{lane}/none.md"
     fs::write("none.md", dir, "It breaks, see #904.\n")
     run(repo.clone(), nikaia.clone(), "scripts/issue-check.nika", ["--body", none, "--open", "904"])
     let list = f"{lane}/issues.txt"
     fs::write("issues.txt", dir, "=== #30 ===\n## To build\n\n1. Do it.\n\n## Done when\n\nDone.\n=== #31 ===\n## To build\n\n1. Use the key decided in #904.\n\n## Done when\n\nDone.\n=== #32 ===\nNeeds #904\n\n## To build\n\n1. Use #904.\n\n## Done when\n\nDone.\n=== #33 ===\nFound while #904\n\n## To build\n\n1. Fix it beside #904.\n\n## Done when\n\nDone.\n=== #34 ===\nNo form at all.\n")
     run(repo.clone(), nikaia.clone(), "scripts/drive.nika", ["--queue-check", list, "904"])
+    // A check script that does not build holds the issue back (#2466).
+    fs::write("broken.nika", dir, "fn main() throws {\n    let x: i64 = \"text\"\n    println(x)\n}\n")
+    fs::write("one.txt", dir, "=== #35 ===\n## To build\n\n1. Do it.\n\n## Done when\n\nDone.\n")
+    run_check(repo.clone(), nikaia.clone(), f"{lane}/broken.nika", ["--queue-check", f"{lane}/one.txt"])
     let report = f"{lane}/report.md"
     fs::write("report.md", dir, "Result: done\nIssue: partly wrong I7: the cause was half right\nNeeds: none\nFriction: none\n")
     run(repo.clone(), nikaia, "scripts/drive.nika", ["--improve-plan", "issue-1991", "1991", report, f"{lane}/none.md"])
