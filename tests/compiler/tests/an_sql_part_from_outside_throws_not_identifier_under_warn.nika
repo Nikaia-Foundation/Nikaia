@@ -1,0 +1,37 @@
+// A part from outside that reaches `db::raw(...)` unproved builds under
+// `raw-sinks = "warn"`, the default, in a function that `throws`, and is
+// checked at that site (ADR-raw-sinks-1 D7, #2524): `x;` and a line break
+// before `DROP` is not `db::is_identifier`, so the call throws
+// `db::NotIdentifier` to the `catch` around it, with the part escaped as the
+// log escapes it (ADR-398); an identifier makes the statement as written.
+use std::env
+use std::fs
+use std::process
+
+// The running `nikaia` (`env::current_exe`, ADR-program-path-1 D3).
+fn toolchain() -> String throws {
+    return env::current_exe()?.display() ?? "target/fast/nikaia"
+}
+
+fn root() -> String throws {
+    return env::current_main()?.parent()?.parent()?.parent()?.parent()?.display() ?? "../.."
+}
+
+fn main() throws {
+    let nikaia = toolchain()
+    let repo = root()
+    let scratch = fs::scratch()
+    let tmp = f"{scratch.path().display()}"
+    fs::create_dir("src", scratch)
+    fs::write("nikaia.toml", scratch, f"[package]\nname = \"p\"\nversion = \"0.1.0\"\n\n[dependencies]\ndb = {{ path = \"{repo}/packages/db\" }}\n")
+    let program = "use db\nuse std::cli\n\nfn shown(at: i64, given: String) throws {\n    let name = cli::args().nth(at) ?? given\n    let made = db::raw(f\"SELECT * FROM {name}\") catch {\n        println(f\"caught: {error}\")\n        return\n    }\n    println(made.text())\n}\n\nfn main() throws {\n    shown(1, \"x;\\nDROP\")\n    shown(2, \"users\")\n}\n"
+    fs::write("src/main.nika", scratch, program)
+    let out = process::run(nikaia, ["run", "src/main.nika"]; dir: tmp.clone(), env: [("RUST_BACKTRACE", "0")])
+    println(f"exit {out.code}")
+    print(out.stdout)
+    for line in out.stderr.lines() {
+        if line.contains("error") {
+            println(line.replace(tmp, "TMP").replace(repo, "REPO").trim())
+        }
+    }
+}

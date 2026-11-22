@@ -1,0 +1,2 @@
+html::HtmlError::NotPlain("<b>")
+<p>plain</p>

@@ -114,12 +114,12 @@ pub fn throws_record(mut ledger: Ledger, graph: ref ThrowsGraph, places: ref col
 
 /// Every `throws` function and method of one unit, by the key the ledger
 /// records it under, into `graph`, which `error_sets` takes.
-pub fn unit_throws(program: ref Program, names: ref winnow_grammar::InternerContext, holes_of: fn(ref Expr) -> Vec[Expr] sync, contribution_of: fn(ref Expr) -> Contribution sync, own: ref Ledger, library: ref Ledger, mut graph: ThrowsGraph) {
+pub fn unit_throws(program: ref Program, names: ref winnow_grammar::InternerContext, holes_of: fn(ref Expr) -> Vec[Expr] sync, contribution_of: fn(ref Expr) -> Contribution sync, own: ref Ledger, library: ref Ledger, raw_sinks_warn: bool, mut graph: ThrowsGraph) {
     for item in program.items {
         match item.node {
             Item::Fn { name, body, can_throw, .. } => {
                 if can_throw {
-                    let thrown = thrown_by(body, names, holes_of, contribution_of)
+                    let thrown = thrown_by_at(body, names, holes_of, contribution_of, raw_sinks_warn)
                     with_methods(key_of_function(name, "", names), thrown, own, library, graph)
                 }
             }
@@ -129,7 +129,7 @@ pub fn unit_throws(program: ref Program, names: ref winnow_grammar::InternerCont
                     match method.node {
                         Item::Fn { name, body, can_throw, .. } => {
                             if can_throw {
-                                let thrown = thrown_by(body, names, holes_of, contribution_of)
+                                let thrown = thrown_by_at(body, names, holes_of, contribution_of, raw_sinks_warn)
                                 with_methods(key_of_function(name, owner, names), thrown, own, library, graph)
                             }
                         }
@@ -683,6 +683,9 @@ pub struct Thrown {
     /// (ADR-345 D2).
     named: collections::BTreeSet[String],
     pub fatal_calls: collections::BTreeMap[String, collections::BTreeSet[String]],
+    /// **Under `raw-sinks = "warn"`, a raw sink's part throws its error**
+    /// (ADR-raw-sinks-1 D7): what `raw_sink_thrown` reads.
+    raw_sinks_warn: bool,
 }
 
 /// What an expression contributes, as the compiler resolved it: a function of
@@ -703,9 +706,63 @@ pub struct Contribution {
 
 /// What a function's body throws itself, and whom in this package it calls.
 fn thrown_by(body: ref Block, names: ref winnow_grammar::InternerContext, holes_of: fn(ref Expr) -> Vec[Expr] sync, contribution_of: fn(ref Expr) -> Contribution sync) -> Thrown {
-    let mut out = Thrown { direct: collections::BTreeSet(), calls: collections::BTreeSet(), passes_on: false, named: collections::BTreeSet(), fatal_calls: collections::BTreeMap() }
+    return thrown_by_at(body, names, holes_of, contribution_of, false)
+}
+
+/// `thrown_by`, with whether the build is at `raw-sinks = "warn"`.
+fn thrown_by_at(body: ref Block, names: ref winnow_grammar::InternerContext, holes_of: fn(ref Expr) -> Vec[Expr] sync, contribution_of: fn(ref Expr) -> Contribution sync, raw_sinks_warn: bool) -> Thrown {
+    let mut out = Thrown { direct: collections::BTreeSet(), calls: collections::BTreeSet(), passes_on: false, named: collections::BTreeSet(), fatal_calls: collections::BTreeMap(), raw_sinks_warn: raw_sinks_warn }
     thrown_in_block(body, names, holes_of, contribution_of, false, out)
     return out
+}
+
+/// **What a raw sink's call throws under `raw-sinks = "warn"`**
+/// (ADR-raw-sinks-1 D7, #2524): an `html::Raw(...)` with a part that is not
+/// a literal throws `html::HtmlError`, a `db::raw(...)` with one
+/// `db::NotIdentifier`, since the emitter checks such a part where it runs
+/// where the prover does not prove it. Read off the call as written, before
+/// the prover: a proof takes away the check, not the entry.
+fn raw_sink_thrown(func: ref Expr, args: ref Vec[Expr], names: ref winnow_grammar::InternerContext, holes_of: fn(ref Expr) -> Vec[Expr] sync) -> String? {
+    let (error, given) = raw_sink_error(func, args.len(), names) ?? return null
+    for k in 0..<given {
+        if raw_sink_has_a_part(args[k], holes_of) {
+            return error
+        }
+    }
+    return null
+}
+
+/// **The raw sink a call goes to** (ADR-raw-sinks-1 D7, #2524): the error
+/// its check throws and how many of its `count` arguments are its parts, or
+/// `null` for a call to anything else. The checker asks it too (`NK1134`).
+pub fn raw_sink_error(func: ref Expr, count: i64, names: ref winnow_grammar::InternerContext) -> (String, i64)? {
+    let callee = match func {
+        Expr::Path(segments, _) => if segments.len() == 2 { all_but_the_last(names, segments) + "::" + names.resolve(segments[1]) } else { return null },
+        else => return null,
+    }
+    if callee == "html::Raw" {
+        return ("html::HtmlError", count)
+    }
+    if callee == "db::raw" {
+        return ("db::NotIdentifier", if count == 0 { 0 } else { 1 })
+    }
+    return null
+}
+
+/// Whether a raw sink's argument has a part that is not a literal: the
+/// holes of an `f"..."` and the sides of a `+` are its parts.
+fn raw_sink_has_a_part(expr: ref Expr, holes_of: fn(ref Expr) -> Vec[Expr] sync) -> bool {
+    return match expr {
+        Expr::LitInterpolated { .. } => holes_of(expr).iter().any(fn(hole) { raw_sink_has_a_part(hole, holes_of) }),
+        Expr::Binary { op, lhs, rhs, .. } => if op == BinaryOp::Add { raw_sink_has_a_part(lhs, holes_of) || raw_sink_has_a_part(rhs, holes_of) } else { true },
+        Expr::LitStr { .. } => false,
+        Expr::LitInt { .. } => false,
+        Expr::LitFloat(..) => false,
+        Expr::LitChar(..) => false,
+        Expr::LitBool(..) => false,
+        Expr::LitNull(..) => false,
+        else => true,
+    }
 }
 
 // Each statement's expressions, then the blocks it holds - each with whether
@@ -763,6 +820,14 @@ fn thrown_in(expr: ref Expr, names: ref winnow_grammar::InternerContext, holes_o
     }
     match expr {
         Expr::Call { func, args, config, .. } => {
+            if out.raw_sinks_warn && !caught {
+                match raw_sink_thrown(func, args, names, holes_of) {
+                    error => {
+                        out.direct.insert(error)
+                    },
+                    null => {}
+                }
+            }
             thrown_in(func, names, holes_of, contribution_of, in_a_handler, caught, out)
             for arg in args {
                 thrown_in(arg, names, holes_of, contribution_of, in_a_handler, caught, out)
@@ -1021,7 +1086,7 @@ fn the_caught_error(expr: ref Expr, names: ref winnow_grammar::InternerContext) 
 // Whether a handler passes what it caught on: `throw error` anywhere in it
 // (ADR-280 D10).
 fn passes_on(handler: ref Block, names: ref winnow_grammar::InternerContext, holes_of: fn(ref Expr) -> Vec[Expr] sync, contribution_of: fn(ref Expr) -> Contribution sync) -> bool {
-    let mut seen = Thrown { direct: collections::BTreeSet(), calls: collections::BTreeSet(), passes_on: false, named: collections::BTreeSet(), fatal_calls: collections::BTreeMap() }
+    let mut seen = Thrown { direct: collections::BTreeSet(), calls: collections::BTreeSet(), passes_on: false, named: collections::BTreeSet(), fatal_calls: collections::BTreeMap(), raw_sinks_warn: false }
     thrown_in_block(handler, names, holes_of, contribution_of, false, seen)
     return seen.passes_on
 }

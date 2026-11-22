@@ -70,6 +70,7 @@ pub fn infer(
             },
             own,
             library,
+            super::raw_sinks_are_warn(),
             &mut graph,
         );
     }

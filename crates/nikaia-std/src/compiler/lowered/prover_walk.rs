@@ -2077,12 +2077,12 @@ pub(crate) fn prover_raw_sink(walk: &mut ProverWalk, callee: &str, args: &[Expr]
         let mut parts: Vec<Expr> = vec![];
         for arg in args.iter() { raw_sink_parts(arg, &mut *holes_of, &mut parts); }
         let sink = ParamSink { index: -1, kind: String::from("markup"), sink: String::from("the markup of `html::Raw`, written to the page as it is"), operation: String::from(""), root_part: false, guard: String::from("html::is_plain") };
-        for part in parts.iter() { raw_sink_part(walk, &sink, &sink.sink, part, span, scope, at, program, words, library, &mut *holes_of, &mut *ask, &mut *written_of); }
+        raw_sink_checked_parts(walk, &sink, &parts, raw_check_markup(), span, scope, at, program, words, library, &mut *holes_of, &mut *ask, &mut *written_of);
     } else if callee == "db::raw" && !args.is_empty() {
         let mut parts: Vec<Expr> = vec![];
         raw_sink_parts(unsafe { nikaia_std::proven::read(&args, (0) as usize) }, &mut *holes_of, &mut parts);
         let sink = ParamSink { index: -1, kind: String::from("sql"), sink: String::from("the text of `db::raw`, sent to the database as SQL"), operation: String::from(""), root_part: false, guard: String::from("db::is_identifier") };
-        for part in parts.iter() { raw_sink_part(walk, &sink, &sink.sink, part, span, scope, at, program, words, library, &mut *holes_of, &mut *ask, &mut *written_of); }
+        raw_sink_checked_parts(walk, &sink, &parts, raw_check_sql(), span, scope, at, program, words, library, &mut *holes_of, &mut *ask, &mut *written_of);
     } else if callee == "process::run" && !args.is_empty() {
         let mut parts: Vec<Expr> = vec![];
         raw_sink_parts(unsafe { nikaia_std::proven::read(&args, (0) as usize) }, &mut *holes_of, &mut parts);
@@ -2226,6 +2226,33 @@ pub(crate) fn raw_sink_carried_root(arg: &Expr, scope: &ProverScope, words: &win
     let name = match raw_sink_name(arg, words) { Some(__nikaia_value) => __nikaia_value, None => return false };
     scope.carried.contains(&name) && !raw_sink_outside(arg, scope, words, library, state, &mut *holes_of)
 }
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub fn raw_check_markup() -> i64 { -1 }
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub fn raw_check_sql() -> i64 { -2 }
+
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn raw_sink_checked_parts(walk: &mut ProverWalk, sink: &ParamSink, parts: &[Expr], check: i64, span: Span, scope: &ProverScope, at: &ProverWhere, program: &Program, words: &winnow_grammar::InternerContext, library: &Ledger, holes_of: &mut impl FnMut(&Expr) -> Vec<Expr>, ask: &mut impl FnMut(&logic::TermArena, &[i64], i64) -> SolverAnswer, written_of: &mut impl FnMut(&Expr) -> String) {
+    let checked = at.throws_out && !at.lambda;
+    for part in parts.iter() {
+        let before = walk.findings.len() as i64;
+        raw_sink_part(walk, sink, &sink.sink, part, span, scope, at, program, words, library, &mut *holes_of, &mut *ask, &mut *written_of);
+        let mut helps: Vec<String> = vec![];
+        for k in before..walk.findings.len() as i64 {
+            if nikaia_std::index::get(&walk.findings, nikaia_std::index::at(k)).code != "NK1308" { continue; }
+            if checked { helps.push(nikaia_std::block::Text::from(nikaia_std::index::or(unsafe { nikaia_std::proven::read(&walk.findings, (k) as usize) }.help.as_deref(), || "").to_string())); } else { (*unsafe { nikaia_std::proven::slot(&mut walk.findings, (k) as usize) }).notes.push(raw_sink_unchecked_note()); }
+        }
+        if !helps.is_empty() { walk.raw_paths.insert(node_key(part), RawPathCheck { root: check, helps }); }
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub fn raw_sink_unchecked_note() -> String { String::from("`raw-sinks = \"warn\"` checks a part like this one where it runs only in a function that `throws`, so it refuses it here too.") }
 
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn raw_sink_part(walk: &mut ProverWalk, sink: &ParamSink, shown: &str, part: &Expr, span: Span, scope: &ProverScope, at: &ProverWhere, program: &Program, words: &winnow_grammar::InternerContext, library: &Ledger, holes_of: &mut impl FnMut(&Expr) -> Vec<Expr>, ask: &mut impl FnMut(&logic::TermArena, &[i64], i64) -> SolverAnswer, written_of: &mut impl FnMut(&Expr) -> String) {

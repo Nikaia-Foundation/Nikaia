@@ -15,6 +15,12 @@ throws = ["?"]
 keeps = ["parameters", "text"]
 signature = "(ref self, text: String, parameters: collections::HashMap[String, Value]) -> Vec[Row]"
 
+[fn."NotIdentifier::message"]
+sync = "inferred"
+panics = false
+touches = []
+signature = "(ref self) -> String"
+
 [fn."NullInField::message"]
 sync = "inferred"
 panics = false
@@ -102,9 +108,18 @@ signature = "(text: ref String) -> Raw"
 
 [trait."Transaction"]
 
+[impl."Error for NotIdentifier"]
+
 [impl."Error for NullInField"]
 
 [impl."Statement for Raw"]
+
+[type."NotIdentifier"]
+pub = true
+fields = ["pub part: String"]
+compares = true
+equates = true
+hashes = true
 
 [type."NullInField"]
 pub = true

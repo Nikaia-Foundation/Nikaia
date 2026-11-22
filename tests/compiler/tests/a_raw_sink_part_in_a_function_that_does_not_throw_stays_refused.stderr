@@ -1,0 +1,11 @@
+error[NK1308]: `name` reaches the markup of `html::Raw`, written to the page as it is, and it comes from outside the program.
+   --> tests/a_raw_sink_part_in_a_function_that_does_not_throw_stays_refused.nika:10:5
+    |
+ 10 |     let made = html::Raw(f"<p>{name}</p>")
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: `name` comes from `cli::args`: whoever sends it chooses the value, so nothing the compiler can see says what it holds.
+    = note: Markup from outside can carry a script that runs in the page of whoever opens it.
+    = note: `raw-sinks = "warn"` checks a part like this one where it runs only in a function that `throws`, so it refuses it here too.
+    = help: Check it where it arrives: `throw BadInput(name) if !html::is_plain(name)`, after which it is proved; or write it as text, which `html` escapes. If the program means to write markup from outside, `untrusted-markup = true` under `[allow]` in the manifest builds it.
+1 type error

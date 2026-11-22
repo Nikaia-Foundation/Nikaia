@@ -325,6 +325,7 @@ pub struct CheckWorld<'a, 'a1, 'a2, 'a3, 'a4, 'a5, 'a6, 'a7> {
     pub newly_keeps: collections::BTreeMap<String, Vec<(String, bool, String)>>,
     pub keepers: collections::BTreeMap<String, collections::BTreeMap<String, Vec<String>>>,
     pub package: Option<&'a7 CheckPackage>,
+    pub raw_sinks_warn: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]

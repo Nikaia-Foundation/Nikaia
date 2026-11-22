@@ -11,6 +11,9 @@
 use std::borrow::Cow;
 use std::fmt;
 
+/// What a breached markup precondition throws under `raw-sinks = "warn"`
+/// (ADR-raw-sinks-1 D7): its Nikaia half, `runtime/raw_sinks.nika`.
+pub use crate::runtime::HtmlError;
 /// `html::is_plain(part)`: its Nikaia half, `runtime/raw_sinks.nika`, the
 /// precondition of `html::Raw` (ADR-raw-sinks-1 D2, #1253).
 pub use crate::runtime::is_plain;

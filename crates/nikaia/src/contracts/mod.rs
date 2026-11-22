@@ -503,6 +503,22 @@ pub(crate) fn environment_untrusted(untrusted: bool) {
     ENVIRONMENT_UNTRUSTED.store(untrusted, std::sync::atomic::Ordering::Relaxed);
 }
 
+/// Whether this build is at `raw-sinks = "warn"`, the default
+/// ([ADR-raw-sinks-1](../../../../docs/specification/adr/adr-raw-sinks-1.md)
+/// D3, D7): set once the settings are resolved, read by the throw-set
+/// inference, which counts a raw sink's part as throwing its error then.
+static RAW_SINKS_WARN: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(true);
+
+/// `raw-sinks = "warn"`, or `--raw-sinks=warn`, for this process's build.
+pub(crate) fn raw_sinks_warn(warn: bool) {
+    RAW_SINKS_WARN.store(warn, std::sync::atomic::Ordering::Relaxed);
+}
+
+/// Whether this build is at `raw-sinks = "warn"` (ADR-raw-sinks-1 D7).
+pub(crate) fn raw_sinks_are_warn() -> bool {
+    RAW_SINKS_WARN.load(std::sync::atomic::Ordering::Relaxed)
+}
+
 /// Whether this build's environment is untrusted (ADR-397 D4): the emitter
 /// leaves out the stop of a privileged start then (D3).
 pub(crate) fn environment_is_untrusted() -> bool {

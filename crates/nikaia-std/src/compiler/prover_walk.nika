@@ -2840,16 +2840,12 @@ fn prover_raw_sink(mut walk: ProverWalk, callee: ref String, args: ref Vec[Expr]
             raw_sink_parts(arg, holes_of, parts)
         }
         let sink = ParamSink { index: -1, kind: "markup", sink: "the markup of `html::Raw`, written to the page as it is", operation: "", root_part: false, guard: "html::is_plain" }
-        for part in parts {
-            raw_sink_part(walk, sink, sink.sink, part, span, scope, at, program, words, library, holes_of, ask, written_of)
-        }
+        raw_sink_checked_parts(walk, sink, parts, raw_check_markup(), span, scope, at, program, words, library, holes_of, ask, written_of)
     } else if callee == "db::raw" && !args.is_empty() {
         let mut parts: Vec[Expr] = []
         raw_sink_parts(args[0], holes_of, parts)
         let sink = ParamSink { index: -1, kind: "sql", sink: "the text of `db::raw`, sent to the database as SQL", operation: "", root_part: false, guard: "db::is_identifier" }
-        for part in parts {
-            raw_sink_part(walk, sink, sink.sink, part, span, scope, at, program, words, library, holes_of, ask, written_of)
-        }
+        raw_sink_checked_parts(walk, sink, parts, raw_check_sql(), span, scope, at, program, words, library, holes_of, ask, written_of)
     } else if callee == "process::run" && !args.is_empty() {
         let mut parts: Vec[Expr] = []
         raw_sink_parts(args[0], holes_of, parts)
@@ -3096,6 +3092,54 @@ fn raw_sink_first_name(callee: ref String, i: i64) -> i64 {
 fn raw_sink_carried_root(arg: ref Expr, scope: ref ProverScope, words: ref winnow_grammar::InternerContext, library: ref Ledger, state: ref ProverState, holes_of: fn(ref Expr) -> Vec[Expr] sync) -> bool {
     let name = raw_sink_name(arg, words) ?? return false
     return scope.carried.contains(name) && !raw_sink_outside(arg, scope, words, library, state, holes_of)
+}
+
+/// **The check a markup part stands for in `raw_paths`** (ADR-raw-sinks-1
+/// D7): a root's index is 0 or more, so the two value sinks are below it.
+pub fn raw_check_markup() -> i64 sync {
+    return -1
+}
+
+/// The check an SQL part of `db::raw` stands for in `raw_paths`.
+pub fn raw_check_sql() -> i64 sync {
+    return -2
+}
+
+/// **The parts of an `html::Raw(...)` or a `db::raw(...)`, each checked
+/// where it runs if it stays unproved** (ADR-raw-sinks-1 D7, #2524): in a
+/// function that `throws`, each part with an `NK1308` is kept in
+/// `raw_paths` by its own id with `check`, and under `raw-sinks = "warn"`
+/// the emitter checks it where the value is made and throws the sink's
+/// error. In one that does not, or in a lambda, nothing can leave with the
+/// error, so its `NK1308` carries `raw_sink_unchecked_note()` and stays a
+/// refusal under `warn` too.
+fn raw_sink_checked_parts(mut walk: ProverWalk, sink: ref ParamSink, parts: ref Vec[Expr], check: i64, span: Span, scope: ref ProverScope, at: ref ProverWhere, program: ref Program, words: ref winnow_grammar::InternerContext, library: ref Ledger, holes_of: fn(ref Expr) -> Vec[Expr] sync, ask: fn(ref logic::TermArena, ref Vec[i64], i64) -> SolverAnswer sync, written_of: fn(ref Expr) -> String sync) {
+    let checked = at.throws_out && !at.lambda
+    for part in parts {
+        let before = walk.findings.len()
+        raw_sink_part(walk, sink, sink.sink, part, span, scope, at, program, words, library, holes_of, ask, written_of)
+        let mut helps: Vec[String] = []
+        for k in before..<walk.findings.len() {
+            if walk.findings[k].code != "NK1308" {
+                continue
+            }
+            if checked {
+                helps.push((walk.findings[k].help ?? "").clone())
+            } else {
+                walk.findings[k].notes.push(raw_sink_unchecked_note())
+            }
+        }
+        if !helps.is_empty() {
+            walk.raw_paths.insert(node_key(part), RawPathCheck { root: check, helps: helps })
+        }
+    }
+}
+
+/// **The note of an `NK1308` no run-time check can stand for**
+/// (ADR-raw-sinks-1 D7): the part is in a function that does not `throw`,
+/// so `raw-sinks = "warn"` refuses it as `error` does.
+pub fn raw_sink_unchecked_note() -> String sync {
+    return "`raw-sinks = \"warn\"` checks a part like this one where it runs only in a function that `throws`, so it refuses it here too."
 }
 
 /// **One part of a raw sink's text** (ADR-raw-sinks-1 D2): from outside and

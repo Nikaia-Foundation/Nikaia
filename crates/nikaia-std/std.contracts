@@ -615,6 +615,26 @@ sync = true
 touches = []
 signature = "(part: ref String) -> bool"
 
+# **What a breached markup precondition throws** (ADR-raw-sinks-1 D7): under
+# `raw-sinks = "warn"` an unproved part from outside at an `html::Raw(...)`
+# site that is not `html::is_plain` throws `NotPlain(part)` where the value is
+# made, the part escaped as the log escapes it. Written in Nikaia,
+# `src/runtime/raw_sinks.nika`; its parts are a `String`, so it crosses and
+# compares.
+[type."html::HtmlError"]
+pub = true
+crosses = true
+compares = true
+variants = ["NotPlain(String)"]
+
+# What went wrong, in words: `Error`'s `message` (Part I 7.1).
+[fn."html::HtmlError::message"]
+pub = true
+panics = false
+sync = true
+touches = []
+signature = "(self: ref html::HtmlError) -> String"
+
 # Whether `p` is one component of a path: not empty, not `.` or `..`, no `/`
 # and no `\` (ADR-raw-sinks-1 D14). A pure `bool` call, so a guard on it is a
 # fact the prover reads (ADR-396 D2). Written in Nikaia,

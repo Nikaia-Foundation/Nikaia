@@ -253,6 +253,7 @@ impl Settings {
     pub fn sinks(&mut self, raw_sinks: Option<&str>, allow: &[String]) -> Result<()> {
         self.words.raw_sinks = project_settings::project_settings_raw_sinks(&self.words, raw_sinks)
             .map_err(refusal)?;
+        crate::contracts::raw_sinks_warn(self.words.raw_sinks == "warn");
         let flags: Vec<String> = allow.iter().map(|word| word.to_text()).collect();
         self.words.allow = project_settings::project_settings_allowed(&self.words.allow, &flags)
             .map_err(refusal)?;

@@ -241,6 +241,7 @@ pub(crate) fn check_core_value_of<H: CheckHost>(state: &mut CheckState, world: &
         Expr::Call { func, args, config, .. } => {
             let func = nikaia_std::boxed::open(func);
             state.declared_callee_at(world, expr, func);
+            state.a_raw_sink_checked(world, host, func, args);
             check_core_call(state, world, host, func, args, config, span)
         },
         Expr::MethodCall { receiver, method, args, config, .. } => {

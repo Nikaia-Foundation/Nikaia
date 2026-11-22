@@ -298,6 +298,7 @@ fn check_core_value_of[H: CheckHost](mut state: CheckState, world: ref CheckWorl
         Expr::Match { value, arms, .. } => check_reflect_match(state, world, host, expr, value, arms, span) ?? check_core_flow_match(state, world, host, expr, value, arms, span),
         Expr::Call { func, args, config, .. } => {
             state.declared_callee_at(world, expr, func)
+            state.a_raw_sink_checked(world, host, func, args)
             check_core_call(state, world, host, func, args, config, span)
         },
         Expr::MethodCall { receiver, method, args, config, .. } => {

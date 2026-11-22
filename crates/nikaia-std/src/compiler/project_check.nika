@@ -296,7 +296,15 @@ fn project_check_let_raw_sinks_through(findings: Vec[CheckFinding], raw_sinks: S
             said.message = f"{said.message} The package `{package}` hands it on, and the application does not allow it."
             said.help = f"If the application means to let `{package}` do this, `{key} = {value}` under `[allow.packages.{package}]` in its manifest builds it, or `--allow={package}:{key}` for one build."
         }
-        if raw_sinks == "warn" {
+        // **A part no run-time check can stand for stays refused**
+        // (ADR-raw-sinks-1 D7): the prover's note says so, read under
+        // `warn` alone.
+        let note = raw_sink_unchecked_note()
+        let unchecked = said.notes.contains(note)
+        if raw_sinks != "warn" {
+            said.notes.retain(fn(one) { one != note })
+        }
+        if raw_sinks == "warn" && !unchecked {
             said.severity = CheckSeverity::Warning
             said.notes.push("`raw-sinks = \"warn\"` lets this build through.")
         }

@@ -622,6 +622,9 @@ pub struct CheckWorld {
     /// its file checks** (`CheckPackage`, #2685). `null` where the check was
     /// handed none: it works each out over `here` and `beside` itself.
     pub package: ref CheckPackage?,
+    /// **Whether `raw-sinks` is `warn`** (ADR-raw-sinks-1 D7, #2524): a raw
+    /// sink's part from outside is checked where it runs, so the call can fail.
+    pub raw_sinks_warn: bool,
 }
 
 /// **The facts of a whole package that each file's check asks the same**

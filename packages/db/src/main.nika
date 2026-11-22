@@ -161,6 +161,21 @@ pub fn is_identifier(part: String) -> bool sync {
     return !first
 }
 
+/// **A part of `raw(text)` from outside that is no SQL identifier**
+/// (ADR-raw-sinks-1 D7, #2524): under `raw-sinks = "warn"` an unproved part
+/// at a `raw(...)` site is checked there with `is_identifier`, and one that
+/// fails throws this from that site, the part escaped the way the log escapes
+/// it (ADR-398 D4). `Raw` keeps no mark of it and `execute` is unchanged.
+pub struct NotIdentifier {
+    pub part: String,
+}
+
+impl Error for NotIdentifier {
+    fn message(self) -> String {
+        return f"a part of db::raw is not one SQL identifier: {self.part}"
+    }
+}
+
 impl Statement for Raw {
     fn text(self) -> String {
         return self.text.clone()

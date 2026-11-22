@@ -140,6 +140,7 @@ impl EmitState {
         for each in visited_in_expr(guarded) {
             let key = node_key(each);
             if key != top && !apart.contains(&key) && self.emit_call_fails(world, each) { return true; }
+            if !apart.contains(&key) && nikaia_std::index::or(self.raw_path_checks.get(&key), || 0) < 0 { return true; }
         }
         let mut elsewhere: collections::BTreeSet<i64> = collections::BTreeSet::new();
         for each in visited_in_expr(guarded) {

@@ -11,6 +11,25 @@ pub fn is_plain(part: &str) -> bool {
     true
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum HtmlError {
+    NotPlain(String),
+}
+
+impl HtmlError {
+    pub fn message(&self) -> String {
+        match self {
+            HtmlError::NotPlain(part) => format!("a part of html::Raw is not plain text: {}", part),
+        }
+    }
+}
+impl std::fmt::Display for HtmlError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.message())
+    }
+}
+impl std::error::Error for HtmlError {}
+
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 pub fn is_operand(text: &str) -> bool { !text.starts_with('-') && !text.starts_with('/') }

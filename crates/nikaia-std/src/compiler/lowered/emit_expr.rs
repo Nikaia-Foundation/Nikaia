@@ -183,6 +183,31 @@ impl EmitState {
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn emit_expr_as_written<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, node: &Expr, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
+        let at = node_key(node);
+        if nikaia_std::index::or(self.raw_path_checks.get(&at), || 0) < 0 {
+            self.emit_raw_sink_checked(world, walk, out, host, node, depth, flow, scope)?;
+            return Ok(());
+        }
+        self.emit_expr_as_written_open(world, walk, out, host, node, depth, flow, scope)?;
+        Ok(())
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn emit_raw_sink_checked<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, node: &Expr, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
+        let markup = nikaia_std::index::or(self.raw_path_checks.get(&node_key(node)), || 0) == raw_check_markup();
+        let breaks = flow.breaks_to >= 0;
+        if breaks { out.push("match "); }
+        out.push("{ let __part = ::std::string::ToString::to_string(&(");
+        self.emit_expr_as_written_open(world, walk, out, host, node, depth, flow, scope)?;
+        if markup { out.push(")); if nikaia_std::html::is_plain(&__part) { Ok(__part) } else { Err(nikaia_std::html::HtmlError::NotPlain(::std::convert::Into::into(nikaia_std::text::escape_control(&__part)))) } }"); } else { out.push(")); if db::is_identifier(&__part) { Ok(__part) } else { Err(db::NotIdentifier { part: ::std::convert::Into::into(nikaia_std::text::escape_control(&__part)) }) } }"); }
+        if breaks { self.emit_expr_break_close(out, &flow); } else { out.push("?"); }
+        Ok(())
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn emit_expr_as_written_open<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, node: &Expr, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
         if self.facts.text_option_results.contains(&node_key(node)) {
             out.take_lend();
             out.push("(");

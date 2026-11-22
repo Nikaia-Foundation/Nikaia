@@ -71,13 +71,14 @@ pub fn throws_record(ledger: &mut Ledger, graph: &ThrowsGraph, places: &collecti
     }
 }
 
-pub fn unit_throws(program: &Program, names: &winnow_grammar::InternerContext, holes_of: &mut impl FnMut(&Expr) -> Vec<Expr>, contribution_of: &mut impl FnMut(&Expr) -> Contribution, own: &Ledger, library: &Ledger, graph: &mut ThrowsGraph) {
+#[allow(clippy::too_many_arguments)]
+pub fn unit_throws(program: &Program, names: &winnow_grammar::InternerContext, holes_of: &mut impl FnMut(&Expr) -> Vec<Expr>, contribution_of: &mut impl FnMut(&Expr) -> Contribution, own: &Ledger, library: &Ledger, raw_sinks_warn: bool, graph: &mut ThrowsGraph) {
     for item in program.items.iter() {
         match &item.node {
             Item::Fn { name, body, can_throw, .. } => {
                 let can_throw = *can_throw; let name = *name;
                 if can_throw {
-                    let thrown = thrown_by(body, names, &mut *holes_of, &mut *contribution_of);
+                    let thrown = thrown_by_at(body, names, &mut *holes_of, &mut *contribution_of, raw_sinks_warn);
                     with_methods(&key_of_function((name).as_ref(), "", names), &thrown, own, library, graph);
                 }
             },
@@ -88,7 +89,7 @@ pub fn unit_throws(program: &Program, names: &winnow_grammar::InternerContext, h
                         Item::Fn { name, body, can_throw, .. } => {
                             let can_throw = *can_throw; let name = *name;
                             if can_throw {
-                                let thrown = thrown_by(body, names, &mut *holes_of, &mut *contribution_of);
+                                let thrown = thrown_by_at(body, names, &mut *holes_of, &mut *contribution_of, raw_sinks_warn);
                                 with_methods(&key_of_function((name).as_ref(), &owner, names), &thrown, own, library, graph);
                             }
                         },
@@ -463,6 +464,7 @@ pub struct Thrown {
     pub(crate) passes_on: bool,
     pub(crate) named: collections::BTreeSet<String>,
     pub fatal_calls: collections::BTreeMap<String, collections::BTreeSet<String>>,
+    pub(crate) raw_sinks_warn: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -474,10 +476,42 @@ pub struct Contribution {
     pub result: Option<String>,
 }
 
-pub(crate) fn thrown_by(body: &Block, names: &winnow_grammar::InternerContext, holes_of: &mut impl FnMut(&Expr) -> Vec<Expr>, contribution_of: &mut impl FnMut(&Expr) -> Contribution) -> Thrown {
-    let mut out = Thrown { direct: collections::BTreeSet::new(), calls: collections::BTreeSet::new(), passes_on: false, named: collections::BTreeSet::new(), fatal_calls: collections::BTreeMap::new() };
+pub(crate) fn thrown_by(body: &Block, names: &winnow_grammar::InternerContext, holes_of: &mut impl FnMut(&Expr) -> Vec<Expr>, contribution_of: &mut impl FnMut(&Expr) -> Contribution) -> Thrown { thrown_by_at(body, names, &mut *holes_of, &mut *contribution_of, false) }
+
+pub(crate) fn thrown_by_at(body: &Block, names: &winnow_grammar::InternerContext, holes_of: &mut impl FnMut(&Expr) -> Vec<Expr>, contribution_of: &mut impl FnMut(&Expr) -> Contribution, raw_sinks_warn: bool) -> Thrown {
+    let mut out = Thrown { direct: collections::BTreeSet::new(), calls: collections::BTreeSet::new(), passes_on: false, named: collections::BTreeSet::new(), fatal_calls: collections::BTreeMap::new(), raw_sinks_warn };
     thrown_in_block(body, names, &mut *holes_of, &mut *contribution_of, false, &mut out);
     out
+}
+
+pub(crate) fn raw_sink_thrown(func: &Expr, args: &[Expr], names: &winnow_grammar::InternerContext, holes_of: &mut impl FnMut(&Expr) -> Vec<Expr>) -> Option<String> {
+    let (error, given) = match raw_sink_error(func, args.len() as i64, names) { Some(__nikaia_value) => __nikaia_value, None => return None };
+    for k in 0..given { if raw_sink_has_a_part(nikaia_std::index::get(&args, (k) as usize), &mut *holes_of) { return Some(error); } }
+    None
+}
+
+pub fn raw_sink_error(func: &Expr, count: i64, names: &winnow_grammar::InternerContext) -> Option<(String, i64)> {
+    let callee = match func {
+        Expr::Path(segments, _) => if segments.len() == 2 { nikaia_std::block::Text::from(nikaia_std::concat::plus(nikaia_std::block::Text::from(nikaia_std::concat::plus(all_but_the_last(names, segments), "::")), names.resolve(*unsafe { nikaia_std::proven::read(&segments, (1) as usize) }))) } else { return None; },
+        _ => return None,
+    };
+    if callee == "html::Raw" { return Some((String::from("html::HtmlError"), count)); }
+    if callee == "db::raw" { return Some((String::from("db::NotIdentifier"), if count == 0 { 0 } else { 1 })); }
+    None
+}
+
+pub(crate) fn raw_sink_has_a_part(expr: &Expr, holes_of: &mut dyn FnMut(&Expr) -> Vec<Expr>) -> bool {
+    match expr {
+        Expr::LitInterpolated { .. } => holes_of(expr).iter().any(|hole| { raw_sink_has_a_part(hole, &mut &mut *holes_of) }),
+        Expr::Binary { op, lhs, rhs, .. } => { let lhs = nikaia_std::boxed::open(lhs); let rhs = nikaia_std::boxed::open(rhs); if *op == BinaryOp::Add { raw_sink_has_a_part(lhs, &mut &mut *holes_of) || raw_sink_has_a_part(rhs, &mut &mut *holes_of) } else { true } },
+        Expr::LitStr { .. } => false,
+        Expr::LitInt { .. } => false,
+        Expr::LitFloat(..) => false,
+        Expr::LitChar(..) => false,
+        Expr::LitBool(..) => false,
+        Expr::LitNull(..) => false,
+        _ => true,
+    }
 }
 
 pub(crate) fn thrown_in_block(block: &Block, names: &winnow_grammar::InternerContext, holes_of: &mut dyn FnMut(&Expr) -> Vec<Expr>, contribution_of: &mut dyn FnMut(&Expr) -> Contribution, in_a_handler: bool, out: &mut Thrown) {
@@ -523,6 +557,12 @@ pub(crate) fn thrown_in(expr: &Expr, names: &winnow_grammar::InternerContext, ho
     match expr {
         Expr::Call { func, args, config, .. } => {
             let func = nikaia_std::boxed::open(func);
+            if out.raw_sinks_warn && !caught {
+                match raw_sink_thrown(func, args, names, &mut &mut *holes_of) {
+                    Some(error) => { out.direct.insert(error); },
+                    None => { },
+                }
+            }
             thrown_in(func, names, &mut &mut *holes_of, &mut &mut *contribution_of, in_a_handler, caught, out);
             for arg in args.iter() { thrown_in(arg, names, &mut &mut *holes_of, &mut &mut *contribution_of, in_a_handler, caught, out); }
             for setting in config.iter() { thrown_in(&setting.value, names, &mut &mut *holes_of, &mut &mut *contribution_of, in_a_handler, caught, out); }
@@ -699,7 +739,7 @@ pub(crate) fn the_caught_error(expr: &Expr, names: &winnow_grammar::InternerCont
 }
 
 pub(crate) fn passes_on(handler: &Block, names: &winnow_grammar::InternerContext, holes_of: &mut dyn FnMut(&Expr) -> Vec<Expr>, contribution_of: &mut dyn FnMut(&Expr) -> Contribution) -> bool {
-    let mut seen = Thrown { direct: collections::BTreeSet::new(), calls: collections::BTreeSet::new(), passes_on: false, named: collections::BTreeSet::new(), fatal_calls: collections::BTreeMap::new() };
+    let mut seen = Thrown { direct: collections::BTreeSet::new(), calls: collections::BTreeSet::new(), passes_on: false, named: collections::BTreeSet::new(), fatal_calls: collections::BTreeMap::new(), raw_sinks_warn: false };
     thrown_in_block(handler, names, &mut &mut *holes_of, &mut &mut *contribution_of, false, &mut seen);
     seen.passes_on
 }

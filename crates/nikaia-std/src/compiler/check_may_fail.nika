@@ -46,6 +46,29 @@ impl CheckState {
 }
 
 impl CheckState {
+    /// **A raw sink checked where it runs** (ADR-raw-sinks-1 D7, #2524): under
+    /// `raw-sinks = "warn"`, `html::Raw(...)` or `db::raw(...)` with a part that
+    /// is not a literal can throw the sink's error, so a `catch` around it has
+    /// that to handle (no `NK1134`), as the throws walk counts it.
+    fn a_raw_sink_checked[H: CheckHost](ref mut self, world: ref CheckWorld, host: ref H, func: ref Expr, args: ref Vec[Expr]) sync {
+        if !world.raw_sinks_warn || self.flow.guarded == null {
+            return
+        }
+        let (error, given) = raw_sink_error(func, args.len(), world.words) ?? return
+        let mut parted = false
+        for k in 0..<given {
+            parted = parted || check_raw_sink_has_a_part(host, args[k])
+        }
+        if !parted {
+            return
+        }
+        let held: CheckGuarded? = self.flow.guarded?.clone()
+        let mut guarded = held ?? CheckGuarded::nothing()
+        guarded.fallible = true
+        guarded.thrown.insert(error)
+        self.flow.guarded = guarded
+    }
+
     /// **A `throw` in a function that does not say `throws`** (`NK2605`, Part
     /// I 7.1, #1627): it fails the function as a failing call does, and the
     /// language below has no `Result` to give it to.
@@ -141,5 +164,22 @@ impl CheckState {
             help = drop_help((function.strip_suffix("::drop") ?? "").clone())
         }
         self.findings.push(CheckFinding { severity: CheckSeverity::Error, span: span.clone(), code: "NK2605", message: f"This function can fail, because `{key}` can fail.", notes: [f"`{key}` can fail with {list}.", "A call that can fail looks like any other call, so its failure passes straight through this function unless you handle it."], help: help, labels: [], edit: null })
+    }
+}
+
+/// Whether a raw sink's argument has a part that is not a literal, as
+/// `raw_sink_has_a_part` in the throws walk reads it: the holes of an `f"..."`
+/// and the sides of a `+` are its parts.
+fn check_raw_sink_has_a_part[H: CheckHost](host: ref H, expr: ref Expr) -> bool sync {
+    return match expr {
+        Expr::LitInterpolated { .. } => host.holes_read(expr).iter().any(fn(hole) { check_raw_sink_has_a_part(host, hole.0) }),
+        Expr::Binary { op, lhs, rhs, .. } => if op == BinaryOp::Add { check_raw_sink_has_a_part(host, lhs) || check_raw_sink_has_a_part(host, rhs) } else { true },
+        Expr::LitStr { .. } => false,
+        Expr::LitInt { .. } => false,
+        Expr::LitFloat(..) => false,
+        Expr::LitChar(..) => false,
+        Expr::LitBool(..) => false,
+        Expr::LitNull(..) => false,
+        else => true,
     }
 }

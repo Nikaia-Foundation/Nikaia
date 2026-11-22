@@ -35,6 +35,24 @@ pub fn is_plain(part: ref String) -> bool sync {
     return true
 }
 
+/// **What a breached markup precondition throws** (ADR-raw-sinks-1 D7,
+/// #2524): under `raw-sinks = "warn"` a part from outside the program that
+/// reaches `html::Raw(...)` unproved is checked where the value is made, and
+/// one that is not `is_plain` throws `NotPlain(part)`, the part escaped the
+/// way the log escapes it (ADR-398 D4). `src/html.rs` re-exports it as
+/// `nikaia_std::html::HtmlError`.
+pub enum HtmlError {
+    NotPlain(String),
+}
+
+impl Error for HtmlError {
+    fn message(self) -> String {
+        return match self {
+            HtmlError::NotPlain(part) => f"a part of html::Raw is not plain text: {part}",
+        }
+    }
+}
+
 /// Whether `text` is read as an operand, not as an option: it starts with
 /// neither `-` nor `/` (ADR-raw-sinks-1 D18, the precondition of the start of
 /// each argument of `process::run`). A program reads a word that starts with

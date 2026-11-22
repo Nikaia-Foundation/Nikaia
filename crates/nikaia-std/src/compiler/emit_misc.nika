@@ -256,6 +256,11 @@ impl EmitState {
             if key != top && !apart.contains(key) && self.emit_call_fails(world, each) {
                 return true
             }
+            // **A raw sink's part checked where it runs** (ADR-raw-sinks-1
+            // D7, #2524) fails at that part, the guarded call itself included.
+            if !apart.contains(key) && (self.raw_path_checks.get(key) ?? 0) < 0 {
+                return true
+            }
         }
         // **A `throw` in the guarded half is caught here too** (Part I 7.1,
         // #1635), the guarded expression itself included; one in a nested

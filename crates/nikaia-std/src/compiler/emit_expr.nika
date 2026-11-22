@@ -274,6 +274,45 @@ impl EmitState {
     /// own bytes kept beyond the text are copied** into a `Bytes` of their own
     /// (ADR-320 D11, `kept_text_bytes`).
     fn emit_expr_as_written[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, node: ref Expr, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
+        let at = node_key(node)
+        if (self.raw_path_checks.get(at) ?? 0) < 0 {
+            self.emit_raw_sink_checked(world, walk, out, host, node, depth, flow, scope)
+            return
+        }
+        self.emit_expr_as_written_open(world, walk, out, host, node, depth, flow, scope)
+    }
+
+    /// **A raw sink's part from outside, checked where the value is made**
+    /// (ADR-raw-sinks-1 D7, #2524): under `raw-sinks = "warn"` a part of an
+    /// `html::Raw(...)` the prover did not prove is the text it makes when
+    /// `html::is_plain` holds of it, and throws `html::HtmlError::NotPlain`
+    /// otherwise; one of a `db::raw(...)` the same with `db::is_identifier`
+    /// and `db::NotIdentifier`. The part in the error is escaped as the log
+    /// escapes it (ADR-398 D4). The error leaves as a failing call's does:
+    /// to the handler of the `catch` that guards it, else out of the
+    /// function, which `throws` (the prover keeps a part elsewhere refused).
+    fn emit_raw_sink_checked[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, node: ref Expr, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
+        let markup = (self.raw_path_checks.get(node_key(node)) ?? 0) == raw_check_markup()
+        let breaks = flow.breaks_to >= 0
+        if breaks {
+            out.push("match ")
+        }
+        out.push("{ let __part = ::std::string::ToString::to_string(&(")
+        self.emit_expr_as_written_open(world, walk, out, host, node, depth, flow, scope)
+        if markup {
+            out.push(")); if nikaia_std::html::is_plain(&__part) { Ok(__part) } else { Err(nikaia_std::html::HtmlError::NotPlain(::std::convert::Into::into(nikaia_std::text::escape_control(&__part)))) } }")
+        } else {
+            out.push(")); if db::is_identifier(&__part) { Ok(__part) } else { Err(db::NotIdentifier { part: ::std::convert::Into::into(nikaia_std::text::escape_control(&__part)) }) } }")
+        }
+        if breaks {
+            self.emit_expr_break_close(out, flow)
+        } else {
+            out.push("?")
+        }
+    }
+
+    /// `emit_expr_as_written`, past the check of a raw sink's part.
+    fn emit_expr_as_written_open[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, node: ref Expr, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
         // **A `String?` handed back into a `ref String?`** (#1666): the
         // option of a view of the map's text, `Option<&String>`, is made the
         // option of a text view the result is.

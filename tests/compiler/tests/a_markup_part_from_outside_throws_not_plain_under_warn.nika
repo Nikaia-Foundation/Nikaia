@@ -1,0 +1,28 @@
+// A part from outside that reaches `html::Raw(...)` unproved builds under
+// `raw-sinks = "warn"`, the default, in a function that `throws`, and is
+// checked where the value is made (ADR-raw-sinks-1 D7, #2524): `<b>` is not
+// `html::is_plain`, so the call throws `html::HtmlError::NotPlain` with the
+// part, to the `catch` around it or out of the function. A plain part makes
+// the markup as written.
+use std::cli
+use std::html
+
+fn page(at: i64, given: String) -> html::Raw throws {
+    let name = cli::args().nth(at) ?? given
+    return html::Raw(f"<p>{name}</p>")
+}
+
+fn shown(at: i64, given: String) throws {
+    let made = page(at, given) catch {
+        match error {
+            html::HtmlError::NotPlain(part) => println(f"html::HtmlError::NotPlain(\"{part}\")"),
+        }
+        return
+    }
+    println(made.as_str())
+}
+
+fn main() throws {
+    shown(1, "<b>")
+    shown(2, "plain")
+}

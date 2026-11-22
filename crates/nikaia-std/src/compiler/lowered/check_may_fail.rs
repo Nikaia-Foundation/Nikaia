@@ -33,6 +33,23 @@ impl CheckState {
 impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
+    pub(crate) fn a_raw_sink_checked<H: CheckHost>(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, host: &H, func: &Expr, args: &[Expr]) {
+        if !world.raw_sinks_warn || self.flow.guarded.is_none() { return; }
+        let (error, given) = match raw_sink_error(func, args.len() as i64, world.words) { Some(__nikaia_value) => __nikaia_value, None => return };
+        let mut parted = false;
+        for k in 0..given { parted = parted || check_raw_sink_has_a_part(host, nikaia_std::index::get(&args, (k) as usize)); }
+        if !parted { return; }
+        let held: Option<CheckGuarded> = match self.flow.guarded.as_ref() {
+            Some(__nikaia_it) => Some(__nikaia_it.clone()),
+            None => None,
+        };
+        let mut guarded = nikaia_std::index::or(held, || CheckGuarded::nothing());
+        guarded.fallible = true;
+        guarded.thrown.insert(error);
+        self.flow.guarded = Some(guarded);
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
     pub(crate) fn a_throw_here(&mut self, thrown: &Ty, span: &Span) {
         if self.flow.throwing || self.flow.caught || self.inside_an_action.is_some() { return; }
         let function = match match self.current.as_ref() {
@@ -95,6 +112,22 @@ impl CheckState {
         let mut help: String = format!("Add `throws` to `{}`, or handle it at the call: `… catch {{ … }}`.", function);
         if self.inside_a_drop && function.ends_with("::drop") { help = drop_help(&nikaia_std::block::Text::from(nikaia_std::index::or(function.strip_suffix("::drop"), || "").to_string())); }
         self.findings.push(CheckFinding { severity: CheckSeverity::Error, span: span.clone(), code: String::from("NK2605"), message: format!("This function can fail, because `{}` can fail.", key), notes: vec![format!("`{}` can fail with {}.", key, list), String::from("A call that can fail looks like any other call, so its failure passes straight through this function unless you handle it.")], help: Some(help), labels: vec![], edit: None });
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn check_raw_sink_has_a_part<H: CheckHost>(host: &H, expr: &Expr) -> bool {
+    match expr {
+        Expr::LitInterpolated { .. } => host.holes_read(expr).iter().any(|hole| { check_raw_sink_has_a_part(host, &hole.0) }),
+        Expr::Binary { op, lhs, rhs, .. } => { let lhs = nikaia_std::boxed::open(lhs); let rhs = nikaia_std::boxed::open(rhs); if *op == BinaryOp::Add { check_raw_sink_has_a_part(host, lhs) || check_raw_sink_has_a_part(host, rhs) } else { true } },
+        Expr::LitStr { .. } => false,
+        Expr::LitInt { .. } => false,
+        Expr::LitFloat(..) => false,
+        Expr::LitChar(..) => false,
+        Expr::LitBool(..) => false,
+        Expr::LitNull(..) => false,
+        _ => true,
     }
 }
 

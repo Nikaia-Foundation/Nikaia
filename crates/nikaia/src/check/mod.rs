@@ -436,6 +436,7 @@ fn walked<'a>(
             })
             .collect(),
         package: package.map(|facts| &facts.check),
+        raw_sinks_warn: crate::contracts::raw_sinks_are_warn(),
     };
     let mut s = core::hollow();
     s.flow = CheckFlow::start(computes, harvesting);

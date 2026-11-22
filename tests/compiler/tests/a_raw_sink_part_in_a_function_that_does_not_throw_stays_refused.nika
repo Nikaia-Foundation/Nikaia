@@ -1,0 +1,16 @@
+// Under `raw-sinks = "warn"`, the default, a part from outside at a raw
+// sink is checked where it runs only in a function that `throws`
+// (ADR-raw-sinks-1 D7, #2524): in `page`, which does not, nothing can leave
+// with `html::HtmlError`, so the unproved part stays `NK1308`, refused.
+use std::cli
+use std::html
+
+fn page() -> String {
+    let name = cli::args().nth(1) ?? "<b>"
+    let made = html::Raw(f"<p>{name}</p>")
+    return made.as_str().clone()
+}
+
+fn main() throws {
+    println(page())
+}
