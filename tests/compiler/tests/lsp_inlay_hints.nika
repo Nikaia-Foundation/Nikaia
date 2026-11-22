@@ -1,0 +1,66 @@
+// ADR-text-reuse-1 D5 (#2514): `textDocument/inlayHint` answers each give
+// and each reuse the check narrated as a hint at the end of its line, worded
+// as `--tethers` prints it: the grown cut `rest` takes the buffer of `line`,
+// and `t = t.replace(..)` works in the buffer of `t`. A range that holds
+// neither line answers an empty list; `initialize` offers the hints.
+use std::fs
+use std::process
+
+fn toolchain() -> String throws {
+    let exe = process::run("sh", ["-c", "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\""]).stdout.trim().clone()
+    if exe.len() > 0 { return exe }
+    return "target/fast/nikaia"
+}
+
+fn framed(body: String) -> String {
+    return f"Content-Length: {body.len()}\r\n\r\n{body}"
+}
+
+fn quoted(text: String) -> String {
+    return text.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n")
+}
+
+fn opened(uri: String, text: String) -> String {
+    return framed(f"{{\"jsonrpc\":\"2.0\",\"method\":\"textDocument/didOpen\",\"params\":{{\"textDocument\":{{\"uri\":\"{uri}\",\"languageId\":\"nikaia\",\"version\":1,\"text\":\"{quoted(text)}\"}}}}}}")
+}
+
+fn hints(id: i64, uri: String, first: i64, last: i64) -> String {
+    return framed(f"{{\"jsonrpc\":\"2.0\",\"id\":{id},\"method\":\"textDocument/inlayHint\",\"params\":{{\"textDocument\":{{\"uri\":\"{uri}\"}},\"range\":{{\"start\":{{\"line\":{first},\"character\":0}},\"end\":{{\"line\":{last},\"character\":0}}}}}}}}")
+}
+
+// The answers, each frame as `Content-Length: ok` when the length is the
+// body's bytes: the length depends on the scratch path, which is cut from the
+// output. The published diagnostics are left out.
+fn masked(stdout: String, base: String) -> String {
+    let mut out = ""
+    for part in stdout.split("Content-Length: ") {
+        let pieces: Vec[String] = part.split("\r\n\r\n").map(fn(p) { p }).collect()
+        if pieces.len() == 2 && !pieces[1].contains("publishDiagnostics") {
+            let length = if pieces[0] == f"{pieces[1].len()}" { "ok" } else { "wrong" }
+            out.push_str(f"Content-Length: {length}\\r\\n\n\\r\\n\n{pieces[1].replace(base, "<scratch>")}\n")
+        }
+    }
+    return out
+}
+
+fn main() throws {
+    let root = fs::scratch()
+    fs::create_dir("pk/src", root; recursive: true)
+    fs::write("pk/nikaia.toml", root, "[package]\nname = \"pk\"\nversion = \"0.1.0\"\n")
+    let text: String = "fn tail_of(keep line: String) -> String {\n    let m = line.find(\";\") ?? return line\n    let mut rest = line.after(m.end)\n    rest += \"!\"\n    return rest\n}\n\nfn shorter(s: String) -> String {\n    let mut t = s.replace(\"a\", \"b\")\n    t = t.replace(\"cc\", \"c\")\n    return t\n}\n\nfn main() throws {\n    println(tail_of(f\"Hamburg;{12}\"))\n    println(shorter(\"accbcc\"))\n}\n"
+    fs::write("pk/src/main.nika", root, text)
+    let base = fs::canonical(".", root).display()
+    let uri = f"file://{base}/pk/src/main.nika"
+    let mut transcript = framed("{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{\"capabilities\":{}}}")
+    transcript.push_str(framed("{\"jsonrpc\":\"2.0\",\"method\":\"initialized\",\"params\":{}}"))
+    transcript.push_str(opened(uri, text))
+    // The whole file, then the lines of `main` only.
+    transcript.push_str(hints(2, uri, 0, 20))
+    transcript.push_str(hints(3, uri, 13, 16))
+    transcript.push_str(framed("{\"jsonrpc\":\"2.0\",\"id\":4,\"method\":\"shutdown\"}"))
+    transcript.push_str(framed("{\"jsonrpc\":\"2.0\",\"method\":\"exit\"}"))
+    let out = process::run(toolchain(), ["lsp"]; stdin: process::Input::Text(transcript))
+    print(masked(out.stdout, base))
+    println(f"exit {out.code}")
+    print(out.stderr)
+}

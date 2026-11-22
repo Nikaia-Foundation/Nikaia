@@ -12,6 +12,8 @@
 // text (`LspHost`) - as `textDocument/publishDiagnostics`, each finding on the
 // file it is about. It answers `textDocument/definition` with the place the
 // name under the cursor is declared, as the same check resolved it (#1396).
+// It answers `textDocument/inlayHint` with each give and each reuse the check
+// narrated, the line `--tethers` prints there (ADR-text-reuse-1 D5, #2514).
 
 use json
 use std::collections
@@ -33,9 +35,14 @@ use std::text
 /// `offset` of `entry` is declared (#1396): the file's path, the span of the
 /// declaration and the name declared there; nothing on a place that names
 /// nothing it resolved, or where the file does not parse.
+///
+/// `narrated` checks the same program and gives what the check of `entry`
+/// narrated (ADR-text-reuse-1 D5, #2514): each give and each reuse, by the
+/// first byte of its site; nothing where the file does not parse.
 pub trait LspHost {
     fn diagnose(ref self, entry: ref String, open: ref collections::BTreeMap[String, String], alone: bool, tests: bool) -> Vec[(String, Shown)] sync
     fn definition(ref self, entry: ref String, open: ref collections::BTreeMap[String, String], alone: bool, offset: i64) -> (String, Span, String)? sync
+    fn narrated(ref self, entry: ref String, open: ref collections::BTreeMap[String, String], alone: bool) -> collections::BTreeSet[(i64, String)] sync
 }
 
 /// A message the editor sent that cannot be read as one.
@@ -109,9 +116,10 @@ fn lsp_refuse(id: ref json::Value, code: i64, message: ref String) throws {
 }
 
 /// What `initialize` answers: the whole text of a document is sent on each
-/// change (`textDocumentSync` 1), and "go to definition" is offered (#1396).
+/// change (`textDocumentSync` 1), "go to definition" is offered (#1396), and
+/// so are inlay hints (#2514).
 fn lsp_capabilities() -> json::Value {
-    return lsp_object([("capabilities", lsp_object([("textDocumentSync", lsp_number(1)), ("definitionProvider", json::Value::Bool(true))]))])
+    return lsp_object([("capabilities", lsp_object([("textDocumentSync", lsp_number(1)), ("definitionProvider", json::Value::Bool(true)), ("inlayHintProvider", json::Value::Bool(true))]))])
 }
 
 /// **The server**: messages are read and answered until `exit`. What it ends
@@ -188,6 +196,8 @@ pub fn lsp_serve[H: LspHost](host: ref H) -> i64 throws {
                     lsp_respond(asked, json::Value::Null)
                 } else if method == "textDocument/definition" {
                     lsp_respond(asked, lsp_definition(host, cargo_json_member(message, "params"), open, uris))
+                } else if method == "textDocument/inlayHint" {
+                    lsp_respond(asked, lsp_inlay_hints(host, cargo_json_member(message, "params"), open))
                 } else {
                     lsp_refuse(asked, -32601, f"no method `{method}`")
                 }
@@ -276,6 +286,31 @@ fn lsp_definition[H: LspHost](host: ref H, params: ref json::Value?, open: ref c
     let offset = lsp_offset(lsp_text_of(path, open), line, character)
     let (file, span, name) = host.definition(path, open, alone, offset) ?? return json::Value::Null
     return lsp_object([("uri", lsp_string(lsp_uri_of(file, uris))), ("range", lsp_range(lsp_text_of(file, open), span, name))])
+}
+
+/// **The gives and reuses of a document, as inlay hints** (ADR-text-reuse-1
+/// D5, #2514): for each site the check narrated on a line of the asked
+/// range, an `InlayHint` at the end of that line whose label is the line
+/// `--tethers` prints there (`rest takes the buffer of line`). An empty list
+/// where nothing was narrated or the document was not checked.
+fn lsp_inlay_hints[H: LspHost](host: ref H, params: ref json::Value?, open: ref collections::BTreeMap[String, String]) -> json::Value {
+    let document = cargo_json_member(params, "textDocument")
+    let uri = cargo_json_text(cargo_json_member(document, "uri")) ?? return json::Value::Null
+    let range = cargo_json_member(params, "range")
+    let first = cargo_json_number(cargo_json_member(cargo_json_member(range, "start"), "line")) ?? 0
+    let last = cargo_json_number(cargo_json_member(cargo_json_member(range, "end"), "line")) ?? 1000000000
+    let alone = !uri.starts_with("file://")
+    let path = if alone { uri.clone() } else { lsp_uri_path(uri) ?? return json::Value::Null }
+    let source = lsp_text_of(path, open)
+    let mut hints: Vec[json::Value] = []
+    for (_, line, text) in narrated_lines(host.narrated(path, open, alone), source) {
+        if line < first || line > last {
+            continue
+        }
+        let (_, end) = lsp_position(source, lsp_offset(source, line, 1000000000))
+        hints.push(lsp_object([("position", lsp_point(line, end)), ("label", lsp_string(text)), ("paddingLeft", json::Value::Bool(true))]))
+    }
+    return json::Value::Array(hints)
 }
 
 /// The text of the file at `path`: the editor's where it has it open, else

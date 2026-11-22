@@ -1,0 +1,13 @@
+Content-Length: ok\r\n
+\r\n
+{"jsonrpc":"2.0","id":1,"result":{"capabilities":{"textDocumentSync":1,"definitionProvider":true,"inlayHintProvider":true}}}
+Content-Length: ok\r\n
+\r\n
+{"jsonrpc":"2.0","id":2,"result":[{"position":{"line":2,"character":36},"label":"rest takes the buffer of line","paddingLeft":true},{"position":{"line":9,"character":28},"label":"replace works in the buffer of t","paddingLeft":true}]}
+Content-Length: ok\r\n
+\r\n
+{"jsonrpc":"2.0","id":3,"result":[]}
+Content-Length: ok\r\n
+\r\n
+{"jsonrpc":"2.0","id":4,"result":null}
+exit 0
