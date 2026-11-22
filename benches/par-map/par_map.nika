@@ -1,0 +1,131 @@
+// ADR-async-5 D28's count: `par_iter().map(…).collect()` over 10^6 elements,
+// a Nikaia program against its Rayon twin.
+//
+// D28 accepts the lowering of a `par_iter` chain only with these rows: the
+// chain counted against Rayon, once with a lambda that can throw and once with
+// one that allocates, release builds on both sides, LTO stated, the same
+// output first. Each row is a `.nika` program beside this file and a Rust
+// binary in `src/bin/par_map_<row>.rs`.
+//
+// Both sides are built at opt-level 3, 16 codegen units, without LTO: the
+// Rust side at the workspace's `release` profile, the Nikaia side through
+// `[build.x86_64-linux]`, with `user-parallelism = "yes"` (at `no` the chain
+// is the list's `iter`). What was built is asserted: the emitted Rust must
+// walk through `nikaia_std::par::`, or the count would be of a sequential
+// loop. Both run on Rayon's global pool, its size pinned by
+// `RAYON_NUM_THREADS` for both.
+//
+// Counted with callgrind, never timed (docs/measuring.md): total instructions
+// and mispredicted branches of each binary, the two outputs compared byte for
+// byte first. See README.md.
+//
+//     nikaia run benches/par-map/par_map.nika                 10^6 elements, 4 threads
+//     nikaia run benches/par-map/par_map.nika -- 10000 2      quicker
+//     NIKAIA=target/fast/nikaia nikaia run benches/par-map/par_map.nika
+//
+// The projects, the outputs and callgrind's files go to target/par-map-bench.
+use std::cli
+use std::fs
+use std::process
+use std::text
+
+fn root() -> String throws {
+	return process::run("git", ["rev-parse", "--show-toplevel"]).stdout.trim().clone()
+}
+
+fn sh(script: String) -> process::Output throws {
+	return process::run("sh", ["-c", script])
+}
+
+fn must(script: String, what: String) throws {
+	let r = sh(script)
+	if r.code != 0 {
+		println(f"{what} failed:\n{r.stdout}{r.stderr}")
+		process::exit(1)
+	}
+}
+
+fn write(path: String, text: String) throws {
+	fs::write(path, fs::Root::Anywhere, text)
+}
+
+// The compiler: `$NIKAIA`, else a release build of the repository's own.
+fn toolchain(repo: String) -> String throws {
+	let exe = sh("echo ${NIKAIA:-}").stdout.trim().clone()
+	if exe.len() > 0 { return exe }
+	must(
+		f"cargo build -q --release -p nikaia --manifest-path {repo}/Cargo.toml",
+		"the compiler's release build",
+	)
+	return f"{repo}/target/release/nikaia"
+}
+
+// One row's `.nika` program built as its own project; its binary's path.
+fn build(nikaia: String, repo: String, out: String, row: String) -> String throws {
+	let project = f"{out}/{row}"
+	must(f"mkdir -p {project}/src", "mkdir")
+	must(f"cp {repo}/benches/par-map/{row}.nika {project}/src/main.nika", "cp")
+	write(
+		f"{project}/nikaia.toml",
+		f"[package]\nname = \"{row}\"\nversion = \"0.1.0\"\n\n[build]\nuser-parallelism = \"yes\"\n\n[build.x86_64-linux]\nopt-level = 3\ncodegen-units = 16\nlto = false\ndebug = false\n",
+	)
+	must(f"cd {project} && {nikaia} build > /dev/null", f"the build of {row}")
+	let gen = f"{project}/target/nikaia/gen/{row}/{row}.rs"
+	if sh(f"grep -q 'nikaia_std::par::' {gen}").code != 0 {
+		println(f"{row}: the emitted Rust walks no `nikaia_std::par::` chain, so this would count a sequential loop")
+		process::exit(1)
+	}
+	return f"{project}/target/nikaia/bin/{row}"
+}
+
+// Instructions and mispredicted branches of one run, as two cells, from
+// callgrind's totals (`events: Ir Bc Bcm Bi Bim`).
+fn count(out: String, env: String, binary: String, n: i64) -> String throws {
+	let file = f"{out}/cg.out"
+	must(
+		f"{env} timeout -s KILL 3600 valgrind --tool=callgrind --branch-sim=yes --callgrind-out-file={file} {binary} {n} > /dev/null 2>{out}/valgrind.log",
+		f"callgrind of {binary}",
+	)
+	let totals = sh(f"grep -E '^(totals|summary):' {file} | head -1").stdout.trim().clone()
+	let fields: Vec[String] = totals.split_whitespace().collect()
+	let instructions = text::parse_i64(fields[1]) ?? 0
+	let mispredicted = (text::parse_i64(fields[3]) ?? 0) + (text::parse_i64(fields[5]) ?? 0)
+	return f"{instructions} | {mispredicted}"
+}
+
+fn main() throws {
+	let repo = root()
+	let mut args = cli::args()
+	args.nth(0)
+	let n = text::parse_i64(args.nth(0) ?? "1000000") ?? 1000000
+	let threads = text::parse_i64(args.nth(0) ?? "4") ?? 4
+	let out = f"{repo}/target/par-map-bench"
+	must("command -v valgrind", "par_map.nika needs valgrind (callgrind):")
+	must(f"mkdir -p {out}", "mkdir")
+	let nikaia = toolchain(repo.clone())
+	must(
+		f"cargo build -q --release -p par-map-bench --manifest-path {repo}/Cargo.toml",
+		"the Rayon side's release build",
+	)
+	// The runtime's I/O wait does not block under valgrind 3.22
+	// (docs/measuring.md), so the Nikaia side runs with the blocking fallback.
+	let config = f"{out}/io-blocking.toml"
+	write(config, "io-method = \"blocking\"\n")
+	let env = f"RAYON_NUM_THREADS={threads} NIKAIA_RUNTIME_CONFIG={config}"
+
+	println(f"{n} elements, RAYON_NUM_THREADS={threads}, opt-level 3, 16 codegen units, no LTO on both sides")
+	println("")
+	println("| lambda | Nikaia: instructions | mispredicted | Rayon: instructions | mispredicted |")
+	println("|---|--:|--:|--:|--:|")
+	for row in ["allocates"] {
+		let ours = build(nikaia, repo, out, row)
+		let theirs = f"{repo}/target/release/par_map_{row}"
+		must(f"{env} {ours} {n} > {out}/{row}.nikaia.out", f"{row}, the Nikaia side")
+		must(f"{env} {theirs} {n} > {out}/{row}.rayon.out", f"{row}, the Rayon side")
+		if sh(f"cmp -s {out}/{row}.nikaia.out {out}/{row}.rayon.out").code != 0 {
+			println(f"{row}: the two programs print different things")
+			process::exit(1)
+		}
+		println(f"| {row} | {count(out, env, ours, n)} | {count(out, env, theirs, n)} |")
+	}
+}
