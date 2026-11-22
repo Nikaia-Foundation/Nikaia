@@ -1,0 +1,58 @@
+// #2511, ADR-async-5 D32: the ledger records how each `par_iter` call runs,
+// and where the committed ledger says a call ran in pieces and its lambda can
+// now pause, the build warns (`NK2119`) at the call that made it pause, with
+// the calls that lead there. The ledger the build writes acknowledges it, and
+// a lambda written to pause from the start is never warned of.
+use std::env
+use std::fs
+use std::process
+
+fn toolchain() -> String throws {
+    let exe = env::current_exe()?.display() ?? ""
+    if exe.len() > 0 { return exe }
+    return "target/fast/nikaia"
+}
+
+fn build(nikaia: String, tmp: ref fs::Root, label: String) throws {
+    let out = process::run(nikaia, ["build"]; dir: tmp.path().to_text())
+    println(f"-- {label}")
+    let mut inside = false
+    let mut warned = false
+    for line in f"{out.stdout}{out.stderr}".lines() {
+        if line.starts_with("warning[") || line.starts_with("error[") {
+            inside = line.contains("NK2119") || line.starts_with("error[")
+            warned = warned || inside
+        } else if !line.starts_with(" ") {
+            inside = false
+        }
+        if inside && !line.trim().starts_with("|") && !line.trim().starts_with("^") && !line.contains("Compiling") && !line.contains("Finished") && !line.contains("Blocking waiting for file lock") {
+            println(line.replace(tmp.path().to_text(), "TMP"))
+        }
+    }
+    if !warned {
+        println("no NK2119")
+    }
+    for line in fs::read_to_string("nikaia.contracts", tmp).lines() {
+        if line.starts_with("[fn.\"total\"]") || line.starts_with("[fn.\"fetched\"]") || line.starts_with("par_iter = ") {
+            println(line)
+        }
+    }
+}
+
+fn main() throws {
+    let tmp = fs::scratch()
+    let nikaia = toolchain()
+    process::run("mkdir", ["-p", f"{tmp.path().to_text()}/src"])
+    fs::write("nikaia.toml", tmp, "[package]\nname = \"pieces\"\nversion = \"0.1.0\"\n")
+    let pure = "fn step(n: i64) -> i64 {\n    return n * 2\n}\n"
+    let paused = "use std::time\n\nfn step(n: i64) -> i64 {\n    return wait(n)\n}\n\nfn wait(n: i64) -> i64 {\n    time::sleep(1.millis())\n    return n * 2\n}\n"
+    let total = "fn total(xs: ref Vec[i64]) -> i64 {\n    let doubled: Vec[i64] = xs.par_iter().map(fn(x) { step(x) + 1 }).collect()\n    let kept: Vec[i64] = xs.par_iter().filter(fn(x) { x > 1 }).collect()\n    return doubled.len() + kept.len()\n}\n"
+    let fetched = "fn fetched(xs: ref Vec[i64]) -> i64 {\n    let got: Vec[i64] = xs.par_iter().map(fn(x) { wait(x) }).collect()\n    return got.len()\n}\n"
+    let main = "fn main() throws {\n    println(total([1, 2, 3]))\n}\n"
+    fs::write("src/main.nika", tmp, f"{pure}{total}{main}")
+    build(nikaia, tmp, "every lambda computes: both calls run in pieces")
+    fs::write("src/main.nika", tmp, f"{paused}{total}{main}")
+    build(nikaia, tmp, "the first call's lambda now pauses")
+    fs::write("src/main.nika", tmp, f"{paused}{total}{fetched}{main}")
+    build(nikaia, tmp, "the ledger written acknowledges it; a lambda written to pause is not warned of")
+}

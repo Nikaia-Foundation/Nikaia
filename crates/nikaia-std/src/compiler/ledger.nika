@@ -409,6 +409,8 @@ fn function_key(mut entry: FnContract, name: ref String, key: ref String, value:
         entry.keeps = entries(value, n)
     } else if key == "at_once" {
         entry.at_once = entries(value, n)
+    } else if key == "par_iter" {
+        entry.par_iter = entries(value, n)
     } else if key == "os_text" {
         entry.os_text = entries(value, n)
     } else if key == "mutates" {

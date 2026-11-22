@@ -120,6 +120,7 @@ pub(crate) fn function_text(name: &str, contract: &FnContract) -> String {
     if !contract.returns.is_empty() { { use ::core::fmt::Write as _; let _ = out.write_fmt(format_args!("returns = \"{}\"\n", contract.returns)); }; } else if !contract.borrows.is_empty() && !borrows_said { { use ::core::fmt::Write as _; let _ = out.write_fmt(format_args!("returns = \"ref({})\"\n", nikaia_std::block::Text::from(contract.borrows.join(" | ")))); }; }
     if !contract.keeps.is_empty() { { use ::core::fmt::Write as _; let _ = out.write_fmt(format_args!("keeps = [{}]\n", quoted_all(&contract.keeps))); }; }
     if !contract.at_once.is_empty() { { use ::core::fmt::Write as _; let _ = out.write_fmt(format_args!("at_once = [{}]\n", quoted_all(&contract.at_once))); }; }
+    if !contract.par_iter.is_empty() { { use ::core::fmt::Write as _; let _ = out.write_fmt(format_args!("par_iter = [{}]\n", quoted_all(&contract.par_iter))); }; }
     if !contract.os_text.is_empty() { { use ::core::fmt::Write as _; let _ = out.write_fmt(format_args!("os_text = [{}]\n", quoted_all(&contract.os_text))); }; }
     if contract.mutates && !mutates_said { out.push_str("mutates = true\n"); }
     match contract.touches_a_lock {

@@ -707,14 +707,54 @@ pub(crate) fn tasks_in_block(block: &Block, walk: &mut TaskWalk, pauses: &mut dy
 pub fn par_report(items: &[Spanned<Item>], names: &winnow_grammar::InternerContext, source: &str, fanned: &mut impl FnMut(i64) -> bool, pauses: &mut impl FnMut(&Expr) -> bool) -> String {
     let lines: Vec<&str> = source.split("\n").collect::<Vec<_>>();
     let mut out: String = String::from(""); #[allow(clippy::redundant_locals)] let lines = lines;
+    let sites = par_sites(items, names, &mut *fanned, &mut *pauses);
+    let mut at: i64 = 0; #[allow(clippy::redundant_locals)] let lines = lines;
+    while at < sites.len() as i64 {
+        let key = nikaia_std::block::Text::from(unsafe { nikaia_std::proven::read(&sites, (at) as usize) }.function.to_string());
+        let mut count: i64 = 0;
+        while at + count < sites.len() as i64 && unsafe { nikaia_std::proven::read(&sites, (nikaia_std::proven::add::<i64>(at, count)) as usize) }.function == key { count = unsafe { nikaia_std::proven::add::<i64>(count, 1) }; }
+        let noun = if count == 1 { "call" } else { "calls" };
+        out.push_str(&format!("{}: {} `par_iter` {}\n", key, count, noun));
+        for k in 0..count {
+            let site: &ParSite = nikaia_std::index::get(&sites, nikaia_std::index::at(at + k));
+            let line = line_at(&lines, site.start).0 + 1;
+            let written = (*nikaia_std::index::get(&lines, nikaia_std::index::at(line - 1))).trim();
+            out.push_str(&format!("    par_iter {}, line {}: `{}`\n", site.number, line, written));
+            let runs = match &site.pausing {
+                None => String::from("in pieces on the cores: no lambda of it pauses (ADR-async-5 D25)"),
+                Some(pause) => format!("one task per element: a lambda of it pauses at its call of `{}` (ADR-async-5 D25)", pause.callee),
+            };
+            out.push_str(&format!("        runs        {}\n", runs));
+        }
+        at += count;
+    }
+    out
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct ParSite {
+    pub function: String,
+    pub number: i64,
+    pub start: i64,
+    pub pausing: Option<ParPause>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct ParPause {
+    pub callee: String,
+    pub span: Span,
+}
+
+pub fn par_sites(items: &[Spanned<Item>], names: &winnow_grammar::InternerContext, fanned: &mut impl FnMut(i64) -> bool, pauses: &mut impl FnMut(&Expr) -> bool) -> Vec<ParSite> {
+    let mut out: Vec<ParSite> = vec![];
     for item in items.iter() {
         match &item.node {
-            Item::Fn { name, body, .. } => { let name = *name; par_walks_of_function(&function_name(names, name), body, &lines, names, &mut *fanned, &mut *pauses, &mut out); },
+            Item::Fn { name, body, .. } => { let name = *name; par_walks_of_function(&function_name(names, name), body, names, &mut *fanned, &mut *pauses, &mut out); },
             Item::Impl { target, methods, .. } => {
                 let owner: Option<String> = Some(nikaia_std::block::Text::from(names.resolve(target.name).to_string()));
                 for method in methods.iter() {
                     match &method.node {
-                        Item::Fn { name, body, .. } => { let name = *name; par_walks_of_function(&keyed((owner).as_deref(), &function_name(names, name)), body, &lines, names, &mut *fanned, &mut *pauses, &mut out); },
+                        Item::Fn { name, body, .. } => { let name = *name; par_walks_of_function(&keyed((owner).as_deref(), &function_name(names, name)), body, names, &mut *fanned, &mut *pauses, &mut out); },
                         _ => { },
                     }
                 }
@@ -725,30 +765,45 @@ pub fn par_report(items: &[Spanned<Item>], names: &winnow_grammar::InternerConte
     out
 }
 
+pub fn par_sites_checked(items: &[Spanned<Item>], names: &winnow_grammar::InternerContext, aliases: &collections::BTreeMap<String, String>, facts: &CheckFacts, own: &Ledger, library: &Ledger) -> Vec<ParSite> { par_sites(items, names, &mut |lambda| { par_fanned(facts, lambda) }, &mut |call| { par_call_pauses(names, aliases, facts, own, library, call) }) }
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn par_fanned(facts: &CheckFacts, lambda: i64) -> bool {
+    let entry = match facts.pausing_lambdas.get(&lambda) { Some(__nikaia_value) => __nikaia_value, None => return false };
+    match entry {
+        FactPausing::Function(name) => name.starts_with("fan_"),
+        _ => false,
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn par_call_pauses(names: &winnow_grammar::InternerContext, aliases: &collections::BTreeMap<String, String>, facts: &CheckFacts, own: &Ledger, library: &Ledger, call: &Expr) -> bool {
+    match call {
+        Expr::Call { func, .. } => { let func = nikaia_std::boxed::open(func); call_pausing_key(names, aliases, own, library, func).is_some() },
+        Expr::MethodCall { receiver, .. } => { let receiver = nikaia_std::boxed::open(receiver); facts.pausing_methods.contains(&node_key(receiver)) },
+        Expr::SafeMethod { receiver, .. } => { let receiver = nikaia_std::boxed::open(receiver); facts.pausing_methods.contains(&node_key(receiver)) },
+        _ => false,
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub(crate) struct ParWalkSite {
     pub(crate) start: i64,
-    pub(crate) cause: Option<String>,
+    pub(crate) cause: Option<ParPause>,
 }
 
-pub(crate) fn par_walks_of_function(key: &str, body: &Block, lines: &[&str], names: &winnow_grammar::InternerContext, fanned: &mut impl FnMut(i64) -> bool, pauses: &mut impl FnMut(&Expr) -> bool, out: &mut String) {
+pub(crate) fn par_walks_of_function(key: &str, body: &Block, names: &winnow_grammar::InternerContext, fanned: &mut impl FnMut(i64) -> bool, pauses: &mut impl FnMut(&Expr) -> bool, out: &mut Vec<ParSite>) {
     let mut sites: collections::BTreeMap<i64, ParWalkSite> = collections::BTreeMap::new();
     par_walks_in_block(body, &mut sites, names, &mut *fanned, &mut *pauses);
-    if sites.is_empty() { return; }
-    let count = sites.len() as i64;
-    let noun = if count == 1 { "call" } else { "calls" };
-    out.push_str(&format!("{}: {} `par_iter` {}\n", key, count, noun));
-    let mut number = 0;
-    for (_, site) in sites.iter() {
-        number += 1;
-        let line = line_at(lines, site.start).0 + 1;
-        let written = (*nikaia_std::index::get(&lines, nikaia_std::index::at(line - 1))).trim();
-        out.push_str(&format!("    par_iter {}, line {}: `{}`\n", number, line, written));
-        let runs = match &site.cause {
-            None => String::from("in pieces on the cores: no lambda of it pauses (ADR-async-5 D25)"),
-            Some(cause) => format!("one task per element: a lambda of it pauses at {} (ADR-async-5 D25)", cause),
-        };
-        out.push_str(&format!("        runs        {}\n", runs));
+    let mut number: i64 = 0;
+    out.reserve(sites.iter().size_hint().0); for (_, site) in sites.iter() {
+        number = unsafe { nikaia_std::proven::add::<i64>(number, 1) };
+        out.push(ParSite { function: nikaia_std::block::Text::from(key.to_string()), number, start: site.start, pausing: match site.cause.as_ref() {
+            Some(__nikaia_it) => Some(__nikaia_it.clone()),
+            None => None,
+        } });
     }
 }
 
@@ -819,19 +874,21 @@ pub(crate) fn par_lambda_step<'r>(each: &'r Expr, names: &'r winnow_grammar::Int
     None
 }
 
-pub(crate) fn par_pausing_call(lambda: &Expr, names: &winnow_grammar::InternerContext, pauses: &mut impl FnMut(&Expr) -> bool) -> Option<String> {
+pub(crate) fn par_pausing_call(lambda: &Expr, names: &winnow_grammar::InternerContext, pauses: &mut impl FnMut(&Expr) -> bool) -> Option<ParPause> {
     let body: &Block = match lambda {
         Expr::Closure { body, .. } => body,
         _ => return None,
     };
-    for each in visited_in_block(body) {
-        let callee: String = match each {
-            Expr::Call { func, .. } => { let func = nikaia_std::boxed::open(func); match called_key(func, names) { Some(__nikaia_value) => __nikaia_value, None => continue } },
-            Expr::MethodCall { method, .. } => { let method = *method; nikaia_std::block::Text::from(names.resolve(method).to_string()) },
-            _ => continue,
-        };
-        if !pauses(each) || par_call_inside_pauses(each, &mut *pauses) { continue; }
-        return Some(format!("its call of `{}`", callee));
+    for stmt in body.stmts.iter() {
+        for each in visited_in_stmt(&stmt.node) {
+            let callee: String = match each {
+                Expr::Call { func, .. } => { let func = nikaia_std::boxed::open(func); match called_key(func, names) { Some(__nikaia_value) => __nikaia_value, None => continue } },
+                Expr::MethodCall { method, .. } => { let method = *method; nikaia_std::block::Text::from(names.resolve(method).to_string()) },
+                _ => continue,
+            };
+            if !pauses(each) || par_call_inside_pauses(each, &mut *pauses) { continue; }
+            return Some(ParPause { callee, span: Span { start: stmt.span.start, end: stmt.span.end } });
+        }
     }
     None
 }
