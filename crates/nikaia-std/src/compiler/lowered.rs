@@ -3812,7 +3812,7 @@ pub mod prover_state {
 }
 pub mod prover_walk {
     #[allow(unused_imports)]
-    pub use super::{ProverWalk};
+    pub use super::{ProverWalk, raw_check_markup, raw_check_sql, raw_sink_unchecked_note};
 }
 pub mod render {
     #[allow(unused_imports)]
@@ -3877,7 +3877,7 @@ pub mod threads {
 }
 pub mod throws {
     #[allow(unused_imports)]
-    pub use super::{AS_VALUE, MethodsCalled, ThrowsGraph, throws_graph, fatal_types, throws_places, throws_record, unit_throws, stored_throws, params_as_places, throws_given, throws_published, error_sets, throws_of_unit, error_sets_callees_first, throws_callees_first, error_type, Thrown, Contribution};
+    pub use super::{AS_VALUE, MethodsCalled, ThrowsGraph, throws_graph, fatal_types, throws_places, throws_record, unit_throws, stored_throws, params_as_places, throws_given, throws_published, error_sets, throws_of_unit, error_sets_callees_first, throws_callees_first, error_type, Thrown, Contribution, raw_sink_error};
 }
 pub mod tiers {}
 pub mod toml {
@@ -3994,4 +3994,4 @@ pub fn nikaia_run_tests(filters: &[std::string::String], list: bool, more: std::
 /// **The digest of this lowered set** (#1610): every file `lower-std` wrote
 /// beside this index, and the index above this line. Compiled into the same
 /// crate as the code it names, it is the compiler's identity for its caches.
-pub const LOWERED_DIGEST: &str = "b276638f60aa2d6e2998e8b895d8851abb93eb41ead57eb2123246c1fd2bc8d6";
+pub const LOWERED_DIGEST: &str = "fd4dd0db4b131dcc02a1e5535e696068d9b29ba3cd520c980594d8c8611f0e7d";
