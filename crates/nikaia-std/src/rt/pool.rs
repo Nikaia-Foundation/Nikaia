@@ -154,6 +154,13 @@ pub struct Pool {
     /// quiet (#693) counts it. Counted in every build (#2316): the increment
     /// sits beside a condvar broadcast on a path that has just left the ring.
     rang: std::sync::atomic::AtomicI64,
+    /// **The completion count as of the last rearm** (#2729). Any thread
+    /// that holds the ring reaps every completion on it - a task's own poll
+    /// or submit as much as the pilot's park - and moves the count
+    /// (`Runtime::with_held`). Only the pool can turn that into a poll of
+    /// the task whose answer it was, since an I/O future keeps no waker. So
+    /// an idle turn that finds the count past this rearms, whoever moved it.
+    seen: std::sync::atomic::AtomicI64,
 }
 
 impl Pool {
@@ -176,6 +183,7 @@ impl Pool {
             threads: std::sync::atomic::AtomicUsize::new(0),
             timer: Mutex::new(None),
             rang: std::sync::atomic::AtomicI64::new(0),
+            seen: std::sync::atomic::AtomicI64::new(crate::rt::io::generation()),
         });
         for n in 0..threads {
             let mine = pool.clone();
@@ -330,6 +338,17 @@ impl Pool {
             self.rearm();
             return;
         }
+        // **A completion somebody else reaped is a wake too** (#2729). A
+        // task's poll on another worker took the ring, reaped this task's
+        // answer with its own and moved the count, so the count had moved
+        // before the pilot below read its generation: its park saw no move,
+        // nothing rearmed, and the task whose answer it was waited for ever
+        // (eight pool tasks writing and reading their own files, about one
+        // run in 25 under load).
+        if self.moved_since_rearm() {
+            self.rearm();
+            return;
+        }
         let slice = self.slice();
         let piloting = self
             .piloting
@@ -346,7 +365,11 @@ impl Pool {
         // ordering `exec::block_on` keeps for the same reason: a completion
         // arriving between the two has already moved the count, so the park
         // returns at once rather than waiting for a wake that has happened.
-        let generation = crate::rt::io::generation();
+        // **And it is the count as of the last rearm**, not the count now
+        // (#2729): a move between the check above and this read was a
+        // completion another thread reaped, and a park from the count now
+        // would not hear it.
+        let generation = self.seen.load(Ordering::Acquire);
         let empty = self
             .ready
             .lock()
@@ -364,6 +387,7 @@ impl Pool {
                 // future stores no waker, because the executor is the only
                 // thing that parks. So the answer to "who should be polled
                 // now" is everyone.
+                let _ = self.moved_since_rearm();
                 self.rearm();
                 // **No bell of its own.** Whoever is on the main thread, which
                 // at `yes` waits on the runtime's bell, has heard already: an
@@ -426,6 +450,15 @@ impl Pool {
             }
             _ => false,
         }
+    }
+
+    /// Whether the completion count moved since the last rearm, taking the
+    /// count as seen if so. Taken **before** the rearm it calls for: a
+    /// completion reaped during that rearm's polls moves the count past it
+    /// again, and the next idle turn rearms once more.
+    fn moved_since_rearm(&self) -> bool {
+        let now = crate::rt::io::generation();
+        self.seen.fetch_max(now, Ordering::AcqRel) < now
     }
 
     /// Put every idle task back on the queue.

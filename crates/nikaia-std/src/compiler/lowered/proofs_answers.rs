@@ -152,8 +152,18 @@ pub(crate) fn proofs_write_term(arena: &logic::TermArena, id: i64, out: &mut Str
     }
     match unsafe { nikaia_std::proven::read(&arena.nodes, (id) as usize) } {
         logic::SolverTerm::Bool(value) => { let value = *value; out.push_str(if value { "T" } else { "F" }); },
-        logic::SolverTerm::Int(value) => { let value = *value; { use ::core::fmt::Write as _; let _ = out.write_fmt(format_args!("i{},", value)); }; },
-        logic::SolverTerm::Var(name) => { { use ::core::fmt::Write as _; let _ = out.write_fmt(format_args!("v{}:{}", name.len() as i64, name)); }; },
+        logic::SolverTerm::Int(value) => {
+            let value = *value;
+            out.push_str("i");
+            logic::lg_write_int(value, out);
+            out.push_str(",");
+        },
+        logic::SolverTerm::Var(name) => {
+            out.push_str("v");
+            logic::lg_write_int(name.len() as i64, out);
+            out.push_str(":");
+            out.push_str(name);
+        },
         logic::SolverTerm::Add(a, b) => { let a = *a; let b = *b; proofs_write_two("+", arena, a, b, out); },
         logic::SolverTerm::Sub(a, b) => { let a = *a; let b = *b; proofs_write_two("-", arena, a, b, out); },
         logic::SolverTerm::Mul(a, b) => { let a = *a; let b = *b; proofs_write_two("*", arena, a, b, out); },
@@ -175,7 +185,9 @@ pub(crate) fn proofs_write_term(arena: &logic::TermArena, id: i64, out: &mut Str
         },
         logic::SolverTerm::Quot(a, k) => {
             let a = *a; let k = *k;
-            { use ::core::fmt::Write as _; let _ = out.write_fmt(format_args!("q{},", k)); };
+            out.push_str("q");
+            logic::lg_write_int(k, out);
+            out.push_str(",");
             proofs_write_term(arena, a, out);
         },
         logic::SolverTerm::And(parts) => { proofs_write_all("&", arena, parts, out); },
@@ -191,7 +203,9 @@ pub(crate) fn proofs_write_two(tag: &str, arena: &logic::TermArena, a: i64, b: i
 }
 
 pub(crate) fn proofs_write_all(tag: &str, arena: &logic::TermArena, parts: &[i64], out: &mut String) {
-    { use ::core::fmt::Write as _; let _ = out.write_fmt(format_args!("{}{},", tag, parts.len() as i64)); };
+    out.push_str(tag);
+    logic::lg_write_int(parts.len() as i64, out);
+    out.push_str(",");
     for part in parts.iter() {
         let part = nikaia_std::num::value(part);
         proofs_write_term(arena, part, out);
@@ -199,10 +213,7 @@ pub(crate) fn proofs_write_all(tag: &str, arena: &logic::TermArena, parts: &[i64
 }
 
 pub(crate) fn proofs_known(t: &mut ProofsThread, written: &str) -> Option<ProofsAsked> {
-    let held = match match t.known.get(written) {
-        Some(__nikaia_it) => Some(__nikaia_it.clone()),
-        None => None,
-    } { Some(__nikaia_value) => __nikaia_value, None => return None };
+    let held = match t.known.get(written) { Some(__nikaia_value) => __nikaia_value, None => return None };
     let book = match t.book.as_mut() { Some(__nikaia_value) => __nikaia_value, None => return None };
     let entry = match book.entries.get(&held.key) { Some(__nikaia_value) => __nikaia_value, None => return None };
     if *entry != held.entry { return None; }
@@ -242,7 +253,7 @@ pub fn proofs_ask(t: &mut ProofsThread, arena: &logic::TermArena, facts: &[i64],
         }, || ProofsEntry::Unknown(String::from("")));
         let asked = proofs_read(&normal, &held);
         if asked.is_some() {
-            t.known.insert(nikaia_std::block::Text::from(written.to_string()), ProofsKnown { key: nikaia_std::block::Text::from(key.to_string()), entry: held.clone(), asked: asked.as_ref().unwrap().clone() });
+            t.known.insert(written, ProofsKnown { key: nikaia_std::block::Text::from(key.to_string()), entry: held.clone(), asked: asked.as_ref().unwrap().clone() });
             proofs_dump(&normal, asked.as_ref().unwrap());
             proofs_remember(t, &key, asked.as_ref().unwrap(), Option::as_ref(&recorded));
             return asked.unwrap();
@@ -255,7 +266,7 @@ pub fn proofs_ask(t: &mut ProofsThread, arena: &logic::TermArena, facts: &[i64],
         Some(__nikaia_it) => Some(__nikaia_it.clone()),
         None => None,
     };
-    if entry.is_some() { t.known.insert(nikaia_std::block::Text::from(written.to_string()), ProofsKnown { key: nikaia_std::block::Text::from(key.to_string()), entry: entry.as_ref().unwrap().clone(), asked: found.asked.clone() }); }
+    if entry.is_some() { t.known.insert(written, ProofsKnown { key: nikaia_std::block::Text::from(key.to_string()), entry: entry.as_ref().unwrap().clone(), asked: found.asked.clone() }); }
     let place = proofs_here(&t);
     let book = match t.book.as_mut() { Some(__nikaia_value) => __nikaia_value, None => return found.asked };
     book.searched += 1;
