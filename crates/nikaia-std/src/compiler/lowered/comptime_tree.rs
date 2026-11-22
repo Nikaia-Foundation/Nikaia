@@ -552,6 +552,7 @@ pub const NOWHERE: &str = "This check has no place to compile build-time code in
 pub enum ComptimeDriven {
     Program(String),
     NotLowered,
+    Refused { message: String, at: i64 },
     Uncrossed { ty: String, because: String },
     NoHandBack,
 }
@@ -562,6 +563,13 @@ pub const COMPTIME_STOPPED_AT: &str = "@";
 pub struct ComptimeLowered {
     pub rust: String,
     pub rows: Vec<(i64, i64, i64)>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct ComptimeRefusal {
+    pub message: String,
+    pub at: i64,
+    pub unit: i64,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -587,6 +595,7 @@ pub trait ComptimeComputeHost {
     fn derived(&self, units: &[i64], packages: &collections::BTreeMap<String, Ledger>) -> Ledger;
     fn lowered_alone(&self, unit: i64, derived: &Ledger) -> Option<ComptimeLowered>;
     fn lowered_units(&self, units: &[i64], here: i64, derived: &Ledger, packages: &collections::BTreeMap<String, Ledger>) -> Option<ComptimeLowered>;
+    fn lowering_refused(&self) -> Option<ComptimeRefusal>;
     fn dump(&self, unit: i64, ty: &Ty, out: &mut String) -> Option<CheckWall>;
     fn bounds(&self) -> (u64, u64);
     fn run_comptime(&self, program: &str, bound: &str, answer: &mut String) -> Option<CheckWall>;
@@ -709,6 +718,7 @@ pub fn comptime_computed<H: ComptimeComputeHost>(host: &H, here: i64, bound: &st
     let program = match comptime_driven(host, &units, here, &derived, &packages, ty) {
         ComptimeDriven::Program(program) => program,
         ComptimeDriven::NotLowered => return not_here(COMPTIME_NOT_LOWERED),
+        ComptimeDriven::Refused { message, at } => return CheckComputed::Refused { message, at },
         ComptimeDriven::Uncrossed { ref ty, ref because } => { return CheckComputed::NotHere(format!("Its type `{}` can't be handed back from the program that computes it: {}", ty, because)); },
         ComptimeDriven::NoHandBack => return not_here("Its type can't be handed back from the program that computes it"),
     };
@@ -760,7 +770,10 @@ pub(crate) fn comptime_driven<H: ComptimeComputeHost>(host: &H, units: &[i64], h
         1 => host.lowered_alone(*nikaia_std::index::get(&units, nikaia_std::index::at(here)), derived),
         _ => host.lowered_units(units, here, derived, packages),
     };
-    let lowered = match found { Some(__nikaia_value) => __nikaia_value, None => return ComptimeDriven::NotLowered };
+    let lowered = match found { Some(__nikaia_value) => __nikaia_value, None => return match host.lowering_refused() {
+        None => ComptimeDriven::NotLowered,
+        Some(ref refused) => ComptimeDriven::Refused { message: nikaia_std::block::Text::from(refused.message.to_string()), at: if refused.unit == *nikaia_std::index::get(&units, nikaia_std::index::at(here)) { refused.at } else { -1 } },
+    } };
     let mut dump: String = String::from("");
     let wall = host.dump(*nikaia_std::index::get(&units, nikaia_std::index::at(here)), ty, &mut dump);
     match wall {

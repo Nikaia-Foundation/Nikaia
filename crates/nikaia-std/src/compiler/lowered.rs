@@ -3396,7 +3396,7 @@ pub mod comptime_driver {
 }
 pub mod comptime_tree {
     #[allow(unused_imports)]
-    pub use super::{VALUE_FN, NOT_COMPUTED_YET, comptime_keeps, comptime_sub_program, TURN_MARK, comptime_unit_without_its_constants, comptime_drop_readers, comptime_constants_of, comptime_readers_dropped, comptime_value_fn_names, comptime_declared_of, comptime_as_built, ComptimeLowerHost, comptime_lowered_units, comptime_without_foreign, comptime_dependency_modules, comptime_by_package, COMPTIME_NOT_LOWERED, COMPTIME_NOT_READ, COMPTIME_NOT_CARRIED, NOWHERE, ComptimeDriven, COMPTIME_STOPPED_AT, ComptimeLowered, ComptimeDeclared, ComptimeComputeHost, comptime_value_computed, COMPTIME_VALUE_DIR, comptime_computed};
+    pub use super::{VALUE_FN, NOT_COMPUTED_YET, comptime_keeps, comptime_sub_program, TURN_MARK, comptime_unit_without_its_constants, comptime_drop_readers, comptime_constants_of, comptime_readers_dropped, comptime_value_fn_names, comptime_declared_of, comptime_as_built, ComptimeLowerHost, comptime_lowered_units, comptime_without_foreign, comptime_dependency_modules, comptime_by_package, COMPTIME_NOT_LOWERED, COMPTIME_NOT_READ, COMPTIME_NOT_CARRIED, NOWHERE, ComptimeDriven, COMPTIME_STOPPED_AT, ComptimeLowered, ComptimeRefusal, ComptimeDeclared, ComptimeComputeHost, comptime_value_computed, COMPTIME_VALUE_DIR, comptime_computed};
 }
 pub mod contract_changes {
     #[allow(unused_imports)]
@@ -3979,4 +3979,4 @@ pub fn nikaia_run_tests(filters: &[std::string::String], list: bool, more: std::
 /// **The digest of this lowered set** (#1610): every file `lower-std` wrote
 /// beside this index, and the index above this line. Compiled into the same
 /// crate as the code it names, it is the compiler's identity for its caches.
-pub const LOWERED_DIGEST: &str = "ee19f06fa9ffc0b48cbff521d31a969d76c2f0c60f78f040d1b4217a4ee4a7f6";
+pub const LOWERED_DIGEST: &str = "52d3fecdd565f799569c72e8dd5c36adac132846d6b8cf9bd84404bd8d643ae0";
