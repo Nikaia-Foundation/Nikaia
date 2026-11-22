@@ -5268,11 +5268,17 @@ fn drive_waits_line(n: String, waits: Vec[String], open: Vec[String]) -> String 
 // The findings of scripts/issue-check.nika on issue N's BODY (#2003): one
 // per requirement of docs/issues.md it misses, none when its form holds.
 // KNOWN says OPEN lists the open issues (the tests' form); else the script
-// asks GitHub. A script that fails to run finds nothing, so it holds up nothing.
+// asks GitHub. A script that fails to run (it does not build, or stops
+// before it prints a finding) has not passed: its one finding is
+// `issue-check failed to run: <line>` (drive_check_failure), so the issue is
+// held back, without the label swap and comment of a form that misses a
+// requirement (#2466). NIKAIA_DRIVE_ISSUE_CHECK names another script (the
+// tests' broken one).
 fn drive_issue_check(n: String, body: String, known: bool, open: Vec[String]) -> Vec[String] throws {
 	let file = process::run("mktemp", []).stdout.trim().clone()
 	fs::write(file.clone(), fs::Root::Anywhere, body)
-	let mut args = ["run", "scripts/issue-check.nika", "--", "--body", file.clone()]
+	let script = env::var("NIKAIA_DRIVE_ISSUE_CHECK") ?? "scripts/issue-check.nika"
+	let mut args = ["run", script, "--", "--body", file.clone()]
 	if known {
 		args.push("--open")
 		for m in open {
@@ -5286,7 +5292,24 @@ fn drive_issue_check(n: String, body: String, known: bool, open: Vec[String]) ->
 	for l in got.stdout.split("\n") {
 		if l.trim() != "" && !l.starts_with("issue-check:") && !l.starts_with("usage:") { out.push(l.trim().clone()) }
 	}
+	if out.len() == 0 { out.push(f"issue-check failed to run: {drive_check_failure(got.stderr, got.stdout, got.code)}") }
 	return out
+}
+
+// Why issue-check failed to run, from its STDERR and STDOUT: the first
+// line of an error (a refusal or a stop; a warning before it says nothing of
+// the failure), else the first non-empty line of either, else its exit CODE.
+fn drive_check_failure(stderr: String, stdout: String, code: i64) -> String {
+	for l in stderr.split("\n") {
+		if l.starts_with("error") || l.starts_with("Error") { return l.trim().clone() }
+	}
+	for l in stderr.split("\n") {
+		if l.trim() != "" { return l.trim().clone() }
+	}
+	for l in stdout.split("\n") {
+		if l.trim() != "" { return l.trim().clone() }
+	}
+	return f"exit {code}"
 }
 
 // The comment on issue N that FINDINGS (drive_issue_check) kept out of the
@@ -5353,7 +5376,9 @@ fn drive_wait_block(n: String, line: String) throws {
 // is swapped for `blocked` with a comment naming #M (drive_wait_block), so
 // it is skipped once; so is one whose form misses a requirement (`SKIPPED #N
 // issue-check: ...`, scripts/issue-check.nika, #2003), whose `ready` is
-// swapped for `decision` with one comment of its findings (drive_check_block). Closed ones still queued are dropped first
+// swapped for `decision` with one comment of its findings (drive_check_block);
+// one the script failed to check (`SKIPPED #N issue-check: issue-check failed
+// to run: ...`, #2466) is only held back, its form is not at fault. Closed ones still queued are dropped first
 // (drive_queue_prune), and so are those that wait for an open issue.
 fn drive_queue(dir: String, area: String) throws {
 	drive_queue_prune(dir.clone())
@@ -5387,7 +5412,9 @@ fn drive_queue(dir: String, area: String) throws {
 			println(line.clone())
 			let words: Vec[String] = line.split(" ").collect()
 			let m = (words[1].strip_prefix("#") ?? "").clone()
-			if line.contains(" issue-check: ") {
+			if line.contains(" issue-check: issue-check failed to run: ") {
+				continue
+			} else if line.contains(" issue-check: ") {
 				for (k, body) in bodies {
 					if k == m { drive_check_block(m.clone(), body.clone()) }
 				}
@@ -5697,7 +5724,7 @@ fn main() throws {
 		let list = drive_read(args[2].clone())
 		for line in drive_queue_plan(dir, list.clone(), open.clone(), check, true) {
 			println(line.clone())
-			if !line.contains(" issue-check: ") { continue }
+			if !line.contains(" issue-check: ") || line.contains(" issue-check: issue-check failed to run: ") { continue }
 			let words: Vec[String] = line.split(" ").collect()
 			let m = (words[1].strip_prefix("#") ?? "").clone()
 			for (k, body) in drive_queue_records(list.clone()) {
