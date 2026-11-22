@@ -980,6 +980,13 @@ pub struct Opened {
     shown: String,
 }
 
+/// What a struct that holds a [`File`] prints for `Debug` (#2238): its name.
+impl std::fmt::Debug for Opened {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "fs::File({})", self.shown)
+    }
+}
+
 impl Opened {
     fn failed(&self, error: std::io::Error) -> crate::io::IoError {
         crate::io::IoError::of(error, &self.shown)

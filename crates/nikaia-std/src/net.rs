@@ -58,6 +58,13 @@ pub struct Listener {
     tls: Option<std::sync::Arc<rustls::ServerConfig>>,
 }
 
+/// What a struct that holds one prints for `Debug` (#2238).
+impl std::fmt::Debug for Listener {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("net::Listener")
+    }
+}
+
 /// One connection, open until it is dropped.
 ///
 /// **Dropping it closes it**, which is Rust's own answer and not a decision
@@ -70,6 +77,14 @@ pub struct Connection {
     /// The TLS session where the connection has one (ADR-289 D34): `read`
     /// and `write` carry plaintext through it.
     tls: Option<Session>,
+}
+
+/// What a struct that holds one prints for `Debug` (#2238): the handle, not
+/// the socket's insides.
+impl std::fmt::Debug for Connection {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("net::Connection")
+    }
 }
 
 impl Drop for Connection {

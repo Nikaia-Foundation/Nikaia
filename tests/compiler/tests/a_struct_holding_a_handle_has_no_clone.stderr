@@ -1,0 +1,9 @@
+error[NK1171]: `Peer` has no method called `clone`.
+   --> tests/a_struct_holding_a_handle_has_no_clone.nika:11:2
+    |
+ 11 | 	return p.clone()
+    |  ^^^^^^^^^^^^^^^^
+    |
+    = note: `Peer` holds a value that does not copy - a task's handle, a lock, a socket, a file, a child process or a channel's end - so it has no copy either.
+    = help: Hand the value itself on, or keep the handle in a `Shared` that both places reach.
+1 type error
