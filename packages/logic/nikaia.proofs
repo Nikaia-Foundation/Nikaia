@@ -2580,6 +2580,7 @@
 0baeded42ce57d06bea394875377232894e0cd81aa90c4239e4e31ba369111ed refuted v0=0,v1=1,v10=0,v11=0,v2=1,v3=0,v4=1,v5=0,v6=0,v7=0,v8=0,v9=0
 0bb2e65d2640df77babed102a3778356787ac546daa656d4e73088a5dc240b69 refuted v0=0,v1=1,v2=1,v3=1,v4=1,v5=1,v6=1
 0bb317ce21cc77ccbbae496a028417deb913d38f2cc55bf3f9d0cad51f37c2f7 proved R(h33,h76,c0:1:1:1)
+0bb31c43d18bf7f4b9544fd09ac039649e30a2d5215ae55103e4923035ced105 invariant src/sv_sat.nika:961:3/bounds closed-forms=eq(i@25066,start);closed-forms=ge(i@25066,0);closed-forms=lt(i@25066,self.heap.len%28%29);guess-and-check=le(i,start);guess-and-check=le(0,i);guess-and-check=ge(i,0);guess-and-check=lt(i,self.heap.len%28%29)
 0bb37f0ad29054a82e2aa4b400765a6268ab5c49d67a595d752545ce3e64f6ff proved S0[R(h17,h47,c1:1:0:1)|R(h0,h43,h48,c1:1:0:1,c3:1:2:1)]
 0bb3cc187729d428eae00a7445856c9e6d50eea61337563582dc2878ce020de6 refuted def#0=0,def#1=0,v0=1,v1=0,v10=0,v11=0,v12=0,v13=0,v14=0,v15=0,v16=0,v17=0,v18=0,v19=0,v2=0,v20=0,v21=0,v22=0,v23=0,v24=1,v25=-1,v26=0,v3=0,v4=0,v5=0,v6=0,v7=0,v8=0,v9=0
 0bb40b53162ed94d48d5404e6be80bf72d389dfc139d92006dc8e1c09a6434f6 proved R(h5,h21,c1:1:0:1)
@@ -7066,6 +7067,7 @@
 1f87a650552aadb2c154b216cd7193698946da9aac3d0b8439463cc064d3e518 proved R(h27)
 1f87c5c7591e9c47b7c37cdd975d0026cb3d50027caeb6ff8bfd85e2087faaca unknown fourier-motzkin-1+sv-1
 1f87cf6eb46a94348f374aa8bf0c89fb3221009926e01e95a3f1262c115a9dc6 unknown fourier-motzkin-1+sv-1
+1f8977af513ae14ef99f7277dc8902b90918bbd76641859310822d089c33dd69 invariant src/sv_sat.nika:979:3/bounds closed-forms=eq(i@25407,start);closed-forms=ge(i@25407,0);closed-forms=lt(i@25407,self.heap.len%28%29);guess-and-check=ge(i,start);guess-and-check=le(0,i);guess-and-check=le(i,self.heap.len%28%29);guess-and-check=lt(i,self.heap.len%28%29);guess-and-check=ge(i,0);guess-and-check=lt(i,self.heap.len%28%29)
 1f8a3f6e8209779485d650b30df5f73559ff1bafabe2086c7582b67361ff9a4a refuted v0=0,v1=0,v10=0,v11=0,v12=0,v13=0,v14=0,v15=0,v16=0,v17=0,v18=0,v2=0,v3=0,v4=0,v5=0,v6=0,v7=0,v8=0,v9=0
 1f8afc75b4f3739cb328fa639e0655c53a81a63fb2ed62a1bad694572d8cbd2a proved R(h6,h57,c0:1:1:1)
 1f8c19eeebd6caf39f038368a2c7e221d3047f5eba51cc61fdb940f450dcde43 proved S1[R(h15,h44,c1:1:0:1)|R(h3,h45,c1:1:0:1)]
@@ -21642,6 +21644,7 @@
 61df2208622ecf94df19e9adc493ba05aac9d087747266f8e7036554e287d3e0 proved R(h10,h69,h71,c0:1:2:1,c1:1:3:1)
 61df51bf963e5624ac67d6c0dad710ee4e3c163bcacb9332829caa12aade4fb2 proved S4[R(h50,h38,c1:1:0:1)|S8[R(h50,h46,c1:1:0:1)|S10[R(h47,h51,c1:1:0:1)|R(h39,h52,c1:1:0:1)]]]
 61dfe880ec3f48c9d6b398c10384d07b6cb4b19241910792a00139e294dc9b96 refuted v0=0,v1=1,v10=0,v11=0,v12=0,v13=0,v14=0,v15=0,v16=0,v17=0,v18=1,v19=1,v2=1,v20=0,v21=0,v22=0,v23=1,v24=1,v3=2,v4=1,v5=0,v6=0,v7=0,v8=0,v9=0
+61e0aa329ef86223ee58b8a9f84dc6557f925c894a185166dcfa3f05137c183f invariant src/logic_smtlib.nika:317:9/bounds guess-and-check=ge(args.len%28%29,0);guess-and-check=ge(at,1)
 61e4a70f81698549a5ebd4e171d13e44ee888891ff81d46ba28b08581c590427 proved R(h5,h20,h22,c1:1:2:1,c3:1:0:1)
 61e74ec0f0b86de5e4b6b8f41a408de24de4ef692447b816bf68d545da6ec969 proved R(h10,h40,c1:1:0:1)
 61e7efd6e0decf5133ffe843c8978ba10d20e1aca030da6e18458e4fb6b82cd5 refuted v0=1,v1=2,v10=0,v11=0,v12=0,v13=0,v14=0,v15=0,v16=0,v17=0,v18=2,v19=0,v2=0,v20=1,v21=1,v22=0,v3=2,v4=1,v5=0,v6=0,v7=0,v8=0,v9=0
@@ -35119,6 +35122,7 @@
 9e2433c48790715291526a9d30bedb2ab8f828d1601518817390fd20f587e21a proved S1[R(h21,h46,c1:1:0:1)|R(h3,h47,c0:1:1:1)]
 9e2483c87db9ab974b618262d4b6a0a0b5ee2aaf94bef7d2c1664c53b5c16bad proved S4[R(h14,h25,c0:1:1:1)|R(h13,h26,c1:1:0:1)]
 9e24f62eca9795e21096c30a17e273f6c81494975066622213d2eafd3b6e4b87 proved R(h16,h22,c0:1:1:1)
+9e25d67abf98b8ad08ba4178660645284c95b3e2c1df51418706068786b9a061 invariant src/logic_lia.nika:781:9/bounds closed-forms=eq(j@27671,i);closed-forms=le(j,j@27671);guess-and-check=le(j,i);guess-and-check=ge(j,0);guess-and-check=lt(j,out.len%28%29);guess-and-check=ge(j,0);guess-and-check=lt(j,out.len%28%29)
 9e25e48f72150684d9ebff13b034db28ac92a897ac48cbf87c7ab071a16978b7 proved S1[R(h16,h45,c1:1:0:1)|R(h47,h46,c0:1:1:1)]
 9e25ed0db8a3ac20700defe901f411d9d63e360c8a369bf74a35b0c183318cdc proved R(h28,h60,c1:1:0:1)
 9e2792e46c367944fd32cde6a8a29458496cc5dd13b1f0f70d23dde94d7273dd refuted def#0=0,def#1=0,def#2=0,def#3=0,def#4=0,v0=0,v1=1,v10=0,v11=0,v12=0,v13=0,v14=0,v15=0,v16=0,v17=0,v18=0,v19=0,v2=0,v20=1,v21=1,v22=1,v23=1,v24=0,v25=0,v26=0,v27=0,v28=0,v29=0,v3=0,v30=0,v4=0,v5=0,v6=0,v7=0,v8=0,v9=0
@@ -42882,6 +42886,7 @@ c0ffec1e7a89aeec59467a252ab3e69a4076d8448cf465b2effb683143acd137 proved R(h0,h53
 c1007b3748a53fe695de84de25fa9287f41bd54134eddf7ec3a8a9e2b1fd78a8 proved R(h42,h48,c0:1:1:1)
 c1017f5450368193c6a69af64098adec82ca5cada495b6adbed70068b76f9994 proved S0[R(h2,h48,h50,c2:1:0:1,c1:1:3:1)|R(h22,h46,h51,c1:1:2:1,c3:1:0:1)]
 c102ca0036b4312d2bd6492addc0565f30c0697380d210c2d6dbdaefd95922ff proved R(h30,h32,c0:1:1:1)
+c106d00a0fc205a3ddc24d5da84e4c9474b63a5d9682e4708d2c7e6b6fd5a31e invariant src/logic_smtlib.nika:362:17/bounds closed-forms=eq(links.len%28%29@11956,0);closed-forms=eq(next@11956,0);closed-forms=ge(next,next@11956);closed-forms=le(links.len%28%29,next);closed-forms=ge(links.len%28%29,next);intervals=ge(next,0);flag-facts=or(eq(next,next@11956),le(add(next@11956,2),n));guess-and-check=ge(next,0)
 c106d3673c7ad40e097fbd2068289739018507f0d5fa88318494f28a4fc0b69b proved S0[R(h52,h69,c1:1:0:1)|R(h51,h70,c0:1:1:1)]
 c10dc1e1dec849bd23e9b6c660eadab1da3cc4fc3a3ba56be1d27c4137a8fde3 unknown fourier-motzkin-1+sv-1
 c10ec4d075b23ca8467c4f7fe6f5f64ad106737bcb32365bd6af97fd44ba904e refuted v0=1,v1=0,v10=0,v11=0,v12=0,v13=0,v2=0,v3=0,v4=0,v5=0,v6=0,v7=0,v8=0,v9=0
@@ -52015,6 +52020,7 @@ eab36c6b2bc401f27716fc7b49b92e6cc1153c2b93764f7e300a8bdd8f07ea6f unknown fourier
 eab676c032552c6cacf60b829f0e107dba23e7357fcf697cab892f6014fb2b88 proved R(h3,h55,h68,c0:1:1:1,c2:1:3:1)
 eab6ac46afc0c236dbc14d3445f882727b666680278c534b25702eb5558db2f6 refuted v0=0,v1=1,v2=0,v3=0,v4=0,v5=0,v6=0
 eab98d847ac4bb650102c867b9eeb843aed52aea0d73cd48476fde32c4ccb8ab proved R(h2,h15,c1:1:0:1)
+eaba27bae41e6669e9d3008f441f5e8877e2330bb6221593bd6278dea5f00d68 invariant src/sv_row.nika:67:2/bounds closed-forms=eq(lo@2115,0);closed-forms=eq(hi@2115,r.cols.len%28%29);guess-and-check=ge(lo,0);guess-and-check=le(hi,r.cols.len%28%29)
 eabe5b0842b3dd4531a869043fedb4876a582a949efa8c3d2a0df1774cb53c37 refuted v0=0,v1=1,v10=1,v11=0,v12=1,v13=0,v14=0,v15=0,v16=0,v17=0,v18=0,v19=0,v2=1,v20=0,v21=1,v22=0,v3=1,v4=1,v5=0,v6=0,v7=1,v8=1,v9=0
 eabe674ea0888aa741e3fb5895f9af8602a47a4253d2323b6b90d96a139b6f3f refuted v0=0,v1=-2,v10=0,v11=0,v12=0,v13=0,v14=1,v15=1,v16=1,v17=1,v18=1,v19=0,v2=0,v20=0,v21=0,v22=0,v23=0,v24=4611686018427387904,v3=-2,v4=0,v5=-2,v6=0,v7=0,v8=0,v9=0
 eabf8e28df3dbd89b34d5b083c4e51457773157527cd85f648bc8482feb5c141 proved R(h6,h23,c0:1:1:1)
