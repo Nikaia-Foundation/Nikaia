@@ -92,14 +92,14 @@ pub struct TouchGraph {
     pub reaches: collections::BTreeMap<String, Reach>,
 }
 
-pub fn unit_touches(program: &Program, names: &winnow_grammar::InternerContext, unaliased: &mut impl FnMut(&str) -> String, holes_of: &mut impl FnMut(&Expr) -> Vec<Expr>, own: &Ledger, library: &Ledger, graph: &mut TouchGraph) {
-    for item in program.items.iter() {
+pub fn unit_touches(items: &[Spanned<Item>], names: &winnow_grammar::InternerContext, unaliased: &mut impl FnMut(&str) -> String, holes_of: &mut impl FnMut(&Expr) -> Vec<Expr>, own: &Ledger, library: &Ledger, graph: &mut TouchGraph) {
+    for item in items.iter() {
         match &item.node {
             Item::Fn { name, body, .. } => {
                 let name = *name;
                 let key = key_of_function((name).as_ref(), "", names);
                 let mut reach = Reach { unknown: false, outside: vec![], calls: collections::BTreeSet::new() };
-                reached_by(&seen_in(body, names, &mut *unaliased, &mut *holes_of, &mut no_root, false), program, names, own, library, &mut reach);
+                reached_by(&seen_in(body, names, &mut *unaliased, &mut *holes_of, &mut no_root, false), items, names, own, library, &mut reach);
                 methods_reach(*nikaia_std::index::get(&graph.methods, &key), own, library, &mut reach);
                 graph.reaches.insert(key, reach);
             },
@@ -111,7 +111,7 @@ pub fn unit_touches(program: &Program, names: &winnow_grammar::InternerContext, 
                             let name = *name;
                             let key = key_of_function((name).as_ref(), &owner, names);
                             let mut reach = Reach { unknown: false, outside: vec![], calls: collections::BTreeSet::new() };
-                            reached_by(&seen_in(body, names, &mut *unaliased, &mut *holes_of, &mut no_root, false), program, names, own, library, &mut reach);
+                            reached_by(&seen_in(body, names, &mut *unaliased, &mut *holes_of, &mut no_root, false), items, names, own, library, &mut reach);
                             methods_reach(*nikaia_std::index::get(&graph.methods, &key), own, library, &mut reach);
                             graph.reaches.insert(key, reach);
                         },
@@ -124,7 +124,7 @@ pub fn unit_touches(program: &Program, names: &winnow_grammar::InternerContext, 
                 for rule in def.rules.iter() {
                     for alt in rule.alts.iter() {
                         let action = match alt.action.as_ref() { Some(__nikaia_value) => __nikaia_value, None => continue };
-                        reached_by(&seen_in(action, names, &mut *unaliased, &mut *holes_of, &mut no_root, false), program, names, own, library, &mut whole);
+                        reached_by(&seen_in(action, names, &mut *unaliased, &mut *holes_of, &mut no_root, false), items, names, own, library, &mut whole);
                     }
                 }
                 rules_into(def, names, &whole, own, library, graph);
@@ -146,6 +146,150 @@ pub fn touches_of_graph(graph: &TouchGraph) -> collections::BTreeMap<String, Vec
     touches_of(&unknown, &outside, &calls)
 }
 
+pub fn touches_infer(ledger: &mut Ledger, units: &[ParsedView<'_, '_, '_, '_, '_, '_, '_>], library: &Ledger, resolved: &collections::BTreeMap<String, CheckMethodCalls>, holes_of: &mut impl FnMut(i64, &Expr) -> Vec<Expr>) {
+    let mut graph = TouchGraph { methods: collections::BTreeMap::new(), reaches: collections::BTreeMap::new() };
+    for (key, calls) in resolved.iter() {
+        let called = MethodsCalled { resolved: calls.resolved.copy_owned(), unseen: calls.unresolved, fields: collections::BTreeSet::new(), swallowed: collections::BTreeMap::new() };
+        graph.methods.insert(nikaia_std::block::Text::from(key.to_string()), called);
+    }
+    for unit in 0..units.len() as i64 {
+        let view = unsafe { nikaia_std::proven::read(&units, (unit) as usize) };
+        unit_touches(view.items, view.words, &mut |name| { view.unaliased(name) }, &mut |expr| { holes_of(unit, expr) }, &ledger, library, &mut graph);
+    }
+    let answer = touches_callees_first(&graph);
+    for (name, touches) in answer.iter() {
+        let contract = match ledger.functions.get_mut(name) { Some(__nikaia_value) => __nikaia_value, None => continue };
+        if contract.touches_known { continue; }
+        contract.touches = in_ledger_order(touches);
+        contract.touches_known = true;
+    }
+}
+
+pub fn in_ledger_order(touches: &[Touch]) -> Vec<Touch> {
+    let mut found: collections::BTreeMap<(String, Option<String>, Option<String>, bool), Touch> = collections::BTreeMap::new();
+    for touch in touches.iter() {
+        found.insert((nikaia_std::block::Text::from(touch.kind.to_string()), match touch.parameter.as_ref() {
+            Some(__nikaia_it) => Some(__nikaia_it.clone()),
+            None => None,
+        }, match touch.named.as_ref() {
+            Some(__nikaia_it) => Some(__nikaia_it.clone()),
+            None => None,
+        }, touch.write), touch.clone());
+    }
+    let mut kept: Vec<Touch> = vec![];
+    kept.reserve(found.iter().size_hint().0); for (_, touch) in found.iter() { kept.push(touch.clone()); }
+    kept
+}
+
+pub fn touches_of_unit(unit: &[String], reaches: &collections::BTreeMap<String, Reach>, stored: &collections::BTreeMap<String, Vec<Touch>>) -> collections::BTreeMap<String, Vec<Touch>> {
+    let mut members: collections::BTreeSet<String> = collections::BTreeSet::new();
+    let mut known: collections::BTreeMap<String, bool> = collections::BTreeMap::new();
+    for name in unit.iter() {
+        members.insert(nikaia_std::block::Text::from(name.to_string()));
+        let lost = nikaia_std::index::or((*nikaia_std::index::get(&reaches, name)).as_ref().map(|__nikaia_it| __nikaia_it.unknown), || true);
+        known.insert(nikaia_std::block::Text::from(name.to_string()), !lost);
+    }
+    let mut changed = true;
+    while changed {
+        changed = false;
+        for name in unit.iter() {
+            let holds = nikaia_std::index::or(*nikaia_std::index::get(&known, name), || false);
+            if !holds { continue; }
+            let reach = match *nikaia_std::index::get(&reaches, name) { Some(__nikaia_value) => __nikaia_value, None => continue };
+            let mut reaches_unknown = false;
+            for callee in reach.calls.iter() {
+                let theirs = if members.contains(callee) { nikaia_std::index::or(*nikaia_std::index::get(&known, callee), || false) } else { stored.contains_key(callee) };
+                if !theirs { reaches_unknown = true; }
+            }
+            if reaches_unknown {
+                known.insert(nikaia_std::block::Text::from(name.to_string()), false);
+                changed = true;
+            }
+        }
+    }
+    let mut settled: collections::BTreeMap<String, Vec<Touch>> = collections::BTreeMap::new();
+    for name in unit.iter() {
+        let holds = nikaia_std::index::or(*nikaia_std::index::get(&known, name), || false);
+        if !holds { continue; }
+        let mut found: Vec<Touch> = vec![];
+        let mut seen: collections::BTreeSet<String> = collections::BTreeSet::new();
+        let mut todo: Vec<String> = nikaia_std::block::List::from_array_in([nikaia_std::block::Text::from(name.to_string())], nikaia_std::block::Place::Block);
+        while !todo.is_empty() {
+            let here = match todo.pop() { Some(__nikaia_value) => __nikaia_value, None => break };
+            if seen.contains(&here) { continue; }
+            seen.insert(nikaia_std::block::Text::from(here.to_string()));
+            if !members.contains(&here) {
+                for touch in nikaia_std::index::or(match *nikaia_std::index::get(&stored, &here) {
+                    Some(__nikaia_it) => Some(__nikaia_it.clone()),
+                    None => None,
+                }, || vec![].into()) { found.push(touch); }
+                continue;
+            }
+            let reach = match *nikaia_std::index::get(&reaches, &here) { Some(__nikaia_value) => __nikaia_value, None => continue };
+            found.reserve(reach.outside.iter().size_hint().0); for touch in reach.outside.iter() { found.push(touch.clone()); }
+            todo.reserve(reach.calls.iter().size_hint().0); for callee in reach.calls.iter() { todo.push(nikaia_std::block::Text::from(callee.to_string())); }
+        }
+        settled.insert(nikaia_std::block::Text::from(name.to_string()), found);
+    }
+    settled
+}
+
+pub fn touches_callees_first(graph: &TouchGraph) -> collections::BTreeMap<String, Vec<Touch>> {
+    let mut stored: collections::BTreeMap<String, Vec<Touch>> = collections::BTreeMap::new();
+    for unit in touch_units(&graph.reaches) {
+        let column = touches_of_unit(&unit, &graph.reaches, &stored);
+        stored.extend(column);
+    }
+    stored
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub(crate) struct TouchComponents {
+    pub(crate) index: collections::BTreeMap<String, i64>,
+    pub(crate) low: collections::BTreeMap<String, i64>,
+    pub(crate) open: collections::BTreeSet<String>,
+    pub(crate) stack: Vec<String>,
+    pub(crate) units: Vec<Vec<String>>,
+    pub(crate) next: i64,
+}
+
+pub fn touch_units(reaches: &collections::BTreeMap<String, Reach>) -> Vec<Vec<String>> {
+    let mut walk = TouchComponents { index: collections::BTreeMap::new(), low: collections::BTreeMap::new(), open: collections::BTreeSet::new(), stack: vec![], units: vec![], next: 0 };
+    for (name, _) in reaches.iter() { if !walk.index.contains_key(name) { touch_connect(reaches, name, &mut walk); } }
+    walk.units
+}
+
+pub(crate) fn touch_connect(reaches: &collections::BTreeMap<String, Reach>, name: &str, walk: &mut TouchComponents) {
+    walk.index.insert(nikaia_std::block::Text::from(name.to_string()), walk.next);
+    walk.low.insert(nikaia_std::block::Text::from(name.to_string()), walk.next);
+    walk.next = walk.next + 1;
+    walk.stack.push(nikaia_std::block::Text::from(name.to_string()));
+    walk.open.insert(nikaia_std::block::Text::from(name.to_string()));
+    let reach = match *nikaia_std::index::get(&reaches, name) { Some(__nikaia_value) => __nikaia_value, None => return };
+    for to in reach.calls.iter() {
+        if !reaches.contains_key(to) { continue; }
+        let mut reached: i64 = -1;
+        if !walk.index.contains_key(to) {
+            touch_connect(reaches, to, walk);
+            reached = nikaia_std::index::or(*nikaia_std::index::get(&walk.low, to), || -1);
+        } else if walk.open.contains(to) { reached = nikaia_std::index::or(*nikaia_std::index::get(&walk.index, to), || -1); }
+        let mine = nikaia_std::index::or(*nikaia_std::index::get(&walk.low, name), || 0);
+        if reached >= 0 && reached < mine { walk.low.insert(nikaia_std::block::Text::from(name.to_string()), reached); }
+    }
+    if nikaia_std::index::or(*nikaia_std::index::get(&walk.low, name), || -1) != nikaia_std::index::or(*nikaia_std::index::get(&walk.index, name), || -2) { return; }
+    let mut unit: Vec<String> = vec![];
+    loop {
+        let top = match walk.stack.pop() { Some(__nikaia_value) => __nikaia_value, None => break };
+        walk.open.remove(&top);
+        let last = top == name;
+        unit.push(top);
+        if last { break; }
+    }
+    walk.units.push(unit);
+}
+
+pub fn touch_kind_is_known(touch: &Touch) -> bool { known_kind(&touch.kind) }
+
 pub(crate) fn rules_into(def: &GrammarDef, names: &winnow_grammar::InternerContext, whole: &Reach, own: &Ledger, library: &Ledger, graph: &mut TouchGraph) {
     let named = nikaia_std::block::Text::from(names.resolve(def.name).to_string());
     for rule in def.rules.iter() {
@@ -157,10 +301,10 @@ pub(crate) fn rules_into(def: &GrammarDef, names: &winnow_grammar::InternerConte
     }
 }
 
-pub(crate) fn reached_by(seen: &[Seen], program: &Program, names: &winnow_grammar::InternerContext, own: &Ledger, library: &Ledger, reach: &mut Reach) {
+pub(crate) fn reached_by(seen: &[Seen], items: &[Spanned<Item>], names: &winnow_grammar::InternerContext, own: &Ledger, library: &Ledger, reach: &mut Reach) {
     for one in seen.iter() {
         match one {
-            Seen::Call { name, literals, .. } => { reached_call((callee_named(names, nikaia_std::block::Text::from(name.to_string()), own, library, &program.items)).as_ref(), literals, library, reach); },
+            Seen::Call { name, literals, .. } => { reached_call((callee_named(names, nikaia_std::block::Text::from(name.to_string()), own, library, items)).as_ref(), literals, library, reach); },
             Seen::Spawn { .. } => { reach.unknown = true; },
             Seen::Opaque { .. } => { reach.unknown = true; },
             _ => { },
@@ -326,6 +470,109 @@ pub(crate) fn __nikaia_test_7() -> Result<(), std::boxed::Box<dyn std::error::Er
 }
 
 pub(crate) fn __nikaia_test_8() -> Result<(), std::boxed::Box<dyn std::error::Error>> {
+    for kind in KNOWN_KINDS.iter() {
+        let kind = *kind;
+        let touch = match touch_of(&format!("{} read", kind)) {
+            Ok(value) => value,
+            Err(_error) => {
+                if !(false) { nikaia_std::abort::assertion_failed("assert(false)", None, &[]) };
+                return Ok(());
+            },
+        };
+        if !(touch_kind_is_known(&touch)) { nikaia_std::abort::assertion_failed("assert(touch_kind_is_known(touch))", None, &[]) };
+    }
+    for written in ["stdoutt write", "stdin write", "endpoint(url) write"] {
+        let touch = match touch_of(written) {
+            Ok(value) => value,
+            Err(_error) => {
+                if !(false) { nikaia_std::abort::assertion_failed("assert(false)", None, &[]) };
+                return Ok(());
+            },
+        };
+        if !(!touch_kind_is_known(&touch)) { nikaia_std::abort::assertion_failed("assert(!touch_kind_is_known(touch))", None, &[]) };
+    }
+    Ok(())
+}
+
+pub(crate) fn touch_test_node(graph: &mut TouchGraph, name: String, unknown: bool, outside: &[&'static str], calls: &[&'static str]) {
+    let mut reach = Reach { unknown, outside: vec![], calls: collections::BTreeSet::new() };
+    for kind in outside.iter() {
+        let kind = *kind;
+        reach.outside.push(Touch { kind: nikaia_std::block::Text::from(kind.to_string()), parameter: None, named: None, write: true });
+    }
+    for callee in calls.iter() {
+        let callee = *callee;
+        reach.calls.insert(nikaia_std::block::Text::from(callee.to_string()));
+    }
+    graph.reaches.insert(name, reach);
+}
+
+pub(crate) fn touch_test_texts(touches: &[Touch]) -> Vec<String> {
+    let mut texts: Vec<String> = vec![];
+    for touch in in_ledger_order(touches) { texts.push(touch.text()); }
+    texts
+}
+
+pub(crate) fn __nikaia_test_9() -> Result<(), std::boxed::Box<dyn std::error::Error>> {
+    let mut graph = TouchGraph { methods: collections::BTreeMap::new(), reaches: collections::BTreeMap::new() };
+    touch_test_node(&mut graph, String::from("a"), false, &vec!["stderr"], &vec!["b"]);
+    touch_test_node(&mut graph, String::from("b"), false, &vec![], &vec!["c"]);
+    touch_test_node(&mut graph, String::from("c"), false, &vec!["stdout"], &vec![]);
+    touch_test_node(&mut graph, String::from("p"), false, &vec!["args"], &vec!["q", "c"]);
+    touch_test_node(&mut graph, String::from("q"), false, &vec!["lock"], &vec!["p"]);
+    touch_test_node(&mut graph, String::from("x"), false, &vec![], &vec!["y"]);
+    touch_test_node(&mut graph, String::from("y"), true, &vec![], &vec!["x"]);
+    touch_test_node(&mut graph, String::from("w"), false, &vec![], &vec!["x"]);
+    touch_test_node(&mut graph, String::from("r"), false, &vec![], &vec!["gone"]);
+    let whole = touches_of_graph(&graph);
+    let first = touches_callees_first(&graph);
+    if !((whole.len() as i64) == first.len() as i64) { nikaia_std::abort::assertion_failed("assert(whole.len() == first.len())", None, &[("whole.len()", (&&nikaia_std::abort::Operand(&(whole.len() as i64))).shown()), ("first.len()", (&&nikaia_std::abort::Operand(&(first.len() as i64))).shown()), ]) };
+    for (name, touches) in whole.iter() {
+        let mine = match *nikaia_std::index::get(&first, name) { Some(__nikaia_value) => __nikaia_value, None => {
+            if !(false) { nikaia_std::abort::assertion_failed("assert(false)", None, &[]) };
+            continue;
+        } };
+        if !(touch_test_texts(touches) == touch_test_texts(&mine)) { nikaia_std::abort::assertion_failed("assert(touch_test_texts(touches) == touch_test_texts(mine))", None, &[("touch_test_texts(touches)", (&&nikaia_std::abort::Operand(&(touch_test_texts(touches)))).shown()), ("touch_test_texts(mine)", (&&nikaia_std::abort::Operand(&(touch_test_texts(&mine)))).shown()), ]) };
+    }
+    if !(touch_test_texts(&nikaia_std::index::or(match *nikaia_std::index::get(&first, "a") {
+        Some(__nikaia_it) => Some(__nikaia_it.clone()),
+        None => None,
+    }, || vec![].into())) == vec!["stderr write", "stdout write"]) { nikaia_std::abort::assertion_failed("assert(touch_test_texts(first[\"a\"]?.clone() ?? []) == [\"stderr write\", \"stdout write\"])", None, &[("touch_test_texts(first[\"a\"]?.clone() ?? [])", (&&nikaia_std::abort::Operand(&(touch_test_texts(&nikaia_std::index::or(match *nikaia_std::index::get(&first, "a") {
+        Some(__nikaia_it) => Some(__nikaia_it.clone()),
+        None => None,
+    }, || vec![].into()))))).shown()), ("[\"stderr write\", \"stdout write\"]", (&&nikaia_std::abort::Operand(&(vec!["stderr write", "stdout write"]))).shown()), ]) };
+    if !(touch_test_texts(&nikaia_std::index::or(match *nikaia_std::index::get(&first, "q") {
+        Some(__nikaia_it) => Some(__nikaia_it.clone()),
+        None => None,
+    }, || vec![].into())) == vec!["args write", "lock write", "stdout write"]) { nikaia_std::abort::assertion_failed("assert(touch_test_texts(first[\"q\"]?.clone() ?? []) == [\"args write\", \"lock write\", \"stdout write\"])", None, &[("touch_test_texts(first[\"q\"]?.clone() ?? [])", (&&nikaia_std::abort::Operand(&(touch_test_texts(&nikaia_std::index::or(match *nikaia_std::index::get(&first, "q") {
+        Some(__nikaia_it) => Some(__nikaia_it.clone()),
+        None => None,
+    }, || vec![].into()))))).shown()), ("[\"args write\", \"lock write\", \"stdout write\"]", (&&nikaia_std::abort::Operand(&(vec!["args write", "lock write", "stdout write"]))).shown()), ]) };
+    for lost in ["x", "y", "w", "r"] { if !(!first.contains_key(nikaia_std::index::as_text(&lost))) { nikaia_std::abort::assertion_failed("assert(!first.contains_key(lost))", None, &[]) }; }
+    let mut pair = 0;
+    for unit in touch_units(&graph.reaches) { if unit.len() > 1 { pair = pair + 1; } }
+    if !(pair == 2) { nikaia_std::abort::assertion_failed("assert(pair == 2)", None, &[("pair", (&&nikaia_std::abort::Operand(&(pair))).shown()), ]) };
+    let mut stored: collections::BTreeMap<String, Vec<Touch>> = collections::BTreeMap::new();
+    stored.insert(String::from("b"), vec![Touch { kind: String::from("stdout"), parameter: None, named: None, write: true }]);
+    let alone: Vec<String> = vec![String::from("a")];
+    let head = touches_of_unit(&alone, &graph.reaches, &stored);
+    if !(touch_test_texts(&nikaia_std::index::or(match *nikaia_std::index::get(&head, "a") {
+        Some(__nikaia_it) => Some(__nikaia_it.clone()),
+        None => None,
+    }, || vec![].into())) == touch_test_texts(&nikaia_std::index::or(match *nikaia_std::index::get(&whole, "a") {
+        Some(__nikaia_it) => Some(__nikaia_it.clone()),
+        None => None,
+    }, || vec![].into()))) { nikaia_std::abort::assertion_failed("assert(touch_test_texts(head[\"a\"]?.clone() ?? []) == touch_test_texts(whole[\"a\"]?.clone() ?? []))", None, &[("touch_test_texts(head[\"a\"]?.clone() ?? [])", (&&nikaia_std::abort::Operand(&(touch_test_texts(&nikaia_std::index::or(match *nikaia_std::index::get(&head, "a") {
+        Some(__nikaia_it) => Some(__nikaia_it.clone()),
+        None => None,
+    }, || vec![].into()))))).shown()), ("touch_test_texts(whole[\"a\"]?.clone() ?? [])", (&&nikaia_std::abort::Operand(&(touch_test_texts(&nikaia_std::index::or(match *nikaia_std::index::get(&whole, "a") {
+        Some(__nikaia_it) => Some(__nikaia_it.clone()),
+        None => None,
+    }, || vec![].into()))))).shown()), ]) };
+    Ok(())
+}
+
+pub(crate) fn __nikaia_test_10() -> Result<(), std::boxed::Box<dyn std::error::Error>> {
     let unknown = Reached { kind: String::from("file"), named: None, unknown: true, write: true };
     let read = touch_test_reached(String::from("file"), Some(String::from("a.txt")), false);
     if !(unknown.conflicts_with(&read)) { nikaia_std::abort::assertion_failed("assert(unknown.conflicts_with(read))", None, &[]) };
@@ -346,6 +593,8 @@ pub(crate) fn touch_nikaia_tests() -> Vec<(&'static str, fn() -> Result<(), std:
         ("touch::the_two_console_handles_may_be_one_destination", __nikaia_test_5),
         ("touch::two_reads_never_conflict", __nikaia_test_6),
         ("touch::two_named_resources_are_compared_by_name", __nikaia_test_7),
-        ("touch::an_unnameable_resource_conflicts_with_its_whole_kind", __nikaia_test_8),
+        ("touch::a_kind_outside_the_vocabulary_is_not_known", __nikaia_test_8),
+        ("touch::the_per_function_touches_entry_gives_the_whole_package_column", __nikaia_test_9),
+        ("touch::an_unnameable_resource_conflicts_with_its_whole_kind", __nikaia_test_10),
     ]
 }

@@ -2453,12 +2453,24 @@ fn emit_tuple_part_copies(parts: ref Vec[String]) -> String {
 /// **The trait a method call's ledger key names, where a library `impl` gives
 /// it a type** (#2304): `supervisor::Restart` for `supervisor::Restart::decide`,
 /// else `""`. Only a trait of a module, the path the language below writes
-/// under `nikaia_std::`.
+/// under `nikaia_std::`. A key of the implementing type names the trait too
+/// where the trait has the method (#2118): `supervisor::Backoff::decide`, the
+/// entry a `std` module written in Nikaia is inferred with, is the trait's
+/// `decide` in the language below.
 fn emit_call_library_trait(world: ref EmitWorld, key: ref String) -> String {
-    for (trait_name, _) in world.library.implementations {
-        let method = key.strip_prefix(f"{trait_name}::") ?? continue
-        if trait_name.contains("::") && !method.contains("::") {
+    for (trait_name, types) in world.library.implementations {
+        if !trait_name.contains("::") {
+            continue
+        }
+        let method = key.strip_prefix(f"{trait_name}::") ?? ""
+        if method != "" && !method.contains("::") {
             return trait_name.clone()
+        }
+        for ty in types {
+            let own = key.strip_prefix(f"{ty}::") ?? continue
+            if own != "" && !own.contains("::") && world.library.functions.contains_key(f"{trait_name}::{own}") {
+                return trait_name.clone()
+            }
         }
     }
     return ""

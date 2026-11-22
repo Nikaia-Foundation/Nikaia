@@ -30,9 +30,9 @@ use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 // somebody wrote. ADR-094 §5's first step had none, on purpose, so that the
 // answer could be diffed against the corpus before one call site changed.
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 
-use crate::ast::{Expr, Item};
+use crate::ast::Expr;
 use crate::parser::Parsed;
 
 use super::Ledger;
@@ -100,12 +100,13 @@ pub fn moves(ty: &super::ty::Ty) -> bool {
     nikaia_std::compiler::lends::moves(ty)
 }
 
+use nikaia_std::compiler::keeps::KeepsHost;
 pub use nikaia_std::compiler::keeps::{KeepsColumn as Column, KeepsKeeper as Keeper};
-use nikaia_std::compiler::keeps::{KeepsHost, KeepsIndexes};
 
 /// Give every function in the ledger the `keeps` its body earns: the walk, the
-/// trait edges and the least fixpoint are Nikaia (`tools/keeps.nika`,
-/// ADR-294, #125); this builds what they are handed.
+/// trait edges, the least fixpoint and the method indexes are Nikaia
+/// (`compiler/keeps.nika`, ADR-294, #125); this hands over each unit's view
+/// and the holes of its literals, which are read from the Rust `Parsed`.
 pub fn infer(
     ledger: &mut Ledger,
     units: &[&Parsed],
@@ -116,120 +117,17 @@ pub fn infer(
         .iter()
         .map(|parsed| crate::check::parsed_view_of(parsed))
         .collect();
-    let own_methods = nikaia_std::compiler::ty::method_index(ledger);
-    let library_methods = nikaia_std::compiler::ty::method_index(library);
-    let host = Host {
-        units,
-        own_methods: &own_methods,
-        library_methods: &library_methods,
-        resolved,
-    };
-    nikaia_std::compiler::keeps::keeps_infer(
-        ledger,
-        &views,
-        library,
-        resolved,
-        &KeepsIndexes {
-            own: &own_methods,
-            library: &library_methods,
-        },
-        &host,
-    )
+    nikaia_std::compiler::keeps::keeps_infer(ledger, &views, library, resolved, &Host { units })
 }
 
-/// What the Nikaia walk asks of the compiler: a literal's holes, and the
-/// statement that keeps a parameter, which needs the unit's own tokens.
+/// What the Nikaia walk asks of the compiler: a literal's holes, which are
+/// read from the unit's own tokens.
 struct Host<'a> {
     units: &'a [&'a Parsed],
-    own_methods: &'a nikaia_std::compiler::ty::MethodIndex,
-    library_methods: &'a nikaia_std::compiler::ty::MethodIndex,
-    resolved: &'a BTreeMap<String, crate::check::MethodCalls>,
 }
 
 impl KeepsHost for Host<'_> {
     fn holes(&self, unit: i64, expr: &Expr) -> Vec<Expr> {
         crate::emit::literal_expressions(self.units[unit as usize], expr)
     }
-
-    fn keeping_statement(
-        &self,
-        unit: i64,
-        method: &crate::ast::Spanned<Item>,
-        target: &str,
-        parameter: &str,
-        own_kept: &BTreeMap<String, BTreeSet<String>>,
-        own: &Ledger,
-        library: &Ledger,
-    ) -> crate::ast::Span {
-        keeping_statement(
-            self.units[unit as usize],
-            method,
-            target,
-            parameter,
-            own_kept,
-            (own, library),
-            (self.own_methods, self.library_methods),
-            self.resolved,
-        )
-    }
-}
-
-/// **The statement that keeps `parameter`**: the first prefix of the impl's
-/// body whose walk keeps it, on its own evidence (`own_kept` answers the
-/// callees); the method itself where none does.
-#[allow(clippy::too_many_arguments)]
-fn keeping_statement(
-    parsed: &Parsed,
-    method: &crate::ast::Spanned<Item>,
-    target: &str,
-    parameter: &str,
-    own_kept: &BTreeMap<String, BTreeSet<String>>,
-    (ledger, library): (&Ledger, &Ledger),
-    (own_methods, library_methods): (
-        &nikaia_std::compiler::ty::MethodIndex,
-        &nikaia_std::compiler::ty::MethodIndex,
-    ),
-    resolved: &BTreeMap<String, crate::check::MethodCalls>,
-) -> crate::ast::Span {
-    let Item::Fn { body, .. } = &method.node else {
-        return method.span;
-    };
-    let view = crate::check::parsed_view_of(parsed);
-    for end in 1..=body.stmts.len() {
-        let mut prefix = method.node.clone();
-        if let Item::Fn { body, .. } = &mut prefix {
-            body.stmts.truncate(end);
-        }
-        let Some(found) = nikaia_std::compiler::keeps::keeps_uses_of(
-            &view,
-            &prefix,
-            Some(target),
-            ledger,
-            library,
-            &KeepsIndexes {
-                own: own_methods,
-                library: library_methods,
-            },
-            resolved,
-            &mut |expr: &Expr| crate::emit::literal_expressions(parsed, expr),
-        ) else {
-            continue;
-        };
-        let uses = found.uses;
-        if uses.kept.contains(parameter)
-            || uses.passed.iter().any(|passed| {
-                passed.parameter == parameter
-                    && nikaia_std::compiler::lends::keeps_its(
-                        &passed.callee,
-                        passed.at,
-                        own_kept,
-                        ledger,
-                        library,
-                    )
-            })
-        {
-            return body.stmts[end - 1].span;
-        }
-    }
-    method.span
 }

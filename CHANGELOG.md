@@ -8,6 +8,17 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1545] — 2026-11-22
+
+**Builders' changes (#2118, #2581, #2582, #2583, #2584, #2586)**
+- std's default restart policy `supervisor::Backoff()` is written in Nikaia (`supervisor.nika`), with the same delays, ceiling, healthy reset, 300 s give-up and jitter; a std trait method called on a std type and a std signature default calling a type's constructor now lower correctly.
+- The locks pass derives one function's lock column, or its recursive group's, from its callees' stored columns, and the package callees first through it; the whole-package fixpoint stays as the reference (ADR-100 D7)
+- The panics pass derives one function's panics and places columns, or its recursive group's, from its callees' stored columns, and the package callees first through it; the whole-package fixpoint stays as the reference (ADR-100 D7)
+- The keeps pass derives one function's keeps column, or its recursive group's, from its callees' stored columns, and the package callees first through it; the whole-package fixpoint stays as the reference (ADR-100 D7)
+- The touch pass derives one function's touches, or its recursive group's, from its callees' stored columns, and the package callees first through it; the whole-package fixpoint stays as the reference, and writing the column into the ledger moved from Rust into touch.nika (ADR-100 D7)
+- The throws pass derives one function's error set, or its recursive group's, from its callees' stored sets, and the package callees first through it; the whole-package fixpoint stays as the reference (ADR-100 D7)
+- A list, set or map that only literals went into can be compared with one holding text of its own; the compiler no longer writes Rust that rustc refuses for it (ADR-282 D29)
+
 ## [0.0.1544] — 2026-11-22
 
 **Builders' changes (#2742, #2752)**

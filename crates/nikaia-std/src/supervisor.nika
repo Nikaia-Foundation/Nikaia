@@ -1,8 +1,9 @@
 // crates/nikaia-std/src/supervisor.nika
 //
 // `std::supervisor`'s policy, written in Nikaia: the trait a program
-// implements and the types it speaks in (ADR-328 D5). The supervisor itself is
-// Rust, in `supervision.rs`, which includes what this lowers to.
+// implements, the types it speaks in and `std`'s default policy, `Backoff`
+// (ADR-328 D5). The supervisor itself is Rust, in `supervision.rs`, which
+// includes what this lowers to.
 
 use std::time
 
@@ -30,4 +31,78 @@ pub struct Failures {
 /// takes one, and a policy that needs more history keeps it itself.
 pub trait Restart {
     fn decide(ref mut self, keep history: Failures) -> Next sync
+}
+
+/// **`std`'s default policy** (ADR-328, Part II 12.8): the first failure is
+/// restarted at once, then after a delay that grows, with jitter, up to a
+/// ceiling; an attempt that ran long enough starts a new cycle; a cycle that
+/// lasts too long gives up.
+///
+/// **The numbers are starting values**, not measured: what a service on one
+/// machine tolerates. A program that needs others passes another policy.
+///
+/// **Its cycle is its own**: the supervisor's history counts the child's whole
+/// life, and an attempt that ran `healthy` long starts a new cycle here, kept
+/// as where in that history it began.
+pub struct Backoff {
+    /// The second failure's delay; each after it doubles.
+    pub first_delay: time::Duration,
+    /// No delay is longer.
+    pub ceiling: time::Duration,
+    /// An attempt that ran this long ends the cycle: it was healthy.
+    pub healthy: time::Duration,
+    /// A cycle that lasts longer than this gives up.
+    pub give_up_after: time::Duration,
+    /// The failures before this cycle.
+    cycle_failures: i64,
+    /// How long after the first failure this cycle began.
+    cycle_began: time::Duration,
+    /// The jitter's xorshift state, never zero.
+    seed: u64,
+}
+
+impl Backoff {
+    /// `supervisor::Backoff()`: `std`'s default policy, the value `policy:`
+    /// has where a child names none. Its seed is read from the clock each
+    /// time (#2467).
+    pub fn() -> Backoff sync {
+        let nanos = time::since_epoch().in_nanos() % 1_000_000_000
+        return Backoff {
+            first_delay: 100.millis(),
+            ceiling: 30.seconds(),
+            healthy: 60.seconds(),
+            give_up_after: 300.seconds(),
+            cycle_failures: 0,
+            cycle_began: 0.seconds(),
+            seed: (nanos as u64) | 1,
+        }
+    }
+}
+
+impl Restart for Backoff {
+    /// One failure, from the supervisor's history of the child.
+    fn decide(ref mut self, keep history: Failures) -> Next sync {
+        if history.last_uptime >= self.healthy {
+            self.cycle_failures = history.consecutive - 1
+            self.cycle_began = history.since_first
+        }
+        let failures = history.consecutive - self.cycle_failures
+        let lasted = history.since_first.saturating_sub(self.cycle_began)
+        if lasted > self.give_up_after {
+            return Next::Escalate
+        }
+        if failures <= 1 {
+            return Next::Immediate
+        }
+        let doubled = self.first_delay.saturating_mul(1 << (failures - 2).min(20))
+        let delay = doubled.min(self.ceiling)
+        // **Jitter**, so that children that crashed together do not restart
+        // together: up to a quarter less, never more than the ceiling.
+        self.seed = self.seed ^ (self.seed << 13)
+        self.seed = self.seed ^ (self.seed >> 7)
+        self.seed = self.seed ^ (self.seed << 17)
+        let quarter = delay.in_nanos() / 4
+        let off = if quarter <= 0 { 0 } else { (self.seed % (quarter as u64)) as i64 }
+        return Next::Delay(delay - off.nanos())
+    }
 }
