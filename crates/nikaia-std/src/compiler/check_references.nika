@@ -529,7 +529,9 @@ fn check_gives_back_block_returns(block: ref Block, name: ref String, words: ref
             Stmt::Return(value) => {
                 if value != null {
                     let inner = value ?? return false
-                    check_gives_back_is_name(inner, name, words) || check_gives_back_returns(inner, name, words)
+                    // **A name a returned `match` or `if` ends in is returned
+                    // too** (#2707): `return match end { … else => end }`.
+                    check_gives_back_tail(inner, name, words) || check_gives_back_returns(inner, name, words)
                 } else {
                     false
                 }
@@ -554,7 +556,7 @@ fn check_gives_back_returns(expr: ref Expr, name: ref String, words: ref winnow_
     for inner in visited_in_expr(expr) {
         match inner {
             Expr::Return(value, _) => {
-                if value != null && check_gives_back_is_name(value ?? return false, name, words) {
+                if value != null && check_gives_back_tail(value ?? return false, name, words) {
                     found = true
                 }
             },
