@@ -33,7 +33,7 @@ pub(crate) fn note_a_division(op: &BinaryOp) -> bool { *op == BinaryOp::Div || *
 impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn a_sequence_that_cannot_do_this(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, on: &Ty, method: winnow_grammar::Symbol, contract: &FnContract, found: &[Ty], span: &Span) {
+    pub(crate) fn a_sequence_that_cannot_do_this(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, on: &Ty, method: winnow_grammar::Symbol, contract: &FnContract, found: &[Ty], span: &Span) {
         let signature = match contract.signature.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return };
         let written = nikaia_std::block::Text::from(world.words.resolve(method).to_string());
         let receiver_lacks = !signature.params.is_empty() && unsafe { nikaia_std::proven::read(&signature.params, (0) as usize) }.0 == "self" && self.a_sequence_lacks(&written, &unsafe { nikaia_std::proven::read(&signature.params, (0) as usize) }.1, on, span);
@@ -82,7 +82,7 @@ impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
-    pub(crate) fn a_cleanup_that_moved(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, key: &str, param: &str, moved_now: bool, moved_ty: &str, want: &Ty, given: Option<&Expr>, span: &Span) {
+    pub(crate) fn a_cleanup_that_moved(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, key: &str, param: &str, moved_now: bool, moved_ty: &str, want: &Ty, given: Option<&Expr>, span: &Span) {
         let expr = match given { Some(__nikaia_value) => __nikaia_value, None => return };
         let value = match expr {
             Expr::Variable(name, _) => { let name = *name; nikaia_std::block::Text::from(world.words.resolve(name).to_string()) },
@@ -106,7 +106,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn divisor_is_not_zero(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, op: &BinaryOp, rhs: &Expr, span: &Span) {
+    pub(crate) fn divisor_is_not_zero(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, op: &BinaryOp, rhs: &Expr, span: &Span) {
         if !note_a_division(&op) || self.flow.short_circuited > 0 { return; }
         let divisor = match self.constant_of(world, rhs) { Some(__nikaia_value) => __nikaia_value, None => return };
         if divisor.beyond || divisor.value.magnitude != 0u64 { return; }
@@ -117,7 +117,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn shift_count_fits(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, op: &BinaryOp, lhs: &Expr, left: &Ty, rhs: &Expr, span: &Span) {
+    pub(crate) fn shift_count_fits(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, op: &BinaryOp, lhs: &Expr, left: &Ty, rhs: &Expr, span: &Span) {
         if *op != BinaryOp::Shl && *op != BinaryOp::Shr { return; }
         let count = match self.constant_of(world, rhs) { Some(__nikaia_value) => __nikaia_value, None => return };
         let open = self.open_numbers_in(world, lhs);
@@ -139,7 +139,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn literal_shifts_in(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, value: &Expr) -> Vec<CheckConstant> {
+    pub(crate) fn literal_shifts_in(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, value: &Expr) -> Vec<CheckConstant> {
         let mut out: Vec<CheckConstant> = vec![];
         match value {
             Expr::Binary { op, lhs, rhs, .. } => {
@@ -177,7 +177,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn lambda_parameter(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, name: winnow_grammar::Symbol, mutable: &[winnow_grammar::Symbol], ty: Ty, span: &Span) -> CheckLocal {
+    pub(crate) fn lambda_parameter(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, name: winnow_grammar::Symbol, mutable: &[winnow_grammar::Symbol], ty: Ty, span: &Span) -> CheckLocal {
         let mut written = false;
         for one in mutable.iter() {
             let one = *one;
@@ -199,7 +199,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn the_one_error(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, expr: &Expr) -> Option<Ty> {
+    pub(crate) fn the_one_error(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, expr: &Expr) -> Option<Ty> {
         let name = match expr {
             Expr::Call { func, .. } => { let func = nikaia_std::boxed::open(func); match func {
                 Expr::Variable(name, _) => { let name = *name; nikaia_std::block::Text::from(world.words.resolve(name).to_string()) },
@@ -217,7 +217,7 @@ impl CheckState {
     }
 }
 
-pub(crate) fn note_joined(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, segments: &[winnow_grammar::Symbol]) -> String {
+pub(crate) fn note_joined(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, segments: &[winnow_grammar::Symbol]) -> String {
     let mut parts: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     parts.reserve(segments.iter().size_hint().0); for segment in segments.iter() {
         let segment = *segment;

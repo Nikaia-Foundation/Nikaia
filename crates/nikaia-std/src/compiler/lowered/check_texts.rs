@@ -121,7 +121,7 @@ pub(crate) fn a_string_type() -> Ty { Ty::Named { name: String::from("String"), 
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn method_word(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, expr: &Expr) -> String {
+pub(crate) fn method_word(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, expr: &Expr) -> String {
     match expr {
         Expr::MethodCall { method, args, .. } => { let method = *method; if args.is_empty() { nikaia_std::block::Text::from(world.words.resolve(method).to_string()) } else { String::from("") } },
         _ => String::from(""),
@@ -173,7 +173,7 @@ pub(crate) fn a_text_literal_expr(expr: &Expr) -> bool { matches!(expr, Expr::Li
 impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn text_literal(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, want: &Ty, value: &Expr, owned: bool) -> Option<Ty> {
+    pub(crate) fn text_literal(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, want: &Ty, value: &Expr, owned: bool) -> Option<Ty> {
         match want {
             Ty::Nullable(inner) => { let inner = nikaia_std::boxed::open(inner); return self.text_literal(world, inner, value, owned); },
             _ => { },
@@ -325,7 +325,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn tuple_list_literal(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, found: &Ty, want: &Ty, value: &Expr) -> Option<Ty> {
+    pub(crate) fn tuple_list_literal(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, found: &Ty, want: &Ty, value: &Expr) -> Option<Ty> {
         let element: Ty = match want {
             Ty::Named { name, args, .. } => if name == "Vec" && args.len() == 1 { (*unsafe { nikaia_std::proven::read(&args, (0) as usize) }).clone() } else { return None; },
             _ => return None,
@@ -349,7 +349,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn tuple_literal(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, found: &Ty, want: &Ty, value: &Expr) -> Option<Ty> {
+    pub(crate) fn tuple_literal(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, found: &Ty, want: &Ty, value: &Expr) -> Option<Ty> {
         let wants: Vec<Ty> = match want {
             Ty::Tuple(parts) => parts.copy_owned(),
             Ty::Nullable(inner) => { let inner = nikaia_std::boxed::open(inner); match inner {
@@ -416,7 +416,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn list_of_tuple_literals(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, found: &Ty, want: &Ty, value: &Expr) -> Option<Ty> {
+    pub(crate) fn list_of_tuple_literals(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, found: &Ty, want: &Ty, value: &Expr) -> Option<Ty> {
         let name = match want {
             Ty::Named { name, view, .. } => { let view = *view; if view { return None; } else { nikaia_std::block::Text::from(name.to_string()) } },
             _ => return None,

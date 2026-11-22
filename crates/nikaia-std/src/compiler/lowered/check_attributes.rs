@@ -128,7 +128,7 @@ pub(crate) fn check_attributes_marks_in(unit: &ParsedView<'_, '_, '_, '_, '_, '_
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn check_attributes_marks(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>) -> collections::BTreeMap<String, CheckAttributesMark> {
+pub(crate) fn check_attributes_marks(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>) -> collections::BTreeMap<String, CheckAttributesMark> {
     let mut marks: collections::BTreeMap<String, CheckAttributesMark> = collections::BTreeMap::new();
     for (key, contract) in world.library.types.iter() { if contract.mark != "" { marks.insert(nikaia_std::block::Text::from(key.to_string()), check_attributes_mark_read(&contract.mark)); } }
     for (key, contract) in world.own.types.iter() { if contract.mark != "" { marks.insert(nikaia_std::block::Text::from(key.to_string()), check_attributes_mark_read(&contract.mark)); } }
@@ -154,7 +154,7 @@ pub(crate) fn check_attributes_repeats(marks: &collections::BTreeMap<String, Che
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn check_attributes_all<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H) {
+pub(crate) fn check_attributes_all<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, host: &H) {
     let marks = check_attributes_marks(world);
     for item in world.here.items.iter() {
         let place: String = match &item.node {
@@ -200,11 +200,11 @@ pub(crate) fn check_attributes_all<H: CheckHost>(state: &mut CheckState, world: 
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn check_attributes_parameters<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, args: &[FnArg], marks: &collections::BTreeMap<String, CheckAttributesMark>) { for arg in args.iter() { check_attributes_at(state, world, host, &arg.attributes, "parameter", marks); } }
+pub(crate) fn check_attributes_parameters<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, host: &H, args: &[FnArg], marks: &collections::BTreeMap<String, CheckAttributesMark>) { for arg in args.iter() { check_attributes_at(state, world, host, &arg.attributes, "parameter", marks); } }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn check_attributes_at<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, attributes: &[Attribute], place: &str, marks: &collections::BTreeMap<String, CheckAttributesMark>) {
+pub(crate) fn check_attributes_at<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, host: &H, attributes: &[Attribute], place: &str, marks: &collections::BTreeMap<String, CheckAttributesMark>) {
     let mut seen: collections::BTreeMap<String, i64> = collections::BTreeMap::new();
     let mut inlines: i64 = 0;
     let inline_name = check_attributes_inline_name();
@@ -242,7 +242,7 @@ pub(crate) fn check_attributes_at<H: CheckHost>(state: &mut CheckState, world: &
     }
 }
 
-pub(crate) fn check_attributes_inline_refusal(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, attribute: &Attribute) -> Option<String> {
+pub(crate) fn check_attributes_inline_refusal(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, attribute: &Attribute) -> Option<String> {
     let bare = attribute.config.is_empty();
     if attribute.args.is_empty() && bare { return None; }
     if attribute.args.len() == 1 && bare {
@@ -261,7 +261,7 @@ pub(crate) fn check_attributes_inline_refusal(world: &CheckWorld<'_, '_, '_, '_,
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn check_attributes_the_inline(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, attribute: &Attribute, place: &str, count: i64) {
+pub(crate) fn check_attributes_the_inline(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, attribute: &Attribute, place: &str, count: i64) {
     if place != "fn" {
         let mut message: String = format!("`@inline` stands before a function or a method, and this is a `{}`.", place);
         let mut note: String = String::from("It asks that a function's body be copied to where it is called.");
@@ -285,7 +285,7 @@ pub(crate) fn check_attributes_the_inline(state: &mut CheckState, world: &CheckW
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn check_attributes_the_mark(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, attribute: &Attribute, place: &str) {
+pub(crate) fn check_attributes_the_mark(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, attribute: &Attribute, place: &str) {
     if place != "struct" {
         let mark_name = check_attributes_mark_name();
         check_attributes_out_of_place(state, &mark_name, place, None, &attribute.span);
@@ -314,7 +314,7 @@ pub(crate) fn check_attributes_the_mark(state: &mut CheckState, world: &CheckWor
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn check_attributes_arguments<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, name: &str, fields: &[FieldContract], attribute: &Attribute) {
+pub(crate) fn check_attributes_arguments<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, host: &H, name: &str, fields: &[FieldContract], attribute: &Attribute) {
     let mut required: Vec<FieldContract> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     let mut options: Vec<FieldContract> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     for field in fields.iter() { if field.default == "" { required.push(field.clone()); } else { options.push(field.clone()); } }
@@ -380,7 +380,7 @@ pub(crate) fn check_attributes_names_string(ty: &Ty) -> bool {
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn check_attributes_argument<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, owner: &str, field: &FieldContract, arg: &Expr, span: &Span) {
+pub(crate) fn check_attributes_argument<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, host: &H, owner: &str, field: &FieldContract, arg: &Expr, span: &Span) {
     match arg {
         Expr::Variable(word, _) => {
             let word = *word;
@@ -420,7 +420,7 @@ pub(crate) fn check_attributes_argument<H: CheckHost>(state: &mut CheckState, wo
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn check_attributes_an_attribute_read(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, args: &[Expr], span: &Span) -> Option<String> {
+pub(crate) fn check_attributes_an_attribute_read(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, args: &[Expr], span: &Span) -> Option<String> {
     let mut written: String = String::from("");
     let mut one = false;
     if args.len() == 1 {
@@ -465,7 +465,7 @@ pub(crate) fn check_attributes_names_of(contract: &TypeContract) -> Option<Vec<S
     Some(names)
 }
 
-pub(crate) fn check_attributes_variants_of_type(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, ty: &Ty) -> Option<Vec<String>> {
+pub(crate) fn check_attributes_variants_of_type(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, ty: &Ty) -> Option<Vec<String>> {
     let name: &str = match ty {
         Ty::Named { name, .. } => name,
         _ => return None,

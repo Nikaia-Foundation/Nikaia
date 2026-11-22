@@ -4,7 +4,7 @@
 impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn bound_that_answers(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, parameter: &str, member: &str) -> Option<Ty> {
+    pub(crate) fn bound_that_answers(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, parameter: &str, member: &str) -> Option<Ty> {
         let bounds = match *nikaia_std::index::get(&self.type_parameters, parameter) { Some(__nikaia_value) => __nikaia_value, None => return None };
         for bound in bounds.iter() {
             let methods = match *nikaia_std::index::get(&world.own.traits, bound) { Some(__nikaia_value) => __nikaia_value, None => continue };
@@ -124,7 +124,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn grammar_entry(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, receiver: &Expr, method: winnow_grammar::Symbol) -> Option<String> {
+    pub(crate) fn grammar_entry(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, receiver: &Expr, method: winnow_grammar::Symbol) -> Option<String> {
         match receiver {
             Expr::Variable(name, _) => { let name = *name; self.grammar_rule(world.words.resolve(name), world.words.resolve(method)) },
             _ => None,
@@ -158,7 +158,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn answers_for(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, ty: &str, trait_name: &str) -> bool {
+    pub(crate) fn answers_for(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, ty: &str, trait_name: &str) -> bool {
         if (trait_name == "Struct" || trait_name == "Enum") && !world.own.traits.contains_key(trait_name) {
             if self.type_parameters.contains_key(ty) { return self.declares_bound(ty, trait_name); }
             let is_struct = self.structs.contains_key(ty);
@@ -194,7 +194,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn fields_of(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, name: &str) -> Option<Vec<FieldContract>> {
+    pub(crate) fn fields_of(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, name: &str) -> Option<Vec<FieldContract>> {
         if self.structs.contains_key(name) {
             let fields = match *nikaia_std::index::get(&self.structs, name) { Some(__nikaia_value) => __nikaia_value, None => return None };
             return a_nonempty(fields);
@@ -209,7 +209,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn iterates_fallibly(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, name: &str) -> bool {
+    pub(crate) fn iterates_fallibly(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, name: &str) -> bool {
         let suffix = format!("::{}", name);
         for (entry_name, entry_value) in world.own.types.iter() { if (entry_name == name || entry_name.ends_with(AsRef::<str>::as_ref(&suffix))) && entry_value.iterates_fallibly { return true; } }
         for (entry_name, entry_value) in world.library.types.iter() { if (entry_name == name || entry_name.ends_with(AsRef::<str>::as_ref(&suffix))) && entry_value.iterates_fallibly { return true; } }
@@ -217,7 +217,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn function_as_a_value(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, name: &str) -> Option<Ty> {
+    pub(crate) fn function_as_a_value(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, name: &str) -> Option<Ty> {
         let mut key = nikaia_std::block::Text::from(name.to_string());
         if self.structs.contains_key(name) || world.own.types.contains_key(name) { key = format!("{}::new", name); }
         let direct = ledger_function(world, name).is_some();

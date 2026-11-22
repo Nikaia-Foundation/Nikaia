@@ -216,12 +216,71 @@ pub fn check_against<'a>(
     // nothing.
     reads: &'a Reads,
 ) -> Checked {
+    check_against_in(parsed, beside, own, library, modules, newly, reads, None)
+}
+
+/// **What every file check of a package reads alike** (#2685): the views
+/// pass's `ResultPackage` (from the ledgers alone), what the package's
+/// files read and declare (`check_program_package`: the names read,
+/// ADR-327 D17; the field walks, ADR-304 D4; the members boxed, ADR-246 D1),
+/// and what the tether's buffer plans ask of the package (the views its
+/// units declare, the ledgers' method indexes). None of it changes between
+/// the file checks of one run, so a caller that checks a package file by
+/// file makes it once and hands it to each ([`check_against_in`]); without
+/// it each check works them out where it needs them.
+pub struct PackageFacts {
+    pub(crate) results: nikaia_std::compiler::views::ResultPackage,
+    pub(crate) check: nikaia_std::compiler::check_state::CheckPackage,
+    pub(crate) keep: nikaia_std::compiler::keep::KeepContext,
+    pub(crate) own_methods: nikaia_std::compiler::ty::MethodIndex,
+    pub(crate) library_methods: nikaia_std::compiler::ty::MethodIndex,
+}
+
+impl PackageFacts {
+    /// The facts of the package `units`, every file of it: each file checked
+    /// against them must be one of `units`. `None` for a package of no file.
+    /// A frame of its own, so that callgrind counts its one cost apart from
+    /// the file checks (`docs/analysis-at-scale.md`).
+    #[inline(never)]
+    pub fn of(units: &[&Parsed], own: &Ledger, library: &Ledger) -> Option<PackageFacts> {
+        let first = units.first()?;
+        let views: Vec<_> = units.iter().map(|unit| parsed_view_of(unit)).collect();
+        Some(PackageFacts {
+            // From the ledgers alone: the names it is asked under are not read.
+            results: crate::views::result_package(first, own, library),
+            check: nikaia_std::compiler::check_program::check_program_package(&views),
+            keep: crate::contracts::keep::beside(units),
+            own_methods: nikaia_std::compiler::ty::method_index(own),
+            library_methods: nikaia_std::compiler::ty::method_index(library),
+        })
+    }
+}
+
+/// [`check_against`] handed the package's facts, made once for all its files
+/// (#2685); with `None` the check works them out itself, from `beside`.
+#[allow(clippy::too_many_arguments)]
+pub fn check_against_in<'a>(
+    parsed: &'a Parsed,
+    beside: &'a [&'a Parsed],
+    own: &'a Ledger,
+    library: &'a Ledger,
+    modules: &BTreeSet<String>,
+    newly: &'a Newly,
+    reads: &'a Reads,
+    package: Option<&PackageFacts>,
+) -> Checked {
     let mut checked = walked(
-        parsed, beside, own, library, modules, newly, reads, false, true,
+        parsed, beside, own, library, modules, newly, reads, false, true, package,
     );
     refuse_unproved_claims(&mut checked);
     check_keep_marks(parsed, beside, own, library, &mut checked);
-    check_result_from(parsed, own, library, &mut checked);
+    check_result_from(
+        parsed,
+        own,
+        library,
+        package.map(|facts| &facts.results),
+        &mut checked,
+    );
     if beside.is_empty() && modules.is_empty() {
         dump_accepted(parsed, &checked);
     }
@@ -291,6 +350,7 @@ pub(crate) fn check_for_the_ledger<'a>(
         reads,
         false,
         false,
+        None,
     )
 }
 
@@ -322,6 +382,7 @@ fn instantiations_in<'a>(
         reads,
         true,
         true,
+        None,
     )
     .facts
     .unrolled
@@ -339,6 +400,9 @@ fn walked<'a>(
     reads: &'a Reads,
     harvesting: bool,
     computes: bool,
+    // **The package's facts made once for all its files** (#2685), or `None`
+    // where the walk works them out itself.
+    package: Option<&'a PackageFacts>,
 ) -> Checked {
     let views: Vec<_> = beside.iter().map(|other| parsed_view_of(other)).collect();
     let here_at = beside
@@ -371,6 +435,7 @@ fn walked<'a>(
                 (callee.clone(), moved)
             })
             .collect(),
+        package: package.map(|facts| &facts.check),
     };
     let mut s = core::hollow();
     s.flow = CheckFlow::start(computes, harvesting);
@@ -382,6 +447,7 @@ fn walked<'a>(
         here: beside.iter().position(|other| std::ptr::eq(*other, parsed)),
         world: &world,
         s: core::Baton::new(s),
+        package,
     };
     // The walk from the seed to the settled findings (`check_walked.nika`).
     checker.nikaia(|state, world, host| {
@@ -522,6 +588,7 @@ fn propagation(
         reads,
         false,
         computes,
+        None,
     );
     checked.facts
 }
@@ -551,7 +618,7 @@ struct Checker<'a> {
     s: core::Baton,
     /// What it looks at and does not own: the names, and the two ledgers. A
     /// reference, so the moved code can be handed it while the checker is lent.
-    world: &'a CheckWorld<'a, 'a, 'a, 'a, 'a, 'a, 'a>,
+    world: &'a CheckWorld<'a, 'a, 'a, 'a, 'a, 'a, 'a, 'a>,
     parsed: &'a Parsed,
     /// **The program's other files**, for the one question that needs a body
     /// rather than a contract — a `comptime` calling across a file boundary.
@@ -565,6 +632,8 @@ struct Checker<'a> {
     reads: &'a Reads,
     /// Where this file stands among `beside`, where it does.
     here: Option<usize>,
+    /// The package's facts made once for all its files (#2685), if given.
+    package: Option<&'a PackageFacts>,
 }
 
 impl<'a> Checker<'a> {
@@ -579,6 +648,7 @@ impl<'a> Checker<'a> {
             reads: self.reads,
             own: self.world.own,
             library: self.world.library,
+            package: self.package,
         }
     }
 
@@ -780,9 +850,18 @@ pub fn check_keep_marks(
 /// **A result's written `from` against the body** (`NK1335`, `NK1336`,
 /// ADR-views-v4 D8): `tools/check_result_from.nika`, handed what the views pass
 /// finds each body reaches before a written `from` replaces it.
-pub fn check_result_from(parsed: &Parsed, own: &Ledger, library: &Ledger, checked: &mut Checked) {
+pub fn check_result_from(
+    parsed: &Parsed,
+    own: &Ledger,
+    library: &Ledger,
+    results: Option<&nikaia_std::compiler::views::ResultPackage>,
+    checked: &mut Checked,
+) {
     let view = parsed_view_of(parsed);
-    let inferred = crate::views::result_sources_inferred(parsed, own, library);
+    let inferred = match results {
+        Some(package) => crate::views::result_sources_inferred_in(parsed, own, library, package),
+        None => crate::views::result_sources_inferred(parsed, own, library),
+    };
     let found = nikaia_std::compiler::check_result_from::result_from_check(&view, &inferred);
     checked.findings.extend(found);
 }

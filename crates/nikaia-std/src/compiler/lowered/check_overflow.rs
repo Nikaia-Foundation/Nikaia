@@ -4,7 +4,7 @@
 impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn an_operation_that_overflows(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, op: &BinaryOp, lhs: &Expr, rhs: &Expr, reach: Option<&str>, span: &Span) {
+    pub(crate) fn an_operation_that_overflows(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, op: &BinaryOp, lhs: &Expr, rhs: &Expr, reach: Option<&str>, span: &Span) {
         let here = span.start as i64;
         if !(*op == BinaryOp::Add || *op == BinaryOp::Sub || *op == BinaryOp::Mul || *op == BinaryOp::Div || *op == BinaryOp::Rem) || self.flow.overflowed.contains(&here) { return; }
         let left = match self.constant_of(world, lhs) { Some(__nikaia_value) => __nikaia_value, None => return };
@@ -52,7 +52,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn a_negation_that_overflows(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, inner: &Expr, span: &Span) {
+    pub(crate) fn a_negation_that_overflows(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, inner: &Expr, span: &Span) {
         let here = span.start as i64;
         if self.flow.overflowed.contains(&here) { return; }
         let operand = match self.constant_of(world, inner) { Some(__nikaia_value) => __nikaia_value, None => return };
@@ -142,7 +142,7 @@ pub(crate) fn check_wrap_for(found: &Ty, want: &Ty, literal: bool) -> Option<Fac
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn check_overflow_leaves_none(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, expr: &Expr) -> bool {
+pub(crate) fn check_overflow_leaves_none(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, expr: &Expr) -> bool {
     if state.jumps(world, expr) { return true; }
     match expr {
         Expr::Match { arms, .. } => {
@@ -160,7 +160,7 @@ pub(crate) fn check_overflow_leaves_none(state: &CheckState, world: &CheckWorld<
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn check_overflow_block_leaves_none(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, block: &Block) -> bool {
+pub(crate) fn check_overflow_block_leaves_none(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, block: &Block) -> bool {
     if block.stmts.is_empty() { return false; }
     match &unsafe { nikaia_std::proven::read(&block.stmts, (nikaia_std::proven::sub::<i64>(block.stmts.len() as i64, 1)) as usize) }.node {
         Stmt::Return(_) => true,
@@ -192,7 +192,7 @@ pub(crate) fn check_wrap_undecided(found: &Ty, want: &Ty, literal: bool) -> bool
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn check_overflow_unknown_ends<'r>(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, given: &'r Expr) -> Vec<&'r Expr> {
+pub(crate) fn check_overflow_unknown_ends<'r>(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, given: &'r Expr) -> Vec<&'r Expr> {
     let mut out: Vec<&Expr> = vec![];
     for leaf in state.value_leaves(world, given) {
         if ends_in_null(check_peeled(leaf)) { continue; }
@@ -216,7 +216,7 @@ pub(crate) fn check_overflow_a_number_inside(want: &Ty) -> bool {
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn check_widened_slot<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, found: &Ty, want: &Ty, value: Option<&Expr>, span: &Span) -> Option<FactWrap> {
+pub(crate) fn check_widened_slot<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, host: &H, found: &Ty, want: &Ty, value: Option<&Expr>, span: &Span) -> Option<FactWrap> {
     let mut literal = false;
     if value.is_some() {
         let given = match value { Some(__nikaia_value) => __nikaia_value, None => return None };

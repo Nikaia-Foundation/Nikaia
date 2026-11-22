@@ -73,7 +73,7 @@ pub(crate) fn check_walks_the_child(expr: &Expr, id: u32) -> Option<bool> {
     }
 }
 
-pub(crate) fn check_walks_named_after(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, block: &Block, at: i64, names: &[String]) -> i64 {
+pub(crate) fn check_walks_named_after(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, block: &Block, at: i64, names: &[String]) -> i64 {
     let count = block.stmts.len() as i64;
     let mut index: i64 = 0;
     for stmt in block.stmts.iter() {
@@ -87,7 +87,7 @@ pub(crate) fn check_walks_named_after(world: &CheckWorld<'_, '_, '_, '_, '_, '_,
     count
 }
 
-pub(crate) fn check_walks_starts_the_handle(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, stmt: &Stmt, names: &[String]) -> bool {
+pub(crate) fn check_walks_starts_the_handle(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, stmt: &Stmt, names: &[String]) -> bool {
     if names.len() != 1 { return false; }
     match stmt {
         Stmt::Expr(value) => match value {
@@ -101,7 +101,7 @@ pub(crate) fn check_walks_starts_the_handle(world: &CheckWorld<'_, '_, '_, '_, '
     }
 }
 
-pub(crate) fn check_walks_child_window(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, block: &Block, id: u32) -> Option<CheckWalksWindow> {
+pub(crate) fn check_walks_child_window(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, block: &Block, id: u32) -> Option<CheckWalksWindow> {
     let count = block.stmts.len() as i64;
     let mut at: i64 = 0;
     for stmt in block.stmts.iter() {
@@ -142,7 +142,7 @@ pub(crate) fn check_walks_child_window(world: &CheckWorld<'_, '_, '_, '_, '_, '_
     None
 }
 
-pub(crate) fn check_walks_task(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, walking: &Walking<'_, '_>, id: u32, inner: &Expr) -> Option<CheckWalksTask> {
+pub(crate) fn check_walks_task(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, walking: &Walking<'_, '_>, id: u32, inner: &Expr) -> Option<CheckWalksTask> {
     let at = match world.here.spans.get(&id) { Some(__nikaia_value) => __nikaia_value, None => return None };
     let wait = match state.facts.async_waits.get(&(id as i64)) { Some(__nikaia_value) => __nikaia_value, None => return None };
     let until: i64 = match wait.at {
@@ -236,7 +236,7 @@ pub(crate) fn check_walks_door_on(state: &CheckState, value: &Expr, receiver: &E
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn check_walks_a_lambda_against_itself(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, walk: &Ty, lambda: &Expr, span: &Span) {
+pub(crate) fn check_walks_a_lambda_against_itself(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, walk: &Ty, lambda: &Expr, span: &Span) {
     match lambda {
         Expr::Closure { .. } => { },
         _ => { return; },
@@ -293,7 +293,7 @@ pub(crate) fn check_walks_statement_operations(state: &CheckState, stmt: &Stmt, 
     check_walks_values_operations(state, &mut vec![value], words, walking)
 }
 
-pub(crate) fn check_walks_window(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, walking: &Walking<'_, '_>, block: &Block, group: i64, tasks: &[CheckWalksTask], out: &mut Vec<CheckFinding>) {
+pub(crate) fn check_walks_window(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, walking: &Walking<'_, '_>, block: &Block, group: i64, tasks: &[CheckWalksTask], out: &mut Vec<CheckFinding>) {
     for stmt in block.stmts.iter() {
         let mut holds = false;
         let mut inside = false;
@@ -327,7 +327,7 @@ pub(crate) fn check_walks_window(state: &CheckState, world: &CheckWorld<'_, '_, 
 impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn branches_meet_on_nothing(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, block: &Block, changed_by: &[collections::BTreeSet<String>]) {
+    pub(crate) fn branches_meet_on_nothing(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, block: &Block, changed_by: &[collections::BTreeSet<String>]) {
         for stmt in block.stmts.iter() {
             match &stmt.node {
                 Stmt::Let { names, .. } => {
@@ -375,7 +375,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn tasks_meet_on_nothing(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, block: &Block, group: i64) {
+    pub(crate) fn tasks_meet_on_nothing(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, block: &Block, group: i64) {
         let mut count = 0;
         for (_, wait) in self.facts.async_waits.iter() {
             let wait = *wait;
@@ -427,7 +427,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn a_guard_reading_inside_a_box<H: CheckHost>(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, pattern: &MatchPattern, body: &Expr, guard: &Expr) {
+    pub(crate) fn a_guard_reading_inside_a_box<H: CheckHost>(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, host: &H, pattern: &MatchPattern, body: &Expr, guard: &Expr) {
         #[allow(unused_mut)] let mut inside: Vec<String> = vec![];
         self.names_inside_boxes(world, pattern, &mut inside);
         if inside.is_empty() { return; }
@@ -448,7 +448,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn not_pure_in<H: CheckHost>(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, frame: &CheckStoredCode, condition: &Expr) -> Vec<String> {
+    pub(crate) fn not_pure_in<H: CheckHost>(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, host: &H, frame: &CheckStoredCode, condition: &Expr) -> Vec<String> {
         let mut not_pure: Vec<String> = vec![];
         if frame.unresolved { not_pure.push(String::from("It calls a method the compiler knows nothing about, so it might change something.")); }
         for key in frame.resolved.iter() {
@@ -464,7 +464,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn a_lambda_touching_nothing<H: CheckHost>(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, frame: &CheckStoredCode, lambda: &Expr) -> bool {
+    pub(crate) fn a_lambda_touching_nothing<H: CheckHost>(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, host: &H, frame: &CheckStoredCode, lambda: &Expr) -> bool {
         if frame.unresolved { return false; }
         for key in frame.resolved.iter() {
             let method = match resolve_method(world, key) { Some(__nikaia_value) => __nikaia_value, None => return false };
@@ -490,20 +490,20 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn a_claim_reaches<H: CheckHost>(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, condition: &Expr, not_pure: &mut Vec<String>) {
+    pub(crate) fn a_claim_reaches<H: CheckHost>(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, host: &H, condition: &Expr, not_pure: &mut Vec<String>) {
         let mut found: Vec<String> = vec![];
         for each in check_visit_preorder(condition) { self.a_claim_looks_at(world, host, each, &mut found); }
         not_pure.extend(found);
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn a_claim_looks_at<H: CheckHost>(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, expr: &Expr, found: &mut Vec<String>) {
+    pub(crate) fn a_claim_looks_at<H: CheckHost>(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, host: &H, expr: &Expr, found: &mut Vec<String>) {
         self.a_claim_reads(world, expr, found);
         if check_visit_has_holes(expr) { for hole in host.literal_holes(expr) { for inner in check_visit_preorder(&hole) { self.a_claim_looks_at(world, host, inner, found); } } }
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn a_claim_reads(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, expr: &Expr, found: &mut Vec<String>) {
+    pub(crate) fn a_claim_reads(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, expr: &Expr, found: &mut Vec<String>) {
         let form = check_walks_form(expr);
         if !form.is_empty() { found.push(format!("the condition {}", form)); }
         match expr {
@@ -513,7 +513,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn a_claim_names(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, func: &Expr, found: &mut Vec<String>) {
+    pub(crate) fn a_claim_names(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, func: &Expr, found: &mut Vec<String>) {
         let mut name: String = String::from("");
         match func {
             Expr::Variable(symbol, _) => {
@@ -584,7 +584,7 @@ pub(crate) fn check_walks_form(expr: &Expr) -> &'static str {
     }
 }
 
-pub(crate) fn check_walks_reads<H: CheckHost>(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_>, host: &H, expr: &Expr, inside: &[String], read: &mut collections::BTreeSet<String>) {
+pub(crate) fn check_walks_reads<H: CheckHost>(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, host: &H, expr: &Expr, inside: &[String], read: &mut collections::BTreeSet<String>) {
     match expr {
         Expr::Variable(symbol, _) => {
             let symbol = *symbol;
