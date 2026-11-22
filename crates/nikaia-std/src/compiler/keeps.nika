@@ -1900,12 +1900,39 @@ fn keeps_copy_types(view: ref ParsedView) -> collections::BTreeSet[String] {
             }
         }
     }
+    // A `Wide` the file declares hides `std`'s, as in `check_copies.nika`.
+    let mut declares_wide = false
+    for item in view.items {
+        match item.node {
+            Item::Struct { name, .. } => { declares_wide = declares_wide || view.text(name) == "Wide" },
+            Item::Enum { name, .. } => { declares_wide = declares_wide || view.text(name) == "Wide" },
+            else => {},
+        }
+    }
+    if !declares_wide {
+        copies.insert(KEEPS_STD_WIDE.clone())
+    }
     return copies
 }
+
+/// The mark in `keeps_copy_types`'s set that `std`'s `Wide[T]` copies in this
+/// file: a name no type can have.
+comptime KEEPS_STD_WIDE: ref String = "std Wide"
 
 fn keeps_copied_field(ty: ref Ty, copies: ref collections::BTreeSet[String]) -> bool {
     if keeps_a_copied_scalar(ty) {
         return true
+    }
+    // **`std`'s `Wide[T]` copies** (Part I 2.2): a `Wide` of a copied scalar
+    // is handed over by value, where the file declares no `Wide` of its own
+    // (`keeps_copy_types`, #2706).
+    match ty {
+        Ty::Named { name, args, view } => {
+            if !view && name == "Wide" && args.len() == 1 && copies.contains(KEEPS_STD_WIDE) && keeps_a_copied_scalar(args[0]) {
+                return true
+            }
+        },
+        else => {},
     }
     let name = keeps_type_name(ty) ?? return false
     return copies.contains(name)
