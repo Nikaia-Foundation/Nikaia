@@ -382,8 +382,11 @@ impl EmitState {
                     }
                     return null
                 }
-                if self.facts.failing_item_receivers.contains(on) {
-                    return self.emit_failing_through_set(receiver)
+                // **Read off the walk's type** (#2742): the same set whether
+                // the walk was chained or bound to a name first.
+                let set: Vec[String]? = self.facts.failing_item_receivers.get(on)?.clone()
+                if set != null {
+                    return set
                 }
                 return null
             },

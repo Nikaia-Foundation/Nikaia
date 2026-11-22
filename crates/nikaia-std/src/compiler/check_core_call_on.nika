@@ -1340,14 +1340,14 @@ fn check_core_call_on_described[H: CheckHost](mut state: CheckState, world: ref 
     // **A walk of failing elements is worked on inside each `Result`**
     // (#2736): the lowering is told which calls stand on one.
     if shape_failing_items(on) {
-        state.facts.failing_item_receivers.insert(node)
+        state.facts.failing_item_receivers.insert(node, sequence_failures(on))
     }
     if walks_a_pausing_step && hands_back_a_sequence {
         state.facts.pausing_walks.insert(node)
     }
     // **A walk of a sequence whose step can fail, can fail** (ADR-025 D1).
     let seq_throws = match on {
-        Ty::Seq { can_throw, .. } => can_throw,
+        Ty::Seq { fails, .. } => fails.len() > 0,
         else => false,
     }
     if seq_throws && walks && !hands_back_a_sequence {
@@ -1692,9 +1692,16 @@ fn check_core_call_on_described[H: CheckHost](mut state: CheckState, world: ref 
     let mut shaped = shape_through(contract, on, found, substituted)
     // **The walk a failing lambda's step makes fails at each element**
     // (#2736, ADR-025 D1).
+    // **What it fails with is in its type** (#2742), so a binding of the
+    // walk keeps it.
     if failed_through && hands_back_a_sequence {
+        let mut thrown: Vec[String] = []
+        for arg in args {
+            let set: Vec[String]? = state.facts.failing_through_lambdas.get(id_of(arg) as i64)?.clone()
+            thrown = failures_joined(thrown, set ?? [])
+        }
         shaped = match shaped {
-            Ty::Seq { item, is_sync, pauses, parallel, shape, .. } => Ty::Seq { item: item.clone(), is_sync: is_sync, pauses: pauses, can_throw: true, parallel: parallel, shape: shape with { failing_items: true } },
+            Ty::Seq { item, is_sync, pauses, fails, parallel, shape } => Ty::Seq { item: item.clone(), is_sync: is_sync, pauses: pauses, fails: failures_joined(fails, thrown), parallel: parallel, shape: shape with { failing_items: true } },
             else => shaped,
         }
     }

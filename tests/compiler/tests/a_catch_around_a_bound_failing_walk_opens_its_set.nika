@@ -1,0 +1,44 @@
+// A walk whose step can fail keeps what it fails with in its type
+// (`Seq[T] throws` carries the set, supervisor decision on #2742), so a
+// `catch` reading `error` around a walk of it opens that set wherever the
+// walk was made: chained, bound to a name first, or bound and stepped
+// again. It drew NK1343 for the bound walk (#2742).
+struct Bad { why: String }
+
+impl Error for Bad {
+    fn message(ref self) -> String {
+        return self.why.clone()
+    }
+}
+
+fn quick(x: i64) -> i64 throws {
+    if x == 3 {
+        throw Bad { why: "three" }
+    }
+    return x * 2
+}
+
+fn quiet(xs: ref Vec[i64]) -> i64 {
+    let walk = xs.iter().map(fn(x) { quick(x) })
+    let got: Vec[i64] = walk.collect() catch { println(f"lazy: {error.message()}") catch {}; [] }
+    return got.len() as i64
+}
+
+fn chained(xs: ref Vec[i64]) -> i64 {
+    let got: Vec[i64] = xs.iter().map(fn(x) { quick(x) }).collect() catch { println(f"chained: {error.message()}") catch {}; [] }
+    return got.len() as i64
+}
+
+fn stepped(xs: ref Vec[i64]) -> i64 {
+    let walk = xs.iter().map(fn(x) { quick(x) })
+    let got: Vec[i64] = walk.map(fn(y) { y + 1 }).collect() catch { println(f"stepped: {error.message()}") catch {}; [] }
+    return got.len() as i64
+}
+
+fn main() throws {
+    let xs = [1, 2, 3, 4]
+    println(quiet(xs))
+    println(chained(xs))
+    println(stepped(xs))
+    println(quiet([1, 2]))
+}

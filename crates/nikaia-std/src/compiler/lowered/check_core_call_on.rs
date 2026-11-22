@@ -1039,10 +1039,10 @@ pub(crate) fn check_core_call_on_described<H: CheckHost>(state: &mut CheckState,
     let pauses = !contract.sync_claim.is_sync() && !sync_close || walks_a_pausing_step;
     state.method_pauses(node, pauses);
     let hands_back_a_sequence = check_core_call_on_hands_back_a_sequence(contract);
-    if shape_failing_items(on) { state.facts.failing_item_receivers.insert(node); }
+    if shape_failing_items(on) { state.facts.failing_item_receivers.insert(node, sequence_failures(on)); }
     if walks_a_pausing_step && hands_back_a_sequence { state.facts.pausing_walks.insert(node); }
     let seq_throws = match on {
-        Ty::Seq { can_throw, .. } => { let can_throw = *can_throw; can_throw },
+        Ty::Seq { fails, .. } => !fails.is_empty(),
         _ => false,
     };
     if seq_throws && walks && !hands_back_a_sequence { state.a_walk_of_a_failing_sequence(world, method, span); }
@@ -1283,8 +1283,16 @@ pub(crate) fn check_core_call_on_described<H: CheckHost>(state: &mut CheckState,
     state.flow.text_walk = views_text_slots(&result, &bound, false);
     let mut shaped = shape_through(contract, on, &found, substituted);
     if failed_through && hands_back_a_sequence {
+        let mut thrown: Vec<String> = vec![];
+        for arg in args.iter() {
+            let set: Option<Vec<String>> = match state.facts.failing_through_lambdas.get(&(id_of(arg) as i64)) {
+                Some(__nikaia_it) => Some(__nikaia_it.clone()),
+                None => None,
+            };
+            thrown = { let __nikaia_value = failures_joined(&thrown, &nikaia_std::index::or(set, || vec![].into())); __nikaia_value };
+        }
         shaped = match shaped {
-            Ty::Seq { ref item, is_sync, pauses, parallel, shape, .. } => { let item = nikaia_std::boxed::open(item); Ty::Seq { item: nikaia_std::block::Boxed::new(item.clone()), is_sync, pauses, can_throw: true, parallel, shape: Shape { failing_items: true, ..shape } } },
+            Ty::Seq { ref item, is_sync, pauses, ref fails, parallel, shape } => { let item = nikaia_std::boxed::open(item); Ty::Seq { item: nikaia_std::block::Boxed::new(item.clone()), is_sync, pauses, fails: failures_joined(fails, &thrown), parallel, shape: Shape { failing_items: true, ..shape } } },
             _ => shaped,
         };
     }
