@@ -1,0 +1,34 @@
+// ADR-243 D11 (#2748): a spawned child outlives the program. A program beside
+// this one spawns `sleep` with its streams discarded, prints the id and ends
+// without waiting; the `Child` is dropped at its end. The pid is then still
+// alive here, and this test ends it.
+use std::env
+use std::fs
+use std::process
+
+fn toolchain() -> String throws {
+	let exe = env::current_exe()?.display() ?? ""
+	if exe.len() > 0 { return exe }
+	return "target/fast/nikaia"
+}
+
+fn main() throws {
+	let tmp = fs::scratch()
+	fs::write(
+		"inner.nika",
+		tmp,
+		"use std::process\n\nfn main() throws {\n    let child = process::spawn(\"sleep\", [\"60\"]; stdout: process::Stream::Discarded, stderr: process::Stream::Discarded)\n    println(f\"{child.id()}\")\n}\n",
+	)
+	let ran = process::run(toolchain(), ["run", "inner.nika"]; dir: tmp.path().to_text())
+	println(f"inner ended: ok={ran.ok}")
+	if !ran.ok { println(ran.stderr) }
+	let pid = ran.stdout.trim().clone()
+	if !process::is_operand(pid) {
+		println(f"no pid: [{pid}]")
+		return
+	}
+	let alive = process::run("kill", ["-0", pid.clone()])
+	println(f"alive after the program ended: {alive.ok}")
+	let killed = process::run("kill", ["-9", pid.clone()])
+	println(f"killed: {killed.ok}")
+}

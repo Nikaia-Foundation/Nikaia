@@ -1,0 +1,8 @@
+discarded: ok=true [] []
+file: [] stderr=kept
+written: first run, longer
+truncated: [second
+]
+spawn: ok=true [] [] to stderr
+run, unopenable: NotFound TMP/no/such/dir/out.txt
+spawn, unopenable: NotFound TMP/no/such/dir/err.txt

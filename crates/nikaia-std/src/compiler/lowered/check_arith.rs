@@ -72,7 +72,7 @@ impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     pub(crate) fn an_environment_entry_invalid<H: CheckHost>(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, host: &H, key: &str, config: &[ConfigArg], span: &Span) {
-        if key != "process::run" { return; }
+        if key != "process::run" && key != "process::spawn" { return; }
         for option in config.iter() {
             let named = world.words.resolve(option.name);
             if named != "env" && named != "env_remove" { continue; }

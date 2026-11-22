@@ -1,0 +1,14 @@
+-- stdin names the file of run
+exit 0
+warning[NK1308]: `name` reaches the file `process::Stream::File` opens for a program's output, which may name any file, and it comes from outside the program.
+--> src/main.nika:7:5
+-- stdin names the file of spawn
+exit 0
+warning[NK1308]: `name` reaches the file `process::Stream::File` opens for a program's output, which may name any file, and it comes from outside the program.
+--> src/main.nika:7:5
+-- a literal file
+exit 0
+-- a guarded name under a literal directory
+exit 0
+-- [allow] untrusted-paths-write
+exit 0

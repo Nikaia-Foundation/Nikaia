@@ -628,6 +628,7 @@ pub(crate) fn check_core_call_on_failed_through(state: &mut CheckState, args: &[
     if !failed { return false; }
     let kind: i64 = if key == "Seq::map" { 1 } else if key == "Seq::filter" { 2 } else if key == "Seq::for_each" { 3 } else { 4 };
     state.facts.failing_through_calls.insert(node, kind);
+    if kind == 3 && shape_parallel(on) { state.facts.kept_failure_ends.insert(node); }
     if !lazy {
         state.flow.opaque_methods.remove(&node);
         let added = state.flow.fallible_methods.insert(node);
@@ -1040,7 +1041,10 @@ pub(crate) fn check_core_call_on_described<H: CheckHost>(state: &mut CheckState,
     let pauses = !contract.sync_claim.is_sync() && !sync_close || walks_a_pausing_step;
     state.method_pauses(node, pauses);
     let hands_back_a_sequence = check_core_call_on_hands_back_a_sequence(contract);
-    if shape_failing_items(on) { state.facts.failing_item_receivers.insert(node, sequence_failures(on)); }
+    if shape_failing_items(on) {
+        state.facts.failing_item_receivers.insert(node, sequence_failures(on));
+        if shape_parallel(on) { state.facts.kept_failure_ends.insert(node); }
+    }
     if walks_a_pausing_step && hands_back_a_sequence { state.facts.pausing_walks.insert(node); }
     let seq_throws = match on {
         Ty::Seq { fails, .. } => !fails.is_empty(),

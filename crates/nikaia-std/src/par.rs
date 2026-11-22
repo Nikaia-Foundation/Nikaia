@@ -430,6 +430,37 @@ pub fn listed<I: IntoIterator>(walk: I) -> Result<Vec<I::Item>, crate::task::Tim
     ended(all)
 }
 
+/// **Every failure of a `par_iter` walk is kept** (ADR-async-5 D26, Part II
+/// 12.6, #2681): the elements, each a value or a failure, in input order, as
+/// the step that ends the walk gathered them (every element was run). The
+/// values make the result where none failed; else the first failure in input
+/// order is the call's, and each later one joins its `secondary` list, in
+/// input order. The list of the others grows on the failure path alone (D28).
+/// The lowering writes it around a `collect` of the walk, and around a
+/// `for_each` gathered into `()`s; at `user_parallelism = no` over the list's
+/// own `iter()`, so both settings mean the same.
+pub fn kept_failures<C: FromIterator<T>, T, E: crate::error::Joined>(
+    items: impl IntoIterator<Item = Result<T, E>>,
+) -> Result<C, E> {
+    let mut first: Option<E> = None;
+    let mut values: Vec<T> = Vec::new();
+    for item in items {
+        match (item, &mut first) {
+            (Ok(value), None) => values.push(value),
+            (Ok(_), Some(_)) => {}
+            (Err(error), None) => {
+                values = Vec::new();
+                first = Some(error);
+            }
+            (Err(error), Some(held)) => held.joined_by(error),
+        }
+    }
+    match first {
+        Some(error) => Err(error),
+        None => Ok(values.into_iter().collect()),
+    }
+}
+
 /// A walk over a list this module made, for the walks rayon has only over one.
 pub type Listed<T> = rayon::vec::IntoIter<T>;
 
@@ -521,6 +552,16 @@ impl<I: ParallelIterator> Par<I> {
         f: F,
     ) -> Par<rayon::iter::Filter<I, F>> {
         Par(self.0.filter(f), self.1)
+    }
+
+    /// Each element through a function that keeps it, drops it or hands back
+    /// something in its place: the lowering of a `filter` whose lambda can
+    /// fail, which keeps the failure as an element (#2736, #2681).
+    pub fn filter_map<U: Send, F: Fn(I::Item) -> Option<U> + Sync + Send>(
+        self,
+        f: F,
+    ) -> Par<rayon::iter::FilterMap<I, F>> {
+        Par(self.0.filter_map(f), self.1)
     }
 
     /// Each element through a function, for what the function does.

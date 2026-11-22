@@ -1,6 +1,6 @@
 # Nikaia Language Specification
 **Part I: The Language Core**
-**Version:** 0.0.1545 (Draft)
+**Version:** 0.0.1547 (Draft)
 **Date:** 2026-11-22
 
 ---
@@ -1119,7 +1119,7 @@ count. They offer lane by lane `wrapping_add`, `wrapping_sub`,
 `wrapping_sum`, `min_lane` and `max_lane`. `+ - * / %` are not operations of integer lanes
 (`NK1296`); a lane shift's count is a literal below the lane's width (`NK1299`). Only a `Fixed` offers `lane(i)`, checked as an index,
 `simd::Fixed.from([…])`, `shuffle(of)` by constant indices within its lanes
-(`NK1298`), `dot_pairs(w)`, which multiplies lane by lane and adds each
+(`NK1298`), and on `Fixed[u8, N]` `lookup(idx)`, lane `i` its lane `idx.lane(i)`, each index proved below `N` (`NK1298`), or `lookup_or_zero(idx)`, which answers 0 for an index outside ([ADR-377](adr/adr-377.md) D10), `dot_pairs(w)`, which multiplies lane by lane and adds each
 neighbouring pair into one lane of twice the width (`u8` by `i8` into `i16`,
 saturating, `i16` by `i16` into `i32`, wrapping), `widen` and `narrow_saturating`. A mask is read as
 positions: `first() -> i64?`, `positions() -> Seq[i64]` rising, `count()`,

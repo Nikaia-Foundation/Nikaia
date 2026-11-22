@@ -69,16 +69,23 @@ pub struct Output {
     pub timed_out: bool,
 }
 
-/// **Where one of the child's output streams goes** (ADR-243 D10): into
-/// `Output` as text, or to the caller's own stream as the child writes it,
-/// in which case `Output` holds `""` for it.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Default)]
+/// **Where one of the child's output streams goes** (ADR-243 D10, D11): into
+/// `Output` as text, to the caller's own stream as the child writes it, to
+/// the null device, or to a file; in the last three `Output` holds `""` for
+/// it.
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Default)]
 pub enum Stream {
     /// Read through a pipe to its end and handed back in `Output`.
     #[default]
     Captured,
     /// The caller's own stream, shared with the child.
     Inherited,
+    /// The null device: what the child writes there is gone (D11).
+    Discarded,
+    /// This file, created or truncated before the child starts (D11). A
+    /// relative path is read from the caller's working directory, as every
+    /// path the program opens, not from `dir`.
+    File(crate::block::Text),
 }
 
 /// **What the child reads on its standard input** (ADR-243 D10): nothing, the
@@ -96,10 +103,29 @@ pub enum Input {
 }
 
 impl Stream {
-    fn stdio(self) -> Stdio {
-        match self {
+    /// The platform's handle for the stream: a pipe, the caller's own, the
+    /// null device, or the file opened for writing, created or truncated
+    /// (D11). A file that cannot be opened is the call's `IoError`, naming
+    /// the path.
+    fn stdio(self) -> Result<Stdio, IoError> {
+        Ok(match self {
             Stream::Captured => Stdio::piped(),
             Stream::Inherited => Stdio::inherit(),
+            Stream::Discarded => Stdio::null(),
+            Stream::File(path) => {
+                let path = String::from(path);
+                Stdio::from(std::fs::File::create(&path).map_err(|e| IoError::of(e, &path))?)
+            }
+        })
+    }
+}
+
+impl Input {
+    fn stdio(&self) -> Stdio {
+        match self {
+            Input::Closed => Stdio::null(),
+            Input::Inherited => Stdio::inherit(),
+            Input::Text(_) => Stdio::piped(),
         }
     }
 }
@@ -114,11 +140,11 @@ struct Ran {
     timed_out: bool,
 }
 
-/// The streams a run was asked for (ADR-243 D10).
+/// The streams a run was asked for (ADR-243 D10), the output ones opened.
 struct Streams {
     stdin: Input,
-    stdout: Stream,
-    stderr: Stream,
+    stdout: Stdio,
+    stderr: Stdio,
 }
 
 /// Start the program, read both pipes to their end - standard error on a
@@ -152,13 +178,9 @@ fn started(
     let mut child = command
         .args(args)
         .current_dir(dir)
-        .stdin(match &streams.stdin {
-            Input::Closed => Stdio::null(),
-            Input::Inherited => Stdio::inherit(),
-            Input::Text(_) => Stdio::piped(),
-        })
-        .stdout(streams.stdout.stdio())
-        .stderr(streams.stderr.stdio())
+        .stdin(streams.stdin.stdio())
+        .stdout(streams.stdout)
+        .stderr(streams.stderr)
         .spawn()?;
     let writer = match (streams.stdin, child.stdin.take()) {
         (Input::Text(text), Some(mut pipe)) => {
@@ -252,36 +274,8 @@ pub async fn run(
     // Toward the operating system's process the program's lists cross as
     // Rust's (D8): the same memory, outside every block.
     let args: Vec<String> = args.into_iter().map(String::from).collect();
-    let env: Vec<(String, String)> = env
-        .into_iter()
-        .map(|(name, value)| (String::from(name), String::from(value)))
-        .collect();
-    let env_remove: Vec<String> = env_remove.into_iter().map(String::from).collect();
-    let invalid = invalid_entries(&env, &env_remove);
-    if !invalid.is_empty() {
-        return Err(IoError::Other(format!(
-            "{program}: the environment has entries no platform accepts: {}",
-            invalid.join("; ")
-        )));
-    }
     let named = program.to_string();
-    let path = std::env::var_os("PATH");
-    let found = found_on_path(
-        program,
-        path.as_deref(),
-        std::env::var_os("PATHEXT").as_deref(),
-        cfg!(windows),
-    )
-    .ok_or_else(|| IoError::NotFound(PathBuf::from(&named)))?;
-    let environment = (env_clear || !env_remove.is_empty() || !env.is_empty()).then(|| {
-        merged(
-            std::env::vars_os(),
-            env_clear,
-            &env_remove,
-            &env,
-            cfg!(windows),
-        )
-    });
+    let (found, environment) = prepared(program, env, env_remove, env_clear)?;
     let dir = dir.to_string();
     // The input text goes to the thread beside the task, so it crosses as
     // Rust's (D8): a block's text never leaves its task (D9).
@@ -291,8 +285,8 @@ pub async fn run(
     };
     let streams = Streams {
         stdin,
-        stdout,
-        stderr,
+        stdout: stdout.stdio()?,
+        stderr: stderr.stdio()?,
     };
     let finished =
         crate::rt::io::beside(move || started(&found, &args, &dir, environment, within, streams))
@@ -314,6 +308,50 @@ pub async fn run(
         max_rss_kib: finished.waited.max_rss_kib,
         timed_out: finished.timed_out,
     })
+}
+
+/// **The program found and the child's environment**, shared by `run` and
+/// `spawn` (ADR-243 D5-D7, D11): every entry checked first (D7), then the
+/// program looked for on the caller's `PATH` (D6), then the environment
+/// merged (D5), `None` where the call changes nothing in it.
+#[allow(clippy::type_complexity)]
+fn prepared(
+    program: &str,
+    env: crate::block::List<(crate::block::Text, crate::block::Text)>,
+    env_remove: crate::block::List<crate::block::Text>,
+    env_clear: bool,
+) -> Result<(PathBuf, Option<Vec<(OsString, OsString)>>), IoError> {
+    // Toward the operating system's process the program's lists cross as
+    // Rust's (D8): the same memory, outside every block.
+    let env: Vec<(String, String)> = env
+        .into_iter()
+        .map(|(name, value)| (String::from(name), String::from(value)))
+        .collect();
+    let env_remove: Vec<String> = env_remove.into_iter().map(String::from).collect();
+    let invalid = invalid_entries(&env, &env_remove);
+    if !invalid.is_empty() {
+        return Err(IoError::Other(format!(
+            "{program}: the environment has entries no platform accepts: {}",
+            invalid.join("; ")
+        )));
+    }
+    let found = found_on_path(
+        program,
+        std::env::var_os("PATH").as_deref(),
+        std::env::var_os("PATHEXT").as_deref(),
+        cfg!(windows),
+    )
+    .ok_or_else(|| IoError::NotFound(PathBuf::from(program)))?;
+    let environment = (env_clear || !env_remove.is_empty() || !env.is_empty()).then(|| {
+        merged(
+            std::env::vars_os(),
+            env_clear,
+            &env_remove,
+            &env,
+            cfg!(windows),
+        )
+    });
+    Ok((found, environment))
 }
 
 /// **Every environment entry no platform accepts**, described (ADR-243 D7): a
@@ -466,6 +504,7 @@ fn runnable(candidate: &Path) -> bool {
 #[derive(Debug)]
 pub struct Child {
     named: String,
+    pid: i64,
     started: Instant,
     child: Option<std::process::Child>,
     stdout: Option<std::thread::JoinHandle<Vec<u8>>>,
@@ -485,36 +524,62 @@ fn drained<R: Read + Send + 'static>(pipe: Option<R>) -> std::thread::JoinHandle
     })
 }
 
-/// Start `program` with `args` and hand it back running: its standard input
-/// closed, its standard output and standard error read on threads of their
-/// own. `program` is looked for on the caller's `PATH` as `run` looks for it
-/// (ADR-243 D6). It fails with `IoError::NotFound(program)` where nothing is
-/// there and `IoError::PermissionDenied(program)` where it may not be run.
+/// Start `program` with `args` and hand it back running. It takes `run`'s
+/// options but `within`, with `run`'s rules (ADR-243 D5-D7, D10, D11): the
+/// same call starts the same child. By default its standard input is closed
+/// and its standard output and standard error are read on threads of their
+/// own; a stream that is `Inherited`, `Discarded` or a `File` is not read,
+/// and `wait` hands back `""` for it. It fails with
+/// `IoError::NotFound(program)` where nothing is there,
+/// `IoError::PermissionDenied(program)` where it may not be run, and with
+/// the path where a `File` stream cannot be opened.
+///
+/// **A spawned child outlives the program** (D11): neither dropping the
+/// `Child` nor the program's end stops it, as with `Command::spawn`. An
+/// input `Text` is written on a thread of its own, which the program's end
+/// does not wait for either.
+#[allow(clippy::too_many_arguments)]
 pub fn spawn(
     program: &str,
     args: crate::block::List<crate::block::Text>,
+    dir: &str,
+    env: crate::block::List<(crate::block::Text, crate::block::Text)>,
+    env_remove: crate::block::List<crate::block::Text>,
+    env_clear: bool,
+    stdin: Input,
+    stdout: Stream,
+    stderr: Stream,
 ) -> Result<Child, IoError> {
     let named = program.to_string();
-    let found = found_on_path(
-        program,
-        std::env::var_os("PATH").as_deref(),
-        std::env::var_os("PATHEXT").as_deref(),
-        cfg!(windows),
-    )
-    .ok_or_else(|| IoError::NotFound(PathBuf::from(&named)))?;
+    let (found, environment) = prepared(program, env, env_remove, env_clear)?;
+    let stdout = stdout.stdio()?;
+    let stderr = stderr.stdio()?;
     let started = Instant::now();
-    let mut child = Command::new(found)
+    let mut command = Command::new(found);
+    if let Some(environment) = environment {
+        command.env_clear().envs(environment);
+    }
+    let mut child = command
         .args(args)
+        .current_dir(dir)
         .env_remove(crate::env::EXE_VAR)
         .env_remove(crate::env::MAIN_VAR)
-        .stdin(Stdio::null())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
+        .stdin(stdin.stdio())
+        .stdout(stdout)
+        .stderr(stderr)
         .spawn()
         .map_err(|e| IoError::of(e, &named))?;
+    if let (Input::Text(text), Some(mut pipe)) = (stdin, child.stdin.take()) {
+        // The text crosses to the thread as Rust's (D8, D9).
+        let text = String::from(text);
+        std::thread::spawn(move || {
+            let _ = pipe.write_all(text.as_bytes());
+        });
+    }
     let stdout = Some(drained(child.stdout.take()));
     let stderr = Some(drained(child.stderr.take()));
     Ok(Child {
+        pid: i64::from(child.id()),
         named,
         started,
         child: Some(child),
@@ -531,6 +596,11 @@ fn code_of(status: std::process::ExitStatus) -> i64 {
 }
 
 impl Child {
+    /// The operating system's process id (ADR-243 D11).
+    pub fn id(&self) -> i64 {
+        self.pid
+    }
+
     /// The exit code where the program has ended, `-1` where a signal ended
     /// it; nothing while it runs. It does not wait.
     pub fn try_wait(&mut self) -> Result<Option<i32>, IoError> {
