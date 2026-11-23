@@ -1,0 +1,24 @@
+// A key one `get` handed back past a jump is a reference already, in the
+// brackets as in a lookup (D30): `m[at]` after `let at = xs.last() ?? continue`
+// looks the text up as it is (#2585).
+use std::collections
+
+struct Node {
+    unit: i64,
+}
+
+fn path_to(start: ref String) -> Vec[String] {
+    return ["x", start.clone()]
+}
+
+fn main() throws {
+    let mut nodes: collections::BTreeMap[String, Node] = collections::BTreeMap()
+    nodes.insert("x", Node { unit: 1 })
+    nodes.insert("y", Node { unit: 2 })
+    for (start, _) in nodes {
+        let path = path_to(start)
+        let at = path.last() ?? continue
+        let node = nodes[at] ?? continue
+        println(f"{start} {node.unit}")
+    }
+}
