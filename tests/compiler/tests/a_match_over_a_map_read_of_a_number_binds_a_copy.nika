@@ -1,0 +1,49 @@
+// A `match` over a map's read of a value that copies binds the value, not the
+// view the map lends (#1313): `return id` hands out an `i64?` of its own.
+use std::collections
+
+fn find(m: ref collections::BTreeMap[String, i64], key: String) -> i64? {
+	match m.get(key) {
+		null => {},
+		id => {
+			return id
+		},
+	}
+	return null
+}
+
+fn bracketed(m: ref collections::BTreeMap[String, i64], key: String) -> i64? {
+	match m[key] {
+		null => {},
+		id => return id,
+	}
+	return null
+}
+
+fn summed(m: ref collections::BTreeMap[String, i64], key: String) -> i64 {
+	match m.get(key) {
+		null => return 0,
+		id => {
+			let y: i64 = id
+			return y + id
+		},
+	}
+}
+
+fn kept(m: ref collections::BTreeMap[String, i64], key: String) -> i64? {
+	let v: i64? = match m.get(key) {
+		null => null,
+		id => id,
+	}
+	return v
+}
+
+fn main() throws {
+	let mut m: collections::BTreeMap[String, i64] = collections::BTreeMap()
+	m.insert("a", 7)
+	println(find(m, "a") ?? -1)
+	println(find(m, "b") ?? -1)
+	println(bracketed(m, "a") ?? -1)
+	println(summed(m, "a"))
+	println(kept(m, "a") ?? -1)
+}

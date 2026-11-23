@@ -1658,8 +1658,11 @@ fn check_core_flow_match[H: CheckHost](mut state: CheckState, world: ref CheckWo
     state.a_null_arm_on_a_plain_value(world, over, value, arms, span)
     // **A `T?` of views of values that copy is matched as the values**
     // (ADR-231 D1): `map.get(k)` of a `bool` binds the `bool`.
+    // **So is a map's read of a value that copies** (#1313): its type is
+    // the `T?`, and below it is the `Option<&T>` the map lends.
+    let a_map_read = state.flow.map_read_sites.contains(id_of(value) as i64)
     let copied = match on {
-        Ty::Nullable(inner) => copies_as_a_view(inner),
+        Ty::Nullable(inner) => copies_as_a_view(inner) || (a_map_read && a_copy_by_value(inner)),
         else => false,
     }
     if copied {

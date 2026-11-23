@@ -1260,8 +1260,9 @@ pub(crate) fn check_core_flow_match<H: CheckHost>(state: &mut CheckState, world:
     if !state.a_some_or_none_over_a_nullable(world, &over, value, arms, span) && !state.a_pattern_naming_nothing(world, &over, value, arms, span) { state.a_match_that_misses_a_case(world, &over, arms, over_error, span); }
     state.a_variant_matched_on_a_nullable(world, &over, value, arms, span);
     state.a_null_arm_on_a_plain_value(world, &over, value, arms, span);
+    let a_map_read = state.flow.map_read_sites.contains(&(id_of(value) as i64));
     let copied = match on {
-        Ty::Nullable(ref inner) => { let inner = nikaia_std::boxed::open(inner); copies_as_a_view(inner) },
+        Ty::Nullable(ref inner) => { let inner = nikaia_std::boxed::open(inner); copies_as_a_view(inner) || a_map_read && a_copy_by_value(inner) },
         _ => false,
     };
     if copied { state.facts.copied_walks.insert(id_of(value) as i64); }

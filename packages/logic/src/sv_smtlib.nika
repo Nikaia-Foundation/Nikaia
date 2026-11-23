@@ -514,13 +514,16 @@ impl SvSmtReader {
 	/// not once per path.
 	fn fold(ref mut self, rel: String, name: String, k: SvRat, c: SvRat) -> i64? {
 		let key = f"{rel} {k.num}/{k.den} {c.num}/{c.den} {name}"
-		// A sentinel, not `match get { id => return id }`: that returns the
-		// map's `&i64` in rustc (#1313).
-		let known: i64 = self.folds.get(key) ?? -1
-		if known >= 0 {
-			return known
+		match self.folds.get(key) {
+			null => {},
+			known => {
+				if known >= 0 {
+					return known
+				}
+				return null
+			},
 		}
-		if known == -2 || self.depth >= sv_nesting_limit() {
+		if self.depth >= sv_nesting_limit() {
 			return null
 		}
 		self.depth += 1
