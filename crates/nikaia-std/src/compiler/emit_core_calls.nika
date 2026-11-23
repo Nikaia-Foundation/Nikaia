@@ -1801,7 +1801,10 @@ impl EmitState {
         let kept_each = kept_end && (self.facts.failing_through_calls.get(on_node) ?? 0) == 3
         if kept_collect {
             let declared_into = receiver != null && self.facts.collected_into.contains(node_key(receiver ?? return))
-            out.push(if declared_into { "nikaia_std::par::kept_failures(" } else { "nikaia_std::par::kept_failures::<Vec<_>, _, _>(" })
+            // Collected into a list, the list the walk made becomes the
+            // result where nothing failed (`par::kept_failures_listed`,
+            // #2768); a pausing chain's names no type, and keeps the general one.
+            out.push(if declared_into { "nikaia_std::par::kept_failures(" } else if kept_paused { "nikaia_std::par::kept_failures::<Vec<_>, _, _>(" } else { "nikaia_std::par::kept_failures_listed(" })
         } else if kept_each {
             out.push("nikaia_std::par::kept_failures::<(), _, _>(")
         }

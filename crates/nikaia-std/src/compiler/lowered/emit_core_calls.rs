@@ -1219,7 +1219,7 @@ impl EmitState {
         let kept_each = kept_end && nikaia_std::index::or(self.facts.failing_through_calls.get(&on_node), || 0) == 3;
         if kept_collect {
             let declared_into = receiver.is_some() && self.facts.collected_into.contains(&node_key(match receiver { Some(__nikaia_value) => __nikaia_value, None => return Ok(()) }));
-            out.push(if declared_into { "nikaia_std::par::kept_failures(" } else { "nikaia_std::par::kept_failures::<Vec<_>, _, _>(" });
+            out.push(if declared_into { "nikaia_std::par::kept_failures(" } else if kept_paused { "nikaia_std::par::kept_failures::<Vec<_>, _, _>(" } else { "nikaia_std::par::kept_failures_listed(" });
         } else if kept_each { out.push("nikaia_std::par::kept_failures::<(), _, _>("); }
         let joined_key = nikaia_std::index::or(*nikaia_std::index::get(&self.facts.method_callees, &on_node), || "");
         let arriving = (joined_key.starts_with("TaskHandle::join") || joined_key.starts_with("task::ChildHandle::join")) && self.method_can_fail(on_node);
@@ -1645,8 +1645,8 @@ pub(crate) fn emit_tuple_part_copy(i: i64, word: &str) -> String {
 }
 
 pub(crate) fn emit_tuple_part_copies(parts: &[String]) -> String {
-    let copies: Vec<String> = parts.iter().enumerate().map(|(at, item)| (at as i64, item)).map(|__nikaia_tuple125956| {
-        let (i, word) = __nikaia_tuple125956;
+    let copies: Vec<String> = parts.iter().enumerate().map(|(at, item)| (at as i64, item)).map(|__nikaia_tuple126250| {
+        let (i, word) = __nikaia_tuple126250;
         emit_tuple_part_copy(i, word)
     }).collect::<Vec<_>>();
     if copies.len() == 1 { return format!("({},)", *unsafe { nikaia_std::proven::read(&copies, (0) as usize) }); }

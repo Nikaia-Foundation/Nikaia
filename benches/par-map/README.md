@@ -37,25 +37,30 @@ branches, conditional and indirect.
 
 ## The table
 
-2026-11-22, commit `e18b66a6c`, valgrind 3.22.0, cargo 1.97.0, 4 threads,
+2026-11-23, commit `6f191420e` with the fix for #2768 (the allocating row
+unchanged by it), valgrind 3.22.0, cargo 1.97.0, 4 threads,
 10^6 elements, both sides printing the same bytes (`1000000 1499999500000`
 and `1000000 5888890`):
 
 | lambda | Nikaia: instructions | mispredicted | Rayon: instructions | mispredicted |
 |---|--:|--:|--:|--:|
-| can throw | 66,842,070 | 12,381 | 45,559,268 | 10,668 |
-| allocates | 786,713,034 | 4,019,861 | 832,520,860 | 1,861,196 |
+| can throw | 49,759,273 | 12,271 | 45,521,954 | 10,369 |
+| allocates | 786,749,907 | 4,020,019 | 832,513,267 | 2,017,338 |
 | (0 elements: start and end, `ebbbc1dd9`) | 624,358 | 11,679 | 458,506 | 8,388 |
 
-**The chain whose lambda can throw costs 1.47 times Rayon's.** Nikaia
-collects each element's `Result` into a list on the pool (19.0 M), then
-`nikaia_std::par::kept_failures` walks that list on one thread, pushing each
-value into a second list grown from empty and collecting that into the
-result (33.0 M, half the program); Rayon's `collect::<Result<_, _>>` writes
-the values straight into the result (26.0 M on the pool, 10.1 M of
-`memcpy`, 5.0 M in `from_par_iter`). The rest is the sum after the chain:
-14.0 M against 3.8 M, the overflow check every Nikaia build keeps, not the
-chain.
+**The chain whose lambda can throw costs less than Rayon's; the program
+1.09 times Rayon's, for the sum after it.** Nikaia collects each element's
+`Result` into a list on the pool (19.0 M), then
+`nikaia_std::par::kept_failures_listed` reads that list up to its first
+failure (6.0 M) and, where none failed, takes the values out in the list's
+own buffer, which becomes the result (10.0 M, std's in-place collect);
+Rayon's `collect::<Result<_, _>>` writes the values straight into the result
+(26.0 M on the pool, 10.1 M of `memcpy`, 5.0 M in `from_par_iter`). The rest
+is the sum after the chain: 14.0 M against 3.8 M, the overflow check every
+Nikaia build keeps, not the chain. Before the fix for #2768 (2026-11-22,
+`e18b66a6c`) the row counted 66,842,070: `kept_failures` pushed each value
+into a second list grown from empty and collected that into the result
+(33.0 M, half the program).
 
 **The chain that allocates costs no more than Rayon's**: Nikaia counts 5.5 % fewer
 instructions. Both lower onto the same `rayon::slice::Iter`
