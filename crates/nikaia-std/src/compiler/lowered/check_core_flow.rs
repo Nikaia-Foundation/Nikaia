@@ -194,7 +194,7 @@ pub(crate) fn check_core_flow_disagree(state: &mut CheckState, world: &CheckWorl
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn check_core_flow_meet(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, expr: &Expr, arms: &[CheckArm<'_>], span: &Span) -> Ty {
+pub(crate) fn check_core_flow_meet(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, expr: &Expr, arms: &[CheckArm<'_>], span: &Span) -> Ty {
     let text = check_core_flow_meet_at_text(state, world, arms, span);
     if text.is_some() { return nikaia_std::index::or(text, || Ty::Unknown); }
     let at_null = state.arms_meet_at_null(world, arms);
@@ -207,7 +207,7 @@ pub fn check_core_flow_meet(state: &mut CheckState, world: &CheckWorld<'_, '_, '
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn check_core_flow_unsafe<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, host: &H, block: &Block) -> Ty {
+pub(crate) fn check_core_flow_unsafe<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, host: &H, block: &Block) -> Ty {
     let outer = state.inside_unsafe;
     state.inside_unsafe = true;
     let value = check_core_block(state, world, host, block);
@@ -227,7 +227,7 @@ pub(crate) fn check_core_flow_branch<H: CheckHost>(state: &mut CheckState, world
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn check_core_flow_overlap<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, host: &H, block: &Block, span: &Span) -> Ty {
+pub(crate) fn check_core_flow_overlap<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, host: &H, block: &Block, span: &Span) -> Ty {
     state.scope.push(vec![]);
     let mut parts: Vec<Ty> = vec![];
     let mut ranges: Vec<(i64, i64)> = nikaia_std::block::list(nikaia_std::block::Place::Block);
@@ -283,7 +283,7 @@ pub(crate) fn check_core_flow_select_arm<H: CheckHost>(state: &mut CheckState, w
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn check_core_flow_select<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, host: &H, arms: &[SelectArm], span: &Span) -> Ty {
+pub(crate) fn check_core_flow_select<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, host: &H, arms: &[SelectArm], span: &Span) -> Ty {
     let mut seen = Ty::Unknown;
     let mut any = false;
     let mut agree = true;
@@ -327,7 +327,7 @@ pub(crate) fn check_core_flow_else<H: CheckHost>(state: &mut CheckState, world: 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 #[allow(clippy::too_many_arguments)]
-pub fn check_core_flow_if<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, host: &H, expr: &Expr, cond: &Expr, then_branch: &Block, else_branch: Option<&Block>, span: &Span) -> Ty {
+pub(crate) fn check_core_flow_if<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, host: &H, expr: &Expr, cond: &Expr, then_branch: &Block, else_branch: Option<&Block>, span: &Span) -> Ty {
     let at = check_span_at(world, cond, span);
     let cond_ty = check_core_expr(state, world, host, cond, &at);
     state.expect_bool(&cond_ty, &at, "An `if` decides on a `bool`.");
@@ -1171,7 +1171,7 @@ pub(crate) fn check_core_flow_caught(state: &CheckState, world: &CheckWorld<'_, 
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn check_core_flow_match<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, host: &H, expr: &Expr, value: &Expr, arms: &[MatchArm], span: &Span) -> Ty {
+pub(crate) fn check_core_flow_match<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, host: &H, expr: &Expr, value: &Expr, arms: &[MatchArm], span: &Span) -> Ty {
     let on = check_core_expr(state, world, host, value, span);
     let subject = check_core_flow_variable(world, value);
     if subject != "" {
@@ -1436,7 +1436,7 @@ pub(crate) fn check_core_flow_widened_by_null(value: &Ty, answers: &Ty) -> bool 
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn check_core_flow_try_catch<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, host: &H, whole: &Expr, guarded_expr: &Expr, handler: &Block, span: &Span) -> Ty {
+pub(crate) fn check_core_flow_try_catch<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, host: &H, whole: &Expr, guarded_expr: &Expr, handler: &Block, span: &Span) -> Ty {
     let outer = state.flow.caught;
     state.flow.caught = true;
     let swallowed_outer: Option<collections::BTreeSet<String>> = match state.flow.swallowed.as_ref() {

@@ -88,7 +88,7 @@ pub(crate) fn shape_through(contract: &FnContract, receiver: &Ty, found: &[Ty], 
     Ty::Seq { item: nikaia_std::block::Boxed::new(item), is_sync, pauses, fails: failures_joined(&fails, &failing_set), parallel: on_every_core, shape: Shape { ends: written.ends && ends, sized: written.sized && sized, replays: written.replays, timed: written.timed || timed, one_at_a_time: written.one_at_a_time || one_at_a_time, failing_items: written.failing_items || failing_items } }
 }
 
-pub fn sequence_failures(ty: &Ty) -> Vec<String> {
+pub(crate) fn sequence_failures(ty: &Ty) -> Vec<String> {
     match ty {
         Ty::Seq { fails, .. } => fails.copy_owned(),
         _ => vec![],

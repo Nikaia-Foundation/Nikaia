@@ -936,7 +936,7 @@ fn item_declared_type_name(file: ref ParsedView, node: ref Item) -> String? {
 /// writes** (ADR-246 D1): a field is boxed where what it holds inline
 /// reaches back to the type that declares it. Recorded into `boxed` for
 /// every type of `files`.
-pub fn item_contain_themselves(files: ref Vec[ParsedView], mut boxed: collections::BTreeMap[String, collections::BTreeSet[String]]) {
+fn item_contain_themselves(files: ref Vec[ParsedView], mut boxed: collections::BTreeMap[String, collections::BTreeSet[String]]) {
     // A declared generic type is seen through (ADR-294).
     let mut generics: collections::BTreeMap[String, ItemGeneric] = collections::BTreeMap()
     for file in files {

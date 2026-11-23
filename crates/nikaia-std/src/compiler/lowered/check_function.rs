@@ -59,7 +59,7 @@ pub(crate) fn check_function_compared(world: &CheckWorld<'_, '_, '_, '_, '_, '_,
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn check_function_field_walks(file: &ParsedView<'_, '_, '_, '_, '_, '_, '_>, walks: &mut collections::BTreeMap<String, String>) {
+pub(crate) fn check_function_field_walks(file: &ParsedView<'_, '_, '_, '_, '_, '_, '_>, walks: &mut collections::BTreeMap<String, String>) {
     for item in file.items.iter() {
         match &item.node {
             Item::Fn { name, generics, args, body, .. } => {

@@ -126,7 +126,7 @@ impl CheckState {
             };
             let a_view = named && (ty.is_a_view() || self.a_name_that_is_lent(world, leaf));
             if a_view { names += 1; }
-            if named && !a_view {
+            if named && !a_view || !named && check_arm_is_a_place(leaf) && !ty.is_a_view() {
                 owned.push(node_key(leaf));
                 continue;
             }

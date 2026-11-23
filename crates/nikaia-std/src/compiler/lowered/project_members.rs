@@ -492,7 +492,7 @@ pub struct ProjectMembersOwnRust {
     pub entries: String,
 }
 
-pub fn project_members_no_own_rust() -> ProjectMembersOwnRust { ProjectMembersOwnRust { heads: collections::BTreeSet::new(), described: collections::BTreeSet::new(), published: collections::BTreeMap::new(), narrow: collections::BTreeSet::new(), files: collections::BTreeMap::new(), moved: vec![], entries: String::from("") } }
+pub(crate) fn project_members_no_own_rust() -> ProjectMembersOwnRust { ProjectMembersOwnRust { heads: collections::BTreeSet::new(), described: collections::BTreeSet::new(), published: collections::BTreeMap::new(), narrow: collections::BTreeSet::new(), files: collections::BTreeMap::new(), moved: vec![], entries: String::from("") } }
 
 pub fn project_members_no_foreign() -> ProjectMembersForeign { ProjectMembersForeign { declared: collections::BTreeSet::new(), described: collections::BTreeSet::new(), moved: collections::BTreeMap::new(), descriptions: Ledger::blank(), beneath: collections::BTreeSet::new(), within_std: false, over_std: Ledger::blank(), own: project_members_no_own_rust() } }
 
@@ -551,7 +551,7 @@ pub async fn project_members_foreign_of<M: ProjectMembersHost, H: ProjectMembers
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn project_members_rust_heads(text: &str) -> Vec<String> {
+pub(crate) fn project_members_rust_heads(text: &str) -> Vec<String> {
     let mut heads: Vec<String> = vec![];
     let items = match nikaia_std::grammar::parse(&*text, Rust::parse_file()) {
         Ok(value) => value,

@@ -156,7 +156,7 @@ fn a_high_byte(literal: ref String) -> i64? sync {
 /// **Which numbers name a character**: Unicode's scalar values, 0 to
 /// `0x10FFFF` without the surrogates `0xD800` to `0xDFFF` - exactly the numbers
 /// Rust's `char::from_u32` takes.
-pub fn escape_scalar(n: i64) -> scalar? {
+fn escape_scalar(n: i64) -> scalar? {
     if n >= 0 && n <= 0x10FFFF && (n < 0xD800 || n > 0xDFFF) {
         return scalar::from(n)
     }

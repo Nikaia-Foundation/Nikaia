@@ -1,8 +1,14 @@
 --list:
   examples/app: nikaia build --locked
+  examples/ignored: nikaia build --locked
+  examples/plain: nikaia build --locked
   packages/lib: nikaia build --locked
+  tests/language: nikaia build --locked
   exit 0
 --check:
   examples/app: ledger stale
+  examples/ignored: ledger stale
+  examples/plain: ledger stale
   packages/lib: ledger stale
+  tests/language: ledger stale
   exit 1

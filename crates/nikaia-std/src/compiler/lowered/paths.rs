@@ -23,7 +23,7 @@ pub fn after(path: &str, word: &str) -> Option<String> {
     Some(slice(&c, w.len() as i64, c.len() as i64))
 }
 
-pub fn module_of(relative: &str) -> Option<String> {
+pub(crate) fn module_of(relative: &str) -> Option<String> {
     if !relative.starts_with("src/") || !relative.ends_with(".rs") { return None; }
     let c: Vec<scalar> = nikaia_std::list::scalars(relative.chars());
     let inside = slice(&c, 4, unsafe { nikaia_std::proven::sub::<i64>(c.len() as i64, 3) });
@@ -94,7 +94,7 @@ pub fn named(written: &str) -> Named {
     Named { name: nikaia_std::block::Text::from(before.trim().to_string()), alias: nikaia_std::block::Text::from(after_it.trim().to_string()) }
 }
 
-pub fn bases(export: &Export) -> Vec<String> {
+pub(crate) fn bases(export: &Export) -> Vec<String> {
     let prefix = export.prefix.trim();
     #[allow(unused_mut)] let mut out: Vec<String> = vec![];
     let from_root = after(prefix, "crate"); #[allow(unused_mut, clippy::redundant_locals)] let mut out = out;
@@ -123,7 +123,7 @@ pub fn bases(export: &Export) -> Vec<String> {
     out
 }
 
-pub fn split_top_level(text: &str) -> Vec<String> {
+pub(crate) fn split_top_level(text: &str) -> Vec<String> {
     #[allow(unused_mut)] let mut out: Vec<String> = vec![];
     let mut depth = 0;
     let mut current: String = String::from(""); #[allow(unused_mut, clippy::redundant_locals)] let mut out = out;

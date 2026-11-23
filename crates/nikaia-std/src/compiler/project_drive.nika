@@ -752,7 +752,7 @@ fn project_drive_rooted(path: ref fs::Path, roots: ref Vec[fs::Path]) -> Project
 /// file it names lies below none of `roots`, the project's root, the
 /// sysroot of `std`'s sources and the target directory, each read through a
 /// root on the one it lies below (ADR-raw-sinks-1 D17 item 7).
-pub fn project_drive_fresh(record: ref fs::Path, handed: ref String, roots: ref Vec[fs::Path]) -> String? {
+fn project_drive_fresh(record: ref fs::Path, handed: ref String, roots: ref Vec[fs::Path]) -> String? {
     let kept = project_drive_rooted(record, roots) ?? return null
     let key = project_drive_cargo_key(kept, handed)
     let held = fs::read_to_string(kept.below, kept.at) catch { return null }
@@ -788,7 +788,7 @@ pub fn project_drive_fresh(record: ref fs::Path, handed: ref String, roots: ref 
 /// cannot be read, or the record, the program, its dependency file or a file
 /// it lists lies below none of `roots` (ADR-raw-sinks-1 D17 item 7). The
 /// Rust under `generated` is left out of it.
-pub fn project_drive_record(record: ref fs::Path, handed: ref String, messages: ref String, generated: ref fs::Path, roots: ref Vec[fs::Path]) {
+fn project_drive_record(record: ref fs::Path, handed: ref String, messages: ref String, generated: ref fs::Path, roots: ref Vec[fs::Path]) {
     let kept = project_drive_rooted(record, roots) ?? return
     fs::remove(kept.below, kept.at) catch {}
     let binary = diagnostics_executable_in(messages.clone()) ?? return

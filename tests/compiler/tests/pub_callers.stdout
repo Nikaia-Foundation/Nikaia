@@ -1,0 +1,8 @@
+--- every pub fn named outside
+every pub fn of the compiler is named outside it (3 checked)
+exit 0
+--- named only by the compiler's own files
+2 pub fn of the compiler named nowhere outside it (drop `pub`, ADR-391 D4):
+  crates/nikaia-std/src/compiler/a.nika:3: pub fn lonely
+  crates/nikaia-std/src/compiler/a.nika:8: pub fn meth
+exit 1

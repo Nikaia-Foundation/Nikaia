@@ -1401,7 +1401,7 @@ pub fn keeps_infer<H: KeepsHost>(ledger: &mut Ledger, units: &[ParsedView<'_, '_
     column
 }
 
-pub fn keeps_of_unit(unit: &[String], graph: &collections::BTreeMap<String, Uses>, stored: &collections::BTreeMap<String, collections::BTreeSet<String>>, own: &Ledger, library: &Ledger) -> collections::BTreeMap<String, collections::BTreeSet<String>> {
+pub(crate) fn keeps_of_unit(unit: &[String], graph: &collections::BTreeMap<String, Uses>, stored: &collections::BTreeMap<String, collections::BTreeSet<String>>, own: &Ledger, library: &Ledger) -> collections::BTreeMap<String, collections::BTreeSet<String>> {
     let mut kept: collections::BTreeMap<String, collections::BTreeSet<String>> = collections::BTreeMap::new();
     for name in unit.iter() {
         let uses = match *nikaia_std::index::get(&graph, name) { Some(__nikaia_value) => __nikaia_value, None => continue };
@@ -1429,7 +1429,7 @@ pub(crate) fn keeps_settled(callee: &str, at: i64, settling: &collections::BTree
     keeps_its(callee, at, settling, own, library)
 }
 
-pub fn keeps_callees_first(graph: &collections::BTreeMap<String, Uses>, own: &Ledger, library: &Ledger) -> collections::BTreeMap<String, collections::BTreeSet<String>> {
+pub(crate) fn keeps_callees_first(graph: &collections::BTreeMap<String, Uses>, own: &Ledger, library: &Ledger) -> collections::BTreeMap<String, collections::BTreeSet<String>> {
     let mut stored: collections::BTreeMap<String, collections::BTreeSet<String>> = collections::BTreeMap::new();
     for unit in keeps_units(graph) {
         let column = keeps_of_unit(&unit, graph, &stored, own, library);
@@ -1448,7 +1448,7 @@ pub(crate) struct KeepsComponents {
     pub(crate) next: i64,
 }
 
-pub fn keeps_units(graph: &collections::BTreeMap<String, Uses>) -> Vec<Vec<String>> {
+pub(crate) fn keeps_units(graph: &collections::BTreeMap<String, Uses>) -> Vec<Vec<String>> {
     let mut walk = KeepsComponents { index: collections::BTreeMap::new(), low: collections::BTreeMap::new(), open: collections::BTreeSet::new(), stack: vec![], units: vec![], next: 0 };
     for (name, _) in graph.iter() { if !walk.index.contains_key(name) { keeps_connect(graph, name, &mut walk); } }
     walk.units
@@ -1736,7 +1736,7 @@ pub(crate) fn copied_keepers(keepers: &[KeepsKeeper]) -> Vec<KeepsKeeper> {
 }
 
 #[allow(clippy::too_many_arguments)]
-pub fn keeps_uses_of(view: &ParsedView<'_, '_, '_, '_, '_, '_, '_>, item: &Item, target: Option<&str>, ledger: &Ledger, library: &Ledger, indexes: &KeepsIndexes<'_, '_>, resolved: &collections::BTreeMap<String, CheckMethodCalls>, holes_of: &mut impl FnMut(&Expr) -> Vec<Expr>) -> Option<KeepsFound> {
+pub(crate) fn keeps_uses_of(view: &ParsedView<'_, '_, '_, '_, '_, '_, '_>, item: &Item, target: Option<&str>, ledger: &Ledger, library: &Ledger, indexes: &KeepsIndexes<'_, '_>, resolved: &collections::BTreeMap<String, CheckMethodCalls>, holes_of: &mut impl FnMut(&Expr) -> Vec<Expr>) -> Option<KeepsFound> {
     match item {
         Item::Fn { name, generics, receiver, args, config, body, ret_type, .. } => {
             let name = *name;

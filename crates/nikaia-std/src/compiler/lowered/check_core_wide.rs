@@ -3,7 +3,7 @@
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn wide_unsigned_of(element: &str) -> String {
+pub(crate) fn wide_unsigned_of(element: &str) -> String {
     match element {
         "u8" => String::from("u8"),
         "u32" => String::from("u32"),

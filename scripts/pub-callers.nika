@@ -1,0 +1,130 @@
+// Lists the `pub fn` of the compiler package (`crates/nikaia-std/src/compiler/
+// *.nika`) that nothing outside it names, so `pub` by habit does not come
+// back (#1831). Files of one package share one namespace: a sibling file's
+// private `fn` is called by its bare name, and `pub` is only for what another
+// package or the Rust host calls. A needless `pub` costs proofs: the bounds
+// walk derives no precondition for a `pub fn` from its callers (ADR-391 D4),
+// so its sites stay checked.
+//
+//     nikaia run scripts/pub-callers.nika [-- --root DIR]
+//
+// Outside is every `.rs`, `.nika` and `.contracts` under `crates/`,
+// `packages/` and `tests/` but the compiler's own `.nika` and its lowered
+// Rust (`compiler/lowered/`, `compiler/lowered.rs`), which the lowering writes
+// from them. A test that builds a program from a compiler file (the
+// `parser_grammar_*` tests call `pg_render`) needs its `pub`. A name is looked up as a word, so a short one another file uses for
+// something else (`at`, `size`) counts as named: the list only ever misses a
+// needless `pub`, it never names a needed one. Exits 1 when it lists one.
+//
+// DIR is relative and stays below the directory it runs in
+// (`path::is_below`): no `/` first and no `..`.
+
+use std::cli
+use std::collections
+use std::fs
+use std::path
+use std::process
+use std::regex
+
+fn compiler_dir() -> String { return "crates/nikaia-std/src/compiler" }
+
+// Whether FILE (relative to the root) is read as outside the compiler.
+fn pubs_outside(file: String) -> bool {
+	let own = compiler_dir()
+	if file.starts_with(own + "/lowered") { return false }
+	if file.starts_with(own + "/") && file.ends_with(".nika") { return false }
+	return file.ends_with(".rs") || file.ends_with(".nika") || file.ends_with(".contracts")
+}
+
+// The outside files under DIR, relative to ROOT. Hidden files and `target/`
+// are not read.
+fn pubs_walk(root: fs::Root, dir: String, mut out: Vec[String]) throws {
+	if !fs::exists(dir.clone(), root.clone()) { return }
+	for entry in fs::read_dir(dir.clone(), root.clone()) {
+		let text = entry.to_text()
+		let parts = text.split("/").collect()
+		let name = parts[parts.len() - 1]
+		if name.starts_with(".") || name == "target" { continue }
+		let rel = f"{dir}/{name}"
+		if !path::is_below(rel) { continue }
+		if fs::metadata(rel.clone(), root.clone()).is_dir() {
+			pubs_walk(root.clone(), rel, out)
+		} else if pubs_outside(rel) {
+			out.push(rel)
+		}
+	}
+}
+
+fn pubs_read(root: fs::Root, file: String) -> String throws {
+	let raw = fs::read(file, root.clone()) catch { return "" }
+	return raw.text_lossy()
+}
+
+fn main() throws {
+	let mut args: Vec[String] = []
+	for a in cli::args() { args.push(a) }
+	let mut dir: String = "."
+	let mut k = 1
+	while k < args.len() {
+		if args[k] == "--root" && k + 1 < args.len() {
+			dir = args[k + 1].clone()
+			k += 1
+		} else {
+			eprintln("usage: nikaia run scripts/pub-callers.nika [-- --root DIR]")
+			process::exit(2)
+		}
+		k += 1
+	}
+	// Bound once more without `mut`, so the guard's proof holds where the
+	// root is joined (#2591).
+	let dir = dir
+	if !path::is_below(dir) {
+		eprintln(f"pub-callers: {dir} is not below the directory it runs in")
+		process::exit(2)
+	}
+	let root = fs::Root::Dir(".").join(dir)
+
+	// Every word outside the compiler.
+	let mut files: Vec[String] = []
+	pubs_walk(root.clone(), "crates", files)
+	pubs_walk(root.clone(), "packages", files)
+	pubs_walk(root.clone(), "tests", files)
+	let gaps = regex::dynamic("[^A-Za-z0-9_]+")
+	let mut named: collections::HashSet[String] = collections::HashSet()
+	for file in files {
+		let text = pubs_read(root.clone(), file)
+		for word in gaps.split(text) { named.insert(word.clone()) }
+	}
+
+	// Each `pub fn` of the compiler's own files, a method's too.
+	let decl = regex::dynamic("^\\s*pub fn ([A-Za-z_][A-Za-z0-9_]*)")
+	let mut own: Vec[String] = []
+	for entry in fs::read_dir(compiler_dir(), root.clone()) {
+		let text = entry.to_text()
+		let parts = text.split("/").collect()
+		let name = parts[parts.len() - 1]
+		if name.ends_with(".nika") { own.push(name.clone()) }
+	}
+	own.sort()
+	let mut checked = 0
+	let mut needless: Vec[String] = []
+	for name in own {
+		let file = f"{compiler_dir()}/{name}"
+		let text = pubs_read(root.clone(), file.clone())
+		let mut line = 0
+		for row in text.split("\n") {
+			line += 1
+			let caps = decl.captures(row) ?? continue
+			let f = (caps.group(1) ?? continue).text().clone()
+			checked += 1
+			if !named.contains(f) { needless.push(f"  {file}:{line}: pub fn {f}") }
+		}
+	}
+	if needless.is_empty() {
+		println(f"every pub fn of the compiler is named outside it ({checked} checked)")
+		return
+	}
+	println(f"{needless.len()} pub fn of the compiler named nowhere outside it (drop `pub`, ADR-391 D4):")
+	for row in needless { println(row) }
+	process::exit(1)
+}

@@ -71,6 +71,9 @@ pub struct Proven {
     pub gates: BTreeMap<String, String>,
     /// What `--bounds-trace` shows (#1495): each goal of the line asked.
     pub trace: Vec<String>,
+    /// Each type's rules, found or not, with why, where `--asserts` asked
+    /// ([ADR-369](../../docs/specification/adr/adr-369.md) D5).
+    pub rules: Vec<String>,
 }
 
 /// **Every index and every operation the walks prove**
@@ -273,6 +276,31 @@ pub fn proven_traced(
     through_loops: bool,
     trace: &[i64],
 ) -> Proven {
+    proven_asked(
+        parsed,
+        beside,
+        facts,
+        ledgers,
+        nonnegative,
+        through_loops,
+        trace,
+        false,
+    )
+}
+
+/// [`proven_traced`], with each type's rules and why written into
+/// `Proven::rules` where `rules` asks (`--asserts`, ADR-369 D5).
+#[allow(clippy::too_many_arguments)]
+pub fn proven_asked(
+    parsed: &Parsed,
+    beside: &[&Parsed],
+    facts: &crate::check::CheckFacts,
+    ledgers: &[&crate::contracts::Ledger],
+    nonnegative: &BTreeSet<i64>,
+    through_loops: bool,
+    trace: &[i64],
+    rules: bool,
+) -> Proven {
     let counters = std::cell::RefCell::new(HashMap::new());
     let all = nikaia_std::compiler::bounds_proven::bounds_proven(
         &parsed.program,
@@ -291,6 +319,7 @@ pub fn proven_traced(
         nonnegative,
         through_loops,
         trace,
+        rules,
         &mut |text, names| crate::prove::condition_nodes(text, names),
         &mut |arena, known, goal| {
             crate::proofs::ask(arena, known, goal) == crate::proofs::Asked::Proved
@@ -319,5 +348,6 @@ pub fn proven_traced(
         derived: all.derived,
         gates: all.gates,
         trace: all.trace,
+        rules: all.rules,
     }
 }

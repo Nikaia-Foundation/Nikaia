@@ -54,7 +54,7 @@ fn magnitude_compare(a: Vec[u64], b: Vec[u64]) -> i64 sync {
 
 fn magnitude_add(a: Vec[u64], b: Vec[u64]) -> Vec[u64] sync {
     let n = if a.len() > b.len() { a.len() } else { b.len() }
-    let mut sum: Vec[u64] = []
+    let mut sum: Vec[u64] = Vec(capacity: n + 1)
     let mut carry = false
     for at in 0..<n {
         let x: u64 = if at < a.len() { a[at] } else { 0 }
@@ -72,7 +72,7 @@ fn magnitude_add(a: Vec[u64], b: Vec[u64]) -> Vec[u64] sync {
 
 /// `a - b` for magnitudes with `a >= b`.
 fn magnitude_sub(a: Vec[u64], b: Vec[u64]) -> Vec[u64] sync {
-    let mut rest: Vec[u64] = []
+    let mut rest: Vec[u64] = Vec(capacity: a.len())
     let mut borrow = false
     for at in 0..<a.len() {
         let y: u64 = if at < b.len() { b[at] } else { 0 }
@@ -88,7 +88,7 @@ fn magnitude_mul(a: Vec[u64], b: Vec[u64]) -> Vec[u64] sync {
     if a.len() == 0 || b.len() == 0 {
         return []
     }
-    let mut product: Vec[u64] = []
+    let mut product: Vec[u64] = Vec(capacity: a.len() + b.len())
     for _ in 0..<(a.len() + b.len()) {
         product.push(0)
     }
@@ -108,7 +108,7 @@ fn magnitude_mul(a: Vec[u64], b: Vec[u64]) -> Vec[u64] sync {
 
 /// The magnitude moved up by `by` bits, `by` below 64, one digit longer.
 fn shifted_up(a: Vec[u64], by: u32) -> Vec[u64] sync {
-    let mut out: Vec[u64] = []
+    let mut out: Vec[u64] = Vec(capacity: a.len() + 1)
     let mut carry: u64 = 0
     for at in 0..<a.len() {
         if by == 0 {
@@ -124,7 +124,7 @@ fn shifted_up(a: Vec[u64], by: u32) -> Vec[u64] sync {
 
 /// The magnitude moved down by `by` bits, `by` below 64.
 fn shifted_down(a: Vec[u64], by: u32) -> Vec[u64] sync {
-    let mut out: Vec[u64] = []
+    let mut out: Vec[u64] = Vec(capacity: a.len())
     for at in 0..<a.len() {
         if by == 0 {
             out.push(a[at])
@@ -138,7 +138,7 @@ fn shifted_down(a: Vec[u64], by: u32) -> Vec[u64] sync {
 
 /// `a / d` and `a % d` for a magnitude and one digit `d`, not zero.
 fn magnitude_div_digit(a: Vec[u64], d: u64) -> (Vec[u64], u64) sync {
-    let mut quotient: Vec[u64] = []
+    let mut quotient: Vec[u64] = Vec(capacity: a.len())
     for _ in 0..<a.len() {
         quotient.push(0)
     }
@@ -163,7 +163,7 @@ fn magnitude_div_long(a: Vec[u64], b: Vec[u64]) -> (Vec[u64], Vec[u64]) sync {
     let mut u = shifted_up(a, by)
     let top = v[n - 1]
     let next = v[n - 2]
-    let mut quotient: Vec[u64] = []
+    let mut quotient: Vec[u64] = Vec(capacity: m + 1)
     for _ in 0..<(m + 1) {
         quotient.push(0)
     }
@@ -222,7 +222,7 @@ fn magnitude_div_long(a: Vec[u64], b: Vec[u64]) -> (Vec[u64], Vec[u64]) sync {
         }
         quotient[j] = qhat
     }
-    let mut low_part: Vec[u64] = []
+    let mut low_part: Vec[u64] = Vec(capacity: n)
     for i in 0..<n {
         low_part.push(u[i])
     }

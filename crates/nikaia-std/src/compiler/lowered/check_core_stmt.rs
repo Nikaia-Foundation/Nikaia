@@ -3528,7 +3528,7 @@ pub(crate) fn check_core_names_read_in(file: &ParsedView<'_, '_, '_, '_, '_, '_,
     Some(read)
 }
 
-pub fn check_core_names_read(files: &[ParsedView<'_, '_, '_, '_, '_, '_, '_>], with_here: bool) -> CheckNamesRead {
+pub(crate) fn check_core_names_read(files: &[ParsedView<'_, '_, '_, '_, '_, '_, '_>], with_here: bool) -> CheckNamesRead {
     let mut named: collections::BTreeMap<String, i64> = collections::BTreeMap::new();
     let mut grammars: i64 = 0;
     for file in files.iter() {

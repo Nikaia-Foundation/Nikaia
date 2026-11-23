@@ -125,7 +125,7 @@ fn shape_through(contract: ref FnContract, receiver: ref Ty, found: ref Vec[Ty],
 
 /// **What a step of a walk fails with** (#2742): empty for what is no
 /// walk or cannot fail.
-pub fn sequence_failures(ty: ref Ty) -> Vec[String] {
+fn sequence_failures(ty: ref Ty) -> Vec[String] {
     return match ty {
         Ty::Seq { fails, .. } => fails.clone(),
         else => [],

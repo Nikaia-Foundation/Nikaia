@@ -8,6 +8,23 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1556] — 2026-11-23
+
+**Commit the lock and ledgers of every project built in place, as ledgers.nika --refresh writes them (#2797)**
+- The locks and ledgers of every project built in place are committed and checked by CI
+
+## [0.0.1555] — 2026-11-23
+
+**Builders' changes (#1755, #1831, #2519)**
+- Bounds: a method's `mut` parameter now withdraws only the found rules over fields it could be handed, so a struct whose method takes a `mut Vec[u32]` keeps its other found rules.
+- The compiler's functions that only their own package calls are private (ADR-391 D4), seven dead ones are deleted, and scripts/pub-callers.nika lists any pub fn of the compiler nothing outside names
+- --asserts lists the rules of a type: each written rule with the points where it is checked and why, each found rule with how it was found and the bodies that keep it, and each rule not found with the body that breaks it (ADR-369 D5).
+
+## [0.0.1554] — 2026-11-23
+
+**std::bigint sizes its digit buffers up front with Vec(capacity: n) (#2798)**
+- std::bigint builds each digit buffer at its final size: the pidigits spigot runs 52 % fewer instructions and its growth reallocations go from 56,384 to 13. The bounds prover now knows that `Vec()` and `Vec(capacity: n)` start empty, as `[]` does.
+
 ## [0.0.1553] — 2026-11-23
 
 **Builders' changes (#2779, #2780, #988)**

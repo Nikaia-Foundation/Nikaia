@@ -30,6 +30,21 @@ with a known gap and not yet a final number.
 <div class="rq-metric"><div class="rq-metric-bar" role="img" aria-label="Indexes proved in the compiler's Nikaia code, 965 of 1821, 53 %"><span style="width: 53%"></span></div><p class="rq-note">Indexes proved in the compiler's Nikaia code, 965 of 1,821 (53 %), counted for #1053.</p></div>
 <div class="rq-metric"><div class="rq-metric-bar" role="img" aria-label="Arithmetic steps proved, 560 of 1381, 41 %"><span style="width: 41%"></span></div><p class="rq-note">Arithmetic steps proved, 560 of 1,381 (41 %), counted for #1053.</p></div>
 
+The solver package `logic`, written in Nikaia, is the second test bed. A
+count with `nikaia check --bounds` on 2026-11-23 found 624 of its 1,353
+indexes proved (46 %) and 381 of 777 arithmetic steps. Most of the indexes
+left open fall into a few groups. In 219 no fact bounds the value at all,
+and in 173 the index is itself read out of another list, such as a variable's
+position in a heap that is looked up in a second list. In 86 a loop runs
+over the length of one list and indexes another, and 36 index a list of
+lists. The indexes read out of another list are the next step
+([#1890](https://github.com/Nikaia-Foundation/Nikaia/issues/1890)): a survey of what each needs, then element rules the
+compiler finds by itself, then a theory of arrays for the pairs of lists
+that point at each other.
+
+<div class="rq-metric"><div class="rq-metric-bar" role="img" aria-label="Indexes proved in the solver package logic, 624 of 1353, 46 %"><span style="width: 46%"></span></div><p class="rq-note">Indexes proved in the solver package <code>logic</code>, 624 of 1,353 (46 %), counted on 2026-11-23.</p></div>
+<div class="rq-metric"><div class="rq-metric-bar" role="img" aria-label="Arithmetic steps proved in the solver package logic, 381 of 777, 49 %"><span style="width: 49%"></span></div><p class="rq-note">Arithmetic steps proved in the solver package <code>logic</code>, 381 of 777 (49 %), counted on 2026-11-23.</p></div>
+
 Each question below carries two bars. The first shows how far the work is.
 Its filled part <span class="rq-key rq-key-done"></span> is what is built,
 the plain part <span class="rq-key rq-key-known"></span> is the rest of the
@@ -178,9 +193,9 @@ until then it asks the reference solver. How the parts fit together is drawn und
 <p class="rq-note">Masks, shifts and wrapping arithmetic, blasted into clauses for the CDCL skeleton. (<a href="/docs/specification/adr/adr-270.html">ADR-270</a> D13)</p>
 </div>
 <div class="rq-comp">
-<div class="rq-comp-head"><span class="rq-comp-name">Rules over every element</span><span class="rq-stage rq-stage-later">open question</span></div>
-<div class="rq-comp-bar"><div class="rq-build" role="img" aria-label="Rules over every element, about 0 % built, 35 % held back for what is not yet known"><span class="rq-known" style="width: 65%"><span class="rq-done" style="width: 0%"></span></span><span class="rq-unknown" style="width: 35%"></span></div><span class="rq-pct">0 %</span></div>
-<p class="rq-note">Claims that hold for every element of a list, used by the solver without making proofs fragile. Not decided, and asked under the questions below. (<a href="/docs/specification/adr/adr-270.html">ADR-270</a>, <a href="https://github.com/Nikaia-Foundation/Nikaia/issues/798">#798</a>)</p>
+<div class="rq-comp-head"><span class="rq-comp-name">Rules over every element</span><span class="rq-stage rq-stage-growing">partly built</span></div>
+<div class="rq-comp-bar"><div class="rq-build" role="img" aria-label="Rules over every element, about 10 % built, 35 % held back for what is not yet known"><span class="rq-known" style="width: 65%"><span class="rq-done" style="width: 15%"></span></span><span class="rq-unknown" style="width: 35%"></span></div><span class="rq-pct">10 %</span></div>
+<p class="rq-note">Claims that hold for every element of a list, used by the solver without making proofs fragile. A bound on every element of a field's or parameter's list is found by the compiler and built; nothing of the kind is written by hand. Element rules for values read out of another list and a theory of arrays are next. (<a href="/docs/specification/adr/adr-270.html">ADR-270</a>, <a href="/docs/specification/adr/adr-306.html">ADR-306</a> D21, <a href="https://github.com/Nikaia-Foundation/Nikaia/issues/1890">#1890</a>)</p>
 </div>
 <p class="rq-layer">Steering</p>
 <div class="rq-comp">
@@ -285,7 +300,7 @@ the way back without knowing how the prover works.
 <div class="rq-bars">
 <div class="rq-row"><span>Built</span><div class="rq-build" role="img" aria-label="Built: about 5 % of the estimated whole, 35 % held back for what is not yet known"><span class="rq-known" style="width: 65%"><span class="rq-done" style="width: 8%"></span></span><span class="rq-unknown" style="width: 35%"></span></div></div>
 <div class="rq-row"><span>Evidence</span><div class="rq-conf" role="img" aria-label="Evidence neither way yet"><span class="rq-conf-pos" style="width: 0%"></span></div></div>
-<p class="rq-note">None of the e-graph, the theory of arrays or the rules over every element is built yet, and there is no evidence either way.</p>
+<p class="rq-note">Neither the e-graph nor the theory of arrays is built yet. Of the rules over every element, a found bound on the elements of a field's or parameter's list is built. There is no evidence either way yet.</p>
 </div>
 
 The solver today decides linear integer arithmetic. Many arguments about
@@ -295,17 +310,20 @@ value otherwise. Equality with uninterpreted functions, built as an e-graph,
 and a theory of arrays carry exactly this. The procedure is decided
 ([ADR-270](/docs/specification/adr/adr-270.html) D13) and not yet built. Beyond it lie claims
 about every element, such as a sorted list or a partition, which need a rule
-over all elements ([#798](https://github.com/Nikaia-Foundation/Nikaia/issues/798), open for decision) and invariants over
-list contents that the compiler would have to find by itself. Finding such
+over all elements and invariants over list contents that the compiler has to
+find by itself. The form is decided: such a rule is found, not written
+([ADR-306](/docs/specification/adr/adr-306.html) D21). The first part is built, a bound on
+every element of a field's or parameter's list up to the length of another
+list, and the next parts are planned in [#1890](https://github.com/Nikaia-Foundation/Nikaia/issues/1890). Finding such
 invariants without help is the hardest part of the question whether Nikaia finds every
 invariant by itself, and the place where its limits are most likely to show.
 
 ### Can the prover use rules over every element of a list and keep its proofs stable?
 
 <div class="rq-bars">
-<div class="rq-row"><span>Built</span><div class="rq-build" role="img" aria-label="Built: about 3 % of the estimated whole, 35 % held back for what is not yet known"><span class="rq-known" style="width: 65%"><span class="rq-done" style="width: 5%"></span></span><span class="rq-unknown" style="width: 35%"></span></div></div>
+<div class="rq-row"><span>Built</span><div class="rq-build" role="img" aria-label="Built: about 8 % of the estimated whole, 35 % held back for what is not yet known"><span class="rq-known" style="width: 65%"><span class="rq-done" style="width: 12%"></span></span><span class="rq-unknown" style="width: 35%"></span></div></div>
 <div class="rq-row"><span>Evidence</span><div class="rq-conf" role="img" aria-label="Evidence neither way yet"><span class="rq-conf-pos" style="width: 0%"></span></div></div>
-<p class="rq-note">The committed proof file, which keeps a found proof from being searched again, is built. A solver that reasons about every element is not, so nothing has been measured yet.</p>
+<p class="rq-note">The committed proof file, which keeps a found proof from being searched again, is built, and so is a found bound on every element of a field's or parameter's list. A solver with general rules over all values is not, so their stability has not been measured yet.</p>
 </div>
 
 Many claims about a program speak of every element at once: every index
@@ -329,11 +347,16 @@ claims of this kind are carried without any rule over all elements.
 
 The solver itself decides linear integer arithmetic and has no rules over
 all values yet. Whether it needs them is to be asked when a claim does
-([ADR-270](/docs/specification/adr/adr-270.html)), and the first such claim, a rule over every
-element that the prover reads, `xs.all(|x| ...)`, waits for a count of how
-many unproved indexes need it ([#798](https://github.com/Nikaia-Foundation/Nikaia/issues/798)). Rules of this kind written
-into a loop by the programmer were not taken up
-([ADR-361](/docs/specification/adr/adr-361.html)). The question is whether rules over every
+([ADR-270](/docs/specification/adr/adr-270.html)). The first such claim is decided in a
+narrow form. A bound on every element of a field's or parameter's list is
+found by the compiler from every write to that list, and no written
+`xs.all(|x| ...)` stands beside it, because a written rule would hide where
+the prover falls short ([ADR-306](/docs/specification/adr/adr-306.html) D21). That form is
+built, and a value read out of such a list keeps its bound when the list
+later shrinks. Element rules for values read out of another list, and a
+theory of arrays for two lists that point at each other, follow in
+[#1890](https://github.com/Nikaia-Foundation/Nikaia/issues/1890). Rules of this kind written into a loop by the
+programmer were not taken up ([ADR-361](/docs/specification/adr/adr-361.html)). The question is whether rules over every
 element can be used in a form whose proofs survive an edit and a new solver
 version, with a certificate the small checker can replay, and how much of
 the range of the established method that form gives up.
