@@ -2761,6 +2761,19 @@ impl EmitState {
         // **A text the checker placed in the task's block** (ADR-327 D9,
         // `check_core_place_in_block`) grows there.
         if args.len() == 0 && self.facts.placed_in_block.contains(node_key(func)) {
+            // **A list made by its constructor** (#2805) is the block's list,
+            // with the room `Vec(capacity: n)` holds ahead.
+            let listed = match func {
+                Expr::Variable(name, _) => emit_text(world, name) == "Vec",
+                else => false,
+            }
+            if listed {
+                if self.emit_call_room(world, walk, out, host, "nikaia_std::block::List::new_in", config, depth, flow, scope) {
+                    return true
+                }
+                out.push("nikaia_std::block::list(nikaia_std::block::Place::Block)")
+                return true
+            }
             // **With its room held ahead** (#2114): `String(capacity: n)` in
             // the block is the block's text with that room.
             if self.emit_call_room(world, walk, out, host, "nikaia_std::block::Text::new_in", config, depth, flow, scope) {
@@ -3168,7 +3181,8 @@ impl EmitState {
     /// (ADR-285 D15): a negative one stops the program, *a count cannot be
     /// negative*. `made` is the constructor's path below: `Vec::new`, a map's
     /// `default` (whose hasher is named beside the room), or the task block's
-    /// `Text::new_in` (ADR-327 D9), which takes its place after it. False, and
+    /// `Text::new_in` or `List::new_in` (ADR-327 D9), which takes its place
+    /// after it. False, and
     /// nothing written, where the call passes no `capacity`.
     fn emit_call_room[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, made: ref String, config: ref Vec[ConfigArg], depth: i64, flow: EmitFlow, scope: ref EmitScope) -> bool sync throws {
         if config.len() != 1 || emit_text(world, config[0].name) != "capacity" {
