@@ -822,7 +822,7 @@ fn prover_let(mut walk: ProverWalk, names: ref Vec[winnow_grammar::Symbol], muta
         if raw_sink_first_part(value, written_of) == null {
             has_start = true
         } else {
-            has_start = raw_sink_name(first, words) != null
+            has_start = raw_sink_name(first, words) != null || raw_sink_operand_call(walk, first, words)
             start_name = raw_sink_name(first, words) ?? ""
         }
     }
@@ -3250,7 +3250,20 @@ fn raw_sink_passes(mut walk: ProverWalk, guard: ref String, part: ref Expr, scop
         }
         return raw_sink_guarded(walk, part, "path::is_component", scope, words, ask) || raw_sink_guarded(walk, part, "path::is_below", scope, words, ask)
     }
+    if guard == "process::is_operand" && raw_sink_operand_call(walk, part, words) {
+        return true
+    }
     return raw_sink_guarded(walk, part, guard, scope, words, ask)
+}
+
+/// **A call of a function that checked its result** (ADR-raw-sinks-1 D18
+/// item 2, D14): it hands back the proof of `process::is_operand`
+/// (`ProverOutside::operand_result`).
+fn raw_sink_operand_call(walk: ref ProverWalk, part: ref Expr, words: ref winnow_grammar::InternerContext) -> bool {
+    return match part {
+        Expr::Call { func, .. } => walk.state.outside.operand_result(outside_source_named(func, words) ?? ""),
+        else => false,
+    }
 }
 
 /// **Data from outside at a raw sink, reported** (`NK1308`): the sink named

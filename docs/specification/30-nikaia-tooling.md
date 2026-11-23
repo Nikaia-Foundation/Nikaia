@@ -1747,7 +1747,9 @@ Some modules are available, or behave restrictively, depending on the target and
   `"./" + name` or a path of a `Dir`, passes. A leading `/` is refused on
   every target, since a Windows program reads it as an option (`findstr
   /G:file`, D18 item 6), and a literal `"--"` earlier in the list ends only
-  the `-` options, so it does not prove an outside element after it. A `program` with no path separator is looked up on the
+  the `-` options, so it does not prove an outside element after it. A
+  function that checked `process::is_operand` of the value it returns hands
+  back the proof (D14). A `program` with no path separator is looked up on the
   **caller's** `PATH` as it is at the call, never on the child's, and started
   by the full name found. A name that is empty or holds `=` or a NUL, or a
   value that holds a NUL, is invalid: every entry is checked before anything

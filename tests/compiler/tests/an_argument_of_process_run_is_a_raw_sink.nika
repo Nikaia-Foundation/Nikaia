@@ -5,7 +5,8 @@
 // wrote (`"--output=" + name`, `f"-I{name}"`), but not behind a literal
 // `"--"`, which ends only the `-` options (D18 item 6, #2722). A
 // list filled from outside is followed through its pushes, a parameter
-// carries the sink to its caller, and `[allow] untrusted-option = true`
+// carries the sink to its caller, a function that checked its result hands
+// back the proof, and `[allow] untrusted-option = true`
 // admits the call, which `--trust` lists.
 use std::env
 use std::fs
@@ -54,6 +55,9 @@ fn main() throws {
     said(nikaia, "a list with a literal -- first", "", "    let mut args: Vec[String] = [\"-f\", \"--\"]\n    args.push(name)\n    process::run(\"rm\", args)\n", "", check)
     said(nikaia, "a list of proved values", "", "    if !process::is_operand(name) {\n        process::exit(2)\n    }\n    let mut args: Vec[String] = [\"-f\"]\n    args.push(name)\n    process::run(\"rm\", args)\n", "", check)
     said(nikaia, "through a function", "", "    remove(name)\n", "\nfn remove(file: String) throws {\n    process::run(\"rm\", [file])\n}\n", check)
+    said(nikaia, "a function that checked it hands back the proof", "", "    process::run(\"rm\", [checked(name)])\n", "\nfn checked(name: String) -> String {\n    if !process::is_operand(name) {\n        return \"./\" + name\n    }\n    return name\n}\n", check)
+    said(nikaia, "a function that refuses an option hands back the proof", "", "    process::run(\"git\", [\"show\", operand(name)])\n", "\nfn operand(word: String) -> String throws {\n    if !process::is_operand(word) {\n        throw io::IoError::Other(\"an option\")\n    }\n    return word\n}\n", check)
+    said(nikaia, "a function that did not check it hands back none", "", "    process::run(\"rm\", [unchecked(name)])\n", "\nfn unchecked(name: String) -> String {\n    return name.trim().clone()\n}\n", check)
     said(nikaia, "[allow] untrusted-option", "[allow]\nuntrusted-option = true\n", "    process::run(\"rm\", [name])\n", "", check)
     said(nikaia, "--trust lists the key", "[allow]\nuntrusted-option = true\n", "    process::run(\"rm\", [name])\n", "", ["check", "--trust"])
 }

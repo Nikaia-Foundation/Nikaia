@@ -528,15 +528,17 @@ pub struct ProverOutside {
     pub returning: collections::BTreeSet<String>,
     pub valued: collections::BTreeSet<String>,
     pub leads: collections::BTreeMap<String, collections::BTreeSet<i64>>,
+    pub operand_valued: collections::BTreeSet<String>,
 }
 
 impl ProverOutside {
-    pub fn nothing() -> ProverOutside { ProverOutside { results: collections::BTreeMap::new(), fields: collections::BTreeMap::new(), returning: collections::BTreeSet::new(), valued: collections::BTreeSet::new(), leads: collections::BTreeMap::new() } }
+    pub fn nothing() -> ProverOutside { ProverOutside { results: collections::BTreeMap::new(), fields: collections::BTreeMap::new(), returning: collections::BTreeSet::new(), valued: collections::BTreeSet::new(), leads: collections::BTreeMap::new(), operand_valued: collections::BTreeSet::new() } }
     pub fn proved_result(&self, key: &str) -> bool { self.returning.contains(key) && !self.valued.contains(key) }
+    pub fn operand_result(&self, key: &str) -> bool { self.returning.contains(key) && !self.operand_valued.contains(key) }
 }
 
 pub(crate) fn prover_outside(program: &Program, words: &winnow_grammar::InternerContext, own: &Ledger, library: &Ledger, state: &ProverState, holes_of: &mut impl FnMut(&Expr) -> Vec<Expr>) -> ProverOutside {
-    let mut found = ProverOutside { results: state.outside.results.copy_owned(), fields: state.outside.fields.copy_owned(), returning: collections::BTreeSet::new(), valued: collections::BTreeSet::new(), leads: collections::BTreeMap::new() };
+    let mut found = ProverOutside { results: state.outside.results.copy_owned(), fields: state.outside.fields.copy_owned(), returning: collections::BTreeSet::new(), valued: collections::BTreeSet::new(), leads: collections::BTreeMap::new(), operand_valued: collections::BTreeSet::new() };
     let leaving = ProverLeaving::of(program, own, words);
     for item in program.items.iter() {
         match &item.node {
@@ -662,6 +664,7 @@ pub(crate) fn prover_outside_tail(found: &mut ProverOutside, expr: &Expr, key: &
 
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn prover_outside_result(found: &mut ProverOutside, value: &Expr, key: &str, tainted: &collections::BTreeSet<String>, sources: &collections::BTreeMap<String, String>, proof: &OutsideProof, words: &winnow_grammar::InternerContext, library: &Ledger, state: &ProverState, holes_of: &mut impl FnMut(&Expr) -> Vec<Expr>) {
+    if !proof.operand_proved(value, words) { found.operand_valued.insert(nikaia_std::block::Text::from(key.to_string())); }
     let mut leads: collections::BTreeSet<i64> = collections::BTreeSet::new();
     if !proof.proved(value, words, &mut *holes_of, &mut leads) { found.valued.insert(nikaia_std::block::Text::from(key.to_string())); } else {
         if !leads.is_empty() {
@@ -714,12 +717,13 @@ pub(crate) struct OutsideProof {
     pub(crate) guarded: collections::BTreeSet<String>,
     pub(crate) joined: collections::BTreeMap<String, collections::BTreeSet<i64>>,
     pub(crate) clean: collections::BTreeSet<String>,
+    pub(crate) operands: collections::BTreeSet<String>,
     pub(crate) leaving: ProverLeaving,
 }
 
 impl OutsideProof {
     pub(crate) fn of(args: &[FnArg], method: bool, leaving: ProverLeaving, words: &winnow_grammar::InternerContext) -> OutsideProof {
-        let mut proof = OutsideProof { params: collections::BTreeMap::new(), fixed: collections::BTreeSet::new(), guarded: collections::BTreeSet::new(), joined: collections::BTreeMap::new(), clean: collections::BTreeSet::new(), leaving };
+        let mut proof = OutsideProof { params: collections::BTreeMap::new(), fixed: collections::BTreeSet::new(), guarded: collections::BTreeSet::new(), joined: collections::BTreeMap::new(), clean: collections::BTreeSet::new(), operands: collections::BTreeSet::new(), leaving };
         for (at, arg) in args.iter().enumerate().map(|(at, item)| (at as i64, item)) {
             if arg.mutable { continue; }
             let n = nikaia_std::block::Text::from(words.resolve(arg.name).to_string());
@@ -734,6 +738,7 @@ impl OutsideProof {
         self.guarded = before.guarded;
         self.joined = before.joined;
         self.clean = before.clean;
+        self.operands = before.operands;
     }
     pub(crate) fn forget(&mut self, name: &str) {
         self.params.remove(name);
@@ -741,6 +746,30 @@ impl OutsideProof {
         self.guarded.remove(name);
         self.joined.remove(name);
         self.clean.remove(name);
+        self.operands.remove(name);
+    }
+    pub(crate) fn operand_proved(&self, value: &Expr, words: &winnow_grammar::InternerContext) -> bool {
+        if literal_only(value) { return true; }
+        match value {
+            Expr::If { then_branch, else_branch, .. } => {
+                let other = match else_branch { Some(__nikaia_value) => __nikaia_value, None => return false };
+                return self.operand_proved_tail(then_branch, words) && self.operand_proved_tail(other, words);
+            },
+            Expr::Block(block, _) => { return self.operand_proved_tail(block, words); },
+            Expr::Match { arms, .. } => {
+                for arm in arms.iter() { if !self.operand_proved(&arm.body, words) { return false; } }
+                return true;
+            },
+            _ => { },
+        }
+        let first = match raw_sink_first_part(value, &mut |e| { String::from("") }) { Some(__nikaia_value) => __nikaia_value, None => return true };
+        let name = match raw_sink_name(&first, words) { Some(__nikaia_value) => __nikaia_value, None => return false };
+        self.operands.contains(&name) || self.clean.contains(&name)
+    }
+    pub(crate) fn operand_proved_tail(&self, block: &Block, words: &winnow_grammar::InternerContext) -> bool {
+        if block.stmts.len() != 1 { return false; }
+        let tail = match tail_value_of(block) { Some(__nikaia_value) => __nikaia_value, None => return false };
+        self.operand_proved(tail, words)
     }
     pub(crate) fn reads_clean(&self, value: &Expr, functions: &collections::BTreeSet<String>, words: &winnow_grammar::InternerContext, holes_of: &mut dyn FnMut(&Expr) -> Vec<Expr>) -> bool {
         if literal_only(value) { return true; }
@@ -811,9 +840,10 @@ impl OutsideProof {
                     Expr::Call { func, args, config, .. } => {
                         let func = nikaia_std::boxed::open(func);
                         let called = match outside_source_named(func, words) { Some(__nikaia_value) => __nikaia_value, None => return };
-                        if called != "path::is_component" && called != "path::is_below" || args.len() != 1 || !config.is_empty() { return; }
+                        if args.len() != 1 || !config.is_empty() { return; }
                         let on = match raw_sink_name(unsafe { nikaia_std::proven::read(&args, (0) as usize) }, words) { Some(__nikaia_value) => __nikaia_value, None => return };
-                        if self.fixed.contains(&on) { self.guarded.insert(on); }
+                        if !self.fixed.contains(&on) { return; }
+                        if called == "process::is_operand" { self.operands.insert(on); } else if called == "path::is_component" || called == "path::is_below" { self.guarded.insert(on); }
                     },
                     _ => { },
                 }

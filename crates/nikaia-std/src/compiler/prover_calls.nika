@@ -693,11 +693,14 @@ pub struct ProverOutside {
     pub returning: collections::BTreeSet[String],
     pub valued: collections::BTreeSet[String],
     pub leads: collections::BTreeMap[String, collections::BTreeSet[i64]],
+    /// The functions some value of which, handed back, is not proved
+    /// `process::is_operand` (ADR-raw-sinks-1 D18 item 2, `operand_result`).
+    pub operand_valued: collections::BTreeSet[String],
 }
 
 impl ProverOutside {
     pub fn nothing() -> ProverOutside {
-        return ProverOutside { results: collections::BTreeMap(), fields: collections::BTreeMap(), returning: collections::BTreeSet(), valued: collections::BTreeSet(), leads: collections::BTreeMap() }
+        return ProverOutside { results: collections::BTreeMap(), fields: collections::BTreeMap(), returning: collections::BTreeSet(), valued: collections::BTreeSet(), leads: collections::BTreeMap(), operand_valued: collections::BTreeSet() }
     }
 
     /// Whether every value the function `key` hands back is proved: a
@@ -705,6 +708,15 @@ impl ProverOutside {
     /// D10, D14).
     pub fn proved_result(ref self, key: ref String) -> bool {
         return self.returning.contains(key) && !self.valued.contains(key)
+    }
+
+    /// **Whether a function that checked its result hands back the proof**
+    /// (ADR-raw-sinks-1 D18 item 2, D14): every value the function `key`
+    /// hands back starts with a literal piece, or is a name a guard proved
+    /// `process::is_operand` of, so its result passes the start of an
+    /// argument of `process::run`.
+    pub fn operand_result(ref self, key: ref String) -> bool {
+        return self.returning.contains(key) && !self.operand_valued.contains(key)
     }
 }
 
@@ -714,7 +726,7 @@ impl ProverOutside {
 /// they are written, without branches told apart: a value that may come
 /// from outside is taken as coming from outside.
 fn prover_outside(program: ref Program, words: ref winnow_grammar::InternerContext, own: ref Ledger, library: ref Ledger, state: ref ProverState, holes_of: fn(ref Expr) -> Vec[Expr] sync) -> ProverOutside {
-    let mut found = ProverOutside { results: state.outside.results.clone(), fields: state.outside.fields.clone(), returning: collections::BTreeSet(), valued: collections::BTreeSet(), leads: collections::BTreeMap() }
+    let mut found = ProverOutside { results: state.outside.results.clone(), fields: state.outside.fields.clone(), returning: collections::BTreeSet(), valued: collections::BTreeSet(), leads: collections::BTreeMap(), operand_valued: collections::BTreeSet() }
     let leaving = ProverLeaving::of(program, own, words)
     for item in program.items {
         match item.node {
@@ -866,6 +878,9 @@ fn prover_outside_tail(mut found: ProverOutside, expr: ref Expr, key: ref String
 /// D14): a literal, or a guarded name joined to a clean part, the
 /// parameters it reads unguarded kept in `leads`.
 fn prover_outside_result(mut found: ProverOutside, value: ref Expr, key: ref String, tainted: ref collections::BTreeSet[String], sources: ref collections::BTreeMap[String, String], proof: ref OutsideProof, words: ref winnow_grammar::InternerContext, library: ref Ledger, state: ref ProverState, holes_of: fn(ref Expr) -> Vec[Expr] sync) {
+    if !proof.operand_proved(value, words) {
+        found.operand_valued.insert(key.clone())
+    }
     let mut leads: collections::BTreeSet[i64] = collections::BTreeSet()
     if !proof.proved(value, words, holes_of, leads) {
         found.valued.insert(key.clone())
@@ -935,13 +950,15 @@ struct OutsideProof {
     guarded: collections::BTreeSet[String],
     joined: collections::BTreeMap[String, collections::BTreeSet[i64]],
     clean: collections::BTreeSet[String],
+    /// The fixed names a guard proved `process::is_operand` of (D18 item 2).
+    operands: collections::BTreeSet[String],
     /// The calls that never come back in this function (#2485).
     leaving: ProverLeaving,
 }
 
 impl OutsideProof {
     fn of(args: ref Vec[FnArg], method: bool, leaving: ProverLeaving, words: ref winnow_grammar::InternerContext) -> OutsideProof {
-        let mut proof = OutsideProof { params: collections::BTreeMap(), fixed: collections::BTreeSet(), guarded: collections::BTreeSet(), joined: collections::BTreeMap(), clean: collections::BTreeSet(), leaving: leaving }
+        let mut proof = OutsideProof { params: collections::BTreeMap(), fixed: collections::BTreeSet(), guarded: collections::BTreeSet(), joined: collections::BTreeMap(), clean: collections::BTreeSet(), operands: collections::BTreeSet(), leaving: leaving }
         for (at, arg) in args.iter().enumerate() {
             if arg.mutable {
                 continue
@@ -961,6 +978,7 @@ impl OutsideProof {
         self.guarded = before.guarded
         self.joined = before.joined
         self.clean = before.clean
+        self.operands = before.operands
     }
 
     /// `name` bound or changed again: nothing proved of it holds.
@@ -970,6 +988,44 @@ impl OutsideProof {
         self.guarded.remove(name)
         self.joined.remove(name)
         self.clean.remove(name)
+        self.operands.remove(name)
+    }
+
+    /// Whether `value`, handed back, starts with a part that is a literal
+    /// piece, a `clean` name or a name a guard proved `process::is_operand`
+    /// of (D18 item 2); an `if`, a `match` or a one-statement block by each
+    /// value it ends in.
+    fn operand_proved(ref self, value: ref Expr, words: ref winnow_grammar::InternerContext) -> bool {
+        if literal_only(value) {
+            return true
+        }
+        match value {
+            Expr::If { then_branch, else_branch, .. } => {
+                let other = else_branch ?? return false
+                return self.operand_proved_tail(then_branch, words) && self.operand_proved_tail(other, words)
+            },
+            Expr::Block(block, _) => return self.operand_proved_tail(block, words),
+            Expr::Match { arms, .. } => {
+                for arm in arms {
+                    if !self.operand_proved(arm.body, words) {
+                        return false
+                    }
+                }
+                return true
+            },
+            else => {},
+        }
+        let first = raw_sink_first_part(value, fn(e) { "" }) ?? return true
+        let name = raw_sink_name(first, words) ?? return false
+        return self.operands.contains(name) || self.clean.contains(name)
+    }
+
+    fn operand_proved_tail(ref self, block: ref Block, words: ref winnow_grammar::InternerContext) -> bool {
+        if block.stmts.len() != 1 {
+            return false
+        }
+        let tail = tail_value_of(block) ?? return false
+        return self.operand_proved(tail, words)
     }
 
     /// Whether `value` reads nothing but literals and `clean` names, through
@@ -1070,11 +1126,16 @@ impl OutsideProof {
                 match expr {
                     Expr::Call { func, args, config, .. } => {
                         let called = outside_source_named(func, words) ?? return
-                        if (called != "path::is_component" && called != "path::is_below") || args.len() != 1 || !config.is_empty() {
+                        if args.len() != 1 || !config.is_empty() {
                             return
                         }
                         let on = raw_sink_name(args[0], words) ?? return
-                        if self.fixed.contains(on) {
+                        if !self.fixed.contains(on) {
+                            return
+                        }
+                        if called == "process::is_operand" {
+                            self.operands.insert(on)
+                        } else if called == "path::is_component" || called == "path::is_below" {
                             self.guarded.insert(on)
                         }
                     },

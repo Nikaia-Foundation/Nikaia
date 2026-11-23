@@ -596,7 +596,7 @@ pub(crate) fn prover_let(walk: &mut ProverWalk, names: &[winnow_grammar::Symbol]
     if !mutable && names.len() == 1 {
         let first = nikaia_std::index::or(raw_sink_first_part(value, &mut &mut *written_of), || value.clone().into());
         if raw_sink_first_part(value, &mut &mut *written_of).is_none() { has_start = true; } else {
-            has_start = raw_sink_name(&first, words).is_some();
+            has_start = raw_sink_name(&first, words).is_some() || raw_sink_operand_call(&walk, &first, words);
             start_name = nikaia_std::index::or(raw_sink_name(&first, words), || "".into());
         }
     }
@@ -2319,7 +2319,15 @@ pub(crate) fn raw_sink_passes(walk: &mut ProverWalk, guard: &str, part: &Expr, s
         if raw_sink_joined_name(part, scope, words) { return true; }
         return raw_sink_guarded(walk, part, "path::is_component", scope, words, &mut *ask) || raw_sink_guarded(walk, part, "path::is_below", scope, words, &mut *ask);
     }
+    if guard == "process::is_operand" && raw_sink_operand_call(&walk, part, words) { return true; }
     raw_sink_guarded(walk, part, guard, scope, words, &mut *ask)
+}
+
+pub(crate) fn raw_sink_operand_call(walk: &ProverWalk, part: &Expr, words: &winnow_grammar::InternerContext) -> bool {
+    match part {
+        Expr::Call { func, .. } => { let func = nikaia_std::boxed::open(func); walk.state.outside.operand_result(&nikaia_std::index::or(outside_source_named(func, words), || "".into())) },
+        _ => false,
+    }
 }
 
 #[allow(clippy::too_many_arguments)]

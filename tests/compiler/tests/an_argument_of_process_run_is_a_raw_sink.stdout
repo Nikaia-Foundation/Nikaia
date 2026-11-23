@@ -41,6 +41,15 @@ exit 0
 warning[NK1308]: `name` reaches the start of an argument of `process::run`, which the program may read as an option, through `remove`, and it comes from outside the program.
 --> src/main.nika:6:5
 = help: Check it where it arrives: `if !process::is_operand(name) { process::exit(2) }` refuses a leading `-` and `/`, after which it is proved; or, where it names a file, pass it as `"./" + name` or as the path of a root it is joined under (`dir.join(name).path().to_text()`), which start with text the program wrote. If the program means to pass options from outside, `untrusted-option = true` under `[allow]` in the manifest builds it.
+-- a function that checked it hands back the proof
+exit 0
+-- a function that refuses an option hands back the proof
+exit 0
+-- a function that did not check it hands back none
+exit 0
+warning[NK1308]: `unchecked(name)` reaches the start of an argument of `process::run`, which the program may read as an option, and it comes from outside the program.
+--> src/main.nika:6:5
+= help: Check it where it arrives: `if !process::is_operand(unchecked(name)) { process::exit(2) }` refuses a leading `-` and `/`, after which it is proved; or, where it names a file, pass it as `"./" + unchecked(name)` or as the path of a root it is joined under (`dir.join(unchecked(name)).path().to_text()`), which start with text the program wrote. If the program means to pass options from outside, `untrusted-option = true` under `[allow]` in the manifest builds it.
 -- [allow] untrusted-option
 exit 0
 -- --trust lists the key
