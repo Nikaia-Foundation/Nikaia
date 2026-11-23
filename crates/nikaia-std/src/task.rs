@@ -299,6 +299,15 @@ impl std::fmt::Display for OverBudget {
 
 impl std::error::Error for OverBudget {}
 
+impl OverBudget {
+    /// What went wrong, in words: `Error`'s `message` (Part I 7.1), which is
+    /// what the failure prints as. A block's text (#490), the `String` of a
+    /// program.
+    pub fn message(&self) -> crate::block::Text {
+        crate::block::Text::from(self.to_string())
+    }
+}
+
 impl From<Crashed> for OverBudget {
     /// Only a crash that is a full block reaches a channel of this alone.
     fn from(crash: Crashed) -> OverBudget {
@@ -336,6 +345,15 @@ impl std::fmt::Display for Crashed {
 }
 
 impl std::error::Error for Crashed {}
+
+impl Crashed {
+    /// What went wrong, in words: `Error`'s `message` (Part I 7.1), which is
+    /// what the failure prints as. A block's text (#490), the `String` of a
+    /// program.
+    pub fn message(&self) -> crate::block::Text {
+        crate::block::Text::from(self.to_string())
+    }
+}
 
 thread_local! {
     /// **Where the last panic on this thread happened**, as the hook named it:
@@ -640,6 +658,15 @@ impl std::fmt::Display for TimedOut {
 }
 
 impl std::error::Error for TimedOut {}
+
+impl TimedOut {
+    /// What went wrong, in words: `Error`'s `message` (Part I 7.1), which is
+    /// what the failure prints as. A block's text (#490), the `String` of a
+    /// program.
+    pub fn message(&self) -> crate::block::Text {
+        crate::block::Text::from(self.to_string())
+    }
+}
 
 /// **The deadline of `async(within: d)`**
 /// ([ADR-async-5](../../../docs/specification/adr/adr-async-5.md) D16): `d`
