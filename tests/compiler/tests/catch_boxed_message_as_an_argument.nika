@@ -1,0 +1,20 @@
+// `error.message()` in a handler the box reached (#2219), handed straight to
+// `println` and written in an `f"…"` part: the message is a `String` there
+// too, not a value with no type to become.
+
+enum Bad { Neg }
+
+impl Error for Bad {
+    fn message(ref self) -> String { "neg" }
+}
+
+fn f() -> String throws { throw Bad::Neg }
+
+fn main() throws {
+    let t = f().clone() catch {
+        println(error.message())
+        println(f"in: {error.message()}")
+        "done"
+    }
+    println(t)
+}
