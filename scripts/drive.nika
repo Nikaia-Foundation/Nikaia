@@ -4889,8 +4889,10 @@ fn drive_queue_prune(dir: String) throws {
 		let report = f"{dir}/{name}.md.report.md"
 		if fs::exists(report.clone(), drive_here()) {
 			// A run ended blocked on open issues (#1857): dropped, not cut.
+			let text = drive_read(report)
+			let waits = drive_report_waits(dir.clone(), f"{name}.md", text.clone(), false)
 			let mut held: Vec[String] = []
-			for m in drive_report_waits(dir.clone(), f"{name}.md", drive_read(report), false) {
+			for m in waits.clone() {
 				if m != n && drive_issue_open(m.clone()) { held.push(m) }
 			}
 			held = drive_not_fixed_on_develop(held)
@@ -4899,6 +4901,11 @@ fn drive_queue_prune(dir: String) throws {
 				drive_report_aside(dir.clone(), f"{name}.md", held)
 				blocked.push(tag)
 				blocked_lines.push(line)
+			} else if waits.len() > 0 && drive_field(text, "Result").to_lowercase().starts_with("blocked") {
+				// Every issue it waited for is closed or fixed: the brief runs
+				// again instead of a CUT on the stale report (#2585 was cut
+				// after each restart once its #2753 was closed).
+				drive_report_aside(dir.clone(), f"{name}.md", [])
 			}
 			continue
 		}

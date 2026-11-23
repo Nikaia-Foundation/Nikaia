@@ -42,7 +42,7 @@ use crate::parser::Parsed;
 
 use crate::check::MethodCalls;
 
-use super::{Ledger, Sync};
+use super::Ledger;
 
 /// One call that a `sync` function may not make, declared in Nikaia
 /// (`nikaia-std/src/compiler/sync.nika`): the statement it is in, the caller and
@@ -54,133 +54,53 @@ use super::{Ledger, Sync};
 pub use nikaia_std::compiler::sync::Violation;
 
 /// Every call a `sync` function makes that the ledgers say can pause.
+///
+/// **The walk is Nikaia** (`compiler/sync.nika`'s `sync_violations`, #125);
+/// this hands it the unit's view and the holes the emitter reads.
 pub fn check(parsed: &Parsed, own: &Ledger, library: &Ledger) -> Vec<Violation> {
-    // **The walk is Nikaia** (`tools/sync.nika`, #125).
-    let mut found = nikaia_std::compiler::sync::unit_violations(
-        &parsed.program,
-        &parsed.interner,
-        &mut |name: &str| parsed.unaliased(name),
-        &mut |expr: &Expr| crate::emit::literal_expressions(parsed, expr),
+    nikaia_std::compiler::sync::sync_violations(
+        &crate::check::parsed_view_of(parsed),
         own,
         library,
-    );
-    found.sort_by_key(|v| v.span.at());
-    found
+        &mut |expr: &Expr| crate::emit::literal_expressions(parsed, expr),
+    )
 }
 
-/// Give every function in the ledger the `sync` its body earns.
+/// Give every function in the ledger the `sync` its body earns: the walk,
+/// the fixpoint (callees first, ADR-100 D7), the column written back and the
+/// notes are `compiler/sync.nika`'s `sync_infer` (#125). Only ever *adds*
+/// [`Sync::Inferred`](super::Sync): an assertion in the source is left as it
+/// was written, so that `NK2202` still has something to contradict. The
+/// fixpoint is a greatest one, so mutual recursion between pure functions
+/// keeps the claim.
 ///
-/// Runs after the entries exist, and only ever *adds* [`Sync::Inferred`]: an
-/// assertion in the source is what the source said and is left exactly as it
-/// was written, so that `NK2202` still has something to contradict.
-///
-/// The fixpoint is a greatest one - start from "every candidate is `sync`" and
-/// take the claim away from anything that reaches a function without it. Two
-/// consequences worth naming. Mutual recursion between pure functions keeps the
-/// claim, which is correct and is what a least fixpoint would have got wrong.
-/// And the iteration walks a `BTreeMap` and repeats until nothing changes, so
-/// the answer does not depend on the order the source declared things in -
-/// which it must not, because 13.5 makes this file a pure function of (source,
-/// toolchain) and `--locked` compares it byte for byte.
-///
-/// `resolved` is the type checker's answer to the one question this walk cannot
-/// ask: what a method call goes to (ADR-288). Handing it in rather than
-/// computing it here keeps one type checker in the compiler; the alternative
-/// was a second, worse one living in this file.
+/// `resolved` is the type checker's answer to the one question the walk
+/// cannot ask: what a method call goes to (ADR-288). Handed in, so that the
+/// compiler keeps one type checker.
 ///
 /// **Hands back the functions that pause only where their lambdas do**
-/// ([ADR-288](../../../docs/specification/adr/adr-288.md) D29): by key, the code
-/// parameters that may pause and that each one calls. Nothing else it reaches
-/// can pause, so `sync(those)` is a promise its body would keep. The ledger is
-/// not told - the inference never writes `sync(f)`, because a promise is the
-/// source's to make (§4) - and the build says so in a note instead.
+/// ([ADR-288](../../../docs/specification/adr/adr-288.md) D29), and why each
+/// function that pauses does (D32), for the build to say.
 pub fn infer(
     ledger: &mut Ledger,
     units: &[&Parsed],
     library: &Ledger,
     resolved: &BTreeMap<String, MethodCalls>,
 ) -> Noted {
-    use nikaia_std::compiler::sync::{self as nika, SyncGraph};
-    use nikaia_std::compiler::throws::MethodsCalled;
-
-    // **The walk is Nikaia** (`tools/sync.nika`, #125): every body's calls,
-    // the type checker's method calls merged in - one whose receiver is not
-    // known, or code handed in that may pause, is enough (D2's polarity) -
-    // and a trait's and a grammar's entries as leaves.
-    let mut graph = SyncGraph {
-        methods: resolved
-            .iter()
-            .map(|(key, calls)| {
-                let called = MethodsCalled {
-                    resolved: calls.resolved.clone(),
-                    unseen: calls.unresolved || calls.code_pauses,
-                    fields: Default::default(),
-                    swallowed: Default::default(),
-                };
-                (key.clone(), called)
-            })
-            .collect(),
-        nodes: BTreeMap::new(),
-        unit: 0,
-    };
-    for (unit, parsed) in units.iter().copied().enumerate() {
-        graph.unit = unit as i64;
-        nika::unit_sync(
-            &parsed.program,
-            &parsed.interner,
-            &mut |name: &str| parsed.unaliased(name),
-            &mut |expr: &Expr| crate::emit::literal_expressions(parsed, expr),
-            ledger,
-            library,
-            &mut graph,
-        );
-    }
-
-    // **The fixpoint is Nikaia** too: start optimistic, take the claim away
-    // until nothing changes, and name the functions whose only pausing is
-    // their lambdas' (ADR-288 D29).
-    let reached: BTreeMap<String, nika::SyncReach> = graph
-        .nodes
+    let views: Vec<_> = units
         .iter()
-        .map(|(name, node)| (name.clone(), node.reach.clone()))
+        .map(|parsed| crate::check::parsed_view_of(parsed))
         .collect();
-    let holds = nika::sync_holds(&reached);
-    let by_code = nika::paused_only_by_code(&reached, &holds);
-
-    for (name, holds) in &holds {
-        if !holds {
-            continue;
-        }
-        // Only ever *adds* `Inferred`: an assertion in the source is what the
-        // source said, so that `NK2202` still has something to contradict.
-        if let Some(contract) = ledger.functions.get_mut(name)
-            && contract.sync_claim == Sync::No
-        {
-            contract.sync_claim = Sync::Inferred;
-        }
-    }
-
-    // **Why each function that does not hold pauses** (ADR-288 D32): the
-    // shortest way through the package's calls to a statement that pauses
-    // itself. Breadth-first and over the map's order, so the answer is the same
-    // on every build.
-    let mut why: BTreeMap<String, Pause> = BTreeMap::new();
-    for start in graph.nodes.keys().filter(|name| !holds[name.as_str()]) {
-        let chain = nika::pause_chain(&reached, &holds, start);
-        if let Some(node) = chain.last().and_then(|at| graph.nodes.get(at)) {
-            why.insert(
-                start.clone(),
-                Pause {
-                    chain: chain.clone(),
-                    unit: node.unit,
-                    site: node.site.clone(),
-                },
-            );
-        }
-    }
+    let noted = nikaia_std::compiler::sync::sync_infer(
+        ledger,
+        &views,
+        library,
+        resolved,
+        &mut |unit: i64, expr: &Expr| crate::emit::literal_expressions(units[unit as usize], expr),
+    );
     Noted {
-        by_code,
-        why,
+        by_code: noted.by_code,
+        why: noted.why,
         ..Noted::default()
     }
 }
