@@ -190,12 +190,12 @@ pub fn articles(text: &str) -> String {
         if written > 0 && unsafe { nikaia_std::proven::add::<i64>(at, 1) } < c.len() as i64 && (*unsafe { nikaia_std::proven::read(&c, (nikaia_std::proven::add::<i64>(at, 1)) as usize) }).is_alphanumeric() { kept = unsafe { nikaia_std::proven::sub::<i64>(before.len() as i64, written) }; }
         let mut i: i64 = 0;
         while i < kept {
-            out.push(*nikaia_std::index::get(&before, (i) as usize));
+            out.push(*unsafe { nikaia_std::proven::read(&before, (i) as usize) });
             i = unsafe { nikaia_std::proven::add::<i64>(i, 1) };
         }
         if kept < before.len() as i64 {
             let right = article(&word);
-            if *nikaia_std::index::get(&before, nikaia_std::index::at(kept)) == 'A' { if right == "an" { out.push_str("An"); } else { out.push_str("A"); } } else { out.push_str(&right); }
+            if *unsafe { nikaia_std::proven::read(&before, (kept) as usize) } == 'A' { if right == "an" { out.push_str("An"); } else { out.push_str("A"); } } else { out.push_str(&right); }
             out.push(' ');
         }
         before = vec![];
@@ -219,7 +219,7 @@ pub(crate) fn article_written_before(b: &[scalar]) -> i64 {
     let mut written: i64 = 0;
     if *unsafe { nikaia_std::proven::read(&b, (nikaia_std::proven::sub::<i64>(n, 2)) as usize) } == 'a' || *unsafe { nikaia_std::proven::read(&b, (nikaia_std::proven::sub::<i64>(n, 2)) as usize) } == 'A' { written = 2; } else if n >= 3 && *unsafe { nikaia_std::proven::read(&b, (nikaia_std::proven::sub::<i64>(n, 2)) as usize) } == 'n' && (*unsafe { nikaia_std::proven::read(&b, (nikaia_std::proven::sub::<i64>(n, 3)) as usize) } == 'a' || *unsafe { nikaia_std::proven::read(&b, (nikaia_std::proven::sub::<i64>(n, 3)) as usize) } == 'A') { written = 3; }
     if written == 0 || n == written { return written; }
-    let last = *nikaia_std::index::get(&b, nikaia_std::index::at(unsafe { nikaia_std::proven::sub::<i64>(n, written) } - 1));
+    let last = *nikaia_std::index::get(&b, nikaia_std::index::at(unsafe { nikaia_std::proven::sub::<i64>(nikaia_std::proven::sub::<i64>(n, written), 1) }));
     if last.is_alphanumeric() || last == '`' || last == '_' { return 0; }
     written
 }

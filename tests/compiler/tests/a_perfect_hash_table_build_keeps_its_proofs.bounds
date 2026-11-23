@@ -15,4 +15,4 @@ bounds in tests/a_perfect_hash_table_build_keeps_its_proofs.nika: 10 indexes, 4 
    112  d1 += 1                     checked: a parameter whose callers do not prove a bound (ADR-391 D1)
    125  keys[slot]                  checked: a value read out of a list, of which the walk knows no fact (#797, #798): an element of a named list (ADR-306 D7, D21)
    151  sorted[0]                   checked: no fact bounds what it reads - a counter, a loop, a length, or one list as long as another (#432, #383, #388)
-  derived  attempt: 0 <= buckets, 0 <= n, n <= keys.len(), buckets != 0, n != 0, proved at the calls on lines 43
+  derived  attempt: 0 <= buckets, buckets <= keys.len(), buckets < keys.len(), buckets <= n, buckets < n, 0 <= n, n <= keys.len(), buckets != 0, n != 0, proved at the calls on lines 43

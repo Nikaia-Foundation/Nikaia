@@ -1,0 +1,29 @@
+// The error a `match error`'s catch-all throws on (#1242) is the one that
+// arrived, not a `task::TimedOut`: it leaves `waited` as that error, with
+// the site it was raised at, and `main` gets it and reads its message.
+struct Broke {}
+
+impl Error for Broke {
+    fn message(self) -> String {
+        "the task broke"
+    }
+}
+
+fn work() -> i64 throws {
+    throw Broke {}
+}
+
+fn waited() -> i64 throws {
+    let h = async(detached) fn { work() }
+    return h.join(within: 1000.millis(), on_timeout: task::OnTimeout::Cancel) catch {
+        match error { task::TimedOut => 0, else => throw error }
+    }
+}
+
+fn main() throws {
+    let v = waited() catch {
+        println(f"main got: {error.message()}")
+        -1
+    }
+    println(f"{v}")
+}

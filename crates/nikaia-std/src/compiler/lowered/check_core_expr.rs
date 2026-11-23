@@ -219,6 +219,7 @@ pub(crate) fn check_core_value_of<H: CheckHost>(state: &mut CheckState, world: &
         },
         Expr::LitBool(_, _) => check_core_expr_named("bool"),
         Expr::LitNull(_) => Ty::Nullable(nikaia_std::block::Boxed::new(Ty::Unknown)),
+        Expr::TypeArgument(_, _) => Ty::Unknown,
         Expr::Variable(name, _) => {
             let name = *name;
             if state.run_code.contains(world.words.resolve(name)) { state.a_code_parameter_named(world.words.resolve(name)); }

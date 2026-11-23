@@ -788,6 +788,8 @@ fn grammar_types_written(expr: ref Expr, words: ref winnow_grammar::InternerCont
                 else => return null,
             }
         },
+        // A type no expression spells, `G::read[i64?](…)` (#1079).
+        Expr::TypeArgument(ty, _) => return ty.clone(),
         else => return null,
     }
 }
@@ -1068,12 +1070,16 @@ fn grammar_types_put_written(mut ty: Type?, bound: ref collections::BTreeMap[Str
     }
 }
 
-/// An expression with the copy's types put in: the type of a cast, and a
-/// parameter standing as a name or as a path's head.
+/// An expression with the copy's types put in: the type of a cast or of a
+/// call's brackets, and a parameter standing as a name or as a path's head.
 fn grammar_types_put_in(mut expr: Expr, words: ref winnow_grammar::InternerContext, intern: fn(ref String) -> winnow_grammar::Symbol sync, walk: ref GrammarTypesWalk) {
     match expr {
         Expr::Cast { expr: inner, ty, id } => {
             expr = Expr::Cast { expr: inner, ty: grammar_types_put(ty, walk.bound, words), id: id }
+            return
+        },
+        Expr::TypeArgument(ty, id) => {
+            expr = Expr::TypeArgument(grammar_types_put(ty, walk.bound, words), id)
             return
         },
         Expr::Call { func, args, config, id } => {

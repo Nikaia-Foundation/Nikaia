@@ -1,0 +1,21 @@
+// ADR-330 D9, #1079: a call's brackets may write a type no expression spells,
+// `id[i64?](null)`; a function and a grammar rule that take types read it.
+// The function's argument says `T` too, so its brackets are warned (NK1233).
+grammar Maybe {
+	rule WS = "" -> { }
+	entry rule none[T] -> T = eof -> { null }
+}
+
+fn id[T](x: T) -> T {
+	return x
+}
+
+fn main() throws {
+	let a = id[i64?](null)
+	println(f"{a ?? 0}")
+	let c: i64? = Maybe::none[i64?](Bytes("".bytes().collect())) catch {
+		println("error")
+		return
+	}
+	println(f"{c ?? 3}")
+}

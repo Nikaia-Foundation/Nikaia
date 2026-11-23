@@ -7,6 +7,11 @@ quotes a figure.
   (`valgrind --tool=callgrind --branch-sim=yes`). On these shared machines the
   same binary moves by 1.4-1.9x from one day to the next; a count does not. No
   figure in seconds goes into a document.
+* **The performance gate** (#2811): `nikaia run scripts/perfgate.nika`
+  counts the rows of `benches/perf.baseline` (compile rows at 2 %, runtime
+  rows beside their Rust entries at 1 %) on binaries built with one codegen
+  unit (`[profile.perf]`), and CI's suite runs it after the tests; `--bless`
+  writes new counts after a change that moves them on purpose.
 * **A Nikaia program runs under callgrind with `io-method = "blocking"`**
   (`NIKAIA_RUNTIME_CONFIG` naming a file that holds that line, Part III
   13.3b). valgrind 3.22 runs the executor's `io_uring_enter` wait as a call

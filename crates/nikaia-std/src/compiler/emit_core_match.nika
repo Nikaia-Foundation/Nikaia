@@ -1076,7 +1076,7 @@ impl EmitState {
                 }
                 inside = flow with { caught_named: own }
                 let named_member: String? = member.clone()
-                inside_scope = scope.clone() with { caught_member: named_member }
+                inside_scope = scope.clone() with { caught_member: named_member, caught_boxed: [] }
                 let ask = if m == 0 { "if" } else { " else if" }
                 out.push(f"{ask} nikaia_std::error::holds::<{bare}>(&*error) {{ let error = nikaia_std::error::opened::<{bare}>(error); ")
                 if own {
@@ -1100,14 +1100,29 @@ impl EmitState {
                     if pass == 1 && m < count {
                         out.push("#[allow(unreachable_patterns)] ")
                     }
-                    self.emit_core_pattern_written(world, walk, out, host, arm.pattern, false, node_key(arm.body), false, 0, depth + 2, inside, inside_scope)
+                    // **A catch-all's own binding holds the box too** (#1242),
+                    // and a `throw` of it passes the box on.
+                    let mut arm_scope = inside_scope.clone()
+                    if m == count {
+                        match arm.pattern {
+                            MatchPattern::Path(parts) => {
+                                if parts.len() == 1 {
+                                    let mut names = inside_scope.caught_boxed.clone()
+                                    names.push(emit_text(world, parts[0]))
+                                    arm_scope = inside_scope.clone() with { caught_boxed: names }
+                                }
+                            },
+                            else => {}
+                        }
+                    }
+                    self.emit_core_pattern_written(world, walk, out, host, arm.pattern, false, node_key(arm.body), false, 0, depth + 2, inside, arm_scope)
                     if arm.guard != null {
                         out.push(" if ")
                         let guard = arm.guard ?? return
-                        self.emit_expr(world, walk, out, host, guard, depth + 2, inside, inside_scope)
+                        self.emit_expr(world, walk, out, host, guard, depth + 2, inside, arm_scope)
                     }
                     out.push(" => ")
-                    self.emit_core_arm_body_led(world, walk, out, host, arm.pattern, 0, arm.body, depth + 2, inside, inside_scope, "")
+                    self.emit_core_arm_body_led(world, walk, out, host, arm.pattern, 0, arm.body, depth + 2, inside, arm_scope, "")
                     out.push(",\n")
                 }
             }

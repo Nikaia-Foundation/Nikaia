@@ -5,7 +5,7 @@
 // this was written - see `contracts::sync`.
 pub(crate) fn float_digits_stop(b: &[u8], at: i64) -> i64 {
     let mut stop = at;
-    while stop < b.len() as i64 && *nikaia_std::index::get(&b, nikaia_std::index::at(stop)) >= b'0' && *nikaia_std::index::get(&b, nikaia_std::index::at(stop)) <= b'9' { stop = unsafe { nikaia_std::proven::add::<i64>(stop, 1) }; }
+    while stop < b.len() as i64 && *unsafe { nikaia_std::proven::read(&b, (stop) as usize) } >= b'0' && *unsafe { nikaia_std::proven::read(&b, (stop) as usize) } <= b'9' { stop = unsafe { nikaia_std::proven::add::<i64>(stop, 1) }; }
     stop
 }
 
@@ -13,8 +13,8 @@ pub(crate) fn float_digits_stop(b: &[u8], at: i64) -> i64 {
 // this was written - see `contracts::sync`.
 pub(crate) fn is_float_word(b: &[u8], at: i64, word: &str) -> bool {
     let w = word.as_bytes();
-    if b.len() as i64 - at != w.len() as i64 { return false; }
-    for i in 0..w.len() as i64 { if *nikaia_std::index::get(&b, nikaia_std::index::at(unsafe { nikaia_std::proven::add::<i64>(at, i) })) | 32 != *unsafe { nikaia_std::proven::read(&w, (i) as usize) } { return false; } }
+    if unsafe { nikaia_std::proven::sub::<i64>(b.len() as i64, at) } != w.len() as i64 { return false; }
+    for i in 0..w.len() as i64 { if *unsafe { nikaia_std::proven::read(&b, (nikaia_std::proven::add::<i64>(at, i)) as usize) } | 32 != *unsafe { nikaia_std::proven::read(&w, (i) as usize) } { return false; } }
     true
 }
 
@@ -27,14 +27,14 @@ pub fn writes_float(text: &str) -> bool {
     if is_float_word(&b, at, "inf") || is_float_word(&b, at, "nan") { return true; }
     let mut stop = float_digits_stop(&b, at);
     if stop == at { return false; }
-    if stop < b.len() as i64 && *nikaia_std::index::get(&b, nikaia_std::index::at(stop)) == b'.' {
+    if stop < b.len() as i64 && *unsafe { nikaia_std::proven::read(&b, (stop) as usize) } == b'.' {
         let after = float_digits_stop(&b, unsafe { nikaia_std::proven::add::<i64>(stop, 1) });
         if after == unsafe { nikaia_std::proven::add::<i64>(stop, 1) } { return false; }
         stop = after;
     }
-    if stop < b.len() as i64 && (*nikaia_std::index::get(&b, nikaia_std::index::at(stop)) == b'e' || *unsafe { nikaia_std::proven::read(&b, (stop) as usize) } == b'E') {
+    if stop < b.len() as i64 && (*unsafe { nikaia_std::proven::read(&b, (stop) as usize) } == b'e' || *unsafe { nikaia_std::proven::read(&b, (stop) as usize) } == b'E') {
         let mut from = unsafe { nikaia_std::proven::add::<i64>(stop, 1) };
-        if from < b.len() as i64 && (*nikaia_std::index::get(&b, nikaia_std::index::at(from)) == b'-' || *unsafe { nikaia_std::proven::read(&b, (from) as usize) } == b'+') { from = unsafe { nikaia_std::proven::add::<i64>(from, 1) }; }
+        if from < b.len() as i64 && (*unsafe { nikaia_std::proven::read(&b, (from) as usize) } == b'-' || *unsafe { nikaia_std::proven::read(&b, (from) as usize) } == b'+') { from = unsafe { nikaia_std::proven::add::<i64>(from, 1) }; }
         stop = float_digits_stop(&b, from);
         if stop == from { return false; }
     }
