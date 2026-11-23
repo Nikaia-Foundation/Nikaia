@@ -1,0 +1,10 @@
+bounds in tests/a_list_made_with_room_ahead_starts_empty_for_the_bounds.nika: 9 indexes, 6 proved; 0 operations, 0 proved
+    12  out[at]      proved
+    12  a[at]        proved
+    23  out[at]      proved
+    23  a[at]        proved
+    34  out[at]      proved
+    34  a[at]        proved
+    41  plain(a)[2]  checked: a call's result, which the walk knows nothing of (#382)
+    41  made(a)[1]   checked: a call's result, which the walk knows nothing of (#382)
+    41  roomy(a)[0]  checked: a call's result, which the walk knows nothing of (#382)
