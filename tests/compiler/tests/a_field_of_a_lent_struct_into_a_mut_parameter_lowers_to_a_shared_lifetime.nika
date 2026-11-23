@@ -1,0 +1,32 @@
+// #2425's probe (ADR-views-v4 D32): a text field of a lent struct parameter
+// pushed into a `mut` parameter makes the struct parameter the source, and the
+// lowering gives the source and the `mut` parameter's element type one
+// lifetime, with no copy of the text: `walk` lowers to
+// `fn walk<'a>(n: &'a N, out: &mut Vec<E<'a>>)`, the caller's loop over a
+// lent list hands its elements on, and the program prints `abc def`.
+use std::env
+use std::fs
+use std::process
+
+fn toolchain() -> String throws {
+    let exe = env::current_exe()?.display() ?? ""
+    if exe.len() > 0 { return exe }
+    return "target/fast/nikaia"
+}
+
+fn main() throws {
+    let tmp = fs::scratch()
+    let source = "struct N {\n\traw: String,\n}\nstruct E {\n\tv: String,\n}\nfn walk(n: N, mut out: Vec[E]) {\n\tout.push(E { v: n.raw })\n}\nfn events(ns: Vec[N]) -> Vec[E] {\n\tlet mut out: Vec[E] = []\n\tfor n in ns {\n\t\twalk(n, out)\n\t}\n\treturn out\n}\nfn make() -> String {\n\tlet mut g = String()\n\tg.push_str(\"abc def\")\n\treturn g\n}\nfn main() throws {\n\tlet ns = [N { raw: make() }]\n\tlet es = events(ns)\n\tprintln(es[0].v)\n}\n"
+    fs::write("p.nika", tmp, source)
+    let lowered = process::run(toolchain(), ["lower", "p.nika", "-o", "p.rs"]; dir: tmp.path().to_text())
+    if lowered.stdout.contains("Lowered p.nika") == false { println(lowered.stderr) }
+    let rust = fs::read_to_string("p.rs", tmp)
+    for line in rust.lines() {
+        if line.starts_with("fn walk") {
+            println(line.trim())
+        }
+    }
+    println(f"a copy of the text: {rust.contains("clone()") || rust.contains("to_owned()") || rust.contains("to_string()")}")
+    let ran = process::run(toolchain(), ["run", "p.nika"]; dir: tmp.path().to_text())
+    println(ran.stdout.trim())
+}
