@@ -841,3 +841,22 @@ repository's own programs before anyone else's.
   `async(handle)` (D11) and `par_iter`.
 
 The commit of #991 that removes a form retires its code with it.
+
+### D40 - A handle carries its task's error set, and holds the failure until it is joined, detached or dropped (supervisor, 2026-11-23, by D22 and D35; #989).
+
+D22 step 2 says a handle's failure is held and arrives at the `join`, where an
+enclosing `catch` takes it; step 3 runs the fallback inside the join, or in the
+task when the handle is detached or dropped unjoined. The join can sit in
+another function than the start, so the checker can only know what it throws if
+the set travels with the handle: `TaskHandle[T]` and `task::ChildHandle[T]`
+carry the task's error set in their type, as a function type carries its
+`throws` set and a failing sequence carries its set (ADR-error-sets-1 D1). A
+binding, a parameter and a return of a handle keep the set. A fallback narrows
+it to what the fallback throws. The start site counts nothing of the task's
+set; the `join` throws the handle's set, plus `task::Crashed` only where the
+task can panic (D35) and `task::TimedOut` where it is given `within:` (D17).
+The runtime holds the failure in the handle: the join hands it to the fallback
+if there is one, else to the join's caller; a `detach()` or a drop of an
+unjoined handle runs the fallback in the task. A `task::OverBudget` (D19) is a
+failure of the task like any other and reaches a handle's fallback the same
+way.
