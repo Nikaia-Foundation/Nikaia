@@ -967,9 +967,10 @@ impl ProverLeaving {
                 match &item.node {
                     Item::Fn { name, receiver, generics, args, body, .. } => {
                         let name = *name;
+                        if receiver.is_some() || !generics.is_empty() || !prover_ends_in_leaving_call(&leaving, body, words) { continue; }
                         let symbol = match name { Some(__nikaia_value) => __nikaia_value, None => continue };
                         let text = nikaia_std::block::Text::from(words.resolve(symbol).to_string());
-                        if receiver.is_some() || !generics.is_empty() || leaving.exit_names.contains(&text) || imported.contains(&text) { continue; }
+                        if leaving.exit_names.contains(&text) || imported.contains(&text) { continue; }
                         if prover_never_back(&leaving.within(args, body, words), body, words) {
                             leaving.exit_names.insert(text);
                             found = true;
@@ -1007,6 +1008,19 @@ impl ProverLeaving {
             }
         }
         here
+    }
+}
+
+pub(crate) fn prover_ends_in_leaving_call(leaving: &ProverLeaving, body: &Block, words: &winnow_grammar::InternerContext) -> bool {
+    let last = match body.stmts.last() { Some(__nikaia_value) => __nikaia_value, None => return false };
+    match &last.node {
+        Stmt::Expr(inner) => {
+            match inner {
+                Expr::Call { func, .. } => { let func = nikaia_std::boxed::open(func); leaving.leaves(func, &collections::BTreeSet::new(), words) },
+                _ => false,
+            }
+        },
+        _ => false,
     }
 }
 

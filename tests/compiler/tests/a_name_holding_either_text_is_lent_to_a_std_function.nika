@@ -1,0 +1,19 @@
+// A name bound to a `match` whose arms are a view and text of its own holds
+// `EitherText` (ADR-282 D14); handed to a `std` function that reads a `&str`,
+// it is lent, `&rel`, as it is to a function of the program (#2694: scripts/
+// ledgers.nika handed such a name to `path::is_below`).
+
+use std::path
+use std::process
+
+fn main() throws {
+	let name = "x/y"
+	let rel = match name.strip_prefix("x/") {
+		null => name.clone(),
+		cut => cut,
+	}
+	if !path::is_below(rel) || !process::is_operand(rel) {
+		process::exit(2)
+	}
+	println(rel)
+}

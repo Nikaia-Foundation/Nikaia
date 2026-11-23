@@ -231,7 +231,7 @@ impl CheckState {
         }
         if !fits { return false; }
         if already_a_view {
-            if check_reference_a_library_text_view(world, given_expr, found) { self.facts.lent_args.insert(id_of(given_expr) as i64); }
+            if check_reference_a_library_text_view(world, given_expr, found) || self.an_either_name(world, given_expr) { self.facts.lent_args.insert(id_of(given_expr) as i64); }
             return true;
         }
         if wrote_a_reference {
@@ -247,7 +247,7 @@ impl CheckState {
         let want_nullable_view = check_reference_nullable_view(want);
         let a_lent_nullable = found_nullable && want_nullable_view && self.a_name_that_is_lent(world, given_expr);
         if found.is_a_view() && !a_lent_nullable {
-            if check_reference_a_library_text_view(world, given_expr, found) {
+            if check_reference_a_library_text_view(world, given_expr, found) || self.an_either_name(world, given_expr) {
                 self.facts.lent_args.insert(id_of(given_expr) as i64);
                 return true;
             }

@@ -1330,9 +1330,14 @@ impl ProverLeaving {
             for item in program.items {
                 match item.node {
                     Item::Fn { name, receiver, generics, args, body, .. } => {
+                        // The cheap tests first: `of` runs at every call, and
+                        // `within` reads the whole body.
+                        if receiver != null || !generics.is_empty() || !prover_ends_in_leaving_call(leaving, body, words) {
+                            continue
+                        }
                         let symbol = name ?? continue
                         let text = words.resolve(symbol).clone()
-                        if receiver != null || !generics.is_empty() || leaving.exit_names.contains(text) || imported.contains(text) {
+                        if leaving.exit_names.contains(text) || imported.contains(text) {
                             continue
                         }
                         if prover_never_back(leaving.within(args, body, words), body, words) {
@@ -1396,6 +1401,23 @@ impl ProverLeaving {
             }
         }
         return here
+    }
+}
+
+/// Whether the last statement of `body` is a call `leaving` says never comes
+/// back where no name is hidden: the cheap test before
+/// `ProverLeaving::within` reads the body (hiding only makes it false), since
+/// `of` runs at every call of a program.
+fn prover_ends_in_leaving_call(leaving: ref ProverLeaving, body: ref Block, words: ref winnow_grammar::InternerContext) -> bool {
+    let last = body.stmts.last() ?? return false
+    return match last.node {
+        Stmt::Expr(inner) => {
+            match inner {
+                Expr::Call { func, .. } => leaving.leaves(func, collections::BTreeSet(), words),
+                else => false,
+            }
+        },
+        else => false,
     }
 }
 
