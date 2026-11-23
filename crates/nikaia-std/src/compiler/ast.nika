@@ -819,6 +819,13 @@ pub enum Expr {
         id: node_id::NodeId,
     },
 
+    /// **A type written in a call's brackets that no expression spells**
+    /// (ADR-330 D9, #1079): `id[i64?](null)`, `G::entry[(i64, bool)](input)`.
+    /// The parser makes it only where the brackets do not read as
+    /// expressions, so `f[T](…)` and `list[i](…)` keep their `Index` of a
+    /// name; this is a leaf, read as the type by whoever reads the brackets.
+    TypeArgument(Type, node_id::NodeId),
+
     // `self.sum as f64`
     Cast {
         expr: Expr,
@@ -903,6 +910,7 @@ pub fn id_of(expr: ref Expr) -> u32 sync {
         Expr::LitFloat(_, id) => id.get(),
         Expr::Unsafe(_, id) => id.get(),
         Expr::LitNull(id) => id.get(),
+        Expr::TypeArgument(_, id) => id.get(),
         Expr::Break(id) => id.get(),
         Expr::Continue(id) => id.get(),
     }

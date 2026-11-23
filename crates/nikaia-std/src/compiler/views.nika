@@ -1732,6 +1732,7 @@ fn mentions(unit: ref Unit, asked: ref Asked, here: ref Here, node: ref Expr) ->
         Expr::LitBool(_, _) => false,
         // `null` holds nothing, so it borrows nothing.
         Expr::LitNull(_) => false,
+        Expr::TypeArgument(_, _) => false,
     }
 }
 
@@ -1963,6 +1964,7 @@ fn descend(unit: ref Unit, asked: ref Asked, node: ref Expr, span: ref Span, own
         Expr::LitChar(_, _) => {}
         Expr::LitBool(_, _) => {}
         Expr::LitNull(_) => {}
+        Expr::TypeArgument(_, _) => {}
     }
 }
 
@@ -2470,6 +2472,7 @@ fn rsrc_eval_node(unit: ref Unit, asked: ref Asked, here: ref Here, known: ref c
         Expr::LitChar(_, _) => rsrc_none(),
         Expr::LitBool(_, _) => rsrc_none(),
         Expr::LitNull(_) => rsrc_none(),
+        Expr::TypeArgument(_, _) => rsrc_none(),
     }
 }
 

@@ -1192,6 +1192,7 @@ pub(crate) fn mentions(unit: &Unit, asked: &Asked<'_, '_, '_>, here: &Here, node
         Expr::LitChar(_, _) => false,
         Expr::LitBool(_, _) => false,
         Expr::LitNull(_) => false,
+        Expr::TypeArgument(_, _) => false,
     }
 }
 
@@ -1373,6 +1374,7 @@ pub(crate) fn descend(unit: &Unit, asked: &Asked<'_, '_, '_>, node: &Expr, span:
         Expr::LitChar(_, _) => { },
         Expr::LitBool(_, _) => { },
         Expr::LitNull(_) => { },
+        Expr::TypeArgument(_, _) => { },
     }
 }
 
@@ -1711,6 +1713,7 @@ pub(crate) fn rsrc_eval_node(unit: &Unit, asked: &Asked<'_, '_, '_>, here: &Here
         Expr::LitChar(_, _) => rsrc_none(),
         Expr::LitBool(_, _) => rsrc_none(),
         Expr::LitNull(_) => rsrc_none(),
+        Expr::TypeArgument(_, _) => rsrc_none(),
     }
 }
 

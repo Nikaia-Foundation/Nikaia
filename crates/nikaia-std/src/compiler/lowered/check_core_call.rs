@@ -866,6 +866,16 @@ pub(crate) fn check_core_call_named_call<H: CheckHost>(state: &mut CheckState, w
         state.facts.copied_results.insert(id_of(func) as i64);
         return unviewed_type(&made);
     }
+    match made {
+        Ty::Nullable(ref held) => {
+            let held = nikaia_std::boxed::open(held);
+            if check_core_call_hands_back_a_variable(&contract) && copies_as_a_view(&view_of_type(held)) {
+                state.facts.copied_results.insert(id_of(func) as i64);
+                return Ty::Nullable(nikaia_std::block::Boxed::new(unviewed_type(held)));
+            }
+        },
+        _ => { },
+    }
     if check_core_call_hands_back_a_variable(&contract) && state.facts.viewed_text_calls.contains(&(span.start as i64)) { state.facts.copied_results.insert(id_of(func) as i64); }
     made
 }

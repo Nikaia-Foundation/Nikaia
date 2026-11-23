@@ -399,7 +399,7 @@ impl EmitState {
         match func {
             Expr::Index { base, index, .. } => {
                 let base = nikaia_std::boxed::open(base); let index = nikaia_std::boxed::open(index);
-                let types: String = nikaia_std::index::or(self.emit_call_path_types(world, base, index), || "".into());
+                let types: String = nikaia_std::index::or(self.emit_call_path_types(world, walk, host, base, index), || "".into());
                 if types != "" {
                     walk.path_types = types;
                     self.emit_core_call_inner(world, walk, out, host, base, args, config, unchecked, depth, flow, scope)?;
@@ -1645,8 +1645,8 @@ pub(crate) fn emit_tuple_part_copy(i: i64, word: &str) -> String {
 }
 
 pub(crate) fn emit_tuple_part_copies(parts: &[String]) -> String {
-    let copies: Vec<String> = parts.iter().enumerate().map(|(at, item)| (at as i64, item)).map(|__nikaia_tuple126250| {
-        let (i, word) = __nikaia_tuple126250;
+    let copies: Vec<String> = parts.iter().enumerate().map(|(at, item)| (at as i64, item)).map(|__nikaia_tuple126262| {
+        let (i, word) = __nikaia_tuple126262;
         emit_tuple_part_copy(i, word)
     }).collect::<Vec<_>>();
     if copies.len() == 1 { return format!("({},)", *unsafe { nikaia_std::proven::read(&copies, (0) as usize) }); }
