@@ -1297,8 +1297,21 @@ impl EmitState {
             boxed = true
             named = false
         }
+        // **A call of this program's that fails in the box hands the box on**
+        // (#1242): an arm names a type it holds, as over a `join`'s.
+        if caught && sum == null && !named {
+            let callee: String = call_callee_name(world.words, world.aliases, guarded_expr) ?? ""
+            if self.own_contracts.functions.contains_key(callee) && self.error_channel(world, callee, false, "", "", false) == "std::boxed::Box<dyn std::error::Error>" {
+                sum = ""
+                boxed = true
+            }
+        }
         let inside = flow.handling(named)
-        let inside_scope = scope.clone() with { caught_sum: sum }
+        let mut boxed_names: Vec[String] = []
+        if boxed {
+            boxed_names.push("error")
+        }
+        let inside_scope = scope.clone() with { caught_sum: sum, caught_boxed: boxed_names }
         // **The envelope is opened as the handler's first statement** (ADR-292
         // D20), and not as a block wrapped around it.
         let mut opening: String? = null
@@ -1530,6 +1543,20 @@ impl EmitState {
             out.push(f"break '__nikaia_caught_{flow.breaks_to} Err(nikaia_std::error::raise(")
             self.emit_expr(world, walk, out, host, inner, depth, flow, scope)
             out.push(f", &{rust_string(scope.origin)}))")
+            return
+        }
+        // **The box a handler holds is passed on as it is** (ADR-280 D11,
+        // #1242): it already carries the site it was raised at, and a box is
+        // no `Error` that `raise` could put in another.
+        let mut thrown_name: String = ""
+        match inner {
+            Expr::Variable(name, _) => {
+                thrown_name = emit_text(world, name)
+            },
+            else => {}
+        }
+        if thrown_name != "" && scope.caught_boxed.contains(thrown_name) {
+            out.push(f"return Err({emit_local_name(self.facts.comptime_names, thrown_name)}.into())")
             return
         }
         let passing_on = flow.caught_named && is_the_binding && scope.caught_sum == null

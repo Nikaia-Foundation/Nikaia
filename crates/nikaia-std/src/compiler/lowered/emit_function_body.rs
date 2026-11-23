@@ -71,7 +71,7 @@ impl EmitState {
         }
         walk.nonnegative.insert(nikaia_std::block::Text::from(key.to_string()), locals);
         let flow = EmitFlow { can_throw: throws_, ..EmitFlow::plain() };
-        let scope = EmitScope { origin: nikaia_std::block::Text::from(nikaia_std::index::or(key.rsplit("::").next(), || "").to_string()), function: nikaia_std::block::Text::from(key.to_string()), channel: nikaia_std::block::Text::from(channel.to_string()), caught_sum: None, caught_member: None, bound: String::from(""), changed: vec![], awaited: awaited.copy_owned(), tasks_channel: String::from(""), tasks_function: String::from("") };
+        let scope = EmitScope { origin: nikaia_std::block::Text::from(nikaia_std::index::or(key.rsplit("::").next(), || "").to_string()), function: nikaia_std::block::Text::from(key.to_string()), channel: nikaia_std::block::Text::from(channel.to_string()), caught_sum: None, caught_member: None, caught_boxed: vec![], bound: String::from(""), changed: vec![], awaited: awaited.copy_owned(), tasks_channel: String::from(""), tasks_function: String::from("") };
         let tail = if returns_value { EmitTail::Return } else { EmitTail::Statement };
         #[allow(unused_mut)] let mut first: Vec<String> = walk.either_prelude.copy_owned();
         walk.either_prelude = vec![];
