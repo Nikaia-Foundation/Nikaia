@@ -224,8 +224,9 @@ its window:
   refused as above.
 * **A failure:** where `a` fails, its error is received by the first mention of
   `a` in written order, as a callee's error is its caller's (D22); every other
-  task that waits for `a` cannot go on and is cancelled. One error, one
-  receiver (ADR-346 D1).
+  task that waits for `a` cannot go on and is cancelled. `a`'s error has one
+  receiver; a later read of a cancelled waiter throws an error of its own that
+  names `a`'s error as its cause (D41).
 
 ### D9 - `async e` as a statement starts a task without a value, waited for at its group's end; `async { … }` is the group.
 
@@ -690,7 +691,9 @@ starts no task (D9); `NK2112` `limit:` on a form that starts one task (D15);
 `NK2115` `async` before a function's declaration (D5); `NK2118` retired (D22); `NK2119`
 (warning) a `par_iter` lambda starts to pause (D32); `NK2120` `async` inside a
 loop's body (D30); `NK2121` a deferred handle not started, or started twice, on
-some path (D12); `NK2122` a child handle that leaves its group (D11). `NK2109`
+some path (D12); `NK2122` a child handle that leaves its group (D11). `NK2123`, `NK2124` and `NK2125`
+(warnings) a `spawn`, an `overlap` block and a `task::scope` call, until #991
+removes them (D39). `NK2109`
 is asked of a `join(within:)` as D17 says. `NK2113`, `NK2114`, `NK2116` and
 `NK2117` are retired and not reused.
 
@@ -812,3 +815,64 @@ group's end) and takes a place again, as a queued task does (D37), before it
 goes on. "At most `n` in flight" counts the tasks that run, not the ones
 waiting for their children, and no nesting of forms can block on its own
 places.
+
+### D39 - The forms async-5 replaces are warned with an edit before they go (owner, 2026-11-23, #990).
+
+Before the move removes `spawn`, `overlap` and `task::scope` (#991), the
+checker warns at each use, and the warning carries the edit that rewrites it
+where the edit keeps the meaning; `nikaia fix` makes those edits (`--only` picks
+one code). A use the edit cannot rewrite with the same meaning is warned
+without an edit: the message names the form that replaces it, and the writer
+rewrites it. Users migrate at their own pace and learn the new form from the
+edit; the tree is migrated the same way (#990), so the tool is tested on the
+repository's own programs before anyone else's.
+
+* `NK2123` `spawn fn { … }`, or `std::task::spawn(f)`: the edit writes
+  `async(detached) fn { … }` (D13). Always mechanical.
+* `NK2124` an `overlap` block: where its value is bound, `let (x, y) =
+  overlap { a()  b() }`, the edit writes `let (x, y) = (async a(), async b())`
+  (D6); where it is a statement whose branches give nothing, `async { async a()
+  async b() }` (D9). A branch that is more than one expression, or a block whose
+  branches meet a binding, gets no edit.
+* `NK2125` a `task::scope` call: where its body is one `for` over a list
+  whose body starts one task per element and joins none, the edit writes
+  `xs.par_iter().for_each fn(x) { … }` (D27), unless the task's body prints or
+  writes another shared resource (`NK2104`); any other scope (handles joined,
+  tasks started outside the loop) gets no edit, and the message names
+  `async(handle)` (D11) and `par_iter`.
+
+The commit of #991 that removes a form retires its code with it.
+
+### D40 - A handle carries its task's error set, and holds the failure until it is joined, detached or dropped (supervisor, 2026-11-23, by D22 and D35; #989).
+
+D22 step 2 says a handle's failure is held and arrives at the `join`, where an
+enclosing `catch` takes it; step 3 runs the fallback inside the join, or in the
+task when the handle is detached or dropped unjoined. The join can sit in
+another function than the start, so the checker can only know what it throws if
+the set travels with the handle: `TaskHandle[T]` and `task::ChildHandle[T]`
+carry the task's error set in their type, as a function type carries its
+`throws` set and a failing sequence carries its set (ADR-error-sets-1 D1). A
+binding, a parameter and a return of a handle keep the set. A fallback narrows
+it to what the fallback throws. The start site counts nothing of the task's
+set; the `join` throws the handle's set, plus `task::Crashed` only where the
+task can panic (D35) and `task::TimedOut` where it is given `within:` (D17).
+The runtime holds the failure in the handle: the join hands it to the fallback
+if there is one, else to the join's caller; a `detach()` or a drop of an
+unjoined handle runs the fallback in the task. A `task::OverBudget` (D19) is a
+failure of the task like any other and reaches a handle's fallback the same
+way.
+
+### D41 - A read of a waiter cancelled because a task before it failed throws `task::Abandoned`, which names that failure as its cause (owner, 2026-11-23; #2787).
+
+In a diamond (D8), where `a` fails, the first mention of `a` in written order
+receives `a`'s error (D22), and every other task that waits for `a` is
+cancelled. A later read of such a waiter `c` on the main line throws
+`task::Abandoned`: its message says that `c` did not run to its end because
+`a` failed, and names `a`'s error, which it carries as its cause. It is not
+`task::Crashed`: nothing panicked. It is not `a`'s error again: that error has
+one receiver, so a handler for it never runs twice and nobody compensates
+twice for one failure. ADR-346 D1 asks that every error of a task has a
+receiver and none is dropped without a trace; `a`'s error is received once, and
+`c`'s read receives its own error, which points to it. A read of `c` therefore
+throws `task::Abandoned` where `c` waits for a task that can fail, and the
+checker counts it at that read like any thrown error.
