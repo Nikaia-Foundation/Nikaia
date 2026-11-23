@@ -1,0 +1,21 @@
+// A `with` over a copy of a borrowed struct meets the struct's fields, as
+// one over the struct does: a list of literals moved into a field of text
+// of its own is that text (#1242).
+struct S { names: Vec[String] }
+
+fn derive(s: ref S) -> S {
+    let mut names: Vec[String] = []
+    names.push("error")
+    return s.clone() with { names: names }
+}
+
+fn listed(s: ref S) -> S {
+    let names: Vec[String] = ["a", "b"]
+    let t = s.clone()
+    return t with { names: names }
+}
+
+fn main() throws {
+    let s = S { names: [] }
+    println(f"{derive(s).names.len()} {listed(s).names.len()}")
+}
