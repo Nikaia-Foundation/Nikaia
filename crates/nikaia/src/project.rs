@@ -441,6 +441,11 @@ pub struct Lowered {
     pub node: Option<String>,
     /// Its Java source, which `nikaia bind java` writes (ADR-284 D34).
     pub java: Option<String>,
+    /// **The run-time checks of raw paths the emitter wrote**
+    /// ([ADR-raw-sinks-1](../../docs/specification/adr/adr-raw-sinks-1.md)
+    /// D7), by unit, so that [`Project::report`] lowers the program as the
+    /// build did and places the backend's messages on the right line.
+    pub raw_path_checks: BTreeMap<usize, BTreeMap<i64, i64>>,
 }
 
 /// **The packages a project depends on by path**
@@ -986,7 +991,7 @@ pub fn lower_reading(
     allowlist: Option<&Path>,
 ) -> Result<Lowered> {
     let open = modules::Open::new();
-    let (out, proofs, exported, pending, inputs) = with_lower_host(
+    let (out, proofs, exported, pending, inputs, raw_path_checks) = with_lower_host(
         input,
         settings,
         no_cache,
@@ -1003,6 +1008,7 @@ pub fn lower_reading(
                     host.exported.take(),
                     host.pending.take(),
                     host.inputs(),
+                    host.raw_path_checks.take(),
                 ))
             }
             Err(error) => Err(host.failed.take().unwrap_or_else(|| anyhow!("{error}"))),
@@ -1059,6 +1065,7 @@ pub fn lower_reading(
         python,
         node,
         java,
+        raw_path_checks,
     })
 }
 
@@ -2278,7 +2285,8 @@ impl project_lower::ProjectLowerHost for LowerHost<'_> {
             .descriptions
             .clone();
         program.checked_facts = std::mem::take(&mut *self.checked_facts.borrow_mut());
-        program.raw_path_checks = std::mem::take(&mut *self.raw_path_checks.borrow_mut());
+        // **Kept, not taken**: [`Lowered`] hands them to `report`.
+        program.raw_path_checks = self.raw_path_checks.borrow().clone();
         let book = self
             .book
             .borrow_mut()
@@ -3495,7 +3503,12 @@ impl Project {
     /// The map is rebuilt rather than carried: the lowering is deterministic, so
     /// a second one gives the same map (ADR-300), and this way the cost is paid
     /// only by a build the backend had something to say about.
-    fn report(&self, messages: &str, allowlist: Option<&Path>) -> Result<()> {
+    fn report(
+        &self,
+        messages: &str,
+        allowlist: Option<&Path>,
+        raw_path_checks: BTreeMap<usize, BTreeMap<i64, i64>>,
+    ) -> Result<()> {
         if !project_drive::project_drive_backend_said(messages) {
             return Ok(());
         }
@@ -3521,6 +3534,9 @@ impl Project {
             false => project_members::project_members_no_foreign(),
         };
         program.described = foreign.descriptions.clone();
+        // …and the same run-time checks of raw paths (ADR-raw-sinks-1), or
+        // every line after the first check is placed too far down.
+        program.raw_path_checks = raw_path_checks;
         let lowered = program.emit_reading(self.settings.build, &reads)?;
         let sources: Vec<&str> = program.sources();
         let entry = canonical(&self.entry());
@@ -4893,7 +4909,14 @@ impl project_drive::ProjectDriveHost for DriveHost<'_> {
     }
 
     fn report(&self, messages: &str) -> HostResult<()> {
-        self.held(self.project.report(messages, self.allowlist))
+        // The entry is the first member (`members_of`).
+        let checks = self
+            .kept
+            .borrow()
+            .get(&0)
+            .map(|lowered| lowered.raw_path_checks.clone())
+            .unwrap_or_default();
+        self.held(self.project.report(messages, self.allowlist, checks))
     }
 
     fn package_name(&self) -> Option<String> {
