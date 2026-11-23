@@ -2498,7 +2498,8 @@ fn drive_waiter_state(sha: String) -> String throws {
 }
 
 // `--ci-wait SHA LOG EXIT`: follows the CI run of the push of SHA to a `ci/`
-// branch, polling `gh api` every 30 s. Green writes `Gate: green` to LOG; red
+// branch, polling `gh api` every 30 s. Green writes the perf job's `PERF`
+// lines (#2811, drive_ci_perf) and `Gate: green` to LOG; red
 // (failure, timed out, or cancelled three times: a cancel is started again)
 // writes `Gate: red <job names>` and the last
 // 200 lines of each failed job's log; the first failed or timed-out job of a
@@ -2550,6 +2551,46 @@ fn drive_ci_red(
 	return f"CI run {url}: {conclusion}\n{body}\nGate: red {gate}\n"
 }
 
+// The performance gate's lines of CI run ID (#2811, `scripts/perfgate.nika`):
+// those of its passed perf job's log, each with a line break after it; ""
+// where the run has none (an arm64 leg, a documentation change). A red perf job
+// is a failed job, whose log tail drive_ci_red writes.
+fn drive_ci_perf(repo: String, id: String) -> String throws {
+	let jobs = process::run(
+		"gh",
+		[
+			"api",
+			f"repos/{repo}/actions/runs/{id}/jobs?per_page=100",
+			"--jq",
+			".jobs[] | select((.name | endswith(\"perf\")) and .conclusion == \"success\") | .id",
+		],
+	)
+	let mut out: String = ""
+	for j in jobs.stdout.trim().split("\n") {
+		let jid = j.trim()
+		if jid == "" { continue }
+		let lines = drive_perf_lines(process::run("gh", ["api", f"repos/{repo}/actions/jobs/{jid}/logs"]).stdout)
+		if lines != "" { out = out + lines + "\n" }
+	}
+	return out
+}
+
+// The `PERF`, `RATIO` and `Perf:` lines of a job's log, without the time
+// GitHub writes before each line (`--perf-lines` prints them for the log on
+// standard input, for tests).
+fn drive_perf_lines(log: String) -> String throws {
+	let mut out: Vec[String] = []
+	for raw in log.split("\n") {
+		let mut l = raw.trim_end()
+		if !(l.starts_with("PERF ") || l.starts_with("RATIO ") || l.starts_with("Perf: ")) {
+			let (_, after) = l.split_once(" ") ?? continue
+			l = after
+		}
+		if l.starts_with("PERF ") || l.starts_with("RATIO ") || l.starts_with("Perf: ") { out.push(l) }
+	}
+	return out.join("\n")
+}
+
 // One CI verdict for SHA: the log text and whether it is green.
 fn drive_ci_poll(sha: String) -> (String, bool) throws {
 	let repo = drive_repo()
@@ -2582,7 +2623,8 @@ fn drive_ci_poll(sha: String) -> (String, bool) throws {
 				continue
 			}
 			if words[2] == "success" {
-				return (f"CI run {url}: success\nGate: green\n", true)
+				let perf = drive_ci_perf(repo, id)
+				return (f"CI run {url}: success\n{perf}Gate: green\n", true)
 			} else {
 				let all = ".conclusion == \"failure\" or .conclusion == \"cancelled\" or .conclusion == \"timed_out\""
 				return (drive_ci_red(repo, id, url, words[2], all), false)
@@ -6050,6 +6092,10 @@ fn main() throws {
 		}
 		let failed = drive_local_tests(paths)
 		if failed == "" { println("LOCAL green") } else { println("LOCAL red\n" + failed.trim()) }
+		return
+	}
+	if args.len() == 2 && args[1] == "--perf-lines" {
+		println(drive_perf_lines(drive_stdin()))
 		return
 	}
 	if args.len() == 2 && args[1] == "--named-filters" {

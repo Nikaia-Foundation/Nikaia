@@ -1,0 +1,10 @@
+== job log
+PERF check.gate 812345678 812000000 +0.04
+PERF n-body.nikaia 99 100 -1.00
+RATIO n-body 1.21x
+Perf: green
+== bare lines
+PERF a 1 1 +0.00
+Perf: green
+== no perf job
+

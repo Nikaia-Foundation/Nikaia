@@ -1,0 +1,39 @@
+// scripts/drive.nika --perf-lines (a job log on standard input, #2811): the
+// performance gate's `PERF`, `RATIO` and `Perf:` lines of a green CI run's
+// perf job, which the driver writes into the suite log, the time GitHub puts
+// before each line cut off and every other line left out.
+use std::env
+use std::process
+
+fn toolchain() -> String throws {
+	let exe = env::current_exe()?.display() ?? ""
+	if exe.len() > 0 { return exe }
+	return "target/fast/nikaia"
+}
+
+fn root() -> String throws {
+	return env::current_main()?.parent()?.parent()?.parent()?.parent()?.display() ?? "../.."
+}
+
+fn case(nikaia: String, repo: String, name: String, log: String) throws {
+	let out = process::run(
+		nikaia,
+		["run", "scripts/drive.nika", "--", "--perf-lines"]; dir: repo,
+		stdin: process::Input::Text(log),
+	)
+	println(f"== {name}")
+	println(out.stdout.trim())
+}
+
+fn main() throws {
+	let repo = root()
+	let nikaia = toolchain()
+	case(
+		nikaia.clone(),
+		repo.clone(),
+		"job log",
+		"2026-11-23T07:00:00.1Z ##[group]Run perfgate\n2026-11-23T07:00:01.2Z PERF check.gate 812345678 812000000 +0.04\n2026-11-23T07:00:02.3Z PERF n-body.nikaia 99 100 -1.00\n2026-11-23T07:00:02.4Z RATIO n-body 1.21x\n2026-11-23T07:00:02.5Z warning: PERF in prose\n2026-11-23T07:00:03.6Z Perf: green\n",
+	)
+	case(nikaia.clone(), repo.clone(), "bare lines", "PERF a 1 1 +0.00\nPerf: green\n")
+	case(nikaia.clone(), repo.clone(), "no perf job", "2026-11-23T07:00:00.1Z cargo test\n")
+}

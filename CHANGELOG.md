@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1559] — 2026-11-23
+
+**perf gate in CI: suite.yml's perf job runs perfgate.nika after the tests, the driver writes its PERF lines into the suite log (#2811)**
+- The performance gate runs in CI's suite after the tests: every row of `benches/perf.baseline` counted under callgrind on one-codegen-unit binaries, a row past its tolerance (2 % compile, 1 % runtime) or with a changed output turns the suite red, and the driver's suite log carries the `PERF` lines.
+
 ## [0.0.1558] — 2026-11-23
 
 **benches/game: every figure re-counted on the audit-clean lock (Nikaia 0.0.1557, k-nucleotide against Rust #3, json now 1.20x / 0.89x / 0.83x serde_json), the commit of the lock named (#2806)**
