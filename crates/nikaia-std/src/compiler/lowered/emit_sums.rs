@@ -164,7 +164,9 @@ impl EmitState {
             }
             let mut over_budget = false;
             for member in members.iter() { if member == "task::OverBudget" { over_budget = true; } }
-            if params == "" && (crashed || over_budget) {
+            let mut a_lambdas = false;
+            for (_, thrown) in self.facts.failing_through_lambdas.iter() { if thrown == members { a_lambdas = true; } }
+            if params == "" && (crashed || over_budget || a_lambdas) {
                 for member in members.iter() {
                     let variant = sum_variant(member);
                     let held = self.sum_member_held(world, member, &params);
