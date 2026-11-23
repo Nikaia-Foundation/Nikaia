@@ -1426,7 +1426,7 @@ impl SvTh for SvSimplex {
         }
         if self.splits >= limit.cases { return SvChecked::Unknown(LgUnknown::TooManyCases); }
         self.splits = unsafe { nikaia_std::proven::add::<i64>(self.splits, 1) };
-        let col = *nikaia_std::index::get(&self.var_col, nikaia_std::index::at(v));
+        let col = *unsafe { nikaia_std::proven::read(&self.var_col, (v) as usize) };
         let k = if self.big_on { match self.big_split_point(v) { Some(__nikaia_value) => __nikaia_value, None => return self.big_unknown() } } else { match self.split_point(v) { Some(__nikaia_value) => __nikaia_value, None => return self.overflow() } };
         let le = SvRow { cols: vec![match u32::try_from(col).ok() { Some(__nikaia_value) => __nikaia_value, None => return self.overflow() }], ks: vec![1], constant: match k.checked_neg() { Some(__nikaia_value) => __nikaia_value, None => return self.overflow() } };
         let ge = SvRow { cols: vec![match u32::try_from(col).ok() { Some(__nikaia_value) => __nikaia_value, None => return self.overflow() }], ks: vec![-1], constant: match k.checked_add(1) { Some(__nikaia_value) => __nikaia_value, None => return self.overflow() } };

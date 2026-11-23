@@ -11626,7 +11626,25 @@ fn bounding_by_frame(
 		}
 	}
 	let changed = frame_at_call(frame, path_of(on, words), frame_handed(args, words))
+	// **A list the callee only grows** (#2783): what held of its length
+	// before the call holds of a copy of it, which the length is at least
+	// after, so `v < self.cols.len()` stands past a method that only pushes
+	// to `cols`.
+	let mut grown: Vec[(String, i64)] = []
+	for list in changed.lengths {
+		if changed.falls.contains(list) || changed.values.iter().any(fn(v) { path_within(list, v) }) {
+			continue
+		}
+		let length = length_of(list)
+		if facts.facts.iter().any(fn(f) { walk.arena.mentions(f, length) }) {
+			grown.push((length.clone(), bounding_entry_value(walk, facts, length)))
+		}
+	}
 	bounding_after_change(walk, facts, changed)
+	for (length, before) in grown {
+		let now = walk.arena.var(length)
+		bounding_push(walk, facts, walk.arena.ge(now, before))
+	}
 }
 
 /// What a call changes by its callee's frame, added to `out`.

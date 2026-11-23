@@ -3,8 +3,9 @@
 // `self.hits` alone, so `self.rows[r]` and `r += 1` are proved; so are
 // `deep`'s, whose callee writes `hits` through a recursion, and `handed`'s,
 // whose free function writes the `hits` of what it is handed `mut`.
-// `grows`' callee pushes to `rows` through another method, so its
-// `self.rows[r]` and `r += 1` stay checked.
+// `grows`' callee pushes to `rows` through another method: a list a call
+// only grows keeps what held below its length (#2783), so its
+// `self.rows[r]` is proved too.
 struct Book {
 	rows: Vec[i64],
 	hits: i64,

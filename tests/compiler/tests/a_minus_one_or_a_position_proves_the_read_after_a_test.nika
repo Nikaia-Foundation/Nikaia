@@ -1,0 +1,85 @@
+/// A search that hands back `-1` or a position in a list has the found
+/// bound `result < xs.len()` at its every return (ADR-306 D23: `-1` lies
+/// below any length), so after `r >= 0` or `r != -1` the caller's `xs[r]`
+/// is proved, no disjunction needed (#2783). A call whose frame only grows
+/// the list (ADR-391 D2) keeps that bound: what held below the length before
+/// it holds below the length after; one that shortens it does not.
+struct Cols { var_col: Vec[i64], cuts: i64 }
+
+impl Cols {
+	fn fractional(ref self) -> i64 sync {
+		let mut v = 0
+		while v < self.var_col.len() {
+			if self.var_col[v] > 1 {
+				return v
+			}
+			v += 1
+		}
+		return -1
+	}
+
+	fn new_var(mut self, col: i64) -> i64 sync {
+		self.var_col.push(col)
+		return self.var_col.len() - 1
+	}
+
+	fn cut(mut self) sync {
+		self.cuts += 1
+		let at = self.new_var(3)
+		self.cuts += at
+	}
+
+	fn shrink(mut self) sync {
+		let n = self.var_col.len()
+		self.var_col.truncate(n)
+	}
+
+	fn pick(mut self) -> i64 sync {
+		let v = self.fractional()
+		if v < 0 {
+			return 0
+		}
+		self.cut()
+		return self.var_col[v]
+	}
+
+	fn pick_shrunk(mut self) -> i64 sync {
+		let v = self.fractional()
+		if v < 0 {
+			return 0
+		}
+		self.shrink()
+		return self.var_col[v]
+	}
+}
+
+fn find(xs: ref Vec[i64], v: i64) -> i64 sync {
+	let mut i = 0
+	while i < xs.len() {
+		if xs[i] == v {
+			return i
+		}
+		i += 1
+	}
+	return -1
+}
+
+fn grow(mut xs: Vec[i64]) sync {
+	xs.push(9)
+}
+
+fn main() throws {
+	let mut xs: Vec[i64] = [1, 5, 3]
+	let r = find(xs, 3)
+	if r >= 0 {
+		println(xs[r])
+	}
+	let q = find(xs, 5)
+	if q != -1 {
+		grow(xs)
+		println(xs[q])
+	}
+	let mut c = Cols { var_col: [1, 2], cuts: 0 }
+	println(c.pick())
+	println(c.pick_shrunk())
+}

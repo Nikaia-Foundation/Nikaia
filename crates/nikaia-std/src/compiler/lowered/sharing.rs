@@ -348,7 +348,7 @@ impl Slots {
     pub fn join(&mut self, left: &str, right: &str) {
         let one = self.class_of(left);
         let other = self.class_of(right);
-        if one != other { { let __nikaia_stored = other; nikaia_std::index::set(&mut self.parent, nikaia_std::index::at(one), __nikaia_stored); } }
+        if one != other { { let __nikaia_stored = other; unsafe { nikaia_std::proven::write(&mut self.parent, (one) as usize, __nikaia_stored) }; } }
     }
     pub fn note(&mut self, function: &str, value: &str, ty: Ty, internal: bool, position: bool) {
         let key = slot(function, value);

@@ -410,7 +410,7 @@ pub(crate) fn lg_indexed(arena: &TermArena, facts: &[i64], goal: i64, why: &mut 
     let mut at: i64 = 0;
     while ((at) as usize) < why.quotients.len() {
         all.push(match lg_quotient(arena, *unsafe { nikaia_std::proven::read(&why.quotients, (at) as usize) }, why) { Some(__nikaia_value) => __nikaia_value, None => return None });
-        at += 1;
+        at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
     }
     let mut indexed = LgIndexed { atoms: vec![], ors: vec![], top: vec![] };
     let whole = LgFormula::And(all);

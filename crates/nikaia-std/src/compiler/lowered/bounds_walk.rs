@@ -6773,7 +6773,18 @@ pub(crate) fn bounding_by_frame(walk: &mut BoundsWalk, facts: &mut BoundsFacts, 
     if frame_writes(frame, "#self") { bounding_forget_aliases(&walk, facts, on, words); }
     for (at, arg) in args.iter().enumerate().map(|(at, item)| (at as i64, item)) { if frame_writes(frame, &format!("#{}", at)) { bounding_forget_aliases(&walk, facts, arg, words); } }
     let changed = frame_at_call(frame, (path_of(on, words)).as_deref(), &frame_handed(args, words));
+    let mut grown: Vec<(String, i64)> = nikaia_std::block::list(nikaia_std::block::Place::Block);
+    for list in changed.lengths.iter() {
+        if changed.falls.contains(list) || changed.values.iter().any(|v| { path_within(list, v) }) { continue; }
+        let length = length_of(list);
+        if facts.facts.iter().copied().any(|f| { walk.arena.mentions(f, &length) }) { grown.push((nikaia_std::block::Text::from(length.to_string()), bounding_entry_value(walk, facts, &length))); }
+    }
     bounding_after_change(walk, facts, &changed);
+    for (length, before) in grown.iter() {
+        let before = nikaia_std::num::value(before);
+        let now = walk.arena.var(length);
+        ({ let __nikaia_arg2 = walk.arena.ge(now, before); bounding_push(&walk, facts, __nikaia_arg2) });
+    }
 }
 
 pub(crate) fn changed_by_frame(frame: &BoundsChanged, on: &Expr, args: &[Expr], words: &winnow_grammar::InternerContext, out: &mut BoundsChanged) {

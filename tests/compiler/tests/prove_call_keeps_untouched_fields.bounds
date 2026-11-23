@@ -1,13 +1,13 @@
-bounds in tests/prove_call_keeps_untouched_fields.nika: 4 indexes, 3 proved; 8 operations, 5 proved
-    15  self.hits + r   checked: a parameter no precondition bounds, of a function whose body reads no parameter in a shape a claim is proposed for (ADR-391 D1): an `assert` at the top of the function makes it one (ADR-269 D5)
-    20  self.hits += 1  checked: a field no rule of its type bounds: the walk finds `a <= b` only of two private fields a method compares (ADR-369 D4, #1681), and a count of work done has none (#1531)
-    21  n - 1           proved
-    38  self.rows[r]    proved
-    39  r += 1          proved
-    49  self.rows[r]    proved
-    50  r += 1          proved
-    60  self.rows[r]    proved
-    61  r += 1          proved
-    71  self.rows[r]    checked: a counter the loop on line 69 changes, with no bound tied to its turns or to another counter (ADR-361 D13, #1634)
-    72  r += 1          proved
-    79  b.hits += 1     checked: a parameter no precondition bounds, of a function whose body reads no parameter in a shape a claim is proposed for (ADR-391 D1): an `assert` at the top of the function makes it one (ADR-269 D5)
+bounds in tests/prove_call_keeps_untouched_fields.nika: 4 indexes, 4 proved; 8 operations, 5 proved
+    16  self.hits + r   checked: a parameter no precondition bounds, of a function whose body reads no parameter in a shape a claim is proposed for (ADR-391 D1): an `assert` at the top of the function makes it one (ADR-269 D5)
+    21  self.hits += 1  checked: a field no rule of its type bounds: the walk finds `a <= b` only of two private fields a method compares (ADR-369 D4, #1681), and a count of work done has none (#1531)
+    22  n - 1           proved
+    39  self.rows[r]    proved
+    40  r += 1          proved
+    50  self.rows[r]    proved
+    51  r += 1          proved
+    61  self.rows[r]    proved
+    62  r += 1          proved
+    72  self.rows[r]    proved
+    73  r += 1          proved
+    80  b.hits += 1     checked: a parameter no precondition bounds, of a function whose body reads no parameter in a shape a claim is proposed for (ADR-391 D1): an `assert` at the top of the function makes it one (ADR-269 D5)
