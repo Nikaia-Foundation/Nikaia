@@ -394,7 +394,7 @@ impl EmitState {
                 // join itself.
                 let handle = walk.async_handles.get(emit_text(world, name))
                 if handle != null {
-                    out.push(handle ?? "")
+                    out.push(emit_pending_read_caught(handle ?? "", flow.breaks_to))
                 } else if self.facts.shrunk_leaves.contains(at) {
                     // **A given cut's text that leaves gives back the buffer
                     // it does not fill** (ADR-text-reuse-1 D2, #1589).
