@@ -670,13 +670,13 @@ impl SvSimplex {
             let row = match made.pop() { Some(__nikaia_value) => __nikaia_value, None => return false };
             let t = *unsafe { nikaia_std::proven::read(&changed, (i) as usize) };
             let mut long: Vec<i64> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-            let mut m = if i > 0 { *nikaia_std::index::get(&left_end, nikaia_std::index::at(unsafe { nikaia_std::proven::sub::<i64>(i, 1) })) } else { 0 };
-            while m < *nikaia_std::index::get(&left_end, nikaia_std::index::at(i)) {
+            let mut m = if i > 0 { *unsafe { nikaia_std::proven::read(&left_end, (nikaia_std::proven::sub::<i64>(i, 1)) as usize) } } else { 0 };
+            while m < *unsafe { nikaia_std::proven::read(&left_end, (i) as usize) } {
                 self.col_count[nikaia_std::index::at(left[nikaia_std::index::at(m)] as i64)] -= 1;
                 m += 1;
             }
-            m = if i > 0 { *nikaia_std::index::get(&came_end, nikaia_std::index::at(unsafe { nikaia_std::proven::sub::<i64>(i, 1) })) } else { 0 };
-            while m < *nikaia_std::index::get(&came_end, nikaia_std::index::at(i)) {
+            m = if i > 0 { *unsafe { nikaia_std::proven::read(&came_end, (nikaia_std::proven::sub::<i64>(i, 1)) as usize) } } else { 0 };
+            while m < *unsafe { nikaia_std::proven::read(&came_end, (i) as usize) } {
                 let c = *nikaia_std::index::get(&came, nikaia_std::index::at(m)) as i64;
                 m += 1;
                 self.col_count[nikaia_std::index::at(c)] += 1;

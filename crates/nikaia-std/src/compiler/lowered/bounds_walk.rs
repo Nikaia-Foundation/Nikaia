@@ -5649,6 +5649,20 @@ pub(crate) fn bounding_built(walk: &mut BoundsWalk, facts: &mut BoundsFacts, nam
                 bounding_built(walk, facts, &path, given, words);
             }
         },
+        Expr::Call { func, args, config, .. } => {
+            let func = nikaia_std::boxed::open(func);
+            if !args.is_empty() || config.len() > 1 { return; }
+            if config.len() == 1 && words.resolve(unsafe { nikaia_std::proven::read(&config, (0) as usize) }.name) != "capacity" { return; }
+            let made = match func {
+                Expr::Variable(n, _) => { let n = *n; nikaia_std::block::Text::from(words.resolve(n).to_string()) },
+                _ => return,
+            };
+            if made != "Vec" { return; }
+            let len = walk.arena.var(&length_of(name));
+            let zero = walk.arena.int(0);
+            let fact = walk.arena.equal(len, zero);
+            bounding_push(&walk, facts, fact);
+        },
         _ => { },
     }
 }
