@@ -2658,6 +2658,26 @@ pub(crate) fn bounding_each_present(walk: &mut BoundsWalk, list: &str) -> i64 {
     walk.arena.ge(len, one)
 }
 
+pub(crate) fn bounding_each_unguarded(walk: &mut BoundsWalk, list: &str, fact: i64) -> i64 {
+    let parts = match walk.arena.at(fact) {
+        logic::SolverTerm::Or(parts) => parts,
+        _ => return fact,
+    };
+    let length = length_of(list);
+    let mut kept: Vec<i64> = vec![];
+    for part in parts.iter() {
+        let part = nikaia_std::num::value(part);
+        let guard = match walk.arena.at(part) {
+            logic::SolverTerm::Le(a, b) => walk.arena.is_the_variable(a, &length) && nikaia_std::index::or(walk.arena.constant(b), || 1) == 0,
+            _ => false,
+        };
+        if !guard { kept.push(part); }
+    }
+    if (kept.len() as i64) == parts.len() as i64 || kept.is_empty() { return fact; }
+    if kept.len() == 1 { return *unsafe { nikaia_std::proven::read(&kept, (0) as usize) }; }
+    walk.arena.or(kept)
+}
+
 pub(crate) fn bounding_variable(expr: &Expr, words: &winnow_grammar::InternerContext) -> Option<String> {
     match expr {
         Expr::Variable(name, _) => { let name = *name; Some(nikaia_std::block::Text::from(words.resolve(name).to_string())) },
@@ -5328,7 +5348,7 @@ pub(crate) fn bounding_for(walk: &mut BoundsWalk, bindings: &[winnow_grammar::Sy
     walk.rule_loops.push(kept.copy_owned());
     if !bounding_block(walk, body, &mut inner, context, program, words, &mut &mut *ask) { bounding_turn_end(walk, &inner, false, false, &mut &mut *ask); }
     walk.rule_loops.pop();
-    if classed.is_some() { walk.loop_classes.remove(&nikaia_std::index::or(classed, || "".into())); }
+    if classed.is_some() { walk.loop_classes.remove(nikaia_std::index::or(classed.as_deref(), || "")); }
     let mut filled: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     let mut count: i64 = 0;
     if counted && low.is_some() && high.is_some() {
@@ -6243,7 +6263,14 @@ pub(crate) fn bounding_method(walk: &mut BoundsWalk, facts: &mut BoundsFacts, na
             return;
         }
     }
+    let known = facts.facts.len() as i64;
     bounding_forget_length(&walk, facts, name);
+    if (facts.facts.len() as i64) < known {
+        let len = walk.arena.var(&length);
+        let zero = walk.arena.int(0);
+        let fact = walk.arena.ge(len, zero);
+        bounding_push(&walk, facts, fact);
+    }
 }
 
 pub(crate) fn bounding_children(walk: &mut BoundsWalk, expr: &Expr, facts: &mut BoundsFacts, context: &BoundsContext, program: &Program, words: &winnow_grammar::InternerContext, ask: &mut dyn FnMut(&logic::TermArena, &[i64], i64) -> bool) {

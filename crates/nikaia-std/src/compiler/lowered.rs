@@ -50,6 +50,8 @@ use nikaia_std::runtime;
 use nikaia_std::text;
 #[allow(unused_imports)]
 use nikaia_std::time;
+#[allow(unused_imports)]
+use nikaia_std::winnow_grammar;
 
 #[allow(unsafe_code)]
 mod assets_lowered {
@@ -3195,7 +3197,10 @@ pub mod check_boxes {
 }
 pub mod check_buildtime {}
 pub mod check_buildtime2 {}
-pub mod check_calls {}
+pub mod check_calls {
+    #[allow(unused_imports)]
+    pub use super::{sequence_failures};
+}
 pub mod check_claims {
     #[allow(unused_imports)]
     pub use super::{check_claims_unproved, check_claims_assumes_in_std};
@@ -3354,7 +3359,7 @@ pub mod check_shapes {
 }
 pub mod check_simd {
     #[allow(unused_imports)]
-    pub use super::{check_simd_float, check_simd_float_vector, check_simd_lane_bits, check_simd_wanted, check_simd_element};
+    pub use super::{check_simd_kind, check_simd_float, check_simd_float_vector, check_simd_lane_bits, check_simd_wanted, check_simd_element};
 }
 pub mod check_state {
     #[allow(unused_imports)]
@@ -3611,7 +3616,7 @@ pub mod keep {
 }
 pub mod keeps {
     #[allow(unused_imports)]
-    pub use super::{KeepsBody, uses_in, KeepsHost, KeepsColumn, KeepsKeeper, KeepsImplRow, KeepsIndexes, KeepsFound, keeps_infer, keeps_uses_of};
+    pub use super::{KeepsBody, uses_in, KeepsHost, KeepsColumn, KeepsKeeper, KeepsImplRow, KeepsIndexes, KeepsFound, keeps_infer, keeps_of_unit, keeps_callees_first, keeps_units, keeps_uses_of};
 }
 pub mod leaves {}
 pub mod ledger {
@@ -3644,7 +3649,7 @@ pub mod libraries {
 }
 pub mod locks {
     #[allow(unused_imports)]
-    pub use super::{BodyCalls, Reaches, stored_reaches, locks_infer, free_calls, locking_of, Locking, locking};
+    pub use super::{BodyCalls, Reaches, stored_reaches, locks_infer, free_calls, locking_of, Locking, locking, locks_of_unit, locking_callees_first, callees_first};
 }
 pub mod lsp {
     #[allow(unused_imports)]
@@ -3684,7 +3689,7 @@ pub mod order {
 }
 pub mod panics {
     #[allow(unused_imports)]
-    pub use super::{PanicFacts, PanicReach, PanicsGraph, unit_panics, panics_of_graph, places_of_graph, panics_worth_proving, panics_of_task, places_of_task};
+    pub use super::{PanicFacts, PanicReach, PanicsGraph, unit_panics, panics_of_graph, places_of_graph, panics_of_unit, places_of_unit, panics_callees_first, places_callees_first, panics_settle, panics_worth, panics_units, panics_worth_proving, panics_of_task, places_of_task};
 }
 pub mod parse_errors {
     #[allow(unused_imports)]
@@ -3846,7 +3851,7 @@ pub mod surface {
 }
 pub mod sync {
     #[allow(unused_imports)]
-    pub use super::{SyncReach, sync_holds, paused_only_by_code, pause_chain, Site, SyncNode, SyncGraph, unit_sync, Violation, unit_violations, unit_pausing};
+    pub use super::{SyncReach, sync_holds, paused_only_by_code, pause_chain, sync_of_unit, sync_callees_first, sync_units, SyncNoted, sync_infer, Site, SyncNode, SyncGraph, unit_sync, Violation, sync_violations, unit_pausing};
 }
 pub mod sysroot_cache {
     #[allow(unused_imports)]
@@ -3862,7 +3867,7 @@ pub mod template {
 }
 pub mod tether {
     #[allow(unused_imports)]
-    pub use super::{RESULT_POSITION, INPUT_POSITION, Buffer, PackageTypes, declare_unit, a_parse_that_views, function_views, makes_a_buffer, narrated_lines, reuses_report, tethers_report};
+    pub use super::{RESULT_POSITION, INPUT_POSITION, Buffer, PackageTypes, declare_unit, a_parse_that_views, function_views, tether_infer, tether_of_function, tether_of_entry_rule, makes_a_buffer, narrated_lines, reuses_report, tethers_report};
 }
 pub mod text_tiers {
     #[allow(unused_imports)]
@@ -3874,7 +3879,7 @@ pub mod threads {
 }
 pub mod throws {
     #[allow(unused_imports)]
-    pub use super::{AS_VALUE, MethodsCalled, ThrowsGraph, unit_throws, stored_throws, params_as_places, throws_given, throws_published, error_sets, error_type, Thrown, Contribution};
+    pub use super::{AS_VALUE, MethodsCalled, ThrowsGraph, throws_graph, fatal_types, throws_places, throws_record, unit_throws, stored_throws, params_as_places, throws_given, throws_published, error_sets, throws_of_unit, error_sets_callees_first, throws_callees_first, error_type, Thrown, Contribution};
 }
 pub mod tiers {}
 pub mod toml {
@@ -3883,7 +3888,7 @@ pub mod toml {
 }
 pub mod touch {
     #[allow(unused_imports)]
-    pub use super::{Reached, Reach, TouchGraph, unit_touches, touches_of_graph};
+    pub use super::{Reached, Reach, TouchGraph, unit_touches, touches_of_graph, touches_infer, in_ledger_order, touches_of_unit, touches_callees_first, touch_units, touch_kind_is_known};
 }
 pub mod traits {
     #[allow(unused_imports)]
@@ -3899,7 +3904,7 @@ pub mod trust {
 }
 pub mod ty {
     #[allow(unused_imports)]
-    pub use super::{Ty, CodeNames, Shape, ENDS, SIZED, REPLAYS, SEQ, PAR, PAUSES, ARRAY, TEXT, TEXT_VIEW, text, ty_shown, spoken, spoken_in, shown_in, parse, split_args, Provenance, Sync, Lock, Panics, Crosses, Threads, Touch, State, Held, Count, Class, FieldContract, VariantContract, ConfigContract, Signature, FnContract, TypeContract, Ledger, Notes, SEEN, a_named_ty, a_view_ty, a_seen_ty, bind, substitute, qualify, renamed, MethodIndex, method_index};
+    pub use super::{Ty, CodeNames, Shape, ENDS, SIZED, REPLAYS, SEQ, PAR, PAUSES, ARRAY, TEXT, TEXT_VIEW, text, ty_shown, spoken, spoken_in, shown_in, parse, split_args, Provenance, Sync, Lock, Panics, Crosses, Threads, Touch, State, Held, Count, Class, FieldContract, VariantContract, ConfigContract, Signature, FnContract, TypeContract, Ledger, Notes, SEEN, a_named_ty, a_view_ty, a_seen_ty, bind, substitute, qualify, renamed, MethodIndex, method_index, failures_joined, unnamed_failure};
 }
 pub mod type_rules {
     #[allow(unused_imports)]
@@ -3938,12 +3943,17 @@ pub fn nikaia_tests() -> std::vec::Vec<(std::string::String, fn() -> Result<(), 
     let mut all: std::vec::Vec<(std::string::String, fn() -> Result<(), std::boxed::Box<dyn std::error::Error>>)> = std::vec::Vec::new();
     all.extend(ast_nikaia_tests().into_iter().map(|(name, run)| (name.to_string(), run)));
     all.extend(crossing_nikaia_tests().into_iter().map(|(name, run)| (name.to_string(), run)));
+    all.extend(keeps_nikaia_tests().into_iter().map(|(name, run)| (name.to_string(), run)));
     all.extend(locks_nikaia_tests().into_iter().map(|(name, run)| (name.to_string(), run)));
     all.extend(manifest_nikaia_tests().into_iter().map(|(name, run)| (name.to_string(), run)));
     all.extend(modules_nikaia_tests().into_iter().map(|(name, run)| (name.to_string(), run)));
+    all.extend(panics_nikaia_tests().into_iter().map(|(name, run)| (name.to_string(), run)));
     all.extend(paths_nikaia_tests().into_iter().map(|(name, run)| (name.to_string(), run)));
     all.extend(signature_nikaia_tests().into_iter().map(|(name, run)| (name.to_string(), run)));
+    all.extend(sync_nikaia_tests().into_iter().map(|(name, run)| (name.to_string(), run)));
+    all.extend(tether_nikaia_tests().into_iter().map(|(name, run)| (name.to_string(), run)));
     all.extend(threads_nikaia_tests().into_iter().map(|(name, run)| (name.to_string(), run)));
+    all.extend(throws_nikaia_tests().into_iter().map(|(name, run)| (name.to_string(), run)));
     all.extend(toml_nikaia_tests().into_iter().map(|(name, run)| (name.to_string(), run)));
     all.extend(touch_nikaia_tests().into_iter().map(|(name, run)| (name.to_string(), run)));
     all.extend(ty_nikaia_tests().into_iter().map(|(name, run)| (name.to_string(), run)));
@@ -3988,4 +3998,4 @@ pub fn nikaia_run_tests(filters: &[std::string::String], list: bool, more: std::
 /// **The digest of this lowered set** (#1610): every file `lower-std` wrote
 /// beside this index, and the index above this line. Compiled into the same
 /// crate as the code it names, it is the compiler's identity for its caches.
-pub const LOWERED_DIGEST: &str = "17c1992aaebec584154b9eba030fbef72b4d8142300d900659b023268cac0298";
+pub const LOWERED_DIGEST: &str = "b37cb04bc16410706529a3d6373c9f05f9e231c1cf25989dcd0e7fa748a66832";

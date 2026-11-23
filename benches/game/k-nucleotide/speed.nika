@@ -7,8 +7,9 @@
 //
 //     nikaia run speed.nika < fasta-output.txt
 //
-// Standard input is untrusted, so the maps keyed by it get the keyed hash
-// with a per-process seed (ADR-365 D2), as in `main.nika`.
+// The input is the one fasta wrote for this run, so the read says `trusted:
+// true` and the maps keyed by it take the fast hash (ADR-365 D2), as in
+// `main.nika`.
 use std::io
 use std::collections
 
@@ -30,7 +31,7 @@ fn section_three(input: String) -> Vec[u64] sync {
 // Every fragment of length `k`, by its code, and how often it occurs.
 fn count(codes: Vec[u64], k: i64) -> collections::HashMap[u64, i64] sync {
 	let mut counts: collections::HashMap[u64, i64] = collections::HashMap()
-	if codes.len() < k {
+	if k < 1 || codes.len() < k {
 		return counts
 	}
 	let mask: u64 = (1 << (2 * k as u64)) - 1
@@ -88,7 +89,7 @@ fn report_fragment(codes: Vec[u64], fragment: String) throws {
 }
 
 fn main() throws {
-	let input = io::read_to_string() catch {
+	let input = io::read_to_string(trusted: true) catch {
 		eprintln(f"cannot read standard input: {error}")
 		return
 	}

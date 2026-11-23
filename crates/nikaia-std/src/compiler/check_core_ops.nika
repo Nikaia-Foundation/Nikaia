@@ -569,7 +569,17 @@ fn check_core_ops_binary[H: CheckHost](mut state: CheckState, world: ref CheckWo
         walked_right = check_core_ops_proved_expr(state, world, host, lhs, check_core_ops_and(op), rhs, span)
         state.flow.short_circuited -= 1
     } else {
+        // **A vector made for the right side is of the type the left side
+        // holds** (ADR-377 D3): `idx & simd::splat(15)`, wherever it stands.
+        let wanted_right: Ty? = check_simd_wanted(world, rhs, value_of_a_copy(walked_left.unseen()))
+        let made_right = wanted_right != null
+        if made_right {
+            state.flow.lambda_expected = wanted_right
+        }
         walked_right = check_core_expr(state, world, host, rhs, span)
+        if made_right {
+            state.flow.lambda_expected = null
+        }
     }
     // **A `'…'` beside a byte is a byte** (ADR-320, Part I 2.6).
     let byte = check_core_ops_named("u8")

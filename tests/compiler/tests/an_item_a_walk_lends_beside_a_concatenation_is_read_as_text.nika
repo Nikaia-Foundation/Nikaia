@@ -1,0 +1,24 @@
+// An item a walk lends beside a `+` is read as text (#2392): the list's
+// text lowered to views, so each item below is a reference to a view, and
+// the `+` reads the text it holds, on either side and in a lambda too.
+fn main() throws {
+    let listed: Vec[String] = ["a"]
+    let words: Vec[String] = "x y".split(" ").collect()
+    for made in words.iter() {
+        println(listed[0].clone() + made)
+    }
+    for made in words.iter() {
+        println("b" + made)
+    }
+    let literal: Vec[String] = ["x", "y"]
+    for made in literal.iter() {
+        let mut g = String()
+        g.push_str("c")
+        println(g + made)
+    }
+    for (i, made) in words.iter().enumerate() {
+        println(f"{i}" + made)
+    }
+    let joined: Vec[String] = words.iter().map(fn(m) { "d" + m }).collect()
+    println(joined.join(","))
+}

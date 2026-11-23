@@ -697,6 +697,12 @@ impl CheckState {
         if found.is_a_view() || self.a_lent_let(world, index) || self.facts.bytes_cuts.contains(node_key(index)) {
             return true
         }
+        // **One `get` handed back past a jump is a reference** (D30), as a
+        // lookup's key is: `let k = xs.last() ?? continue` keys `m[k]` as it
+        // is, where a `&` would be `&&String`.
+        if moves(found) && !a_ledger_copies(unviewed_type(found), [world.library]) && check_reads_got_past_a_jump(self, world, index) {
+            return true
+        }
         match index {
             Expr::LitStr { .. } => return true,
             Expr::Variable(name, _) => {
@@ -744,7 +750,7 @@ impl CheckState {
     fn a_view_kept_in_a_tuple_part(ref mut self, world: ref CheckWorld, key: ref String, name: ref String, value: ref Expr, found: ref Ty, want: ref Ty, span: ref Span) -> bool sync {
         let given: Vec[Expr] = match value {
             Expr::Tuple(parts, _) => parts.clone(),
-            else => return false,
+            else => return self.a_tuple_of_views_kept(world, key, name, found, want, span),
         }
         let found_parts: Vec[Ty] = match found {
             Ty::Tuple(parts) => parts.clone(),
@@ -764,6 +770,34 @@ impl CheckState {
             }
             self.findings.push(check_refusal("NK1102", span, spoken_in(f"`{key}` expects `{name}` to be `{want.text()}` here, but part {k} of the tuple is `{part.text()}`.", want, part), [f"This is a view: it points into a `{whole.shown()}` that something else owns.", f"`{key}` keeps its `{name}` after the call returns, so its tuple needs a `{whole.shown()}` of its own."], "Write `.clone()` to copy it here."))
             return true
+        }
+        return false
+    }
+
+    /// **A tuple whose parts are views, kept by a receiver of tuples whose
+    /// parts are their own** (ADR-282 D2, D19, #2384): a name, an element or
+    /// a call's result, not written out part by part, refused as a function
+    /// of this program that keeps such a tuple refuses it (`NK1102`); a part
+    /// that copies is read out of its view and is no matter here. Its copy
+    /// has parts of its own (ADR-293 D24).
+    fn a_tuple_of_views_kept(ref mut self, world: ref CheckWorld, key: ref String, name: ref String, found: ref Ty, want: ref Ty, span: ref Span) -> bool sync {
+        let found_parts: Vec[Ty] = match found {
+            Ty::Tuple(parts) => parts.clone(),
+            else => return false,
+        }
+        let wanted: Vec[Ty] = match want {
+            Ty::Tuple(parts) => parts.clone(),
+            else => return false,
+        }
+        if found_parts.len() != wanted.len() {
+            return false
+        }
+        for (k, part) in found_parts.iter().enumerate() {
+            let seen = check_arm_leaves_a_text_view(part)
+            if views_into_text(seen, wanted[k]) || self.a_view_of_what_does_not_copy(world, seen, wanted[k]) {
+                self.findings.push(check_refusal("NK1102", span, spoken_in(f"`{key}` expects `{name}` to be `{want.text()}` here, but you're passing `{found.text()}`.", want, found), [f"Part {k} is a view: it points into a `{wanted[k].shown()}` that something else owns.", f"`{key}` keeps its `{name}` after the call returns, so its tuple needs a `{wanted[k].shown()}` of its own."], "Write `.clone()` to copy it here: a copy of a tuple of views has parts of its own."))
+                return true
+            }
         }
         return false
     }

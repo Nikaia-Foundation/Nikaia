@@ -95,8 +95,8 @@ those of the Rust entry. Tokens are given once per program.
 | fannkuch-redux | Rust #6, one thread, `target-cpu=ivybridge` | 87.2 | 1.945 | 81.5 | 1.794 | 1.00 |  |
 | fannkuch-redux | Nikaia, `--cpu=x86-64` | 513.1 | 8.842 | 510.1 | 11.056 | 6.26 | 378 |
 | fannkuch-redux | Nikaia, `--cpu=x86-64-v3` | 514.3 | 9.130 | 511.3 | 9.304 | 6.27 |  |
-| fannkuch-redux | Nikaia for speed, `--cpu=x86-64` | 225.7 | 7.518 | 216.1 | 7.444 | 2.65 | 460 |
-| fannkuch-redux | Nikaia for speed, `--cpu=x86-64-v3` | 225.2 | 7.522 | 215.6 | 7.448 | 2.64 |  |
+| fannkuch-redux | Nikaia for speed, `--cpu=x86-64` | 943.5 | 2.088 | 925.8 | 2.052 | 11.36 | 590 |
+| fannkuch-redux | Nikaia for speed, `--cpu=x86-64-v3` | 121.5 | 2.084 | 111.6 | 2.058 | 1.37 |  |
 | binary-trees | Rust #5, `target-cpu=ivybridge` | 49.3 | 0.577 | 43.3 | 0.471 | 1.00 | 502 |
 | binary-trees | Rust #5, one thread, `target-cpu=ivybridge` | 49.3 | 0.577 | 43.3 | 0.471 | 1.00 |  |
 | binary-trees | Nikaia, `--cpu=x86-64` | 183.0 | 1.209 | 145.8 | 1.108 | 3.37 | 237 |
@@ -106,11 +106,11 @@ those of the Rust entry. Tokens are given once per program.
 | fasta | Nikaia, `--cpu=x86-64-v3` | 80.6 | 1.063 | 77.7 | 1.029 | 3.02 |  |
 | fasta | Nikaia for speed, `--cpu=x86-64` | 27.5 | 0.015 | 20.2 | 0.016 | 0.78 | 773 |
 | fasta | Nikaia for speed, `--cpu=x86-64-v3` | 27.5 | 0.015 | 20.2 | 0.015 | 0.78 |  |
-| k-nucleotide | Rust entry 7, `target-cpu=ivybridge` | 359.5 | 0.215 | 313.9 | 0.209 | 1.00 | 1543 |
-| k-nucleotide | Nikaia, `--cpu=x86-64` | 2066.6 | 0.159 | 1999.6 | 0.156 | 6.37 | 506 |
-| k-nucleotide | Nikaia, `--cpu=x86-64-v3` | 1984.7 | 0.166 | 1921.7 | 0.177 | 6.12 |  |
-| k-nucleotide | Nikaia for speed, `--cpu=x86-64` | 999.5 | 0.218 | 986.1 | 0.202 | 3.14 | 627 |
-| k-nucleotide | Nikaia for speed, `--cpu=x86-64-v3` | 956.9 | 0.199 | 956.3 | 0.185 | 3.05 |  |
+| k-nucleotide | Rust entry 7, `target-cpu=ivybridge` | 359.5 | 0.215 | 314.3 | 0.247 | 1.00 | 1543 |
+| k-nucleotide | Nikaia, `--cpu=x86-64` | 923.7 | 0.203 | 869.1 | 0.170 | 2.76 | 509 |
+| k-nucleotide | Nikaia, `--cpu=x86-64-v3` | 953.6 | 0.162 | 822.0 | 0.174 | 2.62 |  |
+| k-nucleotide | Nikaia for speed, `--cpu=x86-64` | 349.6 | 0.167 | 295.0 | 0.174 | 0.94 | 634 |
+| k-nucleotide | Nikaia for speed, `--cpu=x86-64-v3` | 321.4 | 0.167 | 280.8 | 0.176 | 0.89 |  |
 | reverse-complement | Rust entry 1, `target-cpu=ivybridge` | 1.9 | 0.000 | 1.9 | 0.000 | 1.00 | 1966 |
 | reverse-complement | Rust entry 1, one thread, `target-cpu=ivybridge` | 1.9 | 0.000 | 1.9 | 0.000 | 1.00 |  |
 | reverse-complement | Nikaia, `--cpu=x86-64` | 45.5 | 0.069 | 40.4 | 0.069 | 20.86 | 385 |
@@ -145,12 +145,13 @@ figure has moved since, the paragraph says so.
   is scalar, one `divsd` an entry, where Rust #6 divides two lanes by hand.
   `i64`'s signed `/ 2` also costs a shift, an add and a shift, 3 of an entry's
   13 instructions, where Rust's `usize` costs one shift.
-* **fannkuch-redux**, 6.26x and 2.65x. The same two algorithms in plain Rust
-  count 499 and 266 a permutation, so Nikaia's code costs what Rust's does.
-  The gap is Rust #6's algorithm. It holds the permutation in one `u128` and
-  flips a prefix with one `pshufb` whose mask it picks at run time. `std::simd`
-  has only constant shuffles; a run-time shuffle is undecided (ADR-377,
-  section 4).
+* **fannkuch-redux**, 6.26x and 1.37x at `x86-64-v3`. The plain program
+  costs what the same algorithm in plain Rust does (499 a permutation). The
+  speed row holds the permutation in one `simd::Fixed[u8, 16]` and flips a
+  prefix with one `lookup` whose indices a table picks by the first item
+  (ADR-377 D10), as Rust #6's `pshufb` does (re-counted on 2026-11-22 with
+  Nikaia 0.0.1545: 215.6 before). At `x86-64`, a level without SSSE3, the
+  lookup goes byte by byte and counts 11.36x.
 * **binary-trees**, 3.37x (re-counted on 2026-11-21 with Nikaia 0.0.1517;
   5.75x before). Each node's box is built in the task's block (ADR-327 D16,
   D17), `main`'s here, so `malloc` and `free` are no longer counted (71 % of
@@ -168,12 +169,16 @@ figure has moved since, the paragraph says so.
   was added the same algorithm in plain Rust counted 84.1 against Nikaia's
   97.3, all of the extra in `Text::push`. Since then `Text::push` is inlined
   at the call site (#1864), and the plain row fell from 3.66x to 3.08x.
-* **k-nucleotide**, 6.37x and 3.14x. Both programs read standard input,
-  which is untrusted, so their maps hash with the keyed SipHash-1-3.
-  Trusted, the speed program counts 1.13x Rust. When it was added, the plain
-  program also spent 545 instructions a letter in UTF-8 checks of each cut of
-  the input. The row has since fallen from 8.08x to 6.37x, about that much,
-  since a cut of a text's own bytes reads back as text without the check.
+* **k-nucleotide**, 2.76x and 0.94x. The input is the one fasta wrote for
+  the run, so both programs read it with `trusted: true` (ADR-365 D2) and
+  their maps take the fast hash, as Rust's foldhash is; with the keyed
+  SipHash-1-3 of untrusted input they counted 6.37x and 3.14x. When it was
+  added, the plain program also spent 545 instructions a letter in UTF-8
+  checks of each cut of the input; it fell from 8.08x to 6.37x once a cut of
+  a text's own bytes read back as text without the check. The program for
+  speed fell from 1.12x to 0.94x when `count` refused `k < 1` as well: only
+  then is `k - 1` a valid index, and the compiler drops the bounds check on
+  each letter's read.
 * **reverse-complement**, 20.9x and 5.5x. The same two algorithms in plain
   Rust count 39.2 and 15.3 a letter. The entry's algorithm makes the gap: it
   uses SSSE3 `pshufb` as a run-time complement table on 16 bytes at a time,

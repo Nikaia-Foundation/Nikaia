@@ -55,6 +55,14 @@ impl EmitState {
         }
         out
     }
+    pub fn lambda_sums(&self, world: &EmitWorld<'_, '_, '_, '_>, sums: &mut collections::BTreeMap<Vec<String>, String>) {
+        for (_, thrown) in self.facts.failing_through_lambdas.iter() {
+            if thrown.len() < 2 || sums.contains_key(thrown) { continue; }
+            let mut all_named = true;
+            for member in thrown.iter() { if self.name_of_error(world, member) == 0 { all_named = false; } }
+            if all_named { sums.insert(thrown.copy_owned(), sum_name(thrown)); }
+        }
+    }
     pub(crate) fn sums_used_here(&self, world: &EmitWorld<'_, '_, '_, '_>) -> collections::BTreeSet<String> {
         let mut out: collections::BTreeSet<String> = collections::BTreeSet::new();
         for key in sums_declared_here(world) {
@@ -154,7 +162,11 @@ impl EmitState {
                 let held = self.sum_member_held(world, member, &params);
                 if held.starts_with("nikaia_std::error::Thrown<") { out.push(&format!("            ({}::{}(first), {}::{}(later)) => nikaia_std::error::Joined::joined_by(first, later),\n", name, variant, name, variant)); }
             }
-            if params == "" && crashed {
+            let mut over_budget = false;
+            for member in members.iter() { if member == "task::OverBudget" { over_budget = true; } }
+            let mut a_lambdas = false;
+            for (_, thrown) in self.facts.failing_through_lambdas.iter() { if thrown == members { a_lambdas = true; } }
+            if params == "" && (crashed || over_budget || a_lambdas) {
                 for member in members.iter() {
                     let variant = sum_variant(member);
                     let held = self.sum_member_held(world, member, &params);

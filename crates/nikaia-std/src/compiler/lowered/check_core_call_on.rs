@@ -628,6 +628,7 @@ pub(crate) fn check_core_call_on_failed_through(state: &mut CheckState, args: &[
     if !failed { return false; }
     let kind: i64 = if key == "Seq::map" { 1 } else if key == "Seq::filter" { 2 } else if key == "Seq::for_each" { 3 } else { 4 };
     state.facts.failing_through_calls.insert(node, kind);
+    if kind == 3 && shape_parallel(on) { state.facts.kept_failure_ends.insert(node); }
     if !lazy {
         state.flow.opaque_methods.remove(&node);
         let added = state.flow.fallible_methods.insert(node);
@@ -644,6 +645,11 @@ pub(crate) fn check_core_call_on_failed_through(state: &mut CheckState, args: &[
         }
     }
     true
+}
+
+pub(crate) fn check_core_call_on_places<H: CheckHost>(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, host: &H, lambda: &Expr) -> bool {
+    let facts = PanicFacts { checked: true, arithmetic: state.facts.arithmetic.copy_owned(), negations: state.facts.negations.copy_owned(), shifts: state.facts.shifts.copy_owned(), map_keys: state.facts.map_keys.keys().map(|key| { key.0 }).collect(), proven_indices: collections::BTreeSet::new(), proven_arithmetic: collections::BTreeSet::new(), proven_negations: collections::BTreeSet::new(), placed: state.facts.placed_in_block.copy_owned() };
+    places_of_task(lambda, world.here.items, world.words, &mut |literal| { host.literal_holes(literal) }, &facts, world.own, world.library)
 }
 
 pub(crate) fn check_core_call_on_hands_back_a_sequence(contract: &FnContract) -> bool {
@@ -1040,10 +1046,13 @@ pub(crate) fn check_core_call_on_described<H: CheckHost>(state: &mut CheckState,
     let pauses = !contract.sync_claim.is_sync() && !sync_close || walks_a_pausing_step;
     state.method_pauses(node, pauses);
     let hands_back_a_sequence = check_core_call_on_hands_back_a_sequence(contract);
-    if shape_failing_items(on) { state.facts.failing_item_receivers.insert(node); }
+    if shape_failing_items(on) {
+        state.facts.failing_item_receivers.insert(node, sequence_failures(on));
+        if shape_parallel(on) { state.facts.kept_failure_ends.insert(node); }
+    }
     if walks_a_pausing_step && hands_back_a_sequence { state.facts.pausing_walks.insert(node); }
     let seq_throws = match on {
-        Ty::Seq { can_throw, .. } => { let can_throw = *can_throw; can_throw },
+        Ty::Seq { fails, .. } => !fails.is_empty(),
         _ => false,
     };
     if seq_throws && walks && !hands_back_a_sequence { state.a_walk_of_a_failing_sequence(world, method, span); }
@@ -1160,10 +1169,15 @@ pub(crate) fn check_core_call_on_described<H: CheckHost>(state: &mut CheckState,
             let at = nikaia_std::num::value(at);
             if at < found.len() as i64 { { let __nikaia_stored = check_core_call_on_unfailing_fn(unsafe { nikaia_std::proven::read(&found, (at) as usize) }); unsafe { nikaia_std::proven::write(&mut found, (at) as usize, __nikaia_stored) }; } }
         }
-        let seen: CheckGuarded = nikaia_std::index::or(match state.flow.guarded.as_ref() {
+        let mut seen: CheckGuarded = nikaia_std::index::or(match state.flow.guarded.as_ref() {
             Some(__nikaia_it) => Some(__nikaia_it.clone()),
             None => None,
         }, || CheckGuarded::nothing());
+        if parallel && (key == "Seq::map" || key == "Seq::filter" || key == "Seq::for_each") && args.len() == 1 && !a_paused_chain(key, on) && !state.flow.paused_args.contains(&(id_of(unsafe { nikaia_std::proven::read(&args, (0) as usize) }) as i64)) && check_core_call_on_places(&state, world, host, unsafe { nikaia_std::proven::read(&args, (0) as usize) }) {
+            state.facts.blocked_lambdas.insert(id_of(unsafe { nikaia_std::proven::read(&args, (0) as usize) }) as i64);
+            seen.thrown.insert(String::from("task::OverBudget"));
+            state.flow.last_lambda_fails = true;
+        }
         state.flow.caught = outer_caught;
         state.flow.guarded = outer_guarded;
         failed_through = check_core_call_on_failed_through(state, args, &through, &seen, key, on, node, hands_back_a_sequence);
@@ -1284,8 +1298,16 @@ pub(crate) fn check_core_call_on_described<H: CheckHost>(state: &mut CheckState,
     state.flow.text_walk = views_text_slots(&result, &bound, false);
     let mut shaped = shape_through(contract, on, &found, substituted);
     if failed_through && hands_back_a_sequence {
+        let mut thrown: Vec<String> = vec![];
+        for arg in args.iter() {
+            let set: Option<Vec<String>> = match state.facts.failing_through_lambdas.get(&(id_of(arg) as i64)) {
+                Some(__nikaia_it) => Some(__nikaia_it.clone()),
+                None => None,
+            };
+            thrown = { let __nikaia_value = failures_joined(&thrown, &nikaia_std::index::or(set, || vec![].into())); __nikaia_value };
+        }
         shaped = match shaped {
-            Ty::Seq { ref item, is_sync, pauses, parallel, shape, .. } => { let item = nikaia_std::boxed::open(item); Ty::Seq { item: nikaia_std::block::Boxed::new(item.clone()), is_sync, pauses, can_throw: true, parallel, shape: Shape { failing_items: true, ..shape } } },
+            Ty::Seq { ref item, is_sync, pauses, ref fails, parallel, shape } => { let item = nikaia_std::boxed::open(item); Ty::Seq { item: nikaia_std::block::Boxed::new(item.clone()), is_sync, pauses, fails: failures_joined(fails, &thrown), parallel, shape: Shape { failing_items: true, ..shape } } },
             _ => shaped,
         };
     }
@@ -1370,7 +1392,7 @@ pub(crate) fn check_core_call_on<H: CheckHost>(state: &mut CheckState, world: &C
     }
     let mut found: Option<CheckResolved<'_>> = resolve_method(world, &format!("{}::{}", type_name, entry));
     if found.is_none() { found = check_core_call_on_fallback(&state, world, &on, entry); }
-    if found.is_none() && entry == "clone" && args.is_empty() && (state.structs.contains_key(&type_name) || state.enums.contains_key(&type_name) || world.own.types.contains_key(&type_name)) {
+    if found.is_none() && entry == "clone" && args.is_empty() && (state.structs.contains_key(&type_name) || state.enums.contains_key(&type_name) || world.own.types.contains_key(&type_name) || check_core_call_on_library_struct(world, &type_name)) {
         if check_core_call_on_clones(&world.parts_beside, &state.structs, &state.enums, &state.enum_payloads, &state.struct_parameters, &state.type_parameters, world, &on) { return check_core_call_on_owned(&on); }
         state.findings.push(CheckFinding { severity: CheckSeverity::Error, span: span.clone(), code: String::from("NK1171"), message: format!("`{}` has no method called `clone`.", type_name), notes: vec![format!("`{}` holds a value that does not copy - a task's handle, a lock, a socket, a file, a child process or a channel's end - so it has no copy either.", type_name)], help: Some(String::from("Hand the value itself on, or keep the handle in a `Shared` that both places reach.")), labels: vec![], edit: None });
         return Ty::Unknown;
@@ -1378,6 +1400,11 @@ pub(crate) fn check_core_call_on<H: CheckHost>(state: &mut CheckState, world: &C
     if found.is_none() { return check_core_call_on_undescribed(state, world, host, &on, receiver, method, args, entry, &type_name, span); }
     let resolved: CheckResolved<'_> = match found { Some(__nikaia_value) => __nikaia_value, None => return Ty::Unknown };
     check_core_call_on_described(state, world, host, &on, receiver, method, args, entry, &resolved.key, resolved.contract, span)
+}
+
+pub(crate) fn check_core_call_on_library_struct(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, type_name: &str) -> bool {
+    let entry = match *nikaia_std::index::get(&world.library.types, type_name) { Some(__nikaia_value) => __nikaia_value, None => return false };
+    !entry.fields.is_empty()
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before

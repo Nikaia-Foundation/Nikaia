@@ -104,11 +104,13 @@ fn emit_flow_never_returns(world: ref EmitWorld, node: ref Expr) -> bool {
 }
 
 /// Whether the fallback of a `??` is a struct written out or a `bool`: the type
-/// already, whatever the option holds.
+/// already, whatever the option holds. So is a `??` whose own fallback is
+/// one: `a ?? b ?? false` is a `bool` whichever side answers.
 fn emit_flow_a_struct_written(node: ref Expr) -> bool {
     return match node {
         Expr::StructLit { .. } => true,
         Expr::LitBool(_, _) => true,
+        Expr::Coalesce { fallback, .. } => emit_flow_a_struct_written(fallback),
         else => false,
     }
 }
@@ -286,6 +288,13 @@ impl EmitState {
         if pauses {
             out.push("async ")
         }
+        // **A `par_iter` element that places in a block runs in its piece's
+        // block** (ADR-async-5 D28, ADR-327 D13): a full block ends that
+        // element alone, its failure `task::OverBudget`.
+        let blocked = !pauses && self.facts.blocked_lambdas.contains(node_key(node))
+        if blocked {
+            out.push("nikaia_std::par::in_block(")
+        }
         // **`filter` is handed a reference to its item** (ADR-231 D2): where the
         // item copies, the pattern takes it out.
         let pattern = self.facts.filter_patterns.contains(node_key(node))
@@ -380,12 +389,18 @@ impl EmitState {
             out.push(if leaves { "{ " } else { "{ let __nikaia_done = " })
             self.emit_core_block(world, walk, out, host, body, depth, inside with { can_throw: true }, inside_scope, value_tail)
             out.push(if leaves { " }" } else { "; Ok(__nikaia_done) }" })
+            if blocked {
+                out.push(")")
+            }
             if a_task {
                 out.push(")")
             }
             return
         }
         self.emit_core_block(world, walk, out, host, body, depth, inside, inside_scope, return_tail)
+        if blocked {
+            out.push(")")
+        }
         if copied && pauses {
             out.push(f".await; *__nikaia_slot = {names[0]}; }}")
         } else if copied {
@@ -1162,7 +1177,7 @@ impl EmitState {
             },
             else => {},
         }
-        let nested = !joined && !fallback && self.emit_catch_nests_a_failure(world, guarded_expr)
+        let nested = !joined && !fallback && (self.emit_catch_nests_a_failure(world, guarded_expr) || emit_catch_reads_a_pending(world, walk, guarded_expr))
         let at = node_key(guarded_expr)
         // A block is bound first: inside `Ok(…)` its braces would be
         // reported as unneeded, which the author may not even have written
@@ -1189,8 +1204,12 @@ impl EmitState {
             out.push(f"; Ok::<_, {boxed}>(__nikaia_value) }}).await")
         } else if nested {
             guarded = guarded with { breaks_to: at }
+            // **A dropped value is a statement** (#2608): wrapped in `Ok(…)`,
+            // a call that hands `()` is reported as `clippy::unit_arg`.
             if a_block {
                 out.push(f"'__nikaia_caught_{at}: {{ let __nikaia_value = ")
+            } else if dropped {
+                out.push(f"'__nikaia_caught_{at}: {{ ")
             } else {
                 out.push(f"'__nikaia_caught_{at}: {{ Ok::<_, std::boxed::Box<dyn std::error::Error>>(")
             }
@@ -1210,6 +1229,8 @@ impl EmitState {
         }
         if nested && a_block && !bound_here {
             out.push("; Ok::<_, std::boxed::Box<dyn std::error::Error>>(__nikaia_value) }")
+        } else if nested && dropped && !bound_here {
+            out.push("; Ok::<_, std::boxed::Box<dyn std::error::Error>>(()) }")
         } else if nested && !bound_here {
             out.push(") }")
         }
@@ -1633,6 +1654,11 @@ impl EmitState {
         // the strategy admits it.
         let admission = walk.async_admission.clone()
         walk.async_admission = ""
+        // **A free task polls no gate of the group it starts in**
+        // (ADR-async-5 D13, D37): it runs on past that group, so a pause in
+        // its body is a plain `.await`, as in a child task's body.
+        let outer_gates = walk.async_gates.clone()
+        walk.async_gates = []
         let mut first: String = ""
         if admission != "" {
             first = "nikaia_std::task::admission_first(__nikaia_admission).await; "
@@ -1749,6 +1775,7 @@ impl EmitState {
         if opened {
             out.push(" }")
         }
+        walk.async_gates = outer_gates
     }
 }
 

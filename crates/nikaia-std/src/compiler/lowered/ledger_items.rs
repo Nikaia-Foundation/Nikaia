@@ -87,7 +87,7 @@ pub(crate) fn declared_grammar(words: &winnow_grammar::InternerContext, aliases:
         }
         if rule.stream && result.is_some() {
             let item = nikaia_std::index::or(result, || Ty::Unknown);
-            result = Some(Ty::Seq { item: nikaia_std::block::Boxed::new(item), is_sync: true, pauses: false, can_throw: true, parallel: false, shape: Shape::none() });
+            result = Some(Ty::Seq { item: nikaia_std::block::Boxed::new(item), is_sync: true, pauses: false, fails: unnamed_failure(), parallel: false, shape: Shape::none() });
         }
         let mut params: Vec<(String, Ty)> = vec![(String::from("input"), Ty::Unknown)];
         params.reserve(rule.args.iter().size_hint().0); for arg in rule.args.iter() { params.push((nikaia_std::block::Text::from(words.resolve(arg.name).to_string()), written_ty(words, aliases, &arg.ty))); }
@@ -306,11 +306,12 @@ pub(crate) fn declare_items(units: &[ParsedView<'_, '_, '_, '_, '_, '_, '_>], bo
                     let is_public = *is_public; let name = *name;
                     ledger.types.insert(view.text(name), declared_enum(view.words, view.aliases, variants, is_public, borrowing_names));
                 },
-                Item::Struct { name, generics, fields, is_public, is_extern, .. } => {
+                Item::Struct { name, generics, fields, is_public, is_extern, rules } => {
                     let is_extern = *is_extern; let is_public = *is_public; let name = *name;
                     let key = view.text(name);
                     let mut contract = TypeContract::empty();
                     contract.public = is_public;
+                    if is_public { contract.rules = rules.iter().map(|r| { written_expression(view.words, &r.node) }).collect::<Vec<_>>(); }
                     contract.tethered = tethered_fields(view.words, fields, borrowing_names);
                     contract.fields = declared_fields(view.words, view.aliases, generics, fields, is_extern);
                     for (at, f) in fields.iter().enumerate().map(|(at, item)| (at as i64, item)) {

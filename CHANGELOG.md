@@ -8,6 +8,86 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1553] — 2026-11-23
+
+**Builders' changes (#2779, #2780, #988)**
+- A `par_iter` walk whose lambda fails in two of the program's own errors keeps a later failure of the other one in the first's list ("and then:"), instead of dropping it (ADR-async-5 D26).
+- `error.message()` and `error.full()` work on a caught `task::OverBudget`, `task::TimedOut` or `task::Crashed` alone, as on every error (Part I 7.1).
+- `println(error.message())` in a handler the box reached no longer stops in rustc with "type annotations needed".
+- async: where a pending value two tasks wait for fails, the first mention in written order receives the failure and the other task is cancelled at its wait, with no second error at the group's end (ADR-async-5 D8)
+- async: a task's fallback takes the failure of a pending value its body names, also where the callee cannot fail
+
+## [0.0.1552] — 2026-11-23
+
+**Builders' changes (#2585, #2587)**
+- The sync pass derives one function's claim, or its recursive group's, from its callees' stored claims, and the package's callees first through it; its ledger write-back, notes and check move from Rust into sync.nika (ADR-100 D7).
+- `a ?? b ?? false` over map reads is a `bool` below, where rustc could not infer the inner `index::or`; and `m[k]` after `let k = xs.last() ?? continue` keys the map with the reference `k` already is (D30), as `m.get(k)` did, not `&&String`.
+- The tether pass has a per-function entry (ADR-100 D7), and its package loop is Nikaia; a `for` over a list literal of integers can index a list of structs (rustc refused it with "type annotations needed").
+
+## [0.0.1551] — 2026-11-23
+
+**Builders' changes (#2502, #2768, #987)**
+- benches/par-map counts par_iter().map(…).collect() over 10^6 elements against Rayon with a lambda that can throw too: 1.47x Rayon's instructions, the single-threaded walk that keeps every failure being half of it.
+- par_iter: a walk whose lambda can throw, collected into a list, hands back the list it made where nothing failed, no second list (benches/par-map throws row 66.8 M to 49.8 M Ir, Rayon 45.5 M)
+- A `par_iter` element whose lambda builds in a block runs with a task's budget in its piece's block: one that outgrows it fails alone with `task::OverBudget`, kept with the walk's other failures, at both settings of `user_parallelism`; a pausing `par_iter` map that can fail keeps every failure; a lambda failing in several ways crosses workers in a generated sum
+
+## [0.0.1550] — 2026-11-23
+
+**bounds: a list's length forgotten after pop is still never negative, so a field zeroed after it stays within the list (#1642)**
+- Bounds: a field set to 0 after a `pop` of its list stays within the list: a length the walk forgets after `pop`, `retain` or `dedup` is still never negative.
+
+## [0.0.1549] — 2026-11-23
+
+**simd: lookup and lookup_or_zero on Fixed[u8, N] (ADR-377 D10), fannkuch-redux flips with one lookup (#1845)**
+- simd: `lookup` and `lookup_or_zero` pick the bytes of a `simd::Fixed[u8, N]` by indices known at run time (ADR-377 D10): one `pshufb` per 16 bytes with SSSE3, `lookup`'s index proved below N (NK1298); fannkuch-redux for speed counts 111.6 instructions a permutation at x86-64-v3 (215.6 before).
+
+## [0.0.1548] — 2026-11-22
+
+**Builders' changes (#2706, #2707)**
+- std::bigint::BigInt: an exact signed integer of any size, with of, from_wide, narrow, sign, bits, to_text, ==, <, add, sub, neg, abs, mul, div_rem, rem and gcd (no literal, operator or as)
+- LRA simplex: a step that leaves i64 rebuilds the tableau in BigInt and goes on there within a budget (`big_budget`, default 50,000,000 pivots and digit products); `--stats` says "N overflows, resumed in BigInt". No query answered before loses its answer; LassoRanker still needs i64-sized Farkas multipliers.
+- `x.clone()` on a `bigint::BigInt` (and any struct `std` writes in Nikaia, whose ledger lists its fields) is accepted as the derived copy; it was refused NK1171.
+- `return match end { … else => end }` in an arm binds `end` by value; the lowering bound it `ref end` and rustc refused the arms (NK1343 under `nikaia run`).
+- A `pub` struct's written rule is part of its contract: published in `nikaia.contracts` and a change in the breaking direction (narrower or wider) warns NK1208 (ADR-369, ADR-269 D18-D19).
+- A `pub` struct's written rule is part of its contract: `nikaia.contracts` carries it as `rules = [...]` under the type, and a narrower rule (asks more of consumers) or a wider one (promises less) warns with NK1208 against the committed ledger.
+
+## [0.0.1547] — 2026-11-22
+
+**Builders' changes (#2608, #2748)**
+- The outer build's choices move into Nikaia: project_drive.nika chooses Cargo's target directory, sweeps gone projects' programs out of the shared rlib tree and runs Cargo through std::process; the Rust host hands only platform values (rlib cache path, tools directory, own executable, CPU config, program arguments and variables). A dropped `catch` around a call with a failing argument no longer lowers to a unit wrapped in Ok.
+- process::spawn takes run's options (dir, env, env_remove, env_clear, stdin, stdout, stderr); a stream may be process::Stream::Discarded or process::Stream::File(path) for run and spawn; Child::id(); a spawned child outlives the program (ADR-243 D11)
+
+## [0.0.1546] — 2026-11-22
+
+**check, emit, par: a par_iter walk whose lambda fails runs every element and keeps every failure, the first in input order thrown with the others as its secondary list (#2736), #2681)**
+- A `par_iter` walk whose lambda can fail runs every element: the first failure in input order is thrown, and the others are its `secondary` list (ADR-async-5 D26); a failing `filter` on `par_iter` compiles at `user_parallelism = yes`.
+
+## [0.0.1545] — 2026-11-22
+
+**Builders' changes (#2118, #2581, #2582, #2583, #2584, #2586)**
+- std's default restart policy `supervisor::Backoff()` is written in Nikaia (`supervisor.nika`), with the same delays, ceiling, healthy reset, 300 s give-up and jitter; a std trait method called on a std type and a std signature default calling a type's constructor now lower correctly.
+- The locks pass derives one function's lock column, or its recursive group's, from its callees' stored columns, and the package callees first through it; the whole-package fixpoint stays as the reference (ADR-100 D7)
+- The panics pass derives one function's panics and places columns, or its recursive group's, from its callees' stored columns, and the package callees first through it; the whole-package fixpoint stays as the reference (ADR-100 D7)
+- The keeps pass derives one function's keeps column, or its recursive group's, from its callees' stored columns, and the package callees first through it; the whole-package fixpoint stays as the reference (ADR-100 D7)
+- The touch pass derives one function's touches, or its recursive group's, from its callees' stored columns, and the package callees first through it; the whole-package fixpoint stays as the reference, and writing the column into the ledger moved from Rust into touch.nika (ADR-100 D7)
+- The throws pass derives one function's error set, or its recursive group's, from its callees' stored sets, and the package callees first through it; the whole-package fixpoint stays as the reference (ADR-100 D7)
+- A list, set or map that only literals went into can be compared with one holding text of its own; the compiler no longer writes Rust that rustc refuses for it (ADR-282 D29)
+
+## [0.0.1544] — 2026-11-22
+
+**Builders' changes (#2742, #2752)**
+- A walk whose step can fail keeps what it fails with when bound to a name: `let w = xs.iter().map(fn(x) { f(x) }); w.collect() catch { error.message() }` works as the chained form does. Was NK1343.
+- NK1134 explains a `catch` around a pending task value: the help writes the fallback after the `async` expression, `let a = async work(7) catch { … }` (ADR-async-5 D22 step 3).
+
+## [0.0.1543] — 2026-11-22
+
+**Builders' changes (#2483, #2516, #2720)**
+- The record that lets a build skip Cargo (#1750) is read only below the project's and its members' roots, the sysroot's crates/, the target directory and a test batch's directory; a path below none of them makes Cargo run.
+- A Nikaia dependency's shipped ledger is compared with the entries this build derives from its sources before any of its functions run at build time; a disagreement is NK1152 naming the package, the function and both entries (ADR-321 D8).
+- Under raw-sinks = "warn" a path from outside that reaches fs::Root::Anywhere unproved is opened as under Dir("."), so one that leaves the directory throws io::IoError::Outside (ADR-raw-sinks-1 D7).
+- The start of an argument of `process::run` is a raw sink: data from outside there is NK1308 unless `process::is_operand` proves it, a literal "--" stands before it, or `[allow] untrusted-option = true` admits it (ADR-raw-sinks-1 D18).
+- none (a test only)
+
 ## [0.0.1542] — 2026-11-22
 
 **Builders' changes (#2714)**

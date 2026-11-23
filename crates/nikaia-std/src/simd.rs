@@ -400,6 +400,62 @@ impl<T: Lane, const N: usize> Fixed<T, N> {
     }
 }
 
+/// **A lookup by indices known at run time** (D10): a platform primitive
+/// (ADR-platform-layer-v1), `byte_blocks::lookup`'s `pshufb` at 16, 32 and 64
+/// lanes, byte by byte below 16.
+impl<const N: usize> Fixed<u8, N> {
+    /// The bytes of this table that `idx` names: lane `i` is
+    /// `self.lane(idx.lane(i))`. The checker has proved each index below `N`
+    /// (`NK1298`), so no lane is checked here.
+    #[inline(always)]
+    pub fn lookup(self, idx: Fixed<u8, N>) -> Self {
+        self.looked_up(idx, false)
+    }
+
+    /// As [`Self::lookup`], with a lane whose index is `N` or more 0.
+    #[inline(always)]
+    pub fn lookup_or_zero(self, idx: Fixed<u8, N>) -> Self {
+        self.looked_up(idx, true)
+    }
+
+    #[inline(always)]
+    fn looked_up(self, idx: Fixed<u8, N>, zero: bool) -> Self {
+        let table = |i: usize| self.0[i];
+        let index = |i: usize| idx.0[i];
+        match N {
+            16 => {
+                let out = byte_blocks::lookup::<16>(
+                    &std::array::from_fn(table),
+                    &std::array::from_fn(index),
+                    zero,
+                );
+                return Fixed(std::array::from_fn(|i| out[i]));
+            }
+            32 => {
+                let out = byte_blocks::lookup::<32>(
+                    &std::array::from_fn(table),
+                    &std::array::from_fn(index),
+                    zero,
+                );
+                return Fixed(std::array::from_fn(|i| out[i]));
+            }
+            64 => {
+                let out = byte_blocks::lookup::<64>(
+                    &std::array::from_fn(table),
+                    &std::array::from_fn(index),
+                    zero,
+                );
+                return Fixed(std::array::from_fn(|i| out[i]));
+            }
+            _ => {}
+        }
+        Fixed(std::array::from_fn(|i| {
+            let at = usize::from(idx.0[i]);
+            if at < N { self.0[at] } else { 0 }
+        }))
+    }
+}
+
 impl<T: IntLane, const N: usize> Fixed<T, N> {
     lanewise!(
         wrapping_add,

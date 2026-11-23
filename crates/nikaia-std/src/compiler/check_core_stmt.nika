@@ -1778,6 +1778,11 @@ fn check_core_stmt_let[H: CheckHost](mut state: CheckState, world: ref CheckWorl
     local.lent = read_through_a_jump
     local.empty_list = pending
     local.open_number = open
+    // **What a `let` says of a byte vector's lanes proves a lookup's index**
+    // (ADR-377 D10): a name bound once to a proved vector, or to a list of them.
+    if !mutable && names.len() == 1 && shape.len() == 0 && (check_simd_kind(local.ty) == "Fixed" || check_simd_element(local.ty) != null) {
+        local.lanes_at_most = state.lanes_at_most(world, value)
+    }
     local.literal = literal
     local.without_mut = without_mut
     local.written_mut = mutable
@@ -2533,8 +2538,10 @@ fn check_core_stmt_for[H: CheckHost](mut state: CheckState, world: ref CheckWorl
     if bindings.len() == 1 && elements.len() == 1 {
         match elements[0] {
             Ty::Named { name, args, .. } => {
-                // A struct element has the fields of a parameter's type.
-                if has_a_length(name) || (args.is_empty() && !is_whole_number(name)) {
+                // A struct element has the fields of a parameter's type, and
+                // a whole-number element is a whole number of the prover
+                // (ADR-396 D2, #2393).
+                if has_a_length(name) || args.is_empty() {
                     state.facts.whole_lets.insert(span.start as i64, name.clone())
                 }
             },
@@ -2940,6 +2947,7 @@ fn check_core_stmt[H: CheckHost](mut state: CheckState, world: ref CheckWorld, h
         Stmt::Let { names, shape, mutable, mut_names, deep, ty, value } => {
             let typed = check_core_stmt_let(state, world, host, names, shape, mutable, mut_names, deep, ty, value, span)
             check_core_stmt_a_stream_let(state, world, names, shape, mutable, ty, value, span)
+            check_core_stmt_a_pending_task(state, world, names, value)
             typed
         },
         // **`comptime` is a `let` that has to fold** (ADR-287 D4, D5).
@@ -2953,6 +2961,27 @@ fn check_core_stmt[H: CheckHost](mut state: CheckState, world: ref CheckWorld, h
         // **One site, not two.**
         Stmt::Expr(expr) => check_core_expr(state, world, host, expr, span),
         Stmt::Emit(value) => check_core_stmt_emit(state, world, host, value, span),
+    }
+}
+
+/// **A binding that holds a task's value**, `let x = async e` with no
+/// fallback and a task that can fail (ADR-async-5 D22): kept by its id, with the `let` as written, for
+/// `NK1134`'s help where a `catch` around a mention of it handles nothing.
+fn check_core_stmt_a_pending_task(mut state: CheckState, world: ref CheckWorld, names: ref Vec[winnow_grammar::Symbol], value: ref Expr) sync {
+    if names.len() != 1 {
+        return
+    }
+    match value {
+        Expr::Async(inner, _, _, _) if state.flow.fallible_tasks.contains(id_of(value) as i64) => {
+            let name = world.words.resolve(names[0]).clone()
+            match state.binding(name) {
+                bound => {
+                    state.flow.pending_tasks.insert(bound.id, f"let {name} = async {written_expression(world.words, inner)}")
+                },
+                null => {},
+            }
+        },
+        else => {},
     }
 }
 

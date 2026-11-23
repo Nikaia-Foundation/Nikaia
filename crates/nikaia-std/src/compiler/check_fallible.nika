@@ -176,8 +176,8 @@ impl CheckState {
                 }
                 name = f"`{written}`"
             }
-            Ty::Seq { can_throw, item, .. } => {
-                if !can_throw {
+            Ty::Seq { fails, item, .. } => {
+                if fails.len() == 0 {
                     return
                 }
                 name = match item {
@@ -205,7 +205,7 @@ impl CheckState {
     /// can fail (ADR-025 D1).
     fn walks_a_failing_sequence(ref self, on: ref Ty, contract: ref FnContract) -> bool sync {
         let can_fail = match on {
-            Ty::Seq { can_throw, .. } => can_throw,
+            Ty::Seq { fails, .. } => fails.len() > 0,
             else => false,
         }
         if !can_fail || !walks_by_value(contract) {

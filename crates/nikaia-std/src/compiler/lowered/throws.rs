@@ -22,6 +22,55 @@ pub struct ThrowsGraph {
     pub fatal: collections::BTreeSet<String>,
 }
 
+pub fn throws_graph(own: &Ledger, library: &Ledger, resolved: &collections::BTreeMap<String, CheckMethodCalls>) -> ThrowsGraph {
+    let mut methods: collections::BTreeMap<String, MethodsCalled> = collections::BTreeMap::new();
+    for (key, calls) in resolved.iter() {
+        let called = MethodsCalled { resolved: calls.resolved.copy_owned(), unseen: calls.unresolved || calls.code_fails, fields: calls.fields_called.copy_owned(), swallowed: calls.swallowed.copy_owned() };
+        methods.insert(nikaia_std::block::Text::from(key.to_string()), called);
+    }
+    ThrowsGraph { methods, direct: collections::BTreeMap::new(), calls: collections::BTreeMap::new(), fatal_calls: collections::BTreeMap::new(), fatal: fatal_types(own, library) }
+}
+
+pub fn fatal_types(own: &Ledger, library: &Ledger) -> collections::BTreeSet<String> {
+    let mut out: collections::BTreeSet<String> = collections::BTreeSet::new();
+    out.extend(nikaia_std::index::or(match *nikaia_std::index::get(&own.implementations, "Fatal") {
+        Some(__nikaia_it) => Some(__nikaia_it.clone()),
+        None => None,
+    }, || collections::BTreeSet::new().into()));
+    out.extend(nikaia_std::index::or(match *nikaia_std::index::get(&library.implementations, "Fatal") {
+        Some(__nikaia_it) => Some(__nikaia_it.clone()),
+        None => None,
+    }, || collections::BTreeSet::new().into()));
+    out
+}
+
+pub fn throws_places(own: &Ledger, library: &Ledger, stored: &mut collections::BTreeMap<String, CheckStoredCode>, graph: &mut ThrowsGraph) -> collections::BTreeSet<String> {
+    let open = params_as_places(own, stored);
+    let mut places: collections::BTreeSet<String> = collections::BTreeSet::new();
+    for (field, code) in stored.iter() {
+        places.insert(nikaia_std::block::Text::from(field.to_string()));
+        stored_throws(field, &code.resolved, code.unresolved, &code.free, &code.thrown, own, library, graph);
+    }
+    for key in open.iter() {
+        let mut set: collections::BTreeSet<String> = nikaia_std::index::or(graph.direct.remove(key), || collections::BTreeSet::new().into());
+        set.insert(format!("from({})", key));
+        graph.direct.insert(nikaia_std::block::Text::from(key.to_string()), set);
+    }
+    places
+}
+
+pub fn throws_record(ledger: &mut Ledger, graph: &ThrowsGraph, places: &collections::BTreeSet<String>) {
+    let answer = error_sets_callees_first(&graph.direct, &graph.calls, &graph.fatal_calls, &graph.fatal, &ledger, places);
+    for (name, errors) in answer.iter() {
+        if places.contains(name) {
+            ledger.code_throws.insert(nikaia_std::block::Text::from(name.to_string()), errors.copy_owned());
+            continue;
+        }
+        let contract = match ledger.functions.get_mut(name) { Some(__nikaia_value) => __nikaia_value, None => continue };
+        contract.fails_with = throws_published(name, errors);
+    }
+}
+
 pub fn unit_throws(program: &Program, names: &winnow_grammar::InternerContext, holes_of: &mut impl FnMut(&Expr) -> Vec<Expr>, contribution_of: &mut impl FnMut(&Expr) -> Contribution, own: &Ledger, library: &Ledger, graph: &mut ThrowsGraph) {
     for item in program.items.iter() {
         match &item.node {
@@ -159,12 +208,7 @@ pub(crate) fn fails_with_of(library: &Ledger, callee: &str) -> Vec<String> {
 pub fn error_sets(direct: &collections::BTreeMap<String, collections::BTreeSet<String>>, calls: &collections::BTreeMap<String, collections::BTreeSet<String>>, fatal_calls: &collections::BTreeMap<String, collections::BTreeMap<String, collections::BTreeSet<String>>>, fatal: &collections::BTreeSet<String>, own: &Ledger, places: &collections::BTreeSet<String>) -> collections::BTreeMap<String, Vec<String>> {
     let mut sets = direct.copy_owned();
     throws_grow(&mut sets, calls, fatal_calls, fatal, own);
-    let mut unnamed: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-    for (name, set) in sets.iter() {
-        if !set.is_empty() || places.contains(name) { continue; }
-        let contract = match *nikaia_std::index::get(&own.functions, name) { Some(__nikaia_value) => __nikaia_value, None => continue };
-        if !contract.fails_with.is_empty() { unnamed.push(nikaia_std::block::Text::from(name.to_string())); }
-    }
+    let unnamed = names_nothing(&sets, own, places);
     if !unnamed.is_empty() {
         for name in unnamed.iter() {
             let mut only: collections::BTreeSet<String> = collections::BTreeSet::new();
@@ -173,6 +217,137 @@ pub fn error_sets(direct: &collections::BTreeMap<String, collections::BTreeSet<S
         }
         throws_grow(&mut sets, calls, fatal_calls, fatal, own);
     }
+    throws_settled(&sets, calls, own, places)
+}
+
+pub(crate) fn names_nothing(sets: &collections::BTreeMap<String, collections::BTreeSet<String>>, own: &Ledger, places: &collections::BTreeSet<String>) -> Vec<String> {
+    let mut unnamed: Vec<String> = vec![];
+    for (name, set) in sets.iter() {
+        if !set.is_empty() || places.contains(name) { continue; }
+        let contract = match *nikaia_std::index::get(&own.functions, name) { Some(__nikaia_value) => __nikaia_value, None => continue };
+        if !contract.fails_with.is_empty() { unnamed.push(nikaia_std::block::Text::from(name.to_string())); }
+    }
+    unnamed
+}
+
+#[allow(clippy::too_many_arguments)]
+pub fn throws_of_unit(unit: &[String], direct: &collections::BTreeMap<String, collections::BTreeSet<String>>, calls: &collections::BTreeMap<String, collections::BTreeSet<String>>, fatal_calls: &collections::BTreeMap<String, collections::BTreeMap<String, collections::BTreeSet<String>>>, fatal: &collections::BTreeSet<String>, stored: &collections::BTreeMap<String, collections::BTreeSet<String>>, own: &Ledger, places: &collections::BTreeSet<String>) -> collections::BTreeMap<String, collections::BTreeSet<String>> {
+    let mut sets: collections::BTreeMap<String, collections::BTreeSet<String>> = collections::BTreeMap::new();
+    for name in unit.iter() {
+        let itself: collections::BTreeSet<String> = nikaia_std::index::or(match *nikaia_std::index::get(&direct, name) {
+            Some(__nikaia_it) => Some(__nikaia_it.clone()),
+            None => None,
+        }, || collections::BTreeSet::new().into());
+        sets.insert(nikaia_std::block::Text::from(name.to_string()), itself);
+    }
+    throws_grow_unit(unit, &mut sets, calls, fatal_calls, fatal, stored, own);
+    let unnamed = names_nothing(&sets, own, places);
+    if !unnamed.is_empty() {
+        for name in unnamed.iter() {
+            let mut only: collections::BTreeSet<String> = collections::BTreeSet::new();
+            only.insert(nikaia_std::block::Text::from(UNNAMED.to_string()));
+            sets.insert(nikaia_std::block::Text::from(name.to_string()), only);
+        }
+        throws_grow_unit(unit, &mut sets, calls, fatal_calls, fatal, stored, own);
+    }
+    sets
+}
+
+pub(crate) fn throws_grow_unit(unit: &[String], sets: &mut collections::BTreeMap<String, collections::BTreeSet<String>>, calls: &collections::BTreeMap<String, collections::BTreeSet<String>>, fatal_calls: &collections::BTreeMap<String, collections::BTreeMap<String, collections::BTreeSet<String>>>, fatal: &collections::BTreeSet<String>, stored: &collections::BTreeMap<String, collections::BTreeSet<String>>, own: &Ledger) {
+    let mut changed = true;
+    while changed {
+        changed = false;
+        for name in unit.iter() {
+            let before = nikaia_std::index::or(match *nikaia_std::index::get(&sets, name) {
+                Some(__nikaia_it) => Some(__nikaia_it.clone()),
+                None => None,
+            }, || collections::BTreeSet::new().into());
+            let mut grown = before.copy_owned();
+            let callees = nikaia_std::index::or(match *nikaia_std::index::get(&calls, name) {
+                Some(__nikaia_it) => Some(__nikaia_it.clone()),
+                None => None,
+            }, || collections::BTreeSet::new().into());
+            for callee in callees.iter() { grown.extend(theirs_stored(&sets, stored, own, callee)); }
+            let caught = nikaia_std::index::or(match *nikaia_std::index::get(&fatal_calls, name) {
+                Some(__nikaia_it) => Some(__nikaia_it.clone()),
+                None => None,
+            }, || collections::BTreeMap::new().into());
+            for (callee, named) in caught.iter() { for error in theirs_stored(&sets, stored, own, callee) { if fatal.contains(&error) && !named.contains(&error) { grown.insert(error); } } }
+            if (grown.len() as i64) != before.len() as i64 {
+                sets.insert(nikaia_std::block::Text::from(name.to_string()), grown);
+                changed = true;
+            }
+        }
+    }
+}
+
+pub(crate) fn theirs_stored(sets: &collections::BTreeMap<String, collections::BTreeSet<String>>, stored: &collections::BTreeMap<String, collections::BTreeSet<String>>, own: &Ledger, callee: &str) -> Vec<String> {
+    if sets.contains_key(callee) { return theirs(sets, own, callee); }
+    theirs(stored, own, callee)
+}
+
+pub fn error_sets_callees_first(direct: &collections::BTreeMap<String, collections::BTreeSet<String>>, calls: &collections::BTreeMap<String, collections::BTreeSet<String>>, fatal_calls: &collections::BTreeMap<String, collections::BTreeMap<String, collections::BTreeSet<String>>>, fatal: &collections::BTreeSet<String>, own: &Ledger, places: &collections::BTreeSet<String>) -> collections::BTreeMap<String, Vec<String>> {
+    let mut stored: collections::BTreeMap<String, collections::BTreeSet<String>> = collections::BTreeMap::new();
+    for unit in throws_callees_first(direct, calls, fatal_calls) {
+        let column = throws_of_unit(&unit, direct, calls, fatal_calls, fatal, &stored, own, places);
+        stored.extend(column);
+    }
+    throws_settled(&stored, calls, own, places)
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub(crate) struct ThrowsComponents {
+    pub(crate) index: collections::BTreeMap<String, i64>,
+    pub(crate) low: collections::BTreeMap<String, i64>,
+    pub(crate) open: collections::BTreeSet<String>,
+    pub(crate) stack: Vec<String>,
+    pub(crate) units: Vec<Vec<String>>,
+    pub(crate) next: i64,
+}
+
+pub fn throws_callees_first(direct: &collections::BTreeMap<String, collections::BTreeSet<String>>, calls: &collections::BTreeMap<String, collections::BTreeSet<String>>, fatal_calls: &collections::BTreeMap<String, collections::BTreeMap<String, collections::BTreeSet<String>>>) -> Vec<Vec<String>> {
+    let mut walk = ThrowsComponents { index: collections::BTreeMap::new(), low: collections::BTreeMap::new(), open: collections::BTreeSet::new(), stack: vec![], units: vec![], next: 0 };
+    for (name, _) in direct.iter() { if !walk.index.contains_key(name) { throws_connect(direct, calls, fatal_calls, name, &mut walk); } }
+    walk.units
+}
+
+pub(crate) fn throws_connect(direct: &collections::BTreeMap<String, collections::BTreeSet<String>>, calls: &collections::BTreeMap<String, collections::BTreeSet<String>>, fatal_calls: &collections::BTreeMap<String, collections::BTreeMap<String, collections::BTreeSet<String>>>, name: &str, walk: &mut ThrowsComponents) {
+    walk.index.insert(nikaia_std::block::Text::from(name.to_string()), walk.next);
+    walk.low.insert(nikaia_std::block::Text::from(name.to_string()), walk.next);
+    walk.next = walk.next + 1;
+    walk.stack.push(nikaia_std::block::Text::from(name.to_string()));
+    walk.open.insert(nikaia_std::block::Text::from(name.to_string()));
+    let mut edges: collections::BTreeSet<String> = nikaia_std::index::or(match *nikaia_std::index::get(&calls, name) {
+        Some(__nikaia_it) => Some(__nikaia_it.clone()),
+        None => None,
+    }, || collections::BTreeSet::new().into());
+    for (callee, _) in nikaia_std::index::or(match *nikaia_std::index::get(&fatal_calls, name) {
+        Some(__nikaia_it) => Some(__nikaia_it.clone()),
+        None => None,
+    }, || collections::BTreeMap::new().into()) { edges.insert(nikaia_std::block::Text::from(callee.to_string())); }
+    for to in edges.iter() {
+        if !direct.contains_key(to) { continue; }
+        let mut reached: i64 = -1;
+        if !walk.index.contains_key(to) {
+            throws_connect(direct, calls, fatal_calls, to, walk);
+            reached = nikaia_std::index::or(*nikaia_std::index::get(&walk.low, to), || -1);
+        } else if walk.open.contains(to) { reached = nikaia_std::index::or(*nikaia_std::index::get(&walk.index, to), || -1); }
+        let mine = nikaia_std::index::or(*nikaia_std::index::get(&walk.low, name), || 0);
+        if reached >= 0 && reached < mine { walk.low.insert(nikaia_std::block::Text::from(name.to_string()), reached); }
+    }
+    if nikaia_std::index::or(*nikaia_std::index::get(&walk.low, name), || -1) != nikaia_std::index::or(*nikaia_std::index::get(&walk.index, name), || -2) { return; }
+    let mut unit: Vec<String> = vec![];
+    loop {
+        let top = match walk.stack.pop() { Some(__nikaia_value) => __nikaia_value, None => break };
+        walk.open.remove(&top);
+        let last = top == name;
+        unit.push(top);
+        if last { break; }
+    }
+    walk.units.push(unit);
+}
+
+pub(crate) fn throws_settled(sets: &collections::BTreeMap<String, collections::BTreeSet<String>>, calls: &collections::BTreeMap<String, collections::BTreeSet<String>>, own: &Ledger, places: &collections::BTreeSet<String>) -> collections::BTreeMap<String, Vec<String>> {
     let mut settled: collections::BTreeMap<String, Vec<String>> = collections::BTreeMap::new();
     for (name, set) in sets.iter() {
         if places.contains(name) {
@@ -590,3 +765,108 @@ pub(crate) fn thrown_by_a_deadline(within: Option<&Expr>, names: &winnow_grammar
     thrown_in(d, names, &mut &mut *holes_of, &mut &mut *contribution_of, in_a_handler, caught, out);
 }
 
+pub(crate) fn throws_test_node(direct: &mut collections::BTreeMap<String, collections::BTreeSet<String>>, calls: &mut collections::BTreeMap<String, collections::BTreeSet<String>>, name: String, thrown: Option<String>, callee: Option<String>) {
+    let mut set: collections::BTreeSet<String> = collections::BTreeSet::new();
+    if thrown.is_some() { set.insert(nikaia_std::index::or(thrown, || "".into())); }
+    let mut called: collections::BTreeSet<String> = collections::BTreeSet::new();
+    if callee.is_some() { called.insert(nikaia_std::index::or(callee, || "".into())); }
+    direct.insert(nikaia_std::block::Text::from(name.to_string()), set);
+    calls.insert(name, called);
+}
+
+pub(crate) fn __nikaia_test_0() -> Result<(), std::boxed::Box<dyn std::error::Error>> {
+    let mut direct: collections::BTreeMap<String, collections::BTreeSet<String>> = collections::BTreeMap::new();
+    let mut calls: collections::BTreeMap<String, collections::BTreeSet<String>> = collections::BTreeMap::new();
+    let mut fatal_calls: collections::BTreeMap<String, collections::BTreeMap<String, collections::BTreeSet<String>>> = collections::BTreeMap::new();
+    throws_test_node(&mut direct, &mut calls, String::from("a"), None, Some(String::from("b")));
+    throws_test_node(&mut direct, &mut calls, String::from("b"), None, Some(String::from("c")));
+    throws_test_node(&mut direct, &mut calls, String::from("c"), Some(String::from("E")), None);
+    throws_test_node(&mut direct, &mut calls, String::from("p"), Some(String::from("F")), Some(String::from("q")));
+    throws_test_node(&mut direct, &mut calls, String::from("q"), None, Some(String::from("p")));
+    throws_test_node(&mut direct, &mut calls, String::from("s"), None, Some(String::from("t")));
+    throws_test_node(&mut direct, &mut calls, String::from("t"), None, Some(String::from("u")));
+    throws_test_node(&mut direct, &mut calls, String::from("u"), Some(String::from("Boom")), None);
+    let mut kept: collections::BTreeMap<String, collections::BTreeSet<String>> = collections::BTreeMap::new();
+    kept.insert(String::from("s"), collections::BTreeSet::new());
+    fatal_calls.insert(String::from("u"), kept);
+    throws_test_node(&mut direct, &mut calls, String::from("n"), None, None);
+    throws_test_node(&mut direct, &mut calls, String::from("m"), None, Some(String::from("n")));
+    throws_test_node(&mut direct, &mut calls, String::from("h"), Some(String::from("G")), Some(String::from("h::f")));
+    throws_test_node(&mut direct, &mut calls, String::from("h::f"), Some(String::from("from(h::f)")), None);
+    let mut own = Ledger::blank();
+    for name in ["a", "b", "c", "p", "q", "s", "t", "u", "n", "m", "h"] {
+        let mut contract = FnContract::empty();
+        contract.fails_with = vec![String::from("?")];
+        own.functions.insert(nikaia_std::block::Text::from(name.to_string()), contract);
+    }
+    let mut fatal: collections::BTreeSet<String> = collections::BTreeSet::new();
+    fatal.insert(String::from("Boom"));
+    let mut places: collections::BTreeSet<String> = collections::BTreeSet::new();
+    places.insert(String::from("h::f"));
+    let whole = error_sets(&direct, &calls, &fatal_calls, &fatal, &own, &places);
+    let first = error_sets_callees_first(&direct, &calls, &fatal_calls, &fatal, &own, &places);
+    if !(whole == first) { nikaia_std::abort::assertion_failed("assert(whole == first)", None, &[("whole", (&&nikaia_std::abort::Operand(&(whole))).shown()), ("first", (&&nikaia_std::abort::Operand(&(first))).shown()), ]) };
+    if !(nikaia_std::index::or(match *nikaia_std::index::get(&first, "a") {
+        Some(__nikaia_it) => Some(__nikaia_it.clone()),
+        None => None,
+    }, || vec![].into()) == vec!["E"]) { nikaia_std::abort::assertion_failed("assert((first[\"a\"]?.clone() ?? []) == [\"E\"])", None, &[("first[\"a\"]?.clone() ?? []", (&&nikaia_std::abort::Operand(&(nikaia_std::index::or(match *nikaia_std::index::get(&first, "a") {
+        Some(__nikaia_it) => Some(__nikaia_it.clone()),
+        None => None,
+    }, || vec![].into())))).shown()), ("[\"E\"]", (&&nikaia_std::abort::Operand(&(vec!["E"]))).shown()), ]) };
+    if !(nikaia_std::index::or(match *nikaia_std::index::get(&first, "q") {
+        Some(__nikaia_it) => Some(__nikaia_it.clone()),
+        None => None,
+    }, || vec![].into()) == vec!["F"]) { nikaia_std::abort::assertion_failed("assert((first[\"q\"]?.clone() ?? []) == [\"F\"])", None, &[("first[\"q\"]?.clone() ?? []", (&&nikaia_std::abort::Operand(&(nikaia_std::index::or(match *nikaia_std::index::get(&first, "q") {
+        Some(__nikaia_it) => Some(__nikaia_it.clone()),
+        None => None,
+    }, || vec![].into())))).shown()), ("[\"F\"]", (&&nikaia_std::abort::Operand(&(vec!["F"]))).shown()), ]) };
+    if !(nikaia_std::index::or(match *nikaia_std::index::get(&first, "s") {
+        Some(__nikaia_it) => Some(__nikaia_it.clone()),
+        None => None,
+    }, || vec![].into()) == vec!["Boom"]) { nikaia_std::abort::assertion_failed("assert((first[\"s\"]?.clone() ?? []) == [\"Boom\"])", None, &[("first[\"s\"]?.clone() ?? []", (&&nikaia_std::abort::Operand(&(nikaia_std::index::or(match *nikaia_std::index::get(&first, "s") {
+        Some(__nikaia_it) => Some(__nikaia_it.clone()),
+        None => None,
+    }, || vec![].into())))).shown()), ("[\"Boom\"]", (&&nikaia_std::abort::Operand(&(vec!["Boom"]))).shown()), ]) };
+    if !(nikaia_std::index::or(match *nikaia_std::index::get(&first, "m") {
+        Some(__nikaia_it) => Some(__nikaia_it.clone()),
+        None => None,
+    }, || vec![].into()) == vec!["?"]) { nikaia_std::abort::assertion_failed("assert((first[\"m\"]?.clone() ?? []) == [\"?\"])", None, &[("first[\"m\"]?.clone() ?? []", (&&nikaia_std::abort::Operand(&(nikaia_std::index::or(match *nikaia_std::index::get(&first, "m") {
+        Some(__nikaia_it) => Some(__nikaia_it.clone()),
+        None => None,
+    }, || vec![].into())))).shown()), ("[\"?\"]", (&&nikaia_std::abort::Operand(&(vec!["?"]))).shown()), ]) };
+    if !(nikaia_std::index::or(match *nikaia_std::index::get(&first, "h") {
+        Some(__nikaia_it) => Some(__nikaia_it.clone()),
+        None => None,
+    }, || vec![].into()) == vec!["G", "from(h::f)"]) { nikaia_std::abort::assertion_failed("assert((first[\"h\"]?.clone() ?? []) == [\"G\", \"from(h::f)\"])", None, &[("first[\"h\"]?.clone() ?? []", (&&nikaia_std::abort::Operand(&(nikaia_std::index::or(match *nikaia_std::index::get(&first, "h") {
+        Some(__nikaia_it) => Some(__nikaia_it.clone()),
+        None => None,
+    }, || vec![].into())))).shown()), ("[\"G\", \"from(h::f)\"]", (&&nikaia_std::abort::Operand(&(vec!["G", "from(h::f)"]))).shown()), ]) };
+    let units = throws_callees_first(&direct, &calls, &fatal_calls);
+    let mut groups = 0;
+    for unit in units.iter() { if unit.len() > 1 { groups = groups + 1; } }
+    if !(groups == 2) { nikaia_std::abort::assertion_failed("assert(groups == 2)", None, &[("groups", (&&nikaia_std::abort::Operand(&(groups))).shown()), ]) };
+    let mut stored: collections::BTreeMap<String, collections::BTreeSet<String>> = collections::BTreeMap::new();
+    let mut thrown: collections::BTreeSet<String> = collections::BTreeSet::new();
+    thrown.insert(String::from("E"));
+    stored.insert(String::from("b"), thrown);
+    let alone: Vec<String> = vec![String::from("a")];
+    let head = throws_of_unit(&alone, &direct, &calls, &fatal_calls, &fatal, &stored, &own, &places);
+    let mut expected: collections::BTreeSet<String> = collections::BTreeSet::new();
+    expected.insert(String::from("E"));
+    if !(nikaia_std::index::or(match *nikaia_std::index::get(&head, "a") {
+        Some(__nikaia_it) => Some(__nikaia_it.clone()),
+        None => None,
+    }, || collections::BTreeSet::new().into()) == expected) { nikaia_std::abort::assertion_failed("assert((head[\"a\"]?.clone() ?? collections::BTreeSet()) == expected)", None, &[("head[\"a\"]?.clone() ?? collections::BTreeSet()", (&&nikaia_std::abort::Operand(&(nikaia_std::index::or(match *nikaia_std::index::get(&head, "a") {
+        Some(__nikaia_it) => Some(__nikaia_it.clone()),
+        None => None,
+    }, || collections::BTreeSet::new().into())))).shown()), ("expected", (&&nikaia_std::abort::Operand(&(expected))).shown()), ]) };
+    Ok(())
+}
+
+
+/// The `test` blocks of this file (#2082), as `nikaia test --std` runs them.
+pub(crate) fn throws_nikaia_tests() -> Vec<(&'static str, fn() -> Result<(), std::boxed::Box<dyn std::error::Error>>)> {
+    vec![
+        ("throws::the_per_function_throws_entry_gives_the_whole_package_column", __nikaia_test_0),
+    ]
+}

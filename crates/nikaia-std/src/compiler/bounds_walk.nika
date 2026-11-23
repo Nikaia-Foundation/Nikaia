@@ -4594,6 +4594,36 @@ fn bounding_each_present(mut walk: BoundsWalk, list: ref String) -> i64 {
 	return walk.arena.ge(len, one)
 }
 
+/// `fact` without `bounding_each_guarded`'s guard `len(list) <= 0`: what
+/// holds of a value read out of `list`, which the read shows not empty
+/// (#1483). Unguarded, the fact no longer names the list's length, so a
+/// later `truncate` or `pop` of the list keeps it: the value was read before
+/// (#1631, `heap_pop`'s `top`).
+fn bounding_each_unguarded(mut walk: BoundsWalk, list: ref String, fact: i64) -> i64 {
+	let parts = match walk.arena.at(fact) {
+		logic::SolverTerm::Or(parts) => parts,
+		else => return fact,
+	}
+	let length = length_of(list)
+	let mut kept: Vec[i64] = []
+	for part in parts {
+		let guard = match walk.arena.at(part) {
+			logic::SolverTerm::Le(a, b) => walk.arena.is_the_variable(a, length) && (walk.arena.constant(b) ?? 1) == 0,
+			else => false,
+		}
+		if !guard {
+			kept.push(part)
+		}
+	}
+	if kept.len() == parts.len() || kept.is_empty() {
+		return fact
+	}
+	if kept.len() == 1 {
+		return kept[0]
+	}
+	return walk.arena.or(kept)
+}
+
 /// The name `expr` is, where it is a bare one.
 fn bounding_variable(expr: ref Expr, words: ref winnow_grammar::InternerContext) -> String? {
 	return match expr {
@@ -10852,7 +10882,17 @@ fn bounding_method(
 			return
 		}
 	}
+	// **A length forgotten is still never negative** (#1642): after `pop`
+	// on a list whose length was known, `0 <= len(xs)` stands again, so a
+	// field set to `0` after it is seen within the list.
+	let known = facts.facts.len()
 	bounding_forget_length(walk, facts, name)
+	if facts.facts.len() < known {
+		let len = walk.arena.var(length)
+		let zero = walk.arena.int(0)
+		let fact = walk.arena.ge(len, zero)
+		bounding_push(walk, facts, fact)
+	}
 }
 
 /// Each expression directly inside `expr`, then each block, of the

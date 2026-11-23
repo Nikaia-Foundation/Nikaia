@@ -73,7 +73,14 @@ pub(crate) fn emit_flow_never_returns(world: &EmitWorld<'_, '_, '_, '_>, node: &
     }
 }
 
-pub(crate) fn emit_flow_a_struct_written(node: &Expr) -> bool { matches!(node, Expr::StructLit { .. } | Expr::LitBool(_, _)) }
+pub(crate) fn emit_flow_a_struct_written(node: &Expr) -> bool {
+    match node {
+        Expr::StructLit { .. } => true,
+        Expr::LitBool(_, _) => true,
+        Expr::Coalesce { fallback, .. } => { let fallback = nikaia_std::boxed::open(fallback); emit_flow_a_struct_written(fallback) },
+        _ => false,
+    }
+}
 
 pub(crate) fn emit_flow_a_simd_call(world: &EmitWorld<'_, '_, '_, '_>, node: &Expr) -> bool {
     match node {
@@ -192,6 +199,8 @@ impl EmitState {
         let fails = a_task && scope.tasks_channel != "nikaia_std::task::Crashed";
         if a_task && !fails { if pauses { out.push("nikaia_std::task::plain_paused("); } else { out.push("nikaia_std::task::plain("); } }
         if pauses { out.push("async "); }
+        let blocked = !pauses && self.facts.blocked_lambdas.contains(&node_key(node));
+        if blocked { out.push("nikaia_std::par::in_block("); }
         let pattern = self.facts.filter_patterns.contains(&node_key(node));
         let mut takes_out = false;
         let mut place: i64 = 0;
@@ -248,10 +257,12 @@ impl EmitState {
             out.push(if leaves { "{ " } else { "{ let __nikaia_done = " });
             self.emit_core_block(world, walk, out, host, body, depth, EmitFlow { can_throw: true, ..inside }, &inside_scope, &value_tail)?;
             out.push(if leaves { " }" } else { "; Ok(__nikaia_done) }" });
+            if blocked { out.push(")"); }
             if a_task { out.push(")"); }
             return Ok(());
         }
         self.emit_core_block(world, walk, out, host, body, depth, inside, &inside_scope, &return_tail)?;
+        if blocked { out.push(")"); }
         if copied && pauses { out.push(&format!(".await; *__nikaia_slot = {}; }}", *nikaia_std::index::get(&names, 0))); } else if copied { out.push(&format!(")(); *__nikaia_slot = {}; }}", *nikaia_std::index::get(&names, 0))); }
         if a_task { out.push(")"); }
         Ok(())
@@ -761,7 +772,7 @@ impl EmitState {
             Expr::Async(_, _, _, _) => { fallback = true; },
             _ => { },
         }
-        let nested = !joined && !fallback && self.emit_catch_nests_a_failure(world, guarded_expr);
+        let nested = !joined && !fallback && (self.emit_catch_nests_a_failure(world, guarded_expr) || emit_catch_reads_a_pending(world, &walk, guarded_expr));
         let at = node_key(guarded_expr);
         let mut a_block = false;
         match guarded_expr {
@@ -780,14 +791,14 @@ impl EmitState {
             out.push(&format!("; Ok::<_, {}>(__nikaia_value) }}).await", boxed));
         } else if nested {
             guarded = EmitFlow { breaks_to: at, ..guarded };
-            if a_block { out.push(&format!("'__nikaia_caught_{}: {{ let __nikaia_value = ", at)); } else { out.push(&format!("'__nikaia_caught_{}: {{ Ok::<_, std::boxed::Box<dyn std::error::Error>>(", at)); }
+            if a_block { out.push(&format!("'__nikaia_caught_{}: {{ let __nikaia_value = ", at)); } else if dropped { out.push(&format!("'__nikaia_caught_{}: {{ ", at)); } else { out.push(&format!("'__nikaia_caught_{}: {{ Ok::<_, std::boxed::Box<dyn std::error::Error>>(", at)); }
         } else { guarded = EmitFlow { breaks_to: -1, ..guarded }; }
         walk.boxed_scope = false;
         let bracketed = emit_flow_struct_headed(guarded_expr);
         if bracketed && !bound_here { out.push("("); }
         if !bound_here { self.emit_expr(world, walk, out, host, guarded_expr, depth, guarded, scope)?; }
         if bracketed && !bound_here { out.push(")"); }
-        if nested && a_block && !bound_here { out.push("; Ok::<_, std::boxed::Box<dyn std::error::Error>>(__nikaia_value) }"); } else if nested && !bound_here { out.push(") }"); }
+        if nested && a_block && !bound_here { out.push("; Ok::<_, std::boxed::Box<dyn std::error::Error>>(__nikaia_value) }"); } else if nested && dropped && !bound_here { out.push("; Ok::<_, std::boxed::Box<dyn std::error::Error>>(()) }"); } else if nested && !bound_here { out.push(") }"); }
         let a_scope = a_scope_call && walk.boxed_scope;
         walk.boxed_scope = false;
         let pad = nikaia_std::block::Text::from("    ".repeat(nikaia_std::count::of(depth + 1))); #[allow(clippy::redundant_locals)] let passing = passing;
@@ -1027,6 +1038,8 @@ impl EmitState {
         walk.async_within = String::from("");
         let admission = nikaia_std::block::Text::from(walk.async_admission.to_string()); #[allow(clippy::redundant_locals)] let handles = handles;
         walk.async_admission = String::from("");
+        let outer_gates = walk.async_gates.copy_owned();
+        walk.async_gates = vec![];
         let mut first: &'static str = "";
         if admission != "" { first = "nikaia_std::task::admission_first(__nikaia_admission).await; "; }
         let mut fallback_inside = false;
@@ -1091,6 +1104,7 @@ impl EmitState {
         }
         if deferred { out.push(")"); }
         if opened { out.push(" }"); }
+        walk.async_gates = outer_gates;
         Ok(())
     }
 }

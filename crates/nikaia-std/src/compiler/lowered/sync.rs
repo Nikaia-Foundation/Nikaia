@@ -86,6 +86,122 @@ pub(crate) fn reaches_one_that_pauses(calls: &collections::BTreeSet<String>, hol
     false
 }
 
+pub fn sync_of_unit(unit: &[String], graph: &collections::BTreeMap<String, SyncReach>, stored: &collections::BTreeMap<String, bool>) -> collections::BTreeMap<String, bool> {
+    let mut holds: collections::BTreeMap<String, bool> = collections::BTreeMap::new();
+    for name in unit.iter() {
+        let reach = match *nikaia_std::index::get(&graph, name) { Some(__nikaia_value) => __nikaia_value, None => continue };
+        holds.insert(nikaia_std::block::Text::from(name.to_string()), !reach.blocked && reach.through_code.is_empty());
+    }
+    let mut changed = true;
+    while changed {
+        changed = false;
+        for name in unit.iter() {
+            if !held(&holds, name) { continue; }
+            let reach = match *nikaia_std::index::get(&graph, name) { Some(__nikaia_value) => __nikaia_value, None => continue };
+            for callee in reach.calls.iter() {
+                let theirs = nikaia_std::index::or(*nikaia_std::index::get(&holds, callee), || nikaia_std::index::or(*nikaia_std::index::get(&stored, callee), || false));
+                if !theirs {
+                    holds.insert(nikaia_std::block::Text::from(name.to_string()), false);
+                    changed = true;
+                    break;
+                }
+            }
+        }
+    }
+    holds
+}
+
+pub fn sync_callees_first(graph: &collections::BTreeMap<String, SyncReach>) -> collections::BTreeMap<String, bool> {
+    let mut stored: collections::BTreeMap<String, bool> = collections::BTreeMap::new();
+    for unit in sync_units(graph) {
+        let column = sync_of_unit(&unit, graph, &stored);
+        stored.extend(column);
+    }
+    stored
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub(crate) struct SyncComponents {
+    pub(crate) index: collections::BTreeMap<String, i64>,
+    pub(crate) low: collections::BTreeMap<String, i64>,
+    pub(crate) open: collections::BTreeSet<String>,
+    pub(crate) stack: Vec<String>,
+    pub(crate) units: Vec<Vec<String>>,
+    pub(crate) next: i64,
+}
+
+pub fn sync_units(graph: &collections::BTreeMap<String, SyncReach>) -> Vec<Vec<String>> {
+    let mut walk = SyncComponents { index: collections::BTreeMap::new(), low: collections::BTreeMap::new(), open: collections::BTreeSet::new(), stack: vec![], units: vec![], next: 0 };
+    for (name, _) in graph.iter() { if !walk.index.contains_key(name) { sync_connect(graph, name, &mut walk); } }
+    walk.units
+}
+
+pub(crate) fn sync_connect(graph: &collections::BTreeMap<String, SyncReach>, name: &str, walk: &mut SyncComponents) {
+    walk.index.insert(nikaia_std::block::Text::from(name.to_string()), walk.next);
+    walk.low.insert(nikaia_std::block::Text::from(name.to_string()), walk.next);
+    walk.next = walk.next + 1;
+    walk.stack.push(nikaia_std::block::Text::from(name.to_string()));
+    walk.open.insert(nikaia_std::block::Text::from(name.to_string()));
+    let reach = match *nikaia_std::index::get(&graph, name) { Some(__nikaia_value) => __nikaia_value, None => return };
+    for to in reach.calls.iter() {
+        if !graph.contains_key(to) { continue; }
+        let mut reached: i64 = -1;
+        if !walk.index.contains_key(to) {
+            sync_connect(graph, to, walk);
+            reached = nikaia_std::index::or(*nikaia_std::index::get(&walk.low, to), || -1);
+        } else if walk.open.contains(to) { reached = nikaia_std::index::or(*nikaia_std::index::get(&walk.index, to), || -1); }
+        let mine = nikaia_std::index::or(*nikaia_std::index::get(&walk.low, name), || 0);
+        if reached >= 0 && reached < mine { walk.low.insert(nikaia_std::block::Text::from(name.to_string()), reached); }
+    }
+    if nikaia_std::index::or(*nikaia_std::index::get(&walk.low, name), || -1) != nikaia_std::index::or(*nikaia_std::index::get(&walk.index, name), || -2) { return; }
+    let mut unit: Vec<String> = vec![];
+    loop {
+        let top = match walk.stack.pop() { Some(__nikaia_value) => __nikaia_value, None => break };
+        walk.open.remove(&top);
+        let last = top == name;
+        unit.push(top);
+        if last { break; }
+    }
+    walk.units.push(unit);
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct SyncNoted {
+    pub by_code: collections::BTreeMap<String, Vec<String>>,
+    pub why: collections::BTreeMap<String, ModulesPause>,
+}
+
+pub fn sync_infer(ledger: &mut Ledger, units: &[ParsedView<'_, '_, '_, '_, '_, '_, '_>], library: &Ledger, resolved: &collections::BTreeMap<String, CheckMethodCalls>, holes_of: &mut impl FnMut(i64, &Expr) -> Vec<Expr>) -> SyncNoted {
+    let methods: collections::BTreeMap<String, MethodsCalled> = resolved.iter().map(|entry| { (nikaia_std::block::Text::from(entry.0.to_string()), MethodsCalled { resolved: entry.1.resolved.copy_owned(), unseen: entry.1.unresolved || entry.1.code_pauses, fields: collections::BTreeSet::new(), swallowed: collections::BTreeMap::new() }) }).collect();
+    let mut graph = SyncGraph { methods, nodes: collections::BTreeMap::new(), unit: 0 };
+    for unit in 0..units.len() as i64 {
+        let view = unsafe { nikaia_std::proven::read(&units, (unit) as usize) };
+        graph.unit = unit;
+        unit_sync(view.items, view.words, &mut |name| { view.unaliased(name) }, &mut |expr| { holes_of(unit, expr) }, &ledger, library, &mut graph);
+    }
+    let reached: collections::BTreeMap<String, SyncReach> = graph.nodes.iter().map(|entry| { (nikaia_std::block::Text::from(entry.0.to_string()), entry.1.reach.clone()) }).collect();
+    let holds = sync_callees_first(&reached);
+    let by_code = paused_only_by_code(&reached, &holds);
+    for (name, keeps) in holds.iter() {
+        let keeps = nikaia_std::num::value(keeps);
+        if !keeps { continue; }
+        let contract = match ledger.functions.get_mut(name) { Some(__nikaia_value) => __nikaia_value, None => continue };
+        if contract.sync_claim == Sync::No { contract.sync_claim = Sync::Inferred; }
+    }
+    let mut why: collections::BTreeMap<String, ModulesPause> = collections::BTreeMap::new();
+    for (start, _) in graph.nodes.iter() {
+        if held(&holds, start) { continue; }
+        let chain = pause_chain(&reached, &holds, start);
+        let at = match chain.last() { Some(__nikaia_value) => __nikaia_value, None => continue };
+        let node = match *nikaia_std::index::get(&graph.nodes, at) { Some(__nikaia_value) => __nikaia_value, None => continue };
+        why.insert(nikaia_std::block::Text::from(start.to_string()), ModulesPause { chain: chain.copy_owned(), unit: node.unit, site: match node.site.as_ref() {
+            Some(__nikaia_it) => Some(__nikaia_it.clone()),
+            None => None,
+        } });
+    }
+    SyncNoted { by_code, why }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Site {
     pub span: Span,
@@ -106,13 +222,13 @@ pub struct SyncGraph {
     pub unit: i64,
 }
 
-pub fn unit_sync(program: &Program, names: &winnow_grammar::InternerContext, unaliased: &mut impl FnMut(&str) -> String, holes_of: &mut impl FnMut(&Expr) -> Vec<Expr>, own: &Ledger, library: &Ledger, graph: &mut SyncGraph) {
-    for item in program.items.iter() {
+pub fn unit_sync(items: &[Spanned<Item>], names: &winnow_grammar::InternerContext, unaliased: &mut impl FnMut(&str) -> String, holes_of: &mut impl FnMut(&Expr) -> Vec<Expr>, own: &Ledger, library: &Ledger, graph: &mut SyncGraph) {
+    for item in items.iter() {
         match &item.node {
             Item::Fn { name, args, body, is_sync, sync_by, .. } => {
                 let is_sync = *is_sync; let name = *name;
                 let key = key_of_function((name).as_ref(), "", names);
-                let mut node = sync_node(&seen_in(body, names, &mut *unaliased, &mut *holes_of, &mut no_root, false), program, &code_of(args, body, names), names, own, library, graph.unit);
+                let mut node = sync_node(&seen_in(body, names, &mut *unaliased, &mut *holes_of, &mut no_root, false), items, &code_of(args, body, names), names, own, library, graph.unit);
                 sync_methods(*nikaia_std::index::get(&graph.methods, &key), own, library, &mut node);
                 declared_sync(is_sync, sync_by, &mut node);
                 graph.nodes.insert(key, node);
@@ -125,7 +241,7 @@ pub fn unit_sync(program: &Program, names: &winnow_grammar::InternerContext, una
                         Item::Fn { name, args, body, is_sync, sync_by, .. } => {
                             let is_sync = *is_sync; let name = *name;
                             let key = key_of_function((name).as_ref(), &owner, names);
-                            let mut node = sync_node(&seen_in(body, names, &mut *unaliased, &mut *holes_of, &mut no_root, false), program, &code_of(args, body, names), names, own, library, graph.unit);
+                            let mut node = sync_node(&seen_in(body, names, &mut *unaliased, &mut *holes_of, &mut no_root, false), items, &code_of(args, body, names), names, own, library, graph.unit);
                             sync_methods(*nikaia_std::index::get(&graph.methods, &key), own, library, &mut node);
                             declared_sync(is_sync, sync_by, &mut node);
                             declared_by((trait_name).as_ref(), &key_of_function((name).as_ref(), "", names), names, own, library, &mut node);
@@ -231,7 +347,7 @@ pub(crate) fn code_source(value: &Expr, names: &winnow_grammar::InternerContext,
     }
 }
 
-pub(crate) fn sync_node(seen: &[Seen], program: &Program, code: &collections::BTreeMap<String, bool>, names: &winnow_grammar::InternerContext, own: &Ledger, library: &Ledger, unit: i64) -> SyncNode {
+pub(crate) fn sync_node(seen: &[Seen], items: &[Spanned<Item>], code: &collections::BTreeMap<String, bool>, names: &winnow_grammar::InternerContext, own: &Ledger, library: &Ledger, unit: i64) -> SyncNode {
     let mut node = SyncNode { reach: SyncReach { blocked: false, calls: collections::BTreeSet::new(), through_code: collections::BTreeSet::new(), pauses_here: false }, site: None, unit };
     for one in seen.iter() {
         match one {
@@ -239,7 +355,7 @@ pub(crate) fn sync_node(seen: &[Seen], program: &Program, code: &collections::BT
                 node.reach.blocked = true;
                 first_site(span, &format!("an `{}` block", construct), &mut node);
             },
-            Seen::Call { name, span, .. } => { sync_call((callee_named(names, nikaia_std::block::Text::from(name.to_string()), own, library, &program.items)).as_ref(), span, code, &mut node); },
+            Seen::Call { name, span, .. } => { sync_call((callee_named(names, nikaia_std::block::Text::from(name.to_string()), own, library, items)).as_ref(), span, code, &mut node); },
             Seen::Spawn { span } => { sync_call(Some(&Callee::Opaque(None)), span, code, &mut node); },
             Seen::Opaque { span } => { sync_call(Some(&Callee::Opaque(None)), span, code, &mut node); },
             _ => { },
@@ -315,14 +431,20 @@ pub(crate) struct Promise {
     pub(crate) allowed: collections::BTreeSet<String>,
 }
 
-pub fn unit_violations(program: &Program, names: &winnow_grammar::InternerContext, unaliased: &mut impl FnMut(&str) -> String, holes_of: &mut impl FnMut(&Expr) -> Vec<Expr>, own: &Ledger, library: &Ledger) -> Vec<Violation> {
+pub fn sync_violations(view: &ParsedView<'_, '_, '_, '_, '_, '_, '_>, own: &Ledger, library: &Ledger, holes_of: &mut impl FnMut(&Expr) -> Vec<Expr>) -> Vec<Violation> {
+    let mut found = unit_violations(view.items, view.words, &mut |name| { view.unaliased(name) }, &mut *holes_of, own, library);
+    found.sort_by_key(|v| { v.span.start });
+    found
+}
+
+pub(crate) fn unit_violations(items: &[Spanned<Item>], names: &winnow_grammar::InternerContext, unaliased: &mut impl FnMut(&str) -> String, holes_of: &mut impl FnMut(&Expr) -> Vec<Expr>, own: &Ledger, library: &Ledger) -> Vec<Violation> {
     let mut found: Vec<Violation> = vec![];
-    for item in program.items.iter() {
+    for item in items.iter() {
         match &item.node {
             Item::Fn { name, args, body, is_sync, sync_by, .. } => {
                 let is_sync = *is_sync; let name = *name;
                 let promise = match promise_of(&key_of_function((name).as_ref(), "", names), args, body, is_sync, sync_by, names) { Some(__nikaia_value) => __nikaia_value, None => continue };
-                violations_in(&seen_in(body, names, &mut *unaliased, &mut *holes_of, &mut no_root, false), &promise, program, names, own, library, &mut found);
+                violations_in(&seen_in(body, names, &mut *unaliased, &mut *holes_of, &mut no_root, false), &promise, items, names, own, library, &mut found);
             },
             Item::Impl { target, methods, .. } => {
                 let owner = nikaia_std::block::Text::from(names.resolve(target.name).to_string());
@@ -331,7 +453,7 @@ pub fn unit_violations(program: &Program, names: &winnow_grammar::InternerContex
                         Item::Fn { name, args, body, is_sync, sync_by, .. } => {
                             let is_sync = *is_sync; let name = *name;
                             let promise = match promise_of(&key_of_function((name).as_ref(), &owner, names), args, body, is_sync, sync_by, names) { Some(__nikaia_value) => __nikaia_value, None => continue };
-                            violations_in(&seen_in(body, names, &mut *unaliased, &mut *holes_of, &mut no_root, false), &promise, program, names, own, library, &mut found);
+                            violations_in(&seen_in(body, names, &mut *unaliased, &mut *holes_of, &mut no_root, false), &promise, items, names, own, library, &mut found);
                         },
                         _ => { },
                     }
@@ -369,7 +491,7 @@ pub fn unit_pausing(program: &Program, names: &winnow_grammar::InternerContext, 
                     if key == *one {
                         let promise = match promise_of(&key, args, body, true, &vec![], names) { Some(__nikaia_value) => __nikaia_value, None => continue };
                         let mut found: Vec<Violation> = vec![];
-                        violations_in(&seen_in(body, names, &mut *unaliased, &mut *holes_of, &mut no_root, false), &promise, program, names, own, library, &mut found);
+                        violations_in(&seen_in(body, names, &mut *unaliased, &mut *holes_of, &mut no_root, false), &promise, &program.items, names, own, library, &mut found);
                         pauses = !found.is_empty();
                     }
                 },
@@ -410,13 +532,13 @@ pub(crate) fn promise_of(caller: &str, args: &[FnArg], body: &Block, is_sync: bo
     Some(Promise { caller: nikaia_std::block::Text::from(caller.to_string()), promise, allowed })
 }
 
-pub(crate) fn violations_in(seen: &[Seen], promise: &Promise, program: &Program, names: &winnow_grammar::InternerContext, own: &Ledger, library: &Ledger, found: &mut Vec<Violation>) {
+pub(crate) fn violations_in(seen: &[Seen], promise: &Promise, items: &[Spanned<Item>], names: &winnow_grammar::InternerContext, own: &Ledger, library: &Ledger, found: &mut Vec<Violation>) {
     for one in seen.iter() {
         match one {
             Seen::Joins { construct, span } => { found.push(violation(promise, span, construct, false, false, true)); },
             Seen::Call { name, span, .. } => {
                 if !name.contains("::") && promise.allowed.contains(name) { continue; }
-                pausing_call((callee_named(names, nikaia_std::block::Text::from(name.to_string()), own, library, &program.items)).as_ref(), span, promise, own, found);
+                pausing_call((callee_named(names, nikaia_std::block::Text::from(name.to_string()), own, library, items)).as_ref(), span, promise, own, found);
             },
             Seen::Spawn { span } => { pausing_call(Some(&Callee::Opaque(None)), span, promise, own, found); },
             Seen::Opaque { span } => { pausing_call(Some(&Callee::Opaque(None)), span, promise, own, found); },
@@ -457,3 +579,56 @@ pub(crate) fn unpromised(claim: &Sync) -> bool { claim.is_unpromised() }
 
 pub(crate) fn violation(promise: &Promise, span: &Span, callee: &str, from_library: bool, unpromised: bool, construct: bool) -> Violation { Violation { span: span.clone(), caller: nikaia_std::block::Text::from(promise.caller.to_string()), promise: nikaia_std::block::Text::from(promise.promise.to_string()), callee: nikaia_std::block::Text::from(callee.to_string()), from_library, unpromised, construct } }
 
+pub(crate) fn sync_test_node(graph: &mut collections::BTreeMap<String, SyncReach>, name: String, blocked: bool, calls: &[&'static str]) {
+    let mut reach = SyncReach { blocked, calls: collections::BTreeSet::new(), through_code: collections::BTreeSet::new(), pauses_here: blocked };
+    for callee in calls.iter() {
+        let callee = *callee;
+        reach.calls.insert(nikaia_std::block::Text::from(callee.to_string()));
+    }
+    graph.insert(name, reach);
+}
+
+pub(crate) fn __nikaia_test_0() -> Result<(), std::boxed::Box<dyn std::error::Error>> {
+    let mut graph: collections::BTreeMap<String, SyncReach> = collections::BTreeMap::new();
+    sync_test_node(&mut graph, String::from("a"), false, &vec!["b"]);
+    sync_test_node(&mut graph, String::from("b"), false, &vec!["c"]);
+    sync_test_node(&mut graph, String::from("c"), true, &vec![]);
+    sync_test_node(&mut graph, String::from("d"), false, &vec!["e"]);
+    sync_test_node(&mut graph, String::from("e"), false, &vec![]);
+    sync_test_node(&mut graph, String::from("p"), false, &vec!["q", "e"]);
+    sync_test_node(&mut graph, String::from("q"), false, &vec!["p"]);
+    sync_test_node(&mut graph, String::from("x"), false, &vec!["y"]);
+    sync_test_node(&mut graph, String::from("y"), true, &vec!["x"]);
+    sync_test_node(&mut graph, String::from("w"), false, &vec!["x"]);
+    sync_test_node(&mut graph, String::from("r"), false, &vec!["gone"]);
+    let mut code = SyncReach { blocked: false, calls: collections::BTreeSet::new(), through_code: collections::BTreeSet::new(), pauses_here: false };
+    code.through_code.insert(String::from("f"));
+    graph.insert(String::from("k"), code);
+    let whole = sync_holds(&graph);
+    let first = sync_callees_first(&graph);
+    if !(whole == first) { nikaia_std::abort::assertion_failed("assert(whole == first)", None, &[("whole", (&&nikaia_std::abort::Operand(&(whole))).shown()), ("first", (&&nikaia_std::abort::Operand(&(first))).shown()), ]) };
+    for kept in ["d", "e", "p", "q"] { if !(nikaia_std::index::or(*nikaia_std::index::get(&first, kept), || false)) { nikaia_std::abort::assertion_failed("assert(first[kept] ?? false)", None, &[]) }; }
+    for lost in ["a", "b", "c", "x", "y", "w", "r", "k"] { if !(!nikaia_std::index::or(*nikaia_std::index::get(&first, lost), || true)) { nikaia_std::abort::assertion_failed("assert(!(first[lost] ?? true))", None, &[]) }; }
+    let mut pair = 0;
+    for unit in sync_units(&graph) { if unit.len() > 1 { pair = pair + 1; } }
+    if !(pair == 2) { nikaia_std::abort::assertion_failed("assert(pair == 2)", None, &[("pair", (&&nikaia_std::abort::Operand(&(pair))).shown()), ]) };
+    let mut stored: collections::BTreeMap<String, bool> = collections::BTreeMap::new();
+    stored.insert(String::from("b"), false);
+    stored.insert(String::from("e"), true);
+    let head: Vec<String> = vec![String::from("a")];
+    if !(*nikaia_std::index::get(&sync_of_unit(&head, &graph, &stored), "a") == *nikaia_std::index::get(&whole, "a")) { nikaia_std::abort::assertion_failed("assert(sync_of_unit(head, graph, stored)[\"a\"] == whole[\"a\"])", None, &[("sync_of_unit(head, graph, stored)[\"a\"]", (&&nikaia_std::abort::Operand(&(*nikaia_std::index::get(&sync_of_unit(&head, &graph, &stored), "a")))).shown()), ("whole[\"a\"]", (&&nikaia_std::abort::Operand(&(*nikaia_std::index::get(&whole, "a")))).shown()), ]) };
+    let pure: Vec<String> = vec![String::from("d")];
+    if !(*nikaia_std::index::get(&sync_of_unit(&pure, &graph, &stored), "d") == *nikaia_std::index::get(&whole, "d")) { nikaia_std::abort::assertion_failed("assert(sync_of_unit(pure, graph, stored)[\"d\"] == whole[\"d\"])", None, &[("sync_of_unit(pure, graph, stored)[\"d\"]", (&&nikaia_std::abort::Operand(&(*nikaia_std::index::get(&sync_of_unit(&pure, &graph, &stored), "d")))).shown()), ("whole[\"d\"]", (&&nikaia_std::abort::Operand(&(*nikaia_std::index::get(&whole, "d")))).shown()), ]) };
+    let group: Vec<String> = vec![String::from("p"), String::from("q")];
+    let both = sync_of_unit(&group, &graph, &stored);
+    if !(*nikaia_std::index::get(&both, "p") == *nikaia_std::index::get(&whole, "p") && *nikaia_std::index::get(&both, "q") == *nikaia_std::index::get(&whole, "q")) { nikaia_std::abort::assertion_failed("assert(both[\"p\"] == whole[\"p\"] && both[\"q\"] == whole[\"q\"])", None, &[]) };
+    Ok(())
+}
+
+
+/// The `test` blocks of this file (#2082), as `nikaia test --std` runs them.
+pub(crate) fn sync_nikaia_tests() -> Vec<(&'static str, fn() -> Result<(), std::boxed::Box<dyn std::error::Error>>)> {
+    vec![
+        ("sync::the_per_function_sync_entry_gives_the_whole_package_column", __nikaia_test_0),
+    ]
+}

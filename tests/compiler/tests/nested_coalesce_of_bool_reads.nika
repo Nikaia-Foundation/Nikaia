@@ -1,0 +1,22 @@
+// A `??` whose fallback is a `??` ending in a `bool` is a `bool` whichever
+// side answers: the inner one is not left to infer a type from (#2585).
+use std::collections
+
+fn main() throws {
+    let mut mine: collections::BTreeMap[String, bool] = collections::BTreeMap()
+    let mut theirs: collections::BTreeMap[String, bool] = collections::BTreeMap()
+    mine.insert("a", false)
+    theirs.insert("a", true)
+    theirs.insert("b", true)
+    let mut calls: collections::BTreeSet[String] = collections::BTreeSet()
+    calls.insert("a")
+    calls.insert("b")
+    calls.insert("c")
+    for name in calls {
+        let held = mine[name] ?? theirs[name] ?? false
+        println(f"{name} {held}")
+    }
+    let k = "b"
+    let either = mine[k] ?? theirs[k] ?? false
+    println(either)
+}

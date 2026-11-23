@@ -69,6 +69,10 @@ pub struct SvSmtStats {
 	pub repeated: i64,
 	pub decisions: i64,
 	pub restarts: i64,
+	/// The simplex steps that left `i64`, and how often the query went on
+	/// past it in `BigInt` (#2707).
+	pub overflows: i64,
+	pub resumed: i64,
 }
 
 fn sv_smt_stats_none() -> SvSmtStats {
@@ -79,12 +83,21 @@ fn sv_smt_stats_none() -> SvSmtStats {
 		repeated: 0,
 		decisions: 0,
 		restarts: 0,
+		overflows: 0,
+		resumed: 0,
 	}
 }
 
 /// The counters as `--stats` prints them.
 fn sv_smt_stats_text(st: ref SvSmtStats) -> String {
-	return f"conflicts {st.conflicts}, theory conflicts {st.theory_conflicts}, lemmas {st.lemmas} (repeated {st.repeated}), decisions {st.decisions}, restarts {st.restarts}"
+	let mut text = f"conflicts {st.conflicts}, theory conflicts {st.theory_conflicts}, lemmas {st.lemmas} (repeated {st.repeated}), decisions {st.decisions}, restarts {st.restarts}"
+	if st.overflows > 0 {
+		text = f"{text}, {st.overflows} overflows"
+		if st.resumed > 0 {
+			text = f"{text}, resumed in BigInt"
+		}
+	}
+	return text
 }
 
 fn sv_engine_unknown(why: LgUnknown, work: i64) -> SvEngineRun {
@@ -230,6 +243,14 @@ impl SvTh for SvBoth {
 
 	fn pivots(ref self) -> i64 {
 		return self.simplex.pivots
+	}
+
+	fn overflows(ref self) -> i64 {
+		return self.simplex.overflows
+	}
+
+	fn resumed(ref self) -> i64 {
+		return self.simplex.resumed
 	}
 }
 
@@ -884,6 +905,8 @@ fn sv_smt_run[T: SvTh](
 		repeated: s.repeated,
 		decisions: s.sat.stats.decisions,
 		restarts: s.sat.stats.restarts,
+		overflows: s.th.overflows(),
+		resumed: s.th.resumed(),
 	}
 	return match end {
 		SvSmtEnd::Unsat => SvEngineRun {

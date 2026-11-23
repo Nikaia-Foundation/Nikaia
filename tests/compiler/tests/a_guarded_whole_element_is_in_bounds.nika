@@ -1,0 +1,32 @@
+// An element of a `Vec[i64]` is a whole number of the prover (ADR-396 D2,
+// #2393): a guard on it proves the index it is used as, though it comes
+// from outside the program.
+use std::cli
+
+fn main() throws {
+    let line = cli::args().nth(1) ?? "ab c"
+    let flags: Vec[bool] = [true, false, true]
+    let mut at: Vec[i64] = []
+    for w in line.split(" ") {
+        at.push(w.len())
+    }
+    for j in at {
+        if j < 0 || j >= flags.len() {
+            continue
+        }
+        if flags[j] {
+            println("y")
+        } else {
+            println("n")
+        }
+    }
+    for j in at.iter() {
+        if j < 0 || j >= flags.len() {
+            continue
+        }
+        if flags[j] {
+            println("y")
+        }
+    }
+    println("done")
+}

@@ -1360,6 +1360,21 @@ impl EmitState {
                 return
             }
         }
+        // **A list of text searched by halving for a view of text** (#2389),
+        // as `contains` above: the elements compared as text, which a
+        // `String`, a `str` and a `&str` element can be, and the position
+        // or `null` as below (Part I 4.5).
+        if receiver != null && name == "binary_search" && args.len() == 1 {
+            let list = receiver ?? return
+            if self.facts.text_in_lists.contains(node_key(list)) {
+                out.push("{ let items = &")
+                self.emit_expr(world, walk, out, host, list, depth, flow, scope)
+                out.push("; let at: &str = &")
+                self.emit_expr(world, walk, out, host, args[0], depth, flow, scope)
+                out.push("; items.binary_search_by(|item| ::core::convert::AsRef::<str>::as_ref(item).cmp(at)) }.ok().map(|at| at as i64)")
+                return
+            }
+        }
         // **Formatted text appended is formatted into the text** (#2382):
         // `s.push_str(f"…{x}…")` writes into `s`, without the `String` a
         // `format!` would make, copy from and drop.
@@ -1774,6 +1789,25 @@ impl EmitState {
         if timed {
             out.push("nikaia_std::par::ended(")
         }
+        // **A `par_iter` walk keeps every failure** (ADR-async-5 D26, #2681):
+        // its `collect` gathers each element as a value or a failure, and its
+        // `for_each` each `()` or failure, and `par::kept_failures` throws the
+        // first in input order with the others as its `secondary` list.
+        // A pausing chain's `collect` (one task per element, D25) gathers
+        // the same list of values and failures, awaited.
+        let kept_end = self.facts.kept_failure_ends.contains(on_node) && !self.method_pauses(on_node)
+        let kept_paused = self.facts.kept_failure_ends.contains(on_node) && self.method_pauses(on_node) && name == "collect" && args.len() == 0
+        let kept_collect = (kept_end || kept_paused) && name == "collect" && args.len() == 0
+        let kept_each = kept_end && (self.facts.failing_through_calls.get(on_node) ?? 0) == 3
+        if kept_collect {
+            let declared_into = receiver != null && self.facts.collected_into.contains(node_key(receiver ?? return))
+            // Collected into a list, the list the walk made becomes the
+            // result where nothing failed (`par::kept_failures_listed`,
+            // #2768); a pausing chain's names no type, and keeps the general one.
+            out.push(if declared_into { "nikaia_std::par::kept_failures(" } else if kept_paused { "nikaia_std::par::kept_failures::<Vec<_>, _, _>(" } else { "nikaia_std::par::kept_failures_listed(" })
+        } else if kept_each {
+            out.push("nikaia_std::par::kept_failures::<(), _, _>(")
+        }
         // **A handle's `join` is where its task's failure arrives**
         // (ADR-async-5 D23): `error::arrived` records it, on the failure's
         // path alone.
@@ -1809,6 +1843,9 @@ impl EmitState {
             let (through_written, through_open, through_close) = self.emit_call_failing_through(on_node, name, flow)
             if through_written != "" {
                 written = through_written.clone()
+            }
+            if kept_each {
+                written = "map"
             }
             through_prefix = through_open
             through_suffix = through_close
@@ -1876,8 +1913,13 @@ impl EmitState {
         let own = (self.facts.method_callees[on_node]?.clone() ?? "Seq::collect") != "Seq::collect"
         // **A walk of failing elements is collected into a `Result`**
         // (#2736): the first failure ends it, and nothing after is computed.
-        let failing_items = self.facts.failing_item_receivers.contains(on_node)
-        if name == "collect" && args.len() == 0 && !own && !self.method_pauses(on_node) && failing_items {
+        let failing_items = self.facts.failing_item_receivers.contains_key(on_node)
+        if kept_collect {
+            // A pausing chain's `collect` names no type.
+            if !kept_paused {
+                out.push("::<Vec<_>>")
+            }
+        } else if name == "collect" && args.len() == 0 && !own && !self.method_pauses(on_node) && failing_items {
             out.push(if declared { f"::<{self.rust_result()}<_, _>>" } else { f"::<{self.rust_result()}<Vec<_>, _>>" })
         } else if name == "collect" && args.len() == 0 && !declared && !own && !self.method_pauses(on_node) {
             out.push("::<Vec<_>>")
@@ -2001,6 +2043,11 @@ impl EmitState {
             }
             out.push(emit_async_pause(walk))
         }
+        if kept_each {
+            out.push(".collect::<Vec<_>>())")
+        } else if kept_collect {
+            out.push(")")
+        }
         if arriving {
             out.push(f", &{rust_string(scope.origin)})")
         }
@@ -2036,7 +2083,7 @@ impl EmitState {
     /// it is refused with a line, as a walk of a pausing one is.
     fn emit_call_failing_through(ref self, on_node: i64, name: ref String, flow: EmitFlow) -> (String, String, String) sync throws {
         let through = self.facts.failing_through_calls.get(on_node) ?? 0
-        if self.facts.failing_item_receivers.contains(on_node) {
+        if self.facts.failing_item_receivers.contains_key(on_node) {
             if through != 0 {
                 throw EmitRefused { message: f"`{name}` is given a lambda that can fail, over a sequence whose elements can already fail; only one step of a chain can fail so far. Collect the sequence first, with `… .collect() catch {{ … }}`, and walk the list.", at: flow.statement }
             }
@@ -2304,11 +2351,16 @@ impl EmitState {
         // **`error.message()` in a handler the box reached** (#2219): the
         // box has no `message`, and an error's message is what it displays
         // (an `impl Error` writes its `Display` from `message`), so it is
-        // asked that way. On the block types (#490) `String` is a block's text.
+        // asked that way. On the block types (#490) `String` is a block's text,
+        // named outright: a bare `.into()` has no type to go to where the
+        // message is an argument of `println` or an `f"…"` part.
         let boxed_catch = (scope.caught_sum ?? "-") == ""
         if boxed_catch && name == "message" && args.len() == 0 && emit_call_named(world, receiver, "error") {
-            let into = if self.on_block_types() { ".into()" } else { "" }
-            out.push(f"error.to_string(){into}")
+            if self.on_block_types() {
+                out.push("nikaia_std::block::Text::from(error.to_string())")
+            } else {
+                out.push("error.to_string()")
+            }
             return
         }
         // **`x.rotate_left(n)` turns by `n` modulo the width** (#776), and
@@ -2453,12 +2505,24 @@ fn emit_tuple_part_copies(parts: ref Vec[String]) -> String {
 /// **The trait a method call's ledger key names, where a library `impl` gives
 /// it a type** (#2304): `supervisor::Restart` for `supervisor::Restart::decide`,
 /// else `""`. Only a trait of a module, the path the language below writes
-/// under `nikaia_std::`.
+/// under `nikaia_std::`. A key of the implementing type names the trait too
+/// where the trait has the method (#2118): `supervisor::Backoff::decide`, the
+/// entry a `std` module written in Nikaia is inferred with, is the trait's
+/// `decide` in the language below.
 fn emit_call_library_trait(world: ref EmitWorld, key: ref String) -> String {
-    for (trait_name, _) in world.library.implementations {
-        let method = key.strip_prefix(f"{trait_name}::") ?? continue
-        if trait_name.contains("::") && !method.contains("::") {
+    for (trait_name, types) in world.library.implementations {
+        if !trait_name.contains("::") {
+            continue
+        }
+        let method = key.strip_prefix(f"{trait_name}::") ?? ""
+        if method != "" && !method.contains("::") {
             return trait_name.clone()
+        }
+        for ty in types {
+            let own = key.strip_prefix(f"{ty}::") ?? continue
+            if own != "" && !own.contains("::") && world.library.functions.contains_key(f"{trait_name}::{own}") {
+                return trait_name.clone()
+            }
         }
     }
     return ""

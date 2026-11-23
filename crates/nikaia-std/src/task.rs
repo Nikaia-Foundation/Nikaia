@@ -232,6 +232,11 @@ pub struct Crashed {
     /// The task did not panic, its block was full (ADR-327 D13): a channel
     /// that names `task::OverBudget` takes it as that.
     pub(crate) over_budget: bool,
+    /// The task did not panic: it waited for a pending value another task
+    /// waited for first, which received that value's failure (ADR-async-5
+    /// D8), so it was cancelled. Not a failure (D22): no group records it,
+    /// no fallback takes it.
+    pub(crate) cancelled: bool,
 }
 
 impl Crashed {
@@ -239,16 +244,26 @@ impl Crashed {
     /// full block, which unwound past the hook and has no site.
     pub(crate) fn of(payload: Box<dyn std::any::Any + Send>) -> Crashed {
         let site = SITE.with(|held| std::mem::take(&mut *held.borrow_mut()));
+        if payload.is::<group::WaitCancelled>() {
+            return Crashed {
+                message: "the task was cancelled: a pending value it waited for failed, and an earlier mention received the failure".to_string(),
+                site: String::new(),
+                over_budget: false,
+                cancelled: true,
+            };
+        }
         match payload.is::<task_block::OverBudget>() {
             true => Crashed {
                 message: OverBudget.to_string(),
                 site: String::new(),
                 over_budget: true,
+                cancelled: false,
             },
             false => Crashed {
                 message: panic_message(payload.as_ref()),
                 site,
                 over_budget: false,
+                cancelled: false,
             },
         }
     }
@@ -259,6 +274,7 @@ impl Crashed {
             message: message.to_string(),
             site: String::new(),
             over_budget: false,
+            cancelled: false,
         }
     }
 
@@ -282,6 +298,15 @@ impl std::fmt::Display for OverBudget {
 }
 
 impl std::error::Error for OverBudget {}
+
+impl OverBudget {
+    /// What went wrong, in words: `Error`'s `message` (Part I 7.1), which is
+    /// what the failure prints as. A block's text (#490), the `String` of a
+    /// program.
+    pub fn message(&self) -> crate::block::Text {
+        crate::block::Text::from(self.to_string())
+    }
+}
 
 impl From<Crashed> for OverBudget {
     /// Only a crash that is a full block reaches a channel of this alone.
@@ -320,6 +345,15 @@ impl std::fmt::Display for Crashed {
 }
 
 impl std::error::Error for Crashed {}
+
+impl Crashed {
+    /// What went wrong, in words: `Error`'s `message` (Part I 7.1), which is
+    /// what the failure prints as. A block's text (#490), the `String` of a
+    /// program.
+    pub fn message(&self) -> crate::block::Text {
+        crate::block::Text::from(self.to_string())
+    }
+}
 
 thread_local! {
     /// **Where the last panic on this thread happened**, as the hook named it:
@@ -624,6 +658,15 @@ impl std::fmt::Display for TimedOut {
 }
 
 impl std::error::Error for TimedOut {}
+
+impl TimedOut {
+    /// What went wrong, in words: `Error`'s `message` (Part I 7.1), which is
+    /// what the failure prints as. A block's text (#490), the `String` of a
+    /// program.
+    pub fn message(&self) -> crate::block::Text {
+        crate::block::Text::from(self.to_string())
+    }
+}
 
 /// **The deadline of `async(within: d)`**
 /// ([ADR-async-5](../../../docs/specification/adr/adr-async-5.md) D16): `d`
@@ -2105,6 +2148,7 @@ pub fn fell<T>(
 ) -> Result<T, Box<dyn std::error::Error>> {
     let mut ended = None;
     match caught(|| ended = Some(body())) {
+        Err(crash) if crash.cancelled => std::panic::resume_unwind(Box::new(group::WaitCancelled)),
         Err(crash) => Err(Box::new(crash)),
         Ok(()) => ended.expect("a body that did not panic ended"),
     }
@@ -2116,6 +2160,7 @@ where
     F: std::future::Future<Output = Result<T, Box<dyn std::error::Error>>>,
 {
     match caught_paused(body).await {
+        Err(crash) if crash.cancelled => std::panic::resume_unwind(Box::new(group::WaitCancelled)),
         Err(crash) => Err(Box::new(crash)),
         Ok(ended) => ended,
     }
@@ -2505,7 +2550,12 @@ async fn polled<T, F: std::future::Future<Output = ()> + ?Sized>(
                 Ok(std::task::Poll::Pending) => at += 1,
                 Err(payload) => {
                     let crash = Crashed::of(payload);
-                    // A full block fails only its own task (ADR-async-5 D19).
+                    // A full block fails only its own task (ADR-async-5 D19);
+                    // a cancelled waiter (D8) is no failure at all.
+                    if crash.cancelled {
+                        drop(running.swap_remove(at));
+                        continue;
+                    }
                     if crash.over_budget() {
                         crashed(crash);
                         drop(running.swap_remove(at));

@@ -898,7 +898,8 @@ impl Full for Box<dyn Error> {
 /// **Named types and not a blanket impl**: `Box<dyn Error>` does not implement
 /// `Error`, so the language below cannot be told that an `impl<E: Error>` would
 /// not overlap the one above. One line per library error type that can be a
-/// channel, and there are two.
+/// channel: the library's own and the runtime's task
+/// ends (`task::OverBudget`, `task::TimedOut`, `task::Crashed`, #2780).
 impl Full for crate::io::IoError {
     fn full(&self) -> crate::block::Text {
         long_head(&self.to_string(), BELOW_SITE)
@@ -924,6 +925,24 @@ impl Full for crate::regex::Error {
 }
 
 impl Full for crate::grammar::ParseError {
+    fn full(&self) -> crate::block::Text {
+        long_head(&self.to_string(), BELOW_SITE)
+    }
+}
+
+impl Full for crate::task::OverBudget {
+    fn full(&self) -> crate::block::Text {
+        long_head(&self.to_string(), BELOW_SITE)
+    }
+}
+
+impl Full for crate::task::TimedOut {
+    fn full(&self) -> crate::block::Text {
+        long_head(&self.to_string(), BELOW_SITE)
+    }
+}
+
+impl Full for crate::task::Crashed {
     fn full(&self) -> crate::block::Text {
         long_head(&self.to_string(), BELOW_SITE)
     }

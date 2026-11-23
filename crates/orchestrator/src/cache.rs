@@ -691,7 +691,8 @@ impl Layout {
     pub fn resolve(input: &Path) -> Layout {
         let start = Self::start_of(input);
         for dir in start.ancestors() {
-            if dir.join("nikaia.toml").is_file() {
+            let manifest = dir.join("nikaia.toml");
+            if manifest.is_file() && !Self::names_nothing(&manifest) {
                 return Layout {
                     root: dir.to_path_buf(),
                     lock: dir.join("nikaia.lock"),
@@ -701,6 +702,30 @@ impl Layout {
             }
         }
         Self::outside(start)
+    }
+
+    /// **Whether `manifest` names nothing**: no table and no key, only
+    /// blanks and comments (#2407). Such a file names no package and no
+    /// program, so it is no project's root: an empty `/nikaia.toml` some
+    /// failed write left behind made every script below `/` "not the entry
+    /// point of the project at /" (ADR-260 D4). The search goes on above it,
+    /// with a warning, once per process. A file that does not parse is a
+    /// manifest still, and its reading refuses it.
+    fn names_nothing(manifest: &Path) -> bool {
+        static WARNED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+        let Ok(text) = std::fs::read_to_string(manifest) else {
+            return false;
+        };
+        let empty = text
+            .parse::<toml::Table>()
+            .is_ok_and(|table| table.is_empty());
+        if empty && !WARNED.swap(true, std::sync::atomic::Ordering::Relaxed) {
+            eprintln!(
+                "warning: {} names no package, so it is not taken as a project's manifest; the search for one goes on above it.",
+                manifest.display()
+            );
+        }
+        empty
     }
 
     /// **The file as one outside every project**, whatever is above it: a
@@ -1155,94 +1180,6 @@ pub fn touch(dir: &Path) {
     let _ = std::fs::write(dir.join(USED), b"");
 }
 
-/// **A program's artifacts leave a shared tree with its project.**
-///
-/// Every project builds its program in the one tree, under a crate name that
-/// ends in the project's tag (`<name>_<tag>`), so two projects of one name do
-/// not meet, and Cargo lifts its binary out as `<name>-<tag>`. The binaries are tens of megabytes each, and a deleted project
-/// left them there forever: nothing else would ever read them, and a test suite
-/// that builds hundreds of throwaway projects grew the tree by gigabytes a run.
-///
-/// So a build says which directory its tag belongs to, and removes what every
-/// tag whose directory is gone left in the tree. A project that no longer
-/// exists is not building, so nothing is taken from a build in flight. Failure
-/// is a fuller disk, never a failed build ([`prune`]'s rule).
-pub fn sweep_programs(tree: &Path, tag: &str, project: &Path) {
-    let records = tree.join(PROJECTS);
-    let _ = std::fs::create_dir_all(&records);
-    // A path that is not text is not recorded, and so never swept.
-    if let Some(project) = project.to_str() {
-        let _ = std::fs::write(records.join(tag), project);
-    }
-    let Ok(entries) = std::fs::read_dir(&records) else {
-        return;
-    };
-    let gone: Vec<String> = entries
-        .filter_map(|entry| entry.ok())
-        .filter(|entry| {
-            std::fs::read_to_string(entry.path()).is_ok_and(|root| !Path::new(&root).exists())
-        })
-        .map(|entry| entry.file_name().to_string_lossy().into_owned())
-        .collect();
-    if gone.is_empty() {
-        return;
-    }
-    for dir in profile_dirs(tree) {
-        for sub in ["", "deps", ".fingerprint", "incremental", "build"] {
-            let Ok(entries) = std::fs::read_dir(dir.join(sub)) else {
-                continue;
-            };
-            for entry in entries.filter_map(|entry| entry.ok()) {
-                let name = entry.file_name();
-                let name = name.to_string_lossy();
-                // The crate is `<name>_<tag>`; the binary Cargo lifts out of
-                // `deps/` is `<name>-<tag>`.
-                if gone.iter().any(|tag| {
-                    name.contains(&format!("_{tag}")) || name.contains(&format!("-{tag}"))
-                }) {
-                    let path = entry.path();
-                    let _ = match path.is_dir() {
-                        true => std::fs::remove_dir_all(&path),
-                        false => std::fs::remove_file(&path),
-                    };
-                }
-            }
-        }
-    }
-    for tag in gone {
-        let _ = std::fs::remove_file(records.join(tag));
-    }
-}
-
-/// The profile directories of a Cargo target directory - `debug/` and
-/// `<triple>/debug/` and their kin: the ones that hold a `deps/`, or a
-/// `build/` under the layout Cargo 1.100 always uses (#2136), where each
-/// crate is in `build/<crate>/<hash>/`.
-fn profile_dirs(tree: &Path) -> Vec<PathBuf> {
-    let profile = |dir: &Path| dir.join("deps").is_dir() || dir.join("build").is_dir();
-    let children = |dir: &Path| -> Vec<PathBuf> {
-        std::fs::read_dir(dir)
-            .into_iter()
-            .flatten()
-            .filter_map(|entry| entry.ok())
-            .map(|entry| entry.path())
-            .filter(|path| path.is_dir())
-            .collect()
-    };
-    let mut out = Vec::new();
-    for dir in children(tree) {
-        if profile(&dir) {
-            out.push(dir);
-        } else {
-            out.extend(children(&dir).into_iter().filter(|d| profile(d)));
-        }
-    }
-    out
-}
-
-/// Which project each tag in a tree belongs to, one file per tag.
-const PROJECTS: &str = ".nikaia-projects";
-
 /// When a cache directory was last said to be in use.
 fn used_at(dir: &Path) -> std::time::SystemTime {
     std::fs::metadata(dir.join(USED))
@@ -1261,44 +1198,6 @@ const LOCK: &str = ".nikaia-lock";
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    /// A tag whose project is gone loses its artifacts; a live one keeps them,
-    /// and so does what belongs to no project (`std` and its dependencies).
-    #[test]
-    fn a_gone_projects_program_leaves_the_tree_and_a_live_ones_stays() {
-        let base =
-            std::env::temp_dir().join(format!("nikaia-sweep-programs-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&base);
-        let tree = base.join("tree");
-        let profile = tree.join("x86_64-unknown-linux-gnu").join("debug");
-        let live = base.join("live");
-        std::fs::create_dir_all(profile.join("deps")).unwrap();
-        std::fs::create_dir_all(profile.join(".fingerprint/app_aaaa-1")).unwrap();
-        std::fs::create_dir_all(&live).unwrap();
-        for file in [
-            "deps/app_aaaa-1",
-            "app-aaaa",
-            "app-aaaa.d",
-            "deps/app_bbbb-2",
-            "app-bbbb",
-            "deps/libnikaia_std-3.rlib",
-        ] {
-            std::fs::write(profile.join(file), b"").unwrap();
-        }
-        sweep_programs(&tree, "aaaa", &base.join("gone"));
-        sweep_programs(&tree, "bbbb", &live);
-
-        assert!(!profile.join("deps/app_aaaa-1").exists());
-        assert!(!profile.join("app-aaaa").exists());
-        assert!(!profile.join("app-aaaa.d").exists());
-        assert!(profile.join("app-bbbb").exists());
-        assert!(!profile.join(".fingerprint/app_aaaa-1").exists());
-        assert!(profile.join("deps/app_bbbb-2").exists());
-        assert!(profile.join("deps/libnikaia_std-3.rlib").exists());
-        assert!(!tree.join(PROJECTS).join("aaaa").exists());
-        assert!(tree.join(PROJECTS).join("bbbb").exists());
-        let _ = std::fs::remove_dir_all(&base);
-    }
 
     fn choices() -> Choices {
         Choices::new("x86_64-linux/auto", "rust")

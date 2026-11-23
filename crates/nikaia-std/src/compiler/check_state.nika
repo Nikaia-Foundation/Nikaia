@@ -81,6 +81,10 @@ pub struct CheckLocal {
     /// **A number no annotation typed, whose uses will** (ADR-285 D23): the
     /// `let` it was bound at.
     pub open_number: i64?,
+    /// **The most any lane of the byte vector, or of each vector of the
+    /// list, this `let` bound can hold** (ADR-377 D10): what proves a
+    /// `lookup`'s index below the lanes.
+    pub lanes_at_most: i64?,
     /// **Which binding this is**, of all the ones a name has had: a number no
     /// other binding gets. A read of another `k` is not a read of the one that
     /// was handed over (`NK2105`).
@@ -104,6 +108,7 @@ impl CheckLocal {
             literal: null,
             empty_list: null,
             open_number: null,
+            lanes_at_most: null,
             id: id,
         }
     }

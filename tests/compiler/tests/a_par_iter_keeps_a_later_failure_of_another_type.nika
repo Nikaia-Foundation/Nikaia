@@ -1,0 +1,44 @@
+// **A `par_iter` walk keeps a later failure of another type too**
+// (ADR-async-5 D26, #2779): the lambda fails in two of the program's own
+// errors, neither `task::Crashed` nor `task::OverBudget`, and the second
+// element's `Bad` is thrown with the third's `Worse` joined to it, not
+// dropped. A member of a task's error set crosses a worker already, so the
+// sum boxes the other member's failure into its list.
+enum Bad { Oops }
+
+impl Error for Bad {
+	fn message(ref self) -> String {
+		return "bad"
+	}
+}
+
+enum Worse { Oops }
+
+impl Error for Worse {
+	fn message(ref self) -> String {
+		return "worse"
+	}
+}
+
+fn a(n: i64) -> i64 throws {
+	if n == 2 {
+		throw Bad::Oops
+	}
+	return n
+}
+
+fn b(n: i64) -> i64 throws {
+	if n == 3 {
+		throw Worse::Oops
+	}
+	return n
+}
+
+fn main() throws {
+	let xs = [1, 2, 3]
+	let got: Vec[i64] = xs.par_iter().map(fn(x) { a(x) + b(x) }).collect() catch {
+		println(error.full())
+		[]
+	}
+	println(f"got: {got.len()}")
+}

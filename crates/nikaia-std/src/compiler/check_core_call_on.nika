@@ -813,6 +813,11 @@ fn check_core_call_on_failed_through(mut state: CheckState, args: ref Vec[Expr],
     }
     let kind = if key == "Seq::map" { 1 } else if key == "Seq::filter" { 2 } else if key == "Seq::for_each" { 3 } else { 4 }
     state.facts.failing_through_calls.insert(node, kind)
+    // **A `par_iter` walk's `for_each` runs every element and keeps every
+    // failure** (ADR-async-5 D26, #2681), where a sequence's stops at the first.
+    if kind == 3 && shape_parallel(on) {
+        state.facts.kept_failure_ends.insert(node)
+    }
     if !lazy {
         // **The call fails where the lambda does** (ADR-023 D8): its `?` is
         // written, and an enclosing `catch` has what the lambda threw.
@@ -828,6 +833,23 @@ fn check_core_call_on_failed_through(mut state: CheckState, args: ref Vec[Expr],
         }
     }
     return true
+}
+
+/// **Whether a lambda places an allocation in the running block** (ADR-327
+/// D13): its own sites, or a function it calls that does.
+fn check_core_call_on_places[H: CheckHost](state: ref CheckState, world: ref CheckWorld, host: ref H, lambda: ref Expr) -> bool {
+    let facts = PanicFacts {
+        checked: true,
+        arithmetic: state.facts.arithmetic.clone(),
+        negations: state.facts.negations.clone(),
+        shifts: state.facts.shifts.clone(),
+        map_keys: state.facts.map_keys.keys().map(fn(key) { key.0 }).collect(),
+        proven_indices: collections::BTreeSet(),
+        proven_arithmetic: collections::BTreeSet(),
+        proven_negations: collections::BTreeSet(),
+        placed: state.facts.placed_in_block.clone(),
+    }
+    return places_of_task(lambda, world.here.items, world.words, fn(literal) { host.literal_holes(literal) }, facts, world.own, world.library)
 }
 
 /// Whether the entry hands back a sequence.
@@ -1343,14 +1365,18 @@ fn check_core_call_on_described[H: CheckHost](mut state: CheckState, world: ref 
     // **A walk of failing elements is worked on inside each `Result`**
     // (#2736): the lowering is told which calls stand on one.
     if shape_failing_items(on) {
-        state.facts.failing_item_receivers.insert(node)
+        state.facts.failing_item_receivers.insert(node, sequence_failures(on))
+        // **A `par_iter` walk keeps every failure** (ADR-async-5 D26, #2681).
+        if shape_parallel(on) {
+            state.facts.kept_failure_ends.insert(node)
+        }
     }
     if walks_a_pausing_step && hands_back_a_sequence {
         state.facts.pausing_walks.insert(node)
     }
     // **A walk of a sequence whose step can fail, can fail** (ADR-025 D1).
     let seq_throws = match on {
-        Ty::Seq { can_throw, .. } => can_throw,
+        Ty::Seq { fails, .. } => fails.len() > 0,
         else => false,
     }
     if seq_throws && walks && !hands_back_a_sequence {
@@ -1527,7 +1553,16 @@ fn check_core_call_on_described[H: CheckHost](mut state: CheckState, world: ref 
                 found[at] = check_core_call_on_unfailing_fn(found[at])
             }
         }
-        let seen: CheckGuarded = state.flow.guarded?.clone() ?? CheckGuarded::nothing()
+        let mut seen: CheckGuarded = state.flow.guarded?.clone() ?? CheckGuarded::nothing()
+        // **A `par_iter` lambda that never pauses and places an allocation
+        // in a block runs each element as a task for its memory**
+        // (ADR-async-5 D28, ADR-327 D13): a full block ends that element
+        // alone, with `task::OverBudget`, kept among the call's failures.
+        if parallel && (key == "Seq::map" || key == "Seq::filter" || key == "Seq::for_each") && args.len() == 1 && !a_paused_chain(key, on) && !state.flow.paused_args.contains(id_of(args[0]) as i64) && check_core_call_on_places(state, world, host, args[0]) {
+            state.facts.blocked_lambdas.insert(id_of(args[0]) as i64)
+            seen.thrown.insert("task::OverBudget")
+            state.flow.last_lambda_fails = true
+        }
         state.flow.caught = outer_caught
         state.flow.guarded = outer_guarded
         failed_through = check_core_call_on_failed_through(state, args, through, seen, key, on, node, hands_back_a_sequence)
@@ -1695,9 +1730,16 @@ fn check_core_call_on_described[H: CheckHost](mut state: CheckState, world: ref 
     let mut shaped = shape_through(contract, on, found, substituted)
     // **The walk a failing lambda's step makes fails at each element**
     // (#2736, ADR-025 D1).
+    // **What it fails with is in its type** (#2742), so a binding of the
+    // walk keeps it.
     if failed_through && hands_back_a_sequence {
+        let mut thrown: Vec[String] = []
+        for arg in args {
+            let set: Vec[String]? = state.facts.failing_through_lambdas.get(id_of(arg) as i64)?.clone()
+            thrown = failures_joined(thrown, set ?? [])
+        }
         shaped = match shaped {
-            Ty::Seq { item, is_sync, pauses, parallel, shape, .. } => Ty::Seq { item: item.clone(), is_sync: is_sync, pauses: pauses, can_throw: true, parallel: parallel, shape: shape with { failing_items: true } },
+            Ty::Seq { item, is_sync, pauses, fails, parallel, shape } => Ty::Seq { item: item.clone(), is_sync: is_sync, pauses: pauses, fails: failures_joined(fails, thrown), parallel: parallel, shape: shape with { failing_items: true } },
             else => shaped,
         }
     }
@@ -1816,8 +1858,10 @@ fn check_core_call_on[H: CheckHost](mut state: CheckState, world: ref CheckWorld
     }
     // **A copy of a type this program declares is the derived one**, where
     // its parts copy: one holding a handle `.clone()` does not reach has none
-    // (Part I 4.7, #2238), as the handle itself has none.
-    if found == null && entry == "clone" && args.len() == 0 && (state.structs.contains_key(type_name) || state.enums.contains_key(type_name) || world.own.types.contains_key(type_name)) {
+    // (Part I 4.7, #2238), as the handle itself has none. So is a copy of a
+    // struct `std` writes in Nikaia, whose fields its ledger lists
+    // (`bigint::BigInt`, Part I 2.2: `.clone()` is the one word for a copy).
+    if found == null && entry == "clone" && args.len() == 0 && (state.structs.contains_key(type_name) || state.enums.contains_key(type_name) || world.own.types.contains_key(type_name) || check_core_call_on_library_struct(world, type_name)) {
         if check_core_call_on_clones(world.parts_beside, state.structs, state.enums, state.enum_payloads, state.struct_parameters, state.type_parameters, world, on) {
             return check_core_call_on_owned(on)
         }
@@ -1829,6 +1873,13 @@ fn check_core_call_on[H: CheckHost](mut state: CheckState, world: ref CheckWorld
     }
     let resolved: CheckResolved = found ?? return Ty::Unknown
     return check_core_call_on_described(state, world, host, on, receiver, method, args, entry, resolved.key, resolved.contract, span)
+}
+
+/// **Whether `type_name` is a struct of `std` written in Nikaia**: its
+/// ledger entry lists its fields, and the lowered struct derives its copy.
+fn check_core_call_on_library_struct(world: ref CheckWorld, type_name: ref String) -> bool {
+    let entry = world.library.types[type_name] ?? return false
+    return entry.fields.len() > 0
 }
 
 /// **Whether `key` is an entry of the type `inner` names** (#1976): its key

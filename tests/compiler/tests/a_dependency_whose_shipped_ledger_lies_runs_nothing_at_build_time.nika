@@ -1,0 +1,69 @@
+// #2516, ADR-321 D8: before a Nikaia dependency's function runs at build
+// time, the build derives the package's ledger from its sources and compares
+// it with the `nikaia.contracts` it shipped. A package by version (#99, here
+// a `[patch.crates-io]`, offline) keeps the ledger it was published with, so
+// one that says `loud` touches nothing while it prints is refused with
+// `NK1152`, naming the package, the function and both answers; so is one
+// stricter than its sources, and one that lacks the entry. An honest package
+// computes the value, and the next build reads it from the cache: the
+// build's trace (`NIKAIA_WRAPPER_TRACE`) says the package was not derived
+// again.
+use std::env
+use std::fs
+use std::process
+
+fn toolchain() -> String throws {
+	let exe = env::current_exe()?.display() ?? ""
+	if exe.len() == 0 {
+		eprintln("no running nikaia among this program's ancestors: run it with `nikaia test` (#1305)")
+		process::exit(2)
+	}
+	return exe
+}
+
+fn entry(name: String, touches: String) -> String {
+	return f"[fn.\"{name}\"]\npub = true\nsync = \"inferred\"\ntouches = [{touches}]\n\n"
+}
+
+// The package `demo` as crates.io would hand it over, with `ledger` as its
+// shipped `nikaia.contracts`, and an app whose `comptime` calls `call`.
+fn built(tmp: ref fs::Root, ledger: String, call: String, fresh: String) -> String throws {
+	let root = tmp.path().to_text()
+	process::run("rm", ["-rf", f"{root}/demo", f"{root}/app"])
+	process::run("mkdir", ["-p", f"{root}/demo/src", f"{root}/app/src", f"{root}/app/.cargo"])
+	fs::write("demo/Cargo.toml", tmp, "[package]\nname = \"nikaia_demo\"\nversion = \"0.1.3\"\nedition = \"2024\"\n\n[lib]\npath = \"lib.rs\"\n\n[workspace]\n\n[dependencies]\n")
+	fs::write("demo/lib.rs", tmp, "")
+	fs::write("demo/nikaia.toml", tmp, "[package]\nname = \"demo\"\nversion = \"0.1.3\"\n")
+	fs::write("demo/src/lib.nika", tmp, "pub fn loud() -> i64 throws {\n\tprintln(\"hi\")\n\treturn 1\n}\n\npub fn quiet(x: i64) -> i64 {\n\treturn x * 2\n}\n")
+	fs::write("demo/nikaia.contracts", tmp, f"version = 4\n\n{ledger}")
+	fs::write("app/nikaia.toml", tmp, "[package]\nname = \"app\"\nversion = \"0.1.0\"\n\n[dependencies]\ndemo = \"0.1\"\n")
+	fs::write("app/.cargo/config.toml", tmp, f"[patch.crates-io]\nnikaia_demo = {{ path = \"{root}/demo\" }}\n")
+	fs::write("app/src/main.nika", tmp, f"use demo\n\nfn fresh() -> i64 {{\n\treturn {fresh}\n}}\n\ncomptime N: i64 = {call}\n\nfn main() throws {{\n\tprintln(N)\n}}\n")
+	return ran(tmp)
+}
+
+// `nikaia run` in the app: what it printed, the refusal's lines, and how
+// often the build's trace says `demo` was derived for a build-time run.
+fn ran(tmp: ref fs::Root) -> String throws {
+	let root = tmp.path().to_text()
+	let trace = f"{root}/trace"
+	process::run("rm", ["-f", trace.clone()])
+	let out = process::run(toolchain(), ["run"]; dir: f"{root}/app", env: [("CARGO_NET_OFFLINE", "true"), ("RUST_BACKTRACE", "0"), ("NIKAIA_WRAPPER_TRACE", trace.clone())])
+	let said: Vec[String] = out.stderr.lines().filter(fn(l) { l.contains("NK1152") || l.contains("= note: `demo`") }).map(fn(l) { l.trim().clone() }).collect()
+	let traced = fs::read_to_string(trace, fs::Root::Anywhere) catch { "" }
+	let derived = traced.lines().filter(fn(l) { l.contains("demo derived for a build-time run") }).count()
+	return f"{out.stdout.trim()} (exit {out.code}), demo derived {derived} times\n{said.join("\n")}"
+}
+
+fn main() throws {
+	let tmp = fs::scratch()
+	// A fresh number in an unrelated function keeps an earlier run's value
+	// out of the user cache (#2149).
+	let fresh = process::run("date", ["+%s%N"]).stdout.trim().clone()
+	let honest = f"{entry("loud", "\"stdout write\"")}{entry("quiet", "")}"
+	println(f"false touches: {built(tmp, f"{entry("loud", "")}{entry("quiet", "")}", "demo::loud() catch { 0 }", fresh)}")
+	println(f"stricter: {built(tmp, f"{entry("loud", "\"stdout write\"")}{entry("quiet", "\"stdout write\"")}", "demo::quiet(21)", fresh)}")
+	println(f"no entry: {built(tmp, entry("quiet", ""), "demo::quiet(21)", fresh)}")
+	println(f"honest: {built(tmp, honest, "demo::quiet(21)", fresh)}")
+	println(f"again: {ran(tmp)}")
+}

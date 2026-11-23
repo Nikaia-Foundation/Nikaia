@@ -507,10 +507,13 @@ let n = h.join() catch { [] }                               // a catch where it 
 
 1. **In the task.** A `catch` inside the task's expression or lambda is the
    task's own and runs at once, when the task fails.
-2. **Where the failure arrives.** Otherwise the failure is held; no handler
-   runs. It arrives at the mention that waits (the value form) or at the
-   `join` (a handle), and a `catch` that encloses that point and lies inside
-   the binding's block handles it.
+2. **Where the failure arrives, for a handle.** Otherwise a handle's failure
+   is held; no handler runs. It arrives at the `join`, and a `catch` that
+   encloses the join handles it. A value form's failure has no such place: D6
+   waits before the whole statement that first names the binding and never
+   splits a statement, so no `catch` inside the binding's block encloses the
+   wait; its handlers are steps 1, 3 and 4 (owner, 2026-11-22, #2654: the
+   earlier text gave the value form a step 2 that D6 left no case for).
 3. **The fallback.** Otherwise the `catch` written directly after the `async`
    expression runs: for the value form at the wait point, its value becoming
    the value, and the statement goes on with it; for a handle inside the join,
@@ -524,16 +527,17 @@ let n = h.join() catch { [] }                               // a catch where it 
 A cancellation the program asks for (`h.cancel()`, the losing arm of a
 `select`, a join's `on_timeout: task::OnTimeout::Cancel`) is not a failure: it
 runs no fallback. `task::OverBudget` (D19) and a deadline's `task::TimedOut`
-(D16) are failures and run it. Once a `catch` where the failure arrived has
-taken it, a later mention of the value on that path is refused unless the form
-has a fallback (`NK2118`), because the name has no value there. The `throws`
+(D16) are failures and run it. A handle a `join` took is used up, and a later
+use of it is `NK2105`; `NK2118`, which refused a mention after a `catch` had
+taken a value form's failure, is retired with step 2 of the value form. The `throws`
 walk: the function throws what the fallback throws, or the task's whole set
 where there is no fallback.
 
 **What it costs, named:** a name can throw - `page.len()` fails without a call
-that fails being written there, toward a `catch` around it; and which handler
-runs depends on the path that reaches the mention, so a reader looks in up to
-three places. The precedence is fixed and the places are lexical, which is
+that fails being written there - and a `catch` around that mention does not
+take it: the value form's failure goes to the fallback after the `async`
+expression or on to the receiver, so a reader looks in two places, a handle's
+in three. The precedence is fixed and the places are lexical, which is
 what keeps it readable.
 
 ### D23 - An error that crosses a task's boundary records where the task was started and where the failure arrived.
@@ -609,8 +613,19 @@ chain without `within:` keeps no failure slot (D28).
 
 * A failure slot only for a lambda that can throw, and its list is allocated on
   the failure path; a lambda that cannot throw has no slot.
-* A block reset per element only for a lambda that allocates and keeps memory
-  past its element; one that does not shares its piece's block untouched.
+* A block only for a lambda that places an allocation in it (ADR-327 D13); a
+  lambda that places none runs without one and cannot end with
+  `task::OverBudget`. One that does runs each element as a task for its memory
+  too, so the meaning does not depend on D25's choice: the element has a task's
+  budget in its piece's block; what it hands back, and anything else that
+  outlives it, is built outside the block (ADR-327 D9), so what it leaves there
+  is freed when it ends (ADR-327 D10) and the block needs no reset between
+  elements; a full block unwinds that element alone (D19), and the piece
+  catches it at the element's boundary and keeps `task::OverBudget` among the
+  call's failures (D26), with no failure slot in the lambda (supervisor,
+  2026-11-22, with the owner, #2678: this follows from D19, D25, D26 and
+  ADR-327 D9, D10, D13; the earlier text asked for a reset that cannot be
+  needed).
 * Every check (`NK2104`, `NK2107`, `NK2119`) is compile-time only.
 
 Before the lowering is accepted, `par_iter().map(…).collect()` over 10^6
@@ -672,8 +687,7 @@ changed.
 
 `NK2110` a task with nothing beside it (D7); `NK2111` an `async { }` that
 starts no task (D9); `NK2112` `limit:` on a form that starts one task (D15);
-`NK2115` `async` before a function's declaration (D5); `NK2118` a mention after
-a `catch` where the failure arrived took it, without a fallback (D22); `NK2119`
+`NK2115` `async` before a function's declaration (D5); `NK2118` retired (D22); `NK2119`
 (warning) a `par_iter` lambda starts to pause (D32); `NK2120` `async` inside a
 loop's body (D30); `NK2121` a deferred handle not started, or started twice, on
 some path (D12); `NK2122` a child handle that leaves its group (D11). `NK2109`

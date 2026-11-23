@@ -2340,6 +2340,18 @@ fn kept_unseen(value: ref Expr, ask: ref TierAsk, mut walk: TierWalk) {
     }
 }
 
+/// **A declared list, set or map compared with another is text of its own
+/// inside** (ADR-282 D29, D13): the two sides of a comparison are one Rust
+/// type, and a container only literals flowed into, beside one holding text
+/// of its own, would be one of views. A plain `String` compares with either
+/// kind and is left alone.
+fn compared_whole(value: ref Expr, ask: ref TierAsk, mut walk: TierWalk) {
+    let found = source_of(value, ask, walk) ?? return
+    if a_followed(ask.names, found.ty) {
+        demote_inside(found.owner, found.ty, [], ask, walk)
+    }
+}
+
 /// An `if` or a `match` whose values are literals and `null`: the checker
 /// types it `String?`, text of its own with each literal built (#441), so it
 /// is not static text yet.
@@ -6229,6 +6241,14 @@ fn tier_expr(expr: ref Expr, ask: ref TierAsk, mut walk: TierWalk) -> Kinds {
             }
             if adds && left.still {
                 kept_unseen(lhs, ask, walk)
+            }
+            let compares = match op {
+                BinaryOp::Eq | BinaryOp::Ne | BinaryOp::Lt | BinaryOp::Le | BinaryOp::Gt | BinaryOp::Ge => true,
+                else => false,
+            }
+            if compares {
+                compared_whole(lhs, ask, walk)
+                compared_whole(rhs, ask, walk)
             }
             owned_kinds()
         }

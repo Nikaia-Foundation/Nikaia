@@ -74,8 +74,8 @@ fn walks_by_value(contract: ref FnContract) -> bool {
 /// made from does, and - for a callee that ends by length - only where they
 /// are all sized.
 fn shape_through(contract: ref FnContract, receiver: ref Ty, found: ref Vec[Ty], result: Ty) -> Ty {
-    let (item, is_sync, pauses, can_throw, parallel, written) = match result {
-        Ty::Seq { item, is_sync, pauses, can_throw, parallel, shape } => (item.clone(), is_sync, pauses, can_throw, parallel, shape.clone()),
+    let (item, is_sync, pauses, fails, parallel, written) = match result {
+        Ty::Seq { item, is_sync, pauses, fails, parallel, shape } => (item.clone(), is_sync, pauses, fails.clone(), parallel, shape.clone()),
         else => return result,
     }
     let mut ends = true
@@ -84,6 +84,7 @@ fn shape_through(contract: ref FnContract, receiver: ref Ty, found: ref Vec[Ty],
     let mut timed = false
     let mut one_at_a_time = false
     let mut failing_items = false
+    let mut failing_set: Vec[String] = []
     if contract.signature != null {
         let signature = contract.signature?.clone() ?? Signature::empty()
         if signature.params.len() > 0 && signature.params[0].0 == "self" && a_sequence_type(signature.params[0].1) {
@@ -103,6 +104,7 @@ fn shape_through(contract: ref FnContract, receiver: ref Ty, found: ref Vec[Ty],
             // it** (#2736): a step over a walk of failing elements fails
             // where that walk does.
             failing_items = shape_failing_items(receiver)
+            failing_set = sequence_failures(receiver)
         }
         let arguments = call_arguments(signature)
         let mut at = 0
@@ -118,7 +120,16 @@ fn shape_through(contract: ref FnContract, receiver: ref Ty, found: ref Vec[Ty],
         }
     }
     ends = ends && (!contract.ends_by_length || sized)
-    return Ty::Seq { item: item, is_sync: is_sync, pauses: pauses, can_throw: can_throw || failing_items, parallel: on_every_core, shape: Shape { ends: written.ends && ends, sized: written.sized && sized, replays: written.replays, timed: written.timed || timed, one_at_a_time: written.one_at_a_time || one_at_a_time, failing_items: written.failing_items || failing_items } }
+    return Ty::Seq { item: item, is_sync: is_sync, pauses: pauses, fails: failures_joined(fails, failing_set), parallel: on_every_core, shape: Shape { ends: written.ends && ends, sized: written.sized && sized, replays: written.replays, timed: written.timed || timed, one_at_a_time: written.one_at_a_time || one_at_a_time, failing_items: written.failing_items || failing_items } }
+}
+
+/// **What a step of a walk fails with** (#2742): empty for what is no
+/// walk or cannot fail.
+pub fn sequence_failures(ty: ref Ty) -> Vec[String] {
+    return match ty {
+        Ty::Seq { fails, .. } => fails.clone(),
+        else => [],
+    }
 }
 
 /// Whether each element of a walk carries its step's failure (#2736).
@@ -180,12 +191,9 @@ fn a_paused_chain(key: ref String, on: ref Ty) -> bool {
 /// **A sequence made over one that pauses pauses**, fails where it does, and
 /// neither ends from the back nor knows its length.
 fn a_pausing_sequence(result: Ty, on: ref Ty) -> Ty {
-    let fails = match on {
-        Ty::Seq { can_throw, .. } => can_throw,
-        else => false,
-    }
+    let on_fails = sequence_failures(on)
     return match result {
-        Ty::Seq { item, can_throw, parallel, shape, .. } => Ty::Seq { item: item.clone(), is_sync: false, pauses: true, can_throw: can_throw || fails, parallel: parallel, shape: Shape { ends: false, sized: false, replays: shape.replays, timed: shape.timed, one_at_a_time: shape.one_at_a_time, failing_items: shape.failing_items } },
+        Ty::Seq { item, fails, parallel, shape, .. } => Ty::Seq { item: item.clone(), is_sync: false, pauses: true, fails: failures_joined(fails, on_fails), parallel: parallel, shape: Shape { ends: false, sized: false, replays: shape.replays, timed: shape.timed, one_at_a_time: shape.one_at_a_time, failing_items: shape.failing_items } },
         else => result,
     }
 }

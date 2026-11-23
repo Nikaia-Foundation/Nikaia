@@ -204,6 +204,11 @@ pub(crate) fn type_text(contract: &TypeContract) -> String {
         for field in contract.fields.iter() { attributes.reserve(field.attributes.iter().size_hint().0); for attribute in field.attributes.iter() { attributes.push(ledger_escaped(&format!("{}: {}", field.name, attribute))); } }
         if !attributes.is_empty() { { use ::core::fmt::Write as _; let _ = out.write_fmt(format_args!("field_attributes = [{}]\n", quoted_all(&attributes))); }; }
     }
+    if !contract.rules.is_empty() {
+        let mut escaped: Vec<String> = vec![];
+        escaped.reserve(contract.rules.iter().size_hint().0); for rule in contract.rules.iter() { escaped.push(ledger_escaped(rule)); }
+        { use ::core::fmt::Write as _; let _ = out.write_fmt(format_args!("rules = [{}]\n", quoted_all(&escaped))); };
+    }
     if !contract.variants.is_empty() {
         let mut variants: Vec<String> = vec![];
         variants.reserve(contract.variants.iter().size_hint().0); for variant in contract.variants.iter() { variants.push(variant.text()); }

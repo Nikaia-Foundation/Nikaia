@@ -1,0 +1,4 @@
+proved 32
+stats: conflicts 2, theory conflicts 1, lemmas 1 (repeated 0), decisions 1, restarts 0, 1 overflows, resumed in BigInt
+unknown (overflow) 8
+stats: conflicts 0, theory conflicts 0, lemmas 1 (repeated 0), decisions 1, restarts 0, 1 overflows, resumed in BigInt

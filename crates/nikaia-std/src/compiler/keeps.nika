@@ -1763,11 +1763,9 @@ fn hands_on_a_bound_tail(block: ref Block, interner: ref winnow_grammar::Interne
 // trait's methods and its impls, and then the least fixpoint (`kept_by`).
 
 /// What the compiler does for the walk: the holes of a literal are read from
-/// a unit's source, and the statement that keeps a parameter is cut out of a
-/// method's body, which needs the unit's tokens.
+/// a unit's source, which the compiler holds.
 pub trait KeepsHost {
     fn holes(ref self, unit: i64, expr: ref Expr) -> Vec[Expr] sync
-    fn keeping_statement(ref self, unit: i64, method: ref Spanned[Item], target: String, parameter: String, own_kept: ref collections::BTreeMap[String, collections::BTreeSet[String]], own: ref Ledger, library: ref Ledger) -> Span sync
 }
 
 /// **What the impls of trait methods keep on their own evidence** (ADR-277
@@ -1805,8 +1803,7 @@ pub struct KeepsImplRow {
 }
 
 /// **The two ledgers by a method's name** (#727): neither changes while the
-/// walk runs, so the index cannot go stale. Built by the caller, because a
-/// struct holding views of values the caller owns is built where they are.
+/// walk runs, so the index cannot go stale.
 pub struct KeepsIndexes {
     pub own: ref MethodIndex,
     pub library: ref MethodIndex,
@@ -1900,12 +1897,39 @@ fn keeps_copy_types(view: ref ParsedView) -> collections::BTreeSet[String] {
             }
         }
     }
+    // A `Wide` the file declares hides `std`'s, as in `check_copies.nika`.
+    let mut declares_wide = false
+    for item in view.items {
+        match item.node {
+            Item::Struct { name, .. } => { declares_wide = declares_wide || view.text(name) == "Wide" },
+            Item::Enum { name, .. } => { declares_wide = declares_wide || view.text(name) == "Wide" },
+            else => {},
+        }
+    }
+    if !declares_wide {
+        copies.insert(KEEPS_STD_WIDE.clone())
+    }
     return copies
 }
+
+/// The mark in `keeps_copy_types`'s set that `std`'s `Wide[T]` copies in this
+/// file: a name no type can have.
+comptime KEEPS_STD_WIDE: ref String = "std Wide"
 
 fn keeps_copied_field(ty: ref Ty, copies: ref collections::BTreeSet[String]) -> bool {
     if keeps_a_copied_scalar(ty) {
         return true
+    }
+    // **`std`'s `Wide[T]` copies** (Part I 2.2): a `Wide` of a copied scalar
+    // is handed over by value, where the file declares no `Wide` of its own
+    // (`keeps_copy_types`, #2706).
+    match ty {
+        Ty::Named { name, args, view } => {
+            if !view && name == "Wide" && args.len() == 1 && copies.contains(KEEPS_STD_WIDE) && keeps_a_copied_scalar(args[0]) {
+                return true
+            }
+        },
+        else => {},
     }
     let name = keeps_type_name(ty) ?? return false
     return copies.contains(name)
@@ -1929,7 +1953,12 @@ fn no_uses() -> Uses {
 /// answer does not depend on the order the source declared things in - which
 /// it must not, because Part III 13.5 makes this file a pure function of
 /// (source, toolchain) and `--locked` compares it byte for byte.
-pub fn keeps_infer[H: KeepsHost](mut ledger: Ledger, units: ref Vec[ParsedView], library: ref Ledger, resolved: ref collections::BTreeMap[String, CheckMethodCalls], indexes: KeepsIndexes, host: ref H) -> KeepsColumn {
+pub fn keeps_infer[H: KeepsHost](mut ledger: Ledger, units: ref Vec[ParsedView], library: ref Ledger, resolved: ref collections::BTreeMap[String, CheckMethodCalls], host: ref H) -> KeepsColumn {
+    // The two ledgers by a method's name (#727): the walk adds no function,
+    // so neither index goes stale.
+    let own_methods = method_index(ledger)
+    let library_methods = method_index(library)
+    let indexes = KeepsIndexes { own: own_methods, library: library_methods }
     let mut graph: collections::BTreeMap[String, Uses] = collections::BTreeMap()
     // What the package's declarations say about the types a parse hands back,
     // read once for the grammar arm below.
@@ -2121,8 +2150,8 @@ pub fn keeps_infer[H: KeepsHost](mut ledger: Ledger, units: ref Vec[ParsedView],
     // **The least fixpoint** starts from what each body keeps on its own
     // evidence and adds what the callees it hands a parameter to keep, until
     // nothing changes.
-    let kept = kept_by(graph, ledger, library)
-    let column = keeps_the_impls_own(units, impl_rows, graph, ledger, library, host)
+    let kept = keeps_callees_first(graph, ledger, library)
+    let column = keeps_the_impls_own(units, impl_rows, graph, ledger, library, indexes, resolved, host)
     for (name, parameters) in kept {
         if ledger.functions.contains_key(name) {
             let mut contract = ledger.functions[name] ?? continue
@@ -2163,6 +2192,125 @@ pub fn keeps_infer[H: KeepsHost](mut ledger: Ledger, units: ref Vec[ParsedView],
     }
     keeps_by_value(ledger, units, library)
     return column
+}
+
+/// **One function's final `keeps`, or its recursive group's** (ADR-100 D7):
+/// `unit` is the function, or the strongly connected component it is a part
+/// of, `graph` what each body keeps and hands on, and `stored` the final
+/// columns of the callees outside the unit. The least fixpoint runs inside
+/// the unit only; a callee neither in it nor stored is read as `kept_by`
+/// reads it, from the ledgers, and an undescribed one keeps.
+pub fn keeps_of_unit(unit: ref Vec[String], graph: ref collections::BTreeMap[String, Uses], stored: ref collections::BTreeMap[String, collections::BTreeSet[String]], own: ref Ledger, library: ref Ledger) -> collections::BTreeMap[String, collections::BTreeSet[String]] {
+    let mut kept: collections::BTreeMap[String, collections::BTreeSet[String]] = collections::BTreeMap()
+    for name in unit {
+        let uses = graph[name] ?? continue
+        kept.insert(name.clone(), uses.kept.clone())
+    }
+    let mut changed = true
+    while changed {
+        changed = false
+        for name in unit {
+            let uses = graph[name] ?? continue
+            for passed in uses.passed {
+                if keeps_already(kept, name, passed.parameter) {
+                    continue
+                }
+                if keeps_settled(passed.callee, passed.at, kept, stored, own, library) {
+                    add_kept(kept, name, passed.parameter)
+                    changed = true
+                }
+            }
+        }
+    }
+    return kept
+}
+
+/// Whether `callee` keeps the position `at`: from the unit's columns being
+/// derived, then from those already final, then from the ledgers.
+fn keeps_settled(callee: ref String, at: i64, settling: ref collections::BTreeMap[String, collections::BTreeSet[String]], stored: ref collections::BTreeMap[String, collections::BTreeSet[String]], own: ref Ledger, library: ref Ledger) -> bool {
+    if !settling.contains_key(callee) && stored.contains_key(callee) {
+        return keeps_its(callee, at, stored, own, library)
+    }
+    return keeps_its(callee, at, settling, own, library)
+}
+
+/// **The whole package, callees first** (ADR-100 D7): the graph's strongly
+/// connected components in reverse topological order, each derived by
+/// `keeps_of_unit` from the columns its callees already have. The least
+/// fixpoint is unique, so this answers what `kept_by` answers, which stays
+/// the reference.
+pub fn keeps_callees_first(graph: ref collections::BTreeMap[String, Uses], own: ref Ledger, library: ref Ledger) -> collections::BTreeMap[String, collections::BTreeSet[String]] {
+    let mut stored: collections::BTreeMap[String, collections::BTreeSet[String]] = collections::BTreeMap()
+    for unit in keeps_units(graph) {
+        let column = keeps_of_unit(unit, graph, stored, own, library)
+        stored.extend(column)
+    }
+    return stored
+}
+
+/// Tarjan's walk over the hand-on graph: each node's visit number and lowest
+/// reachable one, the nodes still open, and the components in the order they
+/// close, which is callees first.
+struct KeepsComponents {
+    index: collections::BTreeMap[String, i64],
+    low: collections::BTreeMap[String, i64],
+    open: collections::BTreeSet[String],
+    stack: Vec[String],
+    units: Vec[Vec[String]],
+    next: i64,
+}
+
+/// The graph's recursive groups, each a unit, in reverse topological order: a
+/// unit comes after every unit it hands a parameter into. A callee outside
+/// the graph is no edge: the ledgers answer it.
+pub fn keeps_units(graph: ref collections::BTreeMap[String, Uses]) -> Vec[Vec[String]] {
+    let mut walk = KeepsComponents { index: collections::BTreeMap(), low: collections::BTreeMap(), open: collections::BTreeSet(), stack: [], units: [], next: 0 }
+    for (name, _) in graph {
+        if !walk.index.contains_key(name) {
+            keeps_connect(graph, name, walk)
+        }
+    }
+    return walk.units
+}
+
+fn keeps_connect(graph: ref collections::BTreeMap[String, Uses], name: ref String, mut walk: KeepsComponents) {
+    walk.index.insert(name.clone(), walk.next)
+    walk.low.insert(name.clone(), walk.next)
+    walk.next = walk.next + 1
+    walk.stack.push(name.clone())
+    walk.open.insert(name.clone())
+    let uses = graph[name] ?? return
+    for passed in uses.passed {
+        let to = passed.callee
+        if !graph.contains_key(to) {
+            continue
+        }
+        let mut reached = -1
+        if !walk.index.contains_key(to) {
+            keeps_connect(graph, to, walk)
+            reached = walk.low[to] ?? -1
+        } else if walk.open.contains(to) {
+            reached = walk.index[to] ?? -1
+        }
+        let mine = walk.low[name] ?? 0
+        if reached >= 0 && reached < mine {
+            walk.low.insert(name.clone(), reached)
+        }
+    }
+    if (walk.low[name] ?? -1) != (walk.index[name] ?? -2) {
+        return
+    }
+    let mut unit: Vec[String] = []
+    while true {
+        let top = walk.stack.pop() ?? break
+        walk.open.remove(top)
+        let last = top == name
+        unit.push(top)
+        if last {
+            break
+        }
+    }
+    walk.units.push(unit)
 }
 
 // **The parameters an own method takes by value though it keeps none of
@@ -2358,7 +2506,7 @@ fn add_impl(mut impls_of: collections::BTreeMap[String, collections::BTreeSet[St
 /// it the column itself), against the library's column; a position it keeps
 /// that the column runs is `NK1264`, at the first statement whose prefix of the
 /// body keeps it.
-fn keeps_the_impls_own[H: KeepsHost](units: ref Vec[ParsedView], rows: ref Vec[KeepsImplRow], graph: ref collections::BTreeMap[String, Uses], ledger: ref Ledger, library: ref Ledger, host: ref H) -> KeepsColumn {
+fn keeps_the_impls_own[H: KeepsHost](units: ref Vec[ParsedView], rows: ref Vec[KeepsImplRow], graph: ref collections::BTreeMap[String, Uses], ledger: ref Ledger, library: ref Ledger, indexes: KeepsIndexes, resolved: ref collections::BTreeMap[String, CheckMethodCalls], host: ref H) -> KeepsColumn {
     let mut column = KeepsColumn { beyond: [], keepers: collections::BTreeMap() }
     for row in rows {
         if graph.contains_key(row.at_trait) && !column.keepers.contains_key(row.at_trait) {
@@ -2391,7 +2539,7 @@ fn keeps_the_impls_own[H: KeepsHost](units: ref Vec[ParsedView], rows: ref Vec[K
         }
         own_graph.insert(name.clone(), Uses { kept: uses.kept.clone(), passed: passed })
     }
-    let own_kept = kept_by(own_graph, ledger, library)
+    let own_kept = keeps_callees_first(own_graph, ledger, library)
     for row in asked {
         let foreign = !graph.contains_key(row.at_trait)
         let contract = (match foreign {
@@ -2414,7 +2562,7 @@ fn keeps_the_impls_own[H: KeepsHost](units: ref Vec[ParsedView], rows: ref Vec[K
                     if foreign && contract.keeps.contains(theirs) {
                         continue
                     }
-                    let span = host.keeping_statement(row.unit, row.method, row.target.clone(), parameter.clone(), own_kept, ledger, library)
+                    let span = keeps_keeping_statement(units[row.unit], row.method, row.target, parameter, own_kept, ledger, library, indexes, resolved, fn(e) { host.holes(row.unit, e) })
                     if !foreign {
                         add_keeper(column, row.at_trait, theirs, KeepsKeeper { name: row.key.clone(), unit: row.unit, span: span })
                         continue
@@ -2426,6 +2574,27 @@ fn keeps_the_impls_own[H: KeepsHost](units: ref Vec[ParsedView], rows: ref Vec[K
         }
     }
     return column
+}
+
+/// **The statement that keeps `parameter`**: the first prefix of the impl's
+/// body whose walk keeps it, on its own evidence (`own_kept` answers the
+/// callees); the method itself where none does.
+fn keeps_keeping_statement(view: ref ParsedView, method: ref Spanned[Item], target: ref String, parameter: ref String, own_kept: ref collections::BTreeMap[String, collections::BTreeSet[String]], ledger: ref Ledger, library: ref Ledger, indexes: KeepsIndexes, resolved: ref collections::BTreeMap[String, CheckMethodCalls], holes_of: fn(ref Expr) -> Vec[Expr] sync) -> Span {
+    match method.node {
+        Item::Fn { name, generics, receiver, args, config, spread, ret_type, body, is_sync, sync_by, is_public, can_throw, is_extern, ret_from } => {
+            let mut stmts: Vec[Spanned[Stmt]] = []
+            for stmt in body.stmts {
+                stmts.push(stmt.clone())
+                let prefix = Item::Fn { name: name, generics: generics.clone(), receiver: receiver?.clone(), args: args.clone(), config: config.clone(), spread: spread, ret_type: ret_type?.clone(), body: Block { stmts: stmts.clone() }, is_sync: is_sync, sync_by: sync_by.clone(), is_public: is_public, can_throw: can_throw, is_extern: is_extern, ret_from: ret_from.clone() }
+                let found = keeps_uses_of(view, prefix, target.clone(), ledger, library, indexes, resolved, holes_of) ?? continue
+                if found.uses.kept.contains(parameter) || found.uses.passed.iter().any(fn(passed) { passed.parameter == parameter && keeps_its(passed.callee, passed.at, own_kept, ledger, library) }) {
+                    return stmt.span.clone()
+                }
+            }
+        },
+        else => {},
+    }
+    return method.span.clone()
 }
 
 // The name the trait method's signature gives the parameter at `at`.
@@ -2559,6 +2728,19 @@ pub fn keeps_uses_of(view: ref ParsedView, item: ref Item, target: String?, ledg
             let mut fields: collections::BTreeMap[String, collections::BTreeMap[String, Ty]] = collections::BTreeMap()
             for arg in args {
                 let mut of: collections::BTreeMap[String, Ty] = collections::BTreeMap()
+                // **A tuple's parts are its fields, by position** (#2444):
+                // `return site.0` of a `(i64, String, i64)` copies the number
+                // out and takes nothing of `site`, as a struct's `i64` field
+                // does.
+                if arg.ty.is_tuple && !arg.ty.is_nullable && !arg.ty.is_view {
+                    let mut part = 0
+                    for one in arg.ty.generics {
+                        of.insert(f"{part}", written_ty(view.words, view.aliases, one))
+                        part += 1
+                    }
+                    fields.insert(view.text(arg.name), of)
+                    continue
+                }
                 let mut found = false
                 for held in declared {
                     if held.name == arg.ty.name {
@@ -2728,4 +2910,75 @@ fn keeps_holds_either(ty: ref Type) -> bool {
         }
     }
     return false
+}
+
+/// A node of a test graph: a function of one parameter `x`, kept on its own
+/// evidence or not, and handed to each callee at position 0.
+fn keeps_test_node(mut graph: collections::BTreeMap[String, Uses], name: String, keeps: bool, callees: Vec[String]) {
+    let mut uses = no_uses()
+    if keeps {
+        uses.kept.insert("x")
+    }
+    for callee in callees {
+        uses.passed.push(Passed { parameter: "x", callee: callee.clone(), at: 0 })
+    }
+    graph.insert(name, uses)
+}
+
+fn keeps_test_contract(keeps: bool) -> FnContract {
+    let mut contract = FnContract::empty()
+    contract.signature = Signature { bounds: [], params: [("x", Ty::Named { name: "String", args: [], view: false })], mutable: [], config: [], result: null }
+    if keeps {
+        contract.keeps = ["x"]
+    }
+    return contract
+}
+
+/// **The per-function entry answers what the whole-package entry answers**
+/// (ADR-100 D7, ADR-403 D3): on a call chain into a keeping body, a recursive
+/// pair that keeps nothing, a recursive group of three one of whose members
+/// keeps, a call into a library that lends and one nothing describes. The
+/// chain's head is derived from its callee's stored column alone.
+test "the per-function keeps entry gives the whole-package column" {
+    let mut graph: collections::BTreeMap[String, Uses] = collections::BTreeMap()
+    keeps_test_node(graph, "a", false, ["b"])
+    keeps_test_node(graph, "b", false, ["c"])
+    keeps_test_node(graph, "c", true, [])
+    keeps_test_node(graph, "p", false, ["q"])
+    keeps_test_node(graph, "q", false, ["p"])
+    keeps_test_node(graph, "s", false, ["t"])
+    keeps_test_node(graph, "t", false, ["s", "u"])
+    keeps_test_node(graph, "u", true, ["t"])
+    keeps_test_node(graph, "l", false, ["lent"])
+    keeps_test_node(graph, "r", false, ["mystery"])
+    let mut own = Ledger::blank()
+    for name in ["a", "b", "c", "p", "q", "s", "t", "u", "l", "r"] {
+        own.functions.insert(name.clone(), keeps_test_contract(false))
+    }
+    let mut library = Ledger::blank()
+    library.functions.insert("lent", keeps_test_contract(false))
+    let whole = kept_by(graph, own, library)
+    let first = keeps_callees_first(graph, own, library)
+    assert(whole == first)
+    for name in ["a", "b", "c", "s", "t", "u", "r"] {
+        assert(first[name]?.contains("x") ?? false)
+    }
+    for name in ["p", "q", "l"] {
+        assert(!(first[name]?.contains("x") ?? true))
+    }
+    let mut groups = 0
+    for unit in keeps_units(graph) {
+        if unit.len() > 1 {
+            groups = groups + 1
+        }
+    }
+    // `p, q` and `s, t, u` are the recursive groups.
+    assert(groups == 2)
+    let mut stored: collections::BTreeMap[String, collections::BTreeSet[String]] = collections::BTreeMap()
+    let mut kept_x: collections::BTreeSet[String] = collections::BTreeSet()
+    kept_x.insert("x")
+    stored.insert("b", kept_x)
+    let alone: Vec[String] = ["a"]
+    let head = keeps_of_unit(alone, graph, stored, own, library)
+    assert(head["a"] == whole["a"])
 }

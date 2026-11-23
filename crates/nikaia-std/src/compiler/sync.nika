@@ -2,8 +2,7 @@
 //
 // Which functions of a package keep their claim to be `sync` (ADR-288 D1) -
 // the fixpoint the compiler's `contracts::sync` runs over the calls it
-// collected, moved from Rust (ADR-294, #125). Collecting the calls out of the
-// bodies, resolving them and writing the ledger stay Rust.
+// collected, moved from Rust (ADR-294, #125).
 //
 // The fixpoint is a **greatest** one: every candidate starts `sync` and loses
 // the claim on reaching a function without it, until nothing changes. Mutual
@@ -13,8 +12,15 @@
 // **The walk is here too** (0.0.398): what each body does to its own claim -
 // the calls `tools/foreign.nika`'s walk meets, each by `callee_named`, the type
 // checker's method calls merged in (ADR-288), a trait's and a grammar's entries
-// as leaves - and the check of what a `sync` function may not call. Handing in
-// each unit, the notes a build prints and writing the ledger stay Rust.
+// as leaves - and the check of what a `sync` function may not call. So are
+// writing the ledger's column back and what the build notes (`sync_infer`,
+// `sync_violations`); handing in each unit's view stays Rust
+// (`contracts/sync.rs`).
+//
+// **A per-function entry** (ADR-100 D7): `sync_of_unit` answers one function,
+// or its recursive group, from its callees' stored claims, and
+// `sync_callees_first` derives the package through it; `sync_holds`, the
+// whole-package fixpoint, stays as the reference.
 
 use std::collections
 
@@ -135,6 +141,176 @@ fn reaches_one_that_pauses(calls: ref collections::BTreeSet[String], holds: ref 
     return false
 }
 
+/// **One function's final claim, or its recursive group's** (ADR-100 D7):
+/// `unit` is the function, or the strongly connected component it is a part
+/// of, `graph` what each body reaches, and `stored` the final claims of the
+/// callees outside the unit. The greatest fixpoint runs inside the unit only:
+/// a member starts with the claim its own body allows and loses it on calling
+/// one without it; a callee neither in the unit nor stored is read as
+/// `sync_holds` reads one the graph does not hold, as one that pauses.
+pub fn sync_of_unit(unit: ref Vec[String], graph: ref collections::BTreeMap[String, SyncReach], stored: ref collections::BTreeMap[String, bool]) -> collections::BTreeMap[String, bool] {
+    let mut holds: collections::BTreeMap[String, bool] = collections::BTreeMap()
+    for name in unit {
+        let reach = graph[name] ?? continue
+        holds.insert(name.clone(), !reach.blocked && reach.through_code.len() == 0)
+    }
+    let mut changed = true
+    while changed {
+        changed = false
+        for name in unit {
+            if !held(holds, name) {
+                continue
+            }
+            let reach = graph[name] ?? continue
+            for callee in reach.calls {
+                let theirs = holds[callee] ?? stored[callee] ?? false
+                if !theirs {
+                    holds.insert(name.clone(), false)
+                    changed = true
+                    break
+                }
+            }
+        }
+    }
+    return holds
+}
+
+/// **The whole package, callees first** (ADR-100 D7): the graph's strongly
+/// connected components in reverse topological order, each derived by
+/// `sync_of_unit` from the claims its callees already have. The greatest
+/// fixpoint is unique, so this answers what `sync_holds` answers.
+pub fn sync_callees_first(graph: ref collections::BTreeMap[String, SyncReach]) -> collections::BTreeMap[String, bool] {
+    let mut stored: collections::BTreeMap[String, bool] = collections::BTreeMap()
+    for unit in sync_units(graph) {
+        let column = sync_of_unit(unit, graph, stored)
+        stored.extend(column)
+    }
+    return stored
+}
+
+/// Tarjan's walk over the sync graph: each node's visit number and lowest
+/// reachable one, the nodes still open, and the components in the order they
+/// close, which is callees first.
+struct SyncComponents {
+    index: collections::BTreeMap[String, i64],
+    low: collections::BTreeMap[String, i64],
+    open: collections::BTreeSet[String],
+    stack: Vec[String],
+    units: Vec[Vec[String]],
+    next: i64,
+}
+
+/// The graph's recursive groups, each a unit, in reverse topological order: a
+/// unit comes after every unit it calls into. A call that leaves the graph is
+/// no edge.
+pub fn sync_units(graph: ref collections::BTreeMap[String, SyncReach]) -> Vec[Vec[String]] {
+    let mut walk = SyncComponents { index: collections::BTreeMap(), low: collections::BTreeMap(), open: collections::BTreeSet(), stack: [], units: [], next: 0 }
+    for (name, _) in graph {
+        if !walk.index.contains_key(name) {
+            sync_connect(graph, name, walk)
+        }
+    }
+    return walk.units
+}
+
+fn sync_connect(graph: ref collections::BTreeMap[String, SyncReach], name: ref String, mut walk: SyncComponents) {
+    walk.index.insert(name.clone(), walk.next)
+    walk.low.insert(name.clone(), walk.next)
+    walk.next = walk.next + 1
+    walk.stack.push(name.clone())
+    walk.open.insert(name.clone())
+    let reach = graph[name] ?? return
+    for to in reach.calls {
+        if !graph.contains_key(to) {
+            continue
+        }
+        let mut reached = -1
+        if !walk.index.contains_key(to) {
+            sync_connect(graph, to, walk)
+            reached = walk.low[to] ?? -1
+        } else if walk.open.contains(to) {
+            reached = walk.index[to] ?? -1
+        }
+        let mine = walk.low[name] ?? 0
+        if reached >= 0 && reached < mine {
+            walk.low.insert(name.clone(), reached)
+        }
+    }
+    if (walk.low[name] ?? -1) != (walk.index[name] ?? -2) {
+        return
+    }
+    let mut unit: Vec[String] = []
+    while true {
+        let top = walk.stack.pop() ?? break
+        walk.open.remove(top)
+        let last = top == name
+        unit.push(top)
+        if last {
+            break
+        }
+    }
+    walk.units.push(unit)
+}
+
+// ---------------------------------------------------------------------------
+// The inference: the ledger's `sync` column and what the build says of it
+// ---------------------------------------------------------------------------
+
+/// What the inference learns besides the ledger's own column, for the build
+/// to say (ADR-288 D29, D32).
+pub struct SyncNoted {
+    /// The functions that pause only where their lambdas do, with the code
+    /// parameters that decide (D29).
+    pub by_code: collections::BTreeMap[String, Vec[String]],
+    /// Why each function that can pause does (D32).
+    pub why: collections::BTreeMap[String, ModulesPause],
+}
+
+/// **Give every function in the ledger the `sync` its body earns** (ADR-288):
+/// the walk over each unit's view, the type checker's method calls merged in
+/// (`resolved`, by the ledger's key: one whose receiver is not known, or code
+/// handed in that may pause, is enough, D2's polarity), the fixpoint callees
+/// first (ADR-100 D7), and the column written back. Only ever *adds*
+/// `Sync::Inferred`: an assertion in the source is what the source said, so
+/// that `NK2202` still has something to contradict. `holes_of(unit, expr)` is
+/// what unit `unit` wrote in a hole of `expr`.
+pub fn sync_infer(mut ledger: Ledger, units: ref Vec[ParsedView], library: ref Ledger, resolved: ref collections::BTreeMap[String, CheckMethodCalls], holes_of: fn(i64, ref Expr) -> Vec[Expr] sync) -> SyncNoted {
+    let methods: collections::BTreeMap[String, MethodsCalled] = resolved.iter().map(fn(entry) { (entry.0.clone(), MethodsCalled { resolved: entry.1.resolved.clone(), unseen: entry.1.unresolved || entry.1.code_pauses, fields: collections::BTreeSet(), swallowed: collections::BTreeMap() }) }).collect()
+    let mut graph = SyncGraph { methods: methods, nodes: collections::BTreeMap(), unit: 0 }
+    for unit in 0..<units.len() {
+        let view = units[unit]
+        graph.unit = unit
+        unit_sync(view.items, view.words, fn(name) { view.unaliased(name) }, fn(expr) { holes_of(unit, expr) }, ledger, library, graph)
+    }
+    let reached: collections::BTreeMap[String, SyncReach] = graph.nodes.iter().map(fn(entry) { (entry.0.clone(), entry.1.reach.clone()) }).collect()
+    let holds = sync_callees_first(reached)
+    let by_code = paused_only_by_code(reached, holds)
+    for (name, keeps) in holds {
+        if !keeps {
+            continue
+        }
+        let mut contract = ledger.functions.get(name) ?? continue
+        if contract.sync_claim == Sync::No {
+            contract.sync_claim = Sync::Inferred
+        }
+    }
+    // **Why each function that does not hold pauses** (ADR-288 D32): the
+    // shortest way through the package's calls to a statement that pauses
+    // itself, breadth-first and in the map's order, so the answer is the same
+    // on every build.
+    let mut why: collections::BTreeMap[String, ModulesPause] = collections::BTreeMap()
+    for (start, _) in graph.nodes {
+        if held(holds, start) {
+            continue
+        }
+        let chain = pause_chain(reached, holds, start)
+        let at = chain.last() ?? continue
+        let node = graph.nodes[at] ?? continue
+        why.insert(start.clone(), ModulesPause { chain: chain.clone(), unit: node.unit, site: node.site?.clone() })
+    }
+    return SyncNoted { by_code: by_code, why: why }
+}
+
 // ---------------------------------------------------------------------------
 // The walk (ADR-288): what each body does to its own claim, and what a `sync`
 // function may not call
@@ -167,12 +343,12 @@ pub struct SyncGraph {
 
 /// Every function, method, trait method and `pub` grammar rule of one unit,
 /// into `graph`, by the key the ledger records it under.
-pub fn unit_sync(program: ref Program, names: ref winnow_grammar::InternerContext, unaliased: fn(ref String) -> String sync, holes_of: fn(ref Expr) -> Vec[Expr] sync, own: ref Ledger, library: ref Ledger, mut graph: SyncGraph) {
-    for item in program.items {
+pub fn unit_sync(items: ref Vec[Spanned[Item]], names: ref winnow_grammar::InternerContext, unaliased: fn(ref String) -> String sync, holes_of: fn(ref Expr) -> Vec[Expr] sync, own: ref Ledger, library: ref Ledger, mut graph: SyncGraph) {
+    for item in items {
         match item.node {
             Item::Fn { name, args, body, is_sync, sync_by, .. } => {
                 let key = key_of_function(name, "", names)
-                let mut node = sync_node(seen_in(body, names, unaliased, holes_of, no_root, false), program, code_of(args, body, names), names, own, library, graph.unit)
+                let mut node = sync_node(seen_in(body, names, unaliased, holes_of, no_root, false), items, code_of(args, body, names), names, own, library, graph.unit)
                 sync_methods(graph.methods[key], own, library, node)
                 declared_sync(is_sync, sync_by, node)
                 graph.nodes.insert(key, node)
@@ -183,7 +359,7 @@ pub fn unit_sync(program: ref Program, names: ref winnow_grammar::InternerContex
                     match method.node {
                         Item::Fn { name, args, body, is_sync, sync_by, .. } => {
                             let key = key_of_function(name, owner, names)
-                            let mut node = sync_node(seen_in(body, names, unaliased, holes_of, no_root, false), program, code_of(args, body, names), names, own, library, graph.unit)
+                            let mut node = sync_node(seen_in(body, names, unaliased, holes_of, no_root, false), items, code_of(args, body, names), names, own, library, graph.unit)
                             sync_methods(graph.methods[key], own, library, node)
                             declared_sync(is_sync, sync_by, node)
                             declared_by(trait_name, key_of_function(name, "", names), names, own, library, node)
@@ -343,7 +519,7 @@ fn code_source(value: ref Expr, names: ref winnow_grammar::InternerContext, code
 
 // What one body does to its own claim: the calls the walk met, each by the
 // one resolution every analysis shares (`callee_named`, ADR-288).
-fn sync_node(seen: ref Vec[Seen], program: ref Program, code: ref collections::BTreeMap[String, bool], names: ref winnow_grammar::InternerContext, own: ref Ledger, library: ref Ledger, unit: i64) -> SyncNode {
+fn sync_node(seen: ref Vec[Seen], items: ref Vec[Spanned[Item]], code: ref collections::BTreeMap[String, bool], names: ref winnow_grammar::InternerContext, own: ref Ledger, library: ref Ledger, unit: i64) -> SyncNode {
     let mut node = SyncNode { reach: SyncReach { blocked: false, calls: collections::BTreeSet(), through_code: collections::BTreeSet(), pauses_here: false }, site: null, unit: unit }
     for one in seen {
         match one {
@@ -352,7 +528,7 @@ fn sync_node(seen: ref Vec[Seen], program: ref Program, code: ref collections::B
                 node.reach.blocked = true
                 first_site(span, f"an `{construct}` block", node)
             }
-            Seen::Call { name, span, .. } => sync_call(callee_named(names, name.clone(), own, library, program.items), span, code, node),
+            Seen::Call { name, span, .. } => sync_call(callee_named(names, name.clone(), own, library, items), span, code, node),
             Seen::Spawn { span } => sync_call(Callee::Opaque(null), span, code, node),
             Seen::Opaque { span } => sync_call(Callee::Opaque(null), span, code, node),
             else => {}
@@ -455,15 +631,24 @@ struct Promise {
     allowed: collections::BTreeSet[String],
 }
 
+/// **Every call a `sync` function of one unit makes that the ledgers say can
+/// pause** (Part II 12.1, `NK2202`), by where each stands in the source:
+/// `view` is the unit, `holes_of` what it wrote in a hole of an expression.
+pub fn sync_violations(view: ref ParsedView, own: ref Ledger, library: ref Ledger, holes_of: fn(ref Expr) -> Vec[Expr] sync) -> Vec[Violation] {
+    let mut found = unit_violations(view.items, view.words, fn(name) { view.unaliased(name) }, holes_of, own, library)
+    found.sort_by_key(fn(v) { v.span.start })
+    return found
+}
+
 /// Every call a `sync` function of one unit makes that the ledgers say can
 /// pause, in the order the walk meets them.
-pub fn unit_violations(program: ref Program, names: ref winnow_grammar::InternerContext, unaliased: fn(ref String) -> String sync, holes_of: fn(ref Expr) -> Vec[Expr] sync, own: ref Ledger, library: ref Ledger) -> Vec[Violation] {
+fn unit_violations(items: ref Vec[Spanned[Item]], names: ref winnow_grammar::InternerContext, unaliased: fn(ref String) -> String sync, holes_of: fn(ref Expr) -> Vec[Expr] sync, own: ref Ledger, library: ref Ledger) -> Vec[Violation] {
     let mut found: Vec[Violation] = []
-    for item in program.items {
+    for item in items {
         match item.node {
             Item::Fn { name, args, body, is_sync, sync_by, .. } => {
                 let promise = promise_of(key_of_function(name, "", names), args, body, is_sync, sync_by, names) ?? continue
-                violations_in(seen_in(body, names, unaliased, holes_of, no_root, false), promise, program, names, own, library, found)
+                violations_in(seen_in(body, names, unaliased, holes_of, no_root, false), promise, items, names, own, library, found)
             }
             Item::Impl { target, methods, .. } => {
                 let owner = names.resolve(target.name).clone()
@@ -471,7 +656,7 @@ pub fn unit_violations(program: ref Program, names: ref winnow_grammar::Interner
                     match method.node {
                         Item::Fn { name, args, body, is_sync, sync_by, .. } => {
                             let promise = promise_of(key_of_function(name, owner, names), args, body, is_sync, sync_by, names) ?? continue
-                            violations_in(seen_in(body, names, unaliased, holes_of, no_root, false), promise, program, names, own, library, found)
+                            violations_in(seen_in(body, names, unaliased, holes_of, no_root, false), promise, items, names, own, library, found)
                         }
                         else => {}
                     }
@@ -516,7 +701,7 @@ pub fn unit_pausing(program: ref Program, names: ref winnow_grammar::InternerCon
                     if key == one {
                         let promise = promise_of(key, args, body, true, [], names) ?? continue
                         let mut found: Vec[Violation] = []
-                        violations_in(seen_in(body, names, unaliased, holes_of, no_root, false), promise, program, names, own, library, found)
+                        violations_in(seen_in(body, names, unaliased, holes_of, no_root, false), promise, program.items, names, own, library, found)
                         pauses = found.len() > 0
                     }
                 }
@@ -564,7 +749,7 @@ fn promise_of(caller: ref String, args: ref Vec[FnArg], body: ref Block, is_sync
     return Promise { caller: caller.clone(), promise: promise, allowed: allowed }
 }
 
-fn violations_in(seen: ref Vec[Seen], promise: ref Promise, program: ref Program, names: ref winnow_grammar::InternerContext, own: ref Ledger, library: ref Ledger, mut found: Vec[Violation]) {
+fn violations_in(seen: ref Vec[Seen], promise: ref Promise, items: ref Vec[Spanned[Item]], names: ref winnow_grammar::InternerContext, own: ref Ledger, library: ref Ledger, mut found: Vec[Violation]) {
     for one in seen {
         match one {
             Seen::Joins { construct, span } => found.push(violation(promise, span, construct, false, false, true)),
@@ -573,7 +758,7 @@ fn violations_in(seen: ref Vec[Seen], promise: ref Promise, program: ref Program
                 if !name.contains("::") && promise.allowed.contains(name) {
                     continue
                 }
-                pausing_call(callee_named(names, name.clone(), own, library, program.items), span, promise, own, found)
+                pausing_call(callee_named(names, name.clone(), own, library, items), span, promise, own, found)
             }
             Seen::Spawn { span } => pausing_call(Callee::Opaque(null), span, promise, own, found),
             Seen::Opaque { span } => pausing_call(Callee::Opaque(null), span, promise, own, found),
@@ -621,4 +806,64 @@ fn unpromised(claim: ref Sync) -> bool {
 
 fn violation(promise: ref Promise, span: ref Span, callee: ref String, from_library: bool, unpromised: bool, construct: bool) -> Violation {
     return Violation { span: span.clone(), caller: promise.caller.clone(), promise: promise.promise.clone(), callee: callee.clone(), from_library: from_library, unpromised: unpromised, construct: construct }
+}
+
+fn sync_test_node(mut graph: collections::BTreeMap[String, SyncReach], name: String, blocked: bool, calls: Vec[String]) {
+    let mut reach = SyncReach { blocked: blocked, calls: collections::BTreeSet(), through_code: collections::BTreeSet(), pauses_here: blocked }
+    for callee in calls {
+        reach.calls.insert(callee.clone())
+    }
+    graph.insert(name, reach)
+}
+
+/// **The per-function entry answers what the whole-package entry answers**
+/// (ADR-100 D7, ADR-403 D3): on a call chain into a function that pauses, a
+/// pure chain, a recursive pair that keeps the claim (what a least fixpoint
+/// would get wrong), a recursive pair one of whose members pauses, a caller of
+/// that pair, a function that calls code that may pause, and a call to a name
+/// the graph does not hold. The chain's head is derived from its callee's
+/// stored claim alone, each pair as one unit.
+test "the per-function sync entry gives the whole-package column" {
+    let mut graph: collections::BTreeMap[String, SyncReach] = collections::BTreeMap()
+    sync_test_node(graph, "a", false, ["b"])
+    sync_test_node(graph, "b", false, ["c"])
+    sync_test_node(graph, "c", true, [])
+    sync_test_node(graph, "d", false, ["e"])
+    sync_test_node(graph, "e", false, [])
+    sync_test_node(graph, "p", false, ["q", "e"])
+    sync_test_node(graph, "q", false, ["p"])
+    sync_test_node(graph, "x", false, ["y"])
+    sync_test_node(graph, "y", true, ["x"])
+    sync_test_node(graph, "w", false, ["x"])
+    sync_test_node(graph, "r", false, ["gone"])
+    let mut code = SyncReach { blocked: false, calls: collections::BTreeSet(), through_code: collections::BTreeSet(), pauses_here: false }
+    code.through_code.insert("f")
+    graph.insert("k", code)
+    let whole = sync_holds(graph)
+    let first = sync_callees_first(graph)
+    assert(whole == first)
+    for kept in ["d", "e", "p", "q"] {
+        assert(first[kept] ?? false)
+    }
+    for lost in ["a", "b", "c", "x", "y", "w", "r", "k"] {
+        assert(!(first[lost] ?? true))
+    }
+    let mut pair = 0
+    for unit in sync_units(graph) {
+        if unit.len() > 1 {
+            pair = pair + 1
+        }
+    }
+    // `p, q` and `x, y` are the recursive groups.
+    assert(pair == 2)
+    let mut stored: collections::BTreeMap[String, bool] = collections::BTreeMap()
+    stored.insert("b", false)
+    stored.insert("e", true)
+    let head: Vec[String] = ["a"]
+    assert(sync_of_unit(head, graph, stored)["a"] == whole["a"])
+    let pure: Vec[String] = ["d"]
+    assert(sync_of_unit(pure, graph, stored)["d"] == whole["d"])
+    let group: Vec[String] = ["p", "q"]
+    let both = sync_of_unit(group, graph, stored)
+    assert(both["p"] == whole["p"] && both["q"] == whole["q"])
 }

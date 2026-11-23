@@ -1,0 +1,40 @@
+// A `catch` inside a task is the task's own and runs first, at once, when
+// the task fails (Part I 8.1.2, ADR-async-5 D22 step 1, #989): the first
+// task's own catch takes the failure and its fallback does not run; the
+// second fails past its own catch, so its fallback stands in.
+struct Bad {}
+
+impl Error for Bad {
+	fn message(ref self) -> String {
+		return "bad"
+	}
+}
+
+fn fails(n: i64) -> i64 throws {
+	if n > 1 {
+		throw Bad {}
+	}
+	return n
+}
+
+fn main() throws {
+	let h = async(handle) fn {
+		let a = fails(2) catch {
+			println(f"the task's own catch: {error}")
+			5
+		}
+		a + fails(1)
+	} catch {
+		println("the fallback")
+		7
+	}
+	let k = async(handle) fn {
+		let a = fails(2) catch { 5 }
+		a + fails(3)
+	} catch {
+		println(f"the fallback: {error}")
+		7
+	}
+	let other = fails(0)
+	println(f"{h.join()} {k.join()} {other}")
+}

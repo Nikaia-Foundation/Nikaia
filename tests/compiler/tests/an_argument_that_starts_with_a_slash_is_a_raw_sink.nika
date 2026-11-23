@@ -1,0 +1,58 @@
+// #2722, ADR-raw-sinks-1 D18 item 6: a Windows program reads an argument
+// that starts with `/` as an option (`findstr /G:secrets.txt`), so
+// `process::is_operand` refuses a leading `/` as well as a `-`, on every
+// target, and a literal `"--"` ends only the `-` options: an outside name
+// after it is still `NK1308`. A path that is meant passes as `"./" + name`,
+// as the path of a root (D18 item 4), or guarded by `process::is_operand`;
+// a root whose directory is from outside does not. A name bound to a text
+// starts as its value does (`let kept = f"./out/{name}"`).
+use std::env
+use std::fs
+use std::process
+
+// The running `nikaia` (`env::current_exe`, ADR-program-path-1 D3).
+fn toolchain() -> String throws {
+    return env::current_exe()?.display() ?? "target/fast/nikaia"
+}
+
+fn said(nikaia: String, label: String, manifest: String, body: String, rest: String, verb: Vec[String]) throws {
+    let root = fs::scratch()
+    let tmp = f"{root.path().display()}"
+    fs::create_dir("src", root)
+    fs::write("nikaia.toml", root, f"[package]\nname = \"p\"\nversion = \"0.1.0\"\n{manifest}")
+    fs::write("src/main.nika", root, f"use std::fs\nuse std::io\nuse std::process\n\nfn main() throws {{\n    let name = io::read_line() ?? \"\"\n{body}}}\n{rest}")
+    let mut args = verb.clone()
+    args.push("src/main.nika")
+    let out = process::run(nikaia, args; dir: tmp.clone(), env: [("RUST_BACKTRACE", "0")])
+    println(f"-- {label}")
+    println(f"exit {out.code}")
+    let mut listing = false
+    for line in f"{out.stdout}{out.stderr}".lines() {
+        if line.starts_with("raw sinks allowed") {
+            listing = true
+        } else if !line.starts_with("    ") {
+            listing = false
+        }
+        if listing || line.contains("NK1308") || line.contains("= help") || line.contains(" --> ") {
+            println(line.replace(tmp, "TMP").trim())
+        }
+    }
+}
+
+fn main() throws {
+    println(f"is_operand(\"/G:secrets.txt\") {process::is_operand("/G:secrets.txt")}")
+    println(f"is_operand(\"/etc/passwd\") {process::is_operand("/etc/passwd")}")
+    println(f"is_operand(\"./x\") {process::is_operand("./x")}")
+    println(f"is_operand(\"a/b\") {process::is_operand("a/b")}")
+    let nikaia = toolchain()
+    let check: Vec[String] = ["check"]
+    said(nikaia, "an outside /G:x", "", "    process::run(\"findstr\", [name, \"log.txt\"])\n", "", check)
+    said(nikaia, "an outside name after a literal --", "", "    process::run(\"rm\", [\"--\", name])\n", "", check)
+    said(nikaia, "a list with a literal -- first", "", "    let mut args: Vec[String] = [\"-f\", \"--\"]\n    args.push(name)\n    process::run(\"rm\", args)\n", "", check)
+    said(nikaia, "a name behind ./", "", "    process::run(\"cat\", [\"./\" + name])\n", "", check)
+    said(nikaia, "the path of a root join", "", "    let dir = fs::Root::Dir(\".\")\n    process::run(\"cat\", [dir.join(name).path().to_text()])\n", "", check)
+    said(nikaia, "the path of a root from outside", "", "    process::run(\"cat\", [fs::Root::Dir(name).path().to_text()])\n", "", check)
+    said(nikaia, "a name bound to a text that starts with ./", "", "    let kept = f\"./out/{name}\"\n    process::run(\"cat\", [kept])\n", "", check)
+    said(nikaia, "a name bound to a text that starts with a name from outside", "", "    let kept = f\"{name}/out\"\n    process::run(\"cat\", [kept])\n", "", check)
+    said(nikaia, "guarded by is_operand", "", "    if !process::is_operand(name) {\n        process::exit(2)\n    }\n    process::run(\"findstr\", [name, \"log.txt\"])\n", "", check)
+}

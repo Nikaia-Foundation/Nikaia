@@ -252,7 +252,7 @@ impl EmitState {
             Expr::Variable(name, _) => {
                 let name = *name;
                 let handle = walk.async_handles.get(&emit_text(world, name));
-                if handle.is_some() { out.push(nikaia_std::index::or(handle, || "")); } else if self.facts.shrunk_leaves.contains(&at) {
+                if handle.is_some() { out.push(&emit_pending_read_caught(nikaia_std::index::or(handle, || ""), flow.breaks_to)); } else if self.facts.shrunk_leaves.contains(&at) {
                     out.push("nikaia_std::index::shrunk(");
                     self.emit_expr_variable(world, walk, out, host, node, name, depth, &flow, scope)?;
                     out.push(")");

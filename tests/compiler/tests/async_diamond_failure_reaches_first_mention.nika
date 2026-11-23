@@ -1,0 +1,84 @@
+// A diamond whose pending value fails (ADR-async-5 D8, *A failure*, #988):
+// `b`'s and `c`'s tasks both wait for `a`; where `a` throws, its error is
+// received by the first mention in written order, `b`'s, whose fallback runs,
+// and `c`'s task, which cannot go on, is cancelled at its wait: `g` never
+// runs (it would count itself in `ran`), and the group keeps no failure of
+// it. One error, one receiver (ADR-346 D1). The same with a pausing `a`, and
+// with a fallback on `c`, which a cancellation does not run (D22).
+use std::time
+
+struct Bad {}
+
+impl Error for Bad {
+	fn message(ref self) -> String {
+		return "bad"
+	}
+}
+
+fn load(n: i64) -> i64 throws {
+	if n > 5 {
+		throw Bad {}
+	}
+	return n * 2
+}
+
+fn load_slowly(n: i64) -> i64 throws {
+	time::sleep(2.millis())
+	return load(n)
+}
+
+fn f(n: i64) -> i64 {
+	return n + 1
+}
+
+fn g(n: i64, ran: SharedMut[i64]) -> i64 {
+	ran.update fn(mut v) { v += 1 }
+	return n + 2
+}
+
+fn run(n: i64) throws {
+	let ran = SharedMut(0)
+	let a = async load(n)
+	let b = async f(a) catch {
+		println(f"b's fallback: {error}")
+		-1
+	}
+	let _c = async g(a, ran)
+	println(f"b is {b}")
+	println(f"g ran {ran.get()} times")
+}
+
+fn run_slowly(n: i64) throws {
+	let ran = SharedMut(0)
+	let a = async load_slowly(n)
+	let b = async f(a) catch {
+		println(f"b's fallback: {error}")
+		-1
+	}
+	let _c = async g(a, ran)
+	println(f"b is {b}")
+	println(f"g ran {ran.get()} times")
+}
+
+fn run_with_fallbacks(n: i64) throws {
+	let ran = SharedMut(0)
+	let a = async load_slowly(n)
+	let b = async f(a) catch {
+		println(f"b's fallback: {error}")
+		-1
+	}
+	let _c = async g(a, ran) catch {
+		println("c's fallback ran")
+		0
+	}
+	println(f"b is {b}")
+	println(f"g ran {ran.get()} times")
+}
+
+fn main() throws {
+	run(1)
+	run(9)
+	run_slowly(9)
+	run_with_fallbacks(9)
+	println("end")
+}

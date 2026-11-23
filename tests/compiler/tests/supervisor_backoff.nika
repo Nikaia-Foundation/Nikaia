@@ -1,0 +1,35 @@
+// `std`'s default restart policy, `supervisor::Backoff()`, asked by hand
+// (#2118): the first failure restarts at once, later delays double from
+// `first_delay`, stay within a quarter below that, stop at `ceiling`, and a
+// cycle that lasts past `give_up_after` escalates. Jitter makes each delay
+// vary, so the program prints ranges it checked, never a delay.
+use std::supervisor
+use std::time
+
+fn failure(n: i64, since: time::Duration) -> supervisor::Failures {
+    return supervisor::Failures { last_uptime: 0.seconds(), consecutive: n, since_first: since }
+}
+
+fn main() throws {
+    let mut policy = supervisor::Backoff()
+    println(f"first delay {policy.first_delay.in_millis()} ms, ceiling {policy.ceiling.in_seconds()} s")
+    println(f"healthy {policy.healthy.in_seconds()} s, gives up after {policy.give_up_after.in_seconds()} s")
+    let first = policy.decide(failure(1, 0.seconds()))
+    println(f"failure 1 immediate: {first == supervisor::Next::Immediate}")
+    let mut nominal = policy.first_delay
+    for n in 2..<16 {
+        let next = policy.decide(failure(n, n.seconds()))
+        match next {
+            supervisor::Next::Delay(d) => {
+                let within = d <= nominal && d.in_nanos() * 4 >= nominal.in_nanos() * 3
+                println(f"failure {n}: at most {nominal.in_millis()} ms, at least three quarters of it: {within}")
+            },
+            else => println(f"failure {n}: no delay"),
+        }
+        nominal = nominal.saturating_mul(2).min(policy.ceiling)
+    }
+    let at_limit = policy.decide(failure(16, 300.seconds()))
+    println(f"300 s into the cycle, still a delay: {at_limit != supervisor::Next::Escalate}")
+    let gave_up = policy.decide(failure(17, 301.seconds()))
+    println(f"301 s into the cycle escalates: {gave_up == supervisor::Next::Escalate}")
+}

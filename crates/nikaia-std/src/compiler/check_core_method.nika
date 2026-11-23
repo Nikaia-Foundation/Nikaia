@@ -329,8 +329,8 @@ fn check_core_method_own_item(which: ref String, item: Ty) -> Ty {
 /// own.
 fn check_core_method_either_items(which: ref String, on: Ty) -> Ty {
     match on {
-        Ty::Seq { item, is_sync, pauses, can_throw, parallel, shape } => {
-            return Ty::Seq { item: check_core_method_own_item(which, item.clone()), is_sync: is_sync, pauses: pauses, can_throw: can_throw, parallel: parallel, shape: shape.clone() }
+        Ty::Seq { item, is_sync, pauses, fails, parallel, shape } => {
+            return Ty::Seq { item: check_core_method_own_item(which, item.clone()), is_sync: is_sync, pauses: pauses, fails: fails.clone(), parallel: parallel, shape: shape.clone() }
         },
         else => {}
     }
@@ -477,7 +477,8 @@ fn check_core_method_resolved(mut state: CheckState, world: ref CheckWorld, on: 
     // recorded for this receiver: a method called in the argument resolved
     // after it and took `last_resolved`, `names.contains(g.trim())`.
     let callee: String = state.facts.method_callees.get(id_of(receiver) as i64)?.clone() ?? last?.clone() ?? ""
-    if (callee == "Vec::contains" || callee == "Array::contains") && args.len() == 1 {
+    // A search by halving asks the same way (#2389): `names.binary_search("b")`.
+    if (callee == "Vec::contains" || callee == "Array::contains" || callee == "Vec::binary_search") && args.len() == 1 {
         // A literal is text as well (`names.contains("?")`).
         let text = match args[0] {
             Expr::Variable(_, _) => check_core_method_text_local(state, world, args[0]),
@@ -530,7 +531,7 @@ fn check_core_method_resolved(mut state: CheckState, world: ref CheckWorld, on: 
 /// runs in parallel nor ends at a deadline, into a list (`NK1354`, #1975).
 fn check_core_method_collects_a_list(on: ref Ty, value: ref Ty) -> bool {
     let plain = match on {
-        Ty::Seq { pauses, can_throw, parallel, shape, .. } => !pauses && !can_throw && !parallel && !shape.timed,
+        Ty::Seq { pauses, fails, parallel, shape, .. } => !pauses && fails.len() == 0 && !parallel && !shape.timed,
         else => false,
     }
     return plain && match value {
@@ -864,7 +865,7 @@ fn check_core_method_called[H: CheckHost](mut state: CheckState, world: ref Chec
     // D1).
     let mut walked: Ty = value.clone()
     match value {
-        Ty::Seq { item, is_sync, pauses, can_throw, parallel, shape } => {
+        Ty::Seq { item, is_sync, pauses, fails, parallel, shape } => {
             // **Of an open number too** (#594): every number type copies.
             if item.is_unknown() && walk_open != null {
                 state.flow.open_walks.insert(id_of(expr) as i64, walk_open ?? 0)
@@ -874,7 +875,7 @@ fn check_core_method_called[H: CheckHost](mut state: CheckState, world: ref Chec
             }
             if copies_as_a_view(item) {
                 state.facts.copied_walks.insert(id_of(expr) as i64)
-                walked = Ty::Seq { item: unviewed_type(item), is_sync: is_sync, pauses: pauses, can_throw: can_throw, parallel: parallel, shape: shape.clone() }
+                walked = Ty::Seq { item: unviewed_type(item), is_sync: is_sync, pauses: pauses, fails: fails.clone(), parallel: parallel, shape: shape.clone() }
             }
         },
         else => {}
@@ -1013,6 +1014,7 @@ fn check_core_method_called[H: CheckHost](mut state: CheckState, world: ref Chec
     let lanes = value_of_a_copy(on.unseen())
     state.a_lane_method_not_offered(lanes, name, span)
     state.a_shuffle_out_of_lanes(world, lanes, name, args, span)
+    state.a_lookup_out_of_lanes(world, lanes, name, args, span)
     // **A `Wide[T]`'s method** (Part I 2.2, #2619): the halves and the
     // magnitude in the unsigned type of `T`'s width.
     let widened: Ty? = state.wide_method(world, expr, on, name, span)
@@ -1085,7 +1087,7 @@ fn check_core_method_cloned(mut state: CheckState, expr: ref Expr, on: ref Ty, w
         state.facts.owned_clones.insert(id_of(expr) as i64)
     }
     return match walked {
-        Ty::Seq { item, is_sync, pauses, can_throw, parallel, shape } => Ty::Seq { item: unviewed_type(item), is_sync: is_sync, pauses: pauses, can_throw: can_throw, parallel: parallel, shape: shape.clone() },
+        Ty::Seq { item, is_sync, pauses, fails, parallel, shape } => Ty::Seq { item: unviewed_type(item), is_sync: is_sync, pauses: pauses, fails: fails.clone(), parallel: parallel, shape: shape.clone() },
         else => walked,
     }
 }
@@ -1204,7 +1206,7 @@ fn check_core_method_deadline(state: ref CheckState, world: ref CheckWorld, rece
         return found
     }
     return match found {
-        Ty::Seq { item, is_sync, pauses, can_throw, parallel, shape } => Ty::Seq { item: item.clone(), is_sync: is_sync, pauses: pauses, can_throw: can_throw, parallel: parallel, shape: Shape { ends: shape.ends, sized: shape.sized, replays: shape.replays, timed: shape.timed || within, one_at_a_time: shape.one_at_a_time || one, failing_items: shape.failing_items } },
+        Ty::Seq { item, is_sync, pauses, fails, parallel, shape } => Ty::Seq { item: item.clone(), is_sync: is_sync, pauses: pauses, fails: fails.clone(), parallel: parallel, shape: Shape { ends: shape.ends, sized: shape.sized, replays: shape.replays, timed: shape.timed || within, one_at_a_time: shape.one_at_a_time || one, failing_items: shape.failing_items } },
         else => found,
     }
 }
@@ -1490,7 +1492,7 @@ fn check_core_method_walked[H: CheckHost](mut state: CheckState, world: ref Chec
     // that view, so that what follows it is checked as it will be.
     if name == "chars" && args.len() == 0 && config.len() == 0 && check_core_method_text_receiver(on) {
         state.a_chars_call(world, expr, receiver, span)
-        return Ty::Seq { item: check_core_method_named("scalar"), is_sync: true, pauses: false, can_throw: false, parallel: false, shape: Shape { ends: true, sized: false, replays: false, timed: false, one_at_a_time: false, failing_items: false } }
+        return Ty::Seq { item: check_core_method_named("scalar"), is_sync: true, pauses: false, fails: [], parallel: false, shape: Shape { ends: true, sized: false, replays: false, timed: false, one_at_a_time: false, failing_items: false } }
     }
     // **A method on a view of a `String` slot is `String`'s** (#1388): the
     // view is the one text view, but `u.push_str(x)` writes through it.

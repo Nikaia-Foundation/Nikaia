@@ -99,6 +99,17 @@ than making a hard claim ("Failures are never lost"). Prose follows under it.
 Lists are kept for things that are genuinely a list, such as the steps of an
 installation.
 
+A heading introduces its section and stands on its own (owner, 2026-11-22).
+It is read alone in a table of contents, in an overview table and as the
+text of a link, so it names its subject: Nikaia, the prover, the compiler,
+the yaml package. It never points back with "it", "this", "they" or "that",
+and it does not lean on a phrase only the text below explains. A question
+heading asks the reader's question plainly: "Does Nikaia find every
+invariant by itself, with none written by hand?", not "How far does it reach
+with nothing written for it?"; "Where the prover stands today", not "Where
+it stands". When a heading changes, every link to its anchor changes with
+it, such as the rows of the overview on the research page.
+
 ## What is shown as working
 
 A page never presents syntax or behaviour as runnable before the compiler

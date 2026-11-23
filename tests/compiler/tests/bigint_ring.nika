@@ -1,0 +1,35 @@
+// `bigint::BigInt`'s `add`, `sub`, `neg`, `abs` and `mul` are exact at any size
+// (Part I 2.2, #2706): a product past 128 bits, carries through every digit,
+// and each mix of signs.
+use std::bigint
+
+fn main() throws {
+    let least: i64 = -9223372036854775807 - 1
+    let two_63 = bigint::BigInt::of(9223372036854775807).add(bigint::BigInt::of(1))
+    println(two_63.mul(two_63).to_text())
+    println(bigint::BigInt::of(least).mul(bigint::BigInt::of(least)).to_text())
+    let two_64 = bigint::BigInt::from_wide(Wide::from_halves(0, 1))
+    let one = bigint::BigInt::of(1)
+    // Three digits of `u64::MAX` each: every digit carries on `+ 1`.
+    let ones = two_64.mul(two_64).mul(two_64).sub(one)
+    println(ones.to_text())
+    println(ones.add(one).to_text())
+    println(ones.add(one).sub(one) == ones)
+    println(ones.mul(ones).to_text())
+    let a = ones.mul(bigint::BigInt::of(-1234567890123))
+    let b = two_64.add(bigint::BigInt::of(987654321))
+    println(a.mul(b).sub(b.mul(a)).to_text())
+    println(a.mul(b).to_text())
+    println(bigint::BigInt::of(-7).add(bigint::BigInt::of(3)).to_text())
+    println(bigint::BigInt::of(7).add(bigint::BigInt::of(-3)).to_text())
+    println(bigint::BigInt::of(3).sub(bigint::BigInt::of(10)).to_text())
+    println(bigint::BigInt::of(-3).sub(bigint::BigInt::of(-10)).to_text())
+    println(bigint::BigInt::of(-3).mul(bigint::BigInt::of(4)).to_text())
+    println(bigint::BigInt::of(-3).mul(bigint::BigInt::of(-4)).to_text())
+    println(bigint::BigInt::of(5).add(bigint::BigInt::of(-5)).sign())
+    println(ones.neg().to_text())
+    println(ones.neg().abs() == ones)
+    println(bigint::BigInt::of(0).neg().sign())
+    println(bigint::BigInt::of(0).mul(ones).sign())
+    println(two_64.neg().add(ones).to_text())
+}

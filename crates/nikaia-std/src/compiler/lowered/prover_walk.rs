@@ -591,6 +591,15 @@ pub(crate) fn prover_let(walk: &mut ProverWalk, names: &[winnow_grammar::Symbol]
     let mut joins: Vec<Expr> = vec![];
     let root = raw_sink_root(value, &scope, words, &mut &mut *written_of, &mut joins);
     let rooted = !mutable && names.len() == 1 && raw_sink_is_root(&root, words, &mut &mut *written_of);
+    let mut start_name: String = String::from("");
+    let mut has_start = false;
+    if !mutable && names.len() == 1 {
+        let first = nikaia_std::index::or(raw_sink_first_part(value, &mut &mut *written_of), || value.clone().into());
+        if raw_sink_first_part(value, &mut &mut *written_of).is_none() { has_start = true; } else {
+            has_start = raw_sink_name(&first, words).is_some();
+            start_name = nikaia_std::index::or(raw_sink_name(&first, words), || "".into());
+        }
+    }
     for name in names.iter() {
         let name = *name;
         let n = nikaia_std::block::Text::from(words.resolve(name).to_string());
@@ -606,6 +615,10 @@ pub(crate) fn prover_let(walk: &mut ProverWalk, names: &[winnow_grammar::Symbol]
         if rooted {
             scope.roots.insert(nikaia_std::block::Text::from(n.to_string()), root.clone());
             scope.root_joins.insert(nikaia_std::block::Text::from(n.to_string()), joins.copy_owned());
+        }
+        if has_start && start_name != n {
+            scope.starts.insert(nikaia_std::block::Text::from(n.to_string()), value.clone());
+            scope.start_names.insert(nikaia_std::block::Text::from(n.to_string()), nikaia_std::block::Text::from(start_name.to_string()));
         }
         if !mutable { scope.fixed.insert(nikaia_std::block::Text::from(n.to_string())); }
     }
@@ -1138,6 +1151,12 @@ pub(crate) fn prover_filled(scope: &mut ProverScope, fills: &collections::BTreeM
     }
 }
 
+pub(crate) fn prover_whole_element(walk: &mut ProverWalk, inner: &mut ProverScope, name: &str, unsigned: bool) {
+    inner.ints.insert(nikaia_std::block::Text::from(name.to_string()));
+    inner.loose.insert(nikaia_std::block::Text::from(name.to_string()));
+    if unsigned { inner.not_negative(&mut walk.arena, name); }
+}
+
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn prover_for(walk: &mut ProverWalk, bindings: &[winnow_grammar::Symbol], mutable: bool, iter: &Expr, body: &Block, span: Span, scope: &mut ProverScope, at: &ProverWhere, nested: &ProverWhere, program: &Program, words: &winnow_grammar::InternerContext, own: &Ledger, library: &Ledger, ask: &mut dyn FnMut(&logic::TermArena, &[i64], i64) -> SolverAnswer, model: &mut dyn FnMut(&logic::TermArena, &[i64], i64) -> Option<collections::BTreeMap<String, i64>>, escape: &mut dyn FnMut(&str) -> String, holes_of: &mut dyn FnMut(&Expr) -> Vec<Expr>, unaliased: &mut dyn FnMut(&str) -> String, written_of: &mut dyn FnMut(&Expr) -> String, condition: &mut dyn FnMut(&str, &collections::BTreeSet<String>) -> Vec<logic::SolverTerm>) {
     prover_expr(walk, iter, span, &scope, nested, program, words, own, library, &mut &mut *ask, &mut &mut *model, &mut &mut *escape, &mut &mut *holes_of, &mut &mut *unaliased, &mut &mut *written_of, &mut &mut *condition);
@@ -1206,7 +1225,13 @@ pub(crate) fn prover_for(walk: &mut ProverWalk, bindings: &[winnow_grammar::Symb
         match walk.state.whole_lets.get(&(span.start as i64)) {
             None => { },
             Some(element) => {
-                if has_a_length(element) { inner.has_length(&mut walk.arena, words.resolve(*unsafe { nikaia_std::proven::read(&bindings, (0) as usize) }), None); } else {
+                if has_a_length(element) { inner.has_length(&mut walk.arena, words.resolve(*unsafe { nikaia_std::proven::read(&bindings, (0) as usize) }), None); } else if is_whole_number(element) {
+                    let unsigned = element.starts_with('u');
+                    match iter {
+                        Expr::Range { .. } => { },
+                        _ => { prover_whole_element(walk, &mut inner, words.resolve(*unsafe { nikaia_std::proven::read(&bindings, (0) as usize) }), unsigned); },
+                    }
+                } else {
                     let kind = nikaia_std::block::Text::from(element.to_string());
                     let mut not_params: collections::BTreeSet<String> = collections::BTreeSet::new();
                     prover_parameter_fields(walk, &mut inner, &mut not_params, words.resolve(*unsafe { nikaia_std::proven::read(&bindings, (0) as usize) }), &kind, false, program, words);
@@ -2078,6 +2103,13 @@ pub(crate) fn prover_raw_sink(walk: &mut ProverWalk, callee: &str, args: &[Expr]
         let sink = ParamSink { index: -1, kind: String::from("program"), sink: String::from("the program `process::run` runs"), operation: String::from(""), root_part: false, guard };
         for part in parts.iter() { raw_sink_part(walk, &sink, &sink.sink, part, span, scope, at, program, words, library, &mut *holes_of, &mut *ask, &mut *written_of); }
         if args.len() > 1 { raw_sink_options(walk, unsafe { nikaia_std::proven::read(&args, (1) as usize) }, "", span, scope, at, program, words, library, &mut *holes_of, &mut *ask, &mut *written_of); }
+    } else if callee == "process::Stream::File" && !args.is_empty() {
+        let mut parts: Vec<Expr> = vec![];
+        raw_sink_parts(unsafe { nikaia_std::proven::read(&args, (0) as usize) }, &mut *holes_of, &mut parts);
+        let mut guard = String::new();
+        if raw_sink_clean_lead(unsafe { nikaia_std::proven::read(&args, (0) as usize) }, scope, words, library, &walk.state, &mut *holes_of) { guard.push_str("path"); }
+        let sink = ParamSink { index: -1, kind: String::from("path"), sink: String::from("the file `process::Stream::File` opens for a program's output, which may name any file"), operation: String::from("write"), root_part: false, guard };
+        for part in parts.iter() { raw_sink_part(walk, &sink, &sink.sink, part, span, scope, at, program, words, library, &mut *holes_of, &mut *ask, &mut *written_of); }
     } else if callee.starts_with("fs::") && library.functions.contains_key(callee) {
         for (i, written) in args.iter().enumerate().map(|(at, item)| (at as i64, item)) {
             let mut joins: Vec<Expr> = vec![];
@@ -2151,7 +2183,7 @@ pub(crate) fn raw_sink_through(walk: &mut ProverWalk, callee: &str, args: &[Expr
             continue;
         }
         if sink.kind == "option" {
-            let first = match raw_sink_first_part(unsafe { nikaia_std::proven::read(&all, (sink.index) as usize) }, &mut *written_of) { Some(__nikaia_value) => __nikaia_value, None => continue };
+            let first = match raw_sink_option_start(unsafe { nikaia_std::proven::read(&all, (sink.index) as usize) }, scope, words, &mut *written_of) { Some(__nikaia_value) => __nikaia_value, None => continue };
             raw_sink_part(walk, sink, &shown, &first, span, scope, at, program, words, library, &mut *holes_of, &mut *ask, &mut *written_of);
             continue;
         }
@@ -2280,11 +2312,11 @@ pub(crate) fn raw_sink_finding(walk: &mut ProverWalk, sink: &ParamSink, shown: &
         notes.push(String::from("SQL from outside can carry a statement of its own: `x; DROP TABLE users`."));
         help = format!("Hand it to the statement as a value, a hole `:name` in the text and `{}` under `\"name\"` in `execute`'s `parameters`; or, where it names a table or a column, check it where it arrives: `throw BadInput({}) if !db::is_identifier({})`, after which it is proved. If the program means to send SQL from outside, `untrusted-sql = true` under `[allow]` in the manifest builds it.", first, first, first);
     } else if sink.kind == "option" {
-        notes.push(String::from("A program reads an argument that starts with `-` as an option, and an option can name a program to run or a file to write: `-rf`, `--checkpoint-action=exec=sh`."));
-        help = format!("Check it where it arrives: `if !process::is_operand({}) {{ process::exit(2) }}`, after which it is proved; or put a literal `\"--\"` before it in the list, which ends the options: `[\"--\", {}]`. If the program means to pass options from outside, `untrusted-option = true` under `[allow]` in the manifest builds it.", first, first);
+        notes.push(String::from("A program reads an argument that starts with `-` as an option, and a Windows program one that starts with `/`; an option can name a program to run or a file to write: `-rf`, `--checkpoint-action=exec=sh`, `/G:secrets.txt`. A literal `\"--\"` before it ends only the `-` options."));
+        help = format!("Check it where it arrives: `if !process::is_operand({}) {{ process::exit(2) }}` refuses a leading `-` and `/`, after which it is proved; or, where it names a file, pass it as `\"./\" + {}` or as the path of a root it is joined under (`dir.join({}).path().to_text()`), which start with text the program wrote. If the program means to pass options from outside, `untrusted-option = true` under `[allow]` in the manifest builds it.", first, first, first);
     } else if sink.kind == "options" {
-        notes.push(String::from("A program reads an argument that starts with `-` as an option, and a list filled from outside may hold one: `-rf`, `--checkpoint-action=exec=sh`."));
-        help = format!("Push into `{}` only values checked where they arrive, `if !process::is_operand(name) {{ process::exit(2) }}`, or push a literal `\"--\"` first, which ends the options. If the program means to pass options from outside, `untrusted-option = true` under `[allow]` in the manifest builds it.", first);
+        notes.push(String::from("A program reads an argument that starts with `-` as an option, and a Windows program one that starts with `/`, and a list filled from outside may hold one: `-rf`, `--checkpoint-action=exec=sh`, `/G:secrets.txt`. A literal `\"--\"` in it ends only the `-` options."));
+        help = format!("Push into `{}` only values checked where they arrive, `if !process::is_operand(name) {{ process::exit(2) }}`, which refuses a leading `-` and `/`, or files as `\"./\" + name` or as the paths of a root they are joined under (`dir.join(name).path().to_text()`). If the program means to pass options from outside, `untrusted-option = true` under `[allow]` in the manifest builds it.", first);
     } else {
         notes.push(String::from("No check makes a stranger's choice of program safe: a name is looked up on `PATH`, a path runs that file."));
         help = String::from("Name the program with a literal, or choose it with a `match` whose arms are literals: `let editor = match env::var(\"EDITOR\") ?? \"\" { \"vim\" => \"vim\", \"nano\" => \"nano\", else => \"vi\", }`. If the program means to run a program from outside, `untrusted-program = true` under `[allow]` in the manifest builds it.");
@@ -2299,25 +2331,17 @@ pub(crate) fn raw_sink_options(walk: &mut ProverWalk, list: &Expr, through: &str
             let sink = ParamSink { index: -1, kind: String::from("option"), sink: String::from("the start of an argument of `process::run`, which the program may read as an option"), operation: String::from(""), root_part: false, guard: String::from("process::is_operand") };
             let shown = format!("{}{}", sink.sink, through);
             for item in items.iter() {
-                if raw_sink_double_dash(item, &mut *written_of) { return; }
-                let first = match raw_sink_first_part(item, &mut *written_of) { Some(__nikaia_value) => __nikaia_value, None => continue };
+                let first = match raw_sink_option_start(item, scope, words, &mut *written_of) { Some(__nikaia_value) => __nikaia_value, None => continue };
                 raw_sink_part(walk, &sink, &shown, &first, span, scope, at, program, words, library, &mut *holes_of, &mut *ask, &mut *written_of);
             }
         },
         _ => {
             let name = nikaia_std::index::or(raw_sink_name(list, words), || "".into());
             let state = nikaia_std::index::or(*nikaia_std::index::get(&walk.state.option_lists, &name), || 2);
-            if state < 2 { return; }
+            if state == 0 { return; }
             let sink = ParamSink { index: -1, kind: String::from("options"), sink: String::from("the arguments of `process::run`, each of which the program may read as an option"), operation: String::from(""), root_part: false, guard: String::from("") };
             raw_sink_part(walk, &sink, &format!("{}{}", sink.sink, through), list, span, scope, at, program, words, library, &mut *holes_of, &mut *ask, &mut *written_of);
         },
-    }
-}
-
-pub(crate) fn raw_sink_double_dash(item: &Expr, written_of: &mut impl FnMut(&Expr) -> String) -> bool {
-    match item {
-        Expr::LitStr { .. } => written_of(item) == "\"--\"",
-        _ => false,
     }
 }
 
@@ -2340,6 +2364,39 @@ pub(crate) fn raw_sink_first_part(expr: &Expr, written_of: &mut dyn FnMut(&Expr)
         },
         Expr::LitStr { .. } => return None,
         _ => return Some(expr.clone()),
+    }
+}
+
+pub(crate) fn raw_sink_option_start(item: &Expr, scope: &ProverScope, words: &winnow_grammar::InternerContext, written_of: &mut dyn FnMut(&Expr) -> String) -> Option<Expr> {
+    let first = match raw_sink_first_part(item, &mut &mut *written_of) { Some(__nikaia_value) => __nikaia_value, None => return None };
+    let bound = nikaia_std::index::or(raw_sink_name(&first, words), || "".into());
+    if scope.starts.contains_key(&bound) {
+        let value = nikaia_std::index::or(match *nikaia_std::index::get(&scope.starts, &bound) {
+            Some(__nikaia_it) => Some(__nikaia_it.clone()),
+            None => None,
+        }, || first.clone().into());
+        return raw_sink_option_start(&value, scope, words, &mut &mut *written_of);
+    }
+    let mut path = first.clone();
+    match first {
+        Expr::MethodCall { ref receiver, method, ref args, .. } => {
+            let receiver = nikaia_std::boxed::open(receiver);
+            let name = words.resolve(method);
+            if args.is_empty() && (name == "to_text" || name == "display") { path = receiver.clone(); }
+        },
+        _ => { },
+    }
+    match path {
+        Expr::MethodCall { ref receiver, method, ref args, .. } => {
+            let receiver = nikaia_std::boxed::open(receiver);
+            if !args.is_empty() || words.resolve(method) != "path" { return Some(first); }
+            let mut joins: Vec<Expr> = vec![];
+            let base = raw_sink_root(receiver, scope, words, &mut &mut *written_of, &mut joins);
+            if raw_sink_anywhere(&base, words, &mut &mut *written_of) || raw_sink_scratch(&base, words) { return None; }
+            let dir = match raw_sink_dir(&base, words) { Some(__nikaia_value) => __nikaia_value, None => return Some(first) };
+            return raw_sink_first_part(&dir, &mut &mut *written_of);
+        },
+        _ => return Some(first),
     }
 }
 
@@ -2392,8 +2449,7 @@ pub(crate) fn raw_sink_option_list(walk: &mut ProverWalk, stmt: &Stmt, scope: &P
 
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn raw_sink_option_pushed(walk: &mut ProverWalk, item: &Expr, scope: &ProverScope, words: &winnow_grammar::InternerContext, library: &Ledger, holes_of: &mut impl FnMut(&Expr) -> Vec<Expr>, ask: &mut impl FnMut(&logic::TermArena, &[i64], i64) -> SolverAnswer, written_of: &mut impl FnMut(&Expr) -> String) -> i64 {
-    if raw_sink_double_dash(item, &mut *written_of) { return 1; }
-    let first = match raw_sink_first_part(item, &mut *written_of) { Some(__nikaia_value) => __nikaia_value, None => return 0 };
+    let first = match raw_sink_option_start(item, scope, words, &mut *written_of) { Some(__nikaia_value) => __nikaia_value, None => return 0 };
     if raw_sink_outside(&first, scope, words, library, &walk.state, &mut *holes_of) && !raw_sink_passes(walk, "process::is_operand", &first, scope, words, &mut *ask) { return 2; }
     0
 }

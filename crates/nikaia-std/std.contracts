@@ -636,9 +636,10 @@ sync = true
 touches = []
 signature = "(p: ref String) -> bool"
 
-# Whether `text` does not start with `-`, so a program reads it as an operand,
-# not an option: the precondition of the start of each argument of
-# `process::run` from outside the program (ADR-raw-sinks-1 D18). The empty
+# Whether `text` starts with neither `-` nor `/`, so a program reads it as an
+# operand, not an option (a Windows program reads `/x` as one): the
+# precondition of the start of each argument of `process::run` from outside
+# the program (ADR-raw-sinks-1 D18, item 6 for `/`). The empty
 # text holds it. A pure `bool` call, so a guard on it is a fact the prover
 # reads (ADR-381). Written in Nikaia, `src/runtime/raw_sinks.nika`.
 [fn."process::is_operand"]
@@ -6404,6 +6405,60 @@ crosses = true
 compares = true
 fields = ["pub message: String", "pub site: String"]
 
+# What went wrong, in words: `Error`'s `message` (Part I 7.1), what the
+# failure prints as.
+[fn."task::TimedOut::message"]
+pub = true
+panics = false
+sync = true
+touches = []
+signature = "(self: ref task::TimedOut) -> String"
+
+# Everything about the failure, for an operator: `Error`'s `full` (Part I
+# 7.1). It came from the runtime, not a `throw` of the program, and says so.
+[fn."task::TimedOut::full"]
+pub = true
+panics = false
+sync = true
+touches = []
+signature = "(self: ref task::TimedOut) -> String"
+
+# What went wrong, in words: `Error`'s `message` (Part I 7.1), what the
+# failure prints as.
+[fn."task::OverBudget::message"]
+pub = true
+panics = false
+sync = true
+touches = []
+signature = "(self: ref task::OverBudget) -> String"
+
+# Everything about the failure, for an operator: `Error`'s `full` (Part I
+# 7.1). It came from the runtime, not a `throw` of the program, and says so.
+[fn."task::OverBudget::full"]
+pub = true
+panics = false
+sync = true
+touches = []
+signature = "(self: ref task::OverBudget) -> String"
+
+# What went wrong, in words: `Error`'s `message` (Part I 7.1), what the
+# failure prints as.
+[fn."task::Crashed::message"]
+pub = true
+panics = false
+sync = true
+touches = []
+signature = "(self: ref task::Crashed) -> String"
+
+# Everything about the failure, for an operator: `Error`'s `full` (Part I
+# 7.1). It came from the runtime, not a `throw` of the program, and says so.
+[fn."task::Crashed::full"]
+pub = true
+panics = false
+sync = true
+touches = []
+signature = "(self: ref task::Crashed) -> String"
+
 # **How a value is reached** ([ADR-330](../../docs/specification/adr/adr-330.md)
 # D8): what `T::access` and `field.ty::access` are, a value the running
 # program compares, matches, prints with `{a:?}` and keeps.
@@ -7025,14 +7080,18 @@ pub = true
 # what somebody else sent it, and a map keyed on its output is hashed with the
 # keyed function (ADR-010 D2).
 
-# Where one of a program's output streams goes (ADR-243 D10): into `Output`
-# as text, or to the caller's own stream as it is written.
+# Where one of a program's output streams goes (ADR-243 D10, D11): into
+# `Output` as text, to the caller's own stream as it is written, to the null
+# device (`Discarded`), or to a file (`File(path)`), created or truncated
+# before the program starts. `Output` holds `""` for every stream but a
+# `Captured` one. A `File`'s path is opened by this program: relative to its
+# working directory, not to `dir`, and a raw sink of ADR-raw-sinks-1 like
+# every path it opens.
 [type."process::Stream"]
 pub = true
 crosses = true
 compares = true
-copies = true
-variants = ["Captured", "Inherited"]
+variants = ["Captured", "Inherited", "Discarded", "File(String)"]
 
 # What a program reads on its standard input (ADR-243 D10): nothing, the
 # caller's own standard input, or this text, then the end.
@@ -7088,19 +7147,22 @@ fields = ["pub code: i64", "pub ok: bool", "pub stdout: String", "pub stderr: St
 # written while its output is read and then closed; a program that ends before
 # reading all of it is no failure. `stdout` and `stderr` are each `Captured`
 # into `Output`, or `Inherited`: the caller's own stream, written as the
-# program writes, and `""` in `Output`.
+# program writes, and `""` in `Output`; or `Discarded`, the null device, or
+# `File(path)`, the file created or truncated before the program starts, both
+# `""` in `Output` (D11). A `File` that cannot be opened starts nothing and
+# throws the `io::IoError` naming its path.
 #
 # The wait gives the thread up, so other tasks run while the program does.
 #
 # **It keeps every list and text it is handed** (ADR-views-v4 D14, #1797):
-# `args`, `env`, `env_remove` and `stdin` are owned below, so a parameter
-# handed to one is moved, not lent.
+# `args`, `env`, `env_remove`, `stdin`, `stdout` and `stderr` are owned
+# below, so a parameter handed to one is moved, not lent.
 [fn."process::run"]
 pub = true
 panics = false
 throws = ["io::IoError"]
 provenance = "untrusted"
-keeps = ["args", "env", "env_remove", "stdin"]
+keeps = ["args", "env", "env_remove", "stdin", "stdout", "stderr"]
 signature = "(program: ref String, args: Vec[String]; dir: ref String = \".\", env: Vec[(String, String)] = [], env_remove: Vec[String] = [], env_clear: bool = false, within: time::Duration? = null, stdin: process::Input = process::Input::Closed, stdout: process::Stream = process::Stream::Captured, stderr: process::Stream = process::Stream::Captured, trusted: bool = false) -> process::Output"
 
 # A program started and not yet waited for (#1177): what `process::spawn`
@@ -7111,18 +7173,35 @@ pub = true
 crosses = true
 
 # Start a program and hand it back running, the shape of Rust's
-# `Command::spawn`: its standard input closed, its standard output and
-# standard error read on threads of their own. `program` is looked for on the
-# caller's `PATH` as `run` looks for it (ADR-243 D6). It fails where the
-# program cannot be started.
+# `Command::spawn`. It takes `run`'s options but `within` (a spawned program
+# is ended with `kill`), with `run`'s defaults and rules (ADR-243 D5-D7, D10,
+# D11): `program` is looked for on the caller's `PATH`, the environment is
+# changed by `env_clear`, `env_remove`, then `env`, and an entry no platform
+# accepts starts nothing. By default its standard input is closed and its
+# standard output and standard error are read on threads of their own; a
+# stream that is `Inherited`, `Discarded` or a `File` is not read, and `wait`
+# hands back `""` for it. It fails where the program cannot be started and
+# where a `File` stream cannot be opened.
+#
+# **A spawned program outlives this one** (D11): neither dropping the `Child`
+# nor this program's end stops it. Its captured streams are read only while
+# this program runs, so one that should outlive it takes `Discarded`, `File`
+# or `Inherited` streams.
 [fn."process::spawn"]
 pub = true
 panics = false
 sync = true
 throws = ["io::IoError"]
 provenance = "untrusted"
-keeps = ["args"]
-signature = "(program: ref String, args: Vec[String]) -> process::Child"
+keeps = ["args", "env", "env_remove", "stdin", "stdout", "stderr"]
+signature = "(program: ref String, args: Vec[String]; dir: ref String = \".\", env: Vec[(String, String)] = [], env_remove: Vec[String] = [], env_clear: bool = false, stdin: process::Input = process::Input::Closed, stdout: process::Stream = process::Stream::Captured, stderr: process::Stream = process::Stream::Captured) -> process::Child"
+
+# The operating system's process id of the program (ADR-243 D11).
+[fn."process::Child::id"]
+pub = true
+panics = false
+sync = true
+signature = "(self: ref process::Child) -> i64"
 
 # The exit code where the program has ended, `-1` where a signal ended it;
 # nothing while it runs. It does not wait.
@@ -7382,25 +7461,9 @@ signature = "(self: ref Listener, handler: fn(net::Connection) throws; connectio
 # --- `supervisor`: tasks restarted when they end (ADR-328, Part II 12.8) -------
 #
 # **`policy:` takes a value of `supervisor::Restart`**, a trait a program
-# implements. The trait and the types it speaks in are Nikaia
-# (`src/supervisor.nika`), and their entries are among the inferred ones at the
-# end of this file; `std`'s default, `supervisor::Backoff`, is here.
-
-# **`std`'s default policy** (ADR-328 D5): the first failure restarted at once,
-# then after a delay that grows, with jitter, up to a ceiling; a new cycle after
-# an attempt that ran long enough; giving up when a cycle lasts too long.
-[type."supervisor::Backoff"]
-pub = true
-crosses = true
-
-# `std`'s default policy, the value `policy:` has where a child names none.
-[fn."supervisor::Backoff"]
-pub = true
-sync = true
-touches = []
-signature = "() -> supervisor::Backoff"
-
-[impl."supervisor::Restart for supervisor::Backoff"]
+# implements. The trait, the types it speaks in and `std`'s default,
+# `supervisor::Backoff`, are Nikaia (`src/supervisor.nika`), and their entries
+# are among the inferred ones at the end of this file.
 
 # One of Unicode's four normalisation forms (UAX #15), which `s.normalized`
 # takes (ADR-320 D10): `Nfc` and `Nfd` compose and decompose by canonical
@@ -7974,6 +8037,36 @@ sync = true
 signature = "(ref self, history: supervisor::Failures) -> supervisor::Next"
 keeps = ["history"]
 
+# **`std`'s default policy** (ADR-328, Part II 12.8): the first failure is
+# restarted at once, then after a delay that grows, with jitter, up to a
+# ceiling; an attempt that ran long enough starts a new cycle; a cycle that
+# lasts too long gives up.
+[type."supervisor::Backoff"]
+pub = true
+crosses = true
+compares = true
+copies = true
+fields = ["pub first_delay: time::Duration", "pub ceiling: time::Duration", "pub healthy: time::Duration", "pub give_up_after: time::Duration", "cycle_failures: i64", "cycle_began: time::Duration", "seed: u64"]
+
+# `supervisor::Backoff()`: `std`'s default policy, the value `policy:` has
+# where a child names none.
+[fn."supervisor::Backoff::new"]
+pub = true
+panics = false
+sync = true
+signature = "() -> supervisor::Backoff"
+
+# One failure, from the supervisor's history of the child.
+[fn."supervisor::Backoff::decide"]
+pub = false
+panics = true
+sync = true
+touches = []
+signature = "(ref mut self, history: supervisor::Failures) -> supervisor::Next"
+keeps = ["history"]
+
+[impl."supervisor::Restart for supervisor::Backoff"]
+
 # --- `simd`: vectors a program holds (ADR-377, provisional) ------------------
 #
 # **`simd::Lanes[T]` holds as many lanes as the build's widest integer
@@ -8365,6 +8458,25 @@ sync = true
 touches = []
 signature = "[T, N](self: simd::Fixed[T, N], of: simd::Fixed[u8, N]) -> simd::Fixed[T, N]"
 
+# The bytes of the table `self` that `idx` names, lane `i` being
+# `self.lane(idx.lane(i))`; each lane of `idx` proved below `N` (`NK1298`),
+# `Fixed[u8, N]` only (ADR-377 D10).
+[fn."simd::Fixed::lookup"]
+pub = true
+panics = false
+sync = true
+touches = []
+signature = "[N](self: simd::Fixed[u8, N], idx: simd::Fixed[u8, N]) -> simd::Fixed[u8, N]"
+
+# As `lookup`, with no proof asked: a lane whose index is `N` or more is 0
+# (ADR-377 D10).
+[fn."simd::Fixed::lookup_or_zero"]
+pub = true
+panics = false
+sync = true
+touches = []
+signature = "[N](self: simd::Fixed[u8, N], idx: simd::Fixed[u8, N]) -> simd::Fixed[u8, N]"
+
 # Lane by lane `*`, each neighbouring pair added into one lane of twice the
 # width: `Fixed[u8, N]` by `Fixed[i8, N]` into `Fixed[i16, N / 2]`, saturating,
 # `Fixed[i16, N]` by `Fixed[i16, N]` into `Fixed[i32, N / 2]`, wrapping.
@@ -8719,3 +8831,200 @@ panics = false
 sync = true
 touches = []
 signature = "(self: ref winnow_grammar::Symbol) -> winnow_grammar::Symbol"
+
+# An exact signed integer of any size (Part I 2.2, #2706): `std::bigint`,
+# written in Nikaia (`src/bigint.nika`). Not in the prelude.
+[type."bigint::BigInt"]
+pub = true
+fields = ["sign: i64", "digits: Vec[u64]"]
+compares = true
+equates = true
+hashes = true
+
+[fn."bigint::BigInt::abs"]
+pub = true
+sync = true
+panics = false
+touches = []
+signature = "(ref self) -> bigint::BigInt"
+
+[fn."bigint::BigInt::add"]
+pub = true
+sync = true
+panics = false
+touches = []
+views = ["other: borrowed"]
+signature = "(ref self, other: ref bigint::BigInt) -> bigint::BigInt"
+
+[fn."bigint::BigInt::bits"]
+pub = true
+sync = true
+panics = true
+touches = []
+signature = "(ref self) -> i64"
+
+[fn."bigint::BigInt::compare"]
+sync = true
+panics = true
+touches = []
+signature = "(ref self, other: bigint::BigInt) -> Ordering"
+
+[fn."bigint::BigInt::div_rem"]
+pub = true
+sync = true
+panics = true
+touches = []
+views = ["d: borrowed"]
+signature = "(ref self, d: ref bigint::BigInt) -> (bigint::BigInt, bigint::BigInt)?"
+
+[fn."bigint::BigInt::from_wide"]
+pub = true
+sync = true
+keeps = ["w"]
+panics = false
+touches = []
+signature = "(w: Wide[i64]) -> bigint::BigInt"
+
+[fn."bigint::BigInt::gcd"]
+pub = true
+sync = true
+panics = true
+touches = []
+views = ["other: borrowed"]
+signature = "(ref self, other: ref bigint::BigInt) -> bigint::BigInt"
+
+[fn."bigint::BigInt::mul"]
+pub = true
+sync = true
+panics = true
+touches = []
+views = ["other: borrowed"]
+signature = "(ref self, other: ref bigint::BigInt) -> bigint::BigInt"
+
+[fn."bigint::BigInt::narrow"]
+pub = true
+sync = true
+panics = true
+touches = []
+signature = "(ref self) -> i64?"
+
+[fn."bigint::BigInt::neg"]
+pub = true
+sync = true
+panics = true
+touches = []
+signature = "(ref self) -> bigint::BigInt"
+
+[fn."bigint::BigInt::of"]
+pub = true
+sync = true
+panics = false
+touches = []
+signature = "(v: i64) -> bigint::BigInt"
+
+[fn."bigint::BigInt::rem"]
+pub = true
+sync = true
+panics = true
+touches = []
+views = ["d: borrowed"]
+signature = "(ref self, d: ref bigint::BigInt) -> bigint::BigInt?"
+
+[fn."bigint::BigInt::sign"]
+pub = true
+sync = true
+panics = false
+touches = []
+signature = "(ref self) -> i64"
+
+[fn."bigint::BigInt::sub"]
+pub = true
+sync = true
+panics = true
+touches = []
+views = ["other: borrowed"]
+signature = "(ref self, other: ref bigint::BigInt) -> bigint::BigInt"
+
+[fn."bigint::BigInt::to_text"]
+pub = true
+sync = true
+panics = true
+places = true
+touches = []
+signature = "(ref self) -> String"
+
+[fn."bigint::bits_from"]
+sync = true
+panics = true
+touches = []
+signature = "(a: Vec[u64], from: i64) -> i64"
+
+[fn."bigint::made"]
+sync = true
+keeps = ["digits"]
+panics = false
+touches = []
+signature = "(sign: i64, digits: Vec[u64]) -> bigint::BigInt"
+
+[fn."bigint::magnitude_add"]
+sync = true
+panics = false
+touches = []
+signature = "(a: Vec[u64], b: Vec[u64]) -> Vec[u64]"
+
+[fn."bigint::magnitude_compare"]
+sync = true
+panics = false
+touches = []
+signature = "(a: Vec[u64], b: Vec[u64]) -> i64"
+
+[fn."bigint::magnitude_div"]
+sync = true
+panics = true
+touches = []
+signature = "(a: Vec[u64], b: Vec[u64]) -> (Vec[u64], Vec[u64])"
+
+[fn."bigint::magnitude_div_digit"]
+sync = true
+panics = false
+touches = []
+signature = "(a: Vec[u64], d: u64) -> (Vec[u64], u64)"
+
+[fn."bigint::magnitude_div_long"]
+sync = true
+panics = true
+touches = []
+signature = "(a: Vec[u64], b: Vec[u64]) -> (Vec[u64], Vec[u64])"
+
+[fn."bigint::magnitude_mul"]
+sync = true
+panics = false
+touches = []
+signature = "(a: Vec[u64], b: Vec[u64]) -> Vec[u64]"
+
+[fn."bigint::magnitude_sub"]
+sync = true
+panics = false
+touches = []
+signature = "(a: Vec[u64], b: Vec[u64]) -> Vec[u64]"
+
+[fn."bigint::shifted_down"]
+sync = true
+panics = true
+touches = []
+signature = "(a: Vec[u64], by: u32) -> Vec[u64]"
+
+[fn."bigint::shifted_up"]
+sync = true
+panics = true
+touches = []
+signature = "(a: Vec[u64], by: u32) -> Vec[u64]"
+
+[fn."bigint::trimmed"]
+sync = true
+keeps = ["digits"]
+panics = false
+touches = []
+signature = "(digits: Vec[u64]) -> Vec[u64]"
+
+[impl."Ord for bigint::BigInt"]

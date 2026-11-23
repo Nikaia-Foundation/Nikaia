@@ -1272,6 +1272,7 @@ pub(crate) fn check_core_stmt_let<H: CheckHost>(state: &mut CheckState, world: &
     local.lent = read_through_a_jump;
     local.empty_list = pending;
     local.open_number = open;
+    if !mutable && names.len() == 1 && shape.is_empty() && (check_simd_kind(&local.ty) == "Fixed" || check_simd_element(Some(&local.ty)).is_some()) { local.lanes_at_most = state.lanes_at_most(world, value); }
     local.literal = literal;
     local.without_mut = without_mut;
     local.written_mut = mutable;
@@ -1806,7 +1807,7 @@ pub(crate) fn check_core_stmt_for<H: CheckHost>(state: &mut CheckState, world: &
     }
     if bindings.len() == 1 && elements.len() == 1 {
         match *unsafe { nikaia_std::proven::read(&elements, (0) as usize) } {
-            Ty::Named { ref name, ref args, .. } => { if has_a_length(name) || args.is_empty() && !is_whole_number(name) { state.facts.whole_lets.insert(span.start as i64, nikaia_std::block::Text::from(name.to_string())); } },
+            Ty::Named { ref name, ref args, .. } => { if has_a_length(name) || args.is_empty() { state.facts.whole_lets.insert(span.start as i64, nikaia_std::block::Text::from(name.to_string())); } },
             _ => { },
         }
     }
@@ -2080,6 +2081,7 @@ pub(crate) fn check_core_stmt<H: CheckHost>(state: &mut CheckState, world: &Chec
             let deep = *deep; let mutable = *mutable;
             let typed = check_core_stmt_let(state, world, host, names, shape, mutable, mut_names, deep, (ty).as_ref(), value, span);
             check_core_stmt_a_stream_let(state, world, names, shape, mutable, (ty).as_ref(), value, span);
+            check_core_stmt_a_pending_task(state, world, names, value);
             typed
         },
         Stmt::Comptime { name, ty, value, bounds } => { let name = *name; check_core_comptime_binding(state, world, host, name, (ty).as_ref(), value, bounds, span) },
@@ -2091,6 +2093,23 @@ pub(crate) fn check_core_stmt<H: CheckHost>(state: &mut CheckState, world: &Chec
         Stmt::Continue => check_core_stmt_jump(state, "continue", span),
         Stmt::Expr(expr) => check_core_expr(state, world, host, expr, span),
         Stmt::Emit(value) => check_core_stmt_emit(state, world, host, value, span),
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn check_core_stmt_a_pending_task(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, names: &[winnow_grammar::Symbol], value: &Expr) {
+    if names.len() != 1 { return; }
+    match value {
+        Expr::Async(inner, _, _, _) if state.flow.fallible_tasks.contains(&(id_of(value) as i64)) => {
+            let inner = nikaia_std::boxed::open(inner);
+            let name = nikaia_std::block::Text::from(world.words.resolve(*unsafe { nikaia_std::proven::read(&names, (0) as usize) }).to_string());
+            match state.binding(&name) {
+                Some(ref bound) => { state.flow.pending_tasks.insert(bound.id, format!("let {} = async {}", name, written_expression(world.words, inner))); },
+                None => { },
+            }
+        },
+        _ => { },
     }
 }
 

@@ -1,0 +1,27 @@
+// The `throws` walk (Part I 8.1.2, ADR-async-5 D22, #989): a function whose
+// only `async` has a fallback that throws nothing declares no task error;
+// its task's failure ends at the fallback.
+struct Bad {}
+
+impl Error for Bad {
+	fn message(ref self) -> String {
+		return "bad"
+	}
+}
+
+fn fails(n: i64) -> i64 throws {
+	if n > 1 {
+		throw Bad {}
+	}
+	return n
+}
+
+fn run(n: i64) -> i64 {
+	let a = async fails(n) catch { 0 }
+	let b = 1
+	return a + b
+}
+
+fn main() throws {
+	println(f"{run(1)} {run(2)}")
+}

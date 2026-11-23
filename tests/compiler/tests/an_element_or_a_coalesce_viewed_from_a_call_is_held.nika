@@ -1,0 +1,36 @@
+// A view of a call's result kept in a `let` holds the result first (#2391):
+// `gather().first() ?? ""` and `(maybe() ?? "").split(" ")` were rustc's
+// E0716, "temporary value dropped while borrowed".
+
+use std::cli
+
+fn make(text: String) -> String {
+    let mut s = String()
+    s.push_str(text)
+    return s
+}
+
+fn gather() -> Vec[String] {
+    let mut all: Vec[String] = []
+    all.push(make("x"))
+    all.push(make("y"))
+    return all
+}
+
+fn maybe() -> String? {
+    return make("p q")
+}
+
+fn main() throws {
+    let got = gather().first() ?? ""
+    println(got)
+    let end = gather().last() ?? ""
+    println(end)
+    let one = gather().get(1)
+    println(one ?? "none")
+    let words: Vec[String] = (maybe() ?? "").split(" ").collect()
+    println(words.len())
+    println(words[1])
+    let given: Vec[String] = (cli::args().nth(9) ?? "a b c").split(" ").collect()
+    println(given.len())
+}

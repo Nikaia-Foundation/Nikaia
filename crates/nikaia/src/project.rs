@@ -45,9 +45,8 @@ use nikaia_std::rt::exec::block_on;
 use anyhow::{Context, Result, anyhow};
 use orchestrator::cache::{Artifacts, Cache, Choices, Layout, Lockfile};
 use orchestrator::project::{
-    Cargo, CargoProject, CrateKind, Invocation, Package, Profile, Workspace,
-    record_extra_dependencies, resolved_versions, toolchain_can_build_for,
-    toolchain_is_new_enough_as, write_if_changed,
+    CargoProject, CrateKind, Invocation, Package, Profile, Workspace, record_extra_dependencies,
+    resolved_versions, toolchain_can_build_for, toolchain_is_new_enough_as, write_if_changed,
 };
 
 use crate::contracts::{Ledger, sync};
@@ -112,7 +111,7 @@ fn refused(thrown: nikaia_std::error::Thrown<ProjectSettingsRefusal>) -> anyhow:
 
 /// What `project_settings.nika` asks of the compiler: the environment,
 /// what `native` is on this machine, a hash and a hard link.
-struct SettingsHost;
+pub(crate) struct SettingsHost;
 
 impl project_settings::ProjectSettingsHost for SettingsHost {
     fn env_var(&self, name: &str) -> Option<String> {
@@ -3464,10 +3463,11 @@ impl Project {
             no_cache,
             members: RefCell::new(Vec::new()),
             kept: RefCell::new(BTreeMap::new()),
-            cargo: RefCell::new(None),
             failed: RefCell::new(None),
         };
-        match project_drive::project_drive_drive_to(&host, subcommand, no_cache, locked) {
+        match nikaia_std::rt::exec::block_on(project_drive::project_drive_drive_to(
+            &host, subcommand, no_cache, locked,
+        )) {
             Ok(done) => Ok(done),
             Err(error) => Err(host.error(error)),
         }
@@ -4453,8 +4453,8 @@ impl project_tests::ProjectTestsProgramHost for ProgramHost {
 /// of this process runs afterwards to do it.
 /// What `project_drive_drive_to` (`tools/project_drive.nika`) asks of the
 /// compiler: the project, the build's arguments, and the Rust values made on
-/// the way - the members with their manifests, what each lowering keeps for
-/// its ledgers, and the build's Cargo. The error of a step that failed is
+/// the way - the members with their manifests and what each lowering keeps
+/// for its ledgers. The error of a step that failed is
 /// kept here and handed back unchanged.
 struct DriveHost<'a> {
     project: &'a Project,
@@ -4465,7 +4465,6 @@ struct DriveHost<'a> {
     members: RefCell<Vec<Member>>,
     /// Each lowered member's ledger, derived file and proofs, by index.
     kept: RefCell<BTreeMap<i64, Lowered>>,
-    cargo: RefCell<Option<Cargo>>,
     failed: RefCell<Option<anyhow::Error>>,
 }
 
@@ -4494,12 +4493,6 @@ impl DriveHost<'_> {
                 .take()
                 .unwrap_or_else(|| anyhow!("{error}")),
         }
-    }
-
-    fn cargo(&self) -> std::cell::Ref<'_, Cargo> {
-        std::cell::Ref::map(self.cargo.borrow(), |cargo| {
-            cargo.as_ref().expect("Cargo is made first")
-        })
     }
 }
 
@@ -4712,14 +4705,14 @@ impl project_drive::ProjectDriveHost for DriveHost<'_> {
         crate::comptime_run::rustc_version().to_text()
     }
 
-    fn cargo_fresh(&self, record: &Path, handed: &str) -> Option<String> {
-        nikaia_std::rt::exec::block_on(project_drive::project_drive_fresh(record, handed))
+    // ADR-platform-layer-v1 D2, D7 item 3: the outer build's roots, handed
+    // through (ADR-raw-sinks-1 D17 item 7).
+    fn project_root(&self) -> PathBuf {
+        self.project.root.clone()
     }
 
-    fn record_cargo(&self, record: &Path, handed: &str, messages: &str, generated: &Path) {
-        nikaia_std::rt::exec::block_on(project_drive::project_drive_record(
-            record, handed, messages, generated,
-        ));
+    fn std_sources(&self) -> PathBuf {
+        Sysroot::resolve().root().to_path_buf()
     }
 
     fn target_triple(&self) -> String {
@@ -4853,59 +4846,45 @@ impl project_drive::ProjectDriveHost for DriveHost<'_> {
         self.held(self.project.settings.cpu_rustflags())
     }
 
-    fn make_cargo(
-        &self,
-        manifest: &Path,
-        env: &[(String, String)],
-        unset: &[String],
-        shared: bool,
-    ) -> HostResult<()> {
+    // ADR-platform-layer-v1 D2, D5 (#2608): what the outer build reads of
+    // the platform and the settings, handed through; the choices around it
+    // are `project_drive.nika`'s.
+    fn rlib_cache(&self) -> HostResult<PathBuf> {
         let project = self.project;
-        let cargo = self.held((|| {
-            let target_dir = if shared {
-                let tree = cargo_target_dir(project, manifest, shared)?;
-                orchestrator::cache::sweep_programs(&tree, &project.root_tag(), &project.root);
-                Some(tree)
-            } else {
-                None
-            };
-            Ok(Cargo {
-                manifest: manifest.to_path_buf(),
-                target_dir,
-                wrapper: std::env::current_exe().context("finding this compiler's own path")?,
-                env: env
-                    .iter()
-                    .map(|(name, value)| (name.into(), OsString::from(value)))
-                    .collect(),
-                config: project
-                    .settings
-                    .cpu_config()
-                    .iter()
-                    .map(std::string::String::from)
-                    .collect(),
-                unset: unset.iter().map(std::string::String::from).collect(),
-            })
-        })())?;
-        *self.cargo.borrow_mut() = Some(cargo);
-        Ok(())
+        let cpu = self.held(project.settings.cpu_key())?;
+        Ok(Sysroot::resolve().rlib_cache(
+            &project.settings.words.target,
+            &project.codegen(),
+            &project.settings.words.reentrancy_check,
+            &cpu,
+        ))
     }
 
-    fn target_dir(&self, manifest: &Path, shared: bool) -> HostResult<PathBuf> {
-        self.held(cargo_target_dir(self.project, manifest, shared))
+    fn where_tools_start(&self) -> PathBuf {
+        Layout::where_tools_start()
+    }
+
+    fn own_exe(&self) -> HostResult<PathBuf> {
+        self.held(std::env::current_exe().context("finding this compiler's own path"))
+    }
+
+    fn cargo_config(&self) -> Vec<String> {
+        self.project.settings.cpu_config()
+    }
+
+    fn program_args(&self) -> Vec<String> {
+        self.program_args.iter().cloned().collect()
+    }
+
+    fn launch_vars(&self) -> Vec<(String, String)> {
+        self.program_vars()
+            .into_iter()
+            .map(|(name, value)| (name.to_text(), value.to_string_lossy().to_text()))
+            .collect()
     }
 
     fn is_library(&self) -> bool {
         self.project.settings.library()
-    }
-
-    fn cargo_messages(&self, verb: &str, args: &[String]) -> HostResult<(i32, String)> {
-        let args: std::vec::Vec<std::string::String> =
-            args.iter().map(std::string::String::from).collect();
-        self.held(
-            self.cargo()
-                .messages(verb, &args)
-                .map(|(code, said)| (code, String::from(said))),
-        )
     }
 
     fn settle(&self) {
@@ -4939,19 +4918,6 @@ impl project_drive::ProjectDriveHost for DriveHost<'_> {
             .map(|error| format!("{error:#}"))
     }
 
-    fn cargo_run(&self, args: &[String]) -> HostResult<i32> {
-        let args: std::vec::Vec<std::string::String> =
-            args.iter().map(std::string::String::from).collect();
-        let after: std::vec::Vec<std::string::String> = self
-            .program_args
-            .iter()
-            .map(std::string::String::from)
-            .collect();
-        let mut cargo = self.cargo().clone();
-        cargo.env.extend(self.launch_vars());
-        self.held(cargo.run("run", &args, &after))
-    }
-
     fn run_directly(&self, binary: &Path) -> HostResult<i32> {
         // **The record of this run** (#2421), for a program `rustc` built
         // into its slot here: the next run of the same file starts it at once.
@@ -4967,7 +4933,11 @@ impl project_drive::ProjectDriveHost for DriveHost<'_> {
                 &ran.said,
             ));
         }
-        self.held(run_directly(binary, self.program_args, &self.launch_vars()))
+        self.held(run_directly(
+            binary,
+            self.program_args,
+            &self.program_vars(),
+        ))
     }
 }
 
@@ -4978,7 +4948,7 @@ impl DriveHost<'_> {
     /// the file the program stands in as - one its own launcher handed this
     /// run (`nikaia test`'s test file), else the `.nika` file `run` was
     /// given, else the project's entry point.
-    fn launch_vars(&self) -> std::vec::Vec<(std::string::String, std::ffi::OsString)> {
+    fn program_vars(&self) -> std::vec::Vec<(std::string::String, std::ffi::OsString)> {
         let main = self
             .project
             .written
@@ -4988,7 +4958,7 @@ impl DriveHost<'_> {
     }
 }
 
-/// [`DriveHost`]'s `launch_vars`, with `main` the file the program stands in
+/// [`DriveHost`]'s `program_vars`, with `main` the file the program stands in
 /// for where no launcher named one: also a run that finds its program built
 /// (#2421).
 fn launch_vars(main: Option<&Path>) -> std::vec::Vec<(std::string::String, std::ffi::OsString)> {
@@ -5052,27 +5022,6 @@ fn run_directly(
 /// triple they pass Cargo as `--target`: the two bundles
 /// (`tools/comptime_bundle.nika`) and every grammar run's parser.
 ///
-/// **The directory Cargo builds `manifest` in** (ADR-002 D4), which the
-/// wrapper learns as `NIKAIA_TARGET_DIR` (ADR-raw-sinks-1 D17.6): the tree of
-/// the user's cache for these settings when `shared`, else where Cargo puts
-/// it unasked, `CARGO_TARGET_DIR` (relative to where the tools start) or
-/// `target` beside the manifest. The choosing Rust that stays until the outer
-/// build moves (ADR-platform-layer-v1 D5, D6).
-fn cargo_target_dir(project: &Project, manifest: &Path, shared: bool) -> Result<PathBuf> {
-    if shared {
-        return Ok(Sysroot::resolve().rlib_cache(
-            &project.settings.words.target,
-            &project.codegen(),
-            &project.settings.words.reentrancy_check,
-            &project.settings.cpu_key()?,
-        ));
-    }
-    match std::env::var_os("CARGO_TARGET_DIR").filter(|dir| !dir.is_empty()) {
-        Some(dir) => Ok(Layout::where_tools_start().join(dir)),
-        None => Ok(manifest.parent().unwrap_or(Path::new(".")).join("target")),
-    }
-}
-
 /// **The tree a program with no settings is built in** (`Sysroot::rlib_cache`,
 /// ADR-002 D4), with the program's `--target` and the profile a generated
 /// workspace gives its dependencies, so Cargo compiles `std` there once for the

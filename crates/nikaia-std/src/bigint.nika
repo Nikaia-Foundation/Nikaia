@@ -1,0 +1,445 @@
+// crates/nikaia-std/src/bigint.nika
+//
+// `std::bigint`, written in Nikaia: an exact signed integer of any size
+// (Part I 2.2, ADR-270 D11), for a computation that may outgrow every fixed
+// width. A program names it `bigint::BigInt` after `use std::bigint`; it is
+// not in the prelude (Part I 1.3).
+//
+// A sign and a list of 64-bit digits, least significant first, with no
+// leading zero digit; zero has no digits and sign 0, so the derived `==`
+// is equality of value. Every digit step is one of the integer methods of
+// Part I 2.2: `widening_mul` for a digit's product, `overflowing_add` and
+// `overflowing_sub` for the carry and the borrow, `narrowing_div_rem` for a
+// digit's quotient. No literal, operator or `as` (ADR-294).
+
+
+/// An exact signed integer of any size.
+pub struct BigInt {
+    sign: i64,
+    digits: Vec[u64],
+}
+
+/// The magnitude without its leading zero digits.
+fn trimmed(keep digits: Vec[u64]) -> Vec[u64] sync {
+    let mut digits = digits
+    while digits.len() > 0 && digits[digits.len() - 1] == 0 {
+        digits.pop()
+    }
+    return digits
+}
+
+/// A number of this sign and magnitude, zero where the magnitude is.
+fn made(sign: i64, keep digits: Vec[u64]) -> BigInt sync {
+    let kept = trimmed(digits)
+    if kept.len() == 0 {
+        return BigInt { sign: 0, digits: [] }
+    }
+    return BigInt { sign: sign, digits: kept }
+}
+
+/// -1, 0 or 1 as `a` is below, at or above `b`, magnitudes.
+fn magnitude_compare(a: Vec[u64], b: Vec[u64]) -> i64 sync {
+    if a.len() != b.len() {
+        return if a.len() < b.len() { -1 } else { 1 }
+    }
+    let mut at = a.len()
+    while at > 0 {
+        at -= 1
+        if a[at] != b[at] {
+            return if a[at] < b[at] { -1 } else { 1 }
+        }
+    }
+    return 0
+}
+
+fn magnitude_add(a: Vec[u64], b: Vec[u64]) -> Vec[u64] sync {
+    let n = if a.len() > b.len() { a.len() } else { b.len() }
+    let mut sum: Vec[u64] = []
+    let mut carry = false
+    for at in 0..<n {
+        let x: u64 = if at < a.len() { a[at] } else { 0 }
+        let y: u64 = if at < b.len() { b[at] } else { 0 }
+        let (s1, o1) = x.overflowing_add(y)
+        let (s2, o2) = s1.overflowing_add(if carry { 1 } else { 0 })
+        sum.push(s2)
+        carry = o1 || o2
+    }
+    if carry {
+        sum.push(1)
+    }
+    return sum
+}
+
+/// `a - b` for magnitudes with `a >= b`.
+fn magnitude_sub(a: Vec[u64], b: Vec[u64]) -> Vec[u64] sync {
+    let mut rest: Vec[u64] = []
+    let mut borrow = false
+    for at in 0..<a.len() {
+        let y: u64 = if at < b.len() { b[at] } else { 0 }
+        let (d1, o1) = a[at].overflowing_sub(y)
+        let (d2, o2) = d1.overflowing_sub(if borrow { 1 } else { 0 })
+        rest.push(d2)
+        borrow = o1 || o2
+    }
+    return trimmed(rest)
+}
+
+fn magnitude_mul(a: Vec[u64], b: Vec[u64]) -> Vec[u64] sync {
+    if a.len() == 0 || b.len() == 0 {
+        return []
+    }
+    let mut product: Vec[u64] = []
+    for _ in 0..<(a.len() + b.len()) {
+        product.push(0)
+    }
+    for i in 0..<a.len() {
+        let mut carry: u64 = 0
+        for j in 0..<b.len() {
+            let (low, high) = a[i].widening_mul(b[j])
+            let (s1, o1) = low.overflowing_add(product[i + j])
+            let (s2, o2) = s1.overflowing_add(carry)
+            product[i + j] = s2
+            carry = high + (if o1 { 1 } else { 0 }) + (if o2 { 1 } else { 0 })
+        }
+        product[i + b.len()] = carry
+    }
+    return trimmed(product)
+}
+
+/// The magnitude moved up by `by` bits, `by` below 64, one digit longer.
+fn shifted_up(a: Vec[u64], by: u32) -> Vec[u64] sync {
+    let mut out: Vec[u64] = []
+    let mut carry: u64 = 0
+    for at in 0..<a.len() {
+        if by == 0 {
+            out.push(a[at])
+        } else {
+            out.push((a[at] << by) | carry)
+            carry = a[at] >> (64 - by)
+        }
+    }
+    out.push(carry)
+    return out
+}
+
+/// The magnitude moved down by `by` bits, `by` below 64.
+fn shifted_down(a: Vec[u64], by: u32) -> Vec[u64] sync {
+    let mut out: Vec[u64] = []
+    for at in 0..<a.len() {
+        if by == 0 {
+            out.push(a[at])
+        } else {
+            let above: u64 = if at + 1 < a.len() { a[at + 1] << (64 - by) } else { 0 }
+            out.push((a[at] >> by) | above)
+        }
+    }
+    return trimmed(out)
+}
+
+/// `a / d` and `a % d` for a magnitude and one digit `d`, not zero.
+fn magnitude_div_digit(a: Vec[u64], d: u64) -> (Vec[u64], u64) sync {
+    let mut quotient: Vec[u64] = []
+    for _ in 0..<a.len() {
+        quotient.push(0)
+    }
+    let mut rest: u64 = 0
+    let mut at = a.len()
+    while at > 0 {
+        at -= 1
+        let (q, r) = rest.narrowing_div_rem(a[at], d) ?? return ([], 0)
+        quotient[at] = q
+        rest = r
+    }
+    return (trimmed(quotient), rest)
+}
+
+/// `a / b` and `a % b` for magnitudes, `b` of two digits or more and not
+/// above `a`: Knuth's algorithm D (TAOCP 4.3.1).
+fn magnitude_div_long(a: Vec[u64], b: Vec[u64]) -> (Vec[u64], Vec[u64]) sync {
+    let n = b.len()
+    let m = a.len() - n
+    let by = b[n - 1].leading_zeros()
+    let v = trimmed(shifted_up(b, by))
+    let mut u = shifted_up(a, by)
+    let top = v[n - 1]
+    let next = v[n - 2]
+    let mut quotient: Vec[u64] = []
+    for _ in 0..<(m + 1) {
+        quotient.push(0)
+    }
+    let mut j = m + 1
+    while j > 0 {
+        j -= 1
+        // D3: the trial digit from the top two digits of `u` and the top of `v`.
+        let mut qhat: u64 = 18446744073709551615
+        let mut rhat = u[j + n - 1]
+        let mut rhat_fits = true
+        if u[j + n] < top {
+            let (q, r) = u[j + n].narrowing_div_rem(u[j + n - 1], top) ?? return ([], [])
+            qhat = q
+            rhat = r
+        } else {
+            let (r, o) = rhat.overflowing_add(top)
+            rhat = r
+            rhat_fits = !o
+        }
+        while rhat_fits {
+            let (low, high) = qhat.widening_mul(next)
+            if high < rhat || (high == rhat && low <= u[j + n - 2]) {
+                break
+            }
+            qhat -= 1
+            let (r, o) = rhat.overflowing_add(top)
+            rhat = r
+            rhat_fits = !o
+        }
+        // D4: u[j..j+n] -= qhat * v.
+        let mut carry: u64 = 0
+        let mut borrow: u64 = 0
+        for i in 0..<n {
+            let (low, high) = qhat.widening_mul(v[i])
+            let (p, o) = low.overflowing_add(carry)
+            carry = high + (if o { 1 } else { 0 })
+            let (t1, b1) = u[i + j].overflowing_sub(p)
+            let (t2, b2) = t1.overflowing_sub(borrow)
+            u[i + j] = t2
+            borrow = (if b1 { 1 } else { 0 }) + (if b2 { 1 } else { 0 })
+        }
+        let (t1, b1) = u[j + n].overflowing_sub(carry)
+        let (t2, b2) = t1.overflowing_sub(borrow)
+        u[j + n] = t2
+        // D6: one too many, add `v` back.
+        if b1 || b2 {
+            qhat -= 1
+            let mut back = false
+            for i in 0..<n {
+                let (s1, o1) = u[i + j].overflowing_add(v[i])
+                let (s2, o2) = s1.overflowing_add(if back { 1 } else { 0 })
+                u[i + j] = s2
+                back = o1 || o2
+            }
+            u[j + n] = u[j + n].wrapping_add(if back { 1 } else { 0 })
+        }
+        quotient[j] = qhat
+    }
+    let mut low_part: Vec[u64] = []
+    for i in 0..<n {
+        low_part.push(u[i])
+    }
+    return (trimmed(quotient), shifted_down(low_part, by))
+}
+
+/// `a / b` and `a % b` for magnitudes, `b` not zero.
+fn magnitude_div(a: Vec[u64], b: Vec[u64]) -> (Vec[u64], Vec[u64]) sync {
+    if magnitude_compare(a, b) < 0 {
+        return ([], a.clone())
+    }
+    if b.len() == 1 {
+        let (q, r) = magnitude_div_digit(a, b[0])
+        return (q, trimmed([r]))
+    }
+    return magnitude_div_long(a, b)
+}
+
+/// The 62 bits of a magnitude from bit `from` up, which are all its bits
+/// above `from` when it has no more than `from + 62`.
+fn bits_from(a: Vec[u64], from: i64) -> i64 sync {
+    let at = from / 64
+    let by = from % 64
+    let mut value: u64 = if at < a.len() { a[at] >> by } else { 0 }
+    if by > 0 && at + 1 < a.len() {
+        value = value | (a[at + 1] << (64 - by))
+    }
+    return (value & 4611686018427387903).checked_i64() ?? 0
+}
+
+impl BigInt {
+    /// The integer `v`, of any integer type an `i64` holds.
+    pub fn of(v: i64) -> BigInt sync {
+        return BigInt::from_wide(Wide::of(v))
+    }
+
+    /// The integer a `Wide[i64]` holds.
+    pub fn from_wide(w: Wide[i64]) -> BigInt sync {
+        let (low, high) = w.abs().halves()
+        return made(w.sign(), [low, high])
+    }
+
+    /// The value as an `i64`, or `null` where it does not fit one.
+    pub fn narrow(self) -> i64? sync {
+        if self.digits.len() == 0 {
+            return 0
+        }
+        if self.digits.len() > 1 {
+            return null
+        }
+        let d = self.digits[0]
+        if self.sign < 0 && d == 9223372036854775808 {
+            return -9223372036854775807 - 1
+        }
+        let v = d.checked_i64() ?? return null
+        return if self.sign < 0 { -v } else { v }
+    }
+
+    /// -1, 0 or 1 as the value is below, at or above zero.
+    pub fn sign(self) -> i64 sync {
+        return self.sign
+    }
+
+    /// How many bits the magnitude takes: 0 for zero, 1 for ±1.
+    pub fn bits(self) -> i64 sync {
+        let n = self.digits.len()
+        if n == 0 {
+            return 0
+        }
+        let top: i64 = self.digits[n - 1].leading_zeros()
+        return n * 64 - top
+    }
+
+    /// The value in decimal, with a `-` in front where it is negative.
+    pub fn to_text(self) -> String sync {
+        if self.sign == 0 {
+            return "0"
+        }
+        let mut chunks: Vec[u64] = []
+        let mut rest = self.digits.clone()
+        while rest.len() > 0 {
+            let (q, r) = magnitude_div_digit(rest, 10000000000000000000)
+            chunks.push(r)
+            rest = q
+        }
+        let mut text = if self.sign < 0 { "-" } else { "" }
+        let mut at = chunks.len()
+        at -= 1
+        text = text + f"{chunks[at]}"
+        while at > 0 {
+            at -= 1
+            text = text + f"{chunks[at]:019}"
+        }
+        return text
+    }
+
+    /// `self + other`.
+    pub fn add(self, other: ref BigInt) -> BigInt sync {
+        if self.sign == 0 {
+            return other.clone()
+        }
+        if other.sign == 0 {
+            return self.clone()
+        }
+        if self.sign == other.sign {
+            return made(self.sign, magnitude_add(self.digits, other.digits))
+        }
+        let order = magnitude_compare(self.digits, other.digits)
+        if order == 0 {
+            return made(0, [])
+        }
+        if order > 0 {
+            return made(self.sign, magnitude_sub(self.digits, other.digits))
+        }
+        return made(other.sign, magnitude_sub(other.digits, self.digits))
+    }
+
+    /// `self - other`.
+    pub fn sub(self, other: ref BigInt) -> BigInt sync {
+        return self.add(other.neg())
+    }
+
+    /// `-self`.
+    pub fn neg(self) -> BigInt sync {
+        return made(-self.sign, self.digits.clone())
+    }
+
+    /// The magnitude, never negative.
+    pub fn abs(self) -> BigInt sync {
+        return made(1, self.digits.clone())
+    }
+
+    /// `self * other`, schoolbook.
+    pub fn mul(self, other: ref BigInt) -> BigInt sync {
+        return made(self.sign * other.sign, magnitude_mul(self.digits, other.digits))
+    }
+
+    /// `self / d` and `self % d`, rounded as `/` and `%` round: the quotient
+    /// toward zero, the rest with the sign of `self`; `null` for `d` zero.
+    pub fn div_rem(self, d: ref BigInt) -> (BigInt, BigInt)? sync {
+        if d.sign == 0 {
+            return null
+        }
+        let (q, r) = magnitude_div(self.digits, d.digits)
+        return (made(self.sign * d.sign, q), made(self.sign, r))
+    }
+
+    /// `self % d`, with the sign of `self`; `null` for `d` zero.
+    pub fn rem(self, d: ref BigInt) -> BigInt? sync {
+        let (_, r) = self.div_rem(d) ?? return null
+        return r
+    }
+
+    /// The greatest common divisor, never negative; `gcd(0, 0)` is 0.
+    /// Lehmer's algorithm (TAOCP 4.5.2 L) on the leading 62 bits.
+    pub fn gcd(self, other: ref BigInt) -> BigInt sync {
+        let mut u = self.abs()
+        let mut v = other.abs()
+        if u < v {
+            let t = u
+            u = v
+            v = t
+        }
+        while v.sign != 0 {
+            if u.digits.len() == 1 {
+                let mut x = u.digits[0]
+                let mut y = v.digits[0]
+                while y != 0 {
+                    let t = x % y
+                    x = y
+                    y = t
+                }
+                return made(1, [x])
+            }
+            let from = u.bits() - 62
+            let mut uh = bits_from(u.digits, from)
+            let mut vh = bits_from(v.digits, from)
+            let mut a: i64 = 1
+            let mut b: i64 = 0
+            let mut c: i64 = 0
+            let mut d: i64 = 1
+            while vh + c != 0 && vh + d != 0 {
+                let q = (uh + a) / (vh + c)
+                if q != (uh + b) / (vh + d) {
+                    break
+                }
+                let t = a - q * c
+                a = c
+                c = t
+                let t2 = b - q * d
+                b = d
+                d = t2
+                let t3 = uh - q * vh
+                uh = vh
+                vh = t3
+            }
+            if b == 0 {
+                let r = u.rem(v) ?? return u
+                u = v
+                v = r
+            } else {
+                let next_u = BigInt::of(a).mul(u).add(BigInt::of(b).mul(v))
+                let next_v = BigInt::of(c).mul(u).add(BigInt::of(d).mul(v))
+                u = next_u
+                v = next_v
+            }
+        }
+        return u
+    }
+}
+
+impl Ord for BigInt {
+    fn compare(self, other: BigInt) -> Ordering sync {
+        if self.sign != other.sign {
+            return if self.sign < other.sign { Ordering::Less } else { Ordering::Greater }
+        }
+        let order = magnitude_compare(self.digits, other.digits) * self.sign
+        return if order < 0 { Ordering::Less } else if order > 0 { Ordering::Greater } else { Ordering::Equal }
+    }
+}

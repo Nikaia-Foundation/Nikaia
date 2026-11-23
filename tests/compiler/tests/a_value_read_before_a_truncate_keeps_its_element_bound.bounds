@@ -1,0 +1,12 @@
+bounds in tests/a_value_read_before_a_truncate_keeps_its_element_bound.nika: 8 indexes, 8 proved; 2 operations, 2 proved
+    15  v += 1               proved
+    22  self.place[…]        proved
+    30  self.heap[0]         proved
+    31  self.heap.len() - 1  proved
+    32  self.heap[last]      proved
+    33  self.heap[0]         proved
+    34  self.place[…]        proved
+    36  self.place[…]        proved
+    45  h.place[0]           proved
+    45  h.place[2]           proved
+  derived  insert: v <= self.place.len(), v < self.place.len(), proved at the calls on lines 14
