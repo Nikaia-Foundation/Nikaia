@@ -1,0 +1,15 @@
+4: 2 4 6 8
+4: <1><2><3><4>
+4: n1 n4 40
+empty: 0
+element 9 failed
+  raised at text
+  (no trace; set NIKAIA_TRACE=1 to capture one)
+  and then:
+  element 7 failed
+    raised at text
+first: 0
+element 8 failed
+  raised at named
+  (no trace; set NIKAIA_TRACE=1 to capture one)
+last: 0

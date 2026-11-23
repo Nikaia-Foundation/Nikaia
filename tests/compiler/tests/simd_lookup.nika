@@ -1,0 +1,46 @@
+// `lookup` picks bytes of a table by indices known at run time, each proved
+// below the lanes; `lookup_or_zero` asks no proof and answers 0 for an index
+// of `N` or more (ADR-377 D10).
+use std::simd
+
+fn reversed(table: simd::Fixed[u8, 16], k: i64) -> simd::Fixed[u8, 16] sync {
+    // A list of constant vectors proves each element it hands out.
+    let masks: Array[simd::Fixed[u8, 16], 2] = [
+        simd::Fixed::from([3, 2, 1, 0, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]),
+        simd::Fixed::from([15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0]),
+    ]
+    return table.lookup(masks[k])
+}
+
+fn shown(v: simd::Fixed[u8, 16]) -> String sync {
+    let mut out: Vec[String] = []
+    for i in 0..<16 {
+        out.push(f"{v.lane(i)}")
+    }
+    return out.join(" ")
+}
+
+fn main() throws {
+    let table: simd::Fixed[u8, 16] = simd::Fixed::from([100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115])
+    let raw: simd::Fixed[u8, 16] = simd::Fixed::from([15, 16, 127, 128, 255, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 31])
+    println(f"masked  {shown(table.lookup(raw & simd::splat(15)))}")
+    println(f"least   {shown(table.lookup(raw.min(simd::splat(15))))}")
+    println(f"zero    {shown(table.lookup_or_zero(raw))}")
+    println(f"first   {shown(reversed(table, 0))}")
+    println(f"whole   {shown(reversed(table, 1))}")
+    let low: simd::Fixed[u8, 16] = simd::splat(3)
+    let picked = simd::select(raw.gt(simd::splat(100)), low, raw & simd::splat(7))
+    println(f"select  {shown(table.lookup(picked))}")
+    // The result of a lookup from a proved table is proved too.
+    let turn: simd::Fixed[u8, 16] = simd::Fixed::from([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 0])
+    let twice = table.lookup(turn.lookup(low))
+    println(f"twice   {shown(twice)}")
+    let wide: simd::Fixed[u8, 32] = simd::Fixed::from([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31])
+    let ix: simd::Fixed[u8, 32] = simd::Fixed::from([31, 16, 15, 0, 32, 47, 200, 17, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24])
+    let w = wide.lookup_or_zero(ix)
+    println(f"wide    {w.lane(0)} {w.lane(1)} {w.lane(2)} {w.lane(3)} {w.lane(4)} {w.lane(5)} {w.lane(6)} {w.lane(7)}")
+    let small: simd::Fixed[u8, 4] = simd::Fixed::from([7, 8, 9, 10])
+    let s = small.lookup_or_zero(simd::Fixed::from([3, 4, 0, 255]))
+    let t = small.lookup(simd::Fixed::from([3, 3, 0, 1]))
+    println(f"small   {s.lane(0)} {s.lane(1)} {s.lane(2)} {s.lane(3)} {t.lane(0)} {t.lane(3)}")
+}

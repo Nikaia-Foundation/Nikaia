@@ -8,6 +8,23 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1551] — 2026-11-23
+
+**Builders' changes (#2502, #2768, #987)**
+- benches/par-map counts par_iter().map(…).collect() over 10^6 elements against Rayon with a lambda that can throw too: 1.47x Rayon's instructions, the single-threaded walk that keeps every failure being half of it.
+- par_iter: a walk whose lambda can throw, collected into a list, hands back the list it made where nothing failed, no second list (benches/par-map throws row 66.8 M to 49.8 M Ir, Rayon 45.5 M)
+- A `par_iter` element whose lambda builds in a block runs with a task's budget in its piece's block: one that outgrows it fails alone with `task::OverBudget`, kept with the walk's other failures, at both settings of `user_parallelism`; a pausing `par_iter` map that can fail keeps every failure; a lambda failing in several ways crosses workers in a generated sum
+
+## [0.0.1550] — 2026-11-23
+
+**bounds: a list's length forgotten after pop is still never negative, so a field zeroed after it stays within the list (#1642)**
+- Bounds: a field set to 0 after a `pop` of its list stays within the list: a length the walk forgets after `pop`, `retain` or `dedup` is still never negative.
+
+## [0.0.1549] — 2026-11-23
+
+**simd: lookup and lookup_or_zero on Fixed[u8, N] (ADR-377 D10), fannkuch-redux flips with one lookup (#1845)**
+- simd: `lookup` and `lookup_or_zero` pick the bytes of a `simd::Fixed[u8, N]` by indices known at run time (ADR-377 D10): one `pshufb` per 16 bytes with SSSE3, `lookup`'s index proved below N (NK1298); fannkuch-redux for speed counts 111.6 instructions a permutation at x86-64-v3 (215.6 before).
+
 ## [0.0.1548] — 2026-11-22
 
 **Builders' changes (#2706, #2707)**

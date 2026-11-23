@@ -835,6 +835,23 @@ fn check_core_call_on_failed_through(mut state: CheckState, args: ref Vec[Expr],
     return true
 }
 
+/// **Whether a lambda places an allocation in the running block** (ADR-327
+/// D13): its own sites, or a function it calls that does.
+fn check_core_call_on_places[H: CheckHost](state: ref CheckState, world: ref CheckWorld, host: ref H, lambda: ref Expr) -> bool {
+    let facts = PanicFacts {
+        checked: true,
+        arithmetic: state.facts.arithmetic.clone(),
+        negations: state.facts.negations.clone(),
+        shifts: state.facts.shifts.clone(),
+        map_keys: state.facts.map_keys.keys().map(fn(key) { key.0 }).collect(),
+        proven_indices: collections::BTreeSet(),
+        proven_arithmetic: collections::BTreeSet(),
+        proven_negations: collections::BTreeSet(),
+        placed: state.facts.placed_in_block.clone(),
+    }
+    return places_of_task(lambda, world.here.items, world.words, fn(literal) { host.literal_holes(literal) }, facts, world.own, world.library)
+}
+
 /// Whether the entry hands back a sequence.
 fn check_core_call_on_hands_back_a_sequence(contract: ref FnContract) -> bool {
     let signature = contract.signature ?? return false
@@ -1536,7 +1553,16 @@ fn check_core_call_on_described[H: CheckHost](mut state: CheckState, world: ref 
                 found[at] = check_core_call_on_unfailing_fn(found[at])
             }
         }
-        let seen: CheckGuarded = state.flow.guarded?.clone() ?? CheckGuarded::nothing()
+        let mut seen: CheckGuarded = state.flow.guarded?.clone() ?? CheckGuarded::nothing()
+        // **A `par_iter` lambda that never pauses and places an allocation
+        // in a block runs each element as a task for its memory**
+        // (ADR-async-5 D28, ADR-327 D13): a full block ends that element
+        // alone, with `task::OverBudget`, kept among the call's failures.
+        if parallel && (key == "Seq::map" || key == "Seq::filter" || key == "Seq::for_each") && args.len() == 1 && !a_paused_chain(key, on) && !state.flow.paused_args.contains(id_of(args[0]) as i64) && check_core_call_on_places(state, world, host, args[0]) {
+            state.facts.blocked_lambdas.insert(id_of(args[0]) as i64)
+            seen.thrown.insert("task::OverBudget")
+            state.flow.last_lambda_fails = true
+        }
         state.flow.caught = outer_caught
         state.flow.guarded = outer_guarded
         failed_through = check_core_call_on_failed_through(state, args, through, seen, key, on, node, hands_back_a_sequence)

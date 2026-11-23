@@ -8424,6 +8424,25 @@ sync = true
 touches = []
 signature = "[T, N](self: simd::Fixed[T, N], of: simd::Fixed[u8, N]) -> simd::Fixed[T, N]"
 
+# The bytes of the table `self` that `idx` names, lane `i` being
+# `self.lane(idx.lane(i))`; each lane of `idx` proved below `N` (`NK1298`),
+# `Fixed[u8, N]` only (ADR-377 D10).
+[fn."simd::Fixed::lookup"]
+pub = true
+panics = false
+sync = true
+touches = []
+signature = "[N](self: simd::Fixed[u8, N], idx: simd::Fixed[u8, N]) -> simd::Fixed[u8, N]"
+
+# As `lookup`, with no proof asked: a lane whose index is `N` or more is 0
+# (ADR-377 D10).
+[fn."simd::Fixed::lookup_or_zero"]
+pub = true
+panics = false
+sync = true
+touches = []
+signature = "[N](self: simd::Fixed[u8, N], idx: simd::Fixed[u8, N]) -> simd::Fixed[u8, N]"
+
 # Lane by lane `*`, each neighbouring pair added into one lane of twice the
 # width: `Fixed[u8, N]` by `Fixed[i8, N]` into `Fixed[i16, N / 2]`, saturating,
 # `Fixed[i16, N]` by `Fixed[i16, N]` into `Fixed[i32, N / 2]`, wrapping.

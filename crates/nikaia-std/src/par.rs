@@ -442,8 +442,9 @@ pub fn listed<I: IntoIterator>(walk: I) -> Result<Vec<I::Item>, crate::task::Tim
 pub fn kept_failures<C: FromIterator<T>, T, E: crate::error::Joined>(
     items: impl IntoIterator<Item = Result<T, E>>,
 ) -> Result<C, E> {
+    let items = items.into_iter();
     let mut first: Option<E> = None;
-    let mut values: Vec<T> = Vec::new();
+    let mut values: Vec<T> = Vec::with_capacity(items.size_hint().0);
     for item in items {
         match (item, &mut first) {
             (Ok(value), None) => values.push(value),
@@ -458,6 +459,118 @@ pub fn kept_failures<C: FromIterator<T>, T, E: crate::error::Joined>(
     match first {
         Some(error) => Err(error),
         None => Ok(values.into_iter().collect()),
+    }
+}
+
+/// **A list of the elements of a `par_iter` walk, each a value or a
+/// failure**, as the walk's `collect::<Vec<_>>()` made it: `std`'s `Vec`, or
+/// the block types' [`List`](crate::block::List) where the program lowers to
+/// them. [`kept_failures_listed`] takes its buffer over (#2768).
+pub trait Results: Sized {
+    /// What an element is where it did not fail.
+    type Value;
+    /// What an element is where it failed.
+    type Failure: crate::error::Joined;
+    /// The list of the values, of the same kind.
+    type Values;
+    /// The elements as `std`'s `Vec`, the buffer taken over where it can be.
+    fn into_items(self) -> Vec<Result<Self::Value, Self::Failure>>;
+    /// The values as the list of this kind, the buffer taken over.
+    fn values(values: Vec<Self::Value>) -> Self::Values;
+}
+
+impl<T, E: crate::error::Joined> Results for Vec<Result<T, E>> {
+    type Value = T;
+    type Failure = E;
+    type Values = Vec<T>;
+    #[inline]
+    fn into_items(self) -> Vec<Result<T, E>> {
+        self
+    }
+    #[inline]
+    fn values(values: Vec<T>) -> Vec<T> {
+        values
+    }
+}
+
+impl<T, E: crate::error::Joined> Results for crate::block::List<Result<T, E>> {
+    type Value = T;
+    type Failure = E;
+    type Values = crate::block::List<T>;
+    #[inline]
+    fn into_items(self) -> Vec<Result<T, E>> {
+        Vec::from(self)
+    }
+    #[inline]
+    fn values(values: Vec<T>) -> crate::block::List<T> {
+        crate::block::List::from(values)
+    }
+}
+
+/// **[`kept_failures`] where the walk is collected into a list** (#2768,
+/// ADR-async-5 D28): the same values and failures, but where none failed the
+/// list the walk's `collect` made becomes the result in its own buffer (a
+/// `map` over `std`'s `vec::IntoIter` is collected in place), so the values
+/// are neither pushed one by one into a new list nor copied into another.
+/// It reads the list once up to the first failure; the failures are joined
+/// on the failure path alone.
+pub fn kept_failures_listed<L: Results>(items: L) -> Result<L::Values, L::Failure> {
+    let items = items.into_items();
+    match items.iter().position(Result::is_err) {
+        None => Ok(L::values(
+            items
+                .into_iter()
+                .map(|item| match item {
+                    Ok(value) => value,
+                    Err(_) => unreachable!("no element failed"),
+                })
+                .collect(),
+        )),
+        Some(at) => {
+            let mut failures = items.into_iter().skip(at).filter_map(Result::err);
+            let Some(mut first) = failures.next() else {
+                unreachable!("element {at} failed")
+            };
+            for later in failures {
+                crate::error::Joined::joined_by(&mut first, later);
+            }
+            Err(first)
+        }
+    }
+}
+
+thread_local! {
+    /// **The block of the piece this worker runs** (ADR-async-5 D28): made
+    /// the first time an element that places in a block runs here, and kept,
+    /// since every element leaves it as empty as it found it (ADR-327 D9,
+    /// D10).
+    static PIECE: std::cell::OnceCell<crate::block::Block> = const { std::cell::OnceCell::new() };
+}
+
+/// **A `par_iter` element that places in a block runs as a task for its
+/// memory** (ADR-async-5 D28, ADR-327 D13): in its piece's block, with a
+/// task's budget, at both settings. What it hands back is built outside the
+/// block (ADR-327 D9), so the block needs no reset between elements. A full
+/// block unwinds that element alone (D19): its failure is
+/// `task::OverBudget`, kept among the call's failures ([`kept_failures`],
+/// D26), and the other elements go on; any other panic goes on unwinding.
+/// The lowering writes it around such a lambda, which it makes hand back a
+/// `Result`.
+pub fn in_block<A, U, E: From<crate::error::Thrown<crate::task::OverBudget>>>(
+    f: impl Fn(A) -> Result<U, E> + Sync + Send,
+) -> impl Fn(A) -> Result<U, E> + Sync + Send {
+    move |item| {
+        PIECE.with(|piece| {
+            let block = piece.get_or_init(crate::block::for_a_piece);
+            let _entered = crate::block::enter(block);
+            match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| f(item))) {
+                Ok(done) => done,
+                Err(payload) if payload.is::<task_block::OverBudget>() => {
+                    Err(E::from(crate::error::Thrown::from(crate::task::OverBudget)))
+                }
+                Err(payload) => std::panic::resume_unwind(payload),
+            }
+        })
     }
 }
 

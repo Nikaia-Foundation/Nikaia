@@ -286,6 +286,13 @@ impl EmitState {
         if pauses {
             out.push("async ")
         }
+        // **A `par_iter` element that places in a block runs in its piece's
+        // block** (ADR-async-5 D28, ADR-327 D13): a full block ends that
+        // element alone, its failure `task::OverBudget`.
+        let blocked = !pauses && self.facts.blocked_lambdas.contains(node_key(node))
+        if blocked {
+            out.push("nikaia_std::par::in_block(")
+        }
         // **`filter` is handed a reference to its item** (ADR-231 D2): where the
         // item copies, the pattern takes it out.
         let pattern = self.facts.filter_patterns.contains(node_key(node))
@@ -380,12 +387,18 @@ impl EmitState {
             out.push(if leaves { "{ " } else { "{ let __nikaia_done = " })
             self.emit_core_block(world, walk, out, host, body, depth, inside with { can_throw: true }, inside_scope, value_tail)
             out.push(if leaves { " }" } else { "; Ok(__nikaia_done) }" })
+            if blocked {
+                out.push(")")
+            }
             if a_task {
                 out.push(")")
             }
             return
         }
         self.emit_core_block(world, walk, out, host, body, depth, inside, inside_scope, return_tail)
+        if blocked {
+            out.push(")")
+        }
         if copied && pauses {
             out.push(f".await; *__nikaia_slot = {names[0]}; }}")
         } else if copied {

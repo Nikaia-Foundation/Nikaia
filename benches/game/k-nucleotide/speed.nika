@@ -31,7 +31,7 @@ fn section_three(input: String) -> Vec[u64] sync {
 // Every fragment of length `k`, by its code, and how often it occurs.
 fn count(codes: Vec[u64], k: i64) -> collections::HashMap[u64, i64] sync {
 	let mut counts: collections::HashMap[u64, i64] = collections::HashMap()
-	if codes.len() < k {
+	if k < 1 || codes.len() < k {
 		return counts
 	}
 	let mask: u64 = (1 << (2 * k as u64)) - 1

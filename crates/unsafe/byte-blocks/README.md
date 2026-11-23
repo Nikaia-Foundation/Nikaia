@@ -1,7 +1,8 @@
 # byte-blocks
 
 Which bytes of a 64-byte block, or of half of one, belong to a set, one bit a
-byte, at the vector width the build's CPU level allows. No dependencies, `no_std`.
+byte, at the vector width the build's CPU level allows; and the byte lookup
+`simd::Fixed[u8, N]` asks of it (`lookup`, ADR-377 D10). No dependencies, `no_std`.
 
 ```rust
 let tables = byte_blocks::Tables::new([1 << b';' | 1 << b'\n', 0, 0, 0]);
@@ -28,6 +29,8 @@ bytes a word on any other target.
 | `high_bits` | a call of a `#[target_feature]` function | as for `any_of`: AVX2 by the `cfg`, SSE2 as x86-64's baseline |
 | `avx2::bits` (from `avx2::high`), `sse2_high` | `_mm256_loadu_si256`, `_mm_loadu_si128` | each reads one part from `as_chunks::<32>()` or `as_chunks::<16>()` of `lanes`, exactly that part's bytes, any alignment |
 | `avx2::table`, `sse2::tables` | `_mm_loadu_si128` | reads the 16 bytes of a `&[u8; 16]`, any alignment |
+| `lookup` | a call of a `#[target_feature]` function | the `cfg` around the call says the build enables SSSE3 for every function |
+| `ssse3::lookup` | `_mm_loadu_si128`, `_mm_storeu_si128` | each reads or writes one part from `as_chunks::<16>()` or `as_chunks_mut::<16>()` of a `[u8; L]`, exactly that part's 16 bytes, any alignment |
 
 ## How it is checked
 
