@@ -1,0 +1,21 @@
+// #990: `nikaia fix --only NK2125` rewrites a `task::scope` whose one `for`
+// starts a task per element as `xs.par_iter().for_each fn(x) { … }`
+// (ADR-async-5 D39).
+use std::env
+use std::fs
+use std::process
+
+fn toolchain() -> String throws {
+    let exe = env::current_exe()?.display() ?? ""
+    if exe.len() > 0 { return exe }
+    return "target/fast/nikaia"
+}
+
+fn main() throws {
+    let tmp = fs::scratch()
+    let nikaia = toolchain()
+    fs::write("main.nika", tmp, "use std::task\n\nfn work(n: i64) -> i64 sync {\n    return n * 2\n}\n\nfn main() throws {\n    let xs = [1, 2, 3]\n    task::scope fn(s) {\n        for v in xs {\n            s.spawn fn { work(v) }\n        }\n    }\n    println(xs.len())\n}\n")
+    let fixed = process::run(nikaia, ["fix", "--only", "NK2125", f"{tmp.path().to_text()}/main.nika"])
+    print(f"--only NK2125: {fixed.stdout}{fixed.stderr}".replace(tmp.path().to_text(), "TMP"))
+    print(fs::read_to_string("main.nika", tmp))
+}

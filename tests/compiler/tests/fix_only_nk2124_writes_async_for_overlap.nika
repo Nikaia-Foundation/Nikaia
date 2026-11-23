@@ -1,0 +1,21 @@
+// #990: `nikaia fix --only NK2124` rewrites `overlap` (ADR-async-5 D39): a
+// bound block becomes a tuple of `async`, a statement block whose branches
+// give nothing becomes `async { async a()  async b() }`.
+use std::env
+use std::fs
+use std::process
+
+fn toolchain() -> String throws {
+    let exe = env::current_exe()?.display() ?? ""
+    if exe.len() > 0 { return exe }
+    return "target/fast/nikaia"
+}
+
+fn main() throws {
+    let tmp = fs::scratch()
+    let nikaia = toolchain()
+    fs::write("main.nika", tmp, "fn work(n: i64) -> i64 sync {\n    return n * 2\n}\n\nfn rest(n: i64) sync {\n    if n > 9 { return }\n}\n\nfn main() throws {\n    let (a, b) = overlap {\n        work(2)\n        work(3)\n    }\n    println(a + b)\n    overlap {\n        rest(4)\n        rest(5)\n    }\n}\n")
+    let fixed = process::run(nikaia, ["fix", "--only", "NK2124", f"{tmp.path().to_text()}/main.nika"])
+    print(f"--only NK2124: {fixed.stdout}{fixed.stderr}".replace(tmp.path().to_text(), "TMP"))
+    print(fs::read_to_string("main.nika", tmp))
+}

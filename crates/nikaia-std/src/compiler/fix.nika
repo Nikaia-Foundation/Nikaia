@@ -37,12 +37,14 @@ pub struct FixPlan {
 }
 
 /// One edit planned: the bytes `start` to `end` of the file replaced by
-/// `text`, for the finding `code`.
+/// `text`, for the finding `code`; `group` counts the findings, so the
+/// parts of one edit (`CheckEdit.also`, ADR-async-5 D39) share it.
 struct FixEdit {
     start: i64,
     end: i64,
     text: String,
     code: String,
+    group: i64,
 }
 
 /// **`nikaia fix`**: the exit code. Each file is written where it changes and
@@ -125,29 +127,51 @@ fn fix_planned(path: ref String, source: ref String, found: ref Vec[Shown], only
     }
     let size = source.bytes.len() as i64
     let mut edits: Vec[FixEdit] = []
+    let mut group = 0
     for shown in found {
         let edit = shown.edit ?? continue
         if !only.is_empty() && !only.contains(shown.code) {
             continue
         }
-        let one = FixEdit { start: edit.span.start as i64, end: edit.span.end as i64, text: edit.text.clone(), code: shown.code.clone() }
-        if one.start > one.end || one.end > size {
+        group += 1
+        let mut parts: Vec[FixEdit] = [FixEdit { start: edit.span.start as i64, end: edit.span.end as i64, text: edit.text.clone(), code: shown.code.clone(), group: group }]
+        for part in edit.also {
+            parts.push(FixEdit { start: part.span.start as i64, end: part.span.end as i64, text: part.text.clone(), code: shown.code.clone(), group: group })
+        }
+        if parts.iter().any(fn(one) { one.start > one.end || one.end > size }) {
             continue
         }
         // A finding said twice (a file of a package checked with another)
-        // is one edit.
-        if !edits.iter().any(fn(e) { e.start == one.start && e.end == one.end && e.text == one.text }) {
-            edits.push(one)
+        // is one edit: its first part is made already.
+        let first = parts[0].clone()
+        if !edits.iter().any(fn(e) { e.start == first.start && e.end == first.end && e.text == first.text }) {
+            edits.extend(parts)
         }
     }
     edits.sort_by_key(fn(e) { e.start })
+    // **An edit is made whole or not at all**: a part that overlaps one
+    // before it leaves every part of its edit (`CheckEdit.also`).
+    let mut left: collections::BTreeSet[i64] = collections::BTreeSet()
+    let mut reach = 0
+    for edit in edits {
+        if edit.start < reach {
+            left.insert(edit.group)
+        }
+        if edit.end > reach {
+            reach = edit.end
+        }
+    }
+    let mut told: collections::BTreeSet[i64] = collections::BTreeSet()
     let mut said: Vec[String] = []
     let mut out = ""
     let mut at = 0
     for edit in edits {
         let line = fix_line_of(source, edit.start)
-        if edit.start < at {
-            said.push(f"{path}:{line}: {edit.code}: not applied: it overlaps the edit before it")
+        if left.contains(edit.group) || edit.start < at {
+            if !told.contains(edit.group) {
+                told.insert(edit.group)
+                said.push(f"{path}:{line}: {edit.code}: not applied: it overlaps the edit before it")
+            }
             continue
         }
         let kept = fix_cut(source, at, edit.start) ?? return fix_off_characters(path, source)
@@ -157,6 +181,8 @@ fn fix_planned(path: ref String, source: ref String, found: ref Vec[Shown], only
         at = edit.end
         if edit.text.is_empty() {
             said.push(f"{path}:{line}: {edit.code}: deleted `{old}`")
+        } else if old.is_empty() {
+            said.push(f"{path}:{line}: {edit.code}: inserted `{edit.text}`")
         } else {
             said.push(f"{path}:{line}: {edit.code}: replaced `{old}` with `{edit.text}`")
         }

@@ -227,7 +227,10 @@ pub(crate) fn check_core_flow_branch<H: CheckHost>(state: &mut CheckState, world
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn check_core_flow_overlap<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, host: &H, block: &Block, span: &Span) -> Ty {
+pub fn check_core_flow_overlap<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, host: &H, whole: &Expr, block: &Block, span: &Span) -> Ty {
+    let in_a_loop = state.flow.loops > 0;
+    let caught = state.flow.caught_overlap;
+    state.flow.caught_overlap = false;
     state.scope.push(vec![]);
     let mut parts: Vec<Ty> = vec![];
     let mut ranges: Vec<(i64, i64)> = nikaia_std::block::list(nikaia_std::block::Place::Block);
@@ -253,6 +256,9 @@ pub fn check_core_flow_overlap<H: CheckHost>(state: &mut CheckState, world: &Che
         changed_by.push(names);
     }
     state.branches_meet_on_nothing(world, block, &changed_by);
+    let mut meet = false;
+    for names in changed_by.iter() { if !names.is_empty() { meet = true; } }
+    state.an_overlap_replaced(world, whole, block, &parts, in_a_loop || meet || caught, span);
     Ty::Tuple(parts)
 }
 
