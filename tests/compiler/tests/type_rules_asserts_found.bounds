@@ -1,0 +1,4 @@
+bounds in tests/type_rules_asserts_found.nika: 1 indexes, 1 proved; 1 operations, 1 proved
+    28  self.c[self.at]  proved
+    33  self.at += 1     proved
+  derived  piece: 0 <= a, a <= b, a < b, 0 <= b, proved at the calls on lines 40

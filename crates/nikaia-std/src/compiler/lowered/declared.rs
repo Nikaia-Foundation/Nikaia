@@ -117,11 +117,6 @@ pub(crate) fn code_lends_unmarked(names: &winnow_grammar::InternerContext, ty: &
     false
 }
 
-pub fn code_writes_from(ty: &Type) -> bool {
-    let code = match (*ty.code).as_ref() { Some(__nikaia_value) => __nikaia_value, None => return false };
-    !code.result_from.is_empty()
-}
-
 pub(crate) fn code_reads(code: &Code, at: i64) -> bool {
     if at >= code.param_names.len() as i64 { return false; }
     let name = match *nikaia_std::index::get(&code.param_names, nikaia_std::index::at(at)) { Some(__nikaia_value) => __nikaia_value, None => return false };

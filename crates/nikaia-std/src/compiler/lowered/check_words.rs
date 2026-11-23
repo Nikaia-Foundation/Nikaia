@@ -69,12 +69,6 @@ pub(crate) fn names_listed(names: &[String]) -> String {
     format!("{} and `{}`", nikaia_std::block::Text::from(rest.join(", ")), *unsafe { nikaia_std::proven::read(&names, (nikaia_std::proven::sub::<i64>(names.len() as i64, 1)) as usize) })
 }
 
-pub fn indented_text(text: &str) -> String {
-    let mut lines: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-    for line in text.trim_end().lines() { lines.push(format!("       {}", line)); }
-    nikaia_std::block::Text::from(lines.join("\n"))
-}
-
 pub(crate) fn brace_groups(text: &str) -> Vec<String> {
     let c: Vec<scalar> = nikaia_std::list::scalars(text.chars());
     let mut found: Vec<String> = vec![];

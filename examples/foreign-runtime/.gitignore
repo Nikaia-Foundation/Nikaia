@@ -1,5 +1,12 @@
 target/
-nikaia.contracts
-nikaia.proofs
-nikaia.lock
 Cargo.lock
+# crossing/ and smuggled/ must not build (README), so a ledger or lock
+# there records nothing; serve/ commits its own (#2797).
+crossing/nikaia.lock
+crossing/nikaia.contracts
+crossing/nikaia.derived
+crossing/nikaia.proofs
+smuggled/nikaia.lock
+smuggled/nikaia.contracts
+smuggled/nikaia.derived
+smuggled/nikaia.proofs

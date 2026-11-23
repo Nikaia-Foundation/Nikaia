@@ -80,7 +80,7 @@ pub fn first_literal(args: &[Expr]) -> Option<String> {
     }
 }
 
-pub fn operator_read(library: &Ledger, source: &str, args: &[Expr]) -> bool {
+pub(crate) fn operator_read(library: &Ledger, source: &str, args: &[Expr]) -> bool {
     let contract = match *nikaia_std::index::get(&library.functions, source) { Some(__nikaia_value) => __nikaia_value, None => return false };
     read_by_operator(contract, (first_literal(args)).as_deref())
 }

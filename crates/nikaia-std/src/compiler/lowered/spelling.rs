@@ -17,15 +17,15 @@ pub fn distance(a: &str, b: &str) -> i64 {
     for i in 1..rows {
         for j in 1..cols {
             let cost: i64 = if *unsafe { nikaia_std::proven::read(&x, (nikaia_std::proven::sub::<i64>(i, 1)) as usize) } == *unsafe { nikaia_std::proven::read(&y, (nikaia_std::proven::sub::<i64>(j, 1)) as usize) } { 0 } else { 1 };
-            let mut best = *nikaia_std::index::get(nikaia_std::index::get(&d, nikaia_std::index::at(unsafe { nikaia_std::proven::sub::<i64>(i, 1) })), nikaia_std::index::at(j)) + 1;
-            if *nikaia_std::index::get(nikaia_std::index::get(&d, nikaia_std::index::at(i)), nikaia_std::index::at(unsafe { nikaia_std::proven::sub::<i64>(j, 1) })) + 1 < best { best = *nikaia_std::index::get(unsafe { nikaia_std::proven::read(&d, (i) as usize) }, nikaia_std::index::at(unsafe { nikaia_std::proven::sub::<i64>(j, 1) })) + 1; }
+            let mut best = *nikaia_std::index::get(unsafe { nikaia_std::proven::read(&d, (nikaia_std::proven::sub::<i64>(i, 1)) as usize) }, nikaia_std::index::at(j)) + 1;
+            if *nikaia_std::index::get(unsafe { nikaia_std::proven::read(&d, (i) as usize) }, nikaia_std::index::at(unsafe { nikaia_std::proven::sub::<i64>(j, 1) })) + 1 < best { best = *nikaia_std::index::get(unsafe { nikaia_std::proven::read(&d, (i) as usize) }, nikaia_std::index::at(unsafe { nikaia_std::proven::sub::<i64>(j, 1) })) + 1; }
             if *nikaia_std::index::get(unsafe { nikaia_std::proven::read(&d, (nikaia_std::proven::sub::<i64>(i, 1)) as usize) }, nikaia_std::index::at(unsafe { nikaia_std::proven::sub::<i64>(j, 1) })) + cost < best { best = *nikaia_std::index::get(unsafe { nikaia_std::proven::read(&d, (nikaia_std::proven::sub::<i64>(i, 1)) as usize) }, nikaia_std::index::at(unsafe { nikaia_std::proven::sub::<i64>(j, 1) })) + cost; }
             let swapped = i > 1 && j > 1 && *unsafe { nikaia_std::proven::read(&x, (nikaia_std::proven::sub::<i64>(i, 1)) as usize) } == *unsafe { nikaia_std::proven::read(&y, (nikaia_std::proven::sub::<i64>(j, 2)) as usize) } && *unsafe { nikaia_std::proven::read(&x, (nikaia_std::proven::sub::<i64>(i, 2)) as usize) } == *unsafe { nikaia_std::proven::read(&y, (nikaia_std::proven::sub::<i64>(j, 1)) as usize) };
             if swapped && *nikaia_std::index::get(nikaia_std::index::get(&d, nikaia_std::index::at(unsafe { nikaia_std::proven::sub::<i64>(i, 2) })), nikaia_std::index::at(unsafe { nikaia_std::proven::sub::<i64>(j, 2) })) + 1 < best { best = *nikaia_std::index::get(nikaia_std::index::get(&d, nikaia_std::index::at(unsafe { nikaia_std::proven::sub::<i64>(i, 2) })), nikaia_std::index::at(unsafe { nikaia_std::proven::sub::<i64>(j, 2) })) + 1; }
             { let __nikaia_stored = best; nikaia_std::index::set(&mut (*unsafe { nikaia_std::proven::slot(&mut d, (i) as usize) }), nikaia_std::index::at(j), __nikaia_stored); }
         }
     }
-    *nikaia_std::index::get(nikaia_std::index::get(&d, nikaia_std::index::at(unsafe { nikaia_std::proven::sub::<i64>(rows, 1) })), nikaia_std::index::at(unsafe { nikaia_std::proven::sub::<i64>(cols, 1) }))
+    *nikaia_std::index::get(unsafe { nikaia_std::proven::read(&d, (nikaia_std::proven::sub::<i64>(rows, 1)) as usize) }, nikaia_std::index::at(unsafe { nikaia_std::proven::sub::<i64>(cols, 1) }))
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before

@@ -147,7 +147,7 @@ pub fn grammar_run_driver<H: GrammarDriverHost>(host: &H, names: &winnow_grammar
     Ok(out)
 }
 
-pub fn grammar_run_dump(names: &winnow_grammar::InternerContext, aliases: &collections::BTreeMap<String, String>, program: &Program, ledger: &Ledger, result: &Ty, out: &mut String) -> Option<CheckWall> {
+pub(crate) fn grammar_run_dump(names: &winnow_grammar::InternerContext, aliases: &collections::BTreeMap<String, String>, program: &Program, ledger: &Ledger, result: &Ty, out: &mut String) -> Option<CheckWall> {
     let shapes = grammar_run_shapes(names, aliases, program, ledger);
     grammar_run_dump_shaped(&shapes, result, out)
 }
@@ -192,8 +192,8 @@ pub fn grammar_run_shapes_qualified(shapes: &Shapes, package: &str, into: &mut S
 }
 
 pub fn grammar_run_shapes(names: &winnow_grammar::InternerContext, aliases: &collections::BTreeMap<String, String>, program: &Program, ledger: &Ledger) -> Shapes {
-    let mut shapes = Shapes { enums: collections::BTreeMap::new(), structs: collections::BTreeMap::new(), constants: ledger.types.iter().filter_map(|__nikaia_tuple13824| {
-        let (name, entry) = __nikaia_tuple13824;
+    let mut shapes = Shapes { enums: collections::BTreeMap::new(), structs: collections::BTreeMap::new(), constants: ledger.types.iter().filter_map(|__nikaia_tuple13820| {
+        let (name, entry) = __nikaia_tuple13820;
         grammar_run_constant(name, &entry.constant)
     }).collect() };
     grammar_run_shapes_add(names, aliases, program, &mut shapes);

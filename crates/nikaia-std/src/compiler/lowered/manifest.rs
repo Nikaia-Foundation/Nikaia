@@ -9,9 +9,9 @@ pub enum Switch {
 
 pub fn known() -> Vec<String> { vec![String::from("target"), String::from("user-parallelism"), String::from("reentrancy-check"), String::from("cleanup-deadline"), String::from("optimization"), String::from("refuted-claims"), String::from("unproved-claims"), String::from("unproved-checks"), String::from("artifact"), String::from("symbol-prefix"), String::from("raw-sinks"), String::from("environment")] }
 
-pub fn raw_sinks_allow_keys() -> Vec<String> { vec![String::from("untrusted-shell"), String::from("untrusted-sql"), String::from("untrusted-markup"), String::from("untrusted-program"), String::from("untrusted-option"), String::from("untrusted-paths-read"), String::from("untrusted-paths-write"), String::from("untrusted-paths-remove"), String::from("untrusted-paths-anywhere")] }
+pub(crate) fn raw_sinks_allow_keys() -> Vec<String> { vec![String::from("untrusted-shell"), String::from("untrusted-sql"), String::from("untrusted-markup"), String::from("untrusted-program"), String::from("untrusted-option"), String::from("untrusted-paths-read"), String::from("untrusted-paths-write"), String::from("untrusted-paths-remove"), String::from("untrusted-paths-anywhere")] }
 
-pub fn raw_sinks_allow_sources() -> Vec<String> { vec![String::from("args"), String::from("stdin"), String::from("env"), String::from("request"), String::from("file"), String::from("process"), String::from("network")] }
+pub(crate) fn raw_sinks_allow_sources() -> Vec<String> { vec![String::from("args"), String::from("stdin"), String::from("env"), String::from("request"), String::from("file"), String::from("process"), String::from("network")] }
 
 pub(crate) fn raw_sinks_allow_value(table: &str, key: &str, word: &str, text: &str) -> Result<Vec<String>, nikaia_std::error::Thrown<Refused>> {
     let value = text.trim();
@@ -37,7 +37,7 @@ pub(crate) fn raw_sinks_allow_value(table: &str, key: &str, word: &str, text: &s
     Ok(words)
 }
 
-pub fn raw_sinks_allow_key(table: &str, key: &str) -> Result<(), nikaia_std::error::Thrown<Refused>> {
+pub(crate) fn raw_sinks_allow_key(table: &str, key: &str) -> Result<(), nikaia_std::error::Thrown<Refused>> {
     if !contains(&raw_sinks_allow_keys(), key) {
         let expected = choices(&raw_sinks_allow_keys());
         return Err(nikaia_std::error::throwing(Refused::Because(format!("`{}` has no key called `{}`. The keys are: {}.", table, key, expected)), &"raw_sinks_allow_key"));

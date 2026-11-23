@@ -127,13 +127,9 @@ grammar LedgerValue {
     rule ESCAPED = "\\" any -> { }
 }
 
-/// What a quoted string holds: `\n` is a line break, and a `\` before any
-/// other character is that character.
-pub fn unquote(value: ref String) -> String throws {
-    return unquote_at(value, "")
-}
-
-// `unquote`, with what a refusal starts with: the line, where it is known.
+// What a quoted string holds (`\n` is a line break, and a `\` before any
+// other character is that character), with what a refusal starts with:
+// the line, where it is known.
 fn unquote_at(value: ref String, at: ref String) -> String throws {
     // The quotes are one byte each, so what is between them is a view of the
     // value itself: no grammar is entered for a value this short.
@@ -794,7 +790,7 @@ pub fn touch_of(written: ref String) -> Touch throws {
 }
 
 /// `position: borrowed` or `position: tethered`, or nothing.
-pub fn held_of(written: ref String) -> Held? {
+fn held_of(written: ref String) -> Held? {
     let c: Vec[scalar] = written.scalars.collect()
     let colon = find_last(c, ':')
     if colon < 0 {

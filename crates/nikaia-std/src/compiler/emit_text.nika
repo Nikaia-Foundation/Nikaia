@@ -226,7 +226,7 @@ fn plain_named(written: ref String, args: ref Vec[Ty], view: bool) -> String {
 
 /// The check `emit_format_compared` writes on the lent text `__nikaia_t` and
 /// the parts `pieces`, each a `str` literal or a lent hole (#2405).
-pub fn format_compared_check(kind: ref String, pieces: ref Vec[String]) -> String {
+fn format_compared_check(kind: ref String, pieces: ref Vec[String]) -> String {
     if kind == "!=" {
         return f"!({format_compared_check("==", pieces)})"
     }

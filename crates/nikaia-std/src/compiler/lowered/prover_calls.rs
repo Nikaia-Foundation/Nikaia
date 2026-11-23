@@ -532,7 +532,7 @@ pub struct ProverOutside {
 
 impl ProverOutside {
     pub fn nothing() -> ProverOutside { ProverOutside { results: collections::BTreeMap::new(), fields: collections::BTreeMap::new(), returning: collections::BTreeSet::new(), valued: collections::BTreeSet::new(), leads: collections::BTreeMap::new() } }
-    pub fn proved_result(&self, key: &str) -> bool { self.returning.contains(key) && !self.valued.contains(key) }
+    pub(crate) fn proved_result(&self, key: &str) -> bool { self.returning.contains(key) && !self.valued.contains(key) }
 }
 
 pub(crate) fn prover_outside(program: &Program, words: &winnow_grammar::InternerContext, own: &Ledger, library: &Ledger, state: &ProverState, holes_of: &mut impl FnMut(&Expr) -> Vec<Expr>) -> ProverOutside {

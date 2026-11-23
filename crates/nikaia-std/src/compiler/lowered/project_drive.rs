@@ -495,7 +495,7 @@ pub(crate) fn project_drive_rooted(path: &std::path::Path, roots: &[fs::Path]) -
     None
 }
 
-pub async fn project_drive_fresh(record: &std::path::Path, handed: &str, roots: &[fs::Path]) -> Option<String> {
+pub(crate) async fn project_drive_fresh(record: &std::path::Path, handed: &str, roots: &[fs::Path]) -> Option<String> {
     let kept = match project_drive_rooted(record, roots) { Some(__nikaia_value) => __nikaia_value, None => return None };
     let key = project_drive_cargo_key(&kept, handed).await;
     let held = match fs::read_to_string(&kept.below, &kept.at).await {
@@ -528,7 +528,7 @@ pub async fn project_drive_fresh(record: &std::path::Path, handed: &str, roots: 
     }
 }
 
-pub async fn project_drive_record(record: &std::path::Path, handed: &str, messages: &str, generated: &std::path::Path, roots: &[fs::Path]) {
+pub(crate) async fn project_drive_record(record: &std::path::Path, handed: &str, messages: &str, generated: &std::path::Path, roots: &[fs::Path]) {
     let kept = match project_drive_rooted(record, roots) { Some(__nikaia_value) => __nikaia_value, None => return };
     match fs::remove(&kept.below, &kept.at, false) {
         Ok(_) => {},
@@ -1382,8 +1382,8 @@ pub async fn project_drive_wrapper<H: ProjectDriveWrapperHost>(host: &H) -> Resu
     };
     let no_cache = env::var("NIKAIA_NO_CACHE").is_some();
     let args = host.args();
-    let a_program = args.iter().zip(args.iter().skip(1)).any(|__nikaia_tuple94039| {
-        let (a, b) = __nikaia_tuple94039;
+    let a_program = args.iter().zip(args.iter().skip(1)).any(|__nikaia_tuple94031| {
+        let (a, b) = __nikaia_tuple94031;
         AsRef::<str>::as_ref(&(a)) == AsRef::<str>::as_ref(&("--crate-type")) && AsRef::<str>::as_ref(&(b)) == AsRef::<str>::as_ref(&("bin"))
     });
     let batch: Option<String> = match a_program {
@@ -1694,8 +1694,8 @@ pub(crate) async fn project_drive_rustc_inputs(depends: &str, store: &ProjectDri
     for word in nikaia_std::block::Text::from(listed.replace("\\ ", "\u{1f}")).split(' ') {
         let path: fs::Path = std::path::PathBuf::from(nikaia_std::block::Text::from(word.replace("\u{1f}", " ")));
         if word.is_empty() || nikaia_std::fs::path::same(&(path), &(store.generated)) { continue; }
-        let __keep_111872 = nikaia_std::tether::Keep::new();
-        let below = match project_drive_rustc_below((&__keep_111872).put(nikaia_std::fs::path::display(&(path))), &store.within) { Some(__nikaia_value) => __nikaia_value, None => return None };
+        let __keep_111864 = nikaia_std::tether::Keep::new();
+        let below = match project_drive_rustc_below((&__keep_111864).put(nikaia_std::fs::path::display(&(path))), &store.within) { Some(__nikaia_value) => __nikaia_value, None => return None };
         let bytes = match fs::read(std::path::Path::new(&(below)), &store.sources).await {
             Ok(value) => value,
             Err(_error) => { return None; },

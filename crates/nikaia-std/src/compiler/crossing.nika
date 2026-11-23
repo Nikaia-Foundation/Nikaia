@@ -99,7 +99,7 @@ fn is_plain(name: ref String) -> bool {
 }
 
 /// `Name<inner>` unwrapped, where the text is exactly that.
-pub fn generic_of(written: ref String, name: ref String) -> String? {
+fn generic_of(written: ref String, name: ref String) -> String? {
     let text = written.trim()
     if !text.starts_with(name) {
         return null
@@ -117,7 +117,7 @@ pub fn generic_of(written: ref String, name: ref String) -> String? {
 
 /// Whether a bound list names `Send` as a **word**: `Sender` and `Resend`
 /// contain the letters and are not the bound.
-pub fn bounds_send(text: ref String) -> bool {
+fn bounds_send(text: ref String) -> bool {
     let c: Vec[scalar] = text.scalars.collect()
     let mut start = 0
     for at in 0..<c.len() + 1 {
@@ -134,7 +134,7 @@ pub fn bounds_send(text: ref String) -> bool {
 
 /// `a` / `a and b` / `a, b and c`, each in backticks, with the right article
 /// in front: `one` for a single name, `many` for more.
-pub fn a_list(names: ref Vec[String], one: ref String, many: ref String) -> String {
+fn a_list(names: ref Vec[String], one: ref String, many: ref String) -> String {
     if names.is_empty() {
         return ""
     }
@@ -163,7 +163,7 @@ pub fn a_list(names: ref Vec[String], one: ref String, many: ref String) -> Stri
 /// **Breadth first**, so the path a note names is the shortest one: the
 /// quickest for a reviewer to check. A cycle ends because a function is
 /// walked once.
-pub fn reaches_a_thread(from: ref String, calls: ref collections::BTreeMap[String, Vec[String]]) -> Vec[String]? {
+fn reaches_a_thread(from: ref String, calls: ref collections::BTreeMap[String, Vec[String]]) -> Vec[String]? {
     let mut seen: collections::BTreeSet[String] = collections::BTreeSet()
     let mut queue: Vec[String] = [from.clone()]
     let mut ways: Vec[Vec[String]] = [[]]
@@ -201,7 +201,7 @@ pub fn reaches_a_thread(from: ref String, calls: ref collections::BTreeMap[Strin
 /// the path as written, or failing that the one function whose path **ends**
 /// with it. Two of that name is an ambiguity this cannot resolve without a
 /// scope table, and a note naming the wrong one is worse than none.
-pub fn the_crates_own(call: ref String, calls: ref collections::BTreeMap[String, Vec[String]]) -> String? {
+fn the_crates_own(call: ref String, calls: ref collections::BTreeMap[String, Vec[String]]) -> String? {
     if calls.contains_key(call) {
         return call.clone()
     }

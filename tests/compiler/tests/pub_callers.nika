@@ -1,0 +1,69 @@
+// scripts/pub-callers.nika lists the `pub fn` of the compiler package no
+// file outside it names (#1831, ADR-391 D4). Shown on a fixture tree given
+// with `--root`, below the directory a copy of it runs in: a tree where the
+// host names every `pub fn`, then one with a `pub fn` and a `pub` method
+// only the compiler's own lowered Rust names, beside a private `fn`.
+use std::env
+use std::fs
+use std::process
+
+// The running `nikaia`: the one `nikaia test` started this program with
+// (`env::current_exe`, ADR-program-path-1 D3).
+fn toolchain() -> String throws {
+	return env::current_exe()?.display() ?? "target/fast/nikaia"
+}
+
+// The repository: a test program runs in its package's directory,
+// `tests/compiler` (#1398), two below the root; `.` where it is run from the
+// root.
+fn root() -> String throws {
+	return if fs::exists("scripts/drive.nika", fs::Root::Dir(".")) { "." } else { "../.." }
+}
+
+// Writes `file` under `tree`, its directories first.
+fn put(tree: fs::Root, file: String, text: String) throws {
+	let (dir, _) = file.rsplit_once("/") ?? (".", "")
+	fs::create_dir(dir, tree; recursive: true)
+	fs::write(file, tree, text)
+}
+
+fn run(base: String, nikaia: String, tree: String) throws {
+	let out = process::run(
+		nikaia,
+		["run", "pub-callers.nika", "--", "--root", tree]; dir: base,
+	)
+	println(out.stdout.trim())
+	if out.stderr.trim().len() > 0 { println(out.stderr.trim()) }
+	println(f"exit {out.code}")
+}
+
+fn main() throws {
+	let repo = root()
+	let nikaia = toolchain()
+	let dir = fs::scratch()
+	fs::write(
+		"pub-callers.nika",
+		dir.clone(),
+		fs::read_to_string("scripts/pub-callers.nika", fs::Root::Dir(repo)),
+	)
+	let base = f"{dir.path().display()}"
+	let own = "crates/nikaia-std/src/compiler"
+	let source = "pub fn used() -> i64 { return 1 }\n\npub fn lonely() -> i64 { return used() }\n\nfn private() -> i64 { return lonely() }\n\nimpl Thing {\n\tpub fn meth(self) -> i64 { return 2 }\n}\n"
+
+	println("--- every pub fn named outside")
+	fs::create_dir("clean", dir; recursive: true)
+	let clean = dir.join("clean")
+	put(clean, f"{own}/a.nika", source)
+	put(clean, "crates/nikaia/src/host.rs", "fn host() { used(); lonely(); thing.meth(); }\n")
+	run(base, nikaia, "clean")
+
+	println("--- named only by the compiler's own files")
+	fs::create_dir("lonely", dir; recursive: true)
+	let lonely = dir.join("lonely")
+	put(lonely, f"{own}/a.nika", source)
+	put(lonely, f"{own}/b.nika", "fn other() -> i64 { return lonely() + private() }\n")
+	put(lonely, f"{own}/lowered/a.rs", "pub fn lonely() -> i64 { meth() }\n")
+	put(lonely, f"{own}/lowered.rs", "pub use lowered::a::lonely;\n")
+	put(lonely, "packages/p/src/main.nika", "fn main() { let x = used() }\n")
+	run(base, nikaia, "lonely")
+}

@@ -715,7 +715,7 @@ pub struct ProjectMembersOwnRust {
 }
 
 /// A package without Rust of its own.
-pub fn project_members_no_own_rust() -> ProjectMembersOwnRust {
+fn project_members_no_own_rust() -> ProjectMembersOwnRust {
     return ProjectMembersOwnRust { heads: collections::BTreeSet(), described: collections::BTreeSet(), published: collections::BTreeMap(), narrow: collections::BTreeSet(), files: collections::BTreeMap(), moved: [], entries: "" }
 }
 
@@ -820,7 +820,7 @@ pub fn project_members_foreign_of[M: ProjectMembersHost, H: ProjectMembersForeig
 /// the package, with what it publishes and what moved since it was reviewed.
 /// **The modules a hand-written Rust root declares** (ADR-rust-boundary-1
 /// D24): each `mod X` of `text`, in order.
-pub fn project_members_rust_heads(text: ref String) -> Vec[String] sync {
+fn project_members_rust_heads(text: ref String) -> Vec[String] sync {
     let mut heads: Vec[String] = []
     let items = Rust::file(text) catch { [] }
     for item in items {

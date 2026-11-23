@@ -151,7 +151,7 @@ pub(crate) enum Root {
 
 pub fn views_stored(asked: &Asked<'_, '_, '_>, items: &[Spanned<Item>], own_buffer: &mut impl FnMut(&Expr) -> bool) -> Vec<Stored> { views_stored_in(asked, &result_package(asked), items, &mut *own_buffer) }
 
-pub fn views_stored_in(asked: &Asked<'_, '_, '_>, package: &ResultPackage, items: &[Spanned<Item>], own_buffer: &mut impl FnMut(&Expr) -> bool) -> Vec<Stored> {
+pub(crate) fn views_stored_in(asked: &Asked<'_, '_, '_>, package: &ResultPackage, items: &[Spanned<Item>], own_buffer: &mut impl FnMut(&Expr) -> bool) -> Vec<Stored> {
     let mut unit = plain_unit(package, borrowing_types(asked.names, items), view_fields(asked.names, items));
     method_table(asked, items, &mut unit);
     let mut round: Vec<Stored> = vec![];

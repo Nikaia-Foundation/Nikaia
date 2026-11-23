@@ -1,0 +1,40 @@
+/// A `mut` parameter drops only the fields it may be handed (ADR-369 D4,
+/// #1755): `take`'s `mut out: Vec[u32]` may be another `Tab`'s `trail`, a
+/// `Vec[u32]`, but never its `cols` or `forms`, so `len(cols) ==
+/// len(forms)` is still found and `slack`'s read is proved, as
+/// sv_simplex's `take_atoms` beside its tableau. `Mixed` in
+/// `a_found_rule_over_pub_fields` keeps a `mut` list of the fields' own type,
+/// and its read stays checked.
+struct Tab {
+	cols: Vec[i64],
+	forms: Vec[i64],
+	trail: Vec[u32],
+}
+
+impl Tab {
+	pub fn add(ref mut self, c: i64) -> i64 {
+		let v = self.cols.len()
+		self.cols.push(c)
+		self.forms.push(0)
+		return v
+	}
+
+	pub fn slack(ref mut self) -> i64 {
+		let s = self.add(-1)
+		self.forms[s] = 7
+		return s
+	}
+
+	pub fn take(ref mut self, v: i64, mut out: Vec[u32]) {
+		self.trail.push(1)
+		out.push(v.checked_u32() ?? 0)
+	}
+}
+
+fn main() throws {
+	let mut t = Tab { cols: [], forms: [], trail: [] }
+	let s = t.slack()
+	let mut o: Vec[u32] = []
+	t.take(s, o)
+	println(f"{s} {o.len()}")
+}

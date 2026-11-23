@@ -110,7 +110,7 @@ pub fn translate(written: ref String, crate_word: ref String, parameters: ref Ve
 
 /// `Result<T, E>` in the result position: the `T` is the type and the `E` is a
 /// `throws` - the crate's own error by its path, and `"?"` for any other.
-pub fn result_of(written: ref String, crate_word: ref String, parameters: ref Vec[String], types: ref collections::BTreeSet[String], mut mentioned: collections::BTreeSet[String]) -> Resulted {
+fn result_of(written: ref String, crate_word: ref String, parameters: ref Vec[String], types: ref collections::BTreeSet[String], mut mentioned: collections::BTreeSet[String]) -> Resulted {
     let resulted = generic_of(written, "Result")
     if resulted == null {
         let plain = translate(written, crate_word, parameters, types, mentioned)
@@ -147,7 +147,7 @@ fn view_of(ty: Ty) -> Ty {
 /// `impl … Send …` at the parameter itself. `names` and `types` are the
 /// parameters' names and written types, in order; `bounds` is the `<…>` list
 /// and the `where` clause, joined.
-pub fn sent_across(names: ref Vec[String], types: ref Vec[String], bounds: ref String) -> Vec[String] {
+fn sent_across(names: ref Vec[String], types: ref Vec[String], bounds: ref String) -> Vec[String] {
     let sent = sends(bounds)
     let mut out: Vec[String] = []
     for at in 0..<names.len() {

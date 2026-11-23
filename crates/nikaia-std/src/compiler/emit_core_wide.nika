@@ -12,7 +12,7 @@
 
 /// **The native type of twice `T`'s width, the unsigned type of `T`'s
 /// width and `T`'s bits**: `("", "", 0)` for a `T` that has no `Wide`.
-pub fn emit_wide_native(element: ref String) -> (String, String, i64) sync {
+fn emit_wide_native(element: ref String) -> (String, String, i64) sync {
     return match element {
         "u8" => ("u16", "u8", 8),
         "u32" => ("u64", "u32", 32),

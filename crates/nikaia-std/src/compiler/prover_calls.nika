@@ -703,7 +703,7 @@ impl ProverOutside {
     /// Whether every value the function `key` hands back is proved: a
     /// literal or a guarded name joined to a clean part (ADR-raw-sinks-1
     /// D10, D14).
-    pub fn proved_result(ref self, key: ref String) -> bool {
+    fn proved_result(ref self, key: ref String) -> bool {
         return self.returning.contains(key) && !self.valued.contains(key)
     }
 }

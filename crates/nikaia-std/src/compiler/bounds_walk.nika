@@ -9827,6 +9827,28 @@ fn bounding_built(mut walk: BoundsWalk, mut facts: BoundsFacts, name: ref String
 				bounding_built(walk, facts, path, given, words)
 			}
 		},
+		// **A list made empty with room ahead** (#2798): `Vec()` and
+		// `Vec(capacity: n)` hold no element, as `[]` does; the room is no
+		// length (Part I 10, ADR-149 D5).
+		Expr::Call { func, args, config, .. } => {
+			if !args.is_empty() || config.len() > 1 {
+				return
+			}
+			if config.len() == 1 && words.resolve(config[0].name) != "capacity" {
+				return
+			}
+			let made = match func {
+				Expr::Variable(n, _) => words.resolve(n).clone(),
+				else => return,
+			}
+			if made != "Vec" {
+				return
+			}
+			let len = walk.arena.var(length_of(name))
+			let zero = walk.arena.int(0)
+			let fact = walk.arena.equal(len, zero)
+			bounding_push(walk, facts, fact)
+		},
 		else => {},
 	}
 }

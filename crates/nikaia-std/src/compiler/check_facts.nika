@@ -1354,7 +1354,18 @@ fn check_claim_refused(held: ref ClaimHeld?) -> String? {
 /// function's callers (ADR-391 D4), as `bounds_report_derived` writes them:
 /// each a row marked `derived`, in green after the rest, counted apart from
 /// the asserts.
-pub fn check_claims_report(claims: ref collections::BTreeMap[(i64, i64), FactClaim], source: ref String, path: ref String, published: ref collections::BTreeMap[String, Published], derived: ref Vec[String], colour: bool, refuses: bool) -> String {
+///
+/// **A type's rules come last** (ADR-369 D5): each written rule with each
+/// point it is checked at, what the point is and how it is held (its
+/// claims counted with the rest, listed only under the rule), then each rule
+/// the walk looked for where none is written, from `rules` (`rules_report`):
+/// found, with what found it, or not found, with what broke it.
+pub fn check_claims_report(claims: ref collections::BTreeMap[(i64, i64), FactClaim], source: ref String, path: ref String, published: ref collections::BTreeMap[String, Published], derived: ref Vec[String], rules: ref Vec[String], colour: bool, refuses: bool) -> String {
+    // Each written rule by its message, in the order first met, with its
+    // points painted as their group is.
+    let mut written: Vec[String] = []
+    let mut points: Vec[Vec[(String, String)]] = []
+    let mut ruled: collections::BTreeSet[String] = collections::BTreeSet()
     let mut refused: Vec[String] = []
     let mut at_run_time: Vec[String] = []
     let mut arrives: Vec[String] = []
@@ -1391,6 +1402,21 @@ pub fn check_claims_report(claims: ref collections::BTreeMap[(i64, i64), FactCla
             false => check_claim_held(claim.held),
         }
         let row = f"  {path}:{line}  {claim.written}  {how}"
+        let rule = check_claim_rule(claim.written)
+        if rule != null {
+            let label = rule ?? ""
+            let point = check_claim_point(source, start, line, label)
+            let paint = check_claim_paint(how, claim.held != null)
+            ruled.insert(row.clone())
+            let shown = f"    {path}:{line}  {point}  {how}"
+            match written.iter().position(fn(w) { w == label }) {
+                k => points[k].push((shown, paint)),
+                null => {
+                    written.push(label)
+                    points.push([(shown, paint)])
+                },
+            }
+        }
         if how == "proved" || how.starts_with("proved: known from") {
             proved.push(row)
         } else if how.starts_with("proved through") || how.starts_with("proved inside") {
@@ -1439,22 +1465,94 @@ pub fn check_claims_report(claims: ref collections::BTreeMap[(i64, i64), FactCla
     if derived.len() > 0 {
         vouched = f"{vouched}; derived from the callers {derived.len()}"
     }
+    // **A type's rules** (ADR-369 D5), counted apart: their written points
+    // are among the asserts already.
+    let found = rules.iter().filter(fn(r) { r.starts_with("found\t") }).count()
+    if written.len() + rules.len() > 0 {
+        vouched = f"{vouched}; type rules {written.len() + rules.len()} (written {written.len()}, found {found}, not found {rules.len() - found})"
+    }
     let mut out: String = f"asserts in {path}: {unproved + arrives.len() + done} - not proved {unproved} (refused {refused.len()}, checked at run time {at_run_time.len()}, checked by a test {by_the_test.len()}); checked where the words arrive {arrives.len()}; proved {done} (proved {proved.len()}{looped}, preconditions proved at every call {preconditions.len()}){vouched}\n"
     let mut red: Vec[String] = []
-    red.extend(refused)
-    red.extend(at_run_time)
-    red.extend(by_the_test)
+    red.extend(refused.iter().filter(fn(r) { !ruled.contains(r) }).cloned())
+    red.extend(at_run_time.iter().filter(fn(r) { !ruled.contains(r) }).cloned())
+    red.extend(by_the_test.iter().filter(fn(r) { !ruled.contains(r) }).cloned())
     let mut green: Vec[String] = []
-    green.extend(proved)
-    green.extend(preconditions)
+    green.extend(proved.iter().filter(fn(r) { !ruled.contains(r) }).cloned())
+    green.extend(preconditions.iter().filter(fn(r) { !ruled.contains(r) }).cloned())
     for row in derived {
         green.push(f"  {path}  derived  {row}")
     }
     out.push_str(check_report_rows(red, "\x1b[31m", colour))
-    out.push_str(check_report_rows(arrives, "\x1b[94m", colour))
+    out.push_str(check_report_rows(arrives.iter().filter(fn(r) { !ruled.contains(r) }).cloned().collect(), "\x1b[94m", colour))
     out.push_str(check_report_rows(assumed, "\x1b[33m", colour))
     out.push_str(check_report_rows(green, "\x1b[32m", colour))
+    for (k, label) in written.iter().enumerate() {
+        out.push_str(f"  {path}  written  {label}: checked at {points[k].len()} points\n")
+        for (row, paint) in points[k] {
+            out.push_str(check_report_rows([row.clone()], paint, colour))
+        }
+    }
+    for row in rules {
+        let parts: Vec[String] = row.split("\t").collect()
+        if parts.len() != 4 {
+            continue
+        }
+        let paint = if parts[0] == "found" { "\x1b[32m" } else { "\x1b[33m" }
+        out.push_str(check_report_rows([f"  {path}  {parts[0]}  `{parts[1]}`: {parts[2]} - {parts[3]}"], paint, colour))
+    }
     return out
+}
+
+/// **The rule a claim checks** (ADR-369 D2): `the rule of `T`` and its
+/// message, as `type_rules.nika` wrote it into the claim's `message:`;
+/// nothing for any other claim.
+fn check_claim_rule(written: ref String) -> String? {
+    let at = written.find("message: \"the rule of `") ?? return null
+    let said = written.after(at.end)
+    let message = said.strip_suffix("\")") ?? return null
+    return f"the rule of `{message}"
+}
+
+/// **What a rule's point is** (ADR-369 D2), read off the source where its
+/// claim stands: the end of a method that changes the value, a `return` or
+/// a `throw` of one, a construction, or a write to a field.
+fn check_claim_point(source: ref String, start: i64, line: i64, rule: ref String) -> String {
+    let text = (source.lines().nth(line - 1) ?? "").clone()
+    let lead = text.trim_start()
+    if start < source.bytes.len() && source.bytes[start] == '}' {
+        return "where a method that changes it ends"
+    }
+    // The type's name, between the backticks of `the rule of `T``.
+    let named = rule.strip_prefix("the rule of `") ?? ""
+    let tick = named.find("`")
+    let ty = match tick {
+        at => named.before(at.start).clone(),
+        null => named.clone(),
+    }
+    if text.contains(f"{ty} {{") || text.contains(f"{ty}(") || text.contains(" with ") {
+        return "where a value of it is built"
+    }
+    if lead.starts_with("return") {
+        return "at a `return` of a method that changes it"
+    }
+    if lead.starts_with("throw") {
+        return "at a `throw` of a method that changes it"
+    }
+    return "after a write to its fields"
+}
+
+/// The colour of a claim's row by how it is held, as its group has it.
+fn check_claim_paint(how: ref String, held: bool) -> String {
+    if how == "proved" || how.starts_with("proved") || (how.starts_with("precondition") && how.contains("proved at every call")) {
+        return "\x1b[32m"
+    }
+    if how.starts_with("precondition of `main`") {
+        return "\x1b[94m"
+    }
+    if !held {
+        return ""
+    }
+    return "\x1b[31m"
 }
 
 /// Each row on a line of its own, in `paint` where `colour` asks for it.

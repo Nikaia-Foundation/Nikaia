@@ -1,0 +1,2 @@
+bounds in tests/a_found_rule_beside_a_mut_list_parameter.nika: 1 indexes, 1 proved; 0 operations, 0 proved
+    24  self.forms[s]  proved
