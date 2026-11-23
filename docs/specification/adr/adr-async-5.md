@@ -224,8 +224,9 @@ its window:
   refused as above.
 * **A failure:** where `a` fails, its error is received by the first mention of
   `a` in written order, as a callee's error is its caller's (D22); every other
-  task that waits for `a` cannot go on and is cancelled. One error, one
-  receiver (ADR-346 D1).
+  task that waits for `a` cannot go on and is cancelled. `a`'s error has one
+  receiver; a later read of a cancelled waiter throws an error of its own that
+  names `a`'s error as its cause (D41).
 
 ### D9 - `async e` as a statement starts a task without a value, waited for at its group's end; `async { … }` is the group.
 
@@ -860,3 +861,18 @@ if there is one, else to the join's caller; a `detach()` or a drop of an
 unjoined handle runs the fallback in the task. A `task::OverBudget` (D19) is a
 failure of the task like any other and reaches a handle's fallback the same
 way.
+
+### D41 - A read of a waiter cancelled because a task before it failed throws `task::Abandoned`, which names that failure as its cause (owner, 2026-11-23; #2787).
+
+In a diamond (D8), where `a` fails, the first mention of `a` in written order
+receives `a`'s error (D22), and every other task that waits for `a` is
+cancelled. A later read of such a waiter `c` on the main line throws
+`task::Abandoned`: its message says that `c` did not run to its end because
+`a` failed, and names `a`'s error, which it carries as its cause. It is not
+`task::Crashed`: nothing panicked. It is not `a`'s error again: that error has
+one receiver, so a handler for it never runs twice and nobody compensates
+twice for one failure. ADR-346 D1 asks that every error of a task has a
+receiver and none is dropped without a trace; `a`'s error is received once, and
+`c`'s read receives its own error, which points to it. A read of `c` therefore
+throws `task::Abandoned` where `c` waits for a task that can fail, and the
+checker counts it at that read like any thrown error.
