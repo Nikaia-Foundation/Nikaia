@@ -42,13 +42,6 @@ fn slot_cache_dir() -> String {
 	return f"{home}/.cache/nikaia"
 }
 
-// The directory BASE lies below: the user cache, or else the working
-// directory.
-fn slot_under(given: String, cache: String) -> String throws {
-	if cache != "" && given.starts_with(cache + "/") { return cache }
-	return fs::canonical(".", fs::Root::Dir(".")).display()
-}
-
 // BASE below `under`: an absolute path under it loses `under/`, any other
 // comes back as given.
 fn slot_below(given: String, under: String) -> String {
@@ -101,7 +94,10 @@ fn main() throws {
 	// D18); joined under a root of the directory it lies below, it gives the
 	// slots' absolute path.
 	let cache = slot_cache_dir()
-	let under = slot_under(given.clone(), cache.clone())
+	// The directory BASE lies below: the user cache, or else the working
+	// directory, chosen by BASE but never made of it.
+	let mut under = fs::canonical(".", fs::Root::Dir(".")).display()
+	if cache != "" && given.starts_with(cache + "/") { under = cache.clone() }
 	let rel = slot_below(given.clone(), under.clone())
 	if !path::is_below(rel) || !process::is_operand(rel) {
 		eprintln(f"refused: BASE {given} lies neither below the working directory nor below {cache}, or reads as an option")
