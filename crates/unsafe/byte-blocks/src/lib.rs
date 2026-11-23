@@ -163,6 +163,74 @@ pub fn high_bits<const L: usize>(lanes: &[u8; L]) -> u64 {
     }
 }
 
+/// **The bytes of `table` that `idx` names** ([ADR-377](../../../docs/specification/adr/adr-377.md)
+/// D10): byte `i` is `table[idx[i]]` where `idx[i]` is below `L`. Where it is
+/// `L` or more the byte is 0 when `zero` holds, and else either 0 or some byte
+/// of `table` (the caller has proved every index below `L`, and one `pshufb`
+/// a 16 bytes is all the lookup costs then). `L` is 16, 32 or 64: SSSE3's
+/// `pshufb`, one a table part, where the build has it; byte by byte
+/// elsewhere, each index past the table answering 0 where `zero` is set.
+#[inline(always)]
+pub fn lookup<const L: usize>(table: &[u8; L], idx: &[u8; L], zero: bool) -> [u8; L] {
+    const { assert!(L == 16 || L == 32 || L == 64) };
+    #[cfg(all(target_arch = "x86_64", target_feature = "ssse3"))]
+    // SAFETY: the build enables SSSE3 for every function (`cfg`).
+    return unsafe { ssse3::lookup(table, idx, zero) };
+    #[cfg(not(all(target_arch = "x86_64", target_feature = "ssse3")))]
+    {
+        if zero {
+            core::array::from_fn(|i| table.get(usize::from(idx[i])).copied().unwrap_or(0))
+        } else {
+            // Every index is below `L`, a power of two: the mask keeps it and
+            // spares the bounds check.
+            core::array::from_fn(|i| table[usize::from(idx[i]) & (L - 1)])
+        }
+    }
+}
+
+/// [`lookup`] a `pshufb` a 16 bytes of the table.
+#[cfg(all(target_arch = "x86_64", target_feature = "ssse3"))]
+mod ssse3 {
+    use core::arch::x86_64::*;
+
+    #[inline]
+    #[target_feature(enable = "ssse3")]
+    pub(super) fn lookup<const L: usize>(table: &[u8; L], idx: &[u8; L], zero: bool) -> [u8; L] {
+        // SAFETY: the load reads the 16 bytes of `part`, unaligned.
+        let load = |part: &[u8; 16]| unsafe { _mm_loadu_si128(part.as_ptr().cast::<__m128i>()) };
+        let parts = table.as_chunks::<16>().0;
+        let mut out = [0u8; L];
+        for (into, at) in out
+            .as_chunks_mut::<16>()
+            .0
+            .iter_mut()
+            .zip(idx.as_chunks::<16>().0)
+        {
+            let v = load(at);
+            let picked = if L == 16 && !zero {
+                // An index below 16 is the byte it names.
+                _mm_shuffle_epi8(load(&parts[0]), v)
+            } else {
+                // Part `p` answers the indices from `16 p` to `16 p + 15`:
+                // the index less `16 p`, saturated up by `0x70`, keeps its
+                // low four bits there and has bit 7 set everywhere else, so
+                // `pshufb` answers 0 there. An index below `16 p` wraps round
+                // to 208 or more, which the saturation takes to 255.
+                let mut any = _mm_setzero_si128();
+                for (p, part) in parts.iter().enumerate() {
+                    let local = _mm_sub_epi8(v, _mm_set1_epi8((16 * p) as i8));
+                    let index = _mm_adds_epu8(local, _mm_set1_epi8(0x70));
+                    any = _mm_or_si128(any, _mm_shuffle_epi8(load(part), index));
+                }
+                any
+            };
+            // SAFETY: the store writes the 16 bytes of `into`, unaligned.
+            unsafe { _mm_storeu_si128(into.as_mut_ptr().cast::<__m128i>(), picked) };
+        }
+        out
+    }
+}
+
 /// [`high_bits`] 16 bytes a `pmovmskb`.
 #[cfg(target_arch = "x86_64")]
 #[inline]
