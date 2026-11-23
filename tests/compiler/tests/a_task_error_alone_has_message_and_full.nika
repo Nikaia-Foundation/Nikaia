@@ -1,0 +1,49 @@
+// Every error has `message()` and `full()` (Part I 7.1), the runtime's task
+// ends too: a handler whose only error is `task::OverBudget`,
+// `task::Crashed` or `task::TimedOut` calls both (#2780).
+struct Small {}
+
+impl task::Admission for Small {
+    fn decide(mut self, _load: task::Load) -> task::Decision sync {
+        return task::Decision { start: 1, budget: 65536 }
+    }
+}
+
+fn fill() -> i64 {
+    let mut xs: Vec[i64] = []
+    for i in 0..<100000 {
+        xs.push(i)
+    }
+    return xs.len()
+}
+
+fn boom(n: i64) -> i64 {
+    let xs = [1, 2]
+    return xs[n]
+}
+
+fn main() throws {
+    let a = async(admission: Small {}) fill() catch {
+        println(error.message())
+        println(error.full())
+        0
+    }
+    let b = 1
+    println(f"after: {a + b}")
+    let t = async(detached) fn { boom(5) }
+    // A crash names the line it happened on, by a path that moves with the
+    // project: only its words are printed.
+    let got = t.join() catch {
+        println(f"{error.message().ends_with("the len is 2 but the index is 5")}")
+        println(f"{error.full().contains("(raised below Nikaia; no site recorded)")}")
+        0
+    }
+    println(f"got {got}")
+    let xs = [1, 2, 3]
+    let ys: Vec[i64] = xs.par_iter(within: 0.seconds()).map(fn(x) { x * 2 }).collect() catch {
+        println(error.message())
+        println(error.full())
+        []
+    }
+    println(f"{ys.len()}")
+}

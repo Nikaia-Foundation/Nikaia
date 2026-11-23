@@ -73,7 +73,14 @@ pub(crate) fn emit_flow_never_returns(world: &EmitWorld<'_, '_, '_, '_>, node: &
     }
 }
 
-pub(crate) fn emit_flow_a_struct_written(node: &Expr) -> bool { matches!(node, Expr::StructLit { .. } | Expr::LitBool(_, _)) }
+pub(crate) fn emit_flow_a_struct_written(node: &Expr) -> bool {
+    match node {
+        Expr::StructLit { .. } => true,
+        Expr::LitBool(_, _) => true,
+        Expr::Coalesce { fallback, .. } => { let fallback = nikaia_std::boxed::open(fallback); emit_flow_a_struct_written(fallback) },
+        _ => false,
+    }
+}
 
 pub(crate) fn emit_flow_a_simd_call(world: &EmitWorld<'_, '_, '_, '_>, node: &Expr) -> bool {
     match node {
@@ -765,7 +772,7 @@ impl EmitState {
             Expr::Async(_, _, _, _) => { fallback = true; },
             _ => { },
         }
-        let nested = !joined && !fallback && self.emit_catch_nests_a_failure(world, guarded_expr);
+        let nested = !joined && !fallback && (self.emit_catch_nests_a_failure(world, guarded_expr) || emit_catch_reads_a_pending(world, &walk, guarded_expr));
         let at = node_key(guarded_expr);
         let mut a_block = false;
         match guarded_expr {
@@ -1031,6 +1038,8 @@ impl EmitState {
         walk.async_within = String::from("");
         let admission = nikaia_std::block::Text::from(walk.async_admission.to_string()); #[allow(clippy::redundant_locals)] let handles = handles;
         walk.async_admission = String::from("");
+        let outer_gates = walk.async_gates.copy_owned();
+        walk.async_gates = vec![];
         let mut first: &'static str = "";
         if admission != "" { first = "nikaia_std::task::admission_first(__nikaia_admission).await; "; }
         let mut fallback_inside = false;
@@ -1095,6 +1104,7 @@ impl EmitState {
         }
         if deferred { out.push(")"); }
         if opened { out.push(" }"); }
+        walk.async_gates = outer_gates;
         Ok(())
     }
 }

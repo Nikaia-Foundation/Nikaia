@@ -1,0 +1,12 @@
+b is 3
+g ran 1 times
+b's fallback: bad
+b is -1
+g ran 0 times
+b's fallback: bad
+b is -1
+g ran 0 times
+b's fallback: bad
+b is -1
+g ran 0 times
+end

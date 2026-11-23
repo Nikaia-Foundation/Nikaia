@@ -6425,6 +6425,60 @@ crosses = true
 compares = true
 fields = ["pub message: String", "pub site: String"]
 
+# What went wrong, in words: `Error`'s `message` (Part I 7.1), what the
+# failure prints as.
+[fn."task::TimedOut::message"]
+pub = true
+panics = false
+sync = true
+touches = []
+signature = "(self: ref task::TimedOut) -> String"
+
+# Everything about the failure, for an operator: `Error`'s `full` (Part I
+# 7.1). It came from the runtime, not a `throw` of the program, and says so.
+[fn."task::TimedOut::full"]
+pub = true
+panics = false
+sync = true
+touches = []
+signature = "(self: ref task::TimedOut) -> String"
+
+# What went wrong, in words: `Error`'s `message` (Part I 7.1), what the
+# failure prints as.
+[fn."task::OverBudget::message"]
+pub = true
+panics = false
+sync = true
+touches = []
+signature = "(self: ref task::OverBudget) -> String"
+
+# Everything about the failure, for an operator: `Error`'s `full` (Part I
+# 7.1). It came from the runtime, not a `throw` of the program, and says so.
+[fn."task::OverBudget::full"]
+pub = true
+panics = false
+sync = true
+touches = []
+signature = "(self: ref task::OverBudget) -> String"
+
+# What went wrong, in words: `Error`'s `message` (Part I 7.1), what the
+# failure prints as.
+[fn."task::Crashed::message"]
+pub = true
+panics = false
+sync = true
+touches = []
+signature = "(self: ref task::Crashed) -> String"
+
+# Everything about the failure, for an operator: `Error`'s `full` (Part I
+# 7.1). It came from the runtime, not a `throw` of the program, and says so.
+[fn."task::Crashed::full"]
+pub = true
+panics = false
+sync = true
+touches = []
+signature = "(self: ref task::Crashed) -> String"
+
 # **How a value is reached** ([ADR-330](../../docs/specification/adr/adr-330.md)
 # D8): what `T::access` and `field.ty::access` are, a value the running
 # program compares, matches, prints with `{a:?}` and keeps.

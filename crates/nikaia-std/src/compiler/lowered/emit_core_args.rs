@@ -701,7 +701,7 @@ impl EmitState {
             out.push(&format!("|mut __nk_acc, __nk_x| {{ nikaia_std::par::in_place(&mut __nk_acc, {}, ", second));
         }
         let shared = emit_arg_a_shared_read(world, &walk, arg);
-        if shared != "" && (out.buf.len() as i64) == arg_start && in_place == 0 && !future { out.push(&shared); } else if future { self.emit_arg_future(world, walk, out, host, arg, i, depth, &inside, scope)?; } else { self.emit_arg_value(world, walk, out, host, arg, i, depth, inside, scope)?; }
+        if shared != "" && (out.buf.len() as i64) == arg_start && in_place == 0 && !future { out.push(&emit_pending_read_caught(&shared, inside.breaks_to)); } else if future { self.emit_arg_future(world, walk, out, host, arg, i, depth, &inside, scope)?; } else { self.emit_arg_value(world, walk, out, host, arg, i, depth, inside, scope)?; }
         if in_place > 0 { out.push("); __nk_acc }"); }
         if pointer == 1 { out.push(".as_ptr()"); } else if pointer == 2 { out.push(".as_mut_ptr()"); }
         if pointer == 6 { out.push(".lent()"); }
@@ -1045,6 +1045,39 @@ pub(crate) fn emit_arg_a_shared_read(world: &EmitWorld<'_, '_, '_, '_>, walk: &E
         },
         _ => return String::from(""),
     }
+}
+
+pub(crate) fn emit_pending_read_caught(read: &str, breaks_to: i64) -> String {
+    if breaks_to < 0 { return nikaia_std::block::Text::from(read.to_string()); }
+    let mut open: String = String::from("");
+    let mut close: &'static str = "";
+    let mut inner = nikaia_std::block::Text::from(read.to_string());
+    if inner.starts_with('(') && inner.ends_with(')') {
+        let opened = match inner.strip_prefix('(') { Some(__nikaia_value) => __nikaia_value, None => return nikaia_std::block::Text::from(read.to_string()) };
+        inner = nikaia_std::block::Text::from(match opened.strip_suffix(')') { Some(__nikaia_value) => __nikaia_value, None => return nikaia_std::block::Text::from(read.to_string()) }.to_string());
+        open = String::from("(");
+        close = ")";
+    }
+    if inner.starts_with('*') {
+        inner = nikaia_std::block::Text::from(match inner.strip_prefix('*') { Some(__nikaia_value) => __nikaia_value, None => return nikaia_std::block::Text::from(read.to_string()) }.to_string());
+        open = format!("{}*", open);
+    }
+    let joined = match inner.strip_suffix('?') { Some(__nikaia_value) => __nikaia_value, None => return nikaia_std::block::Text::from(read.to_string()) };
+    format!("{}match {} {{ Ok(value) => value, Err(error) => break '__nikaia_caught_{} Err(error.into()) }}{}", open, joined, breaks_to, close)
+}
+
+pub(crate) fn emit_catch_reads_a_pending(world: &EmitWorld<'_, '_, '_, '_>, walk: &EmitWalk, guarded: &Expr) -> bool {
+    for each in visited_in_expr(guarded) {
+        match each {
+            Expr::Variable(name, _) => {
+                let name = *name;
+                let handle = nikaia_std::index::or(walk.async_handles.get(&emit_text(world, name)), || "");
+                if handle.ends_with('?') || handle.ends_with("?)") { return true; }
+            },
+            _ => { },
+        }
+    }
+    false
 }
 
 pub(crate) fn emit_async_body_mark() -> String { String::from("__nikaia_task_body__") }

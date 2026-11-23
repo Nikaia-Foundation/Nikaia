@@ -1,0 +1,17 @@
+// A deadline's `task::TimedOut` is a failure of the task, so a child
+// handle's fallback stands in for its value at the `join` (Part I 8.1.2,
+// ADR-async-5 D16, D22, #989).
+use std::time
+
+fn slow() -> i64 {
+	time::sleep(500.millis())
+	return 1
+}
+
+fn main() throws {
+	let h = async(handle, within: 20.millis()) fn { slow() } catch {
+		println(f"fallback: {error}")
+		100
+	}
+	println(f"{h.join()}")
+}

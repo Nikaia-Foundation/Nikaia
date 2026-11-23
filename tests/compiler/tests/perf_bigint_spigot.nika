@@ -1,0 +1,45 @@
+// The Benchmarks Game's pidigits (Gibbons' streaming spigot) on
+// `bigint::BigInt` (Part I 2.2), written as a user writes it: each step
+// rebinds `acc`, `num` and `den` to a new value. The first 300 digits of pi
+// in the game's format, ten to a line. The probe of #2795, which counts
+// what reusing a dead value's digits would save.
+use std::bigint
+
+fn quotient(n: bigint::BigInt, d: bigint::BigInt) -> i64 sync {
+    let (q, _) = n.div_rem(d) ?? return -1
+    return q.narrow() ?? -1
+}
+
+fn main() throws {
+    let wanted: i64 = 300
+    let mut acc = bigint::BigInt::of(0)
+    let mut den = bigint::BigInt::of(1)
+    let mut num = bigint::BigInt::of(1)
+    let mut k: i64 = 0
+    let mut printed: i64 = 0
+    let mut line = ""
+    while printed < wanted {
+        k += 1
+        let k2 = bigint::BigInt::of(k * 2 + 1)
+        acc = acc.add(num.mul(bigint::BigInt::of(2)))
+        acc = acc.mul(k2)
+        den = den.mul(k2)
+        num = num.mul(bigint::BigInt::of(k))
+        if num > acc {
+            continue
+        }
+        let d = quotient(num.mul(bigint::BigInt::of(3)).add(acc), den)
+        if d != quotient(num.mul(bigint::BigInt::of(4)).add(acc), den) {
+            continue
+        }
+        line = line + f"{d}"
+        printed += 1
+        if printed % 10 == 0 {
+            println(f"{line}\t:{printed}")
+            line = ""
+        }
+        acc = acc.sub(den.mul(bigint::BigInt::of(d)))
+        acc = acc.mul(bigint::BigInt::of(10))
+        num = num.mul(bigint::BigInt::of(10))
+    }
+}
