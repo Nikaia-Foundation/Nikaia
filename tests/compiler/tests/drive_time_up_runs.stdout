@@ -1,0 +1,8 @@
+DATE a 2400
+DATE b 600
+DATE c 6000
+runs of 40, 22 min in: starts
+runs of 40, 75 min in: starts
+runs of 40, 85 min in: 34 min left of 120, a builder of DIR takes 40 min
+runs of 40, 85 min in, task 180: starts
+runs of 40, 110 min in: up
