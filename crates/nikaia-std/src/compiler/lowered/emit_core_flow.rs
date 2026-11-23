@@ -836,8 +836,17 @@ impl EmitState {
             boxed = true;
             named = false;
         }
+        if caught && sum.is_none() && !named {
+            let callee: String = nikaia_std::index::or(call_callee_name(world.words, world.aliases, guarded_expr), || "".into());
+            if self.own_contracts.functions.contains_key(&callee) && self.error_channel(world, &callee, false, "", "", false) == "std::boxed::Box<dyn std::error::Error>" {
+                sum = Some(String::from(""));
+                boxed = true;
+            }
+        }
         let inside = flow.handling(named);
-        let inside_scope = EmitScope { caught_sum: sum, ..scope.clone() };
+        let mut boxed_names: Vec<String> = vec![];
+        if boxed { boxed_names.push(String::from("error")); }
+        let inside_scope = EmitScope { caught_sum: sum, caught_boxed: boxed_names, ..scope.clone() };
         let mut opening: Option<String> = None;
         if named { opening = Some(String::from("let (error, __nikaia_site) = error.split();")); } else if boxed && fallback { opening = Some(String::from("let error: std::boxed::Box<dyn std::error::Error> = nikaia_std::task::handed(error.into());")); } else if boxed { opening = Some(String::from("let error: std::boxed::Box<dyn std::error::Error> = error.into();")); }
         if an_else {
@@ -962,6 +971,18 @@ impl EmitState {
             out.push(&format!("break '__nikaia_caught_{} Err(nikaia_std::error::raise(", flow.breaks_to));
             self.emit_expr(world, walk, out, host, inner, depth, flow, scope)?;
             out.push(&format!(", &{}))", rust_string(&scope.origin)));
+            return Ok(());
+        }
+        let mut thrown_name: String = String::from("");
+        match inner {
+            Expr::Variable(name, _) => {
+                let name = *name;
+                thrown_name = emit_text(world, name);
+            },
+            _ => { },
+        }
+        if thrown_name != "" && nikaia_std::list::contains(&scope.caught_boxed, &thrown_name) {
+            out.push(&format!("return Err({}.into())", emit_local_name(&self.facts.comptime_names, &thrown_name)));
             return Ok(());
         }
         let passing_on = flow.caught_named && is_the_binding && scope.caught_sum.is_none();

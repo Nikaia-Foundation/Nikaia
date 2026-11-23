@@ -150,8 +150,9 @@ shows, without collector pauses, and can spread their work over every core.
   already does less work than the fastest Rust a person wrote, and mispredicts a third as many
   branches. The figures and how they are taken are in that README.
 - Programs from the Computer Language Benchmarks Game, each counted against the fastest
-  Rust entry published there, are in [benches/game](benches/game/README.md), with
-  the rows where Nikaia loses and what is known of their causes.
+  Rust entry published there (for k-nucleotide the fastest without an unmaintained crate),
+  are in [benches/game](benches/game/README.md), with the rows where Nikaia loses, what is
+  known of their causes and the commit whose lock the Rust was built with.
 - Whether your code may run on several cores is one line in
   `nikaia.toml`, and the code does not change:
 

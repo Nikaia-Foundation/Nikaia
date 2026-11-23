@@ -15,7 +15,7 @@ pub fn blocks_in(text: &str) -> Vec<SpecBlock> {
     let mut found: Vec<SpecBlock> = vec![];
     let mut at: i64 = 0;
     while at < lines.len() as i64 {
-        if (*nikaia_std::index::get(&lines, nikaia_std::index::at(at))).trim() != "```nika" {
+        if (*unsafe { nikaia_std::proven::read(&lines, (at) as usize) }).trim() != "```nika" {
             at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
             continue;
         }

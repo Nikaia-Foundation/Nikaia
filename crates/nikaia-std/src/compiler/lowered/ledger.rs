@@ -1065,7 +1065,7 @@ pub fn spell(text: &str, key: &str, borrows: &[String], mutates: bool) -> Spelle
         open = unsafe { nikaia_std::proven::add::<i64>(close, 1) };
         while open < c.len() as i64 && (*unsafe { nikaia_std::proven::read(&c, (open) as usize) }).is_whitespace() { open = unsafe { nikaia_std::proven::add::<i64>(open, 1) }; }
     }
-    if open >= c.len() as i64 || *nikaia_std::index::get(&c, nikaia_std::index::at(open)) != '(' { return as_written(text); }
+    if open >= c.len() as i64 || *unsafe { nikaia_std::proven::read(&c, (open) as usize) } != '(' { return as_written(text); }
     let close = matching(&c, unsafe { nikaia_std::proven::add::<i64>(open, 1) }, '(', ')');
     if close < 0 { return as_written(text); }
     let inside: Vec<scalar> = nikaia_std::list::scalars(slice(&c, unsafe { nikaia_std::proven::add::<i64>(open, 1) }, close).chars());

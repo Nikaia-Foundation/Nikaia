@@ -44,7 +44,11 @@ fn refusals(source: &str) -> Vec<nikaia::check::Finding> {
 #[test]
 fn stds_types_are_called_like_a_constructor() {
     let rust = lowered(
-        "use std::collections\n\nfn main() throws {\n\
+        "use std::collections\n\nfn made() -> Vec[i64] {\n\
+         \x20   let mut ys = Vec()\n\
+         \x20   ys.push(2)\n\
+         \x20   ys\n\
+         }\n\nfn main() throws {\n\
          \x20   let mut xs = Vec()\n\
          \x20   let s = String()\n\
          \x20   let m = collections::HashMap()\n\
@@ -52,7 +56,13 @@ fn stds_types_are_called_like_a_constructor() {
          \x20   println(f\"{xs.len()} {s.len()} {m.len()}\")\n\
          }\n",
     );
+    // A `Vec()` that leaves its task stays on the heap; one that stays in it
+    // is built in the task's block (ADR-327 D9).
     assert!(rust.contains("Vec::new()"), "{rust}");
+    assert!(
+        rust.contains("nikaia_std::block::list(nikaia_std::block::Place::Block)"),
+        "{rust}"
+    );
     assert!(rust.contains("String::new()"), "{rust}");
     // **And the map goes through `path`**, which is where one name below
     // depends on more than the name: at the default provenance the map is the

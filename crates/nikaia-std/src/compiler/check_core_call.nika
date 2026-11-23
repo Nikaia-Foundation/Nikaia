@@ -1134,6 +1134,18 @@ fn check_core_call_named_call[H: CheckHost](mut state: CheckState, world: ref Ch
         state.facts.copied_results.insert(id_of(func) as i64)
         return unviewed_type(made)
     }
+    // **So is a view of a nullable copied word** (#1079): `hand(b)` of a
+    // `b: i64?` hands back a view of the `i64?` (the type bound to `T` keeps
+    // no view of its own), read as the `i64?` it views.
+    match made {
+        Ty::Nullable(held) => {
+            if check_core_call_hands_back_a_variable(contract) && copies_as_a_view(view_of_type(held)) {
+                state.facts.copied_results.insert(id_of(func) as i64)
+                return Ty::Nullable(unviewed_type(held))
+            }
+        },
+        else => {},
+    }
     // **A view of a variable that holds a view of text is read at the call**
     // (ADR-views-v4 D12, #1498): the `&&str` the result is points into the
     // call's own `&`, and its copy is the `&str` the arguments view.

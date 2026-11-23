@@ -1,0 +1,72 @@
+// An outer counter set from an inner scan's end (#2457): the block's end
+// solves `j - 1 == start` for `j`, or joins `j >= start` with `i >= j + 1`
+// where only bounds tie `j`; an `if` that sets `i` on both branches keeps
+// the hull `j + 1 <= i <= j + 2` and `start == i#k`. So `i >= 0` holds at
+// the end of a turn and every `bs[j]` and `bs[i]` is proved, on both
+// branches and past a `continue` (ADR-361 D2, D13).
+fn lines(raw: String) -> i64 sync {
+	let bs = raw.bytes
+	let n = bs.len() as i64
+	let mut c = 0
+	let mut i = 0
+	while i < n {
+		let start = i
+		let mut j = start
+		while j < n && bs[j] != 10 {
+			j += 1
+		}
+		if j >= n {
+			break
+		}
+		if bs[j] == 39 {
+			i = j + 2
+		} else {
+			i = j + 1
+		}
+		c = j
+	}
+	return c
+}
+
+fn quoted(raw: String) -> i64 sync {
+	let bs = raw.bytes
+	let n = bs.len() as i64
+	let mut c = 0
+	let mut i = 0
+	while i < n {
+		let start = i
+		let mut j = start
+		while j < n && bs[j] != 10 {
+			j += 1
+		}
+		if j >= n {
+			break
+		}
+		if bs[j] == 39 {
+			i = j + 2
+			continue
+		}
+		c = j
+		i = j + 1
+	}
+	return c
+}
+
+fn pairs(raw: String) -> i64 sync {
+	let bs = raw.bytes
+	let n = bs.len() as i64
+	let mut c = 0
+	let mut i = 0
+	while i < n {
+		c = bs[i] as i64
+		let start = i
+		let mut j = start
+		j += 1
+		i = j + 1
+	}
+	return c
+}
+
+fn main() throws {
+	println(f"{lines("a\nb\n")} {quoted("a\nb\n")} {pairs("abc")}")
+}

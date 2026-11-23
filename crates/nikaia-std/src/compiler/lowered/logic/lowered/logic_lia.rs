@@ -583,14 +583,14 @@ pub(crate) fn lg_contradictory_at(atoms: &[LgLin], places: &[i64], budget: &LgBu
     #[allow(unused_mut)] let mut round_names: Vec<String> = vec![];
     let mut round_places: Vec<Vec<i64>> = vec![];
     let mut held: Vec<LgHeld> = Vec::with_capacity(nikaia_std::count::of(unsafe { nikaia_std::proven::mul::<i64>(4, places.len() as i64) }));
-    let mut alive: Vec<i64> = Vec::with_capacity(nikaia_std::count::of(places.len() as i64));
+    let mut alive: Vec<i64> = nikaia_std::block::List::with_capacity_in(nikaia_std::count::of(places.len() as i64), nikaia_std::block::Place::Block);
     let mut ranks: collections::BTreeMap<String, i64> = collections::BTreeMap::new();
     for at in places.iter() {
         let at = nikaia_std::num::value(at);
         for (name, _) in nikaia_std::index::get(&atoms, nikaia_std::index::at(at)).terms.iter() { if !ranks.contains_key(name) { ranks.insert(nikaia_std::block::Text::from(name.to_string()), 0); } }
     }
     let mut rank_names: Vec<String> = Vec::with_capacity(nikaia_std::count::of(ranks.len() as i64)); #[allow(unused_mut, clippy::redundant_locals)] let mut round_names = round_names;
-    let mut quotients: Vec<bool> = Vec::with_capacity(nikaia_std::count::of(ranks.len() as i64));
+    let mut quotients: Vec<bool> = nikaia_std::block::List::with_capacity_in(nikaia_std::count::of(ranks.len() as i64), nikaia_std::block::Place::Block);
     for (name, rank) in ranks.iter_mut() {
         *rank = rank_names.len() as i64;
         quotients.push(name.starts_with("quot#"));
@@ -694,8 +694,8 @@ pub(crate) fn lg_contradictory_at(atoms: &[LgLin], places: &[i64], budget: &LgBu
 
 pub(crate) fn lg_eliminate(held: &mut Vec<LgHeld>, now: &[i64], rank: i64, budget: &LgBudget, steps: &mut Vec<LgStep>, round_places: &mut Vec<Vec<i64>>, stop: &mut Vec<LgClosed>) -> Vec<i64> {
     let mut without: Vec<i64> = Vec::with_capacity(nikaia_std::count::of(now.len() as i64));
-    let mut up: Vec<i64> = Vec::with_capacity(nikaia_std::count::of(now.len() as i64));
-    let mut down: Vec<i64> = Vec::with_capacity(nikaia_std::count::of(now.len() as i64));
+    let mut up: Vec<i64> = nikaia_std::block::List::with_capacity_in(nikaia_std::count::of(now.len() as i64), nikaia_std::block::Place::Block);
+    let mut down: Vec<i64> = nikaia_std::block::List::with_capacity_in(nikaia_std::count::of(now.len() as i64), nikaia_std::block::Place::Block);
     let mut with_places: Vec<i64> = Vec::with_capacity(nikaia_std::count::of(now.len() as i64));
     with_places.reserve(now.iter().size_hint().0); for place in now.iter() {
         let place = nikaia_std::num::value(place);

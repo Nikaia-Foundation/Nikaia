@@ -29,11 +29,14 @@ trusting the proofs. The study gives the full table, the method and the open
 items.
 
 The [Benchmarks Game table](https://github.com/Nikaia-Foundation/Nikaia/tree/main/benches/game)
-counts seven programs of the Computer Language Benchmarks Game and the `json`
-package against the fastest Rust entry published for each, again in
-instructions. Only two Nikaia programs written for speed do less work than
-their Rust entry. Most rows count more, often several times more. The table
-says what is known of the cause of each loss and keeps every row.
+counts seven programs of the Computer Language Benchmarks Game against the
+fastest Rust entry published for each (for k-nucleotide the fastest that
+links no unmaintained crate), and the `json` package against `serde_json`,
+again in instructions. Three Nikaia programs written for speed do less work
+than their Rust entry, and `json` less than `serde_json` on its two larger
+inputs. Most rows count more, often several times more. The table says what
+is known of the cause of each loss, keeps every row and names the commit
+whose lock its Rust was built with.
 
 ## The questions
 

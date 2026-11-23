@@ -203,7 +203,7 @@ pub(crate) fn check_core_call_code_args(state: &mut CheckState, world: &CheckWor
     let mut i: i64 = -1;
     if signature.takes_a_receiver() { i = -2; }
     for (param, ty) in signature.params.iter() {
-        i += 1;
+        i = unsafe { nikaia_std::proven::add::<i64>(i, 1) };
         if i < 0 || i >= args.len() as i64 || nikaia_std::list::contains(&contract.keeps, &param) || nikaia_std::list::contains(&signature.mutable, &param) { continue; }
         match ty {
             Ty::Fn { .. } => { },
@@ -252,7 +252,7 @@ pub(crate) fn check_core_call_std_code_args(state: &mut CheckState, world: &Chec
     let mut i: i64 = -1;
     if signature.takes_a_receiver() { i = -2; }
     for (param, ty) in signature.params.iter() {
-        i += 1;
+        i = unsafe { nikaia_std::proven::add::<i64>(i, 1) };
         if i < 0 || i >= args.len() as i64 || nikaia_std::list::contains(&contract.keeps, &param) || nikaia_std::list::contains(&signature.mutable, &param) { continue; }
         match ty {
             Ty::Fn { .. } => { },
@@ -865,6 +865,16 @@ pub(crate) fn check_core_call_named_call<H: CheckHost>(state: &mut CheckState, w
     if check_core_call_hands_back_a_variable(&contract) && (copies_as_a_view(&made) || open) {
         state.facts.copied_results.insert(id_of(func) as i64);
         return unviewed_type(&made);
+    }
+    match made {
+        Ty::Nullable(ref held) => {
+            let held = nikaia_std::boxed::open(held);
+            if check_core_call_hands_back_a_variable(&contract) && copies_as_a_view(&view_of_type(held)) {
+                state.facts.copied_results.insert(id_of(func) as i64);
+                return Ty::Nullable(nikaia_std::block::Boxed::new(unviewed_type(held)));
+            }
+        },
+        _ => { },
     }
     if check_core_call_hands_back_a_variable(&contract) && state.facts.viewed_text_calls.contains(&(span.start as i64)) { state.facts.copied_results.insert(id_of(func) as i64); }
     made

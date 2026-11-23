@@ -709,7 +709,7 @@ impl EmitState {
                 }
                 inside = EmitFlow { caught_named: own, ..flow };
                 let named_member: Option<String> = Some(nikaia_std::block::Text::from(member.to_string()));
-                inside_scope = EmitScope { caught_member: named_member, ..scope.clone() };
+                inside_scope = EmitScope { caught_member: named_member, caught_boxed: vec![], ..scope.clone() };
                 let ask = if m == 0 { "if" } else { " else if" };
                 out.push(&format!("{} nikaia_std::error::holds::<{}>(&*error) {{ let error = nikaia_std::error::opened::<{}>(error); ", ask, bare, bare));
                 if own { out.push("let (error, __nikaia_site) = nikaia_std::error::Thrown::from(error).split(); "); }
@@ -723,14 +723,27 @@ impl EmitState {
                     if !mine { continue; }
                     out.push(&inner);
                     if pass == 1 && m < count { out.push("#[allow(unreachable_patterns)] "); }
-                    self.emit_core_pattern_written(world, walk, out, host, &arm.pattern, false, node_key(&arm.body), false, 0, depth + 2, inside, &inside_scope)?;
+                    let mut arm_scope = inside_scope.clone();
+                    if m == count {
+                        match &arm.pattern {
+                            MatchPattern::Path(parts) => {
+                                if parts.len() == 1 {
+                                    let mut names = inside_scope.caught_boxed.copy_owned();
+                                    names.push(emit_text(world, *unsafe { nikaia_std::proven::read(&parts, (0) as usize) }));
+                                    arm_scope = EmitScope { caught_boxed: names, ..inside_scope.clone() };
+                                }
+                            },
+                            _ => { },
+                        }
+                    }
+                    self.emit_core_pattern_written(world, walk, out, host, &arm.pattern, false, node_key(&arm.body), false, 0, depth + 2, inside, &arm_scope)?;
                     if arm.guard.is_some() {
                         out.push(" if ");
                         let guard = match arm.guard.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return Ok(()) };
-                        self.emit_expr(world, walk, out, host, guard, depth + 2, inside, &inside_scope)?;
+                        self.emit_expr(world, walk, out, host, guard, depth + 2, inside, &arm_scope)?;
                     }
                     out.push(" => ");
-                    self.emit_core_arm_body_led(world, walk, out, host, &arm.pattern, 0, &arm.body, depth + 2, inside, &inside_scope, "")?;
+                    self.emit_core_arm_body_led(world, walk, out, host, &arm.pattern, 0, &arm.body, depth + 2, inside, &arm_scope, "")?;
                     out.push(",\n");
                 }
             }
