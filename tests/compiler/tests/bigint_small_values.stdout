@@ -1,0 +1,51 @@
+0: 0 sign 0 bits 0 narrow 0
+1: 1 sign 1 bits 1 narrow 1
+-1: -1 sign -1 bits 1 narrow -1
+max: 9223372036854775807 sign 1 bits 63 narrow 9223372036854775807
+min: -9223372036854775808 sign -1 bits 64 narrow -9223372036854775808
+umax: 18446744073709551615 sign 1 bits 64 narrow -
+umax+1: 18446744073709551616 sign 1 bits 65 narrow -
+2^64+-1: 18446744073709551615 sign 1 bits 64 narrow -
+max+max: 18446744073709551614 sign 1 bits 64 narrow -
+min+min: -18446744073709551616 sign -1 bits 65 narrow -
+min+max: -1 sign -1 bits 1 narrow -1
+-umax+-1: -18446744073709551616 sign -1 bits 65 narrow -
+true
+2^64-1: 18446744073709551615 sign 1 bits 64 narrow -
+2^64-umax: 1 sign 1 bits 1 narrow 1
+umax-2^64: -1 sign -1 bits 1 narrow -1
+2^64-2^64: 0 sign 0 bits 0 narrow 0
+-umax-1: -18446744073709551616 sign -1 bits 65 narrow -
+0-min: 9223372036854775808 sign 1 bits 64 narrow -
+true
+true
+umax*umax: 340282366920938463426481119284349108225 sign 1 bits 128 narrow -
+min*min: 85070591730234615865843651857942052864 sign 1 bits 127 narrow -
+min*-1: 9223372036854775808 sign 1 bits 64 narrow -
+2^64*0: 0 sign 0 bits 0 narrow 0
+2^64*1: 18446744073709551616 sign 1 bits 65 narrow -
+max*-1: -9223372036854775807 sign -1 bits 63 narrow -9223372036854775807
+2^64/2: q 9223372036854775808 r 0 true
+2^64/umax: q 1 r 1 true
+2^64+5/2^64: q 1 r 5 true
+2^128/2^64: q 18446744073709551616 r 0 true
+-2^128/2^64: q -18446744073709551616 r 0 true
+umax/2^64: q 0 r 18446744073709551615 true
+-7/2: q -3 r -1 true
+min/-1: q 9223372036854775808 r 0 true
+0/umax: q 0 r 0 true
+true
+gcd(2^64,3*2^32): 4294967296 sign 1 bits 33 narrow 4294967296
+gcd(umax,2^64): 1 sign 1 bits 1 narrow 1
+gcd(2^128,2^64): 18446744073709551616 sign 1 bits 65 narrow -
+gcd(-6,4): 2 sign 1 bits 2 narrow 2
+gcd(0,-5): 5 sign 1 bits 3 narrow 5
+gcd(0,0): 0 sign 0 bits 0 narrow 0
+gcd(min,min): 9223372036854775808 sign 1 bits 64 narrow -
+true true true true true true true
+true false
+own umax+1: 18446744073709551616 sign 1 bits 65 narrow -
+own 2^64-1: 18446744073709551615 sign 1 bits 64 narrow -
+own 3*2^64-(3*2^64-7): 7 sign 1 bits 3 narrow 7
+own neg: -7 sign -1 bits 3 narrow -7
+own abs: 7 sign 1 bits 3 narrow 7

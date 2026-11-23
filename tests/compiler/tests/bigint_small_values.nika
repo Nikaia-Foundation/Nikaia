@@ -1,0 +1,101 @@
+// `bigint::BigInt` on values of one digit and on those crossing to two
+// digits and back (Part I 2.2, #2824): 0, 1, -1, the `i64` bounds and
+// `u64::MAX`, each operation once growing past a digit and once shrinking
+// below it. A value reached by either route equals the one made directly,
+// so `==` is equality of value whatever form a value is stored in.
+use std::bigint
+
+fn show(label: String, n: bigint::BigInt) throws {
+    let narrow = n.narrow()
+    let fits = if narrow == null { "-" } else { f"{narrow ?? 0}" }
+    println(f"{label}: {n.to_text()} sign {n.sign()} bits {n.bits()} narrow {fits}")
+}
+
+fn divided(label: String, n: bigint::BigInt, d: bigint::BigInt) throws {
+    let (q, r) = n.div_rem(d) ?? return
+    let whole = q.mul(d).add(r) == n
+    println(f"{label}: q {q.to_text()} r {r.to_text()} {whole}")
+}
+
+fn main() throws {
+    let zero = bigint::BigInt::of(0)
+    let one = bigint::BigInt::of(1)
+    let minus_one = bigint::BigInt::of(-1)
+    let max = bigint::BigInt::of(9223372036854775807)
+    let min = bigint::BigInt::of(-9223372036854775807 - 1)
+    let top: u64 = 18446744073709551615
+    let umax = bigint::BigInt::from_wide(Wide::from_halves(top, 0))
+    show("0", zero)
+    show("1", one)
+    show("-1", minus_one)
+    show("max", max)
+    show("min", min)
+    show("umax", umax)
+
+    // add: one digit to two and back.
+    let two64 = umax.add(one)
+    show("umax+1", two64)
+    show("2^64+-1", two64.add(minus_one))
+    show("max+max", max.add(max))
+    show("min+min", min.add(min))
+    show("min+max", min.add(max))
+    show("-umax+-1", umax.neg().add(minus_one))
+    println(two64.add(minus_one) == umax)
+
+    // sub: both directions, and to zero.
+    show("2^64-1", two64.sub(one))
+    show("2^64-umax", two64.sub(umax))
+    show("umax-2^64", umax.sub(two64))
+    show("2^64-2^64", two64.sub(two64))
+    show("-umax-1", umax.neg().sub(one))
+    show("0-min", zero.sub(min))
+    println(two64.sub(umax) == one)
+    println(two64.sub(two64) == zero)
+
+    // mul: past a digit and back to one through a zero and a one.
+    show("umax*umax", umax.mul(umax))
+    show("min*min", min.mul(min))
+    show("min*-1", min.mul(minus_one))
+    show("2^64*0", two64.mul(zero))
+    show("2^64*1", two64.mul(one))
+    show("max*-1", max.mul(minus_one))
+
+    // div_rem: two digits by one and by two, down to one digit.
+    divided("2^64/2", two64, bigint::BigInt::of(2))
+    divided("2^64/umax", two64, umax)
+    divided("2^64+5/2^64", two64.add(bigint::BigInt::of(5)), two64)
+    divided("2^128/2^64", two64.mul(two64), two64)
+    divided("-2^128/2^64", two64.mul(two64).neg(), two64)
+    divided("umax/2^64", umax, two64)
+    divided("-7/2", bigint::BigInt::of(-7), bigint::BigInt::of(2))
+    divided("min/-1", min, minus_one)
+    divided("0/umax", zero, umax)
+    println(one.div_rem(zero) == null)
+
+    // gcd: of two digits down to one, and of one digit.
+    show("gcd(2^64,3*2^32)", two64.gcd(bigint::BigInt::of(12884901888)))
+    show("gcd(umax,2^64)", umax.gcd(two64))
+    show("gcd(2^128,2^64)", two64.mul(two64).gcd(two64))
+    show("gcd(-6,4)", bigint::BigInt::of(-6).gcd(bigint::BigInt::of(4)))
+    show("gcd(0,-5)", zero.gcd(bigint::BigInt::of(-5)))
+    show("gcd(0,0)", zero.gcd(zero))
+    show("gcd(min,min)", min.gcd(min))
+
+    // compare across the digit line.
+    println(f"{two64 > umax} {umax < two64} {two64.neg() < umax.neg()} {one > minus_one} {zero < one} {zero > minus_one} {min < max}")
+    println(f"{umax == umax.clone()} {two64 == umax}")
+
+    // The consuming forms, the receiver dead, crossing the line.
+    let a = umax.add(zero)
+    let b = a.add(one)
+    show("own umax+1", b)
+    let c = b.sub(one)
+    show("own 2^64-1", c)
+    let d = two64.mul(bigint::BigInt::of(3))
+    let e = d.sub(two64.mul(bigint::BigInt::of(3)).sub(bigint::BigInt::of(7)))
+    show("own 3*2^64-(3*2^64-7)", e)
+    let f = e.neg()
+    show("own neg", f)
+    let g = f.abs()
+    show("own abs", g)
+}
