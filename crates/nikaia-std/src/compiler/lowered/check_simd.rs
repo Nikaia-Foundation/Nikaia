@@ -3,7 +3,7 @@
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn check_simd_kind(ty: &Ty) -> String {
+pub fn check_simd_kind(ty: &Ty) -> String {
     match ty {
         Ty::Named { name, view, .. } => { let view = *view; if view { String::from("") } else if name == "simd::Lanes" { String::from("Lanes") } else if name == "simd::Fixed" { String::from("Fixed") } else if name == "simd::Mask" { String::from("Mask") } else { String::from("") } },
         _ => String::from(""),
@@ -316,6 +316,141 @@ impl CheckState {
             }
         }
     }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub(crate) fn a_lookup_out_of_lanes(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, on: &Ty, method: &str, args: &[Expr], span: &Span) {
+        if method != "lookup" && method != "lookup_or_zero" || check_simd_kind(on) != "Fixed" { return; }
+        let lane = check_simd_lane_of(on);
+        if lane != "u8" {
+            self.findings.push(check_refusal("NK1171", span, format!("`{}` has no method called `{}`.", on.shown(), method), vec![format!("`{}` picks bytes from a table of bytes: it is offered on `simd::Fixed[u8, N]` only (ADR-377 D10).", method)], Some(String::from("Write the table and the indices as `simd::Fixed[u8, N]`, or pick lane by lane with `lane(i)`."))));
+            return;
+        }
+        let count = check_simd_count_of(on);
+        if args.len() != 1 || count == 0 { return; }
+        let given: i64 = nikaia_std::index::or(self.lanes_counted(world, unsafe { nikaia_std::proven::read(&args, (0) as usize) }), || count);
+        if given != count {
+            self.findings.push(check_refusal("NK1102", span, format!("`simd::Fixed::{}` expects `idx` to be `simd::Fixed[u8, {}]`, but you're passing `simd::Fixed[u8, {}]`.", method, count, given), vec![nikaia_std::block::Text::from("The index picks one byte of the table for each of its lanes, so it has as many lanes as the table (ADR-377 D10).")], Some(format!("Write the index with {} lanes, as the table has.", count))));
+            return;
+        }
+        if method != "lookup" { return; }
+        let most: Option<i64> = self.lanes_at_most(world, unsafe { nikaia_std::proven::read(&args, (0) as usize) });
+        let help: String = format!("Write `lookup_or_zero`, which answers 0 for an index of {} or more, or bound the index with `& simd::splat({})`.", count, count - 1);
+        let note: String = format!("Each lane of the index picks a byte of the table, from 0 to {}; the checker proves it from a `simd::Fixed::from([…])` of constants, `& simd::splat(c)`, `.min(simd::splat(c))`, a `simd::select` of two proved vectors, a lookup from a proved table, or an element of a `let` list of these (ADR-377 D10).", count - 1);
+        if most.is_none() {
+            self.findings.push(check_refusal("NK1298", span, format!("A lookup's index is not proved below the {} lanes of a `{}`.", count, on.shown()), vec![note], Some(help)));
+            return;
+        }
+        let at_most = nikaia_std::index::or(most, || 0);
+        if at_most >= count { self.findings.push(check_refusal("NK1298", span, format!("A lookup's index can be {}, outside the {} lanes of a `{}`.", at_most, count, on.shown()), vec![note], Some(help))); }
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub(crate) fn lanes_counted(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, value: &Expr) -> Option<i64> {
+        match value {
+            Expr::Variable(name, _) => {
+                let name = *name;
+                let local: CheckLocal = match self.binding(world.words.resolve(name)) { Some(__nikaia_value) => __nikaia_value, None => return None };
+                let count = check_simd_count_of(&value_of_a_copy(&local.ty.unseen()));
+                if count > 0 { Some(count) } else { None }
+            },
+            Expr::Call { func, args, .. } => {
+                let func = nikaia_std::boxed::open(func);
+                let parts = match func {
+                    Expr::Path(parts, _) => parts,
+                    _ => return None,
+                };
+                let mut written: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
+                written.reserve(parts.iter().size_hint().0); for part in parts.iter() {
+                    let part = *part;
+                    written.push(nikaia_std::block::Text::from(world.words.resolve(part).to_string()));
+                }
+                if written.join("::") != "simd::Fixed::from" || args.len() != 1 { return None; }
+                match unsafe { nikaia_std::proven::read(&args, (0) as usize) } {
+                    Expr::ListLit { items, .. } => Some(items.len() as i64),
+                    _ => None,
+                }
+            },
+            Expr::Binary { lhs, .. } => { let lhs = nikaia_std::boxed::open(lhs); self.lanes_counted(world, lhs) },
+            Expr::MethodCall { receiver, .. } => { let receiver = nikaia_std::boxed::open(receiver); self.lanes_counted(world, receiver) },
+            _ => None,
+        }
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn lanes_at_most(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, value: &Expr) -> Option<i64> {
+        match value {
+            Expr::Call { func, args, .. } => { let func = nikaia_std::boxed::open(func); self.lanes_at_most_made(world, func, args) },
+            Expr::Binary { op, lhs, rhs, .. } => { let lhs = nikaia_std::boxed::open(lhs); let rhs = nikaia_std::boxed::open(rhs); if *op == BinaryOp::BitAnd { check_simd_least(self.lanes_at_most(world, lhs), self.lanes_at_most(world, rhs)) } else { None } },
+            Expr::MethodCall { receiver, method, args, .. } => {
+                let receiver = nikaia_std::boxed::open(receiver); let method = *method;
+                let name = world.words.resolve(method);
+                if name == "min" && args.len() == 1 { check_simd_least(self.lanes_at_most(world, receiver), self.lanes_at_most(world, unsafe { nikaia_std::proven::read(&args, (0) as usize) })) } else if (name == "lookup" || name == "lookup_or_zero") && args.len() == 1 { self.lanes_at_most(world, receiver) } else { None }
+            },
+            Expr::Index { base, .. } => { let base = nikaia_std::boxed::open(base); self.lanes_at_most(world, base) },
+            Expr::ListLit { items, .. } => self.lanes_at_most_all(world, items),
+            Expr::Variable(name, _) => {
+                let name = *name;
+                let local: CheckLocal = match self.binding(world.words.resolve(name)) { Some(__nikaia_value) => __nikaia_value, None => return None };
+                local.lanes_at_most
+            },
+            _ => None,
+        }
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub(crate) fn lanes_at_most_made(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, func: &Expr, args: &[Expr]) -> Option<i64> {
+        let parts = match func {
+            Expr::Path(parts, _) => parts,
+            _ => return None,
+        };
+        let mut written: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
+        written.reserve(parts.iter().size_hint().0); for part in parts.iter() {
+            let part = *part;
+            written.push(nikaia_std::block::Text::from(world.words.resolve(part).to_string()));
+        }
+        let path = nikaia_std::block::Text::from(written.join("::"));
+        if path == "simd::Fixed::from" && args.len() == 1 {
+            return match unsafe { nikaia_std::proven::read(&args, (0) as usize) } {
+                Expr::ListLit { items, .. } => self.lanes_at_most_all(world, items),
+                _ => None,
+            };
+        }
+        if path == "simd::splat" && args.len() == 1 { return check_simd_constant(unsafe { nikaia_std::proven::read(&args, (0) as usize) }); }
+        if path == "simd::select" && args.len() == 3 {
+            let a: i64 = match self.lanes_at_most(world, unsafe { nikaia_std::proven::read(&args, (1) as usize) }) { Some(__nikaia_value) => __nikaia_value, None => return None };
+            let b: i64 = match self.lanes_at_most(world, unsafe { nikaia_std::proven::read(&args, (2) as usize) }) { Some(__nikaia_value) => __nikaia_value, None => return None };
+            return Some(if a > b { a } else { b });
+        }
+        None
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub(crate) fn lanes_at_most_all(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, items: &[Expr]) -> Option<i64> {
+        if items.is_empty() { return None; }
+        let mut most: i64 = 0;
+        for item in items.iter() {
+            let one: i64 = match check_simd_constant(item) { Some(__nikaia_value) => __nikaia_value, None => match self.lanes_at_most(world, item) { Some(__nikaia_value) => __nikaia_value, None => return None } };
+            if one > most { most = one; }
+        }
+        Some(most)
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn check_simd_constant(value: &Expr) -> Option<i64> {
+    match value {
+        Expr::LitInt { value, negative, .. } => { let negative = *negative; let value = *value; if negative { None } else { Some(i64::try_from(value).unwrap_or_else(|_| panic!("the value does not fit in an `i64`"))) } },
+        _ => None,
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn check_simd_least(a: Option<i64>, b: Option<i64>) -> Option<i64> {
+    let left: i64 = match a { Some(__nikaia_value) => __nikaia_value, None => return b };
+    let right: i64 = match b { Some(__nikaia_value) => __nikaia_value, None => return Some(left) };
+    Some(if left < right { left } else { right })
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before

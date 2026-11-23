@@ -1276,6 +1276,7 @@ pub(crate) fn check_core_stmt_let<H: CheckHost>(state: &mut CheckState, world: &
     local.lent = read_through_a_jump;
     local.empty_list = pending;
     local.open_number = open;
+    if !mutable && names.len() == 1 && shape.is_empty() && (check_simd_kind(&local.ty) == "Fixed" || check_simd_element(Some(&local.ty)).is_some()) { local.lanes_at_most = state.lanes_at_most(world, value); }
     local.literal = literal;
     local.without_mut = without_mut;
     local.written_mut = mutable;

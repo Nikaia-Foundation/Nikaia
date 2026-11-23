@@ -8,6 +8,16 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1550] — 2026-11-23
+
+**bounds: a list's length forgotten after pop is still never negative, so a field zeroed after it stays within the list (#1642)**
+- Bounds: a field set to 0 after a `pop` of its list stays within the list: a length the walk forgets after `pop`, `retain` or `dedup` is still never negative.
+
+## [0.0.1549] — 2026-11-23
+
+**simd: lookup and lookup_or_zero on Fixed[u8, N] (ADR-377 D10), fannkuch-redux flips with one lookup (#1845)**
+- simd: `lookup` and `lookup_or_zero` pick the bytes of a `simd::Fixed[u8, N]` by indices known at run time (ADR-377 D10): one `pshufb` per 16 bytes with SSSE3, `lookup`'s index proved below N (NK1298); fannkuch-redux for speed counts 111.6 instructions a permutation at x86-64-v3 (215.6 before).
+
 ## [0.0.1548] — 2026-11-22
 
 **Builders' changes (#2706, #2707)**

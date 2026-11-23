@@ -6385,7 +6385,14 @@ pub(crate) fn bounding_method(walk: &mut BoundsWalk, facts: &mut BoundsFacts, na
             return;
         }
     }
+    let known = facts.facts.len() as i64;
     bounding_forget_length(&walk, facts, name);
+    if (facts.facts.len() as i64) < known {
+        let len = walk.arena.var(&length);
+        let zero = walk.arena.int(0);
+        let fact = walk.arena.ge(len, zero);
+        bounding_push(&walk, facts, fact);
+    }
 }
 
 pub(crate) fn bounding_children(walk: &mut BoundsWalk, expr: &Expr, facts: &mut BoundsFacts, context: &BoundsContext, program: &Program, words: &winnow_grammar::InternerContext, ask: &mut dyn FnMut(&logic::TermArena, &[i64], i64) -> bool) {

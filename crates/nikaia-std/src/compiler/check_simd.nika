@@ -14,7 +14,7 @@ use std::collections
 
 /// **`std::simd`'s kinds**: `"Lanes"`, `"Fixed"` or `"Mask"` for one of its
 /// vectors or masks, `""` for any other type.
-fn check_simd_kind(ty: ref Ty) -> String sync {
+pub fn check_simd_kind(ty: ref Ty) -> String sync {
     return match ty {
         Ty::Named { name, view, .. } => if view {
             ""
@@ -371,6 +371,170 @@ impl CheckState {
             }
         }
     }
+
+    /// **A lookup by indices known at run time** (D10): `lookup` and
+    /// `lookup_or_zero` are `Fixed[u8, N]`'s only (`NK1171` on any other lane),
+    /// and every lane of `lookup`'s index is proved below `N` (`NK1298`).
+    fn a_lookup_out_of_lanes(ref mut self, world: ref CheckWorld, on: ref Ty, method: ref String, args: ref Vec[Expr], span: ref Span) sync {
+        if (method != "lookup" && method != "lookup_or_zero") || check_simd_kind(on) != "Fixed" {
+            return
+        }
+        let lane = check_simd_lane_of(on)
+        if lane != "u8" {
+            self.findings.push(check_refusal("NK1171", span, f"`{on.shown()}` has no method called `{method}`.", [f"`{method}` picks bytes from a table of bytes: it is offered on `simd::Fixed[u8, N]` only (ADR-377 D10)."], "Write the table and the indices as `simd::Fixed[u8, N]`, or pick lane by lane with `lane(i)`."))
+            return
+        }
+        let count = check_simd_count_of(on)
+        if args.len() != 1 || count == 0 {
+            return
+        }
+        let given: i64 = self.lanes_counted(world, args[0]) ?? count
+        if given != count {
+            self.findings.push(check_refusal("NK1102", span, f"`simd::Fixed::{method}` expects `idx` to be `simd::Fixed[u8, {count}]`, but you're passing `simd::Fixed[u8, {given}]`.", [f"The index picks one byte of the table for each of its lanes, so it has as many lanes as the table (ADR-377 D10)."], f"Write the index with {count} lanes, as the table has."))
+            return
+        }
+        if method != "lookup" {
+            return
+        }
+        let most: i64? = self.lanes_at_most(world, args[0])
+        let help: String = f"Write `lookup_or_zero`, which answers 0 for an index of {count} or more, or bound the index with `& simd::splat({count - 1})`."
+        let note: String = f"Each lane of the index picks a byte of the table, from 0 to {count - 1}; the checker proves it from a `simd::Fixed::from([…])` of constants, `& simd::splat(c)`, `.min(simd::splat(c))`, a `simd::select` of two proved vectors, a lookup from a proved table, or an element of a `let` list of these (ADR-377 D10)."
+        if most == null {
+            self.findings.push(check_refusal("NK1298", span, f"A lookup's index is not proved below the {count} lanes of a `{on.shown()}`.", [note], help))
+            return
+        }
+        let at_most = most ?? 0
+        if at_most >= count {
+            self.findings.push(check_refusal("NK1298", span, f"A lookup's index can be {at_most}, outside the {count} lanes of a `{on.shown()}`.", [note], help))
+        }
+    }
+
+    /// **How many lanes a lookup's index has**, where its type says it: a name
+    /// bound to a `Fixed`, a `simd::Fixed::from([…])`, and an operation that
+    /// keeps the lanes of its first operand. Nothing where it says none.
+    fn lanes_counted(ref self, world: ref CheckWorld, value: ref Expr) -> i64? sync {
+        return match value {
+            Expr::Variable(name, _) => {
+                let local: CheckLocal = self.binding(world.words.resolve(name)) ?? return null
+                let count = check_simd_count_of(value_of_a_copy(local.ty.unseen()))
+                if count > 0 { count } else { null }
+            },
+            Expr::Call { func, args, .. } => {
+                let parts = match func {
+                    Expr::Path(parts, _) => parts,
+                    else => return null,
+                }
+                let mut written: Vec[String] = []
+                for part in parts {
+                    written.push(world.words.resolve(part).clone())
+                }
+                if written.join("::") != "simd::Fixed::from" || args.len() != 1 {
+                    return null
+                }
+                match args[0] {
+                    Expr::ListLit { items, .. } => items.len() as i64,
+                    else => null,
+                }
+            },
+            Expr::Binary { lhs, .. } => self.lanes_counted(world, lhs),
+            Expr::MethodCall { receiver, .. } => self.lanes_counted(world, receiver),
+            else => null,
+        }
+    }
+
+    /// **The most any lane of a byte vector can hold** (D10), from what the
+    /// program says of it: a `simd::Fixed::from([…])` or a `simd::splat` of
+    /// constants, `x & simd::splat(c)` and `x.min(simd::splat(c))` (at most
+    /// `c`), a `simd::select` of two such, a lookup from such a table, an
+    /// element of a list of such, and a name a `let` bound to one. Nothing
+    /// where it says none of these.
+    pub fn lanes_at_most(ref self, world: ref CheckWorld, value: ref Expr) -> i64? sync {
+        return match value {
+            Expr::Call { func, args, .. } => self.lanes_at_most_made(world, func, args),
+            Expr::Binary { op, lhs, rhs, .. } => if op == BinaryOp::BitAnd {
+                check_simd_least(self.lanes_at_most(world, lhs), self.lanes_at_most(world, rhs))
+            } else {
+                null
+            },
+            Expr::MethodCall { receiver, method, args, .. } => {
+                let name = world.words.resolve(method)
+                if name == "min" && args.len() == 1 {
+                    check_simd_least(self.lanes_at_most(world, receiver), self.lanes_at_most(world, args[0]))
+                } else if (name == "lookup" || name == "lookup_or_zero") && args.len() == 1 {
+                    self.lanes_at_most(world, receiver)
+                } else {
+                    null
+                }
+            },
+            Expr::Index { base, .. } => self.lanes_at_most(world, base),
+            Expr::ListLit { items, .. } => self.lanes_at_most_all(world, items),
+            Expr::Variable(name, _) => {
+                let local: CheckLocal = self.binding(world.words.resolve(name)) ?? return null
+                local.lanes_at_most
+            },
+            else => null,
+        }
+    }
+
+    /// `simd::Fixed::from([…])`, `simd::splat(c)` and `simd::select(m, a, b)`:
+    /// the most a lane of what they make holds.
+    fn lanes_at_most_made(ref self, world: ref CheckWorld, func: ref Expr, args: ref Vec[Expr]) -> i64? sync {
+        let parts = match func {
+            Expr::Path(parts, _) => parts,
+            else => return null,
+        }
+        let mut written: Vec[String] = []
+        for part in parts {
+            written.push(world.words.resolve(part).clone())
+        }
+        let path = written.join("::")
+        if path == "simd::Fixed::from" && args.len() == 1 {
+            return match args[0] {
+                Expr::ListLit { items, .. } => self.lanes_at_most_all(world, items),
+                else => null,
+            }
+        }
+        if path == "simd::splat" && args.len() == 1 {
+            return check_simd_constant(args[0])
+        }
+        if path == "simd::select" && args.len() == 3 {
+            let a: i64 = self.lanes_at_most(world, args[1]) ?? return null
+            let b: i64 = self.lanes_at_most(world, args[2]) ?? return null
+            return if a > b { a } else { b }
+        }
+        return null
+    }
+
+    /// The most of every item's lanes, each a constant or a vector this
+    /// proves; nothing where one is not.
+    fn lanes_at_most_all(ref self, world: ref CheckWorld, items: ref Vec[Expr]) -> i64? sync {
+        if items.len() == 0 {
+            return null
+        }
+        let mut most = 0
+        for item in items {
+            let one: i64 = check_simd_constant(item) ?? (self.lanes_at_most(world, item) ?? return null)
+            if one > most {
+                most = one
+            }
+        }
+        return most
+    }
+}
+
+/// **A constant lane**: the literal written, at least 0, or nothing.
+fn check_simd_constant(value: ref Expr) -> i64? sync {
+    return match value {
+        Expr::LitInt { value, negative, .. } => if negative { null } else { value as i64 },
+        else => null,
+    }
+}
+
+/// The smaller of two bounds where both are known, else the one that is.
+fn check_simd_least(a: i64?, b: i64?) -> i64? sync {
+    let left: i64 = a ?? return b
+    let right: i64 = b ?? return left
+    return if left < right { left } else { right }
 }
 
 /// **The methods only integer lanes have** (D3, D4): not offered on float
