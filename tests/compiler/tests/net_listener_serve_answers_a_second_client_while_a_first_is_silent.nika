@@ -25,7 +25,7 @@ fn clients(at: String) throws {
 fn main() throws {
     let listener = net::listen("127.0.0.1:0")
     let at = listener.address()
-    let client = spawn fn { clients(at) }
+    let client = async(detached) fn { clients(at) }
     listener.serve(fn(mut conn) { echo(conn) }; connections: 2)
     client.join()
     println("serve returned after two connections")

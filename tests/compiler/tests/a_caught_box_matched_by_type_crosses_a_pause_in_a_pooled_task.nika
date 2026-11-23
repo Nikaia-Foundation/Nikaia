@@ -30,7 +30,7 @@ fn wait(at: String) -> String throws {
 fn main() throws {
     let listener = net::listen("127.0.0.1:0")
     let at = listener.address()
-    let waiting = spawn fn { wait(at) }
+    let waiting = async(detached) fn { wait(at) }
     let silent = listener.accept()
     println(waiting.join())
     silent.close()

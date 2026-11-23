@@ -131,7 +131,7 @@ test "the counter of part ii 12 2 runs at both settings" {
 // caller's own handle survives the `spawn`.
 test "a handle a task uses is duplicated and the name survives" {
     let counter = SharedMut(0)
-    let t = spawn fn { counter.update fn(mut alt) { alt += 1 } }
+    let t = async(detached) fn { counter.update fn(mut alt) { alt += 1 } }
     t.join()
     let total = counter.get()
     assert(total == 1)
@@ -151,10 +151,10 @@ fn shared_bump(counter: SharedMut[i64], times: i64) {
 // Part II 11.2 applied to the thing hardest to keep uniform.
 test "a lock shared by four tasks counts every increment" {
     let counter = SharedMut(0)
-    let a = spawn fn { shared_bump(counter, 2500) }
-    let b = spawn fn { shared_bump(counter, 2500) }
-    let c = spawn fn { shared_bump(counter, 2500) }
-    let d = spawn fn { shared_bump(counter, 2500) }
+    let a = async(detached) fn { shared_bump(counter, 2500) }
+    let b = async(detached) fn { shared_bump(counter, 2500) }
+    let c = async(detached) fn { shared_bump(counter, 2500) }
+    let d = async(detached) fn { shared_bump(counter, 2500) }
     a.join()
     b.join()
     c.join()

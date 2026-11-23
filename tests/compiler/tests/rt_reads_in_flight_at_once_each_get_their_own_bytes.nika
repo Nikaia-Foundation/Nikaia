@@ -10,23 +10,11 @@ fn main() throws {
 	let tmp = fs::scratch()
 	fs::write("a", tmp, "eins")
 	fs::write("b", tmp, "zweizwei")
-	let (a, b) = overlap {
-		fs::read_to_string("a", tmp)
-		fs::read_to_string("b", tmp)
-	}
+	let (a, b) = (async fs::read_to_string("a", tmp), async fs::read_to_string("b", tmp))
 	println(f"{a} {b}")
 	for n in 1..<9 {
 		fs::write(f"{n}", tmp, "x".repeat(n))
 	}
-	let (r1, r2, r3, r4, r5, r6, r7, r8) = overlap {
-		fs::read_to_string("1", tmp)
-		fs::read_to_string("2", tmp)
-		fs::read_to_string("3", tmp)
-		fs::read_to_string("4", tmp)
-		fs::read_to_string("5", tmp)
-		fs::read_to_string("6", tmp)
-		fs::read_to_string("7", tmp)
-		fs::read_to_string("8", tmp)
-	}
+	let (r1, r2, r3, r4, r5, r6, r7, r8) = (async fs::read_to_string("1", tmp), async fs::read_to_string("2", tmp), async fs::read_to_string("3", tmp), async fs::read_to_string("4", tmp), async fs::read_to_string("5", tmp), async fs::read_to_string("6", tmp), async fs::read_to_string("7", tmp), async fs::read_to_string("8", tmp))
 	println(f"{r1.len()} {r2.len()} {r3.len()} {r4.len()} {r5.len()} {r6.len()} {r7.len()} {r8.len()}")
 }

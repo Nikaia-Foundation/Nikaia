@@ -23,7 +23,7 @@ fn write(list: SharedMut[Vec[i64]]) -> i64 {
 fn main() throws {
 	let list: SharedMut[Vec[i64]] = SharedMut([1])
 	let other: SharedMut[Vec[i64]] = SharedMut([7])
-	let crossed = spawn fn { list.get().len() + other.get().len() }
+	let crossed = async(detached) fn { list.get().len() + other.get().len() }
 	println(f"crossed: {crossed.join()}")
 	let a = async grow(list) catch { 0 }
 	println("the first task runs")

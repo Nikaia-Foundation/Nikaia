@@ -3,7 +3,7 @@
 
 fn main() throws {
 	let names: Vec[String] = ["a", "b"]
-	let h = spawn fn {
+	let h = async(detached) fn {
 		match 1 {
 			n if n < names.len() => n,
 			else => 0,

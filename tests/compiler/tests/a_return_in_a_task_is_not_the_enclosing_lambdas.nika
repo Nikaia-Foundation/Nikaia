@@ -3,7 +3,7 @@
 fn main() throws {
     let xs: Vec[i64] = [1, 7]
     let ys = xs.iter().map(fn(n) {
-        let h = spawn fn {
+        let h = async(detached) fn {
             if n > 100 {
                 return "big"
             }

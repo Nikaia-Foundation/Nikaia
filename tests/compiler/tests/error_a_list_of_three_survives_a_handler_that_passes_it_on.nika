@@ -19,11 +19,7 @@ fn step(which: String) -> String throws {
 }
 
 fn three() -> String throws {
-	let all = overlap {
-		step("first")
-		step("second")
-		step("third")
-	}
+	let all = (async step("first"), async step("second"), async step("third"))
 	return all.0 + all.1 + all.2
 }
 

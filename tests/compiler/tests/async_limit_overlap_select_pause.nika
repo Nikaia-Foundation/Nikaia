@@ -21,10 +21,7 @@ fn main() throws {
 		let b = async work(2, started)
 		let c = async work(3, started)
 		println(f"before the overlap, {started.get()} started")
-		let both = overlap {
-			nap(30)
-			nap(40)
-		}
+		let both = (async nap(30), async nap(40))
 		println(f"after the overlap, {started.get()} started, {both.0 + both.1}")
 		a + b + c
 	}

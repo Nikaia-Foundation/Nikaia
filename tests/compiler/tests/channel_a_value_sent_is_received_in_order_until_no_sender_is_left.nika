@@ -9,7 +9,7 @@ fn main() throws {
     let (tx, rx) = channel::bounded[i64](4)
     tx.send(7)
     println(rx.recv() ?? -1)
-    spawn fn {
+    async(detached) fn {
         for n in 1..<4 {
             tx.send(n)
         }

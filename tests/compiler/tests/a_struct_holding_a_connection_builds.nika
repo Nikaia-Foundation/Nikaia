@@ -31,7 +31,7 @@ struct Worker {
 
 fn main() throws {
 	let (send, receive) = channel::bounded[i64](1)
-	let worker = Worker { task: spawn fn { 41 }, results: send, name: "w" }
+	let worker = Worker { task: async(detached) fn { 41 }, results: send, name: "w" }
 	worker.results.send(worker.task.join() + 1)
 	println(f"{worker.name}: {receive.recv() ?? 0}")
 }

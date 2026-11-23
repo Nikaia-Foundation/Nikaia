@@ -21,10 +21,7 @@ fn load(which: String) -> String throws {
 }
 
 fn main() throws {
-    let pair = overlap {
-        load("c")
-        load("d")
-    }
+    let pair = (async load("c"), async load("d"))
     println(f"{pair.0} {pair.1}")
     let failed = overlap {
         load("a")
