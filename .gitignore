@@ -44,8 +44,6 @@ node_modules/
 /benches/*.rs
 /benches/nikaia.contracts
 /benches/nikaia.derived
-/benches/game/*/nikaia.contracts
-/benches/game/*/nikaia.derived
 /tests/samples/*.rs
 /tests/samples/nikaia.contracts
 /tests/samples/nikaia.derived
