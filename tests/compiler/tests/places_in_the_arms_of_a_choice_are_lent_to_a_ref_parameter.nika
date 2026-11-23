@@ -1,0 +1,46 @@
+// An `if` or a `match` whose arms are places (an element, a field) handed to
+// a `ref` parameter lends each arm, as it lends an owned local (#897): moving
+// the place would take it out of what it is read from. Rust refused the
+// moving form ("cannot move out of a shared reference", NK1343).
+
+struct Big {
+    name: String,
+}
+
+struct Pair {
+    left: Big,
+    right: Big,
+}
+
+fn size(b: ref Big) -> i64 {
+    return b.name.len()
+}
+
+fn by_index(xs: ref Array[Big], first: bool) -> i64 {
+    return size(if first { xs[0] } else { xs[1] })
+}
+
+fn by_field(p: ref Pair, left: bool) -> i64 {
+    return size(if left { p.left } else { p.right })
+}
+
+fn by_match(xs: ref Array[Big], at: i64) -> i64 {
+    return size(match at {
+        0 => xs[0],
+        else => xs[1],
+    })
+}
+
+fn main() throws {
+    let xs = [Big { name: "ab" }, Big { name: "cde" }]
+    println(by_index(xs, true))
+    println(by_index(xs, false))
+    let p = Pair { left: Big { name: "x" }, right: Big { name: "yyyy" } }
+    println(by_field(p, true))
+    println(by_field(p, false))
+    println(by_match(xs, 0))
+    println(by_match(xs, 1))
+    let owned = [Big { name: "local" }, Big { name: "s" }]
+    println(size(if xs.len() > 1 { owned[0] } else { owned[1] }))
+    println(owned[0].name)
+}
