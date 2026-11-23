@@ -1,0 +1,16 @@
+// A detached task that pauses, started in a group whose main line is gated
+// (a child task that pauses beside it), polls no gate of that group: it runs
+// on past the group (ADR-async-5 D13, D37, #989). The lowering wrote the
+// group's gate into the free task's body, which rustc refused.
+use std::time
+
+fn later(n: i64) -> i64 {
+	time::sleep(10.millis())
+	return n
+}
+
+fn main() throws {
+	let h = async(handle) fn { later(1) }
+	let d = async(detached) fn { later(2) }
+	println(f"{h.join()} {d.join()}")
+}

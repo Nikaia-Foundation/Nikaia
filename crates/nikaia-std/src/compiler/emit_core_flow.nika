@@ -1681,6 +1681,11 @@ impl EmitState {
         // the strategy admits it.
         let admission = walk.async_admission.clone()
         walk.async_admission = ""
+        // **A free task polls no gate of the group it starts in**
+        // (ADR-async-5 D13, D37): it runs on past that group, so a pause in
+        // its body is a plain `.await`, as in a child task's body.
+        let outer_gates = walk.async_gates.clone()
+        walk.async_gates = []
         let mut first: String = ""
         if admission != "" {
             first = "nikaia_std::task::admission_first(__nikaia_admission).await; "
@@ -1797,6 +1802,7 @@ impl EmitState {
         if opened {
             out.push(" }")
         }
+        walk.async_gates = outer_gates
     }
 }
 
