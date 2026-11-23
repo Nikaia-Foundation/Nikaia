@@ -606,8 +606,8 @@ impl BigInt {
 
     /// **The consuming twins** (ADR-text-reuse-1 D6): `add`, `sub`, `neg`
     /// and `abs` where the receiver is not read again, the result written
-    /// into its digits. The emitter picks them at such a site; they are no
-    /// name of the ledger, so no program calls them.
+    /// into its digits. The emitter picks them at such a site; they are in the
+    /// ledger like any method, but no program writes their names.
     /// A receiver of one digit has no buffer to work in, and its result
     /// needs none unless `other`'s is copied.
     pub fn add_own(keep self, other: ref BigInt) -> BigInt sync {

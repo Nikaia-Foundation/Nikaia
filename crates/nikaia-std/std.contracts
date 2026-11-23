@@ -8836,7 +8836,7 @@ signature = "(self: ref winnow_grammar::Symbol) -> winnow_grammar::Symbol"
 # written in Nikaia (`src/bigint.nika`). Not in the prelude.
 [type."bigint::BigInt"]
 pub = true
-fields = ["sign: i64", "digits: Vec[u64]"]
+fields = ["sign: i64", "low: u64", "digits: Vec[u64]"]
 compares = true
 equates = true
 hashes = true
@@ -8848,13 +8848,28 @@ panics = false
 touches = []
 signature = "(ref self) -> bigint::BigInt"
 
-[fn."bigint::BigInt::add"]
+[fn."bigint::BigInt::abs_own"]
 pub = true
 sync = true
 panics = false
 touches = []
+signature = "(self) -> bigint::BigInt"
+
+[fn."bigint::BigInt::add"]
+pub = true
+sync = true
+panics = true
+touches = []
 views = ["other: borrowed"]
 signature = "(ref self, other: ref bigint::BigInt) -> bigint::BigInt"
+
+[fn."bigint::BigInt::add_own"]
+pub = true
+sync = true
+panics = true
+touches = []
+views = ["other: borrowed"]
+signature = "(self, other: ref bigint::BigInt) -> bigint::BigInt"
 
 [fn."bigint::BigInt::bits"]
 pub = true
@@ -8915,6 +8930,13 @@ panics = true
 touches = []
 signature = "(ref self) -> bigint::BigInt"
 
+[fn."bigint::BigInt::neg_own"]
+pub = true
+sync = true
+panics = true
+touches = []
+signature = "(self) -> bigint::BigInt"
+
 [fn."bigint::BigInt::of"]
 pub = true
 sync = true
@@ -8945,6 +8967,14 @@ touches = []
 views = ["other: borrowed"]
 signature = "(ref self, other: ref bigint::BigInt) -> bigint::BigInt"
 
+[fn."bigint::BigInt::sub_own"]
+pub = true
+sync = true
+panics = true
+touches = []
+views = ["other: borrowed"]
+signature = "(self, other: ref bigint::BigInt) -> bigint::BigInt"
+
 [fn."bigint::BigInt::to_text"]
 pub = true
 sync = true
@@ -8953,11 +8983,27 @@ places = true
 touches = []
 signature = "(ref self) -> String"
 
+[fn."bigint::added_in"]
+sync = true
+keeps = ["kept"]
+panics = false
+touches = []
+views = ["other: borrowed"]
+signature = "(own: i64, kept: Vec[u64], sign: i64, other: ref bigint::BigInt) -> bigint::BigInt"
+
 [fn."bigint::bits_from"]
 sync = true
 panics = true
 touches = []
-signature = "(a: Vec[u64], from: i64) -> i64"
+views = ["n: borrowed"]
+signature = "(n: ref bigint::BigInt, from: i64) -> i64"
+
+[fn."bigint::digit_of"]
+sync = true
+panics = false
+touches = []
+views = ["n: borrowed"]
+signature = "(n: ref bigint::BigInt, at: i64) -> u64"
 
 [fn."bigint::made"]
 sync = true
@@ -8971,6 +9017,24 @@ sync = true
 panics = false
 touches = []
 signature = "(a: Vec[u64], b: Vec[u64]) -> Vec[u64]"
+
+[fn."bigint::magnitude_add_digit"]
+sync = true
+panics = false
+touches = []
+signature = "(a: Vec[u64], d: u64) -> Vec[u64]"
+
+[fn."bigint::magnitude_add_digit_in"]
+sync = true
+panics = false
+touches = []
+signature = "(mut a: Vec[u64], d: u64)"
+
+[fn."bigint::magnitude_add_in"]
+sync = true
+panics = false
+touches = []
+signature = "(mut a: Vec[u64], b: Vec[u64])"
 
 [fn."bigint::magnitude_compare"]
 sync = true
@@ -9002,11 +9066,48 @@ panics = false
 touches = []
 signature = "(a: Vec[u64], b: Vec[u64]) -> Vec[u64]"
 
+[fn."bigint::magnitude_mul_digit"]
+sync = true
+panics = false
+touches = []
+signature = "(a: Vec[u64], d: u64) -> Vec[u64]"
+
 [fn."bigint::magnitude_sub"]
 sync = true
 panics = false
 touches = []
 signature = "(a: Vec[u64], b: Vec[u64]) -> Vec[u64]"
+
+[fn."bigint::magnitude_sub_in"]
+sync = true
+panics = false
+touches = []
+signature = "(mut a: Vec[u64], b: Vec[u64])"
+
+[fn."bigint::magnitude_sub_digit"]
+sync = true
+panics = false
+touches = []
+signature = "(a: Vec[u64], d: u64) -> Vec[u64]"
+
+[fn."bigint::magnitude_sub_digit_in"]
+sync = true
+panics = false
+touches = []
+signature = "(mut a: Vec[u64], d: u64)"
+
+[fn."bigint::magnitude_sub_from_in"]
+sync = true
+panics = false
+touches = []
+signature = "(mut a: Vec[u64], b: Vec[u64])"
+
+[fn."bigint::magnitudes_compared"]
+sync = true
+panics = false
+touches = []
+views = ["x: borrowed", "y: borrowed"]
+signature = "(x: ref bigint::BigInt, y: ref bigint::BigInt) -> i64"
 
 [fn."bigint::shifted_down"]
 sync = true
@@ -9019,6 +9120,26 @@ sync = true
 panics = true
 touches = []
 signature = "(a: Vec[u64], by: u32) -> Vec[u64]"
+
+[fn."bigint::signed"]
+sync = true
+panics = false
+touches = []
+views = ["n: borrowed"]
+signature = "(sign: i64, n: ref bigint::BigInt) -> bigint::BigInt"
+
+[fn."bigint::small"]
+sync = true
+panics = false
+touches = []
+signature = "(sign: i64, d: u64) -> bigint::BigInt"
+
+[fn."bigint::summed"]
+sync = true
+panics = true
+touches = []
+views = ["x: borrowed", "y: borrowed"]
+signature = "(xs: i64, x: ref bigint::BigInt, ys: i64, y: ref bigint::BigInt) -> bigint::BigInt"
 
 [fn."bigint::trimmed"]
 sync = true
