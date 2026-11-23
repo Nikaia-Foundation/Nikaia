@@ -1,0 +1,67 @@
+// **A `par_iter` walk collected into a list hands back the list it made**
+// (ADR-async-5 D26, D28, #2768): where no element failed, the values come
+// back in input order, whatever their size against the failure's (a whole
+// number, a text, a struct holding both, nothing at all), and an empty walk
+// is an empty list; where one failed, the first failure in input order is
+// thrown with the later ones as its `secondary` list, the first element or
+// only the last one alike.
+enum Bad { Oops(i64) }
+
+impl Error for Bad {
+	fn message(ref self) -> String {
+		return match self {
+			Bad::Oops(n) => f"element {n} failed",
+		}
+	}
+}
+
+struct Named {
+	name: String,
+	n: i64,
+}
+
+fn work(n: i64) -> i64 throws {
+	if n > 5 {
+		throw Bad::Oops(n)
+	}
+	return n * 2
+}
+
+fn text(n: i64) -> String throws {
+	if n > 5 {
+		throw Bad::Oops(n)
+	}
+	return f"<{n}>"
+}
+
+fn named(n: i64) -> Named throws {
+	if n > 5 {
+		throw Bad::Oops(n)
+	}
+	return Named { name: f"n{n}", n: n * 10 }
+}
+
+fn main() throws {
+	let fine = [1, 2, 3, 4]
+	let doubled: Vec[i64] = fine.par_iter().map(fn(x) { work(x) }).collect() catch { [] }
+	println(f"{doubled.len()}: {doubled[0]} {doubled[1]} {doubled[2]} {doubled[3]}")
+	let texts: Vec[String] = fine.par_iter().map(fn(x) { text(x) }).collect() catch { [] }
+	println(f"{texts.len()}: {texts[0]}{texts[1]}{texts[2]}{texts[3]}")
+	let structs: Vec[Named] = fine.par_iter().map(fn(x) { named(x) }).collect() catch { [] }
+	println(f"{structs.len()}: {structs[0].name} {structs[3].name} {structs[3].n}")
+	let none: Vec[i64] = []
+	let empty: Vec[i64] = none.par_iter().map(fn(x) { work(x) }).collect() catch { [1] }
+	println(f"empty: {empty.len()}")
+	let at_first = [9, 1, 2, 7]
+	let failed: Vec[String] = at_first.par_iter().map(fn(x) { text(x) }).collect() catch {
+		println(error.full())
+		[]
+	}
+	println(f"first: {failed.len()}")
+	let at_last = [1, 2, 3, 8]
+	let last: Vec[Named] = at_last.par_iter().map(fn(x) { named(x) }).collect() catch {
+		println(error.full())
+		[]
+	}
+	println(f"last: {last.len()}")
+}

@@ -647,6 +647,11 @@ pub(crate) fn check_core_call_on_failed_through(state: &mut CheckState, args: &[
     true
 }
 
+pub(crate) fn check_core_call_on_places<H: CheckHost>(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, host: &H, lambda: &Expr) -> bool {
+    let facts = PanicFacts { checked: true, arithmetic: state.facts.arithmetic.copy_owned(), negations: state.facts.negations.copy_owned(), shifts: state.facts.shifts.copy_owned(), map_keys: state.facts.map_keys.keys().map(|key| { key.0 }).collect(), proven_indices: collections::BTreeSet::new(), proven_arithmetic: collections::BTreeSet::new(), proven_negations: collections::BTreeSet::new(), placed: state.facts.placed_in_block.copy_owned() };
+    places_of_task(lambda, world.here.items, world.words, &mut |literal| { host.literal_holes(literal) }, &facts, world.own, world.library)
+}
+
 pub(crate) fn check_core_call_on_hands_back_a_sequence(contract: &FnContract) -> bool {
     let signature = match contract.signature.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return false };
     let result = match signature.result.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return false };
@@ -1164,10 +1169,15 @@ pub(crate) fn check_core_call_on_described<H: CheckHost>(state: &mut CheckState,
             let at = nikaia_std::num::value(at);
             if at < found.len() as i64 { { let __nikaia_stored = check_core_call_on_unfailing_fn(unsafe { nikaia_std::proven::read(&found, (at) as usize) }); unsafe { nikaia_std::proven::write(&mut found, (at) as usize, __nikaia_stored) }; } }
         }
-        let seen: CheckGuarded = nikaia_std::index::or(match state.flow.guarded.as_ref() {
+        let mut seen: CheckGuarded = nikaia_std::index::or(match state.flow.guarded.as_ref() {
             Some(__nikaia_it) => Some(__nikaia_it.clone()),
             None => None,
         }, || CheckGuarded::nothing());
+        if parallel && (key == "Seq::map" || key == "Seq::filter" || key == "Seq::for_each") && args.len() == 1 && !a_paused_chain(key, on) && !state.flow.paused_args.contains(&(id_of(unsafe { nikaia_std::proven::read(&args, (0) as usize) }) as i64)) && check_core_call_on_places(&state, world, host, unsafe { nikaia_std::proven::read(&args, (0) as usize) }) {
+            state.facts.blocked_lambdas.insert(id_of(unsafe { nikaia_std::proven::read(&args, (0) as usize) }) as i64);
+            seen.thrown.insert(String::from("task::OverBudget"));
+            state.flow.last_lambda_fails = true;
+        }
         state.flow.caught = outer_caught;
         state.flow.guarded = outer_guarded;
         failed_through = check_core_call_on_failed_through(state, args, &through, &seen, key, on, node, hands_back_a_sequence);

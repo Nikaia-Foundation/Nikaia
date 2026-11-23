@@ -1,0 +1,19 @@
+fits: 1 3 5
+map: the task is over its memory budget
+map: 0 values
+filter: the task is over its memory budget
+filter: 0 values
+for_each: the task is over its memory budget
+the task is over its memory budget
+  (raised below Nikaia; no site recorded)
+  (no trace; set NIKAIA_TRACE=1 to capture one)
+  and then:
+  the task is over its memory budget
+    (raised below Nikaia; no site recorded)
+  and then:
+  element 5 failed
+    raised at either
+both: 0 values
+own: the task is over its memory budget
+own: 0 values
+plain: 2 10

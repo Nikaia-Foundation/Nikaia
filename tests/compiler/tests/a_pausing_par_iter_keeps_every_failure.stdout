@@ -1,0 +1,8 @@
+element 2 failed
+  raised at slow
+  (no trace; set NIKAIA_TRACE=1 to capture one)
+  and then:
+  element 4 failed
+    raised at slow
+map: 0 values
+in order: 10 30 50

@@ -1,0 +1,37 @@
+// **A `par_iter` map whose lambda pauses and can fail keeps every failure**
+// (ADR-async-5 D24-D26, #987 item 4): one task per element, the first
+// failure in input order thrown with the later ones as its `secondary`
+// list, whatever order the tasks end in (the later elements sleep less, so
+// they end first); where none fails the values come back in input order.
+// Before, the chain's `collect` was a rustc error (NK1343): the walk's list
+// of values and failures was never taken apart.
+use std::time
+
+enum Bad { Oops(i64) }
+
+impl Error for Bad {
+    fn message(ref self) -> String {
+        return match self {
+            Bad::Oops(n) => f"element {n} failed",
+        }
+    }
+}
+
+fn slow(x: i64) -> i64 throws {
+    time::sleep((12 - 2 * x).millis())
+    if x % 2 == 0 {
+        throw Bad::Oops(x)
+    }
+    return x * 10
+}
+
+fn main() throws {
+    let xs = [1, 2, 3, 4, 5]
+    let ys: Vec[i64] = xs.par_iter().map(fn(x) { slow(x) }).collect() catch {
+        println(error.full())
+        []
+    }
+    println(f"map: {ys.len()} values")
+    let ok: Vec[i64] = [1, 3, 5].par_iter().map(fn(x) { slow(x) }).collect() catch { [] }
+    println(f"in order: {ok[0]} {ok[1]} {ok[2]}")
+}
