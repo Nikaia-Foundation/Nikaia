@@ -1,0 +1,16 @@
+warning[NK2123]: `spawn` is replaced by `async(detached)`, which starts the same task.
+   --> tests/spawn_is_warned_with_its_edit.nika:11:5
+    |
+ 11 |     let h = spawn fn { work(1) }
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: `spawn fn { … }` is the earlier spelling of `async(detached) fn { … }` (ADR-async-5 D13); it is removed once every use is rewritten.
+    = help: Write `async(detached) fn { … }`, the same task; `nikaia fix --only NK2123` makes the edit.
+warning[NK2123]: `spawn` is replaced by `async(detached)`, which starts the same task.
+   --> tests/spawn_is_warned_with_its_edit.nika:14:9
+    |
+ 14 |         let g = spawn fn { work(i) }
+    |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: `spawn fn { … }` is the earlier spelling of `async(detached) fn { … }` (ADR-async-5 D13); it is removed once every use is rewritten.
+    = help: `async(detached)` is refused inside a loop's body (`NK2120`): to run the body for every element beside the others, write `xs.par_iter().for_each fn(x) { … }`.

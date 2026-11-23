@@ -14,6 +14,7 @@ pub(crate) struct FixEdit {
     pub(crate) end: i64,
     pub(crate) text: String,
     pub(crate) code: String,
+    pub(crate) group: i64,
 }
 
 pub async fn fix_run<H: LspHost>(host: &H, named: &[String], dry_run: bool, only: &[String]) -> Result<i64, nikaia_std::error::Thrown<nikaia_std::io::IoError>> {
@@ -71,21 +72,35 @@ pub(crate) fn fix_planned(path: &str, source: &str, found: &[Shown], only: &[Str
     for shown in found.iter() { if !shown.warning && shown.edit.is_none() { return FixPlan { text: nikaia_std::block::Text::from(source.to_string()), said: vec![format!("{}: not fixed: its check has errors", path)], left: true }; } }
     let size = source.as_bytes().len() as i64;
     let mut edits: Vec<FixEdit> = nikaia_std::block::list(nikaia_std::block::Place::Block);
+    let mut group: i64 = 0;
     for shown in found.iter() {
         let edit = match shown.edit.as_ref() { Some(__nikaia_value) => __nikaia_value, None => continue };
         if !only.is_empty() && !nikaia_std::list::contains(&only, &shown.code) { continue; }
-        let one = FixEdit { start: edit.span.start as i64, end: edit.span.end as i64, text: nikaia_std::block::Text::from(edit.text.to_string()), code: nikaia_std::block::Text::from(shown.code.to_string()) };
-        if one.start > one.end || one.end > size { continue; }
-        if !edits.iter().any(|e| { e.start == one.start && e.end == one.end && e.text == one.text }) { edits.push(one); }
+        group = unsafe { nikaia_std::proven::add::<i64>(group, 1) };
+        let mut parts: Vec<FixEdit> = vec![FixEdit { start: edit.span.start as i64, end: edit.span.end as i64, text: nikaia_std::block::Text::from(edit.text.to_string()), code: nikaia_std::block::Text::from(shown.code.to_string()), group }];
+        parts.reserve(edit.also.iter().size_hint().0); for part in edit.also.iter() { parts.push(FixEdit { start: part.span.start as i64, end: part.span.end as i64, text: nikaia_std::block::Text::from(part.text.to_string()), code: nikaia_std::block::Text::from(shown.code.to_string()), group }); }
+        if parts.iter().any(|one| { one.start > one.end || one.end > size }) { continue; }
+        let first = (*unsafe { nikaia_std::proven::read(&parts, (0) as usize) }).clone();
+        if !edits.iter().any(|e| { e.start == first.start && e.end == first.end && e.text == first.text }) { edits.extend(parts); }
     }
     edits.sort_by_key(|e| { e.start });
+    let mut left: collections::BTreeSet<i64> = collections::BTreeSet::new();
+    let mut reach: i64 = 0;
+    for edit in edits.iter() {
+        if edit.start < reach { left.insert(edit.group); }
+        if edit.end > reach { reach = edit.end; }
+    }
+    let mut told: collections::BTreeSet<i64> = collections::BTreeSet::new();
     #[allow(unused_mut)] let mut said: Vec<String> = vec![];
     let mut out: String = String::from(""); #[allow(unused_mut, clippy::redundant_locals)] let mut said = said;
     let mut at: i64 = 0;
     for edit in edits.iter() {
         let line = fix_line_of(source, edit.start);
-        if edit.start < at {
-            said.push(format!("{}:{}: {}: not applied: it overlaps the edit before it", path, line, edit.code));
+        if left.contains(&edit.group) || edit.start < at {
+            if !told.contains(&edit.group) {
+                told.insert(edit.group);
+                said.push(format!("{}:{}: {}: not applied: it overlaps the edit before it", path, line, edit.code));
+            }
             continue;
         }
         let kept = match fix_cut(source, at, edit.start) { Some(__nikaia_value) => __nikaia_value, None => return fix_off_characters(path, source) };
@@ -93,7 +108,7 @@ pub(crate) fn fix_planned(path: &str, source: &str, found: &[Shown], only: &[Str
         out.push_str(&kept);
         out.push_str(&edit.text);
         at = edit.end;
-        if edit.text.is_empty() { said.push(format!("{}:{}: {}: deleted `{}`", path, line, edit.code, old)); } else { said.push(format!("{}:{}: {}: replaced `{}` with `{}`", path, line, edit.code, old, edit.text)); }
+        if edit.text.is_empty() { said.push(format!("{}:{}: {}: deleted `{}`", path, line, edit.code, old)); } else if old.is_empty() { said.push(format!("{}:{}: {}: inserted `{}`", path, line, edit.code, edit.text)); } else { said.push(format!("{}:{}: {}: replaced `{}` with `{}`", path, line, edit.code, old, edit.text)); }
     }
     let rest = match fix_cut(source, at, size) { Some(__nikaia_value) => __nikaia_value, None => return fix_off_characters(path, source) };
     out.push_str(&rest);

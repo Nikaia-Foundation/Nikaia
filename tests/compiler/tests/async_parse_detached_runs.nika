@@ -7,6 +7,6 @@ fn work(n: i64) -> i64 {
 
 fn main() throws {
 	let h = async(detached) fn { work(21) }
-	let s = spawn fn { work(4) }
+	let s = async(detached) fn { work(4) }
 	println(f"{h.join()} {s.join()}")
 }

@@ -15,10 +15,10 @@ fn one(_s: SharedMut[Noisy]) -> i64 {
 
 fn main() throws {
 	let kept = SharedMut(Noisy { name: "kept" })
-	let first = spawn fn { one(kept) }
+	let first = async(detached) fn { one(kept) }
 	println(f"the first task saw {first.join()} value")
 	let moved = SharedMut(Noisy { name: "moved" })
-	let second = spawn fn { one(moved) + one(kept) }
+	let second = async(detached) fn { one(moved) + one(kept) }
 	println(f"the second task saw {second.join()} values")
 	println("main goes on")
 }

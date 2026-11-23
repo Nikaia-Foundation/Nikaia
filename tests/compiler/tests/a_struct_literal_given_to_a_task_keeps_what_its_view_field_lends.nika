@@ -6,7 +6,7 @@ struct W { own: ref L, k: i64 }
 
 fn go(l: L) -> i64 {
     let w = W { own: l, k: 1 }
-    let t = spawn fn { w.own.n + w.k }
+    let t = async(detached) fn { w.own.n + w.k }
     return t.await
 }
 

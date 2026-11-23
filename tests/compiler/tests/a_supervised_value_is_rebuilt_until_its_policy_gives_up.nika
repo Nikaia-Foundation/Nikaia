@@ -31,7 +31,7 @@ fn first(list: SharedMut[Vec[i64]]) -> i64 {
 fn main() throws {
 	let cache: SharedMut[Vec[i64]] = SharedMut::supervised(fn { [10] })
 	let kept: SharedMut[Vec[i64]] = SharedMut::supervised(fn { [1] }; policy: Never {})
-	let crossed = spawn fn { cache.get().len() + kept.get().len() }
+	let crossed = async(detached) fn { cache.get().len() + kept.get().len() }
 	println(f"crossed: {crossed.join()}")
 	cache.set([11])
 	let a = async spoil(cache) catch { 0 }

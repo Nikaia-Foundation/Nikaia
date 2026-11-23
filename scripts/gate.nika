@@ -349,7 +349,7 @@ fn gate_test_all(dry: bool) -> String throws {
     process::run("mkdir", ["-p", "target/nikaia-project-tests"])
     let cache = process::run("realpath", ["target/nikaia-project-tests"]).stdout.trim().clone()
     let suite_exe = exe
-    let package = spawn fn { gate_package_suite(suite_exe, cache) }
+    let package = async(detached) fn { gate_package_suite(suite_exe, cache) }
     let cargo = gate_cargo_failed(["test", "--workspace", "--profile", "fast", "--no-fail-fast", "--", "--skip", skip], "4G")
     if cargo != "" { red.push(cargo) }
     let compiler = package.join()

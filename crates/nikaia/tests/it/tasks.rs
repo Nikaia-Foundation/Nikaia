@@ -27,7 +27,14 @@ fn findings(source: &str) -> Vec<Finding> {
     let parsed = parse_to_ast(source).expect("the source parses");
     let own = Ledger::infer(&parsed);
     let library = Ledger::parse(STD).expect("std's shipped ledger parses");
-    check::check(&parsed, &own, &library).findings
+    // `spawn`, `overlap` and `task::scope` stay accepted, with the deprecation
+    // warnings NK2123-NK2125 (ADR-async-5 D39), until they are removed; these
+    // tests are about what a task means, so the warnings are left out.
+    check::check(&parsed, &own, &library)
+        .findings
+        .into_iter()
+        .filter(|f| !matches!(f.code_str(), "NK2123" | "NK2124" | "NK2125"))
+        .collect()
 }
 
 fn lower(source: &str) -> String {
@@ -209,8 +216,8 @@ fn data_a_task_took_and_the_program_used_again_is_refused() {
     // The way out is named, and it is the one Part I 8.3 names.
     let help = found[0].help.clone().unwrap_or_default();
     assert!(help.contains("message.clone()"), "{help}");
-    // Nikaia's words and not the backend's.
-    for backend in ["closure", "borrow of moved", "async"] {
+    // Nikaia's words and not the backend's (`async(detached)` is Nikaia's own).
+    for backend in ["closure", "borrow of moved", "async move"] {
         assert!(!format!("{found:?}").contains(backend), "`{backend}`");
     }
 }

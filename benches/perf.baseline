@@ -1,0 +1,49 @@
+# The performance gate's baseline (#2811): `nikaia run scripts/perfgate.nika`
+# counts every row under callgrind and is red where a row's count exceeds
+# its baseline by more than its tolerance, or where its output's digest
+# changed. `--bless` writes the counts and digests back (after a change that
+# moves them on purpose, and says why in its commit). The format is in the
+# script's header. Every binary is built with one codegen unit, not
+# incremental (`[profile.perf]` in Cargo.toml, `codegen-units = 1` in the
+# Nikaia projects), so a count moves only with the code.
+#
+# The compiler, the measured one.
+build cargo build --quiet --profile perf -p nikaia --manifest-path {repo}/Cargo.toml
+# The Rust references, at the same setting: brc's in the workspace, the
+# game's entries in a workspace of their own, the solver kernels by rustc.
+build cargo build --quiet --profile perf -p brc-bench --manifest-path {repo}/Cargo.toml
+build CARGO_PROFILE_RELEASE_CODEGEN_UNITS=1 CARGO_PROFILE_RELEASE_INCREMENTAL=false CARGO_TARGET_DIR={work}/game-target cargo build --quiet --release --manifest-path {repo}/benches/game/Cargo.toml --bin n-body --bin spectral-norm --bin fannkuch-redux --bin binary-trees
+build mkdir -p {work}/bin && rustc --edition 2021 -C opt-level=3 -C codegen-units=1 -o {work}/bin/kernels.rust {repo}/benches/solver-workload/kernels.rs
+# brc's input, 100 000 rows from the fixed generator. `examples/1brc.nika`
+# beside the naive Rust entry: `benches/brc/fast.nika`, the tuned one, does
+# not build at 0.0.1556 (NK1300 on `Table::slot_of` and `Table::run`).
+build {repo}/target/perf/gen 100000 {work}/measurements.txt
+# The Nikaia programs, each a project of its own.
+nikaia brc examples/1brc.nika
+nikaia n-body benches/game/n-body/speed.nika
+nikaia spectral-norm benches/game/spectral-norm/speed.nika
+nikaia fannkuch-redux benches/game/fannkuch-redux/speed.nika
+nikaia binary-trees benches/game/binary-trees/main.nika
+nikaia kernels benches/solver-kernels.nika
+#
+# Compile rows, 2 %: the checker and the bounds prover on whole programs.
+# `packages/logic/src/sv_simplex.nika` is not here: `check --bounds` on it
+# checks the whole `logic` package, 52 s natively (2026-11-23), about 45
+# minutes under callgrind.
+row check.drive compile 127588608252 2 35880934efe5fea1 {nikaia} check --bounds scripts/drive.nika
+row check.gate compile 5132344282 2 2fde1241626c4a87 {nikaia} check --bounds scripts/gate.nika
+row check.game compile 2944541838 2 fa0874072ae900f2 {nikaia} check --bounds benches/game/game.nika
+#
+# Runtime rows, 1 %: each Nikaia program beside its tuned Rust entry.
+row brc.nikaia run 49279852 1 7d24c091bebf342a NIKAIA_RUNTIME_CONFIG={work}/brc/runtime.toml {work}/bin/brc {work}/measurements.txt
+row brc.rust run 173126856 1 7d24c091bebf342a {repo}/target/perf/naive {work}/measurements.txt
+row n-body.nikaia run 204915384 1 9f7da97662c75f74 NIKAIA_RUNTIME_CONFIG={work}/n-body/runtime.toml {work}/bin/n-body 200000
+row n-body.rust run 1048453866 1 9f7da97662c75f74 RAYON_NUM_THREADS=1 {work}/game-target/release/n-body 200000
+row spectral-norm.nikaia run 126304264 1 4f44d8ca1b8c1656 NIKAIA_RUNTIME_CONFIG={work}/spectral-norm/runtime.toml {work}/bin/spectral-norm 300
+row spectral-norm.rust run 79374438 1 4f44d8ca1b8c1656 RAYON_NUM_THREADS=1 {work}/game-target/release/spectral-norm 300
+row fannkuch-redux.nikaia run 684909734 1 bc5c97f77e1a6a67 NIKAIA_RUNTIME_CONFIG={work}/fannkuch-redux/runtime.toml {work}/bin/fannkuch-redux 9
+row fannkuch-redux.rust run 114987378 1 8240a83dc671a190 RAYON_NUM_THREADS=1 {work}/game-target/release/fannkuch-redux 9
+row binary-trees.nikaia run 893533370 1 b0af3a8c1c6ccf57 NIKAIA_RUNTIME_CONFIG={work}/binary-trees/runtime.toml {work}/bin/binary-trees 14
+row binary-trees.rust run 284118296 1 b0af3a8c1c6ccf57 RAYON_NUM_THREADS=1 {work}/game-target/release/binary-trees 14
+row kernels.nikaia run 1718731996 1 b7e637ab2b93b722 NIKAIA_RUNTIME_CONFIG={work}/kernels/runtime.toml {work}/bin/kernels 20000 all
+row kernels.rust run 2465304674 1 b7e637ab2b93b722 {work}/bin/kernels.rust 20000 all

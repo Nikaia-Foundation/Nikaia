@@ -12,9 +12,6 @@ fn sum(xs: Vec[i64]) -> i64 {
 fn main() throws {
     let overlap = 3
     println(f"{overlap}")
-    let r = overlap {
-        sum([1, 2, 3])
-        sum([4, 5])
-    }
+    let r = (async sum([1, 2, 3]), async sum([4, 5]))
     println(f"{r.0} {r.1}")
 }

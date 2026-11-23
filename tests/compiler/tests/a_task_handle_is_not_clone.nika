@@ -9,7 +9,7 @@ fn id[T: Clone](x: T) -> T {
 }
 
 fn main() throws {
-	let h = id(spawn fn { 3 })
-	let held = id(Held { h: spawn fn { 4 } })
+	let h = id(async(detached) fn { 3 })
+	let held = id(Held { h: async(detached) fn { 4 } })
 	println(f"{h.join()} {held.h.join()}")
 }

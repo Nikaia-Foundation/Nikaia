@@ -12,7 +12,7 @@ use std::time
 // only way the join below can answer is if the executor kept polling while
 // the waiting task was asleep.
 test "a sleep lets the other task run" {
-    let handle = spawn fn { 21 * 2 }
+    let handle = async(detached) fn { 21 * 2 }
     time::sleep(80.millis())
     let answer = handle.join()
     assert(answer == 42)

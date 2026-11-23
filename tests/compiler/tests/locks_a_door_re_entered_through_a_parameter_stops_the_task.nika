@@ -15,7 +15,7 @@ fn put(list: SharedMut[Vec[i64]]) -> i64 sync {
 
 fn main() throws {
 	let list: SharedMut[Vec[i64]] = SharedMut([1, 2, 3])
-	let crossed = spawn fn { list.get().len() }
+	let crossed = async(detached) fn { list.get().len() }
 	println(f"crossed: {crossed.join()}")
 	let a = async look(list, fn { list.get().len() }) catch { -1 }
 	println("the first task runs")

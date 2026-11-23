@@ -6,7 +6,7 @@ use std::channel
 
 fn main() throws {
     let (tx, rx) = channel::bounded[String](100)
-    spawn fn {
+    async(detached) fn {
         let state = "complete"
         tx.send(f"Calculation {state}")
     }
