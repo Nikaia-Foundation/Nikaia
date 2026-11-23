@@ -1,0 +1,376 @@
+// The performance gate (#2811): a fixed set of compile and runtime workloads
+// counted under callgrind against the last recorded baseline.
+//
+//     nikaia run scripts/perfgate.nika [-- --only TEXT] [--bless]
+//         [--baseline FILE] [--work DIR]
+//
+// Reads `benches/perf.baseline` (or FILE), runs its `build` lines in order
+// (the measured binaries, each built with one codegen unit: the `perf` Cargo
+// profile for the compiler and the Rust references, `codegen-units = 1` in the
+// Nikaia projects), then counts each `row` under `valgrind --tool=callgrind
+// --branch-sim=yes`. Each row's standard output is first compared, by its
+// digest, with the one recorded: a program that prints something else is
+// another program, and its count says nothing. Then one line per row:
+//
+//     PERF <name> <count> <baseline> <delta %>
+//
+// a row whose count passes its baseline by more than its tolerance adds
+// `over <tolerance>%`, and a row whose Rust counterpart (`<base>.rust` beside
+// `<base>.nikaia`) was counted too is followed by `RATIO <base> <x>`. Last
+// `Perf: green` (exit 0) or `Perf: red <rows>` (exit 1): a row over its
+// tolerance, with another output, or not yet recorded (count 0). A build or a
+// callgrind run that fails prints `Perf: error <what>` and exits 2.
+//
+// `--bless` writes every counted row's count and output digest back into the
+// baseline (comments and `build` lines kept), and exits 0: after an intended
+// change, a new row, or a toolchain (rustc, valgrind) update, in the same
+// commit. `--only TEXT` counts only the rows whose name contains TEXT (and
+// still runs every build line).
+//
+// Counts, never a clock (docs/measuring.md): the same binary's time moves
+// 1.4-1.9x between days, its instruction count does not.
+//
+// The baseline, one item per line; `#` starts a comment line:
+//
+//     build <shell command>
+//     nikaia <name> <source.nika> [<package>]
+//     row <name> <kind> <instructions> <tolerance %> <digest> <command>
+//
+// `build` runs a shell command from the repository's root. `nikaia` builds
+// the program `source` (from the root) as a project of its own under
+// `{work}/<name>` (opt-level 3, one codegen unit, not incremental; with
+// `packages/<package>` as a dependency) and copies the binary to
+// `{work}/bin/<name>`; it runs on the blocking I/O path through
+// `{work}/<name>/runtime.toml` (#1874: valgrind 3.22 does not block in the
+// executor's `io_uring_enter` wait). `kind` is `compile` or `run`;
+// `instructions` the recorded count (0: not recorded yet); `tolerance` a
+// percent (`2`, `0.5`); `digest` the first 16 hex digits of the SHA-256 of the
+// row's standard output (`-`: not recorded yet). `command` is the rest of the
+// line, run by `sh` from the root as `<VAR=value ...> valgrind ... <program
+// and arguments>`: leading `VAR=value` words are its environment, a `<` or
+// `>` in it applies to valgrind, which hands it on. A command that names
+// `$PERFGATE_CALLGRIND` is not wrapped: it runs as written, and the variable
+// holds the valgrind invocation to put where the counted process runs (a
+// `RUSTC` shim that counts only the program's crate, docs/measuring.md
+// #2016). Every callgrind output file of the row is summed.
+//
+// In every command `{repo}` is the repository's root, `{work}` the work
+// directory (default `target/perfgate`), `{nikaia}` the compiler the gate
+// counts (`target/perf/nikaia`). `$PERFGATE_VALGRIND` replaces `valgrind`
+// (the gate's own test counts through a stand-in).
+use std::cli
+use std::env
+use std::fs
+use std::path
+use std::process
+use std::text
+
+// One counted workload of the baseline.
+struct Row {
+	name: String,
+	kind: String,
+	instructions: i64,
+	tolerance: String,
+	digest: String,
+	command: String,
+}
+
+// What one row's run gave.
+struct Counted {
+	name: String,
+	instructions: i64,
+	digest: String,
+}
+
+fn sh(script: String) -> process::Output throws {
+	return process::run("sh", ["-c", script])
+}
+
+// The repository's root: two levels above this script.
+fn root() -> String throws {
+	return env::current_main()?.parent()?.parent()?.display() ?? "."
+}
+
+// Stops the gate: a build or a run the counts cannot do without.
+fn error(what: String, said: String) throws {
+	if said.len() > 0 {
+		println(said)
+	}
+	println(f"Perf: error {what}")
+	process::exit(2)
+}
+
+fn fill(command: String, repo: String, work: String, nikaia: String) -> String throws {
+	return command.replace(f"{{repo}}", repo).replace(f"{{work}}", work).replace(
+		f"{{nikaia}}",
+		nikaia,
+	)
+}
+
+// The words of a line after the first `skip`, joined by one space.
+fn rest(words: Vec[String], skip: i64) -> String throws {
+	let mut kept: Vec[String] = []
+	let mut i = 0
+	for w in words {
+		if i >= skip {
+			kept.push(w.clone())
+		}
+		i += 1
+	}
+	return kept.join(" ")
+}
+
+// A percent (`2`, `0.5`, `1.25`) in hundredths of a percent; -1 when it is
+// not one.
+fn hundredths(percent: String) -> i64 throws {
+	let parts: Vec[String] = percent.split(".").collect()
+	let whole = text::parse_i64(parts[0]) ?? -1
+	if whole < 0 || parts.len() > 2 { return -1 }
+	if parts.len() == 1 { return whole * 100 }
+	let digits = parts[1]
+	if digits.len() == 0 || digits.len() > 2 { return -1 }
+	let mut part = text::parse_i64(digits) ?? -1
+	if part < 0 { return -1 }
+	if digits.len() == 1 {
+		part = part * 10
+	}
+	return whole * 100 + part
+}
+
+// `count` against `base` in percent with two decimals and a sign: `+1.25`,
+// `-0.50`, `+0.00`.
+fn delta(count: i64, base: i64) -> String throws {
+	if base <= 0 { return "new" }
+	let diff = count - base
+	let mut size = diff
+	let mut sign = "+"
+	if diff < 0 {
+		size = 0 - diff
+		sign = "-"
+	}
+	let scaled = (size * 10000 + base / 2) / base
+	let fraction = f"{scaled % 100}"
+	return f"{sign}{scaled / 100}.{"0".repeat(2 - fraction.len())}{fraction}"
+}
+
+// `a / b` with two decimals.
+fn ratio(a: i64, b: i64) -> String throws {
+	if b <= 0 { return "-" }
+	let scaled = (a * 100 + b / 2) / b
+	let fraction = f"{scaled % 100}"
+	return f"{scaled / 100}.{"0".repeat(2 - fraction.len())}{fraction}"
+}
+
+// Writes the project of one `nikaia` line and builds it.
+fn build_nikaia(repo: String, work: String, at: String, nikaia: String, words: Vec[String]) throws {
+	if words.len() < 3 {
+		error(f"a nikaia line needs a name and a source: {words.join(" ")}", "")
+	}
+	let name = words[1].clone()
+	let source = words[2].clone()
+	let dir = f"{work}/{name}"
+	let made = sh(f"mkdir -p {dir}/src {work}/bin && cp {repo}/{source} {dir}/src/main.nika")
+	if made.code != 0 { error(f"copy of {source}", f"{made.stdout}{made.stderr}") }
+	let mut uses = String()
+	if words.len() > 3 {
+		uses = f"\n[dependencies]\n{words[3]} = {{ path = \"{repo}/packages/{words[3]}\" }}\n"
+	}
+	fs::write(
+		f"{at}/{name}/nikaia.toml",
+		fs::Root::Dir("."),
+		f"[package]\nname = \"perf\"\nversion = \"0.1.0\"\n\n[build.x86_64-linux]\nopt-level = 3\ncodegen-units = 1\nincremental = false\n{uses}",
+	)
+	fs::write(f"{at}/{name}/runtime.toml", fs::Root::Dir("."), "io-method = \"blocking\"\n")
+	let built = sh(f"cd {dir} && {nikaia} build >build.log 2>&1 && cp target/nikaia/bin/perf {work}/bin/{name}")
+	if built.code != 0 {
+		error(f"nikaia build of {source} (log in {dir}/build.log)", f"{built.stdout}{built.stderr}")
+	}
+}
+
+// Splits a row's command into its leading `VAR=value` words and the rest.
+fn split_env(command: String) -> Vec[String] throws {
+	let mut env_words: Vec[String] = []
+	let mut run: Vec[String] = []
+	for w in command.split_whitespace() {
+		if run.len() == 0
+			&& w.contains("=")
+			&& !w.starts_with("-")
+			&& !w.starts_with("{")
+			&& !w.starts_with("/") {
+				env_words.push(w.clone())
+			} else {
+				run.push(w.clone())
+			}
+	}
+	return [env_words.join(" "), run.join(" ")]
+}
+
+// Counts one row: its standard output's digest and the instructions summed
+// over every callgrind output file it left.
+fn count(
+	row: Row,
+	repo: String,
+	work: String,
+	command: String,
+	valgrind: String,
+) -> Counted throws {
+	let out = f"{work}/out/{row.name}"
+	sh(f"rm -f {out}.*.callgrind {out}.stdout {out}.log")
+	let callgrind = f"{valgrind} --tool=callgrind --branch-sim=yes --trace-children=no --callgrind-out-file={out}.%p.callgrind"
+	let parts = split_env(command)
+	let script = if command.contains("$PERFGATE_CALLGRIND") {
+		f"cd {repo} && export PERFGATE_CALLGRIND='{callgrind}'; {command} > {out}.stdout 2> {out}.log"
+	} else {
+		f"cd {repo} && {parts[0]} {callgrind} {parts[1]} > {out}.stdout 2> {out}.log"
+	}
+	let r = sh(script)
+	if r.code != 0 {
+		let tail = sh(f"tail -20 {out}.log").stdout
+		error(f"the run of {row.name} (exit {r.code}, log in {out}.log)", f"{tail}{r.stderr}")
+	}
+	let totals = sh(f"cat {out}.*.callgrind 2>/dev/null | grep -E '^(totals|summary):'").stdout
+	let mut sum = 0
+	let mut files = 0
+	for line in totals.split("\n") {
+		let fields: Vec[String] = line.split_whitespace().collect()
+		if fields.len() < 2 { continue }
+		sum += text::parse_i64(fields[1]) ?? 0
+		files += 1
+	}
+	if files == 0 {
+		error(f"no callgrind output of {row.name} (log in {out}.log)", "")
+	}
+	let digest = sh(f"sha256sum < {out}.stdout | cut -c1-16").stdout.trim().clone()
+	return Counted { name: row.name.clone(), instructions: sum, digest: digest }
+}
+
+fn row_line(row: Row, instructions: i64, digest: String) -> String {
+	return f"row {row.name} {row.kind} {instructions} {row.tolerance} {digest} {row.command}"
+}
+
+fn main() throws {
+	let repo = root()
+	let mut baseline: String = "benches/perf.baseline"
+	let mut at: String = "target/perfgate"
+	let mut only: String = ""
+	let mut bless = false
+	let mut args: Vec[String] = []
+	for a in cli::args() {
+		args.push(a)
+	}
+	let mut i = 1
+	while i < args.len() {
+		let a = args[i].clone()
+		if a == "--bless" {
+			bless = true
+		} else if (a == "--baseline" || a == "--work" || a == "--only") && i + 1 < args.len() {
+			let v = args[i + 1].clone()
+			if a == "--baseline" {
+				baseline = v
+			} else if a == "--work" {
+				at = v
+			} else {
+				only = v
+			}
+			i += 1
+		} else {
+			println(f"perfgate: unknown argument {a}")
+			process::exit(2)
+		}
+		i += 1
+	}
+	// The baseline and the work directory lie below the working directory
+	// (the repository's root, where the defaults are).
+	for p in [baseline.clone(), at.clone()] {
+		if !path::is_below(p) {
+			println(f"perfgate: {p} is not a relative path below the working directory")
+			process::exit(2)
+		}
+	}
+	let nikaia = f"{repo}/target/perf/nikaia"
+	let valgrind = env::var("PERFGATE_VALGRIND") ?? "valgrind"
+	process::run("mkdir", ["-p", f"./{at}/out", f"./{at}/bin"])
+	let work = process::run("realpath", [f"./{at}"]).stdout.trim().clone()
+	let text = fs::read_to_string(baseline.clone(), fs::Root::Dir("."))
+	let mut rows: Vec[Row] = []
+	for line in text.split("\n") {
+		let words: Vec[String] = line.split_whitespace().collect()
+		if words.len() == 0 || words[0].starts_with("#") { continue }
+		if words[0] == "build" {
+			let command = fill(rest(words, 1), repo, work, nikaia)
+			let built = sh(f"cd {repo} && {command}")
+			if built.code != 0 { error(f"build: {command}", f"{built.stdout}{built.stderr}") }
+		} else if words[0] == "nikaia" {
+			build_nikaia(repo, work, at, nikaia, words)
+		} else if words[0] == "row" && words.len() >= 7 {
+			let tolerance = words[4].clone()
+			if hundredths(tolerance) < 0 {
+				error(f"row {words[1]}: tolerance {tolerance} is not a percent", "")
+			}
+			rows.push(Row {
+				name: words[1].clone(),
+				kind: words[2].clone(),
+				instructions: text::parse_i64(words[3]) ?? 0,
+				tolerance: tolerance,
+				digest: words[5].clone(),
+				command: rest(words, 6),
+			})
+		} else {
+			error(f"a line of {baseline} that is no build, nikaia or row: {line}", "")
+		}
+	}
+	let mut counted: Vec[Counted] = []
+	let mut red: Vec[String] = []
+	for row in rows {
+		if only.len() > 0 && !row.name.contains(only) { continue }
+		let c = count(row, repo, work, fill(row.command, repo, work, nikaia), valgrind)
+		let mut said = f"PERF {row.name} {c.instructions} {row.instructions} {delta(c.instructions, row.instructions)}"
+		if row.digest != "-" && row.digest != c.digest {
+			said = f"{said} output {c.digest}, recorded {row.digest}"
+			red.push(row.name.clone())
+		} else if row.instructions <= 0 || row.digest == "-" {
+			said = f"{said} not recorded"
+			red.push(row.name.clone())
+		} else if c.instructions * 10000 > row.instructions * (10000 + hundredths(row.tolerance)) {
+			said = f"{said} over {row.tolerance}%"
+			red.push(row.name.clone())
+		}
+		println(said)
+		if row.name.ends_with(".rust") {
+			let base = row.name.strip_suffix(".rust") ?? ""
+			for n in counted {
+				if n.name == f"{base}.nikaia" {
+					println(f"RATIO {base} {ratio(n.instructions, c.instructions)}")
+				}
+			}
+		}
+		counted.push(c)
+	}
+	if bless {
+		let mut lines: Vec[String] = []
+		for line in text.split("\n") {
+			let words: Vec[String] = line.split_whitespace().collect()
+			let mut kept = line.clone()
+			if words.len() >= 7 && words[0] == "row" {
+				for row in rows {
+					if row.name != words[1] { continue }
+					for c in counted {
+						if c.name == row.name {
+							kept = row_line(row, c.instructions, c.digest)
+						}
+					}
+				}
+			}
+			lines.push(kept)
+		}
+		fs::write(baseline, fs::Root::Dir("."), lines.join("\n"))
+		println(f"Perf: blessed {counted.len()} rows")
+		return
+	}
+	if red.len() == 0 {
+		println("Perf: green")
+		return
+	}
+	println(f"Perf: red {red.join(" ")}")
+	process::exit(1)
+}

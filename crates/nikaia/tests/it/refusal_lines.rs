@@ -111,7 +111,11 @@ fn it_reads_like_a_checkers_refusal() {
         "shape-checker",
     );
     for said in [&lowering, &checker] {
-        let head = said.lines().next().expect("a headline");
+        // `overlap` warns NK2124 first (ADR-async-5 D39); the refusal is the error.
+        let head = said
+            .lines()
+            .find(|l| l.starts_with("error"))
+            .expect("a headline");
         assert!(head.starts_with("error"), "{said}");
         assert!(
             said.lines().any(|l| l.trim_start().starts_with("-->")),

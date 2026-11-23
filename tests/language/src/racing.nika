@@ -55,7 +55,7 @@ test "a failing arm propagates from its own body" {
 
 // D3: a handle has `cancel()`, and it takes the handle.
 test "a handle can be cancelled" {
-    let handle = spawn fn { 1 + 1 }
+    let handle = async(detached) fn { 1 + 1 }
     handle.cancel()
     let stopped = true
     assert(stopped)

@@ -4,8 +4,8 @@
 
 test "a task that panics ends alone and another finishes" {
     let other = SharedMut(1)
-    spawn fn { panic("boom") }
-    let fine = spawn fn { other.update fn(mut v) { v += 1 } }
+    async(detached) fn { panic("boom") }
+    let fine = async(detached) fn { other.update fn(mut v) { v += 1 } }
     fine.join()
     let total = other.get()
     assert(total == 2)
@@ -14,9 +14,9 @@ test "a task that panics ends alone and another finishes" {
 // `join` on a task that panicked throws `task::Crashed`, with what the panic
 // said and where (ADR-328 D8); the joiner goes on.
 test "a crashed task is an error to its joiner" {
-    let t = spawn fn { panic("boom") }
+    let t = async(detached) fn { panic("boom") }
     let said = t.join() catch { f"{error.message}" }
-    let u = spawn fn { 41 + 1 }
+    let u = async(detached) fn { 41 + 1 }
     let n = u.join() catch { 0 }
     assert(said == "boom")
     assert(n == 42)

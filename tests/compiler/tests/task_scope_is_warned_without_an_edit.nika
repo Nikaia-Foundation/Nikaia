@@ -1,0 +1,10 @@
+// #990: `task::scope` warns `NK2125` (ADR-async-5 D39): a scope whose task
+// prints gets no edit, and its help names `par_iter` and `async(handle)`.
+use std::task
+
+fn main() throws {
+    task::scope fn(s) {
+        println("start")
+        s.spawn fn { println("one") }
+    }
+}

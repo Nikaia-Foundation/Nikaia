@@ -34,7 +34,7 @@ fn count(n: SharedMut[Vec[i64]]) -> i64 {
 
 fn main() throws {
 	let n: SharedMut[Vec[i64]] = SharedMut([1])
-	let seen = spawn fn { n.get().len() }
+	let seen = async(detached) fn { n.get().len() }
 	println(f"get: {seen.join()}")
 	n.set([15])
 	n.update fn(mut v) { v[0] += 100 }
@@ -54,16 +54,16 @@ fn main() throws {
 
 	let left = SharedMut(1000)
 	let right = SharedMut(1000)
-	let l = spawn fn { move_left(left, right) }
-	let r = spawn fn { move_right(left, right) }
+	let l = async(detached) fn { move_left(left, right) }
+	let r = async(detached) fn { move_right(left, right) }
 	let moved = l.join() + r.join()
 	println(f"both ways keep the total: {left.get() + right.get()} ({moved} moves)")
 
 	let total: SharedMut[Vec[i64]] = SharedMut([0])
-	let t1 = spawn fn { count(total) }
-	let t2 = spawn fn { count(total) }
-	let t3 = spawn fn { count(total) }
-	let t4 = spawn fn { count(total) }
+	let t1 = async(detached) fn { count(total) }
+	let t2 = async(detached) fn { count(total) }
+	let t3 = async(detached) fn { count(total) }
+	let t4 = async(detached) fn { count(total) }
 	let steps = t1.join() + t2.join() + t3.join() + t4.join()
 	println(f"four tasks: {total.access fn(v) { v[0] }} ({steps} steps)")
 }

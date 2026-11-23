@@ -80,7 +80,7 @@ test "a child lends its captured text to every attempt" {
 test "a supervised shared value is rebuilt after a panic in its door" {
     let cache = SharedMut::supervised(fn { 10 })
     cache.update fn(mut v) { v += 5 }
-    let crashing = spawn fn {
+    let crashing = async(detached) fn {
         cache.update fn(mut v) { panic("half-changed") }
     }
     let mut crashed = false

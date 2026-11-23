@@ -681,6 +681,64 @@ jobs:
           retention-days: 1
           if-no-files-found: ignore
 
+  # **The performance gate** (#2811): after the tests, every row of
+  # `benches/perf.baseline` counted under callgrind (`scripts/perfgate.nika`),
+  # the compiler and the Rust references built with one codegen unit
+  # (`[profile.perf]`); a row over its tolerance, or whose output changed,
+  # fails the job, and so the suite, like a failing test. Its `PERF` lines go
+  # into the driver's suite log (`drive_ci_perf`). The x86 leg only: the
+  # counts are the architecture's.
+  perf:
+    needs: test
+    if: inputs.arch == 'x64'
+    runs-on: ${{ inputs.runner }}
+    timeout-minutes: 120
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Install the toolchain the repository names
+        run: rustup show
+
+      - name: Install valgrind
+        run: sudo apt-get update -q && sudo apt-get install -y -q valgrind
+
+      - name: Restore the cargo registry
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: ${{ runner.os }}-cargo-stable-${{ hashFiles('**/Cargo.lock', 'rust-toolchain.toml') }}
+          restore-keys: ${{ runner.os }}-cargo-stable-
+
+      # The perf build of an earlier commit: one codegen unit takes its crates
+      # from there, and only what changed is compiled again.
+      - name: Restore the perf build
+        id: perfbuild
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            target/perf
+            target/perfgate/game-target
+          key: ${{ runner.os }}-cargo-perf-${{ hashFiles('**/Cargo.lock', 'rust-toolchain.toml') }}-${{ github.sha }}
+          restore-keys: ${{ runner.os }}-cargo-perf-${{ hashFiles('**/Cargo.lock', 'rust-toolchain.toml') }}-
+
+      - name: Build the measured compiler
+        run: cargo build --quiet --profile perf -p nikaia
+
+      - name: Count the baseline (perfgate)
+        run: target/perf/nikaia run scripts/perfgate.nika
+
+      - name: Save the perf build
+        if: always() && github.ref == 'refs/heads/develop'
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            target/perf
+            target/perfgate/game-target
+          key: ${{ runner.os }}-cargo-perf-${{ hashFiles('**/Cargo.lock', 'rust-toolchain.toml') }}-${{ github.sha }}
+
   # **Every entry of the sweep's allow-list is still checked** (#705). Each
   # shard sweeps its own dump (`NIKAIA_SWEEP_PART`) and judges only the
   # entries that dump holds; whether an entry is in no dump at all - no test

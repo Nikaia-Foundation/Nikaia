@@ -460,7 +460,7 @@ fn request(
     // has not begun, is told `500` (ADR-326 D4). The server goes on.
     let staying = asked.keep_alive()
     let request = Request { head: asked, body: body }
-    let running = spawn fn { handler(request) }
+    let running = async(detached) fn { handler(request) }
     let answered = running.join() catch {
         refuse(connection, 500, "500 the handler stopped")
         return false

@@ -45,10 +45,10 @@ fn dropped(s: Step, n: i64) throws {
 }
 
 fn main() throws {
-    let a = spawn fn { w(Step { run: risky }, -1) }
-    let b = spawn fn { w(Step { run: risky }, 5) }
-    let c = spawn fn { valued(Step { run: risky }, -1) }
-    let d = spawn fn { dropped(Step { run: risky }, -1) }
+    let a = async(detached) fn { w(Step { run: risky }, -1) }
+    let b = async(detached) fn { w(Step { run: risky }, 5) }
+    let c = async(detached) fn { valued(Step { run: risky }, -1) }
+    let d = async(detached) fn { dropped(Step { run: risky }, -1) }
     println(a.join())
     println(b.join())
     println(c.join())

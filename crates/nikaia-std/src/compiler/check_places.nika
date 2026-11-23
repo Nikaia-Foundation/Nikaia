@@ -105,6 +105,79 @@ impl CheckState {
         self.findings.push(check_refusal("NK2120", span, "This `async` stands inside a loop's body, but `async` starts only tasks whose number stands in the source.", ["A loop would start one task each time round, and a group's tasks are counted where they are written."], "To run the body for every element beside the others, write `xs.par_iter().for_each fn(x) { … }`."))
     }
 
+    /// **`NK2123` (warning): `spawn fn { … }`**, the earlier spelling of
+    /// `async(detached) fn { … }` (ADR-async-5 D13, D39). The edit writes
+    /// the new word before the lambda; inside a loop's body, where the
+    /// `async` form is refused (`NK2120`, D30), there is no edit.
+    fn a_spawn_replaced(ref mut self, world: ref CheckWorld, whole: ref Expr, span: ref Span) sync {
+        let mut edit: CheckEdit? = null
+        let mut help: String = "Write `async(detached) fn { … }`, the same task; `nikaia fix --only NK2123` makes the edit."
+        if self.flow.loops > 0 {
+            help = "`async(detached)` is refused inside a loop's body (`NK2120`): to run the body for every element beside the others, write `xs.par_iter().for_each fn(x) { … }`."
+        } else {
+            edit = word_replaced(world, whole, "spawn", "async(detached)")
+        }
+        let mut warned = check_refusal("NK2123", span, "`spawn` is replaced by `async(detached)`, which starts the same task.", ["`spawn fn { … }` is the earlier spelling of `async(detached) fn { … }` (ADR-async-5 D13); it is removed once every use is rewritten."], help)
+        warned.severity = CheckSeverity::Warning
+        warned.edit = edit
+        self.findings.push(warned)
+    }
+
+    /// **`NK2124` (warning): an `overlap` block** (ADR-async-5 D39). Where
+    /// each of two or more branches is one expression and no branch changes
+    /// a name the others see, the edit writes `(async a(), async b())` (D6),
+    /// or, where every branch gives nothing, `async { async a()  async b() }`
+    /// (D9); none inside a loop's body, where `async` is refused (`NK2120`),
+    /// nor under a `catch`, which the tuple's failures pass by (#990).
+    fn an_overlap_replaced(ref mut self, world: ref CheckWorld, whole: ref Expr, block: ref Block, parts: ref Vec[Ty], keep: bool, span: ref Span) sync {
+        let mut edit: CheckEdit? = null
+        let mut nothing = true
+        for part in parts {
+            if part.text() != "()" {
+                nothing = false
+            }
+        }
+        if !keep {
+            edit = overlap_rewritten(world, whole, block, nothing)
+        }
+        let mut help: String = "Write `let (x, y) = (async a(), async b())` for the values, or `async { async a()  async b() }` for branches that give nothing."
+        if edit != null {
+            help = f"{help} `nikaia fix --only NK2124` makes the edit."
+        } else {
+            help = f"{help} A branch of several steps is `async fn {{ … }}`; inside a loop's body, `xs.par_iter()`."
+        }
+        let mut warned = check_refusal("NK2124", span, "`overlap` is replaced by `async`, which starts each branch as a task.", ["Each branch of an `overlap` is a task beside the others; `async e` starts one, waited for where its value is first needed, and `async { … }` waits for the tasks it starts at its end (ADR-async-5 D6, D9). The block is removed once every use is rewritten."], help)
+        warned.severity = CheckSeverity::Warning
+        warned.edit = edit
+        self.findings.push(warned)
+    }
+
+    /// **`NK2125` (warning): a `task::scope`** (ADR-async-5 D39). Where its
+    /// body is one `for` that starts one task per element and waits for none,
+    /// and the task neither prints nor writes anything the others see, the
+    /// edit writes `xs.par_iter().for_each fn(x) { … }`; any other scope is a
+    /// warning without one, whose help names `async(handle)` and `par_iter`.
+    fn a_scope_replaced(ref mut self, world: ref CheckWorld, whole: ref Expr, func: ref Expr, args: ref Vec[Expr], span: ref Span) sync {
+        match func {
+            Expr::Path(segments, _) => {
+                let count = segments.len()
+                if count < 2 || world.words.resolve(segments[count - 1]) != "scope" || world.words.resolve(segments[count - 2]) != "task" {
+                    return
+                }
+            },
+            else => return,
+        }
+        let edit = scope_rewritten(world, whole, args)
+        let mut help: String = "For one task per element, write `xs.par_iter().for_each fn(x) { … }`; for tasks whose results are joined, `async(handle) fn { … }` and `.join()` (ADR-async-5 D13)."
+        if edit != null {
+            help = f"{help} `nikaia fix --only NK2125` makes the edit."
+        }
+        let mut warned = check_refusal("NK2125", span, "`task::scope` is replaced by `par_iter` and `async(handle)`.", ["A scope's tasks are written with `async` now: `par_iter` runs a body for every element beside the others, and `async(handle)` starts a task whose result is joined (ADR-async-5 D13, D30). The scope is removed once every use is rewritten."], help)
+        warned.severity = CheckSeverity::Warning
+        warned.edit = edit
+        self.findings.push(warned)
+    }
+
     /// **`NK2110`: a task with nothing beside it** (ADR-async-5 D7): nothing
     /// runs between its start and its wait point; `why` says which shape.
     fn a_task_with_nothing_beside_it(ref mut self, span: ref Span, why: String) sync {
@@ -252,5 +325,160 @@ impl CheckState {
         if !caught {
             self.a_case_is_missing("else", span)
         }
+    }
+}
+
+// **An edit that writes `text` for the keyword `word`** a node starts with
+// (ADR-async-5 D39): `spawn` before `fn { … }`, whose own span the parser does
+// not keep, so the word is where the node's span starts.
+fn word_replaced(world: ref CheckWorld, whole: ref Expr, word: ref String, text: ref String) -> CheckEdit? sync {
+    let at = world.here.spans.get(id_of(whole)) ?? return null
+    let end = at.start + word.len() as u32
+    if end >= at.end {
+        return null
+    }
+    return CheckEdit { span: Span { start: at.start, end: end }, text: text.clone(), also: [] }
+}
+
+// **The edit `NK2124` suggests** (ADR-async-5 D39): `overlap { a()  b() }`
+// written `(async a(), async b())`, or, where every branch gives nothing
+// (`nothing`), `async` for the word and `async ` before each branch. Only
+// where there are two branches or more, each one expression that is not a
+// block of its own, and every span is known.
+fn overlap_rewritten(world: ref CheckWorld, whole: ref Expr, block: ref Block, nothing: bool) -> CheckEdit? sync {
+    if block.stmts.len() < 2 {
+        return null
+    }
+    let at = world.here.spans.get(id_of(whole)) ?? return null
+    for stmt in block.stmts {
+        match stmt.node {
+            Stmt::Expr(value) => {
+                match value {
+                    Expr::Block(_, _) => return null,
+                    Expr::AsyncGroup(_, _, _, _, _) => return null,
+                    Expr::Unsafe(_, _) => return null,
+                    Expr::Overlap(_, _) => return null,
+                    Expr::If { .. } => return null,
+                    Expr::Match { .. } => return null,
+                    else => {},
+                }
+            },
+            else => return null,
+        }
+        if stmt.span.start <= at.start || stmt.span.end >= at.end {
+            return null
+        }
+    }
+    let first = block.stmts[0].span.clone()
+    let mut also: Vec[CheckEditPart] = []
+    if nothing {
+        for stmt in block.stmts {
+            also.push(CheckEditPart { span: Span { start: stmt.span.start, end: stmt.span.start }, text: "async " })
+        }
+        return CheckEdit { span: Span { start: at.start, end: at.start + "overlap".len() as u32 }, text: "async", also: also }
+    }
+    let mut before = first.clone()
+    let mut index = 0
+    for stmt in block.stmts {
+        let read = match stmt.node {
+            Stmt::Expr(value) => world.here.spans.get(id_of(value)) ?? return null,
+            else => return null,
+        }
+        if index > 0 {
+            also.push(CheckEditPart { span: Span { start: before.end, end: read.start }, text: ", async " })
+        }
+        before = read.clone()
+        index += 1
+    }
+    also.push(CheckEditPart { span: Span { start: before.end, end: at.end }, text: ")" })
+    return CheckEdit { span: Span { start: at.start, end: first.start }, text: "(async ", also: also }
+}
+
+// **The edit `NK2125` suggests** (ADR-async-5 D39): `task::scope fn(s) {
+// for x in xs { s.spawn fn { … } } }` written `xs.par_iter().for_each fn(x)
+// { … }`. Only where the loop walks a name with one binding, its body is that
+// one `s.spawn` and the task's steps are expressions that neither print nor
+// write: `print`, `write`, a lock, a channel, a file or anything the text of
+// an expression leaves out (`…`) keeps the scope as written.
+fn scope_rewritten(world: ref CheckWorld, whole: ref Expr, args: ref Vec[Expr]) -> CheckEdit? sync {
+    if args.len() != 1 {
+        return null
+    }
+    let (scope, outer) = match args[0] {
+        Expr::Closure { params, body, .. } => {
+            if params.len() != 1 || body.stmts.len() != 1 {
+                return null
+            }
+            (params[0], body.stmts[0].node.clone())
+        },
+        else => return null,
+    }
+    let (bound, walked, round) = match outer {
+        Stmt::For { bindings, iter, body, .. } => {
+            if bindings.len() != 1 || body.stmts.len() != 1 {
+                return null
+            }
+            (bindings[0], iter.clone(), body.stmts[0].node.clone())
+        },
+        else => return null,
+    }
+    match walked {
+        Expr::Variable(_, _) => {},
+        else => return null,
+    }
+    let task = match round {
+        Stmt::Expr(Expr::MethodCall { receiver, method, args, .. }) => {
+            if args.len() != 1 || world.words.resolve(method) != "spawn" {
+                return null
+            }
+            match receiver {
+                Expr::Variable(name, _) => {
+                    if name != scope {
+                        return null
+                    }
+                },
+                else => return null,
+            }
+            args[0].clone()
+        },
+        else => return null,
+    }
+    let mut opened: Span? = null
+    let mut closed: Span? = null
+    match task {
+        Expr::Closure { params, body, .. } => {
+            if !params.is_empty() || body.stmts.is_empty() {
+                return null
+            }
+            opened = body.stmts[0].span.clone()
+            for step in body.stmts {
+                match step.node {
+                    Stmt::Expr(value) => {
+                        closed = world.here.spans.get(id_of(value)) ?? return null
+                        let text = written_expression(world.words, value)
+                        for word in ["…", "print", "write", "lock", "send", "fs::", "env::", "push", "insert", "spawn", "async"] {
+                            if text.contains(word) {
+                                return null
+                            }
+                        }
+                    },
+                    else => return null,
+                }
+            }
+        },
+        else => return null,
+    }
+    let at = world.here.spans.get(id_of(whole)) ?? return null
+    let first = opened ?? return null
+    let last = closed ?? return null
+    if first.start <= at.start || last.end >= at.end {
+        return null
+    }
+    let named = written_expression(world.words, walked)
+    let name = world.words.resolve(bound)
+    return CheckEdit {
+        span: Span { start: at.start, end: first.start },
+        text: f"{named}.par_iter().for_each fn({name}) {{ ",
+        also: [CheckEditPart { span: Span { start: last.end, end: at.end }, text: " }" }],
     }
 }
