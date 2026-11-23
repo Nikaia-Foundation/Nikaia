@@ -1,0 +1,19 @@
+error[NK2605]: This function can fail, because `fails` can fail.
+   --> tests/async_fail_throws_the_tasks_set.nika:20:2
+    |
+ 20 | 	let a = async fails(n)
+    |  ^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: `fails` can fail with `Bad`.
+    = note: A call that can fail looks like any other call, so its failure passes straight through this function unless you handle it.
+    = help: Add `throws` to `without_a_fallback`, or handle it at the call: `… catch { … }`.
+error[NK2605]: This function can fail, because `fails` can fail.
+   --> tests/async_fail_throws_the_tasks_set.nika:26:33
+    |
+ 26 | 	let a = async fails(n) catch { fails(n + 1) }
+    |                                 ^^^^^^^^^^^^
+    |
+    = note: `fails` can fail with `Bad`.
+    = note: A call that can fail looks like any other call, so its failure passes straight through this function unless you handle it.
+    = help: Add `throws` to `with_a_fallback_that_throws`, or handle it at the call: `… catch { … }`.
+2 places that can fail without saying so

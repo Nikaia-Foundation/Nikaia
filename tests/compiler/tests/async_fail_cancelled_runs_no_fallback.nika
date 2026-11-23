@@ -1,0 +1,36 @@
+// A cancellation the program asks for is not a failure, so it runs no
+// fallback (Part I 8.1.2, ADR-async-5 D14, D22, #989): a child handle and a
+// detached handle, each cancelled before its task fails.
+use std::time
+
+struct Bad {}
+
+impl Error for Bad {
+	fn message(ref self) -> String {
+		return "bad"
+	}
+}
+
+fn fails_later(n: i64) -> i64 throws {
+	time::sleep(100.millis())
+	if n > 1 {
+		throw Bad {}
+	}
+	return n
+}
+
+fn main() throws {
+	let h = async(handle) fn { fails_later(2) } catch {
+		println("the child's fallback")
+		0
+	}
+	let d = async(detached) fn { fails_later(3) } catch {
+		println("the detached task's fallback")
+		0
+	}
+	let k = async(handle) fn { fails_later(1) }
+	h.cancel()
+	d.cancel()
+	time::sleep(200.millis())
+	println(f"both cancelled, the other gave {k.join()}")
+}

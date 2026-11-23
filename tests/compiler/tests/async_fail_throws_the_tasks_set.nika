@@ -1,0 +1,33 @@
+// The `throws` walk (Part I 8.1.2, ADR-async-5 D22, #989): without a
+// fallback a function carries its task's whole set, and with one it throws
+// what the fallback throws; neither function here says `throws`.
+struct Bad {}
+
+impl Error for Bad {
+	fn message(ref self) -> String {
+		return "bad"
+	}
+}
+
+fn fails(n: i64) -> i64 throws {
+	if n > 1 {
+		throw Bad {}
+	}
+	return n
+}
+
+fn without_a_fallback(n: i64) -> i64 {
+	let a = async fails(n)
+	let b = 1
+	return a + b
+}
+
+fn with_a_fallback_that_throws(n: i64) -> i64 {
+	let a = async fails(n) catch { fails(n + 1) }
+	let b = 1
+	return a + b
+}
+
+fn main() throws {
+	println(f"{without_a_fallback(1)} {with_a_fallback_that_throws(1)}")
+}
