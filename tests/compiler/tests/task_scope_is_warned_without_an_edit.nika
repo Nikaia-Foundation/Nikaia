@@ -4,6 +4,7 @@ use std::task
 
 fn main() throws {
     task::scope fn(s) {
+        println("start")
         s.spawn fn { println("one") }
     }
 }

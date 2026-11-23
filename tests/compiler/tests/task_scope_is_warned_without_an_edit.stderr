@@ -6,10 +6,3 @@ warning[NK2125]: `task::scope` is replaced by `par_iter` and `async(handle)`.
    |
    = note: A scope's tasks are written with `async` now: `par_iter` runs a body for every element beside the others, and `async(handle)` starts a task whose result is joined (ADR-async-5 D13, D30). The scope is removed once every use is rewritten.
    = help: For one task per element, write `xs.par_iter().for_each fn(x) { … }`; for tasks whose results are joined, `async(handle) fn { … }` and `.join()` (ADR-async-5 D13).
-warning: Unnecessary braces around function argument.
-  --> tests/task_scope_is_warned_without_an_edit.nika:6:5
-   |
- 6 |     task::scope fn(s) {
-   |     ^^^^^^^^^^^^^^^^^^^
-   |
-   = note: Remove these braces.
