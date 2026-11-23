@@ -420,6 +420,23 @@ pub(crate) fn check_core_method_text_receiver(on: &Ty) -> bool {
     }
 }
 
+pub fn check_core_method_consumes(on: &Ty, name: &str) -> bool {
+    match on {
+        Ty::Named { name: type_name, args, view } => { let view = *view; !view && args.is_empty() && type_name == "bigint::BigInt" && (name == "add" || name == "sub" || name == "neg" || name == "abs") },
+        _ => false,
+    }
+}
+
+pub(crate) fn check_core_method_made_here(receiver: &Expr) -> bool { matches!(receiver, Expr::Call { .. } | Expr::MethodCall { .. }) }
+
+pub(crate) fn check_core_method_maker(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, receiver: &Expr) -> String {
+    match receiver {
+        Expr::MethodCall { method, .. } => { let method = *method; nikaia_std::block::Text::from(world.words.resolve(method).to_string()) },
+        Expr::Call { func, .. } => { let func = nikaia_std::boxed::open(func); nikaia_std::block::Text::from(nikaia_std::index::or(dotted_path(world, func), || "call".into()).to_string()) },
+        _ => String::from("call"),
+    }
+}
+
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 #[allow(clippy::too_many_arguments)]
@@ -496,7 +513,14 @@ pub(crate) fn check_core_method_called<H: CheckHost>(state: &mut CheckState, wor
             },
             _ => { },
         }
-        state.a_replace_seen(world, receiver, args, span);
+        state.a_replace_seen(world, receiver, args, span, "replace", true);
+    }
+    if check_core_method_consumes(&on, &name) && !state.reading_only {
+        if check_core_method_made_here(receiver) {
+            state.facts.consumed_last_uses.insert(id_of(receiver) as i64);
+            let made: String = check_core_method_maker(world, receiver);
+            let said = state.facts.narrated.insert((span.start as i64, format!("{} works in the buffer the {} before it made", name, made)));
+        } else { state.a_replace_seen(world, receiver, args, span, &name, false); }
     }
     if text && views_what_it_is_called_on(&name) { state.facts.receiver_views.insert(id_of(expr) as i64); }
     let collection = match on {

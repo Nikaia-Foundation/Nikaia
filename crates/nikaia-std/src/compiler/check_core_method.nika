@@ -586,6 +586,36 @@ fn check_core_method_text_receiver(on: ref Ty) -> bool {
     }
 }
 
+/// **Whether a call on this receiver has a consuming twin**
+/// (ADR-text-reuse-1 D6): `bigint::BigInt`'s `add`, `sub`, `neg` and `abs`,
+/// whose twins `add_own` and the rest the emitter names
+/// (`emit_call_consuming_twin`). Not a view, which owns no digits.
+pub fn check_core_method_consumes(on: ref Ty, name: ref String) -> bool {
+    return match on {
+        Ty::Named { name: type_name, args, view } => !view && args.len() == 0 && type_name == "bigint::BigInt" && (name == "add" || name == "sub" || name == "neg" || name == "abs"),
+        else => false,
+    }
+}
+
+/// Whether a receiver is a value made where it stands, which nobody reads
+/// again: a call's or a method call's result.
+fn check_core_method_made_here(receiver: ref Expr) -> bool {
+    return match receiver {
+        Expr::Call { .. } => true,
+        Expr::MethodCall { .. } => true,
+        else => false,
+    }
+}
+
+/// The name of the call that made a receiver, as the narration says it.
+fn check_core_method_maker(world: ref CheckWorld, receiver: ref Expr) -> String {
+    return match receiver {
+        Expr::MethodCall { method, .. } => world.words.resolve(method).clone(),
+        Expr::Call { func, .. } => (dotted_path(world, func) ?? "call").clone(),
+        else => "call",
+    }
+}
+
 fn check_core_method_called[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, expr: ref Expr, on: Ty, receiver: ref Expr, method: winnow_grammar::Symbol, args: ref Vec[Expr], written: ref String, span: ref Span) -> Ty sync {
     let name: String = f"{world.words.resolve(method)}"
     // **A `set` given a stamped value** (D4): the receiver's name, carried.
@@ -672,7 +702,19 @@ fn check_core_method_called[H: CheckHost](mut state: CheckState, world: ref Chec
             },
             else => {}
         }
-        state.a_replace_seen(world, receiver, args, span)
+        state.a_replace_seen(world, receiver, args, span, "replace", true)
+    }
+    // **A `std` method with a consuming twin works in its receiver's buffer
+    // where nobody reads the receiver again** (ADR-text-reuse-1 D6): on a
+    // temporary at once, on a `let` where the body's end finds no read after.
+    if check_core_method_consumes(on, name) && !state.reading_only {
+        if check_core_method_made_here(receiver) {
+            state.facts.consumed_last_uses.insert(id_of(receiver) as i64)
+            let made: String = check_core_method_maker(world, receiver)
+            let said = state.facts.narrated.insert((span.start as i64, f"{name} works in the buffer the {made} before it made"))
+        } else {
+            state.a_replace_seen(world, receiver, args, span, name, false)
+        }
     }
     // **A view of the receiver** (ADR-views-v4 D9, #1478): `s.trim()` points
     // into `s`, so a change to `s` while it is used is NK2305.

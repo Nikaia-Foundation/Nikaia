@@ -957,7 +957,7 @@ impl EmitState {
                 _ => { },
             }
         }
-        if receiver.is_some() && (name == "replace" || name == "replacen") && (self.facts.replaced_in_place.contains(&on_node) || self.facts.replaced_last_uses.contains(&on_node)) {
+        if receiver.is_some() && (name == "replace" || name == "replacen") && (self.facts.replaced_in_place.contains(&on_node) || self.facts.consumed_last_uses.contains(&on_node)) {
             let text = match receiver { Some(__nikaia_value) => __nikaia_value, None => return Ok(()) };
             let call: &'static str = if name == "replacen" { "replacedn" } else { "replaced" };
             out.push(&format!("nikaia_std::search::{}(", call));
@@ -1257,6 +1257,13 @@ impl EmitState {
             self.emit_core_receiver(world, walk, out, host, receiver, depth, flow, scope, false)?;
             if stepping && !on_fused || nikaia_std::index::or(self.facts.failing_through_calls.get(&on_node), || 0) == 4 { out.push(".into_iter()"); }
             if name == "len" && on_fused { written = String::from("count"); }
+            if receiver.is_some() && self.facts.consumed_last_uses.contains(&on_node) {
+                let twin = emit_call_consuming_twin(&nikaia_std::index::or(match *nikaia_std::index::get(&self.facts.method_callees, &on_node) {
+                    Some(__nikaia_it) => Some(__nikaia_it.clone()),
+                    None => None,
+                }, || "".into()));
+                if twin != "" { written = nikaia_std::block::Text::from(twin.to_string()); }
+            }
             if name == "collect" && args.is_empty() && self.facts.text_slot_collects.contains(&on_node) { out.push(".map(|s| ::core::convert::AsRef::<str>::as_ref(s))"); }
             out.push(&format!(".{}", written));
             if name == "update" && self.facts.copied_doors.contains(&on_node) { out.push("_copied"); }
@@ -1431,7 +1438,7 @@ impl EmitState {
             out.push(")");
             return Ok(());
         }
-        let replaced_here = self.facts.replaced_in_place.contains(&node_key(receiver)) || self.facts.replaced_last_uses.contains(&node_key(receiver));
+        let replaced_here = self.facts.replaced_in_place.contains(&node_key(receiver)) || self.facts.consumed_last_uses.contains(&node_key(receiver));
         if (name == "rfind" || name == "replacen" && !replaced_here) && self.facts.text_finds.contains(&node_key(receiver)) {
             let module = if name == "rfind" { "text" } else { "search" };
             out.push(&format!("nikaia_std::{}::{}(&", module, name));
@@ -1644,8 +1651,8 @@ pub(crate) fn emit_tuple_part_copy(i: i64, word: &str) -> String {
 }
 
 pub(crate) fn emit_tuple_part_copies(parts: &[String]) -> String {
-    let copies: Vec<String> = parts.iter().enumerate().map(|(at, item)| (at as i64, item)).map(|__nikaia_tuple126467| {
-        let (i, word) = __nikaia_tuple126467;
+    let copies: Vec<String> = parts.iter().enumerate().map(|(at, item)| (at as i64, item)).map(|__nikaia_tuple126975| {
+        let (i, word) = __nikaia_tuple126975;
         emit_tuple_part_copy(i, word)
     }).collect::<Vec<_>>();
     if copies.len() == 1 { return format!("({},)", *unsafe { nikaia_std::proven::read(&copies, (0) as usize) }); }

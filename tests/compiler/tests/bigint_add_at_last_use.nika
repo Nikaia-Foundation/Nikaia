@@ -1,0 +1,70 @@
+// ADR-text-reuse-1 D6 (#2823): `add`, `sub`, `neg` and `abs` on a
+// `bigint::BigInt` the program does not read again work in its digits; on
+// one it reads again they leave it as it was. Each form twice, the receiver
+// dead and the receiver printed after, so a write into the wrong buffer
+// shows. A carry past the last digit, a borrow across digits, a result whose
+// sign is the argument's, and zero on either side.
+use std::bigint
+
+fn big(digits: i64) -> bigint::BigInt sync {
+    let mut n = bigint::BigInt::of(1)
+    for _ in 0..<digits {
+        n = n.mul(bigint::BigInt::of(1000000000000))
+    }
+    return n
+}
+
+fn main() throws {
+    // `acc = acc.add(x)`: in `acc`'s digits, a carry growing it.
+    let mut acc = big(3).sub(bigint::BigInt::of(1))
+    let x = bigint::BigInt::of(1)
+    acc = acc.add(x)
+    println(f"acc {acc.to_text()} x {x.to_text()}")
+    for k in 1..<4 {
+        acc = acc.add(bigint::BigInt::of(k).mul(big(1)))
+    }
+    println(f"looped {acc.to_text()}")
+    // The same with `acc` read after through another name.
+    let kept = acc.clone()
+    let other = kept.add(x)
+    println(f"kept {kept.to_text()} other {other.to_text()}")
+
+    // `let y = a.sub(b)` with `a` dead: a borrow across digits.
+    let a = big(2)
+    let b = bigint::BigInt::of(1)
+    let y = a.sub(b)
+    println(f"y {y.to_text()} b {b.to_text()}")
+    // A result larger than `a`, with the sign of `-c`.
+    let small = bigint::BigInt::of(5)
+    let c = big(2)
+    let z = small.sub(c)
+    println(f"z {z.to_text()} c {c.to_text()}")
+    // Equal magnitudes and zero on either side.
+    let e = big(1)
+    let zero = e.sub(big(1))
+    let from_zero = bigint::BigInt::of(0).add(b)
+    let to_zero = bigint::BigInt::of(7).add(bigint::BigInt::of(0))
+    println(f"zero {zero.to_text()} {from_zero.to_text()} {to_zero.to_text()}")
+    // `sub` with `a2` read after.
+    let a2 = big(2)
+    let y2 = a2.sub(b)
+    println(f"y2 {y2.to_text()} a2 {a2.to_text()}")
+
+    // `neg` and `abs` with the receiver dead, and read after.
+    let n = bigint::BigInt::of(-42).mul(big(1))
+    let m = n.neg()
+    println(f"neg {m.to_text()}")
+    let p = m.neg().abs()
+    println(f"abs {p.to_text()}")
+    let q = bigint::BigInt::of(-9)
+    let r = q.neg()
+    let s = q.abs()
+    println(f"q {q.to_text()} r {r.to_text()} s {s.to_text()}")
+    // A temporary at once: the product's digits take the sum.
+    let t = big(1).mul(bigint::BigInt::of(3)).add(acc)
+    println(f"t {t.to_text()} acc {acc.to_text()}")
+    // In a lambda, which may run again: `total` stays its own.
+    let mut total = big(1)
+    [1, 2].iter().for_each fn (k) { total = total.add(bigint::BigInt::of(k)) }
+    println(f"lambda {total.to_text()}")
+}

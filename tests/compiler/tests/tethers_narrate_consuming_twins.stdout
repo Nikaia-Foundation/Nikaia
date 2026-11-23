@@ -1,0 +1,4 @@
+main.nika:9: add works in the buffer of acc
+main.nika:11: sub works in the buffer of a
+main.nika:12: neg works in the buffer the mul before it made
+exit 0

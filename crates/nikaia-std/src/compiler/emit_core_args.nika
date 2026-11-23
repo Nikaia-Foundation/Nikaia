@@ -1463,6 +1463,27 @@ fn emit_arg_passing(names: ref Vec[String], lent: ref Vec[i64]) -> String {
 /// `std`'s entries that run a kept function in a task of their own and have a
 /// twin for `user_parallelism = yes`, named `<name>_on_pool`: a function, or a
 /// method by its ledger key (`net::Listener::serve`, ADR-326 D10).
+/// **The consuming twin of a `std` method** (ADR-text-reuse-1 D6), by its
+/// ledger key: the form that works in the receiver's buffer, written where
+/// the checker found the receiver at its last use (`consumed_last_uses`).
+/// Empty for a method without one. `replace`'s twin is written apart
+/// (`nikaia_std::search::replaced`, D4). No program names a twin.
+fn emit_call_consuming_twin(key: ref String) -> String {
+    if key == "bigint::BigInt::add" {
+        return "add_own"
+    }
+    if key == "bigint::BigInt::sub" {
+        return "sub_own"
+    }
+    if key == "bigint::BigInt::neg" {
+        return "neg_own"
+    }
+    if key == "bigint::BigInt::abs" {
+        return "abs_own"
+    }
+    return ""
+}
+
 fn emit_call_on_the_pool(key: ref String) -> bool {
     return key == "net::serve" || key == "net::Listener::serve" || key == "supervisor::child" || key == "supervisor::run" || key == "task::scope"
 }

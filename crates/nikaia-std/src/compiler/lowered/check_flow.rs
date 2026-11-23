@@ -192,7 +192,7 @@ pub struct CheckFlow {
     pub followed: collections::BTreeMap<i64, Integer>,
     pub clones: Vec<CheckClone>,
     pub clone_loans: Vec<(String, Option<i64>)>,
-    pub replaces: Vec<CheckClone>,
+    pub replaces: Vec<(CheckClone, String)>,
     pub lone_texts: collections::BTreeSet<String>,
     pub clone_owners: collections::BTreeSet<i64>,
     pub place_clones: Vec<CheckPlaceClone>,

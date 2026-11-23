@@ -1392,7 +1392,10 @@ impl CheckState {
     /// if no read of the name follows it. As a clone's last use is asked
     /// (`a_clone_seen`), and only of a name no view is ever taken of
     /// (`lone_texts`) and that no argument of the call reads.
-    fn a_replace_seen(ref mut self, world: ref CheckWorld, receiver: ref Expr, args: ref Vec[Expr], span: ref Span) sync {
+    /// **So is a `std` method with a consuming twin** (D6, `bigint::BigInt`'s
+    /// `add`, `sub`, `neg`, `abs`): `text` is false there, and a number
+    /// holds no view to be lone of.
+    fn a_replace_seen(ref mut self, world: ref CheckWorld, receiver: ref Expr, args: ref Vec[Expr], span: ref Span, by: ref String, text: bool) sync {
         if self.reading_only || self.task_bindings.len() > 0 {
             return
         }
@@ -1400,7 +1403,7 @@ impl CheckState {
             Expr::Variable(symbol, _) => world.words.resolve(symbol).clone(),
             else => return,
         }
-        if !self.flow.lone_texts.contains(name) || self.flow.mixed_text.contains(name) {
+        if text && (!self.flow.lone_texts.contains(name) || self.flow.mixed_text.contains(name)) {
             return
         }
         let local = self.binding(name) ?? return
@@ -1426,15 +1429,35 @@ impl CheckState {
             }
         }
         let node = id_of(receiver) as i64
-        self.flow.replaces.push(CheckClone { name: name, binding: local.id, seq: self.read_seq, choices: self.branch.clone(), node: node, span: span.clone(), edit: null })
+        self.flow.replaces.push((CheckClone { name: name, binding: local.id, seq: self.read_seq, choices: self.branch.clone(), node: node, span: span.clone(), edit: null }, by.clone()))
+    }
+
+    /// **`x = x.add(y)` on a `let mut` of its own** (ADR-text-reuse-1 D6):
+    /// whether `name` is a `let` that owns what it holds, so the call may be
+    /// handed it and the assignment takes the result back. Not a parameter,
+    /// a view, a lent name or one a task reads.
+    fn a_let_handed_to_itself(ref self, name: ref String) -> bool sync {
+        if self.reading_only || self.task_bindings.len() > 0 {
+            return false
+        }
+        // Not from outside a lambda around: the lambda captures it, and a
+        // capture cannot be given away (it may run again).
+        let bound = self.frame_of(name)
+        for around in self.repeats {
+            if around.what == "lambda" && around.frame > bound {
+                return false
+            }
+        }
+        let local = self.binding(name) ?? return false
+        return clone_of_a_let(local) && self.flow.clone_owners.contains(local.id) && local.view_of == "" && !local.lent && !local.ty.is_a_view() && !self.lent_here(name)
     }
 
     /// **The `replace`s no read followed** work in their text's buffer
-    /// (`replaced_last_uses`), asked where the body ends.
+    /// (`consumed_last_uses`), asked where the body ends.
     fn replaces_at_last_use_said(ref mut self) sync {
         let replaces = self.flow.replaces.clone()
         self.flow.replaces = []
-        for one in replaces {
+        for (one, by) in replaces {
             if self.a_clone_read_after(one) {
                 continue
             }
@@ -1444,9 +1467,9 @@ impl CheckState {
                     lent = true
                 }
             }
-            if !lent {
-                self.facts.replaced_last_uses.insert(one.node)
-                let said = self.facts.narrated.insert((one.span.start as i64, f"replace works in the buffer of {one.name}"))
+            // Said once: `x = x.add(y)` was said where it was assigned.
+            if !lent && self.facts.consumed_last_uses.insert(one.node) {
+                let said = self.facts.narrated.insert((one.span.start as i64, f"{by} works in the buffer of {one.name}"))
             }
         }
     }

@@ -193,10 +193,13 @@ pub struct CheckFacts {
     /// **`x = x.replace(a, b)` on an owned text name**, by the assignment's
     /// start (ADR-text-reuse-1 D4): replaced in `x`'s own buffer.
     pub replaced_assigns: collections::BTreeSet[i64],
-    /// **A text `replace` at the last use of a `let`'s text**, by the
-    /// receiver's node (ADR-text-reuse-1 D4): the text is handed to it and
-    /// replaced in its own buffer.
-    pub replaced_last_uses: collections::BTreeSet[i64],
+    /// **A call at the last use of its receiver**, by the receiver's node
+    /// (ADR-text-reuse-1 D4, D6): a text `replace` on a `let`'s text not read
+    /// again, and a `std` method with a consuming twin (`BigInt`'s `add`)
+    /// on a `let` not read again, on itself assigned (`x = x.add(y)`) or on
+    /// a temporary. The value is handed to the call, which works in its
+    /// buffer.
+    pub consumed_last_uses: collections::BTreeSet[i64],
     /// **Each give and each reuse, narrated** (ADR-text-reuse-1 D5, #2514):
     /// the first byte of the site and its line, `rest takes the buffer of
     /// line` or `replace works in the buffer of x`, which `--tethers` prints
@@ -1000,7 +1003,7 @@ impl CheckFacts {
             text_replaces: collections::BTreeSet(),
             replaced_in_place: collections::BTreeSet(),
             replaced_assigns: collections::BTreeSet(),
-            replaced_last_uses: collections::BTreeSet(),
+            consumed_last_uses: collections::BTreeSet(),
             narrated: collections::BTreeSet(),
             hasher_adds: collections::BTreeSet(),
             receiver_views: collections::BTreeSet(),

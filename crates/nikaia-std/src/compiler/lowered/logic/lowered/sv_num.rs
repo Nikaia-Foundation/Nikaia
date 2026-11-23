@@ -349,8 +349,8 @@ pub(crate) fn sv_big_rat(n: bigint::BigInt, d: &bigint::BigInt) -> SvBigRat {
     let mut num = sv_big_quo(&n, &g);
     let mut den = sv_big_quo(&d, &g);
     if den.sign() < 0 {
-        num = num.neg();
-        den = den.neg();
+        num = num.neg_own();
+        den = den.neg_own();
     }
     SvBigRat { num, den }
 }
@@ -363,7 +363,7 @@ pub(crate) fn sv_big_rat_narrow(a: &SvBigRat) -> Option<SvRat> { Some(SvRat { nu
 
 pub(crate) fn sv_big_rat_add(a: &SvBigRat, b: &SvBigRat) -> SvBigRat {
     if a.den == b.den { return sv_big_rat(a.num.add(&b.num), &a.den.clone()); }
-    sv_big_rat(a.num.mul(&b.den).add(&b.num.mul(&a.den)), &a.den.mul(&b.den))
+    sv_big_rat(a.num.mul(&b.den).add_own(&b.num.mul(&a.den)), &a.den.mul(&b.den))
 }
 
 pub(crate) fn sv_big_rat_sub(a: &SvBigRat, b: &SvBigRat) -> SvBigRat {
@@ -379,7 +379,7 @@ pub(crate) fn sv_big_rat_scale(a: &SvBigRat, n: &bigint::BigInt, d: &bigint::Big
 
 pub(crate) fn sv_big_rat_cmp(a: &SvBigRat, b: &SvBigRat) -> i64 {
     if a.den == b.den { return a.num.sub(&b.num).sign(); }
-    a.num.mul(&b.den).sub(&b.num.mul(&a.den)).sign()
+    a.num.mul(&b.den).sub_own(&b.num.mul(&a.den)).sign()
 }
 
 pub(crate) fn sv_big_rat_floor(a: &SvBigRat) -> bigint::BigInt {

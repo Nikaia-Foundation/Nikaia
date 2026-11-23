@@ -56,6 +56,70 @@ fn magnitude_add(a: &[u64], b: &[u64]) -> Vec<u64> {
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
+fn magnitude_add_in(a: &mut Vec<u64>, b: &[u64]) {
+    while (a.len() as i64) < b.len() as i64 { a.push(0); }
+    let mut carry = false;
+    for at in 0..a.len() as i64 {
+        if !carry && ((at) as usize) >= b.len() { break; }
+        let y: u64 = if ((at) as usize) < b.len() { *unsafe { nikaia_std::proven::read(&b, (at) as usize) } } else { 0u64 };
+        let (s1, o1) = (*unsafe { nikaia_std::proven::read(&a, (at) as usize) }).overflowing_add(y);
+        let (s2, o2) = s1.overflowing_add(if carry { 1u64 } else { 0u64 });
+        { let __nikaia_stored = s2; unsafe { nikaia_std::proven::write(&mut *a, (at) as usize, __nikaia_stored) }; }
+        carry = o1 || o2;
+    }
+    if carry { a.push(1); }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+fn magnitude_sub_in(a: &mut Vec<u64>, b: &[u64]) {
+    let mut borrow = false;
+    for at in 0..a.len() as i64 {
+        if !borrow && ((at) as usize) >= b.len() { break; }
+        let y: u64 = if ((at) as usize) < b.len() { *unsafe { nikaia_std::proven::read(&b, (at) as usize) } } else { 0u64 };
+        let (d1, o1) = (*unsafe { nikaia_std::proven::read(&a, (at) as usize) }).overflowing_sub(y);
+        let (d2, o2) = d1.overflowing_sub(if borrow { 1u64 } else { 0u64 });
+        { let __nikaia_stored = d2; unsafe { nikaia_std::proven::write(&mut *a, (at) as usize, __nikaia_stored) }; }
+        borrow = o1 || o2;
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+fn magnitude_sub_from_in(a: &mut Vec<u64>, b: &[u64]) {
+    while (a.len() as i64) < b.len() as i64 { a.push(0); }
+    let mut borrow = false;
+    for at in 0..a.len() as i64 {
+        let x: u64 = if ((at) as usize) < b.len() { *unsafe { nikaia_std::proven::read(&b, (at) as usize) } } else { 0u64 };
+        let (d1, o1) = x.overflowing_sub(*unsafe { nikaia_std::proven::read(&a, (at) as usize) });
+        let (d2, o2) = d1.overflowing_sub(if borrow { 1u64 } else { 0u64 });
+        { let __nikaia_stored = d2; unsafe { nikaia_std::proven::write(&mut *a, (at) as usize, __nikaia_stored) }; }
+        borrow = o1 || o2;
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+fn added_in(own: i64, kept: Vec<u64>, sign: i64, digits: &[u64]) -> BigInt {
+    if own == 0 { return made(sign, digits.copy_owned()); }
+    let mut sum = kept;
+    if sign == 0 { return made(own, sum); }
+    if own == sign {
+        magnitude_add_in(&mut sum, digits);
+        return made(own, sum);
+    }
+    let order = magnitude_compare(&sum, digits);
+    if order == 0 { return made(0, vec![]); }
+    if order > 0 {
+        magnitude_sub_in(&mut sum, digits);
+        return made(own, sum);
+    }
+    magnitude_sub_from_in(&mut sum, digits);
+    made(sign, sum)
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
 fn magnitude_sub(a: &[u64], b: &[u64]) -> Vec<u64> {
     let mut rest: Vec<u64> = Vec::with_capacity(nikaia_std::count::of(a.len() as i64));
     let mut borrow = false;
@@ -294,6 +358,21 @@ impl BigInt {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     pub fn abs(&self) -> BigInt { made(1, self.digits.copy_owned()) }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn add_own(self, other: &BigInt) -> BigInt { added_in(self.sign, self.digits, other.sign, &other.digits) }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn sub_own(self, other: &BigInt) -> BigInt { added_in(self.sign, self.digits, -other.sign, &other.digits) }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn neg_own(self) -> BigInt {
+        let sign = self.sign;
+        made(-sign, self.digits)
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn abs_own(self) -> BigInt { made(1, self.digits) }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     pub fn mul(&self, other: &BigInt) -> BigInt { made(self.sign * other.sign, magnitude_mul(&self.digits, &other.digits)) }

@@ -924,6 +924,14 @@ pub(crate) fn emit_arg_passing(names: &[String], lent: &[i64]) -> String {
     nikaia_std::block::Text::from(passed.join(", "))
 }
 
+pub(crate) fn emit_call_consuming_twin(key: &str) -> String {
+    if key == "bigint::BigInt::add" { return String::from("add_own"); }
+    if key == "bigint::BigInt::sub" { return String::from("sub_own"); }
+    if key == "bigint::BigInt::neg" { return String::from("neg_own"); }
+    if key == "bigint::BigInt::abs" { return String::from("abs_own"); }
+    String::from("")
+}
+
 pub(crate) fn emit_call_on_the_pool(key: &str) -> bool { key == "net::serve" || key == "net::Listener::serve" || key == "supervisor::child" || key == "supervisor::run" || key == "task::scope" }
 
 pub(crate) fn emit_call_tasks_channel(flow: &EmitFlow, scope: &EmitScope) -> String {

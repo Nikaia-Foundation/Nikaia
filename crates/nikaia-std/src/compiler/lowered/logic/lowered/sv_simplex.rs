@@ -289,7 +289,7 @@ pub(crate) fn sv_big_combine(x: &SvBigRow, mx: &bigint::BigInt, y: &SvBigRow, my
         }
         if take_y {
             col = *nikaia_std::index::get(&y.cols, (j) as usize);
-            k = k.add(&(*nikaia_std::index::get(&y.ks, (j) as usize)).mul(my));
+            k = k.add_own(&(*nikaia_std::index::get(&y.ks, (j) as usize)).mul(my));
             work += dy * sv_big_digits(unsafe { nikaia_std::proven::read(&y.ks, (j) as usize) });
             j = unsafe { nikaia_std::proven::add::<i64>(j, 1) };
         }
@@ -1080,7 +1080,7 @@ impl SvSimplex {
                 if t != p {
                     let tb = sv_big_coef(unsafe { nikaia_std::proven::read(&rows, (t) as usize) }, b);
                     if tb.sign() != 0 {
-                        let made = sv_big_combine(unsafe { nikaia_std::proven::read(&rows, (t) as usize) }, &pb, unsafe { nikaia_std::proven::read(&rows, (p) as usize) }, &tb.neg());
+                        let made = sv_big_combine(unsafe { nikaia_std::proven::read(&rows, (t) as usize) }, &pb, unsafe { nikaia_std::proven::read(&rows, (p) as usize) }, &tb.neg_own());
                         self.big_work += made.work;
                         { let __nikaia_stored = made.row; unsafe { nikaia_std::proven::write(&mut rows, (t) as usize, __nikaia_stored) }; }
                     }
@@ -1129,7 +1129,7 @@ impl SvSimplex {
                 let tc = sv_big_coef(&row, c);
                 if tc.sign() != 0 {
                     let pc = sv_big_coef(nikaia_std::index::get(&self.big_rows, nikaia_std::index::at(at)), c);
-                    let made = sv_big_combine(&row, &pc.neg(), unsafe { nikaia_std::proven::read(&self.big_rows, (at) as usize) }, &tc);
+                    let made = sv_big_combine(&row, &pc.neg_own(), unsafe { nikaia_std::proven::read(&self.big_rows, (at) as usize) }, &tc);
                     self.big_work += made.work;
                     row = made.row;
                 }
@@ -1147,7 +1147,7 @@ impl SvSimplex {
             if at >= 0 {
                 let b = *nikaia_std::index::get(&self.basic, (r) as usize);
                 let a = (*nikaia_std::index::get(&unsafe { nikaia_std::proven::read(&self.big_rows, (r) as usize) }.ks, nikaia_std::index::at(at))).clone();
-                let d = sv_big_coef(unsafe { nikaia_std::proven::read(&self.big_rows, (r) as usize) }, b).neg();
+                let d = sv_big_coef(unsafe { nikaia_std::proven::read(&self.big_rows, (r) as usize) }, b).neg_own();
                 let change = sv_big_delta_scale(&moved, &a, &d);
                 { let __nikaia_stored = sv_big_delta_add(nikaia_std::index::get(&self.big_values, nikaia_std::index::at(b)), &change); unsafe { nikaia_std::proven::write(&mut self.big_values, (b) as usize, __nikaia_stored) }; }
             }
@@ -1228,7 +1228,7 @@ impl SvSimplex {
             let mut weight = a.neg();
             if v != b {
                 upper = (a.sign() > 0) == at.below;
-                weight = a.abs();
+                weight = a.abs_own();
             }
             let side = if upper { (*nikaia_std::index::get(&self.upper, nikaia_std::index::at(v))).clone() } else { (*nikaia_std::index::get(&self.lower, nikaia_std::index::at(v))).clone() };
             if !side.set { return self.big_unknown(); }
@@ -1249,7 +1249,7 @@ impl SvSimplex {
         i = 0;
         while ((i) as usize) < weights.len() {
             let mut m = (*unsafe { nikaia_std::proven::read(&weights, (i) as usize) }).mul(&sv_big(common / *unsafe { nikaia_std::proven::read(&scales, (i) as usize) }));
-            if *unsafe { nikaia_std::proven::read(&negs, (i) as usize) } { m = m.neg(); }
+            if *unsafe { nikaia_std::proven::read(&negs, (i) as usize) } { m = m.neg_own(); }
             if m.sign() != 0 {
                 kept.push((*unsafe { nikaia_std::proven::read(&sources, (i) as usize) }).clone());
                 big_ms.push(m);
@@ -1360,7 +1360,7 @@ impl SvSimplex {
     pub(crate) fn big_split_point(&self, v: i64) -> Option<i64> {
         let value = nikaia_std::index::get(&self.big_values, nikaia_std::index::at(v));
         let mut floor = sv_big_rat_floor(&value.c);
-        if value.c.den == sv_big(1) && value.k.num.sign() < 0 { floor = floor.sub(&sv_big(1)); }
+        if value.c.den == sv_big(1) && value.k.num.sign() < 0 { floor = floor.sub_own(&sv_big(1)); }
         floor.narrow()
     }
 }

@@ -491,8 +491,9 @@ pub struct CheckFlow {
     pub clone_loans: Vec[(String, i64?)],
     /// **The `replace`s on a `let`'s text that may be its last use**
     /// (ADR-text-reuse-1 D4, #1589), asked where the body ends: those no
-    /// read follows work in the text's own buffer.
-    pub replaces: Vec[CheckClone],
+    /// read follows work in the text's own buffer. So do the calls of a
+    /// method with a consuming twin (D6), each with the name narrated.
+    pub replaces: Vec[(CheckClone, String)],
     /// **The names no view is ever taken of** in the body (`lone_texts_of`):
     /// only such a text can be handed to a `replace` at its last use.
     pub lone_texts: collections::BTreeSet[String],

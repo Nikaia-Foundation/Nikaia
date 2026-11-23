@@ -70,6 +70,85 @@ fn magnitude_add(a: Vec[u64], b: Vec[u64]) -> Vec[u64] sync {
     return sum
 }
 
+/// `a + b` written into `a`'s digits (ADR-text-reuse-1 D6).
+fn magnitude_add_in(mut a: Vec[u64], b: Vec[u64]) sync {
+    while a.len() < b.len() {
+        a.push(0)
+    }
+    let mut carry = false
+    for at in 0..<a.len() {
+        if !carry && at >= b.len() {
+            break
+        }
+        let y: u64 = if at < b.len() { b[at] } else { 0 }
+        let (s1, o1) = a[at].overflowing_add(y)
+        let (s2, o2) = s1.overflowing_add(if carry { 1 } else { 0 })
+        a[at] = s2
+        carry = o1 || o2
+    }
+    if carry {
+        a.push(1)
+    }
+}
+
+/// `a - b` written into `a`'s digits, for magnitudes with `a >= b`; the
+/// leading zero digits are left for `made` (ADR-text-reuse-1 D6).
+fn magnitude_sub_in(mut a: Vec[u64], b: Vec[u64]) sync {
+    let mut borrow = false
+    for at in 0..<a.len() {
+        if !borrow && at >= b.len() {
+            break
+        }
+        let y: u64 = if at < b.len() { b[at] } else { 0 }
+        let (d1, o1) = a[at].overflowing_sub(y)
+        let (d2, o2) = d1.overflowing_sub(if borrow { 1 } else { 0 })
+        a[at] = d2
+        borrow = o1 || o2
+    }
+}
+
+/// `b - a` written into `a`'s digits, for magnitudes with `b > a`; the
+/// leading zero digits are left for `made` (ADR-text-reuse-1 D6).
+fn magnitude_sub_from_in(mut a: Vec[u64], b: Vec[u64]) sync {
+    while a.len() < b.len() {
+        a.push(0)
+    }
+    let mut borrow = false
+    for at in 0..<a.len() {
+        let x: u64 = if at < b.len() { b[at] } else { 0 }
+        let (d1, o1) = x.overflowing_sub(a[at])
+        let (d2, o2) = d1.overflowing_sub(if borrow { 1 } else { 0 })
+        a[at] = d2
+        borrow = o1 || o2
+    }
+}
+
+/// The number of sign `own` and magnitude `kept` plus the one of sign `sign`
+/// and magnitude `digits`, written into `kept` (ADR-text-reuse-1 D6).
+fn added_in(own: i64, keep kept: Vec[u64], sign: i64, digits: ref Vec[u64]) -> BigInt sync {
+    if own == 0 {
+        return made(sign, digits.clone())
+    }
+    let mut sum = kept
+    if sign == 0 {
+        return made(own, sum)
+    }
+    if own == sign {
+        magnitude_add_in(sum, digits)
+        return made(own, sum)
+    }
+    let order = magnitude_compare(sum, digits)
+    if order == 0 {
+        return made(0, [])
+    }
+    if order > 0 {
+        magnitude_sub_in(sum, digits)
+        return made(own, sum)
+    }
+    magnitude_sub_from_in(sum, digits)
+    return made(sign, sum)
+}
+
 /// `a - b` for magnitudes with `a >= b`.
 fn magnitude_sub(a: Vec[u64], b: Vec[u64]) -> Vec[u64] sync {
     let mut rest: Vec[u64] = Vec(capacity: a.len())
@@ -357,6 +436,27 @@ impl BigInt {
     /// The magnitude, never negative.
     pub fn abs(self) -> BigInt sync {
         return made(1, self.digits.clone())
+    }
+
+    /// **The consuming twins** (ADR-text-reuse-1 D6): `add`, `sub`, `neg`
+    /// and `abs` where the receiver is not read again, the result written
+    /// into its digits. The emitter picks them at such a site; they are no
+    /// name of the ledger, so no program calls them.
+    pub fn add_own(keep self, other: ref BigInt) -> BigInt sync {
+        return added_in(self.sign, self.digits, other.sign, other.digits)
+    }
+
+    pub fn sub_own(keep self, other: ref BigInt) -> BigInt sync {
+        return added_in(self.sign, self.digits, -other.sign, other.digits)
+    }
+
+    pub fn neg_own(keep self) -> BigInt sync {
+        let sign = self.sign
+        return made(-sign, self.digits)
+    }
+
+    pub fn abs_own(keep self) -> BigInt sync {
+        return made(1, self.digits)
     }
 
     /// `self * other`, schoolbook.

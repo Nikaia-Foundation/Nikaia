@@ -129,6 +129,21 @@ per site, with the file and line of the cut or the call, e.g.
 same analysis and shows the same text as an inlay hint at that site. Nothing
 is written in the source, and nothing changes what the program does.
 
+### D6 — Any `std` method with a consuming lowering of itself works the same way.
+
+Added November 23, 2026 (supervisor decision, issue #2823, from the spike
+#2795). D4 is not particular to `replace`: a `std` method that declares a
+consuming lowering of itself, a twin that builds its result in the
+receiver's own buffer, is lowered to that twin wherever its receiver is dead
+by D4's test (`x = x.m(…)`, `let y = x.m(…)` with `x` not read again, a
+temporary nobody reads again), and to the method itself everywhere else. The
+first are `bigint::BigInt`'s `add`, `sub`, `neg` and `abs`: the sum, the
+difference and the sign are written into the receiver's digits. The method a
+program writes stays the one method; the twin is no name a program can call
+(one way to say it, as in D4). `--tethers` narrates each site as D5 does:
+`main.nika:9: add works in the buffer of acc`, and for a temporary
+`add works in the buffer the mul before it made`.
+
 ## 5. Consequences
 
 `.to_string()` leaves code on text; a program that wrote it drops it, which

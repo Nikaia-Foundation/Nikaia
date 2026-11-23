@@ -1395,9 +1395,9 @@ impl EmitState {
         // **A `replace` on the text a `replace` made works in its buffer**
         // (ADR-text-reuse-1 D4, `replaced_in_place`): the temporary is
         // handed over whole and nobody reads it again.
-        // A `let`'s text at its last use (`replaced_last_uses`) is handed
+        // A `let`'s text at its last use (`consumed_last_uses`) is handed
         // over the same way.
-        if receiver != null && (name == "replace" || name == "replacen") && (self.facts.replaced_in_place.contains(on_node) || self.facts.replaced_last_uses.contains(on_node)) {
+        if receiver != null && (name == "replace" || name == "replacen") && (self.facts.replaced_in_place.contains(on_node) || self.facts.consumed_last_uses.contains(on_node)) {
             let text = receiver ?? return
             let call: String = if name == "replacen" { "replacedn" } else { "replaced" }
             out.push(f"nikaia_std::search::{call}(")
@@ -1872,6 +1872,15 @@ impl EmitState {
             if name == "len" && on_fused {
                 written = "count"
             }
+            // **A call at its receiver's last use is the consuming twin**
+            // (ADR-text-reuse-1 D6, `consumed_last_uses`): the receiver is
+            // handed over and the result made in its buffer.
+            if receiver != null && self.facts.consumed_last_uses.contains(on_node) {
+                let twin = emit_call_consuming_twin(self.facts.method_callees[on_node]?.clone() ?? "")
+                if twin != "" {
+                    written = twin.clone()
+                }
+            }
             // **Text views read from `String` slots, collected** (#1388,
             // ADR-282 D1): each item is made the `&str` the list holds, from
             // a `&String` or a `&&str` alike.
@@ -2192,7 +2201,7 @@ impl EmitState {
         // in `i64`: the language below's own give a `usize`. **Each, and
         // `find`, takes a text or one scalar** (#877), lent with `&` whichever
         // it is.
-        let replaced_here = self.facts.replaced_in_place.contains(node_key(receiver)) || self.facts.replaced_last_uses.contains(node_key(receiver))
+        let replaced_here = self.facts.replaced_in_place.contains(node_key(receiver)) || self.facts.consumed_last_uses.contains(node_key(receiver))
         if (name == "rfind" || (name == "replacen" && !replaced_here)) && self.facts.text_finds.contains(node_key(receiver)) {
             let module = if name == "rfind" { "text" } else { "search" }
             out.push(f"nikaia_std::{module}::{name}(&")

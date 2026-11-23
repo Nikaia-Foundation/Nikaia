@@ -564,6 +564,46 @@ fn check_core_stmt_replaced_said(world: ref CheckWorld, target: ref Expr, value:
     return f"{by} works in the buffer of {named}"
 }
 
+fn check_core_stmt_plain_target(world: ref CheckWorld, target: ref Expr) -> String sync {
+    return match target {
+        Expr::Variable(name, _) => world.words.resolve(name).clone(),
+        else => "",
+    }
+}
+
+/// The method of `x = x.m(..)` where no argument reads `x`, else `null`.
+fn check_core_stmt_consumes_itself(world: ref CheckWorld, target: ref Expr, value: ref Expr) -> String? sync {
+    let named: String = check_core_stmt_plain_target(world, target)
+    if named == "" {
+        return null
+    }
+    return match value {
+        Expr::MethodCall { receiver, method, args, .. } => {
+            let on_itself = match receiver {
+                Expr::Variable(name, _) => world.words.resolve(name) == named,
+                else => false,
+            }
+            if !on_itself {
+                return null
+            }
+            for arg in args {
+                for each in visited_in_expr(arg) {
+                    match each {
+                        Expr::Variable(v, _) => {
+                            if world.words.resolve(v) == named {
+                                return null
+                            }
+                        },
+                        else => {}
+                    }
+                }
+            }
+            world.words.resolve(method).clone()
+        },
+        else => null,
+    }
+}
+
 fn check_core_stmt_replaces_itself(world: ref CheckWorld, target: ref Expr, value: ref Expr) -> bool sync {
     let named: String = match target {
         Expr::Variable(name, _) => world.words.resolve(name).clone(),
@@ -2280,6 +2320,22 @@ fn check_core_stmt_assign[H: CheckHost](mut state: CheckState, world: ref CheckW
     if op == null && is_text_type(into.unseen()) && !into.is_a_view() && check_core_stmt_replaces_itself(world, target, value) {
         let replaced = state.facts.replaced_assigns.insert(span.start as i64)
         let said = state.facts.narrated.insert((span.start as i64, check_core_stmt_replaced_said(world, target, value)))
+    }
+    // **`x = x.add(y)` works in `x`'s buffer** (ADR-text-reuse-1 D6): a
+    // method with a consuming twin, on a `let mut` that owns its value and
+    // that no argument reads.
+    if op == null {
+        let by: String = check_core_stmt_consumes_itself(world, target, value) ?? ""
+        let named: String = check_core_stmt_plain_target(world, target)
+        if by != "" && check_core_method_consumes(into.unseen(), by) && state.a_let_handed_to_itself(named) {
+            match value {
+                Expr::MethodCall { receiver, .. } => {
+                    let handed = state.facts.consumed_last_uses.insert(id_of(receiver) as i64)
+                    let said = state.facts.narrated.insert((span.start as i64, f"{by} works in the buffer of {named}"))
+                },
+                else => {}
+            }
+        }
     }
     // **`x += a` over two integer types is `x = x + a`** (ADR-285 D32).
     if op != null && !check_core_stmt_a_shift(op) {

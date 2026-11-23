@@ -434,6 +434,45 @@ pub(crate) fn check_core_stmt_replaced_said(world: &CheckWorld<'_, '_, '_, '_, '
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
+pub(crate) fn check_core_stmt_plain_target(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, target: &Expr) -> String {
+    match target {
+        Expr::Variable(name, _) => { let name = *name; nikaia_std::block::Text::from(world.words.resolve(name).to_string()) },
+        _ => String::from(""),
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn check_core_stmt_consumes_itself(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, target: &Expr, value: &Expr) -> Option<String> {
+    let named: String = check_core_stmt_plain_target(world, target);
+    if named == "" { return None; }
+    match value {
+        Expr::MethodCall { receiver, method, args, .. } => {
+            let receiver = nikaia_std::boxed::open(receiver); let method = *method;
+            let on_itself = match receiver {
+                Expr::Variable(name, _) => { let name = *name; world.words.resolve(name) == named },
+                _ => false,
+            };
+            if !on_itself { return None; }
+            for arg in args.iter() {
+                for each in visited_in_expr(arg) {
+                    match each {
+                        Expr::Variable(v, _) => {
+                            let v = *v;
+                            if world.words.resolve(v) == named { return None; }
+                        },
+                        _ => { },
+                    }
+                }
+            }
+            Some(nikaia_std::block::Text::from(world.words.resolve(method).to_string()))
+        },
+        _ => None,
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
 pub(crate) fn check_core_stmt_replaces_itself(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, target: &Expr, value: &Expr) -> bool {
     let named: String = match target {
         Expr::Variable(name, _) => { let name = *name; nikaia_std::block::Text::from(world.words.resolve(name).to_string()) },
@@ -1625,6 +1664,20 @@ pub(crate) fn check_core_stmt_assign<H: CheckHost>(state: &mut CheckState, world
     if op.is_none() && is_text_type(&into.unseen()) && !into.is_a_view() && check_core_stmt_replaces_itself(world, target, value) {
         let replaced = state.facts.replaced_assigns.insert(span.start as i64);
         let said = state.facts.narrated.insert((span.start as i64, check_core_stmt_replaced_said(world, target, value)));
+    }
+    if op.is_none() {
+        let by: String = nikaia_std::index::or(check_core_stmt_consumes_itself(world, target, value), || "".into());
+        let named: String = check_core_stmt_plain_target(world, target);
+        if by != "" && check_core_method_consumes(&into.unseen(), &by) && state.a_let_handed_to_itself(&named) {
+            match value {
+                Expr::MethodCall { receiver, .. } => {
+                    let receiver = nikaia_std::boxed::open(receiver);
+                    let handed = state.facts.consumed_last_uses.insert(id_of(receiver) as i64);
+                    let said = state.facts.narrated.insert((span.start as i64, format!("{} works in the buffer of {}", by, named)));
+                },
+                _ => { },
+            }
+        }
     }
     if op.is_some() && !check_core_stmt_a_shift(std::convert::identity(op)) {
         let o: &BinaryOp = match op { Some(__nikaia_value) => __nikaia_value, None => return check_core_stmt_unit() };

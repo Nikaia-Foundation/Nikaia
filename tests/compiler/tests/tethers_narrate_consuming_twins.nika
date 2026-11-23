@@ -1,0 +1,27 @@
+// ADR-text-reuse-1 D6 (#2823): `--tethers` prints one line per site where a
+// `bigint::BigInt` `add`, `sub`, `neg` or `abs` works in its receiver's
+// digits: `acc = acc.add(..)`, a `sub` at the last use of a `let`, and a `neg`
+// on what a `mul` made. An `abs` on a `let` read afterwards narrates nothing.
+use std::env
+use std::fs
+use std::process
+
+fn toolchain() -> String throws {
+    let exe = env::current_exe()?.display() ?? ""
+    if exe.len() > 0 { return exe }
+    return "target/fast/nikaia"
+}
+
+fn main() throws {
+    let tmp = fs::scratch()
+    let program = "use std::bigint\n\nfn big() -> bigint::BigInt sync {\n    return bigint::BigInt::of(1000000000000).mul(bigint::BigInt::of(1000000000000))\n}\n\nfn main() throws {\n    let mut acc = big()\n    acc = acc.add(bigint::BigInt::of(1))\n    let a = big()\n    let y = a.sub(bigint::BigInt::of(1))\n    let t = big().mul(bigint::BigInt::of(3)).neg()\n    let k = big()\n    let kept = k.abs()\n    println(f\"{acc.to_text()} {y.to_text()} {t.to_text()} {kept.to_text()} {k.to_text()}\")\n}\n"
+    fs::write("main.nika", tmp, program)
+    let out = process::run(toolchain(), ["lower", "--tethers", "main.nika"]; dir: tmp.path().to_text())
+    for line in out.stdout.lines() {
+        if line.starts_with("main.nika:") {
+            println(line)
+        }
+    }
+    println(f"exit {out.code}")
+    print(out.stderr)
+}
