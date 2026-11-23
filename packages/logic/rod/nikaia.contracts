@@ -5230,7 +5230,7 @@ signature = "(srcs: ref Vec[logic::SvSrc]) -> String"
 
 [fn."logic::sv_status"]
 sync = "inferred"
-panics = true
+panics = false
 touches = []
 views = ["source: borrowed"]
 signature = "(source: String) -> String"
