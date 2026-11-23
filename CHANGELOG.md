@@ -8,6 +8,13 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1552] — 2026-11-23
+
+**Builders' changes (#2585, #2587)**
+- The sync pass derives one function's claim, or its recursive group's, from its callees' stored claims, and the package's callees first through it; its ledger write-back, notes and check move from Rust into sync.nika (ADR-100 D7).
+- `a ?? b ?? false` over map reads is a `bool` below, where rustc could not infer the inner `index::or`; and `m[k]` after `let k = xs.last() ?? continue` keys the map with the reference `k` already is (D30), as `m.get(k)` did, not `&&String`.
+- The tether pass has a per-function entry (ADR-100 D7), and its package loop is Nikaia; a `for` over a list literal of integers can index a list of structs (rustc refused it with "type annotations needed").
+
 ## [0.0.1551] — 2026-11-23
 
 **Builders' changes (#2502, #2768, #987)**
