@@ -1038,6 +1038,8 @@ impl EmitState {
         walk.async_within = String::from("");
         let admission = nikaia_std::block::Text::from(walk.async_admission.to_string()); #[allow(clippy::redundant_locals)] let handles = handles;
         walk.async_admission = String::from("");
+        let outer_gates = walk.async_gates.copy_owned();
+        walk.async_gates = vec![];
         let mut first: &'static str = "";
         if admission != "" { first = "nikaia_std::task::admission_first(__nikaia_admission).await; "; }
         let mut fallback_inside = false;
@@ -1102,6 +1104,7 @@ impl EmitState {
         }
         if deferred { out.push(")"); }
         if opened { out.push(" }"); }
+        walk.async_gates = outer_gates;
         Ok(())
     }
 }
