@@ -690,7 +690,9 @@ starts no task (D9); `NK2112` `limit:` on a form that starts one task (D15);
 `NK2115` `async` before a function's declaration (D5); `NK2118` retired (D22); `NK2119`
 (warning) a `par_iter` lambda starts to pause (D32); `NK2120` `async` inside a
 loop's body (D30); `NK2121` a deferred handle not started, or started twice, on
-some path (D12); `NK2122` a child handle that leaves its group (D11). `NK2109`
+some path (D12); `NK2122` a child handle that leaves its group (D11). `NK2123`, `NK2124` and `NK2125`
+(warnings) a `spawn`, an `overlap` block and a `task::scope` call, until #991
+removes them (D39). `NK2109`
 is asked of a `join(within:)` as D17 says. `NK2113`, `NK2114`, `NK2116` and
 `NK2117` are retired and not reused.
 
@@ -812,3 +814,30 @@ group's end) and takes a place again, as a queued task does (D37), before it
 goes on. "At most `n` in flight" counts the tasks that run, not the ones
 waiting for their children, and no nesting of forms can block on its own
 places.
+
+### D39 - The forms async-5 replaces are warned with an edit before they go (owner, 2026-11-23, #990).
+
+Before the move removes `spawn`, `overlap` and `task::scope` (#991), the
+checker warns at each use, and the warning carries the edit that rewrites it
+where the edit keeps the meaning; `nikaia fix` makes those edits (`--only` picks
+one code). A use the edit cannot rewrite with the same meaning is warned
+without an edit: the message names the form that replaces it, and the writer
+rewrites it. Users migrate at their own pace and learn the new form from the
+edit; the tree is migrated the same way (#990), so the tool is tested on the
+repository's own programs before anyone else's.
+
+* `NK2123` `spawn fn { … }`, or `std::task::spawn(f)`: the edit writes
+  `async(detached) fn { … }` (D13). Always mechanical.
+* `NK2124` an `overlap` block: where its value is bound, `let (x, y) =
+  overlap { a()  b() }`, the edit writes `let (x, y) = (async a(), async b())`
+  (D6); where it is a statement whose branches give nothing, `async { async a()
+  async b() }` (D9). A branch that is more than one expression, or a block whose
+  branches meet a binding, gets no edit.
+* `NK2125` a `task::scope` call: where its body is one `for` over a list
+  whose body starts one task per element and joins none, the edit writes
+  `xs.par_iter().for_each fn(x) { … }` (D27), unless the task's body prints or
+  writes another shared resource (`NK2104`); any other scope (handles joined,
+  tasks started outside the loop) gets no edit, and the message names
+  `async(handle)` (D11) and `par_iter`.
+
+The commit of #991 that removes a form retires its code with it.
