@@ -421,8 +421,11 @@ Paths: `nikaia.toml`, `nikaia.lock`, `nikaia.proofs`, `ledgers`, `packages/`, `e
 * **A tracked `nikaia.lock` is a ledger, stable across builds** (#1945): it
   holds the toolchain, the units' source hashes and the resolved dependencies,
   not the compiler's identity (ADR-021 D2, D3: that is in the cache key under
-  `target/`), so a rebuild of the compiler leaves it as it is. Most locks are
-  git-ignored; `packages/*/nikaia.lock` and `nikaia.proofs` are tracked.
+  `target/`), so a rebuild of the compiler leaves it as it is. Every in-place
+  project's lock and ledgers are tracked and checked (#2797: `ledgers.nika
+  -- --list` names them, `tests/compiler` among them); only
+  `benches/yaml/*`, `examples/foreign-runtime/{crossing,smuggled}` and the
+  toolchain's own packages keep theirs ignored.
   Commit the lock with a change to its package's sources; one you did not
   touch that changed in the tree comes from the driver's `drive_ledgers` or
   another run's `ledgers.nika --refresh`, which commits it: leave it
