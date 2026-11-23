@@ -27,7 +27,7 @@ fn sh(dir: String, script: String) throws {
 
 // The lines of a ledgers.nika run naming a directory, and its exit code.
 fn ledgers(nikaia: String, repo: String, work: ref fs::Root, mode: String) throws {
-    let out = process::run(nikaia.clone(), ["run", f"{repo}/scripts/ledgers.nika", "--", mode, "--exe", nikaia]; dir: work.path().to_text())
+    let out = process::run(nikaia.clone(), ["run", f"{repo}/scripts/ledgers.nika", "--", mode]; dir: work.path().to_text())
     for line in out.stdout.lines() {
         if line.starts_with("examples/") || line.starts_with("packages/") { println(f"  {line}") }
     }
