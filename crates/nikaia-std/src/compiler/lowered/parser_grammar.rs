@@ -1374,7 +1374,7 @@ pub fn pg_render(source: &str) -> String {
         Ok(value) => value,
         Err(error) => { return format!("refused: {}", error); },
     };
-    let mut parts: Vec<String> = Vec::new();
+    let mut parts: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     parts.reserve(ts.iter().size_hint().0); for t in ts.iter() {
         let b = if t.broke { "\\n" } else { "" };
         parts.push(format!("{}{}@{}", b, pg_kind_text(&t.kind), t.start));

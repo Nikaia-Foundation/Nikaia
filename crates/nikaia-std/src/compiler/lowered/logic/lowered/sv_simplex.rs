@@ -639,12 +639,12 @@ impl SvSimplex {
         let turn = sv_row_coef(nikaia_std::index::get(&self.rows, nikaia_std::index::at(r)), col) > 0;
         self.mark_round += 1;
         let round = self.mark_round;
-        let mut changed: Vec<i64> = Vec::with_capacity(nikaia_std::count::of((*nikaia_std::index::get(&self.col_rows, nikaia_std::index::at(j))).len() as i64));
-        let mut made: Vec<SvRow> = Vec::with_capacity(nikaia_std::count::of((*unsafe { nikaia_std::proven::read(&self.col_rows, (j) as usize) }).len() as i64));
+        let mut changed: Vec<i64> = nikaia_std::block::List::with_capacity_in(nikaia_std::count::of((*nikaia_std::index::get(&self.col_rows, nikaia_std::index::at(j))).len() as i64), nikaia_std::block::Place::Block);
+        let mut made: Vec<SvRow> = nikaia_std::block::List::with_capacity_in(nikaia_std::count::of((*unsafe { nikaia_std::proven::read(&self.col_rows, (j) as usize) }).len() as i64), nikaia_std::block::Place::Block);
         let mut came: Vec<u32> = vec![];
         let mut left: Vec<u32> = vec![];
-        let mut came_end: Vec<i64> = Vec::with_capacity(nikaia_std::count::of((*unsafe { nikaia_std::proven::read(&self.col_rows, (j) as usize) }).len() as i64));
-        let mut left_end: Vec<i64> = Vec::with_capacity(nikaia_std::count::of((*unsafe { nikaia_std::proven::read(&self.col_rows, (j) as usize) }).len() as i64));
+        let mut came_end: Vec<i64> = nikaia_std::block::List::with_capacity_in(nikaia_std::count::of((*unsafe { nikaia_std::proven::read(&self.col_rows, (j) as usize) }).len() as i64), nikaia_std::block::Place::Block);
+        let mut left_end: Vec<i64> = nikaia_std::block::List::with_capacity_in(nikaia_std::count::of((*unsafe { nikaia_std::proven::read(&self.col_rows, (j) as usize) }).len() as i64), nikaia_std::block::Place::Block);
         let mut k: i64 = 0;
         while ((k) as usize) < (*unsafe { nikaia_std::proven::read(&self.col_rows, (j) as usize) }).len() {
             let t = *nikaia_std::index::get(unsafe { nikaia_std::proven::read(&self.col_rows, (j) as usize) }, (k) as usize);

@@ -3408,7 +3408,10 @@ fn check_core_place_in_block(mut state: CheckState, world: ref CheckWorld, block
                         }
                     }
                 }
-                if names.len() == 1 && check_core_placeable_literal(value) {
+                // **And a list made by its constructor** (#2805): `Vec()` and
+                // `Vec(capacity: n)` are `[]` with room ahead, placed by the
+                // same rule (ADR-327 D9) and keyed by the `Vec` they call.
+                if names.len() == 1 && (check_core_placeable_literal(value) || check_core_placeable_list_call(world, value)) {
                     let name = f"{world.words.resolve(names[0])}"
                     if check_core_a_plain_list(state, name) && check_core_view_list_bound_once(world, block, name) {
                         let mut local = true
@@ -3418,7 +3421,10 @@ fn check_core_place_in_block(mut state: CheckState, world: ref CheckWorld, block
                             later += 1
                         }
                         if local {
-                            state.facts.placed_in_block.insert(node_key(value))
+                            match value {
+                                Expr::Call { func, .. } => state.facts.placed_in_block.insert(node_key(func)),
+                                else => state.facts.placed_in_block.insert(node_key(value)),
+                            }
                         }
                     }
                 }
@@ -3433,6 +3439,18 @@ fn check_core_place_in_block(mut state: CheckState, world: ref CheckWorld, block
 fn check_core_placeable_literal(value: ref Expr) -> bool sync {
     return match value {
         Expr::ListLit { .. } => true,
+        else => false,
+    }
+}
+
+/// Whether `value` is `Vec()` or `Vec(capacity: n)`, an empty list the
+/// emitter can place (#2805).
+fn check_core_placeable_list_call(world: ref CheckWorld, value: ref Expr) -> bool sync {
+    return match value {
+        Expr::Call { func, args, config, .. } => args.len() == 0 && config.iter().all(fn(option) { world.words.resolve(option.name) == "capacity" }) && match func {
+            Expr::Variable(found, _) => world.words.resolve(found) == "Vec",
+            else => false,
+        },
         else => false,
     }
 }

@@ -1038,6 +1038,7 @@ signature = "() -> i64"
 throws = ["io::IoError"]
 panics = false
 touches = ["file('missing-one.txt') read", "file('missing-two.txt') read"]
+provenance = "untrusted"
 signature = "() -> String"
 
 [fn."error_types_read"]
@@ -1051,6 +1052,7 @@ signature = "(path: String) -> String"
 throws = ["io::IoError"]
 panics = false
 touches = ["file('missing-one.txt') read", "file('missing-two.txt') read"]
+provenance = "untrusted"
 signature = "() -> String"
 
 [fn."errors_lowering_both"]
@@ -1265,6 +1267,7 @@ signature = "(s: ref String) -> i64"
 [fn."handed_over_two_loops"]
 sync = "inferred"
 panics = false
+places = true
 touches = []
 signature = "() -> i64"
 

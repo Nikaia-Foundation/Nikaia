@@ -2295,6 +2295,7 @@ signature = "(mut normal: LgNormal, from: ref TermArena, id: i64, mut renamed: c
 [fn."lg_eliminate"]
 sync = "inferred"
 panics = true
+places = true
 touches = []
 views = ["now: borrowed", "budget: borrowed"]
 signature = "(mut held: Vec[LgHeld], now: ref Vec[i64], rank: i64, budget: ref LgBudget, mut steps: Vec[LgStep], mut round_places: Vec[Vec[i64]], mut stop: Vec[LgClosed]) -> Vec[i64]"
