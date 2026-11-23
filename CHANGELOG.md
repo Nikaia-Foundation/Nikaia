@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1549] — 2026-11-23
+
+**simd: lookup and lookup_or_zero on Fixed[u8, N] (ADR-377 D10), fannkuch-redux flips with one lookup (#1845)**
+- simd: `lookup` and `lookup_or_zero` pick the bytes of a `simd::Fixed[u8, N]` by indices known at run time (ADR-377 D10): one `pshufb` per 16 bytes with SSSE3, `lookup`'s index proved below N (NK1298); fannkuch-redux for speed counts 111.6 instructions a permutation at x86-64-v3 (215.6 before).
+
 ## [0.0.1548] — 2026-11-22
 
 **Builders' changes (#2706, #2707)**

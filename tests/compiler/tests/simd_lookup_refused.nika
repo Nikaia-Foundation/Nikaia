@@ -1,0 +1,28 @@
+// `lookup` asks every lane of its index proved below the lanes, and is
+// `Fixed[u8, N]`'s only (ADR-377 D10).
+use std::simd
+
+fn unproved(table: simd::Fixed[u8, 16], idx: simd::Fixed[u8, 16]) -> simd::Fixed[u8, 16] sync {
+    return table.lookup(idx)
+}
+
+fn too_large(table: simd::Fixed[u8, 16]) -> simd::Fixed[u8, 16] sync {
+    return table.lookup(simd::Fixed::from([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 16]))
+}
+
+fn on_lanes(table: simd::Lanes[u8], idx: simd::Lanes[u8]) -> simd::Lanes[u8] sync {
+    return table.lookup(idx)
+}
+
+fn on_words(table: simd::Fixed[u32, 4]) -> simd::Fixed[u8, 4] sync {
+    return table.lookup(simd::Fixed::from([0, 1, 2, 3]))
+}
+
+fn other_count(table: simd::Fixed[u8, 16], idx: simd::Fixed[u8, 8]) -> simd::Fixed[u8, 16] sync {
+    return table.lookup_or_zero(idx)
+}
+
+fn main() throws {
+    let table: simd::Fixed[u8, 16] = simd::splat(1)
+    println(f"{unproved(table, table).lane(0)} {too_large(table).lane(0)}")
+}
