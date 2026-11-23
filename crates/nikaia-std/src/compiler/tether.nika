@@ -13,7 +13,9 @@
 // wrong thing.
 
 use std::collections
+use std::node_id
 use std::text
+use std::winnow_grammar
 
 /// The position a function's result occupies in the column - the spelling
 /// `sharing` uses for the same position.
@@ -129,6 +131,138 @@ pub fn function_views(item: ref Item, target: ref String?, names: ref winnow_gra
         else => {}
     }
     return held
+}
+
+/// **The `views` column of a package's ledger** (D7), the whole package at
+/// once: every function's and method's states (`tether_of_function`), and an
+/// `entry` rule's whose result may point into the text it parsed - the entry
+/// holds the input and the result borrows it (ADR-grammar-syntax-v1 D5).
+/// The reference the per-function entry is held to (ADR-100 D7). Which
+/// positions really leave is `keep::infer`'s, run after this.
+pub fn tether_infer(mut ledger: Ledger, units: ref Vec[ParsedView], library: ref Ledger) {
+    let mut solved: collections::BTreeMap[String, Vec[Held]] = collections::BTreeMap()
+    let mut package = PackageTypes::empty()
+    for view in units {
+        declare_unit(view.words, view.items, package)
+    }
+    let package_borrowing = emit_tables_package_borrowing(units)
+    for view in units {
+        // By **name**: a `Symbol` belongs to the parse that interned it.
+        let borrowing: collections::BTreeSet[String] = emit_tables_borrowing_structs_beside(view.words, view.items, package_borrowing).iter().map(fn(sym) { view.words.resolve(sym).clone() }).collect()
+        for item in view.items {
+            match item.node {
+                Item::Fn { name, .. } => {
+                    let key = tether_function_key(view.words, name, null)
+                    solved_into(solved, key, tether_of_function(item.node, null, key, view.words, borrowing, ledger, library))
+                }
+                Item::Impl { target, methods, .. } => {
+                    let owner: String? = view.words.resolve(target.name).clone()
+                    for method in methods {
+                        match method.node {
+                            Item::Fn { name, .. } => {
+                                let key = tether_function_key(view.words, name, owner)
+                                solved_into(solved, key, tether_of_function(method.node, owner, key, view.words, borrowing, ledger, library))
+                            }
+                            else => {}
+                        }
+                    }
+                }
+                Item::Grammar(def) => {
+                    let named = view.words.resolve(def.name).clone()
+                    for rule in def.rules {
+                        if rule.is_entry {
+                            solved_into(solved, f"{named}::{view.words.resolve(rule.name)}", tether_of_entry_rule(view.words, rule.ret_type, package))
+                        }
+                    }
+                }
+                else => {}
+            }
+        }
+    }
+    for (key, held) in solved {
+        let mut contract = ledger.functions.get(key) ?? continue
+        contract.views = held.clone()
+    }
+}
+
+/// A column with something in it is the answer for its key; an empty one
+/// says nothing.
+fn solved_into(mut solved: collections::BTreeMap[String, Vec[Held]], key: ref String, held: Vec[Held]) {
+    if held.len() > 0 {
+        solved.insert(key.clone(), held)
+    }
+}
+
+/// **One function's final column** (ADR-100 D7): the states its signature's
+/// views solve to (`function_views`), with the `String` parameters its body
+/// only reads lent beside them. It reads the function's own declaration and
+/// its own entry of `own` (the signature, `keeps` and `by_value` the passes
+/// before this one wrote) and **no callee's column**: so every function is a
+/// unit of its own, any order is callees first, and a recursive group needs no
+/// fixpoint. `key` is the function's key in the ledger, `target` its `impl`'s.
+pub fn tether_of_function(item: ref Item, target: ref String?, key: ref String, names: ref winnow_grammar::InternerContext, borrowing: ref collections::BTreeSet[String], own: ref Ledger, library: ref Ledger) -> Vec[Held] {
+    let held = function_views(item, target, names, borrowing)
+    return lent_text(held, item, key, own, library, names)
+}
+
+/// **An `entry` rule's column**: its input and result Borrowed where its
+/// result may point into the text it parsed, else nothing.
+pub fn tether_of_entry_rule(names: ref winnow_grammar::InternerContext, result: ref Type?, package: ref PackageTypes) -> Vec[Held] {
+    if !a_parse_that_views(names, result, package) {
+        return []
+    }
+    return [Held { position: INPUT_POSITION.clone(), state: State::Borrowed }, Held { position: RESULT_POSITION.clone(), state: State::Borrowed }]
+}
+
+/// `Type::method`, or the function's own name; `new` for Part I 4.2's
+/// anonymous constructor.
+fn tether_function_key(names: ref winnow_grammar::InternerContext, name: ref winnow_grammar::Symbol?, target: ref String?) -> String {
+    let mut own: String = "new"
+    let symbol: winnow_grammar::Symbol? = name?.clone()
+    if symbol != null {
+        own = names.resolve(symbol ?? return "").clone()
+    }
+    let owner = target ?? return own
+    return f"{owner}::{own}"
+}
+
+/// **A `String` parameter the body only reads is lent** (ADR-282 D2, D5): a
+/// `&str` below, as one written `ref String` is, so the ledger says
+/// `borrowed` for both alike. In the order the signature has them: the
+/// receiver, the parameters, the result.
+fn lent_text(held: Vec[Held], item: ref Item, key: ref String, own: ref Ledger, library: ref Ledger, names: ref winnow_grammar::InternerContext) -> Vec[Held] {
+    let contract = own.functions[key] ?? return held
+    return match item {
+        Item::Fn { receiver, args, .. } => lent_arguments(held, receiver != null, args, contract, library, names),
+        else => held,
+    }
+}
+
+fn lent_arguments(held: Vec[Held], has_receiver: bool, args: ref Vec[FnArg], contract: ref FnContract, library: ref Ledger, names: ref winnow_grammar::InternerContext) -> Vec[Held] {
+    let copying: Vec[ref Ledger] = [library]
+    let shift = if has_receiver { 1 } else { 0 }
+    let params: Vec[String] = args.iter().map(fn(arg) { names.resolve(arg.name).clone() }).collect()
+    let lent: Vec[String] = (0..<args.len()).filter(fn(at) { a_plain_text_parameter(args[at], names) && !held.iter().any(fn(h) { h.position == params[at] }) && lends_in_own(contract, at + shift, copying) }).map(fn(at) { params[at].clone() }).collect()
+    if lent.len() == 0 {
+        return held
+    }
+    let mut out: Vec[Held] = held.iter().filter(fn(h) { h.position == "self" }).cloned().collect()
+    for name in params {
+        let found = held.iter().find(fn(h) { h.position == name })
+        if found != null {
+            out.push(found?.clone() ?? continue)
+        } else if lent.contains(name) {
+            out.push(Held { position: name.clone(), state: State::Borrowed })
+        }
+    }
+    out.extend(held.iter().filter(fn(h) { h.position != "self" && !params.contains(h.position) }).cloned())
+    return out
+}
+
+/// A parameter written plain `String`: no view, no argument, no `?`, no run,
+/// not `mut`.
+fn a_plain_text_parameter(arg: ref FnArg, names: ref winnow_grammar::InternerContext) -> bool {
+    return names.resolve(arg.ty.name) == "String" && arg.ty.generics.len() == 0 && !arg.ty.is_view && !arg.ty.is_nullable && !arg.ty.is_slice && !arg.mutable
 }
 
 fn a_borrowing_target(target: ref String?, borrowing: ref collections::BTreeSet[String]) -> bool {
@@ -469,4 +603,66 @@ pub fn tethers_report(texts: ref Vec[String], ledger: ref Ledger, here: ref coll
         return "no view in a signature here, so there is no state to solve.\n"
     }
     return lines.join("")
+}
+
+/// One function of a test package: `name(param: String or ref String) ->
+/// ref String`, whose body calls `callee`.
+fn tether_test_fn(words: ref winnow_grammar::InternerContext, name: ref String, param: ref String, viewed: bool, result: bool, callee: ref String?) -> Spanned[Item] {
+    let text = Type { name: words.intern_string("String"), generics: [], is_view: viewed, is_tuple: false, is_nullable: false, code: null, count: null, is_mut: false, is_slice: false, either: false, lasting: false }
+    let mut ret_type: Type? = null
+    if result {
+        let mut viewing = text.clone()
+        viewing.is_view = true
+        ret_type = viewing
+    }
+    let mut stmts: Vec[Spanned[Stmt]] = []
+    if callee != null {
+        let called = Expr::Variable(words.intern_string(callee ?? ""), node_id::NodeId::fresh())
+        let call = Expr::Call { func: called, args: [], config: [], id: node_id::NodeId::fresh() }
+        stmts.push(Spanned { node: Stmt::Expr(call), span: Span::nowhere(), doc: null, attributes: [] })
+    }
+    let args: Vec[FnArg] = [FnArg { name: words.intern_string(param), ty: text, mutable: false, keep: false, span: Span::nowhere(), attributes: [] }]
+    let item = Item::Fn { name: words.intern_string(name), generics: [], receiver: null, args: args, config: [], spread: null, ret_type: ret_type, body: Block { stmts: stmts }, is_sync: false, sync_by: [], is_public: false, can_throw: false, is_extern: false, ret_from: [] }
+    return Spanned { node: item, span: Span::nowhere(), doc: null, attributes: [] }
+}
+
+/// **The per-function entry answers what the whole-package entry answers**
+/// (ADR-100 D7, ADR-403 D3): on a call chain `a -> b -> c` and a recursive
+/// pair `p <-> q`, each function's column comes from its own declaration and
+/// ledger entry alone, with no callee's column stored.
+test "the per-function tether entry gives the whole-package column" {
+    let words = winnow_grammar::InternerContext()
+    let items: Vec[Spanned[Item]] = [tether_test_fn(words, "a", "s", true, true, "b"), tether_test_fn(words, "b", "t", false, false, "c"), tether_test_fn(words, "c", "u", false, true, null), tether_test_fn(words, "p", "v", false, false, "q"), tether_test_fn(words, "q", "w", true, false, "p")]
+    let mut own = Ledger::blank()
+    let params = [("a", "s"), ("b", "t"), ("c", "u"), ("p", "v"), ("q", "w")]
+    for (name, param) in params {
+        let mut contract = FnContract::empty()
+        let mut signature = Signature::empty()
+        signature.params.push((param.clone(), Ty::Named { name: "String", args: [], view: false }))
+        contract.signature = signature
+        own.functions.insert(name.clone(), contract)
+    }
+    let aliases: collections::BTreeMap[String, String] = collections::BTreeMap()
+    let spans: collections::BTreeMap[u32, Span] = collections::BTreeMap()
+    let arms: collections::BTreeSet[i64] = collections::BTreeSet()
+    let pushes: collections::BTreeSet[i64] = collections::BTreeSet()
+    let units: Vec[ParsedView] = [ParsedView { words: words, aliases: aliases, items: items, package: null, spans: spans, viewed_arms: arms, given_pushes: pushes }]
+    let mut whole = own.clone()
+    tether_infer(whole, units, Ledger::blank())
+    let borrowing: collections::BTreeSet[String] = collections::BTreeSet()
+    // Callees first or callers first: no column of another function is read.
+    for at in [4, 3, 2, 1, 0] {
+        let key = words.resolve(match items[at].node {
+            Item::Fn { name, .. } => name ?? continue,
+            else => continue,
+        }).clone()
+        let alone = tether_of_function(items[at].node, null, key, words, borrowing, own, Ledger::blank())
+        let written = whole.functions[key]?.views?.clone() ?? []
+        assert(alone == written)
+    }
+    // A view handed back gives a column: the loop compared real ones.
+    let a_column = whole.functions["a"]?.views?.clone() ?? []
+    assert(a_column.len() != 0)
+    let c_column = whole.functions["c"]?.views?.clone() ?? []
+    assert(c_column.len() != 0)
 }

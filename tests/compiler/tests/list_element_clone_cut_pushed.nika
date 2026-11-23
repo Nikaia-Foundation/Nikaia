@@ -1,0 +1,37 @@
+// A clone of an index into a local `Vec[String]`, bound without a type, is the
+// frame's own buffer even when the element is overwritten right after: a cut
+// of it pushed into a local list lives as long as that list (#2436; it was
+// rustc NK1343, "`line` does not live long enough", before the fix for #2014).
+fn roots(mut lines: Vec[String]) -> Vec[String] {
+    let mut dirs: Vec[String] = []
+    let mut i = 0
+    while i < lines.len() {
+        let line = lines[i].clone()
+        lines[i] = ""
+        let bound = line.trim().strip_prefix("let ") ?? ""
+        if bound.ends_with(" = root()") {
+            let d = bound.strip_suffix(" = root()") ?? ""
+            dirs.push(d)
+        }
+        i += 1
+    }
+    return dirs
+}
+
+fn main() throws {
+    let mut dirs: Vec[String] = []
+    let mut lines: Vec[String] = ["let a = root()", "let b = other()"]
+    let mut i = 0
+    while i < lines.len() {
+        let line = lines[i].clone()
+        lines[i] = ""
+        let bound = line.trim().strip_prefix("let ") ?? ""
+        if bound.ends_with(" = root()") {
+            let d = bound.strip_suffix(" = root()") ?? ""
+            dirs.push(d)
+        }
+        i += 1
+    }
+    println(dirs.join(", "))
+    println(roots(["  let c = root() ", "let d = root()", "e"]).join(", "))
+}

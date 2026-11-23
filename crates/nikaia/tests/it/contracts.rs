@@ -732,8 +732,14 @@ fn the_shipped_std_ledger_agrees_with_its_nikaia_sources() {
             let shipped_contract = shipped.functions.get(key).unwrap_or_else(|| {
                 panic!("std.contracts has no entry for `{key}`, which `{module}.nika` declares")
             });
+            // `by_value` is a column of a program's own methods (`keeps.nika`'s
+            // `keeps_by_value`), which the ledger's text has no key for: a
+            // `ref` parameter of a method, `bigint::BigInt::add`'s `other`,
+            // is named there and nowhere in `std.contracts` (#2706).
+            let mut contract = contract.clone();
+            contract.by_value.clear();
             assert_eq!(
-                shipped_contract, contract,
+                shipped_contract, &contract,
                 "std.contracts and {module}.nika disagree about `{key}`"
             );
             checked += 1;

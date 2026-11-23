@@ -1,0 +1,38 @@
+// #2407: an empty `nikaia.toml` above a script names no package, so it is no
+// project's root (ADR-260 D4). An empty `/nikaia.toml` left by a failed write
+// made `nikaia run scripts/drive.nika` refuse with "is not the entry point of
+// the project at /". The search now goes on above such a file, with a
+// warning, and the script runs as a project of its own. A manifest with only
+// a comment names nothing either; one with a `[package]` is still the root.
+use std::env
+use std::fs
+use std::process
+
+fn toolchain() -> String throws {
+    return env::current_exe()?.display() ?? "target/fast/nikaia"
+}
+
+fn ran(nikaia: String, tmp: ref fs::Root, manifest: String) throws {
+    fs::write("nikaia.toml", tmp, manifest)
+    let out = process::run(nikaia, ["run", "scripts/hello.nika"]; dir: tmp.path().to_text())
+    println(f"exit {out.code}")
+    print(out.stdout)
+    for line in out.stderr.lines() {
+        if line.starts_with("warning:") || line.contains("entry point") {
+            println(line.replace(tmp.path().to_text(), "TMP"))
+        }
+    }
+}
+
+fn main() throws {
+    let nikaia = toolchain()
+    let tmp = fs::scratch()
+    fs::create_dir("scripts", tmp)
+    fs::write("scripts/hello.nika", tmp, "fn main() throws {\n    println(\"hello\")\n}\n")
+    println("-- an empty manifest above")
+    ran(nikaia.clone(), tmp, "")
+    println("-- a manifest of a comment above")
+    ran(nikaia.clone(), tmp, "# nothing yet\n")
+    println("-- a manifest naming a package above")
+    ran(nikaia.clone(), tmp, "[package]\nname = \"p\"\nversion = \"0.1.0\"\n")
+}

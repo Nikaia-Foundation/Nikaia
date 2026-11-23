@@ -25,11 +25,20 @@ pub struct SvSmtStats {
     pub repeated: i64,
     pub decisions: i64,
     pub restarts: i64,
+    pub overflows: i64,
+    pub resumed: i64,
 }
 
-pub(crate) fn sv_smt_stats_none() -> SvSmtStats { SvSmtStats { conflicts: 0, theory_conflicts: 0, lemmas: 0, repeated: 0, decisions: 0, restarts: 0 } }
+pub(crate) fn sv_smt_stats_none() -> SvSmtStats { SvSmtStats { conflicts: 0, theory_conflicts: 0, lemmas: 0, repeated: 0, decisions: 0, restarts: 0, overflows: 0, resumed: 0 } }
 
-pub(crate) fn sv_smt_stats_text(st: &SvSmtStats) -> String { format!("conflicts {}, theory conflicts {}, lemmas {} (repeated {}), decisions {}, restarts {}", st.conflicts, st.theory_conflicts, st.lemmas, st.repeated, st.decisions, st.restarts) }
+pub(crate) fn sv_smt_stats_text(st: &SvSmtStats) -> String {
+    let mut text = format!("conflicts {}, theory conflicts {}, lemmas {} (repeated {}), decisions {}, restarts {}", st.conflicts, st.theory_conflicts, st.lemmas, st.repeated, st.decisions, st.restarts);
+    if st.overflows > 0 {
+        text = format!("{}, {} overflows", text, st.overflows);
+        if st.resumed > 0 { text = format!("{}, resumed in BigInt", text); }
+    }
+    text
+}
 
 pub(crate) fn sv_engine_unknown(why: LgUnknown, work: i64) -> SvEngineRun { SvEngineRun { driven: SvDriven::Answer(LgAnswer::Unknown { why }), work, path: String::from(""), carried: vec![], stats: sv_smt_stats_none() } }
 
@@ -118,6 +127,8 @@ impl SvTh for SvBoth {
     }
     fn shared(&self) -> Vec<u32> { vec![] }
     fn pivots(&self) -> i64 { self.simplex.pivots }
+    fn overflows(&self) -> i64 { self.simplex.overflows }
+    fn resumed(&self) -> i64 { self.simplex.resumed }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -291,7 +302,7 @@ pub(crate) fn sv_smt_congruences(cnf: &SvCnf, ids: &[u32], book: &mut SvBook, un
     while ((c) as usize) < cnf.query.clauses.len() {
         let clause = unsafe { nikaia_std::proven::read(&cnf.query.clauses, (c) as usize) };
         if clause.len() == 2 {
-            for k in [0, 1] {
+            for k in [0i64, 1i64] {
                 let d = *nikaia_std::index::get(&clause, nikaia_std::index::at(k));
                 let a = (d / 2u32) as i64;
                 if d % 2u32 == 0u32 && *nikaia_std::index::get(&cnf.definition, nikaia_std::index::at(a)) {
@@ -494,7 +505,7 @@ pub(crate) fn sv_smt_run<T: SvTh>(th: T, sat: SvSat, theory_atom: Vec<bool>, kno
         }
     }
     let end = sv_smt_search(&mut s);
-    let stats = SvSmtStats { conflicts: s.sat.stats.conflicts, theory_conflicts: s.conflicts, lemmas: s.lemmas, repeated: s.repeated, decisions: s.sat.stats.decisions, restarts: s.sat.stats.restarts };
+    let stats = SvSmtStats { conflicts: s.sat.stats.conflicts, theory_conflicts: s.conflicts, lemmas: s.lemmas, repeated: s.repeated, decisions: s.sat.stats.decisions, restarts: s.sat.stats.restarts, overflows: s.th.overflows(), resumed: s.th.resumed() };
     match end {
         SvSmtEnd::Unsat => SvEngineRun { driven: SvDriven::Proved(cnf.query.clone(), s.sat.book.log.steps.copy_owned()), work: s.spent, path: String::from(""), carried: vec![], stats: stats.clone() },
         SvSmtEnd::Sat => {

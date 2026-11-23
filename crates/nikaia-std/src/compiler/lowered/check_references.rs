@@ -344,7 +344,7 @@ pub(crate) fn check_gives_back_block_returns(block: &Block, name: &str, words: &
             Stmt::Return(value) => {
                 if value.is_some() {
                     let inner = match value { Some(__nikaia_value) => __nikaia_value, None => return false };
-                    check_gives_back_is_name(inner, name, words) || check_gives_back_returns(inner, name, words)
+                    check_gives_back_tail(inner, name, words) || check_gives_back_returns(inner, name, words)
                 } else { false }
             },
             Stmt::For { iter, body, .. } => check_gives_back_returns(iter, name, words) || check_gives_back_block_returns(body, name, words),
@@ -366,7 +366,7 @@ pub(crate) fn check_gives_back_returns(expr: &Expr, name: &str, words: &winnow_g
         match inner {
             Expr::Return(value, _) => {
                 let value = nikaia_std::boxed::open(value);
-                if value.is_some() && check_gives_back_is_name(match value { Some(__nikaia_value) => __nikaia_value, None => return false }, name, words) { found = true; }
+                if value.is_some() && check_gives_back_tail(match value { Some(__nikaia_value) => __nikaia_value, None => return false }, name, words) { found = true; }
             },
             Expr::Throw(value, _) => {
                 let value = nikaia_std::boxed::open(value);

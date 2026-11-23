@@ -17,7 +17,7 @@ structure they lean on is described in
 left out of the program, and what it takes to trust a proof that far, is asked
 under [performance with safety](../performance/).
 
-## Where it stands
+## Where the prover stands today
 
 The compiler's own code written in Nikaia (`tools/*.nika`) is the first test
 bed. The goal that it be free of run-time errors is
@@ -197,7 +197,7 @@ until then it asks the reference solver. How the parts fit together is drawn und
 
 ## The questions
 
-### How far does it reach with nothing written for it?
+### Does Nikaia find every invariant by itself, with none written by hand?
 
 <div class="rq-bars">
 <div class="rq-row"><span>Built</span><div class="rq-build" role="img" aria-label="Built: about 35 % of the estimated whole, 25 % held back for what is not yet known"><span class="rq-known" style="width: 75%"><span class="rq-done" style="width: 47%"></span></span><span class="rq-unknown" style="width: 25%"></span></div></div>
@@ -220,7 +220,7 @@ carried to callers ([ADR-381](/docs/specification/adr/adr-381.html), to be built
 proved, on the compiler's own code first and then on the examples and
 packages, together with the number of lines written only to help a proof.
 
-### Can an unproved check one day refuse the program?
+### Can the compiler one day refuse a program whose index or overflow checks are not all proved?
 
 <div class="rq-bars">
 <div class="rq-row"><span>Built</span><div class="rq-build" role="img" aria-label="Built: about 5 % of the estimated whole, 30 % held back for what is not yet known"><span class="rq-known" style="width: 70%"><span class="rq-done" style="width: 7%"></span></span><span class="rq-unknown" style="width: 30%"></span></div></div>
@@ -244,7 +244,7 @@ required. A first step that changes nothing for anyone else would be to hold
 the compiler's own code to that rule once #1053 reaches every site there, so
 that it cannot fall back.
 
-### How much does the design of the language carry?
+### How much of the prover's reach comes from the design of Nikaia?
 
 <div class="rq-bars">
 <div class="rq-row"><span>Built</span><div class="rq-build" role="img" aria-label="Built: about 30 % of the estimated whole, 25 % held back for what is not yet known"><span class="rq-known" style="width: 75%"><span class="rq-done" style="width: 40%"></span></span><span class="rq-unknown" style="width: 25%"></span></div></div>
@@ -261,7 +261,7 @@ this needs a smaller prover, and fewer annotations, for the same reach. The
 question is how much of the reach measured above comes from the language and
 how much from the solver.
 
-### Is it predictable for someone who does not know the prover?
+### Can a programmer who does not know the prover predict which proofs hold?
 
 <div class="rq-bars">
 <div class="rq-row"><span>Built</span><div class="rq-build" role="img" aria-label="Built: about 45 % of the estimated whole, 25 % held back for what is not yet known"><span class="rq-known" style="width: 75%"><span class="rq-done" style="width: 60%"></span></span><span class="rq-unknown" style="width: 25%"></span></div></div>
@@ -280,7 +280,7 @@ D4, D19-D22). The question is how often a proof is lost through an edit that
 does not touch what it is about, and whether the messages are enough to find
 the way back without knowing how the prover works.
 
-### Can it reason about what a list holds?
+### Can the prover reason about what a list holds?
 
 <div class="rq-bars">
 <div class="rq-row"><span>Built</span><div class="rq-build" role="img" aria-label="Built: about 5 % of the estimated whole, 35 % held back for what is not yet known"><span class="rq-known" style="width: 65%"><span class="rq-done" style="width: 8%"></span></span><span class="rq-unknown" style="width: 35%"></span></div></div>
@@ -297,10 +297,10 @@ and a theory of arrays carry exactly this. The procedure is decided
 about every element, such as a sorted list or a partition, which need a rule
 over all elements ([#798](https://github.com/Nikaia-Foundation/Nikaia/issues/798), open for decision) and invariants over
 list contents that the compiler would have to find by itself. Finding such
-invariants without help is the hardest part of the question "nothing written
-for it", and the place where its limits are most likely to show.
+invariants without help is the hardest part of the question whether Nikaia finds every
+invariant by itself, and the place where its limits are most likely to show.
 
-### Can it use rules over every element and keep its proofs stable?
+### Can the prover use rules over every element of a list and keep its proofs stable?
 
 <div class="rq-bars">
 <div class="rq-row"><span>Built</span><div class="rq-build" role="img" aria-label="Built: about 3 % of the estimated whole, 35 % held back for what is not yet known"><span class="rq-known" style="width: 65%"><span class="rq-done" style="width: 5%"></span></span><span class="rq-unknown" style="width: 35%"></span></div></div>
@@ -338,7 +338,7 @@ element can be used in a form whose proofs survive an edit and a new solver
 version, with a certificate the small checker can replay, and how much of
 the range of the established method that form gives up.
 
-### What does trust cost in an ordinary build?
+### What does checking every proof cost in an ordinary build?
 
 <div class="rq-bars">
 <div class="rq-row"><span>Built</span><div class="rq-build" role="img" aria-label="Built: about 30 % of the estimated whole, 25 % held back for what is not yet known"><span class="rq-known" style="width: 75%"><span class="rq-done" style="width: 40%"></span></span><span class="rq-unknown" style="width: 25%"></span></div></div>
@@ -456,7 +456,7 @@ three needs the facts about list contents described above. The question is
 how far a library of proved building blocks lowers the effort in the
 programs above it.
 
-## Ideas this rests on
+## Ideas the prover rests on
 
 | Idea | Recorded in |
 | :--- | :--- |

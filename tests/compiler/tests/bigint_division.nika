@@ -1,0 +1,61 @@
+// `bigint::BigInt`'s `div_rem`, `rem` and `gcd` (Part I 2.2, #2706): the
+// quotient rounds toward zero and the rest takes the dividend's sign, as `/`
+// and `%` do; a zero divisor gives `null`; `gcd` is never negative.
+use std::bigint
+
+fn power_of_two(k: i64) -> bigint::BigInt sync {
+    let mut n = bigint::BigInt::of(1)
+    let two = bigint::BigInt::of(2)
+    for _ in 0..<k {
+        n = n.mul(two)
+    }
+    return n
+}
+
+fn divided(label: String, n: bigint::BigInt, d: bigint::BigInt) throws {
+    let (q, r) = n.div_rem(d) ?? return
+    let whole = q.mul(d).add(r) == n
+    let smaller = r.abs() < d.abs()
+    let signed = r.sign() == 0 || r.sign() == n.sign()
+    let rest = n.rem(d) ?? return
+    let same = rest == r
+    println(f"{label}: q {q.to_text()} r {r.to_text()} {whole} {smaller} {signed} {same}")
+}
+
+fn main() throws {
+    let seven = bigint::BigInt::of(7)
+    let hundred = bigint::BigInt::of(100)
+    divided("100/7", hundred, seven)
+    divided("-100/7", hundred.neg(), seven)
+    divided("100/-7", hundred, seven.neg())
+    divided("-100/-7", hundred.neg(), seven.neg())
+    // 185 bits by 93 bits, each sign.
+    let n = power_of_two(184).add(power_of_two(120).mul(bigint::BigInt::of(12345))).add(bigint::BigInt::of(6789))
+    let d = power_of_two(92).add(power_of_two(40).mul(bigint::BigInt::of(777))).add(bigint::BigInt::of(31))
+    println(f"{n.bits()} {d.bits()}")
+    divided("n/d", n, d)
+    divided("-n/d", n.neg(), d)
+    divided("n/-d", n, d.neg())
+    divided("-n/-d", n.neg(), d.neg())
+    // One digit as divisor, and a dividend below the divisor.
+    divided("n/1000000007", n, bigint::BigInt::of(1000000007))
+    divided("d/n", d, n)
+    // A trial quotient one too large, which algorithm D takes back (its D6).
+    let half: u64 = 9223372036854775808
+    let top = bigint::BigInt::from_wide(Wide::from_halves(0, 1)).mul(bigint::BigInt::from_wide(Wide::from_halves(0, 1)))
+    let u = top.mul(bigint::BigInt::from_wide(Wide::from_halves(half, 9223372036854775807)))
+    let v = top.mul(bigint::BigInt::from_wide(Wide::from_halves(half, 0))).add(bigint::BigInt::of(1))
+    divided("u/v", u, v)
+    println(n.div_rem(bigint::BigInt::of(0)) == null)
+    println(n.rem(bigint::BigInt::of(0)) == null)
+    let g = power_of_two(100).mul(bigint::BigInt::of(3)).gcd(power_of_two(90).mul(bigint::BigInt::of(9)))
+    println(g == power_of_two(90).mul(bigint::BigInt::of(3)))
+    println(g.to_text())
+    println(bigint::BigInt::of(0).gcd(bigint::BigInt::of(0)).to_text())
+    println(bigint::BigInt::of(0).gcd(seven.neg()).to_text())
+    println(bigint::BigInt::of(-12).gcd(bigint::BigInt::of(18)).to_text())
+    // Lehmer's steps on numbers of three digits with a common factor.
+    let f = d.mul(bigint::BigInt::of(1000003))
+    println(n.mul(f).gcd(f.mul(power_of_two(70).add(bigint::BigInt::of(1)))).to_text())
+    println(n.gcd(d).to_text())
+}

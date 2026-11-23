@@ -6,30 +6,18 @@
 // operation the solver does not prove stays checked only where `justified`
 // names its bound (the supervisor's decisions on #1516), and its line says so.
 // A site neither proved nor named prints the walk's own reason.
-use std::fs
+use std::env
 use std::process
 
 fn toolchain(repo: String) -> String throws {
-	let exe = process::run(
-		"sh",
-		[
-			"-c",
-			"e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\"",
-		],
-	).stdout.trim().clone()
+	let exe = env::current_exe()?.display() ?? ""
 	if exe.len() > 0 { return exe }
 	return f"{repo}/target/fast/nikaia"
 }
 
+// The repository: the test file stands at `packages/yaml/tests/` below it.
 fn root() -> String throws {
-	let here = process::run("pwd", []).stdout.trim().clone()
-	if fs::exists(f"{here}/scripts/gate.nika", fs::Root::Anywhere) { return here }
-	let parent = process::run(
-		"sh",
-		["-c", "readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/cwd"],
-	).stdout.trim().clone()
-	if fs::exists(f"{parent}/scripts/gate.nika", fs::Root::Anywhere) { return parent }
-	return process::run("realpath", [f"{parent}/../.."]).stdout.trim().clone()
+	return env::current_main()?.parent()?.parent()?.parent()?.parent()?.display() ?? "../.."
 }
 
 // The operations that keep their check, by the text of the site, and the

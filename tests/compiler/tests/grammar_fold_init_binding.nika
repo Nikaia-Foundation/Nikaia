@@ -1,0 +1,27 @@
+// #2423: a grammar fold's `init` written as a binding beside the fold is the
+// accumulator's first value, as a literal is (#704 item 7), and a maker
+// `fn { … }` (Part II 12.6) is typed by what it hands back. Before the fix,
+// the binding was called as a function (NK1343, rustc: expected a `FnMut()`
+// closure, found `i64`) and the maker drew NK1245.
+grammar Value {
+    rule WS = "" -> { }
+    entry rule top -> i64 = m:count(" ") r:fold(N, m, fn(a, b) { a + b }) -> { r }
+    rule N -> i64 = "x" -> { 1 }
+}
+
+grammar Maker {
+    rule WS = "" -> { }
+    entry rule top -> i64 = m:count(" ") r:fold(N, fn { m * 10 }, fn(a, b) { a + b }) -> { r }
+    rule N -> i64 = "x" -> { 1 }
+}
+
+grammar Literal {
+    rule N -> i64 = d:dec[i64](digit+) "\n" -> { d }
+    entry rule file -> i64 = fold(N, fn { 10 }, fn(acc, n) { acc + n })
+}
+
+fn main() throws {
+    println(f"{Value::top("  xx")}")
+    println(f"{Maker::top("   xx")}")
+    println(f"{Literal::file("3\n4\n")}")
+}

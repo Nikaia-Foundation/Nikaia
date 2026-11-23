@@ -1228,11 +1228,35 @@ pub(crate) fn keeps_copy_types(view: &ParsedView<'_, '_, '_, '_, '_, '_, '_>) ->
             }
         }
     }
+    let mut declares_wide = false;
+    for item in view.items.iter() {
+        match &item.node {
+            Item::Struct { name, .. } => {
+                let name = *name;
+                declares_wide = declares_wide || view.text(name) == "Wide";
+            },
+            Item::Enum { name, .. } => {
+                let name = *name;
+                declares_wide = declares_wide || view.text(name) == "Wide";
+            },
+            _ => { },
+        }
+    }
+    if !declares_wide { copies.insert(nikaia_std::block::Text::from(KEEPS_STD_WIDE.to_string())); }
     copies
 }
 
+pub(crate) const KEEPS_STD_WIDE: &str = "std Wide";
+
 pub(crate) fn keeps_copied_field(ty: &Ty, copies: &collections::BTreeSet<String>) -> bool {
     if keeps_a_copied_scalar(ty) { return true; }
+    match ty {
+        Ty::Named { name, args, view } => {
+            let view = *view;
+            if !view && name == "Wide" && args.len() == 1 && copies.contains(KEEPS_STD_WIDE) && keeps_a_copied_scalar(unsafe { nikaia_std::proven::read(&args, (0) as usize) }) { return true; }
+        },
+        _ => { },
+    }
     let name = match keeps_type_name(ty) { Some(__nikaia_value) => __nikaia_value, None => return false };
     copies.contains(&name)
 }
@@ -1748,6 +1772,15 @@ pub fn keeps_uses_of(view: &ParsedView<'_, '_, '_, '_, '_, '_, '_>, item: &Item,
             let mut fields: collections::BTreeMap<String, collections::BTreeMap<String, Ty>> = collections::BTreeMap::new();
             for arg in args.iter() {
                 let mut of: collections::BTreeMap<String, Ty> = collections::BTreeMap::new();
+                if arg.ty.is_tuple && !arg.ty.is_nullable && !arg.ty.is_view {
+                    let mut part = 0;
+                    for one in arg.ty.generics.iter() {
+                        of.insert(format!("{}", part), written_ty(view.words, view.aliases, one));
+                        part += 1;
+                    }
+                    fields.insert(view.text(arg.name), of);
+                    continue;
+                }
                 let mut found = false;
                 for held in declared.iter() {
                     if held.name == arg.ty.name {

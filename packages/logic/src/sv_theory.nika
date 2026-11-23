@@ -216,6 +216,10 @@ pub trait SvTh {
 	/// `pivots()`: the simplex pivots run so far, never falling; the
 	/// search's budget counts their growth across a check (#2048).
 	fn pivots(ref self) -> i64 sync
+	/// `overflows()`: the steps that left `i64`; `resumed()`: how often
+	/// the query went on past it in `BigInt` (#2707).
+	fn overflows(ref self) -> i64 sync
+	fn resumed(ref self) -> i64 sync
 }
 
 impl SvTh for SvTheory {
@@ -401,6 +405,15 @@ impl SvTh for SvTheory {
 
 	/// `pivots()`: none, Fourier-Motzkin does not pivot.
 	fn pivots(ref self) -> i64 {
+		return 0
+	}
+
+	/// `overflows()`, `resumed()`: Fourier-Motzkin has no stage past `i64`.
+	fn overflows(ref self) -> i64 {
+		return 0
+	}
+
+	fn resumed(ref self) -> i64 {
 		return 0
 	}
 }

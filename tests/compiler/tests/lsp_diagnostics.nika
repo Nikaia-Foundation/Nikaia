@@ -6,11 +6,12 @@
 // (`NK1261`), saves it, and changes it to a text that checks clean, which
 // empties the list. The range's `character` counts UTF-16 units. Last it
 // adds a `use` of no dependency, published at its line with `NK1341` (#1364).
+use std::env
 use std::fs
 use std::process
 
 fn toolchain() -> String throws {
-    let exe = process::run("sh", ["-c", "e=$(readlink /proc/$(cut -d' ' -f4 /proc/$PPID/stat)/exe); [ \"$(basename \"$e\")\" = nikaia ] && echo \"$e\""]).stdout.trim().clone()
+    let exe = env::current_exe()?.display() ?? ""
     if exe.len() > 0 { return exe }
     return "target/fast/nikaia"
 }

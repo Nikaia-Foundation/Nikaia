@@ -1392,7 +1392,7 @@ pub(crate) fn check_core_call_on<H: CheckHost>(state: &mut CheckState, world: &C
     }
     let mut found: Option<CheckResolved<'_>> = resolve_method(world, &format!("{}::{}", type_name, entry));
     if found.is_none() { found = check_core_call_on_fallback(&state, world, &on, entry); }
-    if found.is_none() && entry == "clone" && args.is_empty() && (state.structs.contains_key(&type_name) || state.enums.contains_key(&type_name) || world.own.types.contains_key(&type_name)) {
+    if found.is_none() && entry == "clone" && args.is_empty() && (state.structs.contains_key(&type_name) || state.enums.contains_key(&type_name) || world.own.types.contains_key(&type_name) || check_core_call_on_library_struct(world, &type_name)) {
         if check_core_call_on_clones(&world.parts_beside, &state.structs, &state.enums, &state.enum_payloads, &state.struct_parameters, &state.type_parameters, world, &on) { return check_core_call_on_owned(&on); }
         state.findings.push(CheckFinding { severity: CheckSeverity::Error, span: span.clone(), code: String::from("NK1171"), message: format!("`{}` has no method called `clone`.", type_name), notes: vec![format!("`{}` holds a value that does not copy - a task's handle, a lock, a socket, a file, a child process or a channel's end - so it has no copy either.", type_name)], help: Some(String::from("Hand the value itself on, or keep the handle in a `Shared` that both places reach.")), labels: vec![], edit: None });
         return Ty::Unknown;
@@ -1400,6 +1400,11 @@ pub(crate) fn check_core_call_on<H: CheckHost>(state: &mut CheckState, world: &C
     if found.is_none() { return check_core_call_on_undescribed(state, world, host, &on, receiver, method, args, entry, &type_name, span); }
     let resolved: CheckResolved<'_> = match found { Some(__nikaia_value) => __nikaia_value, None => return Ty::Unknown };
     check_core_call_on_described(state, world, host, &on, receiver, method, args, entry, &resolved.key, resolved.contract, span)
+}
+
+pub(crate) fn check_core_call_on_library_struct(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, type_name: &str) -> bool {
+    let entry = match *nikaia_std::index::get(&world.library.types, type_name) { Some(__nikaia_value) => __nikaia_value, None => return false };
+    !entry.fields.is_empty()
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
