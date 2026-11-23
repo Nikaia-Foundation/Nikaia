@@ -16,22 +16,22 @@ pub fn word_locks_published(c: SharedMut[i64]) {
 // to a function takes the function's parameter with it.
 test "a crossing word is a word and the rest keep their lock" {
     let hits = SharedMut(0)
-    let t = spawn fn { word_locks_bump(hits, 2) }
+    let t = async(detached) fn { word_locks_bump(hits, 2) }
     t.join()
     word_locks_bump(hits, 3)
     let a = SharedMut(10)
     let b = SharedMut(20)
-    let u = spawn fn { a.update fn(mut v) { v -= 1 } }
+    let u = async(detached) fn { a.update fn(mut v) { v -= 1 } }
     u.join()
     update_all(a, b) fn(mut x, mut y) {
         x -= 5
         y += 5
     }
     let p = SharedMut(0)
-    let w = spawn fn { word_locks_published(p) }
+    let w = async(detached) fn { word_locks_published(p) }
     w.join()
     let big = SharedMut(f"text")
-    let z = spawn fn { big.update fn(mut s) { s = f"{s}!" } }
+    let z = async(detached) fn { big.update fn(mut s) { s = f"{s}!" } }
     z.join()
     let xs: Vec[i64] = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
     let total = SharedMut(0)

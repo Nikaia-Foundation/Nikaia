@@ -1928,7 +1928,7 @@ fn collect_replaced(world: ref CheckWorld, call: ref Expr, chain: ref Expr, text
     if of.start != whole.start || of.end >= whole.end {
         return null
     }
-    return CheckEdit { span: Span { start: of.end, end: whole.end }, text: text.clone() }
+    return CheckEdit { span: Span { start: of.end, end: whole.end }, text: text.clone(), also: [] }
 }
 
 // **The edit `NK1350` suggests** (#1714): the `.clone()` after its receiver,
@@ -1941,7 +1941,7 @@ fn clone_deleted(world: ref CheckWorld, call: ref Expr, receiver: ref Expr) -> C
     if of.start != whole.start || of.end >= whole.end {
         return null
     }
-    return CheckEdit { span: Span { start: of.end, end: whole.end }, text: "" }
+    return CheckEdit { span: Span { start: of.end, end: whole.end }, text: "", also: [] }
 }
 
 // The name a field or an index chain starts from: `self` in `self.lower[v]`.

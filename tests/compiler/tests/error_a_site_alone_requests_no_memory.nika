@@ -38,10 +38,7 @@ fn deny(n: i64) -> i64 throws {
 }
 
 fn both(n: i64) -> i64 throws {
-	let pair = overlap {
-		load(n)
-		deny(n)
-	}
+	let pair = (async load(n), async deny(n))
 	return pair.0 + pair.1
 }
 

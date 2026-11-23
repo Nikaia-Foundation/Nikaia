@@ -1,11 +1,17 @@
 first failed
   raised at step
+  started at three
+  arrived at three
   (no trace; set NIKAIA_TRACE=1 to capture one)
   and then:
   second failed
     raised at step
+    started at three
+    arrived at three
   and then:
   third failed
     raised at step
+    started at three
+    arrived at three
 passed on, the same text: true
 after

@@ -11,8 +11,8 @@ fn store(list: SharedMut[Vec[i64]], value: i64) -> i64 {
 
 fn main() throws {
 	let list: SharedMut[Vec[i64]] = SharedMut([0])
-	let left = spawn fn { store(list, 1) }
-	let right = spawn fn { store(list, 2) }
+	let left = async(detached) fn { store(list, 1) }
+	let right = async(detached) fn { store(list, 2) }
 	let wins = left.join() + right.join()
 	let now = list.access fn(v) { v[0] }
 	println(f"one got through: {wins == 1 && (now == 1 || now == 2)}")

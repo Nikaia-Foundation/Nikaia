@@ -1,0 +1,91 @@
+// scripts/perfgate.nika (#2811): the performance gate against a stand-in
+// baseline, counted through a stand-in valgrind (`$PERFGATE_VALGRIND`) that
+// writes the count of `<work>/counts/<row>` as the callgrind totals and runs the
+// program. A row within its tolerance is green; one over it, one whose output
+// differs from the recorded digest and one not recorded yet are red (exit 1);
+// `--bless` writes the counts and digests back, comments and build lines
+// kept, after which the same counts are green; a `.nikaia` row with its
+// `.rust` counterpart prints their ratio; `--only` counts the rows it
+// names a part of; a failing build line is an error
+// (exit 2).
+use std::env
+use std::fs
+use std::process
+
+fn toolchain() -> String throws {
+	let exe = env::current_exe()?.display() ?? ""
+	if exe.len() > 0 { return exe }
+	return "target/fast/nikaia"
+}
+
+fn root() -> String throws {
+	return env::current_main()?.parent()?.parent()?.parent()?.parent()?.display() ?? "../.."
+}
+
+fn sh(script: String) -> String throws {
+	let out = process::run("sh", ["-c", f"set -e; {script}"])
+	if !out.ok { println(f"setup failed: {script}\n{out.stderr}") }
+	return out.stdout.trim().clone()
+}
+
+// The gate's output, the work directory's path written as WORK.
+fn gate(nikaia: String, repo: String, work: String, name: String, extra: Vec[String]) throws {
+	let mut args: Vec[String] = [
+		"run",
+		f"{repo}/scripts/perfgate.nika",
+		"--",
+		"--baseline",
+		"perf.baseline",
+		"--work",
+		"w",
+	]
+	for a in extra {
+		args.push(a.clone())
+	}
+	let out = process::run(
+		nikaia,
+		args; dir: work.clone(),
+		env: [("PERFGATE_VALGRIND", f"{work}/valgrind")],
+	)
+	println(f"== {name}")
+	println(out.stdout.trim().replace(f"{work}/w", "WORK"))
+	println(f"exit {out.code}")
+}
+
+fn counts(work: String, a: String, b: String, c: String) throws {
+	sh(f"cd {work}/w; echo {a} > counts/a; echo {b} > counts/b.nikaia; echo {c} > counts/b.rust")
+}
+
+fn main() throws {
+	let tmp = fs::scratch()
+	let work = f"{tmp.path().to_text()}/perf"
+	let repo = root()
+	let nikaia = toolchain()
+	sh(f"mkdir -p {work}/w/counts")
+	// The stand-in valgrind: skips its options, writes the row's count as the
+	// totals of the output file it was given and runs the rest.
+	fs::write(
+		f"{work}/valgrind",
+		fs::Root::Anywhere,
+		"#!/bin/sh\nout=\nwhile [ $# -gt 0 ]; do\n  case \"$1\" in\n    --callgrind-out-file=*) out=${1#*=} ;;\n    --*) ;;\n    *) break ;;\n  esac\n  shift\ndone\nrow=$(basename \"$out\" .%p.callgrind)\nfile=$(echo \"$out\" | sed \"s/%p/$$/\")\nprintf 'events: Ir\\nsummary: %s\\n' \"$(cat $(dirname \"$out\")/../counts/$row)\" > \"$file\"\nexec \"$@\"\n",
+	)
+	sh(f"chmod +x {work}/valgrind")
+	fs::write(
+		f"{work}/perf.baseline",
+		fs::Root::Anywhere,
+		f"# a stand-in baseline\nbuild touch {{work}}/built\nrow a compile 1000 2 - echo one\nrow b.nikaia run 0 1 - echo two\nrow b.rust run 0 1.5 - echo three\n",
+	)
+	counts(work, "1010", "500", "400")
+	gate(nikaia, repo, work, "not recorded", [])
+	gate(nikaia, repo, work, "bless", ["--bless"])
+	println(sh(f"cat {work}/perf.baseline"))
+	gate(nikaia, repo, work, "within", [])
+	counts(work, "1031", "500", "407")
+	gate(nikaia, repo, work, "over", [])
+	gate(nikaia, repo, work, "only rust", ["--only", "rust"])
+	sh(f"cd {work}; sed -i 's/echo one/echo uno/' perf.baseline")
+	counts(work, "1000", "500", "400")
+	gate(nikaia, repo, work, "another output", [])
+	sh(f"cd {work}; sed -i 's/^build .*/build false/' perf.baseline")
+	gate(nikaia, repo, work, "a build fails", [])
+}

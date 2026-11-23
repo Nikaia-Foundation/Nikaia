@@ -44,7 +44,7 @@ fn main() throws {
     }
     let b = 1
     println(f"after: {a + b}")
-    let b = spawn fn { bag() }
+    let b = async(detached) fn { bag() }
     let held = b.join()
     println(f"bag: {held.items.len()} {held.items[1]}")
 }

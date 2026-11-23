@@ -1,10 +1,18 @@
 Error: a is missing
   raised at load
+  started at main
+  arrived at main
   (no trace; set NIKAIA_TRACE=1 to capture one)
   and then:
   b is broken
     raised at load
+    started at inner
+    arrived at inner
+    started at main
+    arrived at main
     and then:
     c is broken
       raised at load
+      started at inner
+      arrived at inner
 exit 1

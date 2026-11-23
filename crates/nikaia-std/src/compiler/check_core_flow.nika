@@ -278,7 +278,10 @@ fn check_core_flow_branch[H: CheckHost](mut state: CheckState, world: ref CheckW
 
 /// **`overlap { … }`** (Part I 8.1.2, ADR-292 D2): each statement is a
 /// branch, an `async` block of its own, and the value is their tuple.
-fn check_core_flow_overlap[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, block: ref Block, span: ref Span) -> Ty sync {
+fn check_core_flow_overlap[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, whole: ref Expr, block: ref Block, span: ref Span) -> Ty sync {
+    let in_a_loop = state.flow.loops > 0
+    let caught = state.flow.caught_overlap
+    state.flow.caught_overlap = false
     state.scope.push([])
     let mut parts: Vec[Ty] = []
     let mut ranges: Vec[(i64, i64)] = []
@@ -307,6 +310,13 @@ fn check_core_flow_overlap[H: CheckHost](mut state: CheckState, world: ref Check
         changed_by.push(names)
     }
     state.branches_meet_on_nothing(world, block, changed_by)
+    let mut meet = false
+    for names in changed_by {
+        if !names.is_empty() {
+            meet = true
+        }
+    }
+    state.an_overlap_replaced(world, whole, block, parts, in_a_loop || meet || caught, span)
     return Ty::Tuple(parts)
 }
 

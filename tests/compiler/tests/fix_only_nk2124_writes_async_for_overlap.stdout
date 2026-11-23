@@ -1,0 +1,25 @@
+--only NK2124: TMP/main.nika:10: NK2124: replaced `overlap {
+        ` with `(async `
+TMP/main.nika:11: NK2124: replaced `
+        ` with `, async `
+TMP/main.nika:12: NK2124: replaced `
+    }` with `)`
+TMP/main.nika:15: NK2124: replaced `overlap` with `async`
+TMP/main.nika:16: NK2124: inserted `async `
+TMP/main.nika:17: NK2124: inserted `async `
+fn work(n: i64) -> i64 sync {
+    return n * 2
+}
+
+fn rest(n: i64) sync {
+    if n > 9 { return }
+}
+
+fn main() throws {
+    let (a, b) = (async work(2), async work(3))
+    println(a + b)
+    async {
+        async rest(4)
+        async rest(5)
+    }
+}

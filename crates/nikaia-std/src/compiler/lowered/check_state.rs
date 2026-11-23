@@ -306,6 +306,13 @@ pub struct CheckFinding {
 pub struct CheckEdit {
     pub span: Span,
     pub text: String,
+    pub also: Vec<CheckEditPart>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct CheckEditPart {
+    pub span: Span,
+    pub text: String,
 }
 
 pub(crate) fn check_refusal(code: &str, span: &Span, message: String, notes: Vec<String>, help: Option<String>) -> CheckFinding { CheckFinding { severity: CheckSeverity::Error, span: span.clone(), code: nikaia_std::block::Text::from(code.to_string()), message, notes, help, labels: vec![], edit: None } }

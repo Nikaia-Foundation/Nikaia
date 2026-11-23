@@ -1,8 +1,5 @@
 fn main() throws {
     let a: Vec[i64] = [1, 2]
-    let p = overlap {
-        a.len()
-        a.len()
-    }
+    let p = (async a.len(), async a.len())
     println(a.len().to_string())
 }

@@ -1,0 +1,47 @@
+== not recorded
+PERF a 1010 1000 +1.00 not recorded
+PERF b.nikaia 500 0 new not recorded
+PERF b.rust 400 0 new not recorded
+RATIO b 1.25
+Perf: red a b.nikaia b.rust
+exit 1
+== bless
+PERF a 1010 1000 +1.00 not recorded
+PERF b.nikaia 500 0 new not recorded
+PERF b.rust 400 0 new not recorded
+RATIO b 1.25
+Perf: blessed 3 rows
+exit 0
+# a stand-in baseline
+build touch {work}/built
+row a compile 1010 2 2c8b08da5ce60398 echo one
+row b.nikaia run 500 1 27dd8ed44a83ff94 echo two
+row b.rust run 400 1.5 f6936912184481f5 echo three
+== within
+PERF a 1010 1010 +0.00
+PERF b.nikaia 500 500 +0.00
+PERF b.rust 400 400 +0.00
+RATIO b 1.25
+Perf: green
+exit 0
+== over
+PERF a 1031 1010 +2.08 over 2%
+PERF b.nikaia 500 500 +0.00
+PERF b.rust 407 400 +1.75 over 1.5%
+RATIO b 1.23
+Perf: red a b.rust
+exit 1
+== only rust
+PERF b.rust 407 400 +1.75 over 1.5%
+Perf: red b.rust
+exit 1
+== another output
+PERF a 1000 1010 -0.99 output d9f86d34b0b0e31f, recorded 2c8b08da5ce60398
+PERF b.nikaia 500 500 +0.00
+PERF b.rust 400 400 +0.00
+RATIO b 1.25
+Perf: red a
+exit 1
+== a build fails
+Perf: error build: false
+exit 2

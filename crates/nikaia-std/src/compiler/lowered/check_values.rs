@@ -183,9 +183,9 @@ pub(crate) fn ledger_candidates(ledger: &Ledger, methods: &MethodIndex, method: 
 pub(crate) fn a_call_dropped(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, call: &Expr, receiver: &Expr, written: &str) -> Option<CheckEdit> {
     let whole = match world.here.spans.get(&id_of(call)) { Some(__nikaia_value) => __nikaia_value, None => return None };
     let of = match world.here.spans.get(&id_of(receiver)) { Some(__nikaia_value) => __nikaia_value, None => return None };
-    if of.start == whole.start && of.end < whole.end { return Some(CheckEdit { span: Span { start: of.end, end: whole.end }, text: String::from("") }); }
+    if of.start == whole.start && of.end < whole.end { return Some(CheckEdit { span: Span { start: of.end, end: whole.end }, text: String::from(""), also: vec![] }); }
     let size = u32::try_from(written.as_bytes().len() as i64).unwrap_or_else(|_| panic!("the value does not fit in an `u32`"));
-    if of.start > whole.start && of.end + size < whole.end { return Some(CheckEdit { span: Span { start: whole.end - size, end: whole.end }, text: String::from("") }); }
+    if of.start > whole.start && of.end + size < whole.end { return Some(CheckEdit { span: Span { start: whole.end - size, end: whole.end }, text: String::from(""), also: vec![] }); }
     None
 }
 
@@ -194,9 +194,9 @@ pub(crate) fn a_call_dropped(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>,
 pub(crate) fn chars_renamed(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, call: &Expr, receiver: &Expr) -> Option<CheckEdit> {
     let whole = match world.here.spans.get(&id_of(call)) { Some(__nikaia_value) => __nikaia_value, None => return None };
     let of = match world.here.spans.get(&id_of(receiver)) { Some(__nikaia_value) => __nikaia_value, None => return None };
-    if of.start == whole.start && of.end < whole.end { return Some(CheckEdit { span: Span { start: of.end, end: whole.end }, text: String::from(".scalars") }); }
+    if of.start == whole.start && of.end < whole.end { return Some(CheckEdit { span: Span { start: of.end, end: whole.end }, text: String::from(".scalars"), also: vec![] }); }
     let written = u32::try_from(".chars()".as_bytes().len() as i64).unwrap_or_else(|_| panic!("the value does not fit in an `u32`"));
-    if of.start > whole.start && of.end + written < whole.end { return Some(CheckEdit { span: Span { start: whole.end - written, end: whole.end }, text: String::from(".scalars") }); }
+    if of.start > whole.start && of.end + written < whole.end { return Some(CheckEdit { span: Span { start: whole.end - written, end: whole.end }, text: String::from(".scalars"), also: vec![] }); }
     None
 }
 

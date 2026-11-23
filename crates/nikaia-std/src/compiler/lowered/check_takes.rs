@@ -1214,7 +1214,7 @@ pub(crate) fn collect_replaced(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_
     let whole = match world.here.spans.get(&id_of(call)) { Some(__nikaia_value) => __nikaia_value, None => return None };
     let of = match world.here.spans.get(&id_of(chain)) { Some(__nikaia_value) => __nikaia_value, None => return None };
     if of.start != whole.start || of.end >= whole.end { return None; }
-    Some(CheckEdit { span: Span { start: of.end, end: whole.end }, text: nikaia_std::block::Text::from(text.to_string()) })
+    Some(CheckEdit { span: Span { start: of.end, end: whole.end }, text: nikaia_std::block::Text::from(text.to_string()), also: vec![] })
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -1223,7 +1223,7 @@ pub(crate) fn clone_deleted(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, 
     let whole = match world.here.spans.get(&id_of(call)) { Some(__nikaia_value) => __nikaia_value, None => return None };
     let of = match world.here.spans.get(&id_of(receiver)) { Some(__nikaia_value) => __nikaia_value, None => return None };
     if of.start != whole.start || of.end >= whole.end { return None; }
-    Some(CheckEdit { span: Span { start: of.end, end: whole.end }, text: String::from("") })
+    Some(CheckEdit { span: Span { start: of.end, end: whole.end }, text: String::from(""), also: vec![] })
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before

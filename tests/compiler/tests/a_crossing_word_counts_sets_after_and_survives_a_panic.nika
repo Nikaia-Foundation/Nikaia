@@ -31,29 +31,29 @@ fn spoil(k: SharedMut[i64]) -> i64 {
 
 fn main() throws {
 	let n = SharedMut(0)
-	let t1 = spawn fn { count(n) }
-	let t2 = spawn fn { count(n) }
-	let t3 = spawn fn { count(n) }
-	let t4 = spawn fn { count(n) }
+	let t1 = async(detached) fn { count(n) }
+	let t2 = async(detached) fn { count(n) }
+	let t3 = async(detached) fn { count(n) }
+	let t4 = async(detached) fn { count(n) }
 	let steps = t1.join() + t2.join() + t3.join() + t4.join()
 	println(f"no update lost: {n.get()} ({steps} steps)")
 
 	let flag = SharedMut(false)
 	let x = SharedMut(1.5)
 	let c: SharedMut[scalar] = SharedMut('a')
-	let changed = spawn fn { change(flag, x, c) }
+	let changed = async(detached) fn { change(flag, x, c) }
 	let done = changed.join()
 	println(f"bool {flag.get()}, float {x.get()}, char {c.get()} ({done} changed)")
 
 	let w = SharedMut(7)
-	let stale = spawn fn { store(w, 6) }
+	let stale = async(detached) fn { store(w, 6) }
 	if stale.join() == 0 { println("overtaken") }
-	let fresh = spawn fn { store(w, 7) }
+	let fresh = async(detached) fn { store(w, 7) }
 	let stored = fresh.join()
 	println(f"set after: {w.get()} ({stored} stored)")
 
 	let k = SharedMut(7)
-	let crossed = spawn fn { k.get() }
+	let crossed = async(detached) fn { k.get() }
 	println(f"crossed: {crossed.join()}")
 	let a = async spoil(k) catch { 0 }
 	println("the task runs")
