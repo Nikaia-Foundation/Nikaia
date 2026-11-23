@@ -765,7 +765,7 @@ impl EmitState {
             Expr::Async(_, _, _, _) => { fallback = true; },
             _ => { },
         }
-        let nested = !joined && !fallback && self.emit_catch_nests_a_failure(world, guarded_expr);
+        let nested = !joined && !fallback && (self.emit_catch_nests_a_failure(world, guarded_expr) || emit_catch_reads_a_pending(world, &walk, guarded_expr));
         let at = node_key(guarded_expr);
         let mut a_block = false;
         match guarded_expr {

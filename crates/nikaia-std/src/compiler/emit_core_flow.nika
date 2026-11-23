@@ -1175,7 +1175,7 @@ impl EmitState {
             },
             else => {},
         }
-        let nested = !joined && !fallback && self.emit_catch_nests_a_failure(world, guarded_expr)
+        let nested = !joined && !fallback && (self.emit_catch_nests_a_failure(world, guarded_expr) || emit_catch_reads_a_pending(world, walk, guarded_expr))
         let at = node_key(guarded_expr)
         // A block is bound first: inside `Ok(…)` its braces would be
         // reported as unneeded, which the author may not even have written
