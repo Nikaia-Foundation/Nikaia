@@ -73,7 +73,14 @@ pub(crate) fn emit_flow_never_returns(world: &EmitWorld<'_, '_, '_, '_>, node: &
     }
 }
 
-pub(crate) fn emit_flow_a_struct_written(node: &Expr) -> bool { matches!(node, Expr::StructLit { .. } | Expr::LitBool(_, _)) }
+pub(crate) fn emit_flow_a_struct_written(node: &Expr) -> bool {
+    match node {
+        Expr::StructLit { .. } => true,
+        Expr::LitBool(_, _) => true,
+        Expr::Coalesce { fallback, .. } => { let fallback = nikaia_std::boxed::open(fallback); emit_flow_a_struct_written(fallback) },
+        _ => false,
+    }
+}
 
 pub(crate) fn emit_flow_a_simd_call(world: &EmitWorld<'_, '_, '_, '_>, node: &Expr) -> bool {
     match node {

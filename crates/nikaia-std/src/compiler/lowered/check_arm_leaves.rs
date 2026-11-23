@@ -458,6 +458,7 @@ impl CheckState {
     // this was written - see `contracts::sync`.
     pub(crate) fn a_key_read_as_it_is(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, found: &Ty, index: &Expr) -> bool {
         if found.is_a_view() || self.a_lent_let(world, index) || self.facts.bytes_cuts.contains(&node_key(index)) { return true; }
+        if moves(found) && !a_ledger_copies(&unviewed_type(found), &vec![world.library]) && check_reads_got_past_a_jump(self, world, index) { return true; }
         match index {
             Expr::LitStr { .. } => { return true; },
             Expr::Variable(name, _) => {

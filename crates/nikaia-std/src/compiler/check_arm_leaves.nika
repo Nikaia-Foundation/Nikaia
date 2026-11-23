@@ -697,6 +697,12 @@ impl CheckState {
         if found.is_a_view() || self.a_lent_let(world, index) || self.facts.bytes_cuts.contains(node_key(index)) {
             return true
         }
+        // **One `get` handed back past a jump is a reference** (D30), as a
+        // lookup's key is: `let k = xs.last() ?? continue` keys `m[k]` as it
+        // is, where a `&` would be `&&String`.
+        if moves(found) && !a_ledger_copies(unviewed_type(found), [world.library]) && check_reads_got_past_a_jump(self, world, index) {
+            return true
+        }
         match index {
             Expr::LitStr { .. } => return true,
             Expr::Variable(name, _) => {
