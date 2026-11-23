@@ -225,6 +225,9 @@ impl EmitState {
             if ending {
                 out.push(" };")
             }
+            // **A buffer changed after its `let` is put after its last
+            // change** (#1276), in a `throws` body as in any block (#2465).
+            out.push(self.emit_stmt_late_puts(walk, scope.function, stmt.span.start as i64))
             self.emit_view_list_drops(out, stmt.span.start as i64)
             self.emit_view_list_rebinds(out, stmt.span.start as i64)
             out.push("\n")
