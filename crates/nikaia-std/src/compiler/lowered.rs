@@ -3851,7 +3851,7 @@ pub mod surface {
 }
 pub mod sync {
     #[allow(unused_imports)]
-    pub use super::{SyncReach, sync_holds, paused_only_by_code, pause_chain, Site, SyncNode, SyncGraph, unit_sync, Violation, unit_violations, unit_pausing};
+    pub use super::{SyncReach, sync_holds, paused_only_by_code, pause_chain, sync_of_unit, sync_callees_first, sync_units, SyncNoted, sync_infer, Site, SyncNode, SyncGraph, unit_sync, Violation, sync_violations, unit_pausing};
 }
 pub mod sysroot_cache {
     #[allow(unused_imports)]
@@ -3950,6 +3950,7 @@ pub fn nikaia_tests() -> std::vec::Vec<(std::string::String, fn() -> Result<(), 
     all.extend(panics_nikaia_tests().into_iter().map(|(name, run)| (name.to_string(), run)));
     all.extend(paths_nikaia_tests().into_iter().map(|(name, run)| (name.to_string(), run)));
     all.extend(signature_nikaia_tests().into_iter().map(|(name, run)| (name.to_string(), run)));
+    all.extend(sync_nikaia_tests().into_iter().map(|(name, run)| (name.to_string(), run)));
     all.extend(tether_nikaia_tests().into_iter().map(|(name, run)| (name.to_string(), run)));
     all.extend(threads_nikaia_tests().into_iter().map(|(name, run)| (name.to_string(), run)));
     all.extend(throws_nikaia_tests().into_iter().map(|(name, run)| (name.to_string(), run)));
@@ -3997,4 +3998,4 @@ pub fn nikaia_run_tests(filters: &[std::string::String], list: bool, more: std::
 /// **The digest of this lowered set** (#1610): every file `lower-std` wrote
 /// beside this index, and the index above this line. Compiled into the same
 /// crate as the code it names, it is the compiler's identity for its caches.
-pub const LOWERED_DIGEST: &str = "1ec1143e4a65e1f5c00adcdf5d1a1f791812108a64cfba4a8a07e6d6de21f694";
+pub const LOWERED_DIGEST: &str = "d728508a054b34413448d7eff4b6fe11089395323e0525e3dbdfe6e73653b6f4";
