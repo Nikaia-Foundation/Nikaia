@@ -67,6 +67,49 @@ impl CheckState {
     pub(crate) fn an_async_inside_a_loop(&mut self, span: &Span) { self.findings.push(check_refusal("NK2120", span, String::from("This `async` stands inside a loop's body, but `async` starts only tasks whose number stands in the source."), vec![String::from("A loop would start one task each time round, and a group's tasks are counted where they are written.")], Some(String::from("To run the body for every element beside the others, write `xs.par_iter().for_each fn(x) { … }`.")))); }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
+    pub(crate) fn a_spawn_replaced(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, whole: &Expr, span: &Span) {
+        let mut edit: Option<CheckEdit> = None;
+        let mut help: String = String::from("Write `async(detached) fn { … }`, the same task; `nikaia fix --only NK2123` makes the edit.");
+        if self.flow.loops > 0 { help = String::from("`async(detached)` is refused inside a loop's body (`NK2120`): to run the body for every element beside the others, write `xs.par_iter().for_each fn(x) { … }`."); } else { edit = word_replaced(world, whole, "spawn", "async(detached)"); }
+        let mut warned = check_refusal("NK2123", span, String::from("`spawn` is replaced by `async(detached)`, which starts the same task."), vec![String::from("`spawn fn { … }` is the earlier spelling of `async(detached) fn { … }` (ADR-async-5 D13); it is removed once every use is rewritten.")], Some(help));
+        warned.severity = CheckSeverity::Warning;
+        warned.edit = edit;
+        self.findings.push(warned);
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub(crate) fn an_overlap_replaced(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, whole: &Expr, block: &Block, parts: &[Ty], keep: bool, span: &Span) {
+        let mut edit: Option<CheckEdit> = None;
+        let mut nothing = true;
+        for part in parts.iter() { if part.text() != "()" { nothing = false; } }
+        if !keep { edit = overlap_rewritten(world, whole, block, nothing); }
+        let mut help: String = String::from("Write `let (x, y) = (async a(), async b())` for the values, or `async { async a()  async b() }` for branches that give nothing.");
+        if edit.is_some() { help = format!("{} `nikaia fix --only NK2124` makes the edit.", help); } else { help = format!("{} A branch of several steps is `async fn {{ … }}`; inside a loop's body, `xs.par_iter()`.", help); }
+        let mut warned = check_refusal("NK2124", span, String::from("`overlap` is replaced by `async`, which starts each branch as a task."), vec![String::from("Each branch of an `overlap` is a task beside the others; `async e` starts one, waited for where its value is first needed, and `async { … }` waits for the tasks it starts at its end (ADR-async-5 D6, D9). The block is removed once every use is rewritten.")], Some(help));
+        warned.severity = CheckSeverity::Warning;
+        warned.edit = edit;
+        self.findings.push(warned);
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub(crate) fn a_scope_replaced(&mut self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, whole: &Expr, func: &Expr, args: &[Expr], span: &Span) {
+        match func {
+            Expr::Path(segments, _) => {
+                let count = segments.len() as i64;
+                if count < 2 || world.words.resolve(*unsafe { nikaia_std::proven::read(&segments, (nikaia_std::proven::sub::<i64>(count, 1)) as usize) }) != "scope" || world.words.resolve(*unsafe { nikaia_std::proven::read(&segments, (nikaia_std::proven::sub::<i64>(count, 2)) as usize) }) != "task" { return; }
+            },
+            _ => { return; },
+        }
+        let edit = scope_rewritten(world, whole, args);
+        let mut help: String = String::from("For one task per element, write `xs.par_iter().for_each fn(x) { … }`; for tasks whose results are joined, `async(handle) fn { … }` and `.join()` (ADR-async-5 D13).");
+        if edit.is_some() { help = format!("{} `nikaia fix --only NK2125` makes the edit.", help); }
+        let mut warned = check_refusal("NK2125", span, String::from("`task::scope` is replaced by `par_iter` and `async(handle)`."), vec![String::from("A scope's tasks are written with `async` now: `par_iter` runs a body for every element beside the others, and `async(handle)` starts a task whose result is joined (ADR-async-5 D13, D30). The scope is removed once every use is rewritten.")], Some(help));
+        warned.severity = CheckSeverity::Warning;
+        warned.edit = edit;
+        self.findings.push(warned);
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
     pub(crate) fn a_task_with_nothing_beside_it(&mut self, span: &Span, why: &str) { self.findings.push(check_refusal("NK2110", span, format!("This `async` starts a task with nothing beside it: {}.", why), vec![String::from("A task runs beside the code between its start and its wait point; here that is nothing, so it would only be waited for.")], Some(String::from("Remove the word `async`: the expression runs on the main line with the same value.")))); }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
@@ -167,5 +210,119 @@ impl CheckState {
         for arm in arms.iter() { if arm.guard.is_none() && catches_everything(&arm.pattern) { caught = true; } }
         if !caught { self.a_case_is_missing("else", span); }
     }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn word_replaced(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, whole: &Expr, word: &str, text: &str) -> Option<CheckEdit> {
+    let at = match world.here.spans.get(&id_of(whole)) { Some(__nikaia_value) => __nikaia_value, None => return None };
+    let end = at.start + u32::try_from(word.len() as i64).unwrap_or_else(|_| panic!("the value does not fit in an `u32`"));
+    if end >= at.end { return None; }
+    Some(CheckEdit { span: Span { start: at.start, end }, text: nikaia_std::block::Text::from(text.to_string()), also: vec![] })
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn overlap_rewritten(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, whole: &Expr, block: &Block, nothing: bool) -> Option<CheckEdit> {
+    if block.stmts.len() < 2 { return None; }
+    let at = match world.here.spans.get(&id_of(whole)) { Some(__nikaia_value) => __nikaia_value, None => return None };
+    for stmt in block.stmts.iter() {
+        match &stmt.node {
+            Stmt::Expr(value) => {
+                match value {
+                    Expr::Block(_, _) => { return None; },
+                    Expr::AsyncGroup(_, _, _, _, _) => { return None; },
+                    Expr::Unsafe(_, _) => { return None; },
+                    Expr::Overlap(_, _) => { return None; },
+                    Expr::If { .. } => { return None; },
+                    Expr::Match { .. } => { return None; },
+                    _ => { },
+                }
+            },
+            _ => { return None; },
+        }
+        if stmt.span.start <= at.start || stmt.span.end >= at.end { return None; }
+    }
+    let first = unsafe { nikaia_std::proven::read(&block.stmts, (0) as usize) }.span.clone();
+    let mut also: Vec<CheckEditPart> = vec![];
+    if nothing {
+        also.reserve(block.stmts.iter().size_hint().0); for stmt in block.stmts.iter() { also.push(CheckEditPart { span: Span { start: stmt.span.start, end: stmt.span.start }, text: String::from("async ") }); }
+        return Some(CheckEdit { span: Span { start: at.start, end: at.start + u32::try_from("overlap".len() as i64).unwrap_or_else(|_| panic!("the value does not fit in an `u32`")) }, text: String::from("async"), also });
+    }
+    let mut before = first.clone();
+    let mut index = 0;
+    for stmt in block.stmts.iter() {
+        let read = match &stmt.node {
+            Stmt::Expr(value) => match world.here.spans.get(&id_of(value)) { Some(__nikaia_value) => __nikaia_value, None => return None },
+            _ => return None,
+        };
+        if index > 0 { also.push(CheckEditPart { span: Span { start: before.end, end: read.start }, text: String::from(", async ") }); }
+        before = read.clone();
+        index += 1;
+    }
+    also.push(CheckEditPart { span: Span { start: before.end, end: at.end }, text: String::from(")") });
+    Some(CheckEdit { span: Span { start: at.start, end: first.start }, text: String::from("(async "), also })
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn scope_rewritten(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, whole: &Expr, args: &[Expr]) -> Option<CheckEdit> {
+    if args.len() != 1 { return None; }
+    let (scope, outer) = match unsafe { nikaia_std::proven::read(&args, (0) as usize) } {
+        Expr::Closure { params, body, .. } => {
+            if params.len() != 1 || body.stmts.len() != 1 { return None; }
+            (*unsafe { nikaia_std::proven::read(&params, (0) as usize) }, unsafe { nikaia_std::proven::read(&body.stmts, (0) as usize) }.node.clone())
+        },
+        _ => return None,
+    };
+    let (bound, walked, round) = match outer {
+        Stmt::For { ref bindings, ref iter, ref body, .. } => {
+            if bindings.len() != 1 || body.stmts.len() != 1 { return None; }
+            (*unsafe { nikaia_std::proven::read(&bindings, (0) as usize) }, iter.clone(), unsafe { nikaia_std::proven::read(&body.stmts, (0) as usize) }.node.clone())
+        },
+        _ => return None,
+    };
+    match walked {
+        Expr::Variable(_, _) => { },
+        _ => { return None; },
+    }
+    let task = match round {
+        Stmt::Expr(Expr::MethodCall { ref receiver, method, ref args, .. }) => {
+            let receiver = nikaia_std::boxed::open(receiver);
+            if args.len() != 1 || world.words.resolve(method) != "spawn" { return None; }
+            match *receiver {
+                Expr::Variable(name, _) => { if name != scope { return None; } },
+                _ => { return None; },
+            }
+            (*unsafe { nikaia_std::proven::read(&args, (0) as usize) }).clone()
+        },
+        _ => return None,
+    };
+    let mut opened: Option<Span> = None;
+    let mut closed: Option<Span> = None;
+    match task {
+        Expr::Closure { ref params, ref body, .. } => {
+            if !params.is_empty() || body.stmts.is_empty() { return None; }
+            opened = Some(unsafe { nikaia_std::proven::read(&body.stmts, (0) as usize) }.span.clone());
+            for step in body.stmts.iter() {
+                match &step.node {
+                    Stmt::Expr(value) => {
+                        closed = Some(match world.here.spans.get(&id_of(value)).copied() { Some(__nikaia_value) => __nikaia_value, None => return None });
+                        let text = written_expression(world.words, value);
+                        for word in ["…", "print", "write", "lock", "send", "fs::", "env::", "push", "insert", "spawn", "async"] { if text.contains(AsRef::<str>::as_ref(word)) { return None; } }
+                    },
+                    _ => { return None; },
+                }
+            }
+        },
+        _ => { return None; },
+    }
+    let at = match world.here.spans.get(&id_of(whole)) { Some(__nikaia_value) => __nikaia_value, None => return None };
+    let first = match opened { Some(__nikaia_value) => __nikaia_value, None => return None };
+    let last = match closed { Some(__nikaia_value) => __nikaia_value, None => return None };
+    if first.start <= at.start || last.end >= at.end { return None; }
+    let named = written_expression(world.words, &walked);
+    let name = world.words.resolve(bound);
+    Some(CheckEdit { span: Span { start: at.start, end: first.start }, text: format!("{}.par_iter().for_each fn({}) {{ ", named, name), also: vec![CheckEditPart { span: Span { start: last.end, end: at.end }, text: String::from(" }") }] })
 }
 

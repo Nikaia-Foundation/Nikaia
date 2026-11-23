@@ -565,8 +565,18 @@ pub struct CheckFinding {
 }
 
 /// **A suggested edit to the source** (#1714): the bytes of `span` replaced
-/// by `text`; an empty `text` deletes them.
+/// by `text`; an empty `text` deletes them. `also` holds the further parts
+/// of the same edit, made with it or not at all: the checker keeps no text
+/// of the source, so an edit that keeps a branch and rewrites what stands
+/// around it is several parts (ADR-async-5 D39).
 pub struct CheckEdit {
+    pub span: Span,
+    pub text: String,
+    pub also: Vec[CheckEditPart],
+}
+
+/// One further part of a `CheckEdit`: the bytes of `span` replaced by `text`.
+pub struct CheckEditPart {
     pub span: Span,
     pub text: String,
 }

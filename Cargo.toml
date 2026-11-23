@@ -69,3 +69,15 @@ debug = false
 inherits = "release"
 incremental = true
 codegen-units = 256
+
+# **The performance gate** (#2811, `scripts/perfgate.nika`): release's
+# optimisation in one codegen unit, not incremental, so the instruction counts
+# of `benches/perf.baseline` do not move with how rustc partitions the crate
+# (256 units, as `fast` has them, move a hot loop's inlining from build to
+# build). `cargo build --profile perf -p nikaia`; the binary is
+# `target/perf/nikaia`. The Rust reference programs are built the same way.
+[profile.perf]
+inherits = "release"
+codegen-units = 1
+incremental = false
+debug = false

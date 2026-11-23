@@ -8,7 +8,7 @@ fn tasks_work(n: i64) -> i64 {
 
 // `.join()` is an `.await`, and it hands back the body's value (D5).
 test "a handle joins to the value the body came to" {
-    let handle = spawn fn { tasks_work(21) }
+    let handle = async(detached) fn { tasks_work(21) }
     let answer = handle.join()
     assert(answer == 42)
 }
@@ -23,19 +23,19 @@ test "a handle joins to the value the body came to" {
 test "a copy a clone and a reassignment are not refused" {
     let message = "Hello"
     let copy = message.clone()
-    let a = spawn fn { copy }
+    let a = async(detached) fn { copy }
     assert(message == "Hello")
 
     let n = 7
-    let b = spawn fn { n }
+    let b = async(detached) fn { n }
     assert(n == 7)
 
     let word = "Welt"
-    let c = spawn fn { word }
+    let c = async(detached) fn { word }
     assert(word == "Welt")
 
     let mut again = "eins"
-    let d = spawn fn { again }
+    let d = async(detached) fn { again }
     again = "zwei"
     assert(again == "zwei")
 
@@ -52,7 +52,7 @@ test "a copy a clone and a reassignment are not refused" {
 // `async`, `await` and `Future` are not, and a task is where they would leak
 // in first.
 test "nothing a task needs is written in nikaia" {
-    let h = spawn fn { 1 }
+    let h = async(detached) fn { 1 }
     let value = h.join()
     assert(value == 1)
 }

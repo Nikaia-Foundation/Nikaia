@@ -31,7 +31,14 @@ fn findings(source: &str) -> Vec<Finding> {
     let parsed = parse_to_ast(source).expect("the source parses");
     let own = Ledger::infer(&parsed);
     let library = Ledger::parse(STD).expect("std's shipped ledger parses");
-    check::check(&parsed, &own, &library).findings
+    // `spawn` and `overlap` stay accepted, with the deprecation warnings
+    // NK2123 and NK2124 (ADR-async-5 D39), until they are removed; these tests
+    // are about their jumps, so the warnings are left out.
+    check::check(&parsed, &own, &library)
+        .findings
+        .into_iter()
+        .filter(|f| f.code != "NK2123" && f.code != "NK2124")
+        .collect()
 }
 
 /// The one finding a source is written to produce, with its code.

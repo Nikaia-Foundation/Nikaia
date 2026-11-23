@@ -1,0 +1,19 @@
+// A `match error` whose catch-all throws the error on passes the box it
+// holds on as it is (#1242): `else => throw error`, a catch-all's own
+// binding, and a plain handler over the box. Each task ends in time, so
+// nothing is thrown, and each prints its value.
+fn main() throws {
+    let h = async(detached) fn { 1 }
+    let v = h.join(within: 1000.millis(), on_timeout: task::OnTimeout::Cancel) catch {
+        match error { task::TimedOut => 0, else => throw error }
+    }
+    println(f"{v}")
+    let h2 = async(detached) fn { 2 }
+    let w = h2.join(within: 1000.millis(), on_timeout: task::OnTimeout::Cancel) catch {
+        match error { task::TimedOut => 0, e => throw e }
+    }
+    println(f"{w}")
+    let h3 = async(detached) fn { 3 }
+    let x = h3.join(within: 1000.millis(), on_timeout: task::OnTimeout::Cancel) catch { throw error }
+    println(f"{x}")
+}

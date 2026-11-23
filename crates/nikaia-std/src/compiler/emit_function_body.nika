@@ -114,7 +114,7 @@ impl EmitState {
         // boundary these flags do not cross), binds nothing until a statement
         // in it does, is in no loop, and has no `catch` to break out to.
         let flow = EmitFlow::plain() with { can_throw: throws_ }
-        let scope = EmitScope { origin: (key.rsplit("::").next() ?? "").clone(), function: key.clone(), channel: channel.clone(), caught_sum: null, caught_member: null, bound: "", changed: [], awaited: awaited.clone(), tasks_channel: "", tasks_function: "" }
+        let scope = EmitScope { origin: (key.rsplit("::").next() ?? "").clone(), function: key.clone(), channel: channel.clone(), caught_sum: null, caught_member: null, caught_boxed: [], bound: "", changed: [], awaited: awaited.clone(), tasks_channel: "", tasks_function: "" }
 
         // A function body's last statement is the *function's* value, which is
         // the one place a `return x` may be written as `x`.

@@ -21,8 +21,13 @@ fn findings(source: &str) -> Vec<nikaia::check::Finding> {
     let own = nikaia::contracts::Ledger::infer(&parsed);
     let library =
         nikaia::contracts::Ledger::parse(nikaia::contracts::STD).expect("std ships a ledger");
+    // `overlap` stays accepted with the deprecation warning NK2124 (ADR-async-5
+    // D39) until it is removed; these tests are about the program, not it.
     nikaia::check::check_program(&parsed, &own, &library, &std::collections::BTreeSet::new())
         .findings
+        .into_iter()
+        .filter(|f| f.code != "NK2124")
+        .collect()
 }
 
 /// Lowered at `how`, compiled, and run in a directory of its own, which is

@@ -1,0 +1,23 @@
+// #990: `overlap` warns `NK2124` (ADR-async-5 D39): bound, the edit writes a
+// tuple of `async`; branches that change a name the others see get none.
+fn work(n: i64) -> i64 sync {
+    return n * 2
+}
+
+fn main() throws {
+    let (a, b) = overlap {
+        work(2)
+        work(3)
+    }
+    println(a + b)
+    let mut x = 0
+    let (c, d) = overlap {
+        work(4)
+        {
+            let y = work(5)
+            y + 1
+        }
+    }
+    x += c + d
+    println(x)
+}

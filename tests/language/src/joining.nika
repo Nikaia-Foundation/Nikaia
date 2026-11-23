@@ -9,10 +9,7 @@ fn joining_twice(n: i64) -> i64 {
 
 // D1: an `overlap` of branches that cannot pause is still a pause.
 test "an overlap of branches that cannot pause is a pause" {
-    let pair = overlap {
-        joining_twice(3)
-        joining_twice(4)
-    }
+    let pair = (async joining_twice(3), async joining_twice(4))
     assert(pair.0 == 6)
     assert(pair.1 == 8)
 }
@@ -57,10 +54,7 @@ fn joining_load(keep which: String) -> String throws {
 }
 
 fn joining_own_channel() -> String throws {
-    let pair = overlap {
-        joining_load("c")
-        joining_load("d")
-    }
+    let pair = (async joining_load("c"), async joining_load("d"))
     return f"{pair.0} {pair.1}"
 }
 

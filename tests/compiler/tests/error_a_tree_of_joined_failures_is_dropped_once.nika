@@ -22,18 +22,12 @@ fn fail(name: String) -> String throws {
 }
 
 fn pair(a: String, b: String) -> String throws {
-	let both = overlap {
-		fail(a)
-		fail(b)
-	}
+	let both = (async fail(a), async fail(b))
 	return both.0 + both.1
 }
 
 fn tree() -> String throws {
-	let both = overlap {
-		pair("one", "two")
-		pair("three", "four")
-	}
+	let both = (async pair("one", "two"), async pair("three", "four"))
 	return both.0 + both.1
 }
 

@@ -1,0 +1,10 @@
+--only NK2123: TMP/main.nika:6: NK2123: replaced `spawn` with `async(detached)`
+fn work(n: i64) -> i64 sync {
+    return n * 2
+}
+
+fn main() throws {
+    let h = async(detached) fn { work(1) }
+    println(h.join())
+    println("done")
+}

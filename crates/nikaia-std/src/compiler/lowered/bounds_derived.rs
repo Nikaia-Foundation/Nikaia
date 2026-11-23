@@ -959,6 +959,7 @@ pub(crate) fn derived_expr(expr: &Expr, at: i64, words: &winnow_grammar::Interne
         Expr::LitFloat(_, _) => { },
         Expr::LitBool(_, _) => { },
         Expr::LitNull(_) => { },
+        Expr::TypeArgument(_, _) => { },
         Expr::LitChar(_, _) => { },
         Expr::LitStr { .. } => { },
     }

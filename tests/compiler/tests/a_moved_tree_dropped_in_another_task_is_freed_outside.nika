@@ -16,7 +16,7 @@ fn count(t: Tree) -> i64 {
 fn main() throws {
     let (tx, rx) = channel::bounded[i64](1)
     let t = Tree::Node(Tree::Node(Tree::Leaf, Tree::Leaf), Tree::Node(Tree::Leaf, Tree::Leaf))
-    spawn fn {
+    async(detached) fn {
         tx.send(count(t))
     }
     println(f"{rx.recv() ?? -1} nodes counted in another task")

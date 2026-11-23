@@ -1,3 +1,11 @@
+warning[NK2124]: `overlap` is replaced by `async`, which starts each branch as a task.
+  --> tests/overlap_stdout_stderr_note_names_no_seq.nika:4:5
+   |
+ 4 |     let (x, y) = overlap {
+   |     ^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: Each branch of an `overlap` is a task beside the others; `async e` starts one, waited for where its value is first needed, and `async { … }` waits for the tasks it starts at its end (ADR-async-5 D6, D9). The block is removed once every use is rewritten.
+   = help: Write `let (x, y) = (async a(), async b())` for the values, or `async { async a()  async b() }` for branches that give nothing. `nikaia fix --only NK2124` makes the edit.
 error[NK2104]: These two branches can't run at the same time.
   --> tests/overlap_stdout_stderr_note_names_no_seq.nika:6:9
    |
