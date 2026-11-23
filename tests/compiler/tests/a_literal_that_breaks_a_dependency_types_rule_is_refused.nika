@@ -1,0 +1,54 @@
+// A literal of a type of a dependency is a construction (ADR-369 D2,
+// #2766): `level::Level { v: 11 }` breaks the rule the type publishes and
+// is refused, as the package's own literal would be; `{ v: 4 }` keeps it.
+// It was built unchecked.
+use std::env
+use std::fs
+use std::process
+
+// The running `nikaia` (`env::current_exe`, ADR-program-path-1 D3).
+fn toolchain() -> String throws {
+	return env::current_exe()?.display() ?? "target/fast/nikaia"
+}
+
+fn root() -> String throws {
+	return env::current_main()?.parent()?.parent()?.parent()?.parent()?.display() ?? "../.."
+}
+
+fn main() throws {
+	let nikaia = toolchain()
+	let repo = root()
+	let scratch = fs::scratch()
+	let tmp = f"{scratch.path().display()}"
+	fs::create_dir("level", scratch)
+	fs::create_dir("level/src", scratch)
+	fs::create_dir("app", scratch)
+	fs::create_dir("app/src", scratch)
+	fs::write("level/nikaia.toml", scratch, "[package]\nname = \"level\"\nversion = \"0.1.0\"\n")
+	fs::write(
+		"level/src/lib.nika",
+		scratch,
+		"pub struct Level {\n    pub v: i64,\n    assert(0 <= v && v <= 10; message: \"a level is between 0 and 10\")\n}\n\npub fn level() -> Level {\n    return Level { v: 0 }\n}\n",
+	)
+	fs::write(
+		"app/nikaia.toml",
+		scratch,
+		f"[package]\nname = \"app\"\nversion = \"0.1.0\"\n\n[dependencies]\nlevel = {{ path = \"{tmp}/level\" }}\n",
+	)
+	fs::write(
+		"app/src/main.nika",
+		scratch,
+		"use level\n\nfn main() {\n    let good = level::Level { v: 4 }\n    let bad = level::Level { v: 11 }\n    assert(good.v + bad.v > 0)\n}\n",
+	)
+	let out = process::run(
+		nikaia,
+		["check", "src/main.nika"]; dir: f"{tmp}/app",
+		env: [("RUST_BACKTRACE", "0")],
+	)
+	println(f"exit {out.code}")
+	for line in f"{out.stdout}{out.stderr}".lines() {
+		if line.contains("NK") || line.contains(" --> ") {
+			println(line.replace(tmp, "TMP").replace(repo, "REPO").trim())
+		}
+	}
+}
