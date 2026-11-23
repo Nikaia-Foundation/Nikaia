@@ -3,8 +3,11 @@
 Programs of the [Computer Language Benchmarks Game](https://benchmarksgame-team.pages.debian.net/benchmarksgame/),
 each counted against the **fastest Rust entry published there** on
 2026-11-16, not a Rust program written here, plus the `json` package against
-`serde_json`. The Rust entries are copied unchanged, with their header, the
-link to the entry and its revised BSD licence.
+`serde_json`. The one exception is k-nucleotide: its entries #7 and #6 link
+unmaintained crates (tokio-threadpool 0.1, fxhash; #2806), so it is counted
+against the fastest entry that does not, Rust #3 (2.57 s, 2.79 s and 3.28 s
+on the game's machine). The Rust entries are copied unchanged, with their
+header, the link to the entry and its revised BSD licence.
 
 ```sh
 nikaia run benches/game/game.nika             # every problem, the table below
@@ -21,7 +24,7 @@ nikaia run benches/game/game.nika -- json     # json-small, -large, -deep
 | fannkuch-redux | small arrays, permutations | [`main.nika`](fannkuch-redux/main.nika): lists, a clone per permutation | [`speed.nika`](fannkuch-redux/speed.nika): arrays of 16, no allocation | [Rust #6](fannkuch-redux/rust-6.rs), threads |
 | binary-trees | many short-lived small objects | [`main.nika`](binary-trees/main.nika): a recursive enum | none: the faster form is an arena, which Nikaia does not offer | [Rust #5](binary-trees/rust-5.rs), bumpalo arena, threads |
 | fasta | generated text, a random generator, output | [`main.nika`](fasta/main.nika): a `String` a line | [`speed.nika`](fasta/speed.nika): a letter table, `Bytes` written a block at a time | [Rust #7](fasta/rust-7.rs), held to one core |
-| k-nucleotide | hash maps keyed by short text | [`main.nika`](k-nucleotide/main.nika) | [`speed.nika`](k-nucleotide/speed.nika): two-bit codes as `u64` keys | [Rust #7](k-nucleotide/rust-7.rs), threads |
+| k-nucleotide | hash maps keyed by short text | [`main.nika`](k-nucleotide/main.nika) | [`speed.nika`](k-nucleotide/speed.nika): two-bit codes as `u64` keys | [Rust #3](k-nucleotide/rust-3.rs), threads: the fastest entry without an unmaintained crate |
 | reverse-complement | large byte buffers, table lookup | [`main.nika`](reverse-complement/main.nika): text split and rebuilt | [`speed.nika`](reverse-complement/speed.nika): in place, an `Array[u8, 256]` table | [Rust #1](reverse-complement/rust-1.rs), threads |
 | json | reading and writing JSON | [`json/tree.nika`](json/tree.nika) | none | [`serde_json`](json/rust-tree.rs), [its own README](json/README.md) |
 
