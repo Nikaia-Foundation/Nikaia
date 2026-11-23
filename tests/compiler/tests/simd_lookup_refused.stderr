@@ -1,0 +1,41 @@
+error[NK1298]: A lookup's index is not proved below the 16 lanes of a `simd::Fixed[u8, 16]`.
+  --> tests/simd_lookup_refused.nika:6:5
+   |
+ 6 |     return table.lookup(idx)
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: Each lane of the index picks a byte of the table, from 0 to 15; the checker proves it from a `simd::Fixed::from([…])` of constants, `& simd::splat(c)`, `.min(simd::splat(c))`, a `simd::select` of two proved vectors, a lookup from a proved table, or an element of a `let` list of these (ADR-377 D10).
+   = help: Write `lookup_or_zero`, which answers 0 for an index of 16 or more, or bound the index with `& simd::splat(15)`.
+error[NK1298]: A lookup's index can be 16, outside the 16 lanes of a `simd::Fixed[u8, 16]`.
+   --> tests/simd_lookup_refused.nika:10:5
+    |
+ 10 |     return table.lookup(simd::Fixed::from([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 16]))
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: Each lane of the index picks a byte of the table, from 0 to 15; the checker proves it from a `simd::Fixed::from([…])` of constants, `& simd::splat(c)`, `.min(simd::splat(c))`, a `simd::select` of two proved vectors, a lookup from a proved table, or an element of a `let` list of these (ADR-377 D10).
+    = help: Write `lookup_or_zero`, which answers 0 for an index of 16 or more, or bound the index with `& simd::splat(15)`.
+error[NK1171]: `simd::Lanes` has no method called `lookup`.
+   --> tests/simd_lookup_refused.nika:14:5
+    |
+ 14 |     return table.lookup(idx)
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: What can be called is what is written down: `.lookup()` is in no declaration, ledger or description this program reads.
+    = help: Only what is written down for `simd::Lanes` can be called; a Rust function or method of the same name is not reached.
+error[NK1171]: `simd::Fixed[u32, 4]` has no method called `lookup`.
+   --> tests/simd_lookup_refused.nika:18:5
+    |
+ 18 |     return table.lookup(simd::Fixed::from([0, 1, 2, 3]))
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: `lookup` picks bytes from a table of bytes: it is offered on `simd::Fixed[u8, N]` only (ADR-377 D10).
+    = help: Write the table and the indices as `simd::Fixed[u8, N]`, or pick lane by lane with `lane(i)`.
+error[NK1102]: `simd::Fixed::lookup_or_zero` expects `idx` to be `simd::Fixed[u8, 16]`, but you're passing `simd::Fixed[u8, 8]`.
+   --> tests/simd_lookup_refused.nika:22:5
+    |
+ 22 |     return table.lookup_or_zero(idx)
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: The index picks one byte of the table for each of its lanes, so it has as many lanes as the table (ADR-377 D10).
+    = help: Write the index with 16 lanes, as the table has.
+5 type errors

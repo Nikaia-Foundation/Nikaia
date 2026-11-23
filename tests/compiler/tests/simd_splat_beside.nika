@@ -1,0 +1,10 @@
+// A vector made on the right of a lane operation is of the type the left side
+// holds, also where the operation is an argument (ADR-377 D3).
+use std::simd
+
+fn main() throws {
+    let raw: simd::Fixed[u8, 16] = simd::splat(20)
+    let least = raw.min(raw & simd::splat(15))
+    let mixed = raw.max(raw | simd::splat(1))
+    println(f"{least.lane(0)} {mixed.lane(0)}")
+}

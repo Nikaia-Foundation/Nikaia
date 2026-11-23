@@ -371,7 +371,13 @@ pub(crate) fn check_core_ops_binary<H: CheckHost>(state: &mut CheckState, world:
         state.flow.short_circuited += 1;
         walked_right = check_core_ops_proved_expr(state, world, host, lhs, check_core_ops_and(&op), rhs, span);
         state.flow.short_circuited -= 1;
-    } else { walked_right = check_core_expr(state, world, host, rhs, span); }
+    } else {
+        let wanted_right: Option<Ty> = check_simd_wanted(world, rhs, Some(&value_of_a_copy(&walked_left.unseen())));
+        let made_right = wanted_right.is_some();
+        if made_right { state.flow.lambda_expected = wanted_right; }
+        walked_right = check_core_expr(state, world, host, rhs, span);
+        if made_right { state.flow.lambda_expected = None; }
+    }
     let byte = check_core_ops_named("u8");
     let mut left: Ty = walked_left;
     if value_of_a_copy(&walked_right.unseen()) == byte && state.text_literal(world, &byte, lhs, false).is_some() { left = byte.clone(); }
