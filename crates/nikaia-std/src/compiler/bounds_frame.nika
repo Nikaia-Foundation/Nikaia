@@ -55,6 +55,7 @@ fn bounds_around(
 		changing_receivers: collections::BTreeSet(),
 		frames: collections::BTreeMap(),
 		rules: [],
+		rules_unread: collections::BTreeSet(),
 		held: collections::BTreeMap(),
 		checked: collections::BTreeMap(),
 		checked_returning: collections::BTreeSet(),
@@ -118,7 +119,8 @@ fn bounds_around(
 	// **The rules between list fields** read with the frames found
 	// (ADR-369 D4, `bounds_rules.nika`): checked where a body uses them.
 	let rules = rules_candidates(program, beside, context, words)
-	context.around.rules = rules
+	context.around.rules = rules.0
+	context.around.rules_unread = rules.1
 	// **The private functions their callers may bound** (ADR-391 D1).
 	context.around.derived = derived_of(program, beside, words)
 	// **The list fields whose every write the walks see** (ADR-306 D21):

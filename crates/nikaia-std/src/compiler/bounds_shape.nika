@@ -85,6 +85,9 @@ pub struct Around {
 	/// The rules found between the private list fields of a type, not yet
 	/// checked (ADR-369 D4, `bounds_rules.nika`).
 	pub rules: Vec[BoundsRule],
+	/// The fields of the types searched for rules that no candidate is
+	/// read over (`rules_candidates`), for `--asserts` (ADR-369 D5).
+	pub rules_unread: collections::BTreeSet[String],
 	/// **The rules that hold, by type**, found by the first body that
 	/// needs them and kept for the bodies after it that walk the same
 	/// context (#1581): a round of `bounds_fields` or `bounds_returns`, the

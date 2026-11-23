@@ -87,7 +87,7 @@ pub(crate) fn a_high_byte(literal: &str) -> Option<i64> {
     Some(value)
 }
 
-pub fn escape_scalar(n: i64) -> Option<scalar> {
+pub(crate) fn escape_scalar(n: i64) -> Option<scalar> {
     if n >= 0 && n <= 1114111 && (n < 55296 || n > 57343) { return Some(nikaia_std::num::scalar_from(n)); }
     None
 }

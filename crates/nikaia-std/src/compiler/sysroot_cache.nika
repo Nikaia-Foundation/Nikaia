@@ -198,7 +198,7 @@ pub struct SysrootNames {
 
 /// Every word of `text` (letters, digits, `_`, not starting with a digit),
 /// each once, in the order first met.
-pub fn sysroot_words(text: ref String) -> Vec[String] sync {
+fn sysroot_words(text: ref String) -> Vec[String] sync {
     let mut seen: collections::BTreeSet[String] = collections::BTreeSet()
     let mut out: Vec[String] = []
     let n = text.bytes.len()

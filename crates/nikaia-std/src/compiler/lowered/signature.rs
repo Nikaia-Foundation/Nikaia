@@ -63,7 +63,7 @@ pub fn translate(written: &str, crate_word: &str, parameters: &[String], types: 
     Translated { ty: Ty::Unknown, kept: true }
 }
 
-pub fn result_of(written: &str, crate_word: &str, parameters: &[String], types: &collections::BTreeSet<String>, mentioned: &mut collections::BTreeSet<String>) -> Resulted {
+pub(crate) fn result_of(written: &str, crate_word: &str, parameters: &[String], types: &collections::BTreeSet<String>, mentioned: &mut collections::BTreeSet<String>) -> Resulted {
     let resulted = generic_of(written, "Result");
     if resulted.is_none() {
         let plain = translate(written, crate_word, parameters, types, mentioned);
@@ -89,7 +89,7 @@ pub(crate) fn view_of(ty: Ty) -> Ty {
     }
 }
 
-pub fn sent_across(names: &[String], types: &[String], bounds: &str) -> Vec<String> {
+pub(crate) fn sent_across(names: &[String], types: &[String], bounds: &str) -> Vec<String> {
     let sent = sends(bounds);
     let mut out: Vec<String> = vec![]; #[allow(clippy::redundant_locals)] let sent = sent;
     for at in 0..names.len() as i64 {

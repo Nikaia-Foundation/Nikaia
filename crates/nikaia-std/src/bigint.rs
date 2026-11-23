@@ -40,7 +40,7 @@ fn magnitude_compare(a: &[u64], b: &[u64]) -> i64 {
 // this was written - see `contracts::sync`.
 fn magnitude_add(a: &[u64], b: &[u64]) -> Vec<u64> {
     let n = if (a.len() as i64) > b.len() as i64 { a.len() as i64 } else { b.len() as i64 };
-    let mut sum: Vec<u64> = vec![];
+    let mut sum: Vec<u64> = Vec::with_capacity(nikaia_std::count::of(unsafe { nikaia_std::proven::add::<i64>(n, 1) }));
     let mut carry = false;
     for at in 0..n {
         let x: u64 = if ((at) as usize) < a.len() { *unsafe { nikaia_std::proven::read(&a, (at) as usize) } } else { 0u64 };
@@ -57,7 +57,7 @@ fn magnitude_add(a: &[u64], b: &[u64]) -> Vec<u64> {
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 fn magnitude_sub(a: &[u64], b: &[u64]) -> Vec<u64> {
-    let mut rest: Vec<u64> = vec![];
+    let mut rest: Vec<u64> = Vec::with_capacity(nikaia_std::count::of(a.len() as i64));
     let mut borrow = false;
     for at in 0..a.len() as i64 {
         let y: u64 = if ((at) as usize) < b.len() { *unsafe { nikaia_std::proven::read(&b, (at) as usize) } } else { 0u64 };
@@ -73,7 +73,7 @@ fn magnitude_sub(a: &[u64], b: &[u64]) -> Vec<u64> {
 // this was written - see `contracts::sync`.
 fn magnitude_mul(a: &[u64], b: &[u64]) -> Vec<u64> {
     if a.is_empty() || b.is_empty() { return vec![]; }
-    let mut product: Vec<u64> = vec![];
+    let mut product: Vec<u64> = Vec::with_capacity(nikaia_std::count::of(unsafe { nikaia_std::proven::add::<i64>(a.len() as i64, b.len() as i64) }));
     for _ in 0..unsafe { nikaia_std::proven::add::<i64>(a.len() as i64, b.len() as i64) } { product.push(0); }
     for i in 0..a.len() as i64 {
         let mut carry: u64 = 0u64;
@@ -92,7 +92,7 @@ fn magnitude_mul(a: &[u64], b: &[u64]) -> Vec<u64> {
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 fn shifted_up(a: &[u64], by: u32) -> Vec<u64> {
-    let mut out: Vec<u64> = vec![];
+    let mut out: Vec<u64> = Vec::with_capacity(nikaia_std::count::of(unsafe { nikaia_std::proven::add::<i64>(a.len() as i64, 1) }));
     let mut carry: u64 = 0u64;
     for at in 0..a.len() as i64 {
         if by == 0u32 { out.push(*unsafe { nikaia_std::proven::read(&a, (at) as usize) }); } else {
@@ -107,7 +107,7 @@ fn shifted_up(a: &[u64], by: u32) -> Vec<u64> {
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 fn shifted_down(a: &[u64], by: u32) -> Vec<u64> {
-    let mut out: Vec<u64> = vec![];
+    let mut out: Vec<u64> = Vec::with_capacity(nikaia_std::count::of(a.len() as i64));
     for at in 0..a.len() as i64 {
         if by == 0u32 { out.push(*unsafe { nikaia_std::proven::read(&a, (at) as usize) }); } else {
             let above: u64 = if ((unsafe { nikaia_std::proven::add::<i64>(at, 1) }) as usize) < a.len() { *unsafe { nikaia_std::proven::read(&a, (nikaia_std::proven::add::<i64>(at, 1)) as usize) } << 64u32 - by } else { 0u64 };
@@ -120,7 +120,7 @@ fn shifted_down(a: &[u64], by: u32) -> Vec<u64> {
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 fn magnitude_div_digit(a: &[u64], d: u64) -> (Vec<u64>, u64) {
-    let mut quotient: Vec<u64> = vec![];
+    let mut quotient: Vec<u64> = Vec::with_capacity(nikaia_std::count::of(a.len() as i64));
     for _ in 0..a.len() as i64 { quotient.push(0); }
     let mut rest: u64 = 0u64;
     let mut at = a.len() as i64;
@@ -143,7 +143,7 @@ fn magnitude_div_long(a: &[u64], b: &[u64]) -> (Vec<u64>, Vec<u64>) {
     let mut u = shifted_up(&a, by);
     let top = *nikaia_std::index::get(&v, nikaia_std::index::at(unsafe { nikaia_std::proven::sub::<i64>(n, 1) }));
     let next = *nikaia_std::index::get(&v, nikaia_std::index::at(unsafe { nikaia_std::proven::sub::<i64>(n, 2) }));
-    let mut quotient: Vec<u64> = vec![];
+    let mut quotient: Vec<u64> = Vec::with_capacity(nikaia_std::count::of(unsafe { nikaia_std::proven::add::<i64>(m, 1) }));
     for _ in 0..unsafe { nikaia_std::proven::add::<i64>(m, 1) } { quotient.push(0); }
     let mut j = unsafe { nikaia_std::proven::add::<i64>(m, 1) };
     while j > 0 {
@@ -195,7 +195,7 @@ fn magnitude_div_long(a: &[u64], b: &[u64]) -> (Vec<u64>, Vec<u64>) {
         }
         { let __nikaia_stored = qhat; nikaia_std::index::set(&mut quotient, nikaia_std::index::at(j), __nikaia_stored); }
     }
-    let mut low_part: Vec<u64> = vec![];
+    let mut low_part: Vec<u64> = Vec::with_capacity(nikaia_std::count::of(n));
     for i in 0..n { low_part.push(*nikaia_std::index::get(&u, (i) as usize)); }
     (trimmed(quotient), shifted_down(&low_part, by))
 }

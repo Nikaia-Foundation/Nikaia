@@ -2200,7 +2200,7 @@ pub fn keeps_infer[H: KeepsHost](mut ledger: Ledger, units: ref Vec[ParsedView],
 /// columns of the callees outside the unit. The least fixpoint runs inside
 /// the unit only; a callee neither in it nor stored is read as `kept_by`
 /// reads it, from the ledgers, and an undescribed one keeps.
-pub fn keeps_of_unit(unit: ref Vec[String], graph: ref collections::BTreeMap[String, Uses], stored: ref collections::BTreeMap[String, collections::BTreeSet[String]], own: ref Ledger, library: ref Ledger) -> collections::BTreeMap[String, collections::BTreeSet[String]] {
+fn keeps_of_unit(unit: ref Vec[String], graph: ref collections::BTreeMap[String, Uses], stored: ref collections::BTreeMap[String, collections::BTreeSet[String]], own: ref Ledger, library: ref Ledger) -> collections::BTreeMap[String, collections::BTreeSet[String]] {
     let mut kept: collections::BTreeMap[String, collections::BTreeSet[String]] = collections::BTreeMap()
     for name in unit {
         let uses = graph[name] ?? continue
@@ -2239,7 +2239,7 @@ fn keeps_settled(callee: ref String, at: i64, settling: ref collections::BTreeMa
 /// `keeps_of_unit` from the columns its callees already have. The least
 /// fixpoint is unique, so this answers what `kept_by` answers, which stays
 /// the reference.
-pub fn keeps_callees_first(graph: ref collections::BTreeMap[String, Uses], own: ref Ledger, library: ref Ledger) -> collections::BTreeMap[String, collections::BTreeSet[String]] {
+fn keeps_callees_first(graph: ref collections::BTreeMap[String, Uses], own: ref Ledger, library: ref Ledger) -> collections::BTreeMap[String, collections::BTreeSet[String]] {
     let mut stored: collections::BTreeMap[String, collections::BTreeSet[String]] = collections::BTreeMap()
     for unit in keeps_units(graph) {
         let column = keeps_of_unit(unit, graph, stored, own, library)
@@ -2263,7 +2263,7 @@ struct KeepsComponents {
 /// The graph's recursive groups, each a unit, in reverse topological order: a
 /// unit comes after every unit it hands a parameter into. A callee outside
 /// the graph is no edge: the ledgers answer it.
-pub fn keeps_units(graph: ref collections::BTreeMap[String, Uses]) -> Vec[Vec[String]] {
+fn keeps_units(graph: ref collections::BTreeMap[String, Uses]) -> Vec[Vec[String]] {
     let mut walk = KeepsComponents { index: collections::BTreeMap(), low: collections::BTreeMap(), open: collections::BTreeSet(), stack: [], units: [], next: 0 }
     for (name, _) in graph {
         if !walk.index.contains_key(name) {
@@ -2645,7 +2645,7 @@ fn copied_keepers(keepers: ref Vec[KeepsKeeper]) -> Vec[KeepsKeeper] {
 ///
 /// `None` for a declaration with no body - a `trait`'s method, which keeps
 /// nothing because it does nothing, and whose `impl`s answer for themselves.
-pub fn keeps_uses_of(view: ref ParsedView, item: ref Item, target: String?, ledger: ref Ledger, library: ref Ledger, indexes: KeepsIndexes, resolved: ref collections::BTreeMap[String, CheckMethodCalls], holes_of: fn(ref Expr) -> Vec[Expr] sync) -> KeepsFound? {
+fn keeps_uses_of(view: ref ParsedView, item: ref Item, target: String?, ledger: ref Ledger, library: ref Ledger, indexes: KeepsIndexes, resolved: ref collections::BTreeMap[String, CheckMethodCalls], holes_of: fn(ref Expr) -> Vec[Expr] sync) -> KeepsFound? {
     match item {
         Item::Fn { name, generics, receiver, args, config, body, ret_type, .. } => {
             let own = match name {

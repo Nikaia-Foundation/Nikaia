@@ -183,8 +183,10 @@ impl CheckState {
                 names += 1
             }
             // **An owned local is lent through the call** (#897), as
-            // `look(t)` lends it: `Arm::View(&t)`, and `t` stays usable.
-            if named && !a_view {
+            // `look(t)` lends it: `Arm::View(&t)`, and `t` stays usable. So
+            // is a place read off one (`xs[0]`, `p.name`), which moving
+            // would take out of what it is read from.
+            if (named && !a_view) || (!named && check_arm_is_a_place(leaf) && !ty.is_a_view()) {
                 owned.push(node_key(leaf))
                 continue
             }

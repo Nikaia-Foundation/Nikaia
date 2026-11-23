@@ -55,7 +55,7 @@ impl EmitState {
         }
         out
     }
-    pub fn lambda_sums(&self, world: &EmitWorld<'_, '_, '_, '_>, sums: &mut collections::BTreeMap<Vec<String>, String>) {
+    pub(crate) fn lambda_sums(&self, world: &EmitWorld<'_, '_, '_, '_>, sums: &mut collections::BTreeMap<Vec<String>, String>) {
         for (_, thrown) in self.facts.failing_through_lambdas.iter() {
             if thrown.len() < 2 || sums.contains_key(thrown) { continue; }
             let mut all_named = true;

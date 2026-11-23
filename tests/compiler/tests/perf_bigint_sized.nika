@@ -1,0 +1,50 @@
+// #2798: `std::bigint` sizes each digit buffer up front with
+// `Vec(capacity: n)`. Add, sub, mul, the shifts inside the long division and
+// div_rem on values of 1, 2, 40 and 41 digits: a carry into a new digit, a
+// borrow down to fewer digits, a quotient of one digit. The sizing changes
+// no value, so this prints the same before and after.
+use std::bigint
+
+fn show(label: String, x: bigint::BigInt) throws {
+    println(f"{label}: bits {x.bits()} = {x.to_text()}")
+}
+
+fn divided(label: String, a: bigint::BigInt, d: bigint::BigInt) throws {
+    let (q, r) = a.div_rem(d) ?? return
+    show(f"{label} quotient", q)
+    show(f"{label} rest", r)
+}
+
+fn main() throws {
+    let one = bigint::BigInt::of(1)
+    let two32 = bigint::BigInt::of(4294967296)
+    let base = two32.mul(two32)
+    let mut p40 = bigint::BigInt::of(1)
+    for _ in 0..<40 {
+        p40 = p40.mul(base)
+    }
+    let ones1 = base.sub(one)
+    let ones40 = p40.sub(one)
+    let p39 = p40.div_rem(base) ?? return
+    show("1 digit", ones1)
+    show("2 digits, carry", ones1.add(one))
+    show("41 digits, carry", ones40.add(one))
+    show("40 digits, borrow", ones40)
+    show("1 digit, borrow", p40.sub(ones40))
+    show("negative", one.sub(p40))
+    show("mixed signs", ones40.neg().add(p40))
+    show("1 x 1", ones1.mul(ones1))
+    show("40 x 1", ones40.mul(ones1))
+    show("40 x 40", ones40.mul(ones40))
+    show("41 x 2", p40.mul(base))
+    divided("41 / 40", p40, ones40)
+    divided("40 / 40", ones40, ones40.sub(one))
+    divided("80 / 40", ones40.mul(ones40).add(bigint::BigInt::of(5)), ones40)
+    divided("41 / 2", p40, base.add(one))
+    divided("40 / 2", ones40, base)
+    divided("41 / 1", p40, bigint::BigInt::of(7))
+    divided("1 / 1", ones1, bigint::BigInt::of(10))
+    divided("2 / 41", base, p40)
+    divided("40 / 39 shifted", ones40, p39.0.add(bigint::BigInt::of(3)))
+    show("gcd", ones40.gcd(ones1.mul(ones1)))
+}

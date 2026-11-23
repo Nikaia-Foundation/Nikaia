@@ -12,7 +12,7 @@
 
 /// **The unsigned type of `T`'s width**, what the low half is held in: `""`
 /// for a `T` that has no `Wide`.
-pub fn wide_unsigned_of(element: ref String) -> String sync {
+fn wide_unsigned_of(element: ref String) -> String sync {
     return match element {
         "u8" => "u8",
         "u32" => "u32",

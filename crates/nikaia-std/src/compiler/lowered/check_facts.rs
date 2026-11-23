@@ -444,17 +444,21 @@ pub(crate) fn check_claim_refused(held: Option<&ClaimHeld>) -> Option<String> {
     }
 }
 
-pub fn check_claims_report(claims: &collections::BTreeMap<(i64, i64), FactClaim>, source: &str, path: &str, published: &collections::BTreeMap<String, Published>, derived: &[String], colour: bool, refuses: bool) -> String {
-    #[allow(unused_mut)] let mut refused: Vec<String> = vec![];
-    #[allow(unused_mut)] let mut at_run_time: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut refused = refused;
-    #[allow(unused_mut)] let mut arrives: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut refused = refused; #[allow(unused_mut, clippy::redundant_locals)] let mut at_run_time = at_run_time;
-    #[allow(unused_mut)] let mut by_the_test: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut refused = refused; #[allow(unused_mut, clippy::redundant_locals)] let mut at_run_time = at_run_time; #[allow(unused_mut, clippy::redundant_locals)] let mut arrives = arrives;
-    #[allow(unused_mut)] let mut proved: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut refused = refused; #[allow(unused_mut, clippy::redundant_locals)] let mut at_run_time = at_run_time; #[allow(unused_mut, clippy::redundant_locals)] let mut arrives = arrives; #[allow(unused_mut, clippy::redundant_locals)] let mut by_the_test = by_the_test;
+#[allow(clippy::too_many_arguments)]
+pub fn check_claims_report(claims: &collections::BTreeMap<(i64, i64), FactClaim>, source: &str, path: &str, published: &collections::BTreeMap<String, Published>, derived: &[String], rules: &[String], colour: bool, refuses: bool) -> String {
+    #[allow(unused_mut)] let mut written: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
+    let mut points: Vec<Vec<(String, String)>> = nikaia_std::block::list(nikaia_std::block::Place::Block); #[allow(unused_mut, clippy::redundant_locals)] let mut written = written;
+    let mut ruled: collections::BTreeSet<String> = collections::BTreeSet::new(); #[allow(unused_mut, clippy::redundant_locals)] let mut written = written;
+    #[allow(unused_mut)] let mut refused: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block); #[allow(unused_mut, clippy::redundant_locals)] let mut written = written;
+    #[allow(unused_mut)] let mut at_run_time: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block); #[allow(unused_mut, clippy::redundant_locals)] let mut written = written; #[allow(unused_mut, clippy::redundant_locals)] let mut refused = refused;
+    #[allow(unused_mut)] let mut arrives: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block); #[allow(unused_mut, clippy::redundant_locals)] let mut written = written; #[allow(unused_mut, clippy::redundant_locals)] let mut refused = refused; #[allow(unused_mut, clippy::redundant_locals)] let mut at_run_time = at_run_time;
+    #[allow(unused_mut)] let mut by_the_test: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block); #[allow(unused_mut, clippy::redundant_locals)] let mut written = written; #[allow(unused_mut, clippy::redundant_locals)] let mut refused = refused; #[allow(unused_mut, clippy::redundant_locals)] let mut at_run_time = at_run_time; #[allow(unused_mut, clippy::redundant_locals)] let mut arrives = arrives;
+    #[allow(unused_mut)] let mut proved: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block); #[allow(unused_mut, clippy::redundant_locals)] let mut written = written; #[allow(unused_mut, clippy::redundant_locals)] let mut refused = refused; #[allow(unused_mut, clippy::redundant_locals)] let mut at_run_time = at_run_time; #[allow(unused_mut, clippy::redundant_locals)] let mut arrives = arrives; #[allow(unused_mut, clippy::redundant_locals)] let mut by_the_test = by_the_test;
     let mut through_loops = 0;
-    #[allow(unused_mut)] let mut preconditions: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut refused = refused; #[allow(unused_mut, clippy::redundant_locals)] let mut at_run_time = at_run_time; #[allow(unused_mut, clippy::redundant_locals)] let mut arrives = arrives; #[allow(unused_mut, clippy::redundant_locals)] let mut by_the_test = by_the_test; #[allow(unused_mut, clippy::redundant_locals)] let mut proved = proved;
-    #[allow(unused_mut)] let mut assumed: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut refused = refused; #[allow(unused_mut, clippy::redundant_locals)] let mut at_run_time = at_run_time; #[allow(unused_mut, clippy::redundant_locals)] let mut arrives = arrives; #[allow(unused_mut, clippy::redundant_locals)] let mut by_the_test = by_the_test; #[allow(unused_mut, clippy::redundant_locals)] let mut proved = proved; #[allow(unused_mut, clippy::redundant_locals)] let mut preconditions = preconditions;
-    let mut mains: collections::BTreeSet<String> = collections::BTreeSet::new(); #[allow(unused_mut, clippy::redundant_locals)] let mut refused = refused; #[allow(unused_mut, clippy::redundant_locals)] let mut at_run_time = at_run_time; #[allow(unused_mut, clippy::redundant_locals)] let mut arrives = arrives; #[allow(unused_mut, clippy::redundant_locals)] let mut by_the_test = by_the_test; #[allow(unused_mut, clippy::redundant_locals)] let mut proved = proved; #[allow(unused_mut, clippy::redundant_locals)] let mut preconditions = preconditions; #[allow(unused_mut, clippy::redundant_locals)] let mut assumed = assumed;
-    let mut line = 1;
+    #[allow(unused_mut)] let mut preconditions: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block); #[allow(unused_mut, clippy::redundant_locals)] let mut written = written; #[allow(unused_mut, clippy::redundant_locals)] let mut refused = refused; #[allow(unused_mut, clippy::redundant_locals)] let mut at_run_time = at_run_time; #[allow(unused_mut, clippy::redundant_locals)] let mut arrives = arrives; #[allow(unused_mut, clippy::redundant_locals)] let mut by_the_test = by_the_test; #[allow(unused_mut, clippy::redundant_locals)] let mut proved = proved;
+    #[allow(unused_mut)] let mut assumed: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut written = written; #[allow(unused_mut, clippy::redundant_locals)] let mut refused = refused; #[allow(unused_mut, clippy::redundant_locals)] let mut at_run_time = at_run_time; #[allow(unused_mut, clippy::redundant_locals)] let mut arrives = arrives; #[allow(unused_mut, clippy::redundant_locals)] let mut by_the_test = by_the_test; #[allow(unused_mut, clippy::redundant_locals)] let mut proved = proved; #[allow(unused_mut, clippy::redundant_locals)] let mut preconditions = preconditions;
+    let mut mains: collections::BTreeSet<String> = collections::BTreeSet::new(); #[allow(unused_mut, clippy::redundant_locals)] let mut written = written; #[allow(unused_mut, clippy::redundant_locals)] let mut refused = refused; #[allow(unused_mut, clippy::redundant_locals)] let mut at_run_time = at_run_time; #[allow(unused_mut, clippy::redundant_locals)] let mut arrives = arrives; #[allow(unused_mut, clippy::redundant_locals)] let mut by_the_test = by_the_test; #[allow(unused_mut, clippy::redundant_locals)] let mut proved = proved; #[allow(unused_mut, clippy::redundant_locals)] let mut preconditions = preconditions; #[allow(unused_mut, clippy::redundant_locals)] let mut assumed = assumed;
+    let mut line: i64 = 1;
     let mut at: i64 = 0;
     for (key, claim) in claims.iter() {
         let mut start = key.0;
@@ -475,6 +479,21 @@ pub fn check_claims_report(claims: &collections::BTreeMap<(i64, i64), FactClaim>
             false => check_claim_held((claim.held).as_ref()),
         };
         let row = format!("  {}:{}  {}  {}", path, line, claim.written, how);
+        let rule = check_claim_rule(&claim.written);
+        if rule.is_some() {
+            let label = nikaia_std::index::or(rule, || "".into());
+            let point = check_claim_point(source, start, line, &label);
+            let paint = check_claim_paint(&how, claim.held.is_some());
+            ruled.insert(nikaia_std::block::Text::from(row.to_string()));
+            let shown = format!("    {}:{}  {}  {}", path, line, point, how);
+            match written.iter().position(|w| { AsRef::<str>::as_ref(&(w)) == AsRef::<str>::as_ref(&(label)) }).map(|at| at as i64) {
+                Some(k) => { points[nikaia_std::index::at(k)].push((shown, paint)); },
+                None => {
+                    written.push(label);
+                    points.push(vec![(shown, paint)]);
+                },
+            }
+        }
         if how == "proved" || how.starts_with("proved: known from") { proved.push(row); } else if how.starts_with("proved through") || how.starts_with("proved inside") {
             through_loops += 1;
             proved.push(row);
@@ -490,7 +509,7 @@ pub fn check_claims_report(claims: &collections::BTreeMap<(i64, i64), FactClaim>
             None => None,
         }, || Published::nothing());
         for k in 0..entry.requires.len() as i64 {
-            if ((k) as usize) >= entry.from.len() { continue; }
+            if k >= entry.from.len() as i64 { continue; }
             let from = unsafe { nikaia_std::proven::read(&entry.from, (k) as usize) };
             if mains.contains(from) { continue; }
             arrives.push(format!("  {}  {}  precondition of `main` carried back from `{}`, checked where the words arrive", path, *unsafe { nikaia_std::proven::read(&entry.requires, (k) as usize) }, from));
@@ -500,23 +519,65 @@ pub fn check_claims_report(claims: &collections::BTreeMap<(i64, i64), FactClaim>
     let done = unsafe { nikaia_std::proven::add::<i64>(proved.len() as i64, preconditions.len() as i64) };
     let mut looped: String = String::from(""); #[allow(unused_mut, clippy::redundant_locals)] let mut refused = refused; #[allow(unused_mut, clippy::redundant_locals)] let mut at_run_time = at_run_time; #[allow(unused_mut, clippy::redundant_locals)] let mut arrives = arrives; #[allow(unused_mut, clippy::redundant_locals)] let mut by_the_test = by_the_test; #[allow(unused_mut, clippy::redundant_locals)] let mut proved = proved; #[allow(unused_mut, clippy::redundant_locals)] let mut preconditions = preconditions;
     if through_loops > 0 { looped = format!(", through a loop {}", through_loops); }
-    let mut vouched: String = String::from(""); #[allow(unused_mut, clippy::redundant_locals)] let mut refused = refused; #[allow(unused_mut, clippy::redundant_locals)] let mut at_run_time = at_run_time; #[allow(unused_mut, clippy::redundant_locals)] let mut arrives = arrives; #[allow(unused_mut, clippy::redundant_locals)] let mut by_the_test = by_the_test; #[allow(unused_mut, clippy::redundant_locals)] let mut proved = proved; #[allow(unused_mut, clippy::redundant_locals)] let mut preconditions = preconditions; #[allow(unused_mut, clippy::redundant_locals)] let mut assumed = assumed;
+    let mut vouched: String = String::from(""); #[allow(unused_mut, clippy::redundant_locals)] let mut written = written; #[allow(unused_mut, clippy::redundant_locals)] let mut refused = refused; #[allow(unused_mut, clippy::redundant_locals)] let mut at_run_time = at_run_time; #[allow(unused_mut, clippy::redundant_locals)] let mut arrives = arrives; #[allow(unused_mut, clippy::redundant_locals)] let mut by_the_test = by_the_test; #[allow(unused_mut, clippy::redundant_locals)] let mut proved = proved; #[allow(unused_mut, clippy::redundant_locals)] let mut preconditions = preconditions; #[allow(unused_mut, clippy::redundant_locals)] let mut assumed = assumed;
     if !assumed.is_empty() { vouched = format!("; assumed {}", assumed.len() as i64); }
     if !derived.is_empty() { vouched = format!("{}; derived from the callers {}", vouched, derived.len() as i64); }
-    let mut out: String = format!("asserts in {}: {} - not proved {} (refused {}, checked at run time {}, checked by a test {}); checked where the words arrive {}; proved {} (proved {}{}, preconditions proved at every call {}){}\n", path, unsafe { nikaia_std::proven::add::<i64>(unproved, arrives.len() as i64) } + done, unproved, refused.len() as i64, at_run_time.len() as i64, by_the_test.len() as i64, arrives.len() as i64, done, proved.len() as i64, looped, preconditions.len() as i64, vouched); #[allow(unused_mut, clippy::redundant_locals)] let mut assumed = assumed;
+    let found = rules.iter().filter(|&r| { r.starts_with("found\t") }).count() as i64;
+    if (unsafe { nikaia_std::proven::add::<i64>(written.len() as i64, rules.len() as i64) }) > 0 { vouched = format!("{}; type rules {} (written {}, found {}, not found {})", vouched, unsafe { nikaia_std::proven::add::<i64>(written.len() as i64, rules.len() as i64) }, written.len() as i64, found, rules.len() as i64 - found); }
+    let mut out: String = format!("asserts in {}: {} - not proved {} (refused {}, checked at run time {}, checked by a test {}); checked where the words arrive {}; proved {} (proved {}{}, preconditions proved at every call {}){}\n", path, unsafe { nikaia_std::proven::add::<i64>(unproved, arrives.len() as i64) } + done, unproved, refused.len() as i64, at_run_time.len() as i64, by_the_test.len() as i64, arrives.len() as i64, done, proved.len() as i64, looped, preconditions.len() as i64, vouched); #[allow(unused_mut, clippy::redundant_locals)] let mut written = written; #[allow(unused_mut, clippy::redundant_locals)] let mut assumed = assumed;
     let mut red: Vec<String> = vec![];
-    red.extend(refused);
-    red.extend(at_run_time);
-    red.extend(by_the_test);
+    red.extend(refused.iter().filter(|&r| { !ruled.contains(nikaia_std::index::as_text(&r)) }).cloned());
+    red.extend(at_run_time.iter().filter(|&r| { !ruled.contains(nikaia_std::index::as_text(&r)) }).cloned());
+    red.extend(by_the_test.iter().filter(|&r| { !ruled.contains(nikaia_std::index::as_text(&r)) }).cloned());
     let mut green: Vec<String> = vec![];
-    green.extend(proved);
-    green.extend(preconditions);
+    green.extend(proved.iter().filter(|&r| { !ruled.contains(nikaia_std::index::as_text(&r)) }).cloned());
+    green.extend(preconditions.iter().filter(|&r| { !ruled.contains(nikaia_std::index::as_text(&r)) }).cloned());
     green.reserve(derived.iter().size_hint().0); for row in derived.iter() { green.push(format!("  {}  derived  {}", path, row)); }
     out.push_str(&check_report_rows(&red, "\x1b[31m", colour));
-    out.push_str(&check_report_rows(&arrives, "\x1b[94m", colour));
+    out.push_str(&check_report_rows(&arrives.iter().filter(|&r| { !ruled.contains(nikaia_std::index::as_text(&r)) }).cloned().collect::<Vec<_>>(), "\x1b[94m", colour));
     out.push_str(&check_report_rows(&assumed, "\x1b[33m", colour));
     out.push_str(&check_report_rows(&green, "\x1b[32m", colour));
+    for (k, label) in written.iter().enumerate().map(|(at, item)| (at as i64, item)) {
+        { use ::core::fmt::Write as _; let _ = out.write_fmt(format_args!("  {}  written  {}: checked at {} points\n", path, label, (*nikaia_std::index::get(&points, nikaia_std::index::at(k))).len() as i64)); };
+        for (row, paint) in (*unsafe { nikaia_std::proven::read(&points, (k) as usize) }).iter() { out.push_str(&check_report_rows(&vec![nikaia_std::block::Text::from(row.to_string())], paint, colour)); }
+    }
+    for row in rules.iter() {
+        let parts: Vec<&str> = row.split("\t").collect::<Vec<_>>();
+        if parts.len() != 4 { continue; }
+        let paint = if *unsafe { nikaia_std::proven::read(&parts, (0) as usize) } == "found" { "\x1b[32m" } else { "\x1b[33m" };
+        out.push_str(&check_report_rows(&vec![format!("  {}  {}  `{}`: {} - {}", path, *unsafe { nikaia_std::proven::read(&parts, (0) as usize) }, *unsafe { nikaia_std::proven::read(&parts, (1) as usize) }, *unsafe { nikaia_std::proven::read(&parts, (2) as usize) }, *unsafe { nikaia_std::proven::read(&parts, (3) as usize) })], paint, colour));
+    }
     out
+}
+
+pub(crate) fn check_claim_rule(written: &str) -> Option<String> {
+    let at = match nikaia_std::text::find_first(&written, &"message: \"the rule of `") { Some(__nikaia_value) => __nikaia_value, None => return None };
+    let said = written.after(at.end);
+    let message = match said.strip_suffix("\")") { Some(__nikaia_value) => __nikaia_value, None => return None };
+    Some(format!("the rule of `{}", message))
+}
+
+pub(crate) fn check_claim_point(source: &str, start: i64, line: i64, rule: &str) -> &'static str {
+    let text = nikaia_std::block::Text::from(nikaia_std::index::or(source.lines().nth(nikaia_std::count::of(unsafe { nikaia_std::proven::sub::<i64>(line, 1) })), || "").to_string());
+    let lead = text.trim_start();
+    if start < source.as_bytes().len() as i64 && *nikaia_std::index::get(&source.as_bytes(), nikaia_std::index::at(start)) == b'}' { return "where a method that changes it ends"; }
+    let named = nikaia_std::index::or(rule.strip_prefix("the rule of `"), || "");
+    let tick = nikaia_std::text::find_first(&named, &"`");
+    let ty = match tick {
+        Some(at) => nikaia_std::block::Text::from(named.before(at.start).to_string()),
+        None => nikaia_std::block::Text::from(named.to_string()),
+    };
+    if ::core::convert::identity(match (AsRef::<str>::as_ref(&(text)), AsRef::<str>::as_ref(&(ty)), ) { (__nikaia_t, __nikaia_f0, ) => { let mut __nikaia_rest: &str = __nikaia_t; loop { match __nikaia_rest.find(__nikaia_f0) { Some(__nikaia_i) => { if __nikaia_rest[__nikaia_i + __nikaia_f0.len()..].strip_prefix(" {").is_some() { break true; } match __nikaia_rest[__nikaia_i..].chars().next() { Some(__nikaia_c) => __nikaia_rest = &__nikaia_rest[__nikaia_i + __nikaia_c.len_utf8()..], None => break false, } }, None => break false, } } } }) || ::core::convert::identity(match (AsRef::<str>::as_ref(&(text)), AsRef::<str>::as_ref(&(ty)), ) { (__nikaia_t, __nikaia_f0, ) => { let mut __nikaia_rest: &str = __nikaia_t; loop { match __nikaia_rest.find(__nikaia_f0) { Some(__nikaia_i) => { if __nikaia_rest[__nikaia_i + __nikaia_f0.len()..].strip_prefix("(").is_some() { break true; } match __nikaia_rest[__nikaia_i..].chars().next() { Some(__nikaia_c) => __nikaia_rest = &__nikaia_rest[__nikaia_i + __nikaia_c.len_utf8()..], None => break false, } }, None => break false, } } } }) || text.contains(" with ") { return "where a value of it is built"; }
+    if lead.starts_with("return") { return "at a `return` of a method that changes it"; }
+    if lead.starts_with("throw") { return "at a `throw` of a method that changes it"; }
+    "after a write to its fields"
+}
+
+pub(crate) fn check_claim_paint(how: &str, held: bool) -> String {
+    if how == "proved" || how.starts_with("proved") || how.starts_with("precondition") && how.contains("proved at every call") { return String::from("\x1b[32m"); }
+    if how.starts_with("precondition of `main`") { return String::from("\x1b[94m"); }
+    if !held { return String::from(""); }
+    String::from("\x1b[31m")
 }
 
 pub(crate) fn check_report_rows(rows: &[String], paint: &str, colour: bool) -> String {
