@@ -50,6 +50,8 @@ use nikaia_std::runtime;
 use nikaia_std::text;
 #[allow(unused_imports)]
 use nikaia_std::time;
+#[allow(unused_imports)]
+use nikaia_std::winnow_grammar;
 
 #[allow(unsafe_code)]
 mod assets_lowered {
@@ -3865,7 +3867,7 @@ pub mod template {
 }
 pub mod tether {
     #[allow(unused_imports)]
-    pub use super::{RESULT_POSITION, INPUT_POSITION, Buffer, PackageTypes, declare_unit, a_parse_that_views, function_views, makes_a_buffer, narrated_lines, reuses_report, tethers_report};
+    pub use super::{RESULT_POSITION, INPUT_POSITION, Buffer, PackageTypes, declare_unit, a_parse_that_views, function_views, tether_infer, tether_of_function, tether_of_entry_rule, makes_a_buffer, narrated_lines, reuses_report, tethers_report};
 }
 pub mod text_tiers {
     #[allow(unused_imports)]
@@ -3948,6 +3950,7 @@ pub fn nikaia_tests() -> std::vec::Vec<(std::string::String, fn() -> Result<(), 
     all.extend(panics_nikaia_tests().into_iter().map(|(name, run)| (name.to_string(), run)));
     all.extend(paths_nikaia_tests().into_iter().map(|(name, run)| (name.to_string(), run)));
     all.extend(signature_nikaia_tests().into_iter().map(|(name, run)| (name.to_string(), run)));
+    all.extend(tether_nikaia_tests().into_iter().map(|(name, run)| (name.to_string(), run)));
     all.extend(threads_nikaia_tests().into_iter().map(|(name, run)| (name.to_string(), run)));
     all.extend(throws_nikaia_tests().into_iter().map(|(name, run)| (name.to_string(), run)));
     all.extend(toml_nikaia_tests().into_iter().map(|(name, run)| (name.to_string(), run)));
@@ -3994,4 +3997,4 @@ pub fn nikaia_run_tests(filters: &[std::string::String], list: bool, more: std::
 /// **The digest of this lowered set** (#1610): every file `lower-std` wrote
 /// beside this index, and the index above this line. Compiled into the same
 /// crate as the code it names, it is the compiler's identity for its caches.
-pub const LOWERED_DIGEST: &str = "adacdf14759142e9c119ce6ce40b622dc4718ab270df1263abdf8922b0635ebf";
+pub const LOWERED_DIGEST: &str = "d94a6d0869c8151aa439979ebc928ad84742bbbc81320fb97cadc8b42e1e0dd4";

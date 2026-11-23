@@ -75,6 +75,100 @@ pub fn function_views(item: &Item, target: Option<&str>, names: &winnow_grammar:
     held
 }
 
+pub fn tether_infer(ledger: &mut Ledger, units: &[ParsedView<'_, '_, '_, '_, '_, '_, '_>], library: &Ledger) {
+    let mut solved: collections::BTreeMap<String, Vec<Held>> = collections::BTreeMap::new();
+    let mut package = PackageTypes::empty();
+    for view in units.iter() { declare_unit(view.words, view.items, &mut package); }
+    let package_borrowing = emit_tables_package_borrowing(units);
+    for view in units.iter() {
+        let borrowing: collections::BTreeSet<String> = emit_tables_borrowing_structs_beside(view.words, view.items, &package_borrowing).iter().map(|sym| { nikaia_std::block::Text::from(view.words.resolve(*sym).to_string()) }).collect();
+        for item in view.items.iter() {
+            match &item.node {
+                Item::Fn { name, .. } => {
+                    let name = *name;
+                    let key = tether_function_key(view.words, (name).as_ref(), None);
+                    solved_into(&mut solved, &key, tether_of_function(&item.node, None, &key, view.words, &borrowing, &ledger, library));
+                },
+                Item::Impl { target, methods, .. } => {
+                    let owner: Option<String> = Some(nikaia_std::block::Text::from(view.words.resolve(target.name).to_string()));
+                    for method in methods.iter() {
+                        match &method.node {
+                            Item::Fn { name, .. } => {
+                                let name = *name;
+                                let key = tether_function_key(view.words, (name).as_ref(), (owner).as_deref());
+                                solved_into(&mut solved, &key, tether_of_function(&method.node, (owner).as_deref(), &key, view.words, &borrowing, &ledger, library));
+                            },
+                            _ => { },
+                        }
+                    }
+                },
+                Item::Grammar(def) => {
+                    let named = nikaia_std::block::Text::from(view.words.resolve(def.name).to_string());
+                    for rule in def.rules.iter() { if rule.is_entry { solved_into(&mut solved, &format!("{}::{}", named, view.words.resolve(rule.name)), tether_of_entry_rule(view.words, (rule.ret_type).as_ref(), &package)); } }
+                },
+                _ => { },
+            }
+        }
+    }
+    for (key, held) in solved.iter() {
+        let contract = match ledger.functions.get_mut(key) { Some(__nikaia_value) => __nikaia_value, None => continue };
+        contract.views = held.copy_owned();
+    }
+}
+
+pub(crate) fn solved_into(solved: &mut collections::BTreeMap<String, Vec<Held>>, key: &str, held: Vec<Held>) { if !held.is_empty() { solved.insert(nikaia_std::block::Text::from(key.to_string()), held); } }
+
+pub fn tether_of_function(item: &Item, target: Option<&str>, key: &str, names: &winnow_grammar::InternerContext, borrowing: &collections::BTreeSet<String>, own: &Ledger, library: &Ledger) -> Vec<Held> {
+    let held = function_views(item, target, names, borrowing);
+    lent_text(held, item, key, own, library, names)
+}
+
+pub fn tether_of_entry_rule(names: &winnow_grammar::InternerContext, result: Option<&Type>, package: &PackageTypes) -> Vec<Held> {
+    if !a_parse_that_views(names, result, package) { return vec![]; }
+    vec![Held { position: nikaia_std::block::Text::from(INPUT_POSITION.to_string()), state: State::Borrowed }, Held { position: nikaia_std::block::Text::from(RESULT_POSITION.to_string()), state: State::Borrowed }]
+}
+
+pub(crate) fn tether_function_key(names: &winnow_grammar::InternerContext, name: Option<&winnow_grammar::Symbol>, target: Option<&str>) -> String {
+    let mut own: String = String::from("new");
+    let symbol: Option<winnow_grammar::Symbol> = match name {
+        Some(__nikaia_it) => Some(__nikaia_it.copy_owned()),
+        None => None,
+    };
+    if symbol.is_some() { own = nikaia_std::block::Text::from(names.resolve(match symbol { Some(__nikaia_value) => __nikaia_value, None => return String::from("") }).to_string()); }
+    let owner = match target { Some(__nikaia_value) => __nikaia_value, None => return own };
+    format!("{}::{}", owner, own)
+}
+
+pub(crate) fn lent_text(held: Vec<Held>, item: &Item, key: &str, own: &Ledger, library: &Ledger, names: &winnow_grammar::InternerContext) -> Vec<Held> {
+    let contract = match *nikaia_std::index::get(&own.functions, key) { Some(__nikaia_value) => __nikaia_value, None => return held };
+    match item {
+        Item::Fn { receiver, args, .. } => lent_arguments(held, receiver.is_some(), args, contract, library, names),
+        _ => held,
+    }
+}
+
+pub(crate) fn lent_arguments(held: Vec<Held>, has_receiver: bool, args: &[FnArg], contract: &FnContract, library: &Ledger, names: &winnow_grammar::InternerContext) -> Vec<Held> {
+    let copying: Vec<&Ledger> = vec![library];
+    let shift: i64 = if has_receiver { 1 } else { 0 };
+    let params: Vec<String> = args.iter().map(|arg| { nikaia_std::block::Text::from(names.resolve(arg.name).to_string()) }).collect::<Vec<_>>();
+    let lent: Vec<String> = (nikaia_std::range::span(0, args.len() as i64)).filter(|&at| { a_plain_text_parameter(nikaia_std::index::get(&args, nikaia_std::index::at(at)), names) && !held.iter().any(|h| { h.position == *nikaia_std::index::get(&params, nikaia_std::index::at(at)) }) && lends_in_own(contract, at + shift, &copying) }).map(|at| { nikaia_std::block::Text::from((*nikaia_std::index::get(&params, nikaia_std::index::at(at))).to_string()) }).collect::<Vec<_>>();
+    if lent.is_empty() { return held; }
+    let mut out: Vec<Held> = held.iter().filter(|&h| { h.position == "self" }).cloned().collect::<Vec<_>>();
+    for name in params.iter() {
+        let found = held.iter().find(|&h| { h.position == *name });
+        if found.is_some() {
+            out.push(match match found {
+                Some(__nikaia_it) => Some(__nikaia_it.copy_owned()),
+                None => None,
+            } { Some(__nikaia_value) => __nikaia_value, None => continue });
+        } else if nikaia_std::list::contains(&lent, &name) { out.push(Held { position: nikaia_std::block::Text::from(name.to_string()), state: State::Borrowed }); }
+    }
+    out.extend(held.iter().filter(|&h| { h.position != "self" && !nikaia_std::list::contains(&params, &h.position) }).cloned());
+    out
+}
+
+pub(crate) fn a_plain_text_parameter(arg: &FnArg, names: &winnow_grammar::InternerContext) -> bool { names.resolve(arg.ty.name) == "String" && arg.ty.generics.is_empty() && !arg.ty.is_view && !arg.ty.is_nullable && !arg.ty.is_slice && !arg.mutable }
+
 pub(crate) fn a_borrowing_target(target: Option<&str>, borrowing: &collections::BTreeSet<String>) -> bool {
     let named = match target { Some(__nikaia_value) => __nikaia_value, None => return false };
     borrowing.contains(named)
@@ -312,3 +406,75 @@ pub fn tethers_report(texts: &[String], ledger: &Ledger, here: &collections::BTr
     nikaia_std::block::Text::from(lines.join(""))
 }
 
+pub(crate) fn tether_test_fn(words: &winnow_grammar::InternerContext, name: &str, param: &str, viewed: bool, result: bool, callee: Option<&str>) -> Spanned<Item> {
+    let text = Type { name: words.intern_string("String"), generics: vec![], is_view: viewed, is_tuple: false, is_nullable: false, code: nikaia_std::block::Boxed::new(None), count: None, is_mut: false, is_slice: false, either: false, lasting: false };
+    let mut ret_type: Option<Type> = None;
+    if result {
+        let mut viewing = text.clone();
+        viewing.is_view = true;
+        ret_type = Some(viewing);
+    }
+    let mut stmts: Vec<Spanned<Stmt>> = vec![];
+    if callee.is_some() {
+        let called = Expr::Variable(words.intern_string(nikaia_std::index::or(callee, || "")), node_id::NodeId::fresh());
+        let call = Expr::Call { func: nikaia_std::block::Boxed::new(called), args: vec![], config: vec![], id: node_id::NodeId::fresh() };
+        stmts.push(Spanned { node: Stmt::Expr(call), span: Span::nowhere(), doc: None, attributes: vec![] });
+    }
+    let args: Vec<FnArg> = vec![FnArg { name: words.intern_string(param), ty: text, mutable: false, keep: false, span: Span::nowhere(), attributes: vec![] }];
+    let item = Item::Fn { name: Some(words.intern_string(name)), generics: vec![], receiver: None, args, config: vec![], spread: None, ret_type, body: Block { stmts }, is_sync: false, sync_by: vec![], is_public: false, can_throw: false, is_extern: false, ret_from: vec![] };
+    Spanned { node: item, span: Span::nowhere(), doc: None, attributes: vec![] }
+}
+
+pub(crate) fn __nikaia_test_0() -> Result<(), std::boxed::Box<dyn std::error::Error>> {
+    let words = winnow_grammar::InternerContext::new();
+    let items: Vec<Spanned<Item>> = vec![tether_test_fn(&words, "a", "s", true, true, Some("b")), tether_test_fn(&words, "b", "t", false, false, Some("c")), tether_test_fn(&words, "c", "u", false, true, None), tether_test_fn(&words, "p", "v", false, false, Some("q")), tether_test_fn(&words, "q", "w", true, false, Some("p"))];
+    let mut own = Ledger::blank();
+    let params = nikaia_std::block::List::from_array_in([("a", "s"), ("b", "t"), ("c", "u"), ("p", "v"), ("q", "w")], nikaia_std::block::Place::Block);
+    for (name, param) in params.iter() {
+        let name = *name;let param = *param;
+        let mut contract = FnContract::empty();
+        let mut signature = Signature::empty();
+        signature.params.push((nikaia_std::block::Text::from(param.to_string()), Ty::Named { name: String::from("String"), args: vec![], view: false }));
+        contract.signature = Some(signature);
+        own.functions.insert(nikaia_std::block::Text::from(name.to_string()), contract);
+    }
+    let aliases: collections::BTreeMap<String, String> = collections::BTreeMap::new();
+    let spans: collections::BTreeMap<u32, Span> = collections::BTreeMap::new();
+    let arms: collections::BTreeSet<i64> = collections::BTreeSet::new();
+    let pushes: collections::BTreeSet<i64> = collections::BTreeSet::new();
+    let units: Vec<ParsedView<'_, '_, '_, '_, '_, '_, '_>> = vec![ParsedView { words: &words, aliases: &aliases, items: &items, package: None, spans: &spans, viewed_arms: &arms, given_pushes: &pushes }];
+    let mut whole = own.clone();
+    tether_infer(&mut whole, &units, &Ledger::blank());
+    let borrowing: collections::BTreeSet<String> = collections::BTreeSet::new();
+    for at in [4i64, 3i64, 2i64, 1i64, 0i64] {
+        let key = nikaia_std::block::Text::from(words.resolve(match nikaia_std::index::get(&items, nikaia_std::index::at(at)).node {
+            Item::Fn { name, .. } => match name { Some(__nikaia_value) => __nikaia_value, None => continue },
+            _ => continue,
+        }).to_string());
+        let alone = tether_of_function(&nikaia_std::index::get(&items, nikaia_std::index::at(at)).node, None, &key, &words, &borrowing, &own, &Ledger::blank());
+        let written = nikaia_std::index::or(match (*nikaia_std::index::get(&whole.functions, &key)).as_ref().map(|__nikaia_it| &__nikaia_it.views) {
+            Some(__nikaia_it) => Some(__nikaia_it.copy_owned()),
+            None => None,
+        }, || vec![].into());
+        if !(alone == written) { nikaia_std::abort::assertion_failed("assert(alone == written)", None, &[("alone", (&&nikaia_std::abort::Operand(&(alone))).shown()), ("written", (&&nikaia_std::abort::Operand(&(written))).shown()), ]) };
+    }
+    let a_column = nikaia_std::index::or(match (*nikaia_std::index::get(&whole.functions, "a")).as_ref().map(|__nikaia_it| &__nikaia_it.views) {
+        Some(__nikaia_it) => Some(__nikaia_it.copy_owned()),
+        None => None,
+    }, || vec![].into());
+    if !(!a_column.is_empty()) { nikaia_std::abort::assertion_failed("assert(a_column.len() != 0)", None, &[("a_column.len()", (&&nikaia_std::abort::Operand(&(a_column.len() as i64))).shown()), ]) };
+    let c_column = nikaia_std::index::or(match (*nikaia_std::index::get(&whole.functions, "c")).as_ref().map(|__nikaia_it| &__nikaia_it.views) {
+        Some(__nikaia_it) => Some(__nikaia_it.copy_owned()),
+        None => None,
+    }, || vec![].into());
+    if !(!c_column.is_empty()) { nikaia_std::abort::assertion_failed("assert(c_column.len() != 0)", None, &[("c_column.len()", (&&nikaia_std::abort::Operand(&(c_column.len() as i64))).shown()), ]) };
+    Ok(())
+}
+
+
+/// The `test` blocks of this file (#2082), as `nikaia test --std` runs them.
+pub(crate) fn tether_nikaia_tests() -> Vec<(&'static str, fn() -> Result<(), std::boxed::Box<dyn std::error::Error>>)> {
+    vec![
+        ("tether::the_per_function_tether_entry_gives_the_whole_package_column", __nikaia_test_0),
+    ]
+}

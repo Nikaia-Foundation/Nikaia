@@ -54,22 +54,21 @@ use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 // **The buffer table is not here either** (D4). Its shape is a fact about a
 // container's representation, and this file writes no representation.
 
-// **The analysis is written in Nikaia** (`tools/tether.nika`, #125): the
-// states one function's views solve to, whether a parse's result may point
-// into its input, and whether an expression makes a buffer of its own. What
-// stays here is writing the states into the ledger, the `--tethers` report
-// and the refusal, both of which read the keep plan.
+// **The pass is written in Nikaia** (`compiler/tether.nika`, #125): the
+// states one function's views solve to, the whole-package entry
+// (`tether_infer`) and the per-function one (`tether_of_function`,
+// ADR-100 D7), whether a parse's result may point into its input, and whether
+// an expression makes a buffer of its own. What stays here is handing each
+// unit's view over from the Rust `Parsed`, the `--tethers` report and the
+// refusal, both of which read the keep plan.
+
+pub use nikaia_std::compiler::tether::Buffer;
+pub use nikaia_std::compiler::ty::{Held, State};
 
 use crate::contracts::LedgerOps;
-pub use nikaia_std::compiler::tether::Buffer;
-pub use nikaia_std::compiler::tether::PackageTypes as Declared;
-pub use nikaia_std::compiler::ty::{Held, State};
-use std::collections::BTreeMap;
-
-use crate::ast::{Item, Type};
 use crate::parser::Parsed;
 
-use super::{INPUT, Ledger};
+use super::Ledger;
 
 /// The position a function's result occupies in the column.
 ///
@@ -77,182 +76,17 @@ use super::{INPUT, Ledger};
 /// same position read by two analyses.
 pub const RESULT: &str = "<result>";
 
-/// What stays Rust of a [`Held`] (ADR-294 step (b)): reading one back.
-pub trait HeldOps: Sized {
-    fn parse(text: &str) -> Option<Self>;
-}
-
-impl HeldOps for Held {
-    fn parse(text: &str) -> Option<Held> {
-        nikaia_std::compiler::ledger::held_of(text)
-    }
-}
-
 /// Give every entry of this package the states its views solved to (D7):
-/// each function's (`function_views`), and a `entry` rule's whose result may
-/// point into the text it parsed - the entry holds the input and the result
-/// borrows it ([ADR-grammar-syntax-v1](../../../../docs/specification/adr/adr-grammar-syntax-v1.md) D5).
-/// Then which positions really leave, over the whole package, to a fixpoint
-/// (`keep::infer`, [ADR-283](../../../../docs/specification/adr/adr-283.md)
-/// D6).
+/// `tether.nika`'s `tether_infer`, over each unit's view. Then which positions
+/// really leave, over the whole package, to a fixpoint (`keep::infer`,
+/// [ADR-283](../../../../docs/specification/adr/adr-283.md) D6).
 pub fn infer(ledger: &mut Ledger, units: &[&Parsed], library: &Ledger) {
-    let mut solved: BTreeMap<String, Vec<Held>> = BTreeMap::new();
-    let package = declared_in(units);
-    let package_borrowing = crate::emit::package_borrowing(units);
-    for parsed in units.iter().copied() {
-        // By **name**: a `Symbol` belongs to the parse that interned it.
-        let borrowing = crate::emit::borrowing_structs_beside(parsed, &package_borrowing)
-            .into_iter()
-            .map(|s| parsed.text(s).to_text())
-            .collect();
-        let mut keep = |key: String, held: Vec<Held>| {
-            if !held.is_empty() {
-                solved.insert(key, held);
-            }
-        };
-        for item in &parsed.program.items {
-            match &item.node {
-                Item::Fn { name, .. } => {
-                    let key = function_key(parsed, *name, None);
-                    let held = nikaia_std::compiler::tether::function_views(
-                        &item.node,
-                        None,
-                        &parsed.interner,
-                        &borrowing,
-                    );
-                    let held = lent_text(held, &item.node, &key, ledger, library, parsed);
-                    keep(key, held)
-                }
-                Item::Impl {
-                    target, methods, ..
-                } => {
-                    let target = parsed.text(target.name).to_text();
-                    for method in methods {
-                        let Item::Fn { name, .. } = &method.node else {
-                            continue;
-                        };
-                        let key = function_key(parsed, *name, Some(&target));
-                        let held = nikaia_std::compiler::tether::function_views(
-                            &method.node,
-                            Some(&target),
-                            &parsed.interner,
-                            &borrowing,
-                        );
-                        let held = lent_text(held, &method.node, &key, ledger, library, parsed);
-                        keep(key, held);
-                    }
-                }
-                Item::Grammar(def) => {
-                    let named = parsed.text(def.name).to_text();
-                    for rule in def.rules.iter().filter(|r| r.is_entry) {
-                        if a_parse_that_views(parsed, rule.ret_type.as_ref(), &package) {
-                            keep(
-                                format!("{named}::{}", parsed.text(rule.name)),
-                                vec![
-                                    Held {
-                                        position: INPUT.to_text(),
-                                        state: State::Borrowed,
-                                    },
-                                    Held {
-                                        position: RESULT.to_text(),
-                                        state: State::Borrowed,
-                                    },
-                                ],
-                            );
-                        }
-                    }
-                }
-                _ => {}
-            }
-        }
-    }
-    for (key, held) in solved {
-        if let Some(contract) = ledger.functions.get_mut(&key) {
-            contract.views = held;
-        }
-    }
-    super::keep::infer(ledger, units, library);
-}
-
-/// **A `String` parameter the body only reads is lent**
-/// ([ADR-282](../../../../docs/specification/adr/adr-282.md) D2, D5): a `&str`
-/// below, as one written `ref String` is, so the ledger says `borrowed` for
-/// both alike. In the order the signature has them: the receiver, the
-/// parameters, the result.
-fn lent_text(
-    held: Vec<Held>,
-    item: &Item,
-    key: &str,
-    ledger: &Ledger,
-    library: &Ledger,
-    parsed: &Parsed,
-) -> Vec<Held> {
-    let Item::Fn { receiver, args, .. } = item else {
-        return held;
-    };
-    let Some(contract) = ledger.functions.get(key) else {
-        return held;
-    };
-    let named = |at: usize| parsed.text(args[at].name).to_text();
-    let lent: Vec<String> = (0..args.len())
-        .filter(|at| {
-            let ty = &args[*at].ty;
-            parsed.text(ty.name) == "String"
-                && ty.generics.is_empty()
-                && !ty.is_view
-                && !ty.is_nullable
-                && !ty.is_slice
-                && !args[*at].mutable
-                && !held.iter().any(|h| h.position == named(*at))
-                && super::keeps::lends_in_own(
-                    contract,
-                    *at + usize::from(receiver.is_some()),
-                    &[library],
-                )
-        })
-        .map(named)
-        .collect();
-    if lent.is_empty() {
-        return held;
-    }
-    let params: Vec<String> = (0..args.len()).map(named).collect();
-    let mut out: Vec<Held> = held
+    let views: Vec<_> = units
         .iter()
-        .filter(|h| h.position == "self")
-        .cloned()
+        .map(|parsed| crate::check::parsed_view_of(parsed))
         .collect();
-    for name in &params {
-        match held.iter().find(|h| &h.position == name) {
-            Some(h) => out.push(h.clone()),
-            None if lent.contains(name) => out.push(Held {
-                position: name.clone(),
-                state: State::Borrowed,
-            }),
-            None => {}
-        }
-    }
-    out.extend(
-        held.into_iter()
-            .filter(|h| h.position != "self" && !params.contains(&h.position)),
-    );
-    out
-}
-
-/// `Type::method`, or the function's own name; `new` for Part I 4.2's
-/// anonymous constructor.
-fn function_key(
-    parsed: &Parsed,
-    name: Option<winnow_grammar::Symbol>,
-    target: Option<&str>,
-) -> String {
-    let own = match name {
-        Some(name) => parsed.text(name).to_text(),
-        None => "new".to_text(),
-    };
-    match target {
-        Some(target) => format!("{target}::{own}"),
-        None => own,
-    }
+    nikaia_std::compiler::tether::tether_infer(ledger, &views, library);
+    super::keep::infer(ledger, units, library);
 }
 
 /// Whether this expression hands back a buffer of its own
@@ -272,26 +106,6 @@ pub(crate) fn makes_a_buffer(
         },
         &mut |name: &str| parsed.unaliased(name),
     )
-}
-
-/// What a **package's** declarations say about the types a parse can hand
-/// back, read off the units in one pass.
-pub(super) fn declared_in(units: &[&Parsed]) -> Declared {
-    let mut package = Declared::empty();
-    for parsed in units.iter().copied() {
-        nikaia_std::compiler::tether::declare_unit(
-            &parsed.interner,
-            &parsed.program.items,
-            &mut package,
-        );
-    }
-    package
-}
-
-/// Whether a grammar entry's result **may point into the text it parsed**
-/// (`tools/tether.nika`); `keeps` asks it too.
-pub(super) fn a_parse_that_views(parsed: &Parsed, ret: Option<&Type>, package: &Declared) -> bool {
-    nikaia_std::compiler::tether::a_parse_that_views(&parsed.interner, ret, package)
 }
 
 /// `--tethers`: what the analysis solved, per function
