@@ -5,10 +5,27 @@
 //     nikaia run scripts/ledgers.nika -- --refresh [--tree TREE] [--exe NIKAIA]
 //     nikaia run scripts/ledgers.nika -- --list    [--tree TREE]
 //
-// A ledger directory is `examples/*`, `packages/*` or `tests/page-examples`
-// with a committed `nikaia.contracts`, `nikaia.derived` or `nikaia.proofs`.
-// `tests/compiler` is left out: CI builds it `--locked` in place, and it
-// builds every test program.
+// A ledger directory is every project built in place outside `crates/`
+// (#2797): `examples/*`, `examples/foreign-runtime/serve`, `packages/*`,
+// `packages/logic/rod`, `tests/page-examples`, `tests/language`,
+// `tests/build-time` and `tests/compiler`, each found by its `nikaia.toml`.
+// Each commits its `nikaia.lock` and the ledgers its build writes
+// (`nikaia.contracts`, `nikaia.derived`, `nikaia.proofs`). Of
+// `tests/compiler` only the manifest, the ledgers and `src/` are copied, not
+// its test programs; CI also builds it `--locked` in place. A cold build
+// resolves the newest crate versions, which the in-place build's `target/`
+// keeps from before, so only this one checks and refreshes its lock. Left
+// out:
+//
+// * `examples/foreign-runtime/{crossing,smuggled}`: they must not build, and
+//   who refuses them is the finding (their README).
+// * `benches/yaml/*`: `bench.nika` builds each program from a copy with its
+//   own manifest, never in place, and the checked-in package has no
+//   `src/main.nika`.
+// * The fixtures under `tests/compiler/*/` and `tests/accepted/`: a test's
+//   input, built by that test (some are refused on purpose).
+// * The toolchain's packages in `crates/nikaia-std/src/`: `lower-std` lowers
+//   them, never a build in place.
 //
 // Each run copies those directories into a temporary directory, from the git
 // tree TREE (`git archive`) or, without `--tree`, from the working tree's
@@ -32,7 +49,8 @@
 // changes only when those do. `--check` compares the lock the build wrote
 // with the one copied in (stale when they differ, the toolchain line apart), and `--refresh` copies it
 // back; a git-ignored lock is never copied in, so it is neither checked nor
-// refreshed.
+// refreshed. A directory without a lock gets one from its first build, which
+// `--refresh` copies back.
 // `--list` prints each directory and the command it is built with. NIKAIA is
 // the compiler (default `target/fast/nikaia`).
 
@@ -83,7 +101,7 @@ fn ledgers_dirs(tmp: String) -> Vec[String] throws {
 		"sh",
 		[
 			"-c",
-			f"cd '{tmp}' && ls -d examples/*/nikaia.contracts examples/*/nikaia.derived examples/*/nikaia.proofs packages/*/nikaia.contracts packages/*/nikaia.derived packages/*/nikaia.proofs tests/page-examples/nikaia.contracts tests/page-examples/nikaia.derived tests/page-examples/nikaia.proofs 2>/dev/null | xargs -n1 dirname | sort -u",
+			f"cd '{tmp}' && ls -d examples/*/nikaia.toml examples/foreign-runtime/serve/nikaia.toml packages/*/nikaia.toml packages/logic/rod/nikaia.toml tests/page-examples/nikaia.toml tests/language/nikaia.toml tests/build-time/nikaia.toml tests/compiler/nikaia.toml 2>/dev/null | xargs -n1 dirname | sort -u",
 		],
 	).stdout
 	let mut dirs: Vec[String] = []
@@ -107,7 +125,7 @@ fn ledgers_command(dir: String, locked: bool) -> Vec[String] throws {
 fn ledgers_copy(tree: String) -> fs::Root throws {
 	let copy = fs::scratch()
 	let tmp = copy.path().to_text()
-	let roots = "examples packages tests/page-examples"
+	let roots = "examples packages tests/page-examples tests/language tests/build-time 'tests/compiler/nikaia.*' tests/compiler/src"
 	let copied = if tree == "" {
 		process::run(
 			"sh",
