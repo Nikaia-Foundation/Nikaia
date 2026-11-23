@@ -64,21 +64,21 @@ grammar! {
             AS k:KeyName SP "=" SP
             -> { k }
 
-        pub rule read__TomlManifest -> TomlManifest =
+        pub rule read__TomlManifest -> TomlManifest<'a, 'a> =
             GAP m:__nikaia_members_0 eof
             -> { m }
 
-        rule Line__TomlPackage -> TomlPackage =
+        rule Line__TomlPackage -> TomlPackage<'a, 'a, 'a> =
             v:Inline__TomlPackage END
             -> { v }
           | END m:__nikaia_members_1
             -> { m }
 
-        rule Line__TomlBuild_maybe -> Option<TomlBuild> =
+        rule Line__TomlBuild_maybe -> Option<TomlBuild<'a>> =
             v:Line__TomlBuild
             -> { Some(v) }
 
-        rule Inline__TomlPackage -> TomlPackage =
+        rule Inline__TomlPackage -> TomlPackage<'a, 'a, 'a> =
             "{" m:__nikaia_members_2 AS "}"
             -> { m }
 
@@ -98,7 +98,7 @@ grammar! {
             v:Value__Vec_String_ END
             -> { v }
 
-        rule Line__TomlBuild -> TomlBuild =
+        rule Line__TomlBuild -> TomlBuild<'a> =
             v:Inline__TomlBuild END
             -> { v }
           | END m:__nikaia_members_3
@@ -124,7 +124,7 @@ grammar! {
             "[" AS xs:__nikaia_list<&'a str>(item = Item__String, sep = ",") ","? AS "]"
             -> { xs }
 
-        rule Inline__TomlBuild -> TomlBuild =
+        rule Inline__TomlBuild -> TomlBuild<'a> =
             "{" m:__nikaia_members_4 AS "}"
             -> { m }
 
@@ -140,25 +140,25 @@ grammar! {
             v:Value__String
             -> { Some(v) }
 
-        rule __nikaia_members_0 -> TomlManifest =
+        rule __nikaia_members_0 -> TomlManifest<'a, 'a> =
           pieces:__nikaia_members_0_all
-            -> { let mut f0: Option<Option<TomlPackage>> = None; let mut f1: Option<Option<Option<TomlBuild>>> = None; for piece in pieces { if let Some(v) = piece.0 { if f0.is_some() { return Err(::winnow_grammar::winnow::error::ErrMode::Cut(<__WgEr as ::winnow_grammar::error::Diagnostics>::external(input, ::nikaia_std::grammar::member_error("package", "is given twice")))); } f0 = Some(v); }; if let Some(v) = piece.1 { if f1.is_some() { return Err(::winnow_grammar::winnow::error::ErrMode::Cut(<__WgEr as ::winnow_grammar::error::Diagnostics>::external(input, ::nikaia_std::grammar::member_error("build", "is given twice")))); } f1 = Some(v); }; } TomlManifest { package: match f0 { Some(Some(v)) => v, Some(None) => return Err(::winnow_grammar::winnow::error::ErrMode::Cut(<__WgEr as ::winnow_grammar::error::Diagnostics>::external(input, ::nikaia_std::grammar::member_error("package", "takes no null")))), None => return Err(::winnow_grammar::winnow::error::ErrMode::Cut(<__WgEr as ::winnow_grammar::error::Diagnostics>::external(input, ::nikaia_std::grammar::member_error("package", "is missing")))) }, build: match f1 { Some(Some(v)) => v, _ => None } } }
+            -> { let mut f0: Option<Option<TomlPackage<'a, 'a, 'a>>> = None; let mut f1: Option<Option<Option<TomlBuild<'a>>>> = None; for piece in pieces { if let Some(v) = piece.0 { if f0.is_some() { return Err(::winnow_grammar::winnow::error::ErrMode::Cut(<__WgEr as ::winnow_grammar::error::Diagnostics>::external(input, ::nikaia_std::grammar::member_error("package", "is given twice")))); } f0 = Some(v); }; if let Some(v) = piece.1 { if f1.is_some() { return Err(::winnow_grammar::winnow::error::ErrMode::Cut(<__WgEr as ::winnow_grammar::error::Diagnostics>::external(input, ::nikaia_std::grammar::member_error("build", "is given twice")))); } f1 = Some(v); }; } TomlManifest { package: match f0 { Some(Some(v)) => v, Some(None) => return Err(::winnow_grammar::winnow::error::ErrMode::Cut(<__WgEr as ::winnow_grammar::error::Diagnostics>::external(input, ::nikaia_std::grammar::member_error("package", "takes no null")))), None => return Err(::winnow_grammar::winnow::error::ErrMode::Cut(<__WgEr as ::winnow_grammar::error::Diagnostics>::external(input, ::nikaia_std::grammar::member_error("package", "is missing")))) }, build: match f1 { Some(Some(v)) => v, _ => None } } }
 
-        rule __nikaia_members_0_all -> Vec<(Option<Option<TomlPackage>>, Option<Option<Option<TomlBuild>>>,)> =
+        rule __nikaia_members_0_all -> Vec<(Option<Option<TomlPackage<'a, 'a, 'a>>>, Option<Option<Option<TomlBuild<'a>>>>,)> =
           first:__nikaia_members_0_one rest:__nikaia_members_0_more*
             -> { let mut all = vec![first]; all.extend(rest); all }
         | ""
             -> { Vec::new() }
 
-        rule __nikaia_members_0_more -> (Option<Option<TomlPackage>>, Option<Option<Option<TomlBuild>>>,) =
+        rule __nikaia_members_0_more -> (Option<Option<TomlPackage<'a, 'a, 'a>>>, Option<Option<Option<TomlBuild<'a>>>>,) =
           empty p:__nikaia_members_0_one
             -> { p }
 
-        rule __nikaia_members_0_one -> (Option<Option<TomlPackage>>, Option<Option<Option<TomlBuild>>>,) =
+        rule __nikaia_members_0_one -> (Option<Option<TomlPackage<'a, 'a, 'a>>>, Option<Option<Option<TomlBuild<'a>>>>,) =
           k:RootKey => p:__nikaia_members_0_value(i = ::nikaia_std::grammar::member_index(&k, &["package", "build"]))
             -> { match p { Some(p) => p, None => return Err(::winnow_grammar::winnow::error::ErrMode::Cut(<__WgEr as ::winnow_grammar::error::Diagnostics>::external(input, ::nikaia_std::grammar::member_unknown(&k)))) } }
 
-        rule __nikaia_members_0_value(i: usize) -> Option<(Option<Option<TomlPackage>>, Option<Option<Option<TomlBuild>>>,)> =
+        rule __nikaia_members_0_value(i: usize) -> Option<(Option<Option<TomlPackage<'a, 'a, 'a>>>, Option<Option<Option<TomlBuild<'a>>>>,)> =
           if(i == 0) v:Line__TomlPackage
             -> { Some((Some(Some(::nikaia_std::grammar::IntoMember::into_member(v))), None,)) }
         | if(i == 1) v:Line__TomlBuild_maybe
@@ -166,25 +166,25 @@ grammar! {
         | if(i == 2) ""
             -> { None }
 
-        rule __nikaia_members_1 -> TomlPackage =
+        rule __nikaia_members_1 -> TomlPackage<'a, 'a, 'a> =
           pieces:__nikaia_members_1_all
-            -> { let mut f0: Option<Option<String>> = None; let mut f1: Option<Option<String>> = None; let mut f2: Option<Option<i64>> = None; let mut f3: Option<Option<bool>> = None; let mut f4: Option<Option<Vec<String>>> = None; for piece in pieces { if let Some(v) = piece.0 { if f0.is_some() { return Err(::winnow_grammar::winnow::error::ErrMode::Cut(<__WgEr as ::winnow_grammar::error::Diagnostics>::external(input, ::nikaia_std::grammar::member_error("name", "is given twice")))); } f0 = Some(v); }; if let Some(v) = piece.1 { if f1.is_some() { return Err(::winnow_grammar::winnow::error::ErrMode::Cut(<__WgEr as ::winnow_grammar::error::Diagnostics>::external(input, ::nikaia_std::grammar::member_error("version", "is given twice")))); } f1 = Some(v); }; if let Some(v) = piece.2 { if f2.is_some() { return Err(::winnow_grammar::winnow::error::ErrMode::Cut(<__WgEr as ::winnow_grammar::error::Diagnostics>::external(input, ::nikaia_std::grammar::member_error("edition", "is given twice")))); } f2 = Some(v); }; if let Some(v) = piece.3 { if f3.is_some() { return Err(::winnow_grammar::winnow::error::ErrMode::Cut(<__WgEr as ::winnow_grammar::error::Diagnostics>::external(input, ::nikaia_std::grammar::member_error("publish", "is given twice")))); } f3 = Some(v); }; if let Some(v) = piece.4 { if f4.is_some() { return Err(::winnow_grammar::winnow::error::ErrMode::Cut(<__WgEr as ::winnow_grammar::error::Diagnostics>::external(input, ::nikaia_std::grammar::member_error("authors", "is given twice")))); } f4 = Some(v); }; } TomlPackage { name: match f0 { Some(Some(v)) => v, Some(None) => return Err(::winnow_grammar::winnow::error::ErrMode::Cut(<__WgEr as ::winnow_grammar::error::Diagnostics>::external(input, ::nikaia_std::grammar::member_error("name", "takes no null")))), None => return Err(::winnow_grammar::winnow::error::ErrMode::Cut(<__WgEr as ::winnow_grammar::error::Diagnostics>::external(input, ::nikaia_std::grammar::member_error("name", "is missing")))) }, version: match f1 { Some(Some(v)) => v, Some(None) => return Err(::winnow_grammar::winnow::error::ErrMode::Cut(<__WgEr as ::winnow_grammar::error::Diagnostics>::external(input, ::nikaia_std::grammar::member_error("version", "takes no null")))), None => return Err(::winnow_grammar::winnow::error::ErrMode::Cut(<__WgEr as ::winnow_grammar::error::Diagnostics>::external(input, ::nikaia_std::grammar::member_error("version", "is missing")))) }, edition: match f2 { Some(Some(v)) => v, _ => 2026 }, publish: match f3 { Some(Some(v)) => v, _ => false }, authors: match f4 { Some(Some(v)) => v, Some(None) => return Err(::winnow_grammar::winnow::error::ErrMode::Cut(<__WgEr as ::winnow_grammar::error::Diagnostics>::external(input, ::nikaia_std::grammar::member_error("authors", "takes no null")))), None => return Err(::winnow_grammar::winnow::error::ErrMode::Cut(<__WgEr as ::winnow_grammar::error::Diagnostics>::external(input, ::nikaia_std::grammar::member_error("authors", "is missing")))) } } }
+            -> { let mut f0: Option<Option<&'a str>> = None; let mut f1: Option<Option<&'a str>> = None; let mut f2: Option<Option<i64>> = None; let mut f3: Option<Option<bool>> = None; let mut f4: Option<Option<Vec<&'a str>>> = None; for piece in pieces { if let Some(v) = piece.0 { if f0.is_some() { return Err(::winnow_grammar::winnow::error::ErrMode::Cut(<__WgEr as ::winnow_grammar::error::Diagnostics>::external(input, ::nikaia_std::grammar::member_error("name", "is given twice")))); } f0 = Some(v); }; if let Some(v) = piece.1 { if f1.is_some() { return Err(::winnow_grammar::winnow::error::ErrMode::Cut(<__WgEr as ::winnow_grammar::error::Diagnostics>::external(input, ::nikaia_std::grammar::member_error("version", "is given twice")))); } f1 = Some(v); }; if let Some(v) = piece.2 { if f2.is_some() { return Err(::winnow_grammar::winnow::error::ErrMode::Cut(<__WgEr as ::winnow_grammar::error::Diagnostics>::external(input, ::nikaia_std::grammar::member_error("edition", "is given twice")))); } f2 = Some(v); }; if let Some(v) = piece.3 { if f3.is_some() { return Err(::winnow_grammar::winnow::error::ErrMode::Cut(<__WgEr as ::winnow_grammar::error::Diagnostics>::external(input, ::nikaia_std::grammar::member_error("publish", "is given twice")))); } f3 = Some(v); }; if let Some(v) = piece.4 { if f4.is_some() { return Err(::winnow_grammar::winnow::error::ErrMode::Cut(<__WgEr as ::winnow_grammar::error::Diagnostics>::external(input, ::nikaia_std::grammar::member_error("authors", "is given twice")))); } f4 = Some(v); }; } TomlPackage { name: match f0 { Some(Some(v)) => v, Some(None) => return Err(::winnow_grammar::winnow::error::ErrMode::Cut(<__WgEr as ::winnow_grammar::error::Diagnostics>::external(input, ::nikaia_std::grammar::member_error("name", "takes no null")))), None => return Err(::winnow_grammar::winnow::error::ErrMode::Cut(<__WgEr as ::winnow_grammar::error::Diagnostics>::external(input, ::nikaia_std::grammar::member_error("name", "is missing")))) }, version: match f1 { Some(Some(v)) => v, Some(None) => return Err(::winnow_grammar::winnow::error::ErrMode::Cut(<__WgEr as ::winnow_grammar::error::Diagnostics>::external(input, ::nikaia_std::grammar::member_error("version", "takes no null")))), None => return Err(::winnow_grammar::winnow::error::ErrMode::Cut(<__WgEr as ::winnow_grammar::error::Diagnostics>::external(input, ::nikaia_std::grammar::member_error("version", "is missing")))) }, edition: match f2 { Some(Some(v)) => v, _ => 2026 }, publish: match f3 { Some(Some(v)) => v, _ => false }, authors: match f4 { Some(Some(v)) => v, Some(None) => return Err(::winnow_grammar::winnow::error::ErrMode::Cut(<__WgEr as ::winnow_grammar::error::Diagnostics>::external(input, ::nikaia_std::grammar::member_error("authors", "takes no null")))), None => return Err(::winnow_grammar::winnow::error::ErrMode::Cut(<__WgEr as ::winnow_grammar::error::Diagnostics>::external(input, ::nikaia_std::grammar::member_error("authors", "is missing")))) } } }
 
-        rule __nikaia_members_1_all -> Vec<(Option<Option<String>>, Option<Option<String>>, Option<Option<i64>>, Option<Option<bool>>, Option<Option<Vec<String>>>,)> =
+        rule __nikaia_members_1_all -> Vec<(Option<Option<&'a str>>, Option<Option<&'a str>>, Option<Option<i64>>, Option<Option<bool>>, Option<Option<Vec<&'a str>>>,)> =
           first:__nikaia_members_1_one rest:__nikaia_members_1_more*
             -> { let mut all = vec![first]; all.extend(rest); all }
         | ""
             -> { Vec::new() }
 
-        rule __nikaia_members_1_more -> (Option<Option<String>>, Option<Option<String>>, Option<Option<i64>>, Option<Option<bool>>, Option<Option<Vec<String>>>,) =
+        rule __nikaia_members_1_more -> (Option<Option<&'a str>>, Option<Option<&'a str>>, Option<Option<i64>>, Option<Option<bool>>, Option<Option<Vec<&'a str>>>,) =
           empty p:__nikaia_members_1_one
             -> { p }
 
-        rule __nikaia_members_1_one -> (Option<Option<String>>, Option<Option<String>>, Option<Option<i64>>, Option<Option<bool>>, Option<Option<Vec<String>>>,) =
+        rule __nikaia_members_1_one -> (Option<Option<&'a str>>, Option<Option<&'a str>>, Option<Option<i64>>, Option<Option<bool>>, Option<Option<Vec<&'a str>>>,) =
           k:LineKey => p:__nikaia_members_1_value(i = ::nikaia_std::grammar::member_index(&k, &["name", "version", "edition", "publish", "authors"]))
             -> { match p { Some(p) => p, None => return Err(::winnow_grammar::winnow::error::ErrMode::Cut(<__WgEr as ::winnow_grammar::error::Diagnostics>::external(input, ::nikaia_std::grammar::member_unknown(&k)))) } }
 
-        rule __nikaia_members_1_value(i: usize) -> Option<(Option<Option<String>>, Option<Option<String>>, Option<Option<i64>>, Option<Option<bool>>, Option<Option<Vec<String>>>,)> =
+        rule __nikaia_members_1_value(i: usize) -> Option<(Option<Option<&'a str>>, Option<Option<&'a str>>, Option<Option<i64>>, Option<Option<bool>>, Option<Option<Vec<&'a str>>>,)> =
           if(i == 0) v:Line__String
             -> { Some((Some(Some(::nikaia_std::grammar::IntoMember::into_member(v))), None, None, None, None,)) }
         | if(i == 1) v:Line__String
@@ -194,29 +194,29 @@ grammar! {
         | if(i == 3) v:Line__bool
             -> { Some((None, None, None, Some(Some(::nikaia_std::grammar::IntoMember::into_member(v))), None,)) }
         | if(i == 4) v:Line__Vec_String_
-            -> { Some((None, None, None, None, Some(Some(v.into_iter().map(|x| -> String { ::nikaia_std::grammar::IntoMember::into_member(x) }).collect::<Vec<String>>())),)) }
+            -> { Some((None, None, None, None, Some(Some(::nikaia_std::grammar::IntoMember::into_member(v))),)) }
         | if(i == 5) ""
             -> { None }
 
-        rule __nikaia_members_2 -> TomlPackage =
+        rule __nikaia_members_2 -> TomlPackage<'a, 'a, 'a> =
           pieces:__nikaia_members_2_all
-            -> { let mut f0: Option<Option<String>> = None; let mut f1: Option<Option<String>> = None; let mut f2: Option<Option<i64>> = None; let mut f3: Option<Option<bool>> = None; let mut f4: Option<Option<Vec<String>>> = None; for piece in pieces { if let Some(v) = piece.0 { if f0.is_some() { return Err(::winnow_grammar::winnow::error::ErrMode::Cut(<__WgEr as ::winnow_grammar::error::Diagnostics>::external(input, ::nikaia_std::grammar::member_error("name", "is given twice")))); } f0 = Some(v); }; if let Some(v) = piece.1 { if f1.is_some() { return Err(::winnow_grammar::winnow::error::ErrMode::Cut(<__WgEr as ::winnow_grammar::error::Diagnostics>::external(input, ::nikaia_std::grammar::member_error("version", "is given twice")))); } f1 = Some(v); }; if let Some(v) = piece.2 { if f2.is_some() { return Err(::winnow_grammar::winnow::error::ErrMode::Cut(<__WgEr as ::winnow_grammar::error::Diagnostics>::external(input, ::nikaia_std::grammar::member_error("edition", "is given twice")))); } f2 = Some(v); }; if let Some(v) = piece.3 { if f3.is_some() { return Err(::winnow_grammar::winnow::error::ErrMode::Cut(<__WgEr as ::winnow_grammar::error::Diagnostics>::external(input, ::nikaia_std::grammar::member_error("publish", "is given twice")))); } f3 = Some(v); }; if let Some(v) = piece.4 { if f4.is_some() { return Err(::winnow_grammar::winnow::error::ErrMode::Cut(<__WgEr as ::winnow_grammar::error::Diagnostics>::external(input, ::nikaia_std::grammar::member_error("authors", "is given twice")))); } f4 = Some(v); }; } TomlPackage { name: match f0 { Some(Some(v)) => v, Some(None) => return Err(::winnow_grammar::winnow::error::ErrMode::Cut(<__WgEr as ::winnow_grammar::error::Diagnostics>::external(input, ::nikaia_std::grammar::member_error("name", "takes no null")))), None => return Err(::winnow_grammar::winnow::error::ErrMode::Cut(<__WgEr as ::winnow_grammar::error::Diagnostics>::external(input, ::nikaia_std::grammar::member_error("name", "is missing")))) }, version: match f1 { Some(Some(v)) => v, Some(None) => return Err(::winnow_grammar::winnow::error::ErrMode::Cut(<__WgEr as ::winnow_grammar::error::Diagnostics>::external(input, ::nikaia_std::grammar::member_error("version", "takes no null")))), None => return Err(::winnow_grammar::winnow::error::ErrMode::Cut(<__WgEr as ::winnow_grammar::error::Diagnostics>::external(input, ::nikaia_std::grammar::member_error("version", "is missing")))) }, edition: match f2 { Some(Some(v)) => v, _ => 2026 }, publish: match f3 { Some(Some(v)) => v, _ => false }, authors: match f4 { Some(Some(v)) => v, Some(None) => return Err(::winnow_grammar::winnow::error::ErrMode::Cut(<__WgEr as ::winnow_grammar::error::Diagnostics>::external(input, ::nikaia_std::grammar::member_error("authors", "takes no null")))), None => return Err(::winnow_grammar::winnow::error::ErrMode::Cut(<__WgEr as ::winnow_grammar::error::Diagnostics>::external(input, ::nikaia_std::grammar::member_error("authors", "is missing")))) } } }
+            -> { let mut f0: Option<Option<&'a str>> = None; let mut f1: Option<Option<&'a str>> = None; let mut f2: Option<Option<i64>> = None; let mut f3: Option<Option<bool>> = None; let mut f4: Option<Option<Vec<&'a str>>> = None; for piece in pieces { if let Some(v) = piece.0 { if f0.is_some() { return Err(::winnow_grammar::winnow::error::ErrMode::Cut(<__WgEr as ::winnow_grammar::error::Diagnostics>::external(input, ::nikaia_std::grammar::member_error("name", "is given twice")))); } f0 = Some(v); }; if let Some(v) = piece.1 { if f1.is_some() { return Err(::winnow_grammar::winnow::error::ErrMode::Cut(<__WgEr as ::winnow_grammar::error::Diagnostics>::external(input, ::nikaia_std::grammar::member_error("version", "is given twice")))); } f1 = Some(v); }; if let Some(v) = piece.2 { if f2.is_some() { return Err(::winnow_grammar::winnow::error::ErrMode::Cut(<__WgEr as ::winnow_grammar::error::Diagnostics>::external(input, ::nikaia_std::grammar::member_error("edition", "is given twice")))); } f2 = Some(v); }; if let Some(v) = piece.3 { if f3.is_some() { return Err(::winnow_grammar::winnow::error::ErrMode::Cut(<__WgEr as ::winnow_grammar::error::Diagnostics>::external(input, ::nikaia_std::grammar::member_error("publish", "is given twice")))); } f3 = Some(v); }; if let Some(v) = piece.4 { if f4.is_some() { return Err(::winnow_grammar::winnow::error::ErrMode::Cut(<__WgEr as ::winnow_grammar::error::Diagnostics>::external(input, ::nikaia_std::grammar::member_error("authors", "is given twice")))); } f4 = Some(v); }; } TomlPackage { name: match f0 { Some(Some(v)) => v, Some(None) => return Err(::winnow_grammar::winnow::error::ErrMode::Cut(<__WgEr as ::winnow_grammar::error::Diagnostics>::external(input, ::nikaia_std::grammar::member_error("name", "takes no null")))), None => return Err(::winnow_grammar::winnow::error::ErrMode::Cut(<__WgEr as ::winnow_grammar::error::Diagnostics>::external(input, ::nikaia_std::grammar::member_error("name", "is missing")))) }, version: match f1 { Some(Some(v)) => v, Some(None) => return Err(::winnow_grammar::winnow::error::ErrMode::Cut(<__WgEr as ::winnow_grammar::error::Diagnostics>::external(input, ::nikaia_std::grammar::member_error("version", "takes no null")))), None => return Err(::winnow_grammar::winnow::error::ErrMode::Cut(<__WgEr as ::winnow_grammar::error::Diagnostics>::external(input, ::nikaia_std::grammar::member_error("version", "is missing")))) }, edition: match f2 { Some(Some(v)) => v, _ => 2026 }, publish: match f3 { Some(Some(v)) => v, _ => false }, authors: match f4 { Some(Some(v)) => v, Some(None) => return Err(::winnow_grammar::winnow::error::ErrMode::Cut(<__WgEr as ::winnow_grammar::error::Diagnostics>::external(input, ::nikaia_std::grammar::member_error("authors", "takes no null")))), None => return Err(::winnow_grammar::winnow::error::ErrMode::Cut(<__WgEr as ::winnow_grammar::error::Diagnostics>::external(input, ::nikaia_std::grammar::member_error("authors", "is missing")))) } } }
 
-        rule __nikaia_members_2_all -> Vec<(Option<Option<String>>, Option<Option<String>>, Option<Option<i64>>, Option<Option<bool>>, Option<Option<Vec<String>>>,)> =
+        rule __nikaia_members_2_all -> Vec<(Option<Option<&'a str>>, Option<Option<&'a str>>, Option<Option<i64>>, Option<Option<bool>>, Option<Option<Vec<&'a str>>>,)> =
           first:__nikaia_members_2_one rest:__nikaia_members_2_more*
             -> { let mut all = vec![first]; all.extend(rest); all }
         | ""
             -> { Vec::new() }
 
-        rule __nikaia_members_2_more -> (Option<Option<String>>, Option<Option<String>>, Option<Option<i64>>, Option<Option<bool>>, Option<Option<Vec<String>>>,) =
+        rule __nikaia_members_2_more -> (Option<Option<&'a str>>, Option<Option<&'a str>>, Option<Option<i64>>, Option<Option<bool>>, Option<Option<Vec<&'a str>>>,) =
           (AS ",") p:__nikaia_members_2_one
             -> { p }
 
-        rule __nikaia_members_2_one -> (Option<Option<String>>, Option<Option<String>>, Option<Option<i64>>, Option<Option<bool>>, Option<Option<Vec<String>>>,) =
+        rule __nikaia_members_2_one -> (Option<Option<&'a str>>, Option<Option<&'a str>>, Option<Option<i64>>, Option<Option<bool>>, Option<Option<Vec<&'a str>>>,) =
           k:InlineKey => p:__nikaia_members_2_value(i = ::nikaia_std::grammar::member_index(&k, &["name", "version", "edition", "publish", "authors"]))
             -> { match p { Some(p) => p, None => return Err(::winnow_grammar::winnow::error::ErrMode::Cut(<__WgEr as ::winnow_grammar::error::Diagnostics>::external(input, ::nikaia_std::grammar::member_unknown(&k)))) } }
 
-        rule __nikaia_members_2_value(i: usize) -> Option<(Option<Option<String>>, Option<Option<String>>, Option<Option<i64>>, Option<Option<bool>>, Option<Option<Vec<String>>>,)> =
+        rule __nikaia_members_2_value(i: usize) -> Option<(Option<Option<&'a str>>, Option<Option<&'a str>>, Option<Option<i64>>, Option<Option<bool>>, Option<Option<Vec<&'a str>>>,)> =
           if(i == 0) v:Value__String
             -> { Some((Some(Some(::nikaia_std::grammar::IntoMember::into_member(v))), None, None, None, None,)) }
         | if(i == 1) v:Value__String
@@ -226,53 +226,53 @@ grammar! {
         | if(i == 3) v:Value__bool
             -> { Some((None, None, None, Some(Some(::nikaia_std::grammar::IntoMember::into_member(v))), None,)) }
         | if(i == 4) v:Value__Vec_String_
-            -> { Some((None, None, None, None, Some(Some(v.into_iter().map(|x| -> String { ::nikaia_std::grammar::IntoMember::into_member(x) }).collect::<Vec<String>>())),)) }
+            -> { Some((None, None, None, None, Some(Some(::nikaia_std::grammar::IntoMember::into_member(v))),)) }
         | if(i == 5) ""
             -> { None }
 
-        rule __nikaia_members_3 -> TomlBuild =
+        rule __nikaia_members_3 -> TomlBuild<'a> =
           pieces:__nikaia_members_3_all
-            -> { let mut f0: Option<Option<Option<String>>> = None; for piece in pieces { if let Some(v) = piece.0 { if f0.is_some() { return Err(::winnow_grammar::winnow::error::ErrMode::Cut(<__WgEr as ::winnow_grammar::error::Diagnostics>::external(input, ::nikaia_std::grammar::member_error("artifact", "is given twice")))); } f0 = Some(v); }; } TomlBuild { artifact: match f0 { Some(Some(v)) => v, _ => None } } }
+            -> { let mut f0: Option<Option<Option<&'a str>>> = None; for piece in pieces { if let Some(v) = piece.0 { if f0.is_some() { return Err(::winnow_grammar::winnow::error::ErrMode::Cut(<__WgEr as ::winnow_grammar::error::Diagnostics>::external(input, ::nikaia_std::grammar::member_error("artifact", "is given twice")))); } f0 = Some(v); }; } TomlBuild { artifact: match f0 { Some(Some(v)) => v, _ => None } } }
 
-        rule __nikaia_members_3_all -> Vec<(Option<Option<Option<String>>>,)> =
+        rule __nikaia_members_3_all -> Vec<(Option<Option<Option<&'a str>>>,)> =
           first:__nikaia_members_3_one rest:__nikaia_members_3_more*
             -> { let mut all = vec![first]; all.extend(rest); all }
         | ""
             -> { Vec::new() }
 
-        rule __nikaia_members_3_more -> (Option<Option<Option<String>>>,) =
+        rule __nikaia_members_3_more -> (Option<Option<Option<&'a str>>>,) =
           empty p:__nikaia_members_3_one
             -> { p }
 
-        rule __nikaia_members_3_one -> (Option<Option<Option<String>>>,) =
+        rule __nikaia_members_3_one -> (Option<Option<Option<&'a str>>>,) =
           k:LineKey => p:__nikaia_members_3_value(i = ::nikaia_std::grammar::member_index(&k, &["artifact"]))
             -> { match p { Some(p) => p, None => return Err(::winnow_grammar::winnow::error::ErrMode::Cut(<__WgEr as ::winnow_grammar::error::Diagnostics>::external(input, ::nikaia_std::grammar::member_unknown(&k)))) } }
 
-        rule __nikaia_members_3_value(i: usize) -> Option<(Option<Option<Option<String>>>,)> =
+        rule __nikaia_members_3_value(i: usize) -> Option<(Option<Option<Option<&'a str>>>,)> =
           if(i == 0) v:Line__String_maybe
             -> { Some((Some(Some(::nikaia_std::grammar::IntoMember::into_member(v))),)) }
         | if(i == 1) ""
             -> { None }
 
-        rule __nikaia_members_4 -> TomlBuild =
+        rule __nikaia_members_4 -> TomlBuild<'a> =
           pieces:__nikaia_members_4_all
-            -> { let mut f0: Option<Option<Option<String>>> = None; for piece in pieces { if let Some(v) = piece.0 { if f0.is_some() { return Err(::winnow_grammar::winnow::error::ErrMode::Cut(<__WgEr as ::winnow_grammar::error::Diagnostics>::external(input, ::nikaia_std::grammar::member_error("artifact", "is given twice")))); } f0 = Some(v); }; } TomlBuild { artifact: match f0 { Some(Some(v)) => v, _ => None } } }
+            -> { let mut f0: Option<Option<Option<&'a str>>> = None; for piece in pieces { if let Some(v) = piece.0 { if f0.is_some() { return Err(::winnow_grammar::winnow::error::ErrMode::Cut(<__WgEr as ::winnow_grammar::error::Diagnostics>::external(input, ::nikaia_std::grammar::member_error("artifact", "is given twice")))); } f0 = Some(v); }; } TomlBuild { artifact: match f0 { Some(Some(v)) => v, _ => None } } }
 
-        rule __nikaia_members_4_all -> Vec<(Option<Option<Option<String>>>,)> =
+        rule __nikaia_members_4_all -> Vec<(Option<Option<Option<&'a str>>>,)> =
           first:__nikaia_members_4_one rest:__nikaia_members_4_more*
             -> { let mut all = vec![first]; all.extend(rest); all }
         | ""
             -> { Vec::new() }
 
-        rule __nikaia_members_4_more -> (Option<Option<Option<String>>>,) =
+        rule __nikaia_members_4_more -> (Option<Option<Option<&'a str>>>,) =
           (AS ",") p:__nikaia_members_4_one
             -> { p }
 
-        rule __nikaia_members_4_one -> (Option<Option<Option<String>>>,) =
+        rule __nikaia_members_4_one -> (Option<Option<Option<&'a str>>>,) =
           k:InlineKey => p:__nikaia_members_4_value(i = ::nikaia_std::grammar::member_index(&k, &["artifact"]))
             -> { match p { Some(p) => p, None => return Err(::winnow_grammar::winnow::error::ErrMode::Cut(<__WgEr as ::winnow_grammar::error::Diagnostics>::external(input, ::nikaia_std::grammar::member_unknown(&k)))) } }
 
-        rule __nikaia_members_4_value(i: usize) -> Option<(Option<Option<Option<String>>>,)> =
+        rule __nikaia_members_4_value(i: usize) -> Option<(Option<Option<Option<&'a str>>>,)> =
           if(i == 0) v:Value__String_maybe
             -> { Some((Some(Some(::nikaia_std::grammar::IntoMember::into_member(v))),)) }
         | if(i == 1) ""
@@ -291,34 +291,34 @@ grammar! {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub(crate) struct TomlPackage {
-    pub(crate) name: String,
-    pub(crate) version: String,
+pub(crate) struct TomlPackage<'a, 'a1, 'a2> {
+    pub(crate) name: &'a str,
+    pub(crate) version: &'a1 str,
     pub(crate) edition: i64,
     publish: bool,
-    pub(crate) authors: Vec<String>,
+    pub(crate) authors: Vec<&'a2 str>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub(crate) struct TomlBuild {
-    pub(crate) artifact: Option<String>,
+pub(crate) struct TomlBuild<'a> {
+    pub(crate) artifact: Option<&'a str>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub(crate) struct TomlManifest {
-    pub(crate) package: TomlPackage,
-    pub(crate) build: Option<TomlBuild>,
+pub(crate) struct TomlManifest<'a, 'a1> {
+    pub(crate) package: TomlPackage<'a, 'a, 'a>,
+    pub(crate) build: Option<TomlBuild<'a1>>,
 }
 
 pub(crate) fn toml_said(given: &str) -> String {
-    let m: TomlManifest = match nikaia_std::grammar::parse(&*given, Toml::parse_read__TomlManifest()) {
+    let m: TomlManifest<'_, '_> = match nikaia_std::grammar::parse(&*given, Toml::parse_read__TomlManifest()) {
         Ok(value) => value,
         Err(error) => {
             for line in format!("{}", error).split("\n") { return format!("error: {}", line); }
             return String::from("error");
         },
     };
-    let art = nikaia_std::index::or(m.build.as_ref().and_then(|__nikaia_it| __nikaia_it.artifact.as_deref()), || "-");
+    let art = nikaia_std::index::or(m.build.and_then(|__nikaia_it| __nikaia_it.artifact), || "-");
     let authors = nikaia_std::block::Text::from(m.package.authors.join(","));
     format!("{} {} {} {} [{}] {}", m.package.name, m.package.version, m.package.edition, m.package.publish, authors, art)
 }

@@ -5401,7 +5401,28 @@ pub(crate) fn walk_grammar(def: &GrammarDef, ask: &TierAsk<'_, '_, '_, '_, '_, '
             }
             walk_action((alt.action).as_ref(), ask, walk);
             close_tier_scope(walk);
+            flow_members(&gname, &alt.pattern.node, ask, walk);
         }
+    }
+}
+
+pub(crate) fn flow_members(gname: &str, pattern: &Pattern, ask: &TierAsk<'_, '_, '_, '_, '_, '_, '_>, walk: &mut TierWalk) {
+    match pattern {
+        Pattern::Members { ty, fields, .. } => {
+            let of = nikaia_std::block::Text::from(ask.names.resolve(ty.name).to_string());
+            for member in fields.iter() {
+                let kinds = result_kinds(&format!("{}::{}", gname, ask.names.resolve(member.value)), ask, walk);
+                flow_type(&TextOwner::Field(nikaia_std::block::Text::from(of.to_string()), nikaia_std::block::Text::from(ask.names.resolve(member.name).to_string())), &member.ty, &mut vec![], &kinds, ask, walk);
+            }
+        },
+        Pattern::Seq(parts) => { for part in parts.iter() { flow_members(gname, &part.node, ask, walk); } },
+        Pattern::Choice(parts) => { for part in parts.iter() { flow_members(gname, &part.node, ask, walk); } },
+        Pattern::Bind { pat, .. } => { let pat = nikaia_std::boxed::open(pat); flow_members(gname, &pat.node, ask, walk); },
+        Pattern::Group(pat) => { let pat = nikaia_std::boxed::open(pat); flow_members(gname, &pat.node, ask, walk); },
+        Pattern::Repeat { pat, .. } => { let pat = nikaia_std::boxed::open(pat); flow_members(gname, &pat.node, ask, walk); },
+        Pattern::Counted { pat, .. } => { let pat = nikaia_std::boxed::open(pat); flow_members(gname, &pat.node, ask, walk); },
+        Pattern::Ref { args, .. } => { for arg in args.iter() { flow_members(gname, &arg.node, ask, walk); } },
+        _ => { },
     }
 }
 
@@ -6460,6 +6481,27 @@ pub(crate) fn tw_mark_rule(item: &mut Item, j: i64, path: &[i64], tier: &Tier) {
     }
 }
 
+pub(crate) fn tw_mark_members_item(item: &mut Item, words: &winnow_grammar::InternerContext, of: &str, field: &str, path: &[i64], tier: &Tier) {
+    match item {
+        Item::Grammar(def) => { for rule in def.rules.iter_mut() { for alt in (*rule).alts.iter_mut() { tw_mark_members(&mut (*alt).pattern.node, words, of, field, path, &tier); } } },
+        _ => { },
+    }
+}
+
+pub(crate) fn tw_mark_members(pattern: &mut Pattern, words: &winnow_grammar::InternerContext, of: &str, field: &str, path: &[i64], tier: &Tier) {
+    match pattern {
+        Pattern::Members { ty, fields, .. } => { if words.resolve(ty.name) == of { for member in fields.iter_mut() { if words.resolve((*member).name) == field { tw_mark(&mut (*member).ty, path, 0, &tier); } } } },
+        Pattern::Seq(parts) => { for part in parts.iter_mut() { tw_mark_members(&mut (*part).node, words, of, field, path, &tier); } },
+        Pattern::Choice(parts) => { for part in parts.iter_mut() { tw_mark_members(&mut (*part).node, words, of, field, path, &tier); } },
+        Pattern::Bind { pat, .. } => { let pat = nikaia_std::boxed::open(pat); tw_mark_members(&mut pat.node, words, of, field, path, &tier); },
+        Pattern::Group(pat) => { let pat = nikaia_std::boxed::open(pat); tw_mark_members(&mut pat.node, words, of, field, path, &tier); },
+        Pattern::Repeat { pat, .. } => { let pat = nikaia_std::boxed::open(pat); tw_mark_members(&mut pat.node, words, of, field, path, &tier); },
+        Pattern::Counted { pat, .. } => { let pat = nikaia_std::boxed::open(pat); tw_mark_members(&mut pat.node, words, of, field, path, &tier); },
+        Pattern::Ref { args, .. } => { for arg in args.iter_mut() { tw_mark_members(&mut (*arg).node, words, of, field, path, &tier); } },
+        _ => { },
+    }
+}
+
 pub(crate) fn tw_mark_variant(item: &mut Item, words: &winnow_grammar::InternerContext, of: &str, variant: &str, at: i64, path: &[i64], tier: &Tier) {
     match item {
         Item::Enum { name, variants, .. } => {
@@ -6512,7 +6554,12 @@ pub fn tier_write(program: &mut Program, words: &winnow_grammar::InternerContext
     for item in program.items.iter_mut() { tw_lets_item(&mut (*item).node, &job); }
     for (key, tier) in tiers.iter() {
         let tier = *tier;
-        if key.0 == 0 { for item in program.items.iter_mut() { tw_mark_field(&mut (*item).node, words, &key.1, &key.2, &key.4, &tier); } } else if key.0 == 1 && rule_keys.contains_key(&key.1) {
+        if key.0 == 0 {
+            for item in program.items.iter_mut() {
+                tw_mark_field(&mut (*item).node, words, &key.1, &key.2, &key.4, &tier);
+                tw_mark_members_item(&mut (*item).node, words, &key.1, &key.2, &key.4, &tier);
+            }
+        } else if key.0 == 1 && rule_keys.contains_key(&key.1) {
             let (at, j) = match rule_keys.get(&key.1) { Some(__nikaia_value) => __nikaia_value, None => continue }; let at = nikaia_std::num::value(at); let j = nikaia_std::num::value(j);
             let item = match program.items.get_mut(nikaia_std::count::of(at)) { Some(__nikaia_value) => __nikaia_value, None => continue };
             tw_mark_rule(&mut item.node, j, &key.4, &tier);

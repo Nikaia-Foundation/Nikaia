@@ -604,6 +604,12 @@ fn check_function_grammar[H: CheckHost](mut state: CheckState, world: ref CheckW
             let one = written ?? continue
             expected = host.type_of(one)
         }
+        // **A rule's `String` both kinds flow into is either, per value**
+        // (ADR-282 D14, ADR-grammar-typed-read-v1 D5, #2496): an action's
+        // view goes in as it is and text it decoded as its own, as into a
+        // function's result.
+        let outer_either = state.flow.expected_either
+        state.flow.expected_either = rule.ret_type?.either ?? false
         // The rule's own key, so its answers land in its own entry.
         let outer_current: String? = state.current?.clone()
         state.current = f"{named}::{world.words.resolve(rule.name)}"
@@ -639,6 +645,7 @@ fn check_function_grammar[H: CheckHost](mut state: CheckState, world: ref CheckW
         }
         state.current = outer_current
         state.emitting = outer_emitting
+        state.flow.expected_either = outer_either
     }
 }
 
@@ -662,7 +669,11 @@ fn check_function_action[H: CheckHost](mut state: CheckState, world: ref CheckWo
             },
             else => {},
         }
-        state.expect_type(world, tail, wanted, Span { start: at.start, end: at.end }, "returns", fn(found, want) { f"This action builds `{found}`, but its rule returns `{want}`." })
+        // **A view into a rule's result both kinds flow into** goes in as
+        // it is (ADR-282 D14, D15, #2496), as into a function's.
+        if !(state.flow.expected_either && a_plain_str_view(tail) && a_plain_string(wanted)) {
+            state.expect_type(world, tail, wanted, Span { start: at.start, end: at.end }, "returns", fn(found, want) { f"This action builds `{found}`, but its rule returns `{want}`." })
+        }
         // What the action ends in takes the wrap into the rule's type, as a
         // function's tail does: `v` of `i64` is `Some(v)` in an `i64?` rule.
         match action.stmts[count - 1].node {

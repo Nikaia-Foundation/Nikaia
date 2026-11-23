@@ -825,10 +825,23 @@ impl EmitState {
                         if prelude != "" {
                             out.push(" }")
                         }
-                    } else if prelude != "" {
-                        self.emit_stmt_block_opening_with(world, walk, out, host, action, 3, EmitFlow::plain(), EmitScope::plain(), EmitTail::Return, prelude)
                     } else {
-                        self.emit_core_block(world, walk, out, host, action, 3, EmitFlow::plain(), EmitScope::plain(), EmitTail::Return)
+                        // **A rule's `String` both kinds flow into is
+                        // `EitherText`** (ADR-282 D14, ADR-grammar-typed-read-v1
+                        // D5, #2496): what each action hands back goes in as
+                        // the view or the text of its own it is.
+                        let either = rule.ret_type?.either ?? false
+                        if either {
+                            out.push("{ let __wg_either = ")
+                        }
+                        if prelude != "" {
+                            self.emit_stmt_block_opening_with(world, walk, out, host, action, 3, EmitFlow::plain(), EmitScope::plain(), EmitTail::Return, prelude)
+                        } else {
+                            self.emit_core_block(world, walk, out, host, action, 3, EmitFlow::plain(), EmitScope::plain(), EmitTail::Return)
+                        }
+                        if either {
+                            out.push("; ::nikaia_std::either_text::either(__wg_either) }")
+                        }
                     }
                     out.push("\n")
                 },
@@ -1377,17 +1390,31 @@ impl EmitState {
     /// field owns it. Text goes in by `IntoMember`, a list of text item by
     /// item, so a `Vec[String]` or a `Vec[String]?` field takes the list a
     /// rule read.
-    fn member_into[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, host: ref H, ty: ref Type, value: ref String) -> String sync throws {
+    fn member_into[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, host: ref H, ty: ref Type, value: ref String, from_either: bool) -> String sync throws {
+        // **A field both kinds flow into takes either, per value** (ADR-282
+        // D14, ADR-grammar-typed-read-v1 D5, #2496): a view of the input
+        // goes in as it is, text an escape decoded as text of its own.
+        if ty.either && emit_text(world, ty.name) == "String" && ty.generics.len() == 0 {
+            return f"::nikaia_std::either_text::either({value})"
+        }
+        // Text either kind the value rule hands back, into a field that
+        // keeps text of its own (a published one, ADR-282 D22): a copy of it.
+        if from_either && !ty.is_view && emit_text(world, ty.name) == "String" && ty.generics.len() == 0 {
+            if ty.is_nullable {
+                return f"{value}.map(::std::convert::Into::into)"
+            }
+            return f"::std::convert::Into::into({value})"
+        }
         if !member_lists_text(world, ty) {
             return f"::nikaia_std::grammar::IntoMember::into_member({value})"
         }
         if ty.is_nullable {
             let mut inner = ty.clone()
             inner.is_nullable = false
-            return f"{value}.map(|x| -> {host.ty_named(walk, inner)} {{ {self.member_into(world, walk, host, inner, "x")} }})"
+            return f"{value}.map(|x| -> {host.ty_named(walk, inner)} {{ {self.member_into(world, walk, host, inner, "x", from_either)} }})"
         }
         let item = ty.generics[0]
-        return f"{value}.into_iter().map(|x| -> {host.ty_named(walk, item)} {{ {self.member_into(world, walk, host, item, "x")} }}).collect::<{host.ty_named(walk, ty)}>()"
+        return f"{value}.into_iter().map(|x| -> {host.ty_named(walk, item)} {{ {self.member_into(world, walk, host, item, "x", from_either)} }}).collect::<{host.ty_named(walk, ty)}>()"
     }
 
     /// **An action that can fail** (Part II 10.8, #557): its body runs as a
@@ -1487,7 +1514,8 @@ impl EmitState {
                         null => {},
                     }
                     let mut one = nothing.clone()
-                    one[i] = f"Some(Some({self.member_into(world, walk, host, fields[i].ty, "v")}))"
+                    let from_either = walk.grammar_rule_types.get(emit_text(world, fields[i].value))?.contains("EitherText") ?? false
+                    one[i] = f"Some(Some({self.member_into(world, walk, host, fields[i].ty, "v", from_either)}))"
                     out.push(f"        {separator}if(i == {i}) v:{emit_text(world, fields[i].value)}\n")
                     out.push(f"            -> {{ Some({emit_members_tuple(one)}) }}\n")
                     separator = "| "
@@ -1550,7 +1578,7 @@ fn member_lists_text(world: ref EmitWorld, ty: ref Type) -> bool {
 }
 
 fn member_text_inside(world: ref EmitWorld, ty: ref Type) -> bool {
-    if ty.is_view || ty.is_tuple || ty.code != null {
+    if (ty.is_view && !ty.either) || ty.is_tuple || ty.code != null {
         return false
     }
     if emit_text(world, ty.name) == "String" && ty.generics.len() == 0 {
