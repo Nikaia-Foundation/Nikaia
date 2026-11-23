@@ -7,13 +7,16 @@ with a lambda that can throw and once with one that allocates (#988 item 11,
 #2502).
 
 Each row is a `.nika` program and its Rayon twin, the same steps on both
-sides: the list `0..<n` made first, the chain, the result's lengths summed and
-printed.
+sides: the list `0..<n` made first, the chain, the result summed (its
+values, or its texts' lengths) and printed. In the row that can throw no
+element fails, so both sides do the same work; Rayon's `collect` into a
+`Result` keeps one failure and Nikaia's walk keeps every one (D26), which is
+what that row costs.
 
 | row | Nikaia | Rayon |
 |---|---|---|
 | allocates | `allocates.nika`: `xs.par_iter().map(fn(x) { f"{x}" }).collect()` | `src/bin/par_map_allocates.rs`: `xs.par_iter().map(\|x\| format!("{}", x)).collect()` |
-| can throw | not built: a `par_iter` lambda that can throw is refused today (`NK2606`), though Part II 12.6 and D26 keep its failures | — |
+| can throw | `throws.nika`: `xs.par_iter().map(fn(x) { work(x) }).collect()`, `work` throwing `Bad` for a negative element | `src/bin/par_map_throws.rs`: `xs.par_iter().map(\|x\| work(*x)).collect::<Result<_, _>>()` |
 
 ```sh
 nikaia run benches/par-map/par_map.nika                  # 10^6 elements, 4 threads
@@ -34,15 +37,32 @@ branches, conditional and indirect.
 
 ## The table
 
-2026-11-22, commit `ebbbc1dd9`, valgrind 3.22.0, cargo 1.97.0, 4 threads,
-10^6 elements, both printing `1000000 5888890`:
+2026-11-23, commit `6f191420e` with the fix for #2768 (the allocating row
+unchanged by it), valgrind 3.22.0, cargo 1.97.0, 4 threads,
+10^6 elements, both sides printing the same bytes (`1000000 1499999500000`
+and `1000000 5888890`):
 
 | lambda | Nikaia: instructions | mispredicted | Rayon: instructions | mispredicted |
 |---|--:|--:|--:|--:|
-| allocates | 786,738,424 | 4,020,004 | 832,492,712 | 2,017,153 |
-| (0 elements: start and end) | 624,358 | 11,679 | 458,506 | 8,388 |
+| can throw | 49,759,273 | 12,271 | 45,521,954 | 10,369 |
+| allocates | 786,749,907 | 4,020,019 | 832,513,267 | 2,017,338 |
+| (0 elements: start and end, `ebbbc1dd9`) | 624,358 | 11,679 | 458,506 | 8,388 |
 
-**The chain costs no more than Rayon's**: Nikaia counts 5.5 % fewer
+**The chain whose lambda can throw costs less than Rayon's; the program
+1.09 times Rayon's, for the sum after it.** Nikaia collects each element's
+`Result` into a list on the pool (19.0 M), then
+`nikaia_std::par::kept_failures_listed` reads that list up to its first
+failure (6.0 M) and, where none failed, takes the values out in the list's
+own buffer, which becomes the result (10.0 M, std's in-place collect);
+Rayon's `collect::<Result<_, _>>` writes the values straight into the result
+(26.0 M on the pool, 10.1 M of `memcpy`, 5.0 M in `from_par_iter`). The rest
+is the sum after the chain: 14.0 M against 3.8 M, the overflow check every
+Nikaia build keeps, not the chain. Before the fix for #2768 (2026-11-22,
+`e18b66a6c`) the row counted 66,842,070: `kept_failures` pushed each value
+into a second list grown from empty and collected that into the result
+(33.0 M, half the program).
+
+**The chain that allocates costs no more than Rayon's**: Nikaia counts 5.5 % fewer
 instructions. Both lower onto the same `rayon::slice::Iter`
 (`nikaia_std::par::iter`), and the lambda body is the same `format!`; what
 is left is the allocation the two `format!`s make. Nikaia mispredicts twice as

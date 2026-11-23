@@ -1,0 +1,76 @@
+// **A `par_iter` element that places in a block runs as a task for its
+// memory** (ADR-async-5 D28, ADR-327 D13, #987 item 6): each element has a
+// task's budget in its piece's block, at both settings of
+// `user_parallelism`. An element that asks for more than its block holds
+// ends alone with `task::OverBudget`, kept among the call's failures in
+// input order (D26); the other elements run on, and where none overflows
+// the values come back in input order. A lambda that places nothing in a
+// block runs as before and cannot fail so. Before, the element's request
+// ended the whole program.
+enum Bad { Oops(i64) }
+
+impl Error for Bad {
+    fn message(ref self) -> String {
+        return match self {
+            Bad::Oops(n) => f"element {n} failed",
+        }
+    }
+}
+
+// A list of its own, in the element's block: 10^14 numbers do not fit.
+fn fill(x: i64) -> i64 {
+    let n = if x == 2 || x == 4 { 100000000000000 } else { x }
+    let mut xs: Vec[i64] = []
+    xs.resize(n, 0)
+    return xs.len()
+}
+
+fn wide(x: i64) -> bool {
+    return fill(x) > 1
+}
+
+fn either(x: i64) -> i64 throws {
+    if x == 5 {
+        throw Bad::Oops(x)
+    }
+    return fill(x)
+}
+
+fn twice(x: i64) -> i64 {
+    return x * 2
+}
+
+fn main() throws {
+    let xs = [1, 2, 3, 4, 5]
+    let fine: Vec[i64] = [1, 3, 5].par_iter().map(fn(x) { fill(x) }).collect() catch { [] }
+    println(f"fits: {fine[0]} {fine[1]} {fine[2]}")
+    let mapped: Vec[i64] = xs.par_iter().map(fn(x) { fill(x) }).collect() catch {
+        println(f"map: {error}")
+        []
+    }
+    println(f"map: {mapped.len()} values")
+    let kept: Vec[i64] = xs.par_iter().filter(fn(x) { wide(x) }).collect() catch {
+        println(f"filter: {error}")
+        []
+    }
+    println(f"filter: {kept.len()} values")
+    xs.par_iter(limit: 2).for_each(fn(x) { fill(x) }) catch {
+        println(f"for_each: {error}")
+    }
+    let both: Vec[i64] = xs.par_iter().map(fn(x) { either(x) }).collect() catch {
+        println(error.full())
+        []
+    }
+    println(f"both: {both.len()} values")
+    let own: Vec[i64] = xs.par_iter().map(fn(x) {
+        let mut mine: Vec[i64] = []
+        mine.resize(if x == 3 { 100000000000000 } else { x }, 0)
+        mine.len()
+    }).collect() catch {
+        println(f"own: {error}")
+        []
+    }
+    println(f"own: {own.len()} values")
+    let plain: Vec[i64] = xs.par_iter().map(fn(x) { twice(x) }).collect()
+    println(f"plain: {plain[0]} {plain[4]}")
+}
