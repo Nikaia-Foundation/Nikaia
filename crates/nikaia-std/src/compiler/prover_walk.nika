@@ -822,7 +822,7 @@ fn prover_let(mut walk: ProverWalk, names: ref Vec[winnow_grammar::Symbol], muta
         if raw_sink_first_part(value, written_of) == null {
             has_start = true
         } else {
-            has_start = raw_sink_name(first, words) != null || raw_sink_operand_call(walk, first, words)
+            has_start = raw_sink_name(first, words) != null || raw_sink_operand_call(walk, first, words) || raw_sink_root_path(first, words)
             start_name = raw_sink_name(first, words) ?? ""
         }
     }
@@ -1764,7 +1764,23 @@ fn prover_for(mut walk: ProverWalk, bindings: ref Vec[winnow_grammar::Symbol], m
     // A claim in a loop, or after one, is not carried back to the entry
     // (D16): that needs an invariant.
     inner.path = null
+    // **An element of a list whose every value starts proved starts proved**
+    // (ADR-raw-sinks-1 D18 item 3): the binding is followed as the list is,
+    // for the body only.
+    let mut element: String = ""
+    let mut was: i64? = null
+    if bindings.len() == 1 && raw_sink_proved_list(walk, iter, words) {
+        element = words.resolve(bindings[0]).clone()
+        was = walk.state.option_lists[element]
+        walk.state.option_lists.insert(element.clone(), 0)
+    }
     prover_block(walk, body, inner, nested, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition)
+    if element != "" {
+        walk.state.option_lists.remove(element)
+        if was != null {
+            walk.state.option_lists.insert(element, was ?? 2)
+        }
+    }
     scope.path = null
     if leaves_block(body, fn(e) { prover_throws(e, at, program, words, own, library, unaliased) }, holes_of, false) {
         scope.exact = false
@@ -3165,6 +3181,11 @@ pub fn raw_sink_unchecked_note() -> String sync {
 /// named as `shown`); read from a parameter of the free function it stands
 /// in, carried to that function's callers in pass 1 (#2354).
 fn raw_sink_part(mut walk: ProverWalk, sink: ref ParamSink, shown: ref String, part: ref Expr, span: Span, scope: ref ProverScope, at: ref ProverWhere, program: ref Program, words: ref winnow_grammar::InternerContext, library: ref Ledger, holes_of: fn(ref Expr) -> Vec[Expr] sync, ask: fn(ref logic::TermArena, ref Vec[i64], i64) -> SolverAnswer sync, written_of: fn(ref Expr) -> String sync) {
+    // A list handed whole to a parameter that reaches `process::run`
+    // passes where every value pushed into it was proved (D18 item 3).
+    if sink.kind == "options" && raw_sink_proved_list(walk, part, words) {
+        return
+    }
     if raw_sink_outside(part, scope, words, library, walk.state, holes_of) {
         if walk.state.collecting || raw_sink_passes(walk, sink.guard, part, scope, words, ask) {
             return
@@ -3250,7 +3271,7 @@ fn raw_sink_passes(mut walk: ProverWalk, guard: ref String, part: ref Expr, scop
         }
         return raw_sink_guarded(walk, part, "path::is_component", scope, words, ask) || raw_sink_guarded(walk, part, "path::is_below", scope, words, ask)
     }
-    if guard == "process::is_operand" && raw_sink_operand_call(walk, part, words) {
+    if guard == "process::is_operand" && (raw_sink_operand_call(walk, part, words) || raw_sink_proved_list(walk, part, words)) {
         return true
     }
     return raw_sink_guarded(walk, part, guard, scope, words, ask)
@@ -3262,6 +3283,36 @@ fn raw_sink_passes(mut walk: ProverWalk, guard: ref String, part: ref Expr, scop
 fn raw_sink_operand_call(walk: ref ProverWalk, part: ref Expr, words: ref winnow_grammar::InternerContext) -> bool {
     return match part {
         Expr::Call { func, .. } => walk.state.outside.operand_result(outside_source_named(func, words) ?? ""),
+        else => false,
+    }
+}
+
+/// **A list whose every value starts proved** (ADR-raw-sinks-1 D18 item 3,
+/// `ProverState::option_lists`): a list the walk followed, handed to a
+/// parameter whose elements reach `process::run`, or an element of it a
+/// `for` binds (`prover_for`).
+fn raw_sink_proved_list(walk: ref ProverWalk, part: ref Expr, words: ref winnow_grammar::InternerContext) -> bool {
+    let name = raw_sink_name(part, words) ?? return false
+    return (walk.state.option_lists[name] ?? 2) == 0
+}
+
+/// **A path made under a root** (ADR-raw-sinks-1 D18 item 4): `root.path()`
+/// or `root.join(part).path()`, through `.to_text()` or `.display()`. A name
+/// bound to it starts where the root's directory starts, as the value does
+/// written at the sink (`raw_sink_option_start`).
+fn raw_sink_root_path(part: ref Expr, words: ref winnow_grammar::InternerContext) -> bool {
+    let mut path = part.clone()
+    match part {
+        Expr::MethodCall { receiver, method, args, .. } => {
+            let name = words.resolve(method)
+            if args.is_empty() && (name == "to_text" || name == "display") {
+                path = receiver.clone()
+            }
+        },
+        else => {},
+    }
+    return match path {
+        Expr::MethodCall { method, args, .. } => args.is_empty() && words.resolve(method) == "path",
         else => false,
     }
 }
@@ -3365,8 +3416,9 @@ fn raw_sink_first_part(expr: ref Expr, written_of: fn(ref Expr) -> String sync) 
 /// (ADR-raw-sinks-1 D18 item 4): `raw_sink_first_part`, and where that part
 /// is the path of a root (`root.path()`, `root.join(part).path()`, through
 /// `.to_text()` or `.display()`), the part the root's own directory starts
-/// with instead, since the joined parts follow it: none for `Anywhere` or
-/// `fs::scratch()`, the start of `dir` for `fs::Root::Dir(dir)`.
+/// with instead, since the joined parts follow it: none for `fs::scratch()`,
+/// the start of `dir` for `fs::Root::Dir(dir)`, and the start of the first
+/// joined part for `Anywhere`, which has no text of its own.
 fn raw_sink_option_start(item: ref Expr, scope: ref ProverScope, words: ref winnow_grammar::InternerContext, written_of: fn(ref Expr) -> String sync) -> Expr? {
     let first = raw_sink_first_part(item, written_of) ?? return null
     // A name bound to a text starts as its value does (#2722).
@@ -3392,8 +3444,16 @@ fn raw_sink_option_start(item: ref Expr, scope: ref ProverScope, words: ref winn
             }
             let mut joins: Vec[Expr] = []
             let base = raw_sink_root(receiver, scope, words, written_of, joins)
-            if raw_sink_anywhere(base, words, written_of) || raw_sink_scratch(base, words) {
+            if raw_sink_scratch(base, words) {
                 return null
+            }
+            // `Anywhere` has no text of its own: the path starts where its
+            // first joined part starts (#2694).
+            if raw_sink_anywhere(base, words, written_of) {
+                if joins.is_empty() {
+                    return null
+                }
+                return raw_sink_option_start(joins[0], scope, words, written_of)
             }
             let dir = raw_sink_dir(base, words) ?? return first
             return raw_sink_first_part(dir, written_of)

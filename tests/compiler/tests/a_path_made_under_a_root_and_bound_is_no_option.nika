@@ -1,0 +1,72 @@
+// #2694, ADR-raw-sinks-1 D18 item 4: a path made under a root starts with the
+// root's own text, so it passes as an argument of `process::run`, written at
+// the call or bound to a name first. Joined to a root of the program's own
+// directory, a name from stdin passes; a root of a name from outside does
+// not, nor a name joined under `fs::Root::Anywhere`, which has no text of its
+// own, so the path starts with the name.
+use std::env
+use std::fs
+use std::process
+
+// The running `nikaia` (`env::current_exe`, ADR-program-path-1 D3).
+fn toolchain() -> String throws {
+	return env::current_exe()?.display() ?? "target/fast/nikaia"
+}
+
+fn said(nikaia: String, label: String, body: String) throws {
+	let root = fs::scratch()
+	let tmp = f"{root.path().display()}"
+	fs::create_dir("src", root)
+	fs::write("nikaia.toml", root, "[package]\nname = \"p\"\nversion = \"0.1.0\"\n")
+	fs::write(
+		"src/main.nika",
+		root,
+		f"use std::fs\nuse std::io\nuse std::path\nuse std::process\n\nfn main() throws {{\n    let name = io::read_line() ?? \"\"\n    if !path::is_below(name) {{\n        process::exit(2)\n    }}\n{body}}}\n",
+	)
+	let out = process::run(
+		nikaia,
+		["check", "src/main.nika"]; dir: tmp.clone(),
+		env: [("RUST_BACKTRACE", "0")],
+	)
+	println(f"-- {label}")
+	println(f"exit {out.code}")
+	for line in f"{out.stdout}{out.stderr}".lines() {
+		if line.contains("NK1308") || line.contains(" --> ") {
+			println(line.replace(tmp, "TMP").trim())
+		}
+	}
+}
+
+fn main() throws {
+	let nikaia = toolchain()
+	said(
+		nikaia,
+		"written at the call",
+		"    process::run(\"ls\", [fs::Root::Dir(\".\").join(name).path().to_text()])\n",
+	)
+	said(
+		nikaia,
+		"bound to a name",
+		"    let made = fs::Root::Dir(\".\").join(name).path().to_text()\n    process::run(\"ls\", [made])\n",
+	)
+	said(
+		nikaia,
+		"bound, then joined further",
+		"    let made = fs::Root::Dir(\".\").join(name).join(\"x\").path().display()\n    process::run(\"ls\", [made])\n",
+	)
+	said(
+		nikaia,
+		"joined under Anywhere",
+		"    process::run(\"ls\", [fs::Root::Anywhere.join(name).path().to_text()])\n",
+	)
+	said(
+		nikaia,
+		"joined under Anywhere, bound",
+		"    let made = fs::Root::Anywhere.join(name).path().to_text()\n    process::run(\"ls\", [made])\n",
+	)
+	said(
+		nikaia,
+		"a root of a name from outside",
+		"    let made = fs::Root::Dir(name).path().to_text()\n    process::run(\"ls\", [made])\n",
+	)
+}

@@ -960,6 +960,25 @@ impl ProverLeaving {
         let mut leaving = ProverLeaving { panic: !functions.contains("panic") && !own.functions.contains_key("panic"), exit_heads: collections::BTreeSet::new(), exit_names: collections::BTreeSet::new() };
         for head in heads.iter() { if !imported.contains(head) { leaving.exit_heads.insert(nikaia_std::block::Text::from(head.to_string())); } }
         for name in names.iter() { if !imported.contains(name) && !functions.contains(name) && !own.functions.contains_key(name) { leaving.exit_names.insert(nikaia_std::block::Text::from(name.to_string())); } }
+        let mut found = true;
+        while found {
+            found = false;
+            for item in program.items.iter() {
+                match &item.node {
+                    Item::Fn { name, receiver, generics, args, body, .. } => {
+                        let name = *name;
+                        let symbol = match name { Some(__nikaia_value) => __nikaia_value, None => continue };
+                        let text = nikaia_std::block::Text::from(words.resolve(symbol).to_string());
+                        if receiver.is_some() || !generics.is_empty() || leaving.exit_names.contains(&text) || imported.contains(&text) { continue; }
+                        if prover_never_back(&leaving.within(args, body, words), body, words) {
+                            leaving.exit_names.insert(text);
+                            found = true;
+                        }
+                    },
+                    _ => { },
+                }
+            }
+        }
         leaving
     }
     pub(crate) fn leaves(&self, func: &Expr, locals: &collections::BTreeSet<String>, words: &winnow_grammar::InternerContext) -> bool {
@@ -990,6 +1009,24 @@ impl ProverLeaving {
         here
     }
 }
+
+pub(crate) fn prover_never_back(leaving: &ProverLeaving, body: &Block, words: &winnow_grammar::InternerContext) -> bool {
+    let last = match body.stmts.last() { Some(__nikaia_value) => __nikaia_value, None => return false };
+    let ends = match &last.node {
+        Stmt::Expr(inner) => {
+            match inner {
+                Expr::Call { func, .. } => { let func = nikaia_std::boxed::open(func); prover_leaving_spelled(func, words) && leaving.leaves(func, &collections::BTreeSet::new(), words) },
+                _ => false,
+            }
+        },
+        _ => false,
+    };
+    ends && !leaves_block(body, &mut |e| { false }, &mut prover_no_holes, false)
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn prover_no_holes(e: &Expr) -> Vec<Expr> { vec![] }
 
 pub(crate) fn prover_leaving_spelled(func: &Expr, words: &winnow_grammar::InternerContext) -> bool {
     match func {

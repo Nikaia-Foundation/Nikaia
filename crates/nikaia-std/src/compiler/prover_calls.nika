@@ -1319,6 +1319,31 @@ impl ProverLeaving {
                 leaving.exit_names.insert(name.clone())
             }
         }
+        // **A function of the program that ends in a call that never comes
+        // back, and leaves no other way, never comes back either**
+        // (ADR-raw-sinks-1 D14, D18): `fn refuse(why: String) throws {
+        // eprintln(why); process::exit(2) }` ends a guard as
+        // `process::exit` does. Followed until no more are found.
+        let mut found = true
+        while found {
+            found = false
+            for item in program.items {
+                match item.node {
+                    Item::Fn { name, receiver, generics, args, body, .. } => {
+                        let symbol = name ?? continue
+                        let text = words.resolve(symbol).clone()
+                        if receiver != null || !generics.is_empty() || leaving.exit_names.contains(text) || imported.contains(text) {
+                            continue
+                        }
+                        if prover_never_back(leaving.within(args, body, words), body, words) {
+                            leaving.exit_names.insert(text)
+                            found = true
+                        }
+                    },
+                    else => {},
+                }
+            }
+        }
         return leaving
     }
 
@@ -1372,6 +1397,28 @@ impl ProverLeaving {
         }
         return here
     }
+}
+
+/// Whether `body` never comes back (`ProverLeaving::of`): it ends in a call
+/// `leaving` says never comes back, and no `return`, `throw`, `?` or `break`
+/// leaves it before.
+fn prover_never_back(leaving: ref ProverLeaving, body: ref Block, words: ref winnow_grammar::InternerContext) -> bool {
+    let last = body.stmts.last() ?? return false
+    let ends = match last.node {
+        Stmt::Expr(inner) => {
+            match inner {
+                Expr::Call { func, .. } => prover_leaving_spelled(func, words) && leaving.leaves(func, collections::BTreeSet(), words),
+                else => false,
+            }
+        },
+        else => false,
+    }
+    return ends && !leaves_block(body, fn(e) { false }, prover_no_holes, false)
+}
+
+/// No holes: a `return` in an f-string's hole is not looked for.
+fn prover_no_holes(e: ref Expr) -> Vec[Expr] sync {
+    return []
 }
 
 /// Whether a call is spelled as one that may never come back, `panic(…)`,

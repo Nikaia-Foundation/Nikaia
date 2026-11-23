@@ -4,7 +4,8 @@
 // `process::is_operand` proves it, or behind a literal piece the program
 // wrote (`"--output=" + name`, `f"-I{name}"`), but not behind a literal
 // `"--"`, which ends only the `-` options (D18 item 6, #2722). A
-// list filled from outside is followed through its pushes, a parameter
+// list filled from outside is followed through its pushes, into a parameter
+// and through a `for` over it, a parameter
 // carries the sink to its caller, a function that checked its result hands
 // back the proof, and `[allow] untrusted-option = true`
 // admits the call, which `--trust` lists.
@@ -14,50 +15,191 @@ use std::process
 
 // The running `nikaia` (`env::current_exe`, ADR-program-path-1 D3).
 fn toolchain() -> String throws {
-    return env::current_exe()?.display() ?? "target/fast/nikaia"
+	return env::current_exe()?.display() ?? "target/fast/nikaia"
 }
 
-fn said(nikaia: String, label: String, manifest: String, body: String, rest: String, verb: Vec[String]) throws {
-    let root = fs::scratch()
-    let tmp = f"{root.path().display()}"
-    fs::create_dir("src", root)
-    fs::write("nikaia.toml", root, f"[package]\nname = \"p\"\nversion = \"0.1.0\"\n{manifest}")
-    fs::write("src/main.nika", root, f"use std::io\nuse std::process\n\nfn main() throws {{\n    let name = io::read_line() ?? \"\"\n{body}}}\n{rest}")
-    let mut args = verb.clone()
-    args.push("src/main.nika")
-    let out = process::run(nikaia, args; dir: tmp.clone(), env: [("RUST_BACKTRACE", "0")])
-    println(f"-- {label}")
-    println(f"exit {out.code}")
-    let mut listing = false
-    for line in f"{out.stdout}{out.stderr}".lines() {
-        if line.starts_with("raw sinks allowed") {
-            listing = true
-        } else if !line.starts_with("    ") {
-            listing = false
-        }
-        if listing || line.contains("NK1308") || line.contains("= help") || line.contains(" --> ") {
-            println(line.replace(tmp, "TMP").trim())
-        }
-    }
+fn said(
+	nikaia: String,
+	label: String,
+	manifest: String,
+	body: String,
+	rest: String,
+	verb: Vec[String],
+) throws {
+	let root = fs::scratch()
+	let tmp = f"{root.path().display()}"
+	fs::create_dir("src", root)
+	fs::write("nikaia.toml", root, f"[package]\nname = \"p\"\nversion = \"0.1.0\"\n{manifest}")
+	fs::write(
+		"src/main.nika",
+		root,
+		f"use std::io\nuse std::process\n\nfn main() throws {{\n    let name = io::read_line() ?? \"\"\n{body}}}\n{rest}",
+	)
+	let mut args = verb.clone()
+	args.push("src/main.nika")
+	let out = process::run(nikaia, args; dir: tmp.clone(), env: [("RUST_BACKTRACE", "0")])
+	println(f"-- {label}")
+	println(f"exit {out.code}")
+	let mut listing = false
+	for line in f"{out.stdout}{out.stderr}".lines() {
+		if line.starts_with("raw sinks allowed") {
+			listing = true
+		} else if !line.starts_with("    ") {
+			listing = false
+		}
+		if listing || line.contains("NK1308") || line.contains("= help") || line.contains(" --> ") {
+			println(line.replace(tmp, "TMP").trim())
+		}
+	}
 }
 
 fn main() throws {
-    let nikaia = toolchain()
-    let check: Vec[String] = ["check"]
-    said(nikaia, "stdin gives an argument", "", "    process::run(\"rm\", [name])\n", "", check)
-    said(nikaia, "proved where it arrives", "", "    if !process::is_operand(name) {\n        process::exit(2)\n    }\n    process::run(\"rm\", [name])\n", "", check)
-    said(nikaia, "run where it is an operand", "", "    if process::is_operand(name) {\n        process::run(\"rm\", [name])\n    }\n", "", check)
-    said(nikaia, "after a literal --", "", "    process::run(\"rm\", [\"-f\", \"--\", name])\n", "", check)
-    said(nikaia, "before a literal --", "", "    process::run(\"rm\", [name, \"--\"])\n", "", check)
-    said(nikaia, "an option the program wrote", "", "    process::run(\"cc\", [\"--output=\" + name, f\"-I{name}\"])\n", "", check)
-    said(nikaia, "a value that leads", "", "    process::run(\"touch\", [name + \".txt\"])\n", "", check)
-    said(nikaia, "a list filled from outside", "", "    let mut args: Vec[String] = [\"-f\"]\n    args.push(name)\n    process::run(\"rm\", args)\n", "", check)
-    said(nikaia, "a list with a literal -- first", "", "    let mut args: Vec[String] = [\"-f\", \"--\"]\n    args.push(name)\n    process::run(\"rm\", args)\n", "", check)
-    said(nikaia, "a list of proved values", "", "    if !process::is_operand(name) {\n        process::exit(2)\n    }\n    let mut args: Vec[String] = [\"-f\"]\n    args.push(name)\n    process::run(\"rm\", args)\n", "", check)
-    said(nikaia, "through a function", "", "    remove(name)\n", "\nfn remove(file: String) throws {\n    process::run(\"rm\", [file])\n}\n", check)
-    said(nikaia, "a function that checked it hands back the proof", "", "    process::run(\"rm\", [checked(name)])\n", "\nfn checked(name: String) -> String {\n    if !process::is_operand(name) {\n        return \"./\" + name\n    }\n    return name\n}\n", check)
-    said(nikaia, "a function that refuses an option hands back the proof", "", "    process::run(\"git\", [\"show\", operand(name)])\n", "\nfn operand(word: String) -> String throws {\n    if !process::is_operand(word) {\n        throw io::IoError::Other(\"an option\")\n    }\n    return word\n}\n", check)
-    said(nikaia, "a function that did not check it hands back none", "", "    process::run(\"rm\", [unchecked(name)])\n", "\nfn unchecked(name: String) -> String {\n    return name.trim().clone()\n}\n", check)
-    said(nikaia, "[allow] untrusted-option", "[allow]\nuntrusted-option = true\n", "    process::run(\"rm\", [name])\n", "", check)
-    said(nikaia, "--trust lists the key", "[allow]\nuntrusted-option = true\n", "    process::run(\"rm\", [name])\n", "", ["check", "--trust"])
+	let nikaia = toolchain()
+	let check: Vec[String] = ["check"]
+	said(nikaia, "stdin gives an argument", "", "    process::run(\"rm\", [name])\n", "", check)
+	said(
+		nikaia,
+		"proved where it arrives",
+		"",
+		"    if !process::is_operand(name) {\n        process::exit(2)\n    }\n    process::run(\"rm\", [name])\n",
+		"",
+		check,
+	)
+	said(
+		nikaia,
+		"proved by a function that never comes back",
+		"",
+		"    if !process::is_operand(name) {\n        refuse(name)\n    }\n    process::run(\"rm\", [name])\n",
+		"\nfn refuse(name: String) throws {\n    println(f\"refused: {name}\")\n    process::exit(2)\n}\n",
+		check,
+	)
+	said(
+		nikaia,
+		"run where it is an operand",
+		"",
+		"    if process::is_operand(name) {\n        process::run(\"rm\", [name])\n    }\n",
+		"",
+		check,
+	)
+	said(
+		nikaia,
+		"after a literal --",
+		"",
+		"    process::run(\"rm\", [\"-f\", \"--\", name])\n",
+		"",
+		check,
+	)
+	said(nikaia, "before a literal --", "", "    process::run(\"rm\", [name, \"--\"])\n", "", check)
+	said(
+		nikaia,
+		"an option the program wrote",
+		"",
+		"    process::run(\"cc\", [\"--output=\" + name, f\"-I{name}\"])\n",
+		"",
+		check,
+	)
+	said(
+		nikaia,
+		"a value that leads",
+		"",
+		"    process::run(\"touch\", [name + \".txt\"])\n",
+		"",
+		check,
+	)
+	said(
+		nikaia,
+		"a list filled from outside",
+		"",
+		"    let mut args: Vec[String] = [\"-f\"]\n    args.push(name)\n    process::run(\"rm\", args)\n",
+		"",
+		check,
+	)
+	said(
+		nikaia,
+		"a list with a literal -- first",
+		"",
+		"    let mut args: Vec[String] = [\"-f\", \"--\"]\n    args.push(name)\n    process::run(\"rm\", args)\n",
+		"",
+		check,
+	)
+	said(
+		nikaia,
+		"a list of proved values",
+		"",
+		"    if !process::is_operand(name) {\n        process::exit(2)\n    }\n    let mut args: Vec[String] = [\"-f\"]\n    args.push(name)\n    process::run(\"rm\", args)\n",
+		"",
+		check,
+	)
+	said(
+		nikaia,
+		"a list of proved values handed to a function",
+		"",
+		"    if !process::is_operand(name) {\n        process::exit(2)\n    }\n    let mut files: Vec[String] = []\n    files.push(name)\n    remove_all(files)\n",
+		"\nfn remove_all(files: Vec[String]) throws {\n    process::run(\"rm\", files)\n}\n",
+		check,
+	)
+	said(
+		nikaia,
+		"each of a list of proved values",
+		"",
+		"    if !process::is_operand(name) {\n        process::exit(2)\n    }\n    let mut files: Vec[String] = []\n    files.push(name)\n    for f in files {\n        process::run(\"rm\", [f.clone()])\n    }\n",
+		"",
+		check,
+	)
+	said(
+		nikaia,
+		"each of a list filled from outside",
+		"",
+		"    let mut files: Vec[String] = []\n    files.push(name)\n    for f in files {\n        process::run(\"rm\", [f.clone()])\n    }\n    remove_all(files)\n",
+		"\nfn remove_all(files: Vec[String]) throws {\n    process::run(\"rm\", files)\n}\n",
+		check,
+	)
+	said(
+		nikaia,
+		"through a function",
+		"",
+		"    remove(name)\n",
+		"\nfn remove(file: String) throws {\n    process::run(\"rm\", [file])\n}\n",
+		check,
+	)
+	said(
+		nikaia,
+		"a function that checked it hands back the proof",
+		"",
+		"    process::run(\"rm\", [checked(name)])\n",
+		"\nfn checked(name: String) -> String {\n    if !process::is_operand(name) {\n        return \"./\" + name\n    }\n    return name\n}\n",
+		check,
+	)
+	said(
+		nikaia,
+		"a function that refuses an option hands back the proof",
+		"",
+		"    process::run(\"git\", [\"show\", operand(name)])\n",
+		"\nfn operand(word: String) -> String throws {\n    if !process::is_operand(word) {\n        throw io::IoError::Other(\"an option\")\n    }\n    return word\n}\n",
+		check,
+	)
+	said(
+		nikaia,
+		"a function that did not check it hands back none",
+		"",
+		"    process::run(\"rm\", [unchecked(name)])\n",
+		"\nfn unchecked(name: String) -> String {\n    return name.trim().clone()\n}\n",
+		check,
+	)
+	said(
+		nikaia,
+		"[allow] untrusted-option",
+		"[allow]\nuntrusted-option = true\n",
+		"    process::run(\"rm\", [name])\n",
+		"",
+		check,
+	)
+	said(
+		nikaia,
+		"--trust lists the key",
+		"[allow]\nuntrusted-option = true\n",
+		"    process::run(\"rm\", [name])\n",
+		"",
+		["check", "--trust"],
+	)
 }

@@ -5,6 +5,8 @@ warning[NK1308]: `name` reaches the start of an argument of `process::run`, whic
 = help: Check it where it arrives: `if !process::is_operand(name) { process::exit(2) }` refuses a leading `-` and `/`, after which it is proved; or, where it names a file, pass it as `"./" + name` or as the path of a root it is joined under (`dir.join(name).path().to_text()`), which start with text the program wrote. If the program means to pass options from outside, `untrusted-option = true` under `[allow]` in the manifest builds it.
 -- proved where it arrives
 exit 0
+-- proved by a function that never comes back
+exit 0
 -- run where it is an operand
 exit 0
 -- after a literal --
@@ -36,6 +38,18 @@ warning[NK1308]: `args` reaches the arguments of `process::run`, each of which t
 = help: Push into `args` only values checked where they arrive, `if !process::is_operand(name) { process::exit(2) }`, which refuses a leading `-` and `/`, or files as `"./" + name` or as the paths of a root they are joined under (`dir.join(name).path().to_text()`). If the program means to pass options from outside, `untrusted-option = true` under `[allow]` in the manifest builds it.
 -- a list of proved values
 exit 0
+-- a list of proved values handed to a function
+exit 0
+-- each of a list of proved values
+exit 0
+-- each of a list filled from outside
+exit 0
+warning[NK1308]: `f.clone()` reaches the start of an argument of `process::run`, which the program may read as an option, and it comes from outside the program.
+--> src/main.nika:9:9
+= help: Check it where it arrives: `if !process::is_operand(f.clone()) { process::exit(2) }` refuses a leading `-` and `/`, after which it is proved; or, where it names a file, pass it as `"./" + f.clone()` or as the path of a root it is joined under (`dir.join(f.clone()).path().to_text()`), which start with text the program wrote. If the program means to pass options from outside, `untrusted-option = true` under `[allow]` in the manifest builds it.
+warning[NK1308]: `files` reaches the arguments of `process::run`, each of which the program may read as an option, through `remove_all`, and it comes from outside the program.
+--> src/main.nika:11:5
+= help: Push into `files` only values checked where they arrive, `if !process::is_operand(name) { process::exit(2) }`, which refuses a leading `-` and `/`, or files as `"./" + name` or as the paths of a root they are joined under (`dir.join(name).path().to_text()`). If the program means to pass options from outside, `untrusted-option = true` under `[allow]` in the manifest builds it.
 -- through a function
 exit 0
 warning[NK1308]: `name` reaches the start of an argument of `process::run`, which the program may read as an option, through `remove`, and it comes from outside the program.

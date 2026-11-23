@@ -1,0 +1,18 @@
+-- written at the call
+exit 0
+-- bound to a name
+exit 0
+-- bound, then joined further
+exit 0
+-- joined under Anywhere
+exit 0
+warning[NK1308]: `name` reaches the start of an argument of `process::run`, which the program may read as an option, and it comes from outside the program.
+--> src/main.nika:11:5
+-- joined under Anywhere, bound
+exit 0
+warning[NK1308]: `name` reaches the start of an argument of `process::run`, which the program may read as an option, and it comes from outside the program.
+--> src/main.nika:12:5
+-- a root of a name from outside
+exit 0
+warning[NK1308]: `name` reaches the start of an argument of `process::run`, which the program may read as an option, and it comes from outside the program.
+--> src/main.nika:12:5
