@@ -409,6 +409,38 @@ impl EmitState {
         if i >= params.len() as i64 { return false; }
         nikaia_std::list::contains(&contract.os_text, &unsafe { nikaia_std::proven::read(&params, (i) as usize) }.0)
     }
+    pub(crate) fn emit_arg_library_variant_text(&self, world: &EmitWorld<'_, '_, '_, '_>, callee: &str, i: i64) -> bool {
+        if !self.on_block_types() { return false; }
+        let mut owner: String = String::from("");
+        let mut variant: String = String::from("");
+        match callee.rsplit_once("::") {
+            None => { return false; },
+            Some((o, v)) => {
+                owner = nikaia_std::block::Text::from(o.to_string());
+                variant = nikaia_std::block::Text::from(v.to_string());
+            },
+        }
+        if self.own_contracts.types.contains_key(&owner) { return false; }
+        for item in world.items.iter() {
+            match &item.node {
+                Item::Enum { name, .. } => {
+                    let name = *name;
+                    if world.words.resolve(name) == owner { return false; }
+                },
+                _ => { },
+            }
+        }
+        let entry = match world.library.types.get(&owner) { Some(__nikaia_value) => __nikaia_value, None => return false };
+        for each in entry.variants.iter() {
+            if each.name == variant && each.positional && i < each.holds.len() as i64 {
+                return match &unsafe { nikaia_std::proven::read(&each.holds, (i) as usize) }.ty {
+                    Ty::Named { name, args, view } => { let view = *view; name == "String" && args.is_empty() && !view },
+                    _ => false,
+                };
+            }
+        }
+        false
+    }
     pub(crate) fn emit_arg_opening(&self, world: &EmitWorld<'_, '_, '_, '_>, callee: &str, method_callee: Option<&str>, i: i64) -> String {
         let key = nikaia_std::index::or(method_callee, || std::convert::AsRef::<str>::as_ref(callee));
         if self.own_contracts.functions.contains_key(key) {
@@ -474,6 +506,8 @@ impl EmitState {
             if i > 0 { out.push(", "); }
             let os_text = self.emit_arg_os_text(world, callee, (method_callee).as_deref(), i);
             if os_text { out.push("std::ffi::OsStr::new("); }
+            let rust_text = method_callee.is_none() && self.emit_arg_library_variant_text(world, callee, i);
+            if rust_text { out.push("::core::convert::Into::into("); }
             if hoisted.contains(nikaia_std::index::AsKey::as_key(&i)) {
                 let mut one = EmitOut::empty();
                 self.emit_core_argument(world, walk, &mut one, host, callee, (method_callee).as_deref(), arg, i, &boxed_mask, &boxed_built, &part_counts, takes_a_handle, depth, flow, scope)?;
@@ -482,6 +516,7 @@ impl EmitState {
                 lets.push("; ");
                 out.push(&format!("__nikaia_arg{}", i));
             } else { self.emit_core_argument(world, walk, out, host, callee, (method_callee).as_deref(), arg, i, &boxed_mask, &boxed_built, &part_counts, takes_a_handle, depth, flow, scope)?; }
+            if rust_text { out.push(")"); }
             if os_text { out.push(")"); }
             i = unsafe { nikaia_std::proven::add::<i64>(i, 1) };
         }

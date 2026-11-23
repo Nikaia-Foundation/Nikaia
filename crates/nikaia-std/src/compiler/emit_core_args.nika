@@ -585,6 +585,51 @@ impl EmitState {
         return contract.os_text.contains(params[i].0)
     }
 
+    /// Whether argument `i` of `callee` is the `String` part of a variant of an
+    /// enum `std` declares in Rust (`io::IoError::Other(String)`, its ledger's
+    /// `variants`): on the block types that part is Rust's `String` in some
+    /// (`io::IoError`) and the block's `Text` in others (`process::Input`),
+    /// and the ledger says `String` for both, so the text goes through `Into`,
+    /// which the field's type settles (ADR-327 D8, #490). An enum this program
+    /// declares holds the block's own text and is not one.
+    fn emit_arg_library_variant_text(ref self, world: ref EmitWorld, callee: ref String, i: i64) -> bool {
+        if !self.on_block_types() {
+            return false
+        }
+        let mut owner: String = ""
+        let mut variant: String = ""
+        match callee.rsplit_once("::") {
+            null => { return false },
+            (o, v) => {
+                owner = o.clone()
+                variant = v.clone()
+            },
+        }
+        if self.own_contracts.types.contains_key(owner) {
+            return false
+        }
+        for item in world.items {
+            match item.node {
+                Item::Enum { name, .. } => {
+                    if world.words.resolve(name) == owner {
+                        return false
+                    }
+                },
+                else => {},
+            }
+        }
+        let entry = world.library.types.get(owner) ?? return false
+        for each in entry.variants {
+            if each.name == variant && each.positional && i < each.holds.len() {
+                return match each.holds[i].ty {
+                    Ty::Named { name, args, view } => name == "String" && args.len() == 0 && !view,
+                    else => false,
+                }
+            }
+        }
+        return false
+    }
+
     /// The opening a lent view gets inside the option a nullable parameter is:
     /// the declaration's own where this unit has the callee, else the one every
     /// method of that name agrees on (#462). Empty where there is none. **A
@@ -675,6 +720,10 @@ impl EmitState {
             if os_text {
                 out.push("std::ffi::OsStr::new(")
             }
+            let rust_text = method_callee == null && self.emit_arg_library_variant_text(world, callee, i)
+            if rust_text {
+                out.push("::core::convert::Into::into(")
+            }
             if hoisted.contains(i) {
                 let mut one = EmitOut::empty()
                 self.emit_core_argument(world, walk, one, host, callee, method_callee, arg, i, boxed_mask, boxed_built, part_counts, takes_a_handle, depth, flow, scope)
@@ -684,6 +733,9 @@ impl EmitState {
                 out.push(f"__nikaia_arg{i}")
             } else {
                 self.emit_core_argument(world, walk, out, host, callee, method_callee, arg, i, boxed_mask, boxed_built, part_counts, takes_a_handle, depth, flow, scope)
+            }
+            if rust_text {
+                out.push(")")
             }
             if os_text {
                 out.push(")")

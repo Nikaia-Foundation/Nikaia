@@ -1,0 +1,37 @@
+// A block's text handed to a variant of `io::IoError` that holds a `String`
+// crosses into Rust's `String` (ADR-327 D8): an f-string, a literal and a
+// variable, each thrown and caught. A variant whose text part is the block's
+// own (`process::Input::Text`) takes the same f-string unconverted.
+use std::io
+use std::process
+
+fn refuse(word: String) -> String throws {
+	if word == "" {
+		throw io::IoError::Other(f"refused: {word.len()} bytes")
+	}
+	if word == "x" {
+		throw io::IoError::NotText("not text")
+	}
+	if word == "y" {
+		let said = f"named {word}"
+		throw io::IoError::Other(said)
+	}
+	return word
+}
+
+fn main() throws {
+	for word in ["", "x", "y", "ok"] {
+		let got = refuse(word) catch {
+			match error {
+				io::IoError::Other(message) => println(f"other: {message}"),
+				io::IoError::NotText(message) => println(f"not text: {message}"),
+				else => println("else"),
+			}
+			continue
+		}
+		println(got)
+	}
+	let word = "piped"
+	let out = process::run("cat", []; stdin: process::Input::Text(f"{word} in\n"))
+	print(out.stdout)
+}
