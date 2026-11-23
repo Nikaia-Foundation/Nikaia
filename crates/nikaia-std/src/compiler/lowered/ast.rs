@@ -112,6 +112,7 @@ pub enum Expr {
     Continue(node_id::NodeId),
     LitFloat(String, node_id::NodeId),
     Index { base: nikaia_std::block::Boxed<Expr>, index: nikaia_std::block::Boxed<Expr>, id: node_id::NodeId },
+    TypeArgument(Type, node_id::NodeId),
     Cast { expr: nikaia_std::block::Boxed<Expr>, ty: Type, id: node_id::NodeId },
     Coalesce { value: nikaia_std::block::Boxed<Expr>, fallback: nikaia_std::block::Boxed<Expr>, id: node_id::NodeId },
     Asm { bindings: Vec<AsmBinding>, code: String, id: node_id::NodeId },
@@ -164,6 +165,7 @@ pub fn id_of(expr: &Expr) -> u32 {
         Expr::LitFloat(_, id) => { let id = *id; id.get() },
         Expr::Unsafe(_, id) => { let id = *id; id.get() },
         Expr::LitNull(id) => { let id = *id; id.get() },
+        Expr::TypeArgument(_, id) => { let id = *id; id.get() },
         Expr::Break(id) => { let id = *id; id.get() },
         Expr::Continue(id) => { let id = *id; id.get() },
     }

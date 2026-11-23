@@ -2924,6 +2924,8 @@ impl EmitState {
             for part in parts {
                 match part {
                     Expr::Variable(name, _) => types.push(emit_text(world, name).clone()),
+                    // A type no expression spells, `id[i64?](null)` (#1079).
+                    Expr::TypeArgument(ty, _) => types.push(self.emit_core_ty(world, walk, host.crossings_are_possible(), host.overlaps_user_code(), ty, EmitLifetimes::Elided)),
                     else => return false,
                 }
             }
@@ -2945,9 +2947,10 @@ impl EmitState {
     /// **`path::f[T](…)`, the type parameters of a function reached by a
     /// path** (ADR-330 D9, ADR-grammar-typed-read-v1 D11): `::<T>`, written after the
     /// callee's name, where `base` is a path to a function of a ledger whose
-    /// signature names one type parameter and every type written is a name;
+    /// signature names one type parameter and every type written is a name or a
+    /// type no expression spells (#1079);
     /// `null` where the brackets are an index.
-    fn emit_call_path_types(ref self, world: ref EmitWorld, base: ref Expr, index: ref Expr) -> String? {
+    fn emit_call_path_types[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, host: ref H, base: ref Expr, index: ref Expr) -> String? {
         let segments = match base {
             Expr::Path(segments, _) => segments,
             else => return null,
@@ -2972,6 +2975,7 @@ impl EmitState {
             match part {
                 Expr::Variable(name, _) => types.push(emit_text(world, name).clone()),
                 Expr::Path(named, _) => types.push(unaliased_in(world.aliases, emit_arg_joined(world, named))),
+                Expr::TypeArgument(ty, _) => types.push(self.emit_core_ty(world, walk, host.crossings_are_possible(), host.overlaps_user_code(), ty, EmitLifetimes::Elided)),
                 else => return null,
             }
         }

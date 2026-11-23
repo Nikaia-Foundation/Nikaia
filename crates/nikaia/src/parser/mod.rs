@@ -4911,6 +4911,18 @@ grammar! {
                     Expr::Tuple(args, NodeId::parsed())
                 }
             }
+          // A type no expression spells (`id[i64?](null)`, ADR-330 D9,
+          // #1079): tried after the expressions, so `f[T](…)` and
+          // `list[i](…)` keep their parse.
+          | same_line "[" tys:type_refs "]" peek("(") -> {
+                let mut args: Vec<Expr> =
+                    tys.into_iter().map(|ty| Expr::TypeArgument(ty, NodeId::parsed())).collect();
+                if args.len() == 1 {
+                    args.pop().unwrap()
+                } else {
+                    Expr::Tuple(args, NodeId::parsed())
+                }
+            }
 
         rule bool_lit -> Expr =
             KW_TRUE -> { Expr::LitBool(true, NodeId::parsed()) }

@@ -25,7 +25,7 @@ signature = "(said: String) -> Vec[String]"
 
 [fn."examples_under"]
 throws = ["io::IoError"]
-panics = true
+panics = false
 places = true
 provenance = "untrusted"
 views = ["dir: borrowed"]
@@ -33,7 +33,7 @@ signature = "(dir: String) -> Vec[Block]"
 
 [fn."fenced"]
 sync = "inferred"
-panics = true
+panics = false
 places = true
 touches = []
 views = ["page: borrowed", "text: borrowed"]

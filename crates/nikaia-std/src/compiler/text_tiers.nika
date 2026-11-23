@@ -4398,6 +4398,15 @@ fn tier_struct_of(expr: ref Expr, ask: ref TierAsk, mut walk: TierWalk) -> Strin
         // **A struct a function of the program returns** (#803): its fields
         // read through the name it is bound to are that struct's.
         Expr::Call { func, .. } => called_struct(func, ask, walk),
+        // **A copy of one is of its struct** (#1242): `s.clone() with { … }`
+        // over a `ref S` meets `S`'s fields, as `s with { … }` does.
+        Expr::MethodCall { receiver, method, args, .. } => {
+            let called = ask.names.resolve(method)
+            if args.len() != 0 || (called != "clone" && called != "to_owned") {
+                return null
+            }
+            tier_struct_of(receiver, ask, walk)
+        }
         else => null,
     }
 }
@@ -6089,8 +6098,16 @@ fn tier_expr(expr: ref Expr, ask: ref TierAsk, mut walk: TierWalk) -> Kinds {
             for field in fields {
                 let value = field.value ?? continue
                 let kinds = tier_expr(value, ask, walk)
-                let of = owner?.clone() ?? continue
+                // **A field this file does not declare keeps what it takes**
+                // (#1242), as a literal's does (`tier_struct_field`).
+                let of: String = owner?.clone() ?? ""
                 let key = (of.clone(), ask.names.resolve(field.name).clone())
+                if of == "" || !walk.declared.fields.contains_key(key) {
+                    if kinds.still {
+                        kept_unseen(value, ask, walk)
+                    }
+                    continue
+                }
                 let found = walk.declared.fields[key]?.clone() ?? continue
                 let into = TextOwner::Field(of.clone(), ask.names.resolve(field.name).clone())
                 flow_value(going_into(into, found.ty, [], false), value, kinds, ask, walk)

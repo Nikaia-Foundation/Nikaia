@@ -140,6 +140,7 @@ pub fn names_in(expr: &Expr, words: &winnow_grammar::InternerContext, out: &mut 
         Expr::LitFloat(_, _) => { },
         Expr::LitBool(_, _) => { },
         Expr::LitNull(_) => { },
+        Expr::TypeArgument(_, _) => { },
         Expr::LitChar(_, _) => { },
         Expr::LitStr { .. } => { },
     }
