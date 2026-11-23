@@ -157,6 +157,11 @@ pub fn bounds_proven(
 		starts.push(body.span.start as i64)
 	}
 	let order = derived_order(context.around, starts)
+	// How often a derived precondition was added so far, and of each body
+	// walked, its place, the rules it started from and that count then
+	// (#2777).
+	let mut added = 0
+	let mut started: Vec[(i64, collections::BTreeMap[String, Vec[String]], i64)] = []
 	for k in order {
 		let item = bodies[k]
 		match item.node {
@@ -188,7 +193,38 @@ pub fn bounds_proven(
 				derived_note(context.around, walked)
 				if context.around.derived.entry.len() != entries {
 					context.around.held.clear()
+					added += 1
 				}
+				if !walked.rules_used.is_empty() {
+					started.push((k, walked.rules_used.clone(), added))
+				}
+				bp_add(out, walked)
+			},
+			else => {},
+		}
+	}
+	// **A body walked before the preconditions its type's rules need were
+	// derived** (#2777): callers come first, so a method's rules may hold
+	// only by a precondition its callees derive later (`pick` before
+	// `heap_pop`, whose result is a position only where the heap is not
+	// empty). Such a body is walked once more with the rules that hold now,
+	// where they differ from those it started from; what either walk proved
+	// stands, and the second notes no derived precondition, since the
+	// callees are walked already.
+	for (k, used, then) in started {
+		if then == added || !bp_rules_changed(used, context, program, words, ask) {
+			continue
+		}
+		let item = bodies[k]
+		match item.node {
+			Item::Fn { name, args, body, .. } => {
+				let function = bp_name(name, words)
+				let at = item.span.start as i64
+				let counters = nonnegative_locals(body)
+				context.owner = owners[k].clone()
+				let walked = bounds_aggressive(args, body, bp_names(counters, words), context, program, words, fn(arena, known, goal) { ask_in(function, at, arena, known, goal) })
+				record(walked.loops)
+				rules_checked_keep(context, walked.checked)
 				bp_add(out, walked)
 			},
 			else => {},
@@ -314,6 +350,33 @@ fn bp_given(found: ref BmMatched, ranges: ref collections::BTreeMap[String, Rang
 		out.insert(bound.clone(), range.clone())
 	}
 	return out
+}
+
+/// Whether the rules that hold now of a type a body's walk started from
+/// differ from `used`, those it started from (by `rules_key`, #2777); what
+/// holds of a type no body found since is found here, for the next ones.
+fn bp_rules_changed(
+	used: ref collections::BTreeMap[String, Vec[String]],
+	mut context: BoundsContext,
+	program: ref Program,
+	words: ref winnow_grammar::InternerContext,
+	ask: fn(ref logic::TermArena, ref Vec[i64], i64) -> bool sync,
+) -> bool {
+	let mut changed = false
+	for (of, keys) in used {
+		if !context.around.held.contains_key(of) {
+			let mut found: collections::BTreeMap[String, RulesChecked] = collections::BTreeMap()
+			let holding = rules_holding(of, context, program, words, ask, found)
+			rules_checked_keep(context, found)
+			context.around.held.insert(of.clone(), holding)
+		}
+		let mut now: Vec[String] = []
+		for rule in context.around.held.get(of)?.clone() ?? [] {
+			now.push(rules_key(rule))
+		}
+		changed = changed || now != keys
+	}
+	return changed
 }
 
 /// What one walk proved, added to `out`.

@@ -63,6 +63,21 @@ pub(crate) fn rules_candidates(program: &Program, beside: &[&BoundsBeside], cont
         a_program = a_program || other.has_main;
         for name in other.changed.iter() { lost.insert(rules_changed_name(name, &returns)); }
     }
+    let mut mutating = fields_mutating(program, words);
+    for other in beside.iter() {
+        let other = *other;
+        for (f, changes) in other.mutating.iter() {
+            let changes = nikaia_std::num::value(changes);
+            mutating.insert(nikaia_std::block::Text::from(f.to_string()), changes || nikaia_std::index::or(mutating.get(f), || false));
+        }
+    }
+    for other in beside.iter() {
+        let other = *other;
+        for pair in other.handed.iter() {
+            let parts: Vec<&str> = pair.split('|').collect::<Vec<_>>();
+            if parts.len() != 2 || nikaia_std::index::or(mutating.get(*unsafe { nikaia_std::proven::read(&parts, (0) as usize) }), || true) { lost.insert(nikaia_std::block::Text::from(match parts.last().copied() { Some(__nikaia_value) => __nikaia_value, None => continue }.to_string())); }
+        }
+    }
     let mut lists: collections::BTreeMap<String, Vec<String>> = collections::BTreeMap::new();
     let mut whole: collections::BTreeSet<String> = collections::BTreeSet::new();
     let mut nested: collections::BTreeSet<String> = collections::BTreeSet::new();

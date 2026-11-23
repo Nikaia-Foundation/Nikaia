@@ -143,6 +143,25 @@ fn rules_candidates(
             lost.insert(rules_changed_name(name, returns))
         }
     }
+    // A field of a value of a type a file beside cannot tell, handed to a
+    // free function by its name, is changed only where a function of that
+    // name in the package takes a parameter `mut`, or none is declared in
+    // it (#2777): `sv_delta_cmp(had.value, side.value)` with `ref`
+    // parameters changes no field `value`.
+    let mut mutating = fields_mutating(program, words)
+    for other in beside {
+        for (f, changes) in other.mutating {
+            mutating.insert(f.clone(), changes || (mutating.get(f) ?? false))
+        }
+    }
+    for other in beside {
+        for pair in other.handed {
+            let parts: Vec[ref String] = pair.split("|").collect()
+            if parts.len() != 2 || (mutating.get(parts[0]) ?? true) {
+                lost.insert((parts.last() ?? continue).clone())
+            }
+        }
+    }
     // The private list fields of each struct that is not generic, and of
     // those, the lists of whole numbers (`T.f`) and what a literal leaving
     // a field out builds.

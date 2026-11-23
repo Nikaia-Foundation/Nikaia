@@ -603,6 +603,12 @@ struct FieldsScan {
 	/// reads it is not here. One reached through `self` in an `impl`, or
 	/// given in a literal, is named with its type (`Row.cols`).
 	changed: collections::BTreeSet[String],
+	/// Recording, each field of a value whose type the scan cannot tell,
+	/// handed as it is to a free function called by its name, as
+	/// `f|field` (#2777): [`rules_candidates`] takes it as changed only
+	/// where a function `f` of the package takes a `mut` parameter, or
+	/// none is declared there.
+	handed: collections::BTreeSet[String],
 	/// The type of the `impl` scanned, `""` outside one.
 	self_type: String,
 	/// Each parameter of the function scanned, with the last name of its
@@ -641,6 +647,12 @@ pub struct BoundsBeside {
 	/// (#1755): a found rule over that field no longer holds of it. One
 	/// written through a local bound to a call is `f().field` (#1930).
 	pub changed: collections::BTreeSet[String],
+	/// Each field of a value of a type it cannot tell, handed to a free
+	/// function by its name, as `f|field` (`FieldsScan.handed`, #2777).
+	pub handed: collections::BTreeSet[String],
+	/// Each free function the file declares, and whether it takes a
+	/// parameter `mut` ([`fields_mutating`]).
+	pub mutating: collections::BTreeMap[String, bool],
 	/// The last name of the type each function of the file declares as its
 	/// result, where that is one plain type ([`fields_returns`]).
 	pub returns: collections::BTreeMap[String, String],
@@ -660,6 +672,7 @@ pub fn bounds_beside(program: ref Program, words: ref winnow_grammar::InternerCo
 		recording: true,
 		lost: collections::BTreeSet(),
 		changed: collections::BTreeSet(),
+		handed: collections::BTreeSet(),
 		self_type: "",
 		typed: collections::BTreeMap(),
 		calls: collections::BTreeMap(),
@@ -676,7 +689,27 @@ pub fn bounds_beside(program: ref Program, words: ref winnow_grammar::InternerCo
 	for item in program.items {
 		fields_item(item, words, scan, ignored)
 	}
-	return BoundsBeside { names, declared, reached, has_main, lost: scan.lost, changed: scan.changed, returns: fields_returns(program, words) }
+	return BoundsBeside { names, declared, reached, has_main, lost: scan.lost, changed: scan.changed, handed: scan.handed, mutating: fields_mutating(program, words), returns: fields_returns(program, words) }
+}
+
+/// Each free function `program` declares, and whether it takes a parameter
+/// `mut`: only such a one may change a field handed to it (#2777).
+fn fields_mutating(program: ref Program, words: ref winnow_grammar::InternerContext) -> collections::BTreeMap[String, bool] {
+	let mut out: collections::BTreeMap[String, bool] = collections::BTreeMap()
+	for item in program.items {
+		match item.node {
+			Item::Fn { name, args, .. } => {
+				let named = name ?? continue
+				let mut changes = false
+				for arg in args {
+					changes = changes || arg.mutable
+				}
+				out.insert(words.resolve(named).clone(), changes)
+			},
+			else => {},
+		}
+	}
+	return out
 }
 
 /// The last name of `ty` where it is one plain type, not generic, optional
@@ -865,6 +898,7 @@ fn fields_seen(
 		recording: false,
 		lost: collections::BTreeSet(),
 		changed: collections::BTreeSet(),
+		handed: collections::BTreeSet(),
 		self_type: "",
 		typed: collections::BTreeMap(),
 		calls: collections::BTreeMap(),
@@ -1064,21 +1098,26 @@ fn fields_mark(base: ref Expr, name: ref String, words: ref winnow_grammar::Inte
 	if !scan.recording {
 		return
 	}
+	let named = fields_named(base, name, words, scan)
+	scan.changed.insert(if named.is_empty() { name.clone() } else { named })
+}
+
+/// The field `name` of `base` named with its type (`Row.cols`), or with
+/// the function a local holding it was bound to a call of (`bag().values`);
+/// `""` where the scan cannot tell.
+fn fields_named(base: ref Expr, name: ref String, words: ref winnow_grammar::InternerContext, scan: ref FieldsScan) -> String {
 	match base {
 		Expr::Variable(v, _) => {
 			if words.resolve(v) == "self" && !scan.self_type.is_empty() {
-				scan.changed.insert(f"{scan.self_type}.{name}")
-				return
+				return f"{scan.self_type}.{name}"
 			}
 			let ty = scan.typed.get(words.resolve(v))
 			if ty != null {
-				scan.changed.insert(f"{ty ?? ""}.{name}")
-				return
+				return f"{ty ?? ""}.{name}"
 			}
 			let called = scan.calls.get(words.resolve(v))
 			if called != null {
-				scan.changed.insert(f"{called ?? ""}().{name}")
-				return
+				return f"{called ?? ""}().{name}"
 			}
 		},
 		else => {
@@ -1087,23 +1126,34 @@ fn fields_mark(base: ref Expr, name: ref String, words: ref winnow_grammar::Inte
 			// next: Vec[LoopPath]` is `LoopPath.values`.
 			let of = fields_type_of(base, words, scan)
 			if !of.is_empty() {
-				scan.changed.insert(f"{of}.{name}")
-				return
+				return f"{of}.{name}"
 			}
 		},
 	}
-	scan.changed.insert(name.clone())
+	return ""
 }
 
 /// Recording, each field handed to a call as it is: a `mut` parameter
-/// may change it there.
-fn fields_handed(args: ref Vec[Expr], words: ref winnow_grammar::InternerContext, mut scan: FieldsScan) {
+/// may change it there. Where the call names a free function (`callee`,
+/// `""` for any other) and the scan cannot tell the field's type, it goes
+/// into `handed` with the callee instead (#2777).
+fn fields_handed(args: ref Vec[Expr], callee: ref String, words: ref winnow_grammar::InternerContext, mut scan: FieldsScan) {
 	if !scan.recording {
 		return
 	}
 	for arg in args {
 		match arg {
-			Expr::Field { base, name, .. } => fields_mark(base, words.resolve(name), words, scan),
+			Expr::Field { base, name, .. } => {
+				let field = words.resolve(name)
+				let named = fields_named(base, field, words, scan)
+				if !named.is_empty() {
+					scan.changed.insert(named)
+				} else if !callee.is_empty() {
+					scan.handed.insert(f"{callee}|{field}")
+				} else {
+					scan.changed.insert(field.clone())
+				}
+			},
 			else => {},
 		}
 	}
@@ -1269,7 +1319,7 @@ fn fields_expr(expr: ref Expr, words: ref winnow_grammar::InternerContext, mut s
 				},
 				else => fields_expr(receiver, words, scan),
 			}
-			fields_handed(args, words, scan)
+			fields_handed(args, "", words, scan)
 			fields_all(args, words, scan)
 		},
 		Expr::SafeMethod { receiver, args, .. } => {
@@ -1313,7 +1363,11 @@ fn fields_expr(expr: ref Expr, words: ref winnow_grammar::InternerContext, mut s
 		},
 		Expr::Call { func, args, .. } => {
 			fields_expr(func, words, scan)
-			fields_handed(args, words, scan)
+			let callee = match func {
+				Expr::Variable(f, _) => words.resolve(f).clone(),
+				else => "",
+			}
+			fields_handed(args, callee, words, scan)
 			fields_all(args, words, scan)
 		},
 		Expr::Match { value, arms, .. } => {

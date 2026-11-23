@@ -87,6 +87,7 @@ pub struct BoundsProven {
     pub trace: Vec<String>,
     pub held: collections::BTreeMap<String, Vec<BoundsRule>>,
     pub checked: collections::BTreeMap<String, RulesChecked>,
+    pub rules_used: collections::BTreeMap<String, Vec<String>>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -209,7 +210,7 @@ pub(crate) fn most_held() -> i64 { 256 }
 
 pub(crate) fn call_depth() -> i64 { 4 }
 
-pub(crate) fn no_proofs() -> BoundsProven { BoundsProven { indices: collections::BTreeSet::new(), arithmetic: collections::BTreeSet::new(), nonnegative: collections::BTreeSet::new(), negations: collections::BTreeSet::new(), calls: collections::BTreeMap::new(), loops: collections::BTreeMap::new(), derived: collections::BTreeMap::new(), fields: collections::BTreeMap::new(), fields_lost: collections::BTreeSet::new(), returned: None, trace: vec![], held: collections::BTreeMap::new(), checked: collections::BTreeMap::new() } }
+pub(crate) fn no_proofs() -> BoundsProven { BoundsProven { indices: collections::BTreeSet::new(), arithmetic: collections::BTreeSet::new(), nonnegative: collections::BTreeSet::new(), negations: collections::BTreeSet::new(), calls: collections::BTreeMap::new(), loops: collections::BTreeMap::new(), derived: collections::BTreeMap::new(), fields: collections::BTreeMap::new(), fields_lost: collections::BTreeSet::new(), returned: None, trace: vec![], held: collections::BTreeMap::new(), checked: collections::BTreeMap::new(), rules_used: collections::BTreeMap::new() } }
 
 pub(crate) fn nothing_changed() -> BoundsChanged { BoundsChanged { values: collections::BTreeSet::new(), lengths: collections::BTreeSet::new(), parts: collections::BTreeSet::new(), jumps: collections::BTreeSet::new(), drops: collections::BTreeSet::new(), falls: collections::BTreeSet::new(), bare_falls: collections::BTreeSet::new(), elements: collections::BTreeSet::new() } }
 
@@ -292,6 +293,15 @@ pub(crate) fn bounds_rounds_settled(walk: &mut BoundsWalk, found_held: &collecti
     if !walk.return_params.is_empty() { walk.proven.returned = bounding_returns_found(&walk, body, words); }
     walk.proven.held = found_held.copy_owned();
     walk.proven.checked = found_checked.copy_owned();
+    for (_, of) in walk.rule_roots.iter() { walk.proven.rules_used.insert(nikaia_std::block::Text::from(of.to_string()), vec![]); }
+    for rule in walk.rules.iter() {
+        let mut keys = match match walk.proven.rules_used.get(&rule.owner) {
+            Some(__nikaia_it) => Some(__nikaia_it.clone()),
+            None => None,
+        } { Some(__nikaia_value) => __nikaia_value, None => continue };
+        keys.push(rules_key(rule));
+        walk.proven.rules_used.insert(nikaia_std::block::Text::from(rule.owner.to_string()), keys);
+    }
     walk.proven.clone()
 }
 

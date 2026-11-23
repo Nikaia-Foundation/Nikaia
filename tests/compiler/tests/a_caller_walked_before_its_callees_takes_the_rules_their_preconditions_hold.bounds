@@ -1,0 +1,12 @@
+bounds in tests/a_caller_walked_before_its_callees_takes_the_rules_their_preconditions_hold.nika: 7 indexes, 7 proved; 2 operations, 2 proved
+    16  self.phase[…]         proved
+    26  self.phase.len() - 1  proved
+    30  self.place[…]         proved
+    35  self.heap[0]          proved
+    36  self.heap.len() - 1   proved
+    37  self.heap[last]       proved
+    38  self.heap[0]          proved
+    39  self.place[…]         proved
+    41  self.place[…]         proved
+  derived  insert: v <= self.place.len(), v < self.place.len(), proved at the calls on lines 26
+  derived  pop: 0 < self.heap.len(), proved at the calls on lines 15

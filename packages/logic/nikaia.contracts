@@ -716,7 +716,7 @@ signature = "(ref self) -> Vec[bool]"
 
 [fn."SvSat::pick"]
 sync = "inferred"
-panics = true
+panics = false
 touches = []
 signature = "(ref mut self) -> u32?"
 

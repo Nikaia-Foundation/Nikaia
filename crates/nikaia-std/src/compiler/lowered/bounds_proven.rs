@@ -27,7 +27,7 @@ pub fn bounds_proven(program: &Program, words: &winnow_grammar::InternerContext,
     bounds_fields(&mut context, program, words, &mut *ask);
     bounds_returns(&mut context, program, words, &mut *ask);
     let mut bodies: Vec<&Spanned<Item>> = vec![];
-    let mut owners: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block); #[allow(unused_mut, clippy::redundant_locals)] let mut out = out;
+    #[allow(unused_mut)] let mut owners: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block); #[allow(unused_mut, clippy::redundant_locals)] let mut out = out;
     for item in program.items.iter() {
         match &item.node {
             Item::Fn { .. } => {
@@ -49,6 +49,8 @@ pub fn bounds_proven(program: &Program, words: &winnow_grammar::InternerContext,
         starts.push(body.span.start as i64);
     }
     let order = derived_order(&context.around, &starts);
+    let mut added: i64 = 0;
+    let mut started: Vec<(i64, collections::BTreeMap<String, Vec<String>>, i64)> = nikaia_std::block::list(nikaia_std::block::Place::Block); #[allow(unused_mut, clippy::redundant_locals)] let mut out = out; #[allow(unused_mut, clippy::redundant_locals)] let mut owners = owners;
     for k in order.iter() {
         let k = nikaia_std::num::value(k);
         let item = *nikaia_std::index::get(&bodies, nikaia_std::index::at(k));
@@ -67,7 +69,30 @@ pub fn bounds_proven(program: &Program, words: &winnow_grammar::InternerContext,
                 rules_checked_keep(&mut context, &walked.checked);
                 let entries = context.around.derived.entry.len() as i64;
                 derived_note(&mut context.around, &walked);
-                if (context.around.derived.entry.len() as i64) != entries { context.around.held.clear(); }
+                if (context.around.derived.entry.len() as i64) != entries {
+                    context.around.held.clear();
+                    added += 1;
+                }
+                if !walked.rules_used.is_empty() { started.push((k, walked.rules_used.copy_owned(), added)); }
+                bp_add(&mut out, &walked);
+            },
+            _ => { },
+        }
+    }
+    for (k, used, then) in started.iter() {
+        let k = nikaia_std::num::value(k);let then = nikaia_std::num::value(then);
+        if then == added || !bp_rules_changed(used, &mut context, program, words, &mut *ask) { continue; }
+        let item = *nikaia_std::index::get(&bodies, nikaia_std::index::at(k));
+        match &item.node {
+            Item::Fn { name, args, body, .. } => {
+                let name = *name;
+                let function = bp_name(name, words);
+                let at = item.span.start as i64;
+                let counters = nonnegative_locals(body);
+                context.owner = nikaia_std::block::Text::from((*nikaia_std::index::get(&owners, nikaia_std::index::at(k))).to_string());
+                let walked = bounds_aggressive(args, body, bp_names(&counters, words), &context, program, words, &mut |arena, known, goal| { ask_in(&function, at, arena, known, goal) });
+                record(&walked.loops);
+                rules_checked_keep(&mut context, &walked.checked);
                 bp_add(&mut out, &walked);
             },
             _ => { },
@@ -160,6 +185,25 @@ pub(crate) fn bp_given(found: &BmMatched, ranges: &collections::BTreeMap<String,
         out.insert(nikaia_std::block::Text::from(bound.to_string()), range.clone());
     }
     out
+}
+
+pub(crate) fn bp_rules_changed(used: &collections::BTreeMap<String, Vec<String>>, context: &mut BoundsContext, program: &Program, words: &winnow_grammar::InternerContext, ask: &mut impl FnMut(&logic::TermArena, &[i64], i64) -> bool) -> bool {
+    let mut changed = false;
+    for (of, keys) in used.iter() {
+        if !context.around.held.contains_key(of) {
+            let mut found: collections::BTreeMap<String, RulesChecked> = collections::BTreeMap::new();
+            let holding = rules_holding(of, &context, program, words, &mut *ask, &mut found);
+            rules_checked_keep(context, &found);
+            context.around.held.insert(nikaia_std::block::Text::from(of.to_string()), holding);
+        }
+        let mut now: Vec<String> = vec![];
+        for rule in nikaia_std::index::or(match context.around.held.get(of) {
+            Some(__nikaia_it) => Some(__nikaia_it.clone()),
+            None => None,
+        }, || vec![].into()) { now.push(rules_key(&rule)); }
+        changed = changed || now != *keys;
+    }
+    changed
 }
 
 pub(crate) fn bp_add(out: &mut BoundsAllProven, walked: &BoundsProven) {

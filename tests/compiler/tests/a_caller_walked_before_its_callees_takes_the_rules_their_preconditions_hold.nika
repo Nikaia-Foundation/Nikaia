@@ -1,0 +1,51 @@
+// A method walked before its callees (ADR-391 D1, callers first) takes
+// the rules that hold once the callees' derived preconditions are in
+// (#2777): `pop` hands back a position of `phase` only where the heap is
+// not empty, which `pick`'s call proves.
+
+struct Queue {
+	heap: Vec[u32],
+	place: Vec[i64],
+	phase: Vec[bool],
+}
+
+impl Queue {
+	pub fn pick(ref mut self) -> u32? {
+		while self.heap.len() > 0 {
+			let v = self.pop()
+			if self.phase[v as i64] {
+				return v
+			}
+		}
+		return null
+	}
+
+	pub fn add(ref mut self) {
+		self.place.push(-1)
+		self.phase.push(false)
+		self.insert((self.phase.len() - 1) as u32)
+	}
+
+	fn insert(ref mut self, v: u32) {
+		self.place[v as i64] = self.heap.len()
+		self.heap.push(v)
+	}
+
+	fn pop(ref mut self) -> u32 {
+		let top = self.heap[0]
+		let last = self.heap.len() - 1
+		let moved = self.heap[last]
+		self.heap[0] = moved
+		self.place[moved as i64] = 0
+		self.heap.truncate(last)
+		self.place[top as i64] = -1
+		return top
+	}
+}
+
+fn main() throws {
+	let mut q = Queue { heap: [], place: [], phase: [] }
+	q.add()
+	q.add()
+	println(f"{q.pick() ?? 9}")
+}

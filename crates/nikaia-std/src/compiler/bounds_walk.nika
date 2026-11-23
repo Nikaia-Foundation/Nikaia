@@ -236,6 +236,10 @@ pub struct BoundsProven {
 	/// #2396), not given in `context.around.checked`: kept by
 	/// `bounds_proven` for the next bodies.
 	pub checked: collections::BTreeMap[String, RulesChecked],
+	/// **The rules the walk started from**, by `rules_key`, of each type
+	/// it holds a value of (`rules_settle`'s roots): `bounds_proven` walks
+	/// the body again where they changed since (#2777).
+	pub rules_used: collections::BTreeMap[String, Vec[String]],
 }
 
 /// What holds at one point of a body.
@@ -574,6 +578,7 @@ fn no_proofs() -> BoundsProven {
 		trace: [],
 		held: collections::BTreeMap(),
 		checked: collections::BTreeMap(),
+		rules_used: collections::BTreeMap(),
 	}
 }
 
@@ -731,6 +736,14 @@ fn bounds_rounds_settled(
 	}
 	walk.proven.held = found_held.clone()
 	walk.proven.checked = found_checked.clone()
+	for (_, of) in walk.rule_roots {
+		walk.proven.rules_used.insert(of.clone(), [])
+	}
+	for rule in walk.rules {
+		let mut keys = walk.proven.rules_used.get(rule.owner)?.clone() ?? continue
+		keys.push(rules_key(rule))
+		walk.proven.rules_used.insert(rule.owner.clone(), keys)
+	}
 	return walk.proven.clone()
 }
 
