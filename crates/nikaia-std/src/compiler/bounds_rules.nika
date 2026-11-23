@@ -54,6 +54,34 @@ fn rules_last_name(name: ref String) -> String {
     return (name.split("::").last() ?? "").clone()
 }
 
+/// A type by the last segment of each name in it: `Vec[u32]` of
+/// `Vec[u32]`, `BTreeMap[u32, i64]` of `collections::BTreeMap[u32, i64]`.
+fn rules_type_key(ty: ref Type, words: ref winnow_grammar::InternerContext) -> String {
+    let mut parts: Vec[String] = []
+    for inner in ty.generics {
+        parts.push(rules_type_key(inner, words))
+    }
+    let joined = parts.join(", ")
+    if ty.is_tuple {
+        return f"({joined})"
+    }
+    let name = rules_last_name(words.resolve(ty.name))
+    if parts.is_empty() {
+        return name
+    }
+    return f"{name}[{joined}]"
+}
+
+/// **Every type a value of `ty` holds a place of**: `ty` itself and each
+/// type written inside it, so that `Vec[Vec[u32]]` holds `Vec[u32]` and
+/// `u32` (an inner list or an element a `mut` parameter may be handed).
+fn rules_type_places(ty: ref Type, words: ref winnow_grammar::InternerContext, mut out: collections::BTreeSet[String]) {
+    out.insert(rules_type_key(ty, words))
+    for inner in ty.generics {
+        rules_type_places(inner, words, out)
+    }
+}
+
 /// A field a file beside changes (`BoundsBeside.changed`), with a local
 /// bound to a call `f().field` named by the type `f` returns, or by the
 /// field alone where `returns` does not know `f` (#1930).
@@ -124,9 +152,10 @@ fn rules_candidates(
     // The private whole-number fields of each such struct, the candidates
     // of `cap` and `floor` (#1642).
     let mut scalars: collections::BTreeMap[String, Vec[String]] = collections::BTreeMap()
-    // The type of each field of each such struct, by its last name: what a
-    // `mut` parameter of a method may be handed out of another value.
-    let mut held: collections::BTreeMap[String, collections::BTreeSet[String]] = collections::BTreeMap()
+    // Each field of each such struct with the types it holds a place of
+    // (`rules_type_places`): what a `mut` parameter of a method may be
+    // handed out of another value of the type.
+    let mut held: collections::BTreeMap[String, Vec[(String, collections::BTreeSet[String])]] = collections::BTreeMap()
     for item in program.items {
         match item.node {
             Item::Struct { name, generics, fields, is_extern, is_public, .. } => {
@@ -136,11 +165,13 @@ fn rules_candidates(
                 let owner = words.resolve(name).clone()
                 let mut found: Vec[String] = []
                 let mut numbers: Vec[String] = []
-                let mut types: collections::BTreeSet[String] = collections::BTreeSet()
+                let mut places: Vec[(String, collections::BTreeSet[String])] = []
                 for field in fields {
-                    types.insert(rules_last_name(words.resolve(field.ty.name)))
+                    let mut types: collections::BTreeSet[String] = collections::BTreeSet()
+                    rules_type_places(field.ty, words, types)
+                    places.push((words.resolve(field.name).clone(), types))
                 }
-                held.insert(owner.clone(), types)
+                held.insert(owner.clone(), places)
                 for field in fields {
                     let ty = words.resolve(field.ty.name)
                     let seen = !lost.contains(words.resolve(field.name)) && !lost.contains(f"{owner}.{words.resolve(field.name)}") && (!field.is_public || !is_public || a_program)
@@ -217,14 +248,28 @@ fn rules_candidates(
                             let m = words.resolve(written).clone()
                             quiet.around.frames.insert(f"{owner}::{m}", nothing_changed())
                             // A method that takes a parameter `mut` may be
-                            // handed a field of another value of the type:
-                            // one of a field's type, the type itself or a
-                            // type parameter.
-                            let types = held.get(owner)?.clone() ?? collections::BTreeSet()
+                            // handed a field of another value of the type,
+                            // or a place inside one: a parameter of the type
+                            // itself or of a type parameter drops every rule
+                            // of the type; one of another type only the
+                            // fields that hold a place of it (`mut out:
+                            // Vec[u32]` a `Vec[u32]` or `Vec[Vec[u32]]`
+                            // field, not a `Vec[i64]` one, #1755).
+                            let places = held.get(owner)?.clone() ?? []
                             for a in args {
+                                if !a.mutable {
+                                    continue
+                                }
                                 let last = rules_last_name(words.resolve(a.ty.name))
-                                if a.mutable && (!generics.is_empty() || last == owner || types.contains(last)) {
+                                if !generics.is_empty() || last == owner {
                                     dropped.insert(f"{owner}.")
+                                    continue
+                                }
+                                let key = rules_type_key(a.ty, words)
+                                for (f, types) in places {
+                                    if types.contains(key) {
+                                        dropped.insert(f"{owner}.{f}")
+                                    }
                                 }
                             }
                             let ty = ret_type ?? continue

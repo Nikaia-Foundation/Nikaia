@@ -16,6 +16,21 @@ pub struct BoundsRule {
 
 pub(crate) fn rules_last_name(name: &str) -> String { nikaia_std::block::Text::from(nikaia_std::index::or(name.split("::").last(), || "").to_string()) }
 
+pub(crate) fn rules_type_key(ty: &Type, words: &winnow_grammar::InternerContext) -> String {
+    let mut parts: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
+    parts.reserve(ty.generics.iter().size_hint().0); for inner in ty.generics.iter() { parts.push(rules_type_key(inner, words)); }
+    let joined = nikaia_std::block::Text::from(parts.join(", "));
+    if ty.is_tuple { return format!("({})", joined); }
+    let name = rules_last_name(words.resolve(ty.name));
+    if parts.is_empty() { return name; }
+    format!("{}[{}]", name, joined)
+}
+
+pub(crate) fn rules_type_places(ty: &Type, words: &winnow_grammar::InternerContext, out: &mut collections::BTreeSet<String>) {
+    out.insert(rules_type_key(ty, words));
+    for inner in ty.generics.iter() { rules_type_places(inner, words, out); }
+}
+
 pub(crate) fn rules_changed_name(name: &str, returns: &collections::BTreeMap<String, String>) -> String {
     let parts: Vec<&str> = name.split("().").collect::<Vec<_>>();
     if parts.len() != 2 { return nikaia_std::block::Text::from(name.to_string()); }
@@ -53,7 +68,7 @@ pub(crate) fn rules_candidates(program: &Program, beside: &[&BoundsBeside], cont
     let mut nested: collections::BTreeSet<String> = collections::BTreeSet::new();
     let mut defaults: collections::BTreeMap<String, String> = collections::BTreeMap::new();
     let mut scalars: collections::BTreeMap<String, Vec<String>> = collections::BTreeMap::new();
-    let mut held: collections::BTreeMap<String, collections::BTreeSet<String>> = collections::BTreeMap::new();
+    let mut held: collections::BTreeMap<String, Vec<(String, collections::BTreeSet<String>)>> = collections::BTreeMap::new();
     for item in program.items.iter() {
         match &item.node {
             Item::Struct { name, generics, fields, is_extern, is_public, .. } => {
@@ -62,9 +77,13 @@ pub(crate) fn rules_candidates(program: &Program, beside: &[&BoundsBeside], cont
                 let owner = nikaia_std::block::Text::from(words.resolve(name).to_string());
                 #[allow(unused_mut)] let mut found: Vec<String> = vec![];
                 let mut numbers: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut found = found;
-                let mut types: collections::BTreeSet<String> = collections::BTreeSet::new();
-                for field in fields.iter() { types.insert(rules_last_name(words.resolve(field.ty.name))); }
-                held.insert(nikaia_std::block::Text::from(owner.to_string()), types);
+                let mut places: Vec<(String, collections::BTreeSet<String>)> = vec![];
+                places.reserve(fields.iter().size_hint().0); for field in fields.iter() {
+                    let mut types: collections::BTreeSet<String> = collections::BTreeSet::new();
+                    rules_type_places(&field.ty, words, &mut types);
+                    places.push((nikaia_std::block::Text::from(words.resolve(field.name).to_string()), types));
+                }
+                held.insert(nikaia_std::block::Text::from(owner.to_string()), places);
                 found.reserve(fields.iter().size_hint().0); for field in fields.iter() {
                     let ty = words.resolve(field.ty.name);
                     let seen = !lost.contains(words.resolve(field.name)) && !lost.contains(&format!("{}.{}", owner, words.resolve(field.name))) && (!field.is_public || !is_public || a_program);
@@ -121,13 +140,19 @@ pub(crate) fn rules_candidates(program: &Program, beside: &[&BoundsBeside], cont
                             let written = match name { Some(__nikaia_value) => __nikaia_value, None => continue };
                             let m = nikaia_std::block::Text::from(words.resolve(written).to_string());
                             quiet.around.frames.insert(format!("{}::{}", owner, m), nothing_changed());
-                            let types = nikaia_std::index::or(match held.get(owner) {
+                            let places = nikaia_std::index::or(match held.get(owner) {
                                 Some(__nikaia_it) => Some(__nikaia_it.clone()),
                                 None => None,
-                            }, || collections::BTreeSet::new().into());
+                            }, || vec![].into());
                             for a in args.iter() {
+                                if !a.mutable { continue; }
                                 let last = rules_last_name(words.resolve(a.ty.name));
-                                if a.mutable && (!generics.is_empty() || last == owner || types.contains(&last)) { dropped.insert(format!("{}.", owner)); }
+                                if !generics.is_empty() || last == owner {
+                                    dropped.insert(format!("{}.", owner));
+                                    continue;
+                                }
+                                let key = rules_type_key(&a.ty, words);
+                                for (f, types) in places.iter() { if types.contains(&key) { dropped.insert(format!("{}.{}", owner, f)); } }
                             }
                             let ty = match ret_type { Some(__nikaia_value) => __nikaia_value, None => continue };
                             if receiver.is_some() && ty.generics.is_empty() && is_whole_number(words.resolve(ty.name)) { results.push((nikaia_std::block::Text::from(owner.to_string()), m)); }
