@@ -33,36 +33,45 @@ and no data file is kept here:
 
 ## The table
 
-Nikaia 0.0.1403, rustc 1.97.0, serde_json 1.0.149; an Intel Xeon at 2.10 GHz.
+Nikaia 0.0.1557, rustc 1.97.0, serde_json 1.0.154 (the `Cargo.lock` of the
+commit *benches/game: k-nucleotide counted against Rust #3 (hashbrown, std
+threads) instead of #7*, 898eb049c); an Intel Xeon at 2.10 GHz, 2026-11-23.
 Instructions and mispredicted branches per byte of input; the last column is
 the instructions with checks off over serde_json's.
 
 | input | program | instructions, checks on | mispredicted, on | instructions, checks off | mispredicted, off | off / serde_json | tokens |
 |---|---|---:|---:|---:|---:|---:|---:|
-| small | serde_json, `target-cpu=x86-64` | 491.2 | 8.607 | 488.5 | 8.660 | 1.00 | 148 |
-| small | Nikaia, `--cpu=x86-64` | 672.9 | 11.565 | 676.0 | 11.496 | 1.38 | 55 |
-| small | Nikaia, `--cpu=x86-64-v3` | 671.8 | 11.515 | 677.5 | 11.463 | 1.39 | |
-| large | serde_json, `target-cpu=x86-64` | 137.5 | 1.063 | 136.6 | 1.040 | 1.00 | 148 |
-| large | Nikaia, `--cpu=x86-64` | 245.0 | 2.007 | 246.3 | 1.794 | 1.80 | 55 |
-| large | Nikaia, `--cpu=x86-64-v3` | 243.1 | 2.131 | 245.4 | 1.920 | 1.80 | |
-| deep | serde_json, `target-cpu=x86-64` | 387.3 | 0.899 | 382.4 | 0.900 | 1.00 | 148 |
-| deep | Nikaia, `--cpu=x86-64` | 766.2 | 5.097 | 766.2 | 5.175 | 2.00 | 55 |
-| deep | Nikaia, `--cpu=x86-64-v3` | 763.0 | 5.195 | 762.9 | 5.608 | 1.99 | |
+| small | serde_json, `target-cpu=x86-64` | 495.2 | 8.698 | 492.8 | 8.750 | 1.00 | 148 |
+| small | Nikaia, `--cpu=x86-64` | 594.5 | 10.847 | 591.2 | 10.827 | 1.20 | 55 |
+| small | Nikaia, `--cpu=x86-64-v3` | 595.3 | 10.918 | 590.0 | 10.967 | 1.20 | |
+| large | serde_json, `target-cpu=x86-64` | 137.4 | 1.003 | 136.6 | 1.040 | 1.00 | 148 |
+| large | Nikaia, `--cpu=x86-64` | 123.9 | 1.144 | 121.6 | 1.070 | 0.89 | 55 |
+| large | Nikaia, `--cpu=x86-64-v3` | 122.8 | 1.129 | 120.5 | 1.146 | 0.88 | |
+| deep | serde_json, `target-cpu=x86-64` | 386.6 | 0.900 | 382.4 | 0.900 | 1.00 | 148 |
+| deep | Nikaia, `--cpu=x86-64` | 321.7 | 0.534 | 316.8 | 0.531 | 0.83 | 55 |
+| deep | Nikaia, `--cpu=x86-64-v3` | 318.3 | 0.529 | 313.7 | 0.530 | 0.82 | |
 
-The small input is mostly the start of the process: loading and linking take
-about 0.3 million of serde_json's 0.51 million instructions, and as many of
-Nikaia's 0.71 million.
+The small input is mostly the start of the process: serde_json counts 0.52
+million instructions on it and Nikaia 0.62 million.
 
-## Where json is behind
+## Where json was behind
 
-json counts 1.4 to 2.0 times serde_json's instructions. From
+When it was first counted (Nikaia 0.0.1403, serde_json 1.0.149), json
+counted 1.4 to 2.0 times serde_json's instructions. From
 `callgrind_annotate` of the large input, checks off (2.46 billion against
 serde_json's 1.37 billion):
 
-* **The path of every value is built while reading** (30 %; 42 % on deep):
-  `value` makes `f"{path}[{at}]"` and `f"{path}.{key}"` for each element and
-  member, text only an error ever shows.
-* **Text is copied a character at a time** (24 %): `parse` first collects the
-  whole input into a list of characters (`text.chars().collect()`, 6 %), and a
-  number or string is then built by pushing one character after another
-  (`Text::push`, about 30 instructions a call on its own).
+* **The path of every value was built while reading** (30 %; 42 % on deep):
+  `value` made `f"{path}[{at}]"` and `f"{path}.{key}"` for each element and
+  member, text only an error ever shows. Since *json builds a value's path
+  only when reading fails* it is built only then.
+* **Text was copied a character at a time** (24 %): `parse` first collected
+  the whole input into a list of characters (`text.chars().collect()`, 6 %),
+  and a number or string was then built by pushing one character after
+  another (`Text::push`, about 30 instructions a call on its own). Since
+  *json reads the input's bytes in place and cuts numbers and strings from
+  it* it reads the bytes in place.
+
+Now json counts fewer instructions than serde_json on the large and deep
+inputs and 1.20 times as many on the small one, whose count is mostly the
+start of the process. Those 1.20 have not been attributed yet.
