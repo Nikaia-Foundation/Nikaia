@@ -57,6 +57,7 @@
 use std::cli
 use std::env
 use std::fs
+use std::path
 use std::process
 use std::text
 
@@ -245,6 +246,19 @@ fn gate_test_some(names: Vec[String]) -> String throws {
     let mut args: Vec[String] = ["run", "scripts/slot.nika", "--", "target/gate-tests", exe.clone(), "run", main, "--", "--test-in", "{slot}"]
     for name in names { args.push(name.clone()) }
     return gate_run(exe, args)
+}
+
+// The part of NAMED below the working directory HERE: the slot
+// scripts/slot.nika handed over, absolute. Refused where it lies elsewhere or
+// reads as an option (ADR-raw-sinks-1 D14, D18); joined under a root of HERE
+// again, it is a path the program made.
+fn gate_below(here: String, named: String) -> String throws {
+    let rel = named.strip_prefix(here + "/") ?? ""
+    if !path::is_below(rel) || !process::is_operand(rel) {
+        eprintln(f"refused: {named} is not a slot below {here}")
+        process::exit(2)
+    }
+    return rel
 }
 
 // `--test-in DIR NAME...`: copies the tests/compiler package with only the
@@ -457,7 +471,9 @@ fn main() throws {
             names.push(args[k].clone())
             k += 1
         }
-        gate_test_in(args[2].clone(), names)
+        let here = fs::canonical(".", fs::Root::Dir(".")).display()
+        let slot = fs::Root::Dir(here.clone()).join(gate_below(here, args[2].clone())).path().to_text()
+        gate_test_in(slot, names)
         return
     }
     for a in args.clone() {

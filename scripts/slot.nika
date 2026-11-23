@@ -7,7 +7,9 @@
 // a fresh `mktemp -d` misses it on every run. A tool that needs a copy of its
 // own to build in builds it here instead: in the first free of the numbered
 // slots `BASE/0` to `BASE/3`, each held under `flock` on `BASE/<n>.lock` for
-// the whole of COMMAND. Under the lock the slot is emptied and made again, and
+// the whole of COMMAND, BASE a path below the working directory or the user
+// cache.
+// Under the lock the slot is emptied and made again, and
 // COMMAND runs with each argument `{slot}` replaced by the slot's absolute
 // path, its output and its error output this run's own. This run ends with
 // COMMAND's exit code. All four held: it waits for `BASE/0`.
@@ -21,10 +23,38 @@
 // held) is taken for a held slot and run again on the next one.
 
 use std::cli
+use std::env
+use std::fs
+use std::path
 use std::process
 
 fn slot_count() -> i64 {
 	return 4
+}
+
+// The user cache, as scripts/solver.nika's `solver_cache_dir` names it.
+fn slot_cache_dir() -> String {
+	let set = env::var("NIKAIA_CACHE_DIR") ?? ""
+	if set != "" { return set.clone() }
+	let xdg = env::var("XDG_CACHE_HOME") ?? ""
+	if xdg != "" { return f"{xdg}/nikaia" }
+	let home = env::var("HOME") ?? "/tmp"
+	return f"{home}/.cache/nikaia"
+}
+
+// The directory BASE lies below: the user cache, or else the working
+// directory.
+fn slot_under(given: String, cache: String) -> String throws {
+	if cache != "" && given.starts_with(cache + "/") { return cache }
+	return fs::canonical(".", fs::Root::Dir(".")).display()
+}
+
+// BASE below `under`: an absolute path under it loses `under/`, any other
+// comes back as given.
+fn slot_below(given: String, under: String) -> String {
+	let rel = given.strip_prefix(under + "/") ?? ""
+	if rel == "" { return given }
+	return rel.clone()
 }
 
 // The busy code `flock -n` gives for a held lock.
@@ -65,8 +95,20 @@ fn main() throws {
 		eprintln("usage: nikaia run scripts/slot.nika -- BASE COMMAND [ARG...]")
 		process::exit(2)
 	}
-	process::run("mkdir", ["-p", args[1].clone()])
-	let base = process::run("realpath", [args[1].clone()]).stdout.trim().clone()
+	let given = args[1].clone()
+	// BASE lies below the working directory, or below the user cache
+	// (scripts/solver.nika), and reads as no option (ADR-raw-sinks-1 D14,
+	// D18); joined under a root of the directory it lies below, it gives the
+	// slots' absolute path.
+	let cache = slot_cache_dir()
+	let under = slot_under(given.clone(), cache.clone())
+	let rel = slot_below(given.clone(), under.clone())
+	if !path::is_below(rel) || !process::is_operand(rel) {
+		eprintln(f"refused: BASE {given} lies neither below the working directory nor below {cache}, or reads as an option")
+		process::exit(2)
+	}
+	let base = fs::Root::Dir(under).join(rel).path().to_text()
+	process::run("mkdir", ["-p", base.clone()])
 	let mut command: Vec[String] = []
 	let mut i = 2
 	while i < args.len() {

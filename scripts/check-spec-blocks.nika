@@ -41,6 +41,11 @@ fn main() throws {
     let mut args: Vec[String] = []
     for a in cli::args() { args.push(a) }
     let rev = if args.len() > 1 { args[1].clone() } else { "HEAD" }
+    // git reads a revision that starts with `-` as an option (ADR-raw-sinks-1 D18).
+    if !process::is_operand(rev) {
+        println(f"refused: {rev} reads as an option")
+        process::exit(2)
+    }
     let mut bad = 0
     for part in ["10-nikaia-light.md", "20-nikaia-advance.md", "30-nikaia-tooling.md"] {
         let shown = process::run("git", ["show", f"{rev}:docs/specification/{part}"])

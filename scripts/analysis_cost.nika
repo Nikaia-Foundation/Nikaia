@@ -440,7 +440,7 @@ fn main() throws {
         }
         let mut command: String = f"{threads}NIKAIA_CACHE_LIMIT=2G valgrind --tool=callgrind --collect-atstart=no '--toggle-collect=*check_walked_walk*'{dumps} --compress-strings=no --compress-pos=no --callgrind-out-file={out} target/fast/nikaia lower-std --findings"
         if sysroot.len() > 0 { command = f"{command} --sysroot {sysroot}/crates" }
-        let ran = process::run("sh", ["-c", f"{command} > /dev/null"])
+        let ran = process::run("sh", ["-c", f"env {command} > /dev/null"])
         if ran.code != 0 {
             eprintln(ran.stderr)
             eprintln(f"callgrind over lower-std --findings: exit {ran.code}")

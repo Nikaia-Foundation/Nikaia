@@ -41,6 +41,7 @@
 use std::cli
 use std::env
 use std::fs
+use std::path
 use std::process
 
 fn check(name: String, cmd: String, args: Vec[String], dir: String) -> bool throws {
@@ -53,6 +54,19 @@ fn check(name: String, cmd: String, args: Vec[String], dir: String) -> bool thro
     println(out.stdout.trim_end())
     println(out.stderr.trim_end())
     return false
+}
+
+// The part of NAMED below the working directory HERE: the slot
+// scripts/slot.nika handed over, absolute. Refused where it lies elsewhere or
+// reads as an option (ADR-raw-sinks-1 D14, D18); joined under a root of HERE
+// again, it is a path the program made.
+fn pre_push_below(here: String, named: String) -> String throws {
+    let rel = named.strip_prefix(here + "/") ?? ""
+    if !path::is_below(rel) || !process::is_operand(rel) {
+        eprintln(f"refused: {named} is not a slot below {here}")
+        process::exit(2)
+    }
+    return rel
 }
 
 // The pages' examples, only when a staged path can change them.
@@ -127,16 +141,18 @@ fn pre_push_in_slot(args: Vec[String]) throws {
 fn main() throws {
     let mut args: Vec[String] = []
     for a in cli::args() { args.push(a) }
-    let mut copy: String = ""
+    let mut given: String = ""
     let mut i = 1
     while i + 1 < args.len() {
-        if args[i] == "--in" { copy = args[i + 1].clone() }
+        if args[i] == "--in" { given = args[i + 1].clone() }
         i += 1
     }
-    if copy == "" {
+    if given == "" {
         pre_push_in_slot(args)
         return
     }
+    let here = fs::canonical(".", fs::Root::Dir(".")).display()
+    let copy = fs::Root::Dir(here.clone()).join(pre_push_below(here, given)).path().to_text()
     let mut ok = check("index", "git", ["checkout-index", "-a", f"--prefix={copy}/"], ".")
     if ok {
         ok = check("fmt", "cargo", ["fmt", "--all", "--", "--check"], copy.clone())

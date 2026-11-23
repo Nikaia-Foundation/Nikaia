@@ -2382,7 +2382,7 @@ fn drive_ledgers_refresh_on(name: String, built: String) -> Vec[String] throws {
 	let wt = process::run("realpath", [drive_tree_dir()]).stdout.trim().clone()
 	let out = process::run(
 		"sh",
-		["-c", f"cd '{wt}' && '{exe}' run scripts/ledgers.nika -- --refresh --tree {tree} --exe '{exe}'"],
+		["-c", f"cd '{wt}' && '{exe}' run scripts/ledgers.nika -- --refresh --tree {tree}"],
 	)
 	let mut paths: Vec[String] = []
 	for line in out.stdout.split("\n") {
@@ -5545,7 +5545,7 @@ fn drive_focus(exe: String, dry: bool, max: i64, ignore_red: bool, lines_file: S
 		let area = drive_focus_current(file)
 		let dir = drive_focus_dir(file, area)
 		if dir == "" { drive_escalate(f"focus: {path} names no area {area}") }
-		if !path::is_below(dir) { drive_escalate(f"focus: {path} names {dir} for {area}, not a relative path below the working directory") }
+		if !path::is_below(dir) || !process::is_operand(dir) { drive_escalate(f"focus: {path} names {dir} for {area}, not a relative path below the working directory, or one that reads as an option") }
 		if !dry {
 			drive_pickup(bugs)
 			drive_pickup(dir.clone())
@@ -5653,7 +5653,7 @@ fn drive_focus(exe: String, dry: bool, max: i64, ignore_red: bool, lines_file: S
 }
 
 fn main() throws {
-	let mut dir: String = ""
+	let mut lane_dir: String = ""
 	let mut max: i64 = 8
 	let mut dry = false
 	let mut no_bump = false
@@ -5680,7 +5680,7 @@ fn main() throws {
 			dry = true
 			i += 1
 		} else {
-			dir = args[i].clone()
+			lane_dir = args[i].clone()
 		}
 		i += 1
 	}
@@ -5977,7 +5977,7 @@ fn main() throws {
 		drive_focus(exe, dry, max, ignore_red, lines_file)
 		return
 	}
-	if dir == "" {
+	if lane_dir == "" {
 		println("usage: nikaia run scripts/drive.nika -- DIR [--max N] [--no-bump] [--ignore-ci-red] [--dry-run] [--lines FILE]")
 		println("       nikaia run scripts/drive.nika -- --focus [--max N] [--dry-run]")
 		process::exit(2)
@@ -6063,8 +6063,9 @@ fn main() throws {
 	}
 	// The lane directory is checked where it arrives (ADR-raw-sinks-1 D14):
 	// every helper opens it under drive_here, which refuses a name outside.
-	if !path::is_below(dir) {
-		println(f"refused: the lane directory {dir} is not a relative path below the working directory")
+	let dir = lane_dir.clone()
+	if !path::is_below(dir) || !process::is_operand(dir) {
+		println(f"refused: the lane directory {dir} is not a relative path below the working directory, or reads as an option")
 		process::exit(2)
 	}
 	if !dry { drive_silence_stop_hook() }

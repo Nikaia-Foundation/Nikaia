@@ -34,10 +34,14 @@
 // back; a git-ignored lock is never copied in, so it is neither checked nor
 // refreshed.
 // `--list` prints each directory and the command it is built with. NIKAIA is
-// the compiler (default `target/fast/nikaia`).
+// the compiler, a path below the working directory (ADR-raw-sinks-1 D14,
+// D18); without `--exe`, the `nikaia` that runs this script
+// (`env::current_exe`, ADR-program-path-1 D3).
 
 use std::cli
+use std::env
 use std::fs
+use std::path
 use std::process
 
 fn ledgers_names() -> Vec[String] {
@@ -123,7 +127,7 @@ fn ledgers_copy(tree: String) -> fs::Root throws {
 		eprintln(f"copying the ledger directories failed: {copied.stderr.trim()}")
 		process::exit(2)
 	}
-	let here = process::run("pwd", []).stdout.trim().clone()
+	let here = fs::canonical(".", fs::Root::Dir(".")).display()
 	process::run("ln", ["-s", f"{here}/crates", f"{tmp}/crates"])
 	return copy
 }
@@ -205,9 +209,9 @@ fn ledgers_refresh(nikaia: String, copy: ref fs::Root) -> bool throws {
 			let path = f"{dir}/{name}"
 			let built = f"{tmp}/{path}"
 			if !fs::exists(path.clone(), copy) { continue }
-			if process::run("git", ["check-ignore", "-q", path.clone()]).ok { continue }
-			if process::run("cmp", ["-s", built.clone(), path.clone()]).ok { continue }
-			process::run("cp", [built, path.clone()])
+			if process::run("git", ["check-ignore", "-q", "./" + path]).ok { continue }
+			if process::run("cmp", ["-s", built.clone(), "./" + path]).ok { continue }
+			process::run("cp", [built, "./" + path])
 			println(f"refreshed {path}")
 		}
 		// The long certificates go with `nikaia.proofs`, a removed one too:
@@ -217,9 +221,9 @@ fn ledgers_refresh(nikaia: String, copy: ref fs::Root) -> bool throws {
 		let has_built = fs::exists(path.clone(), copy)
 		let has_path = fs::exists(path.clone(), here)
 		if !has_built && !has_path { continue }
-		if has_built && has_path && process::run("diff", ["-rq", built.clone(), path.clone()]).ok { continue }
-		process::run("rm", ["-rf", path.clone()])
-		if has_built { process::run("cp", ["-r", built, path.clone()]) }
+		if has_built && has_path && process::run("diff", ["-rq", built.clone(), "./" + path]).ok { continue }
+		process::run("rm", ["-rf", "./" + path])
+		if has_built { process::run("cp", ["-r", built, "./" + path]) }
 		println(f"refreshed {path}")
 	}
 	return green
@@ -230,7 +234,7 @@ fn main() throws {
 	for a in cli::args() { args.push(a) }
 	let mut mode: String = ""
 	let mut tree: String = ""
-	let mut nikaia: String = "target/fast/nikaia"
+	let mut nikaia: String = ""
 	let mut i = 1
 	while i < args.len() {
 		if args[i] == "--tree" && i + 1 < args.len() {
@@ -248,7 +252,19 @@ fn main() throws {
 		println("usage: nikaia run scripts/ledgers.nika -- --check|--refresh|--list [--tree TREE] [--exe NIKAIA]")
 		process::exit(2)
 	}
-	let exe = process::run("realpath", [nikaia]).stdout.trim().clone()
+	let here = fs::canonical(".", fs::Root::Dir(".")).display()
+	let mut exe = env::current_exe()?.display() ?? "target/fast/nikaia"
+	if nikaia != "" {
+		let rel = match nikaia.strip_prefix(here + "/") {
+			null => nikaia.clone(),
+			cut => cut,
+		}
+		if !path::is_below(rel) || !process::is_operand(rel) {
+			println(f"refused: --exe {nikaia} lies not below the working directory, or reads as an option")
+			process::exit(2)
+		}
+		exe = fs::Root::Dir(here).join(rel).path().to_text()
+	}
 	let copy = ledgers_copy(tree)
 	let tmp = copy.path().to_text()
 	let mut green = true

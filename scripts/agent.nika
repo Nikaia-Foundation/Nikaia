@@ -535,15 +535,23 @@ fn main() throws {
         println("usage: nikaia run scripts/agent.nika -- BRIEF [--dir DIR] [--dry-run] [--claude CMD]")
         process::exit(2)
     }
-    // DIR, the brief and the files beside it lie below the working directory;
-    // without --dir it is the brief's own directory, as given.
-    if dir == "" { dir = process::run("dirname", [brief.clone()]).stdout.trim().clone() }
-    if !path::is_below(dir) {
-        println(f"refused: --dir {dir} is not a relative path below the working directory")
+    // The brief, given relative or as an absolute path below the working
+    // directory (cycle.nika's NEXT and drive.nika hand the realpath on).
+    let here = fs::Root::Dir(".")
+    let cwd = fs::canonical(".", here).display()
+    let given = agent_below(cwd.clone(), brief.clone())
+    if !path::is_below(given) || !process::is_operand(given) {
+        println(f"refused: the brief {brief} is not a path below the working directory, or reads as an option")
         process::exit(2)
     }
-    let here = fs::Root::Dir(".")
-    let abs = process::run("realpath", [brief]).stdout.trim().clone()
+    // DIR, the brief and the files beside it lie below the working directory;
+    // without --dir it is the brief's own directory, as given.
+    if dir == "" { dir = process::run("dirname", [given.clone()]).stdout.trim().clone() }
+    if !path::is_below(dir) || !process::is_operand(dir) {
+        println(f"refused: --dir {dir} is not a relative path below the working directory, or reads as an option")
+        process::exit(2)
+    }
+    let abs = fs::Root::Dir(cwd).join(given).path().to_text()
     let text = fs::read_to_string(abs.clone(), here)
     if info {
         println(agent_front(text.clone(), "agent", "builder") + " " + agent_front(text.clone(), "model", "sonnet") + " " + agent_front(text.clone(), "max_turns", "120") + " " + agent_front(text.clone(), "budget_usd", "20") + " " + agent_effort(text))
@@ -647,7 +655,12 @@ fn main() throws {
     // A run cut off by the time limit writes no row: its resume reads the same
     // transcript and writes the whole session's.
     if exe != "" && !out.timed_out {
-        process::run(exe.clone(), ["run", "scripts/batch.nika", "--", dir.clone(), "--tokens", abs.clone(), usage[0].clone(), usage[1].clone(), usage[2].clone(), usage[3].clone(), usage[4].clone()])
+        // A count that reads as an option (a negative one) writes no row.
+        let mut row: Vec[String] = ["run", "scripts/batch.nika", "--", dir.clone(), "--tokens", abs.clone()]
+        for w in usage {
+            if process::is_operand(w) { row.push(w.clone()) }
+        }
+        if row.len() == 11 { process::run(exe.clone(), row) }
     }
     // The debrief: the same session, resumed while its cache is warm, answers
     // what held it up, before any escalation stops this script.
@@ -692,4 +705,14 @@ fn main() throws {
     }
     let sha = process::run("git", ["rev-parse", "--short=8", "HEAD"]).stdout.trim().clone()
     println(f"done {sha} report {report} cost {cost} turns {turns}")
+}
+
+/// The brief below the working directory `cwd`: an absolute path under it
+/// loses `cwd/`, any other comes back as given.
+fn agent_below(cwd: String, brief: String) -> String {
+    let rel = brief.strip_prefix(cwd + "/") ?? ""
+    if rel == "" {
+        return brief
+    }
+    return rel.clone()
 }

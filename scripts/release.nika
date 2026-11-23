@@ -46,6 +46,7 @@
 
 use std::cli
 use std::fs
+use std::io
 use std::path
 use std::process
 use std::text
@@ -108,8 +109,15 @@ fn release_git(args: Vec[String]) -> String throws {
 }
 
 // The first word after `local `: a report may name the commits after it,
-// `Pushed: local <sha> (<sha> <subject>; ...)`.
-fn release_sha(pushed: String) -> String {
+// `Pushed: local <sha> (<sha> <subject>; ...)`. A word that reads as an
+// option names no commit and is refused (ADR-raw-sinks-1 D18).
+fn release_sha(pushed: String) -> String throws {
+    let sha = release_first_word(pushed)
+    if !process::is_operand(sha) { throw io::IoError::Other(f"Pushed: names no commit: {sha}") }
+    return sha
+}
+
+fn release_first_word(pushed: String) -> String {
     for w in pushed.split(" ") {
         if w.len() > 0 && w != "local" { return w.clone() }
     }
@@ -318,7 +326,8 @@ fn release_bump(title: String, entries: Vec[String]) -> String throws {
     if !process::run("python3", ["scripts/bump.py", "check"]).ok { return "NO BUMP: bump.py check failed" }
     let mut add: Vec[String] = ["add"]
     for f in release_changed() {
-        if !before.contains(f.clone()) { add.push(f) }
+        // A path git printed, below the working directory (ADR-raw-sinks-1 D18).
+        if !before.contains(f.clone()) { add.push("./" + f) }
     }
     let rows = "docs/tokenspeed.md"
     if before.contains(rows) {
@@ -334,7 +343,7 @@ fn release_bump(title: String, entries: Vec[String]) -> String throws {
     for line in release_git(["log", "-1", "--format=%B"]).split("\n") {
         if line.starts_with("Co-Authored-By:") || line.starts_with("Claude-Session:") { message = message + "\n" + line }
     }
-    if !process::run("git", ["commit", "-m", message]).ok { return "NO BUMP: commit failed" }
+    if !process::run("git", ["commit", f"--message={message}"]).ok { return "NO BUMP: commit failed" }
     if !process::run("git", ["push", "origin", "HEAD:develop"]).ok {
         process::run("git", ["pull", "--rebase", "origin", "develop"])
         process::run("python3", ["scripts/bump.py", "rebase-fix"])
@@ -422,7 +431,7 @@ fn release_rows_commit() -> String throws {
     for line in release_git(["log", "-1", "--format=%B"]).split("\n") {
         if line.starts_with("Co-Authored-By:") || line.starts_with("Claude-Session:") { message = message + "\n" + line }
     }
-    if !process::run("git", ["commit", "-q", "-m", message, "--only", "--", rows]).ok { return "ROWS NOT COMMITTED: commit failed" }
+    if !process::run("git", ["commit", "-q", f"--message={message}", "--only", "--", rows]).ok { return "ROWS NOT COMMITTED: commit failed" }
     return "ROWS committed"
 }
 

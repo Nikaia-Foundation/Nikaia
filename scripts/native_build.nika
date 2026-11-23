@@ -35,7 +35,7 @@ fn main() throws {
     }
     let dir = f"target/cpu-{name}"
     let flags = "-C\u{1f}target-cpu=" + name
-    let built = process::run("cargo", ["build", "--profile", profile.clone(), "-p", "nikaia"]; env: [("CARGO_ENCODED_RUSTFLAGS", flags), ("CARGO_TARGET_DIR", dir.clone())])
+    let built = process::run("cargo", ["build", f"--profile={profile}", "-p", "nikaia"]; env: [("CARGO_ENCODED_RUSTFLAGS", flags), ("CARGO_TARGET_DIR", dir.clone())])
     if !built.ok {
         println(built.stderr)
         process::exit(built.code)

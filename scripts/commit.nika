@@ -151,7 +151,10 @@ fn commit_copy_entry(index: String, path: String, stage: bool) -> bool throws {
     let (head, _) = line.split_once("\t") ?? return false
     let parts: Vec[String] = head.split(" ").map(fn(w) { w.clone() }).collect()
     let blob = if stage { parts[1].clone() } else { parts[2].clone() }
-    return commit_git_ok(index, ["update-index", "--add", "--cacheinfo", f"{parts[0]},{blob},{path}"])
+    // The mode git printed starts the argument (ADR-raw-sinks-1 D18).
+    let mode = parts[0].clone()
+    if !process::is_operand(mode) { return false }
+    return commit_git_ok(index, ["update-index", "--add", "--cacheinfo", f"{mode},{blob},{path}"])
 }
 
 // Sets PATHS in the shared index to their entries in HEAD, in one call, tried
@@ -225,7 +228,7 @@ fn commit_earlier(subject: String, files: Vec[String], partial: Vec[String]) -> 
     }
     for line in commit_git(["log", "-50", "--format=%H%x09%s", "HEAD"]).split("\n") {
         let (sha, s) = line.split_once("\t") ?? continue
-        if s != subject { continue }
+        if s != subject || !process::is_operand(sha) { continue }
         let touched: Vec[String] = commit_git(["show", "--name-only", "--format=", sha.clone()]).split("\n").map(fn(w) { w.trim().clone() }).collect()
         let mut every = true
         for f in all {
@@ -398,12 +401,24 @@ fn main() throws {
     }
     let report = fs::read_to_string(path.clone(), fs::Root::Dir("."))
     let mut files: Vec[String] = []
+    // A listed path reaches git as an argument, so one that reads as an
+    // option is refused (ADR-raw-sinks-1 D18).
     for f in commit_field(report.clone(), "Files:").split(" ") {
-        if f != "" { files.push(f.clone()) }
+        if f == "" { continue }
+        if !process::is_operand(f) {
+            println(f"REFUSED: {f} reads as an option, not as a path")
+            process::exit(1)
+        }
+        files.push(f.clone())
     }
     let mut partial: Vec[String] = []
     for f in commit_field(report.clone(), "Partial:").split(" ") {
-        if f != "" && f != "none" { partial.push(f.clone()) }
+        if f == "" || f == "none" { continue }
+        if !process::is_operand(f) {
+            println(f"REFUSED: {f} reads as an option, not as a path")
+            process::exit(1)
+        }
+        partial.push(f.clone())
     }
     if (files.len() == 0 && partial.len() == 0) || commit_field(report.clone(), "Commit:") == "" {
         println("REFUSED: the report has no Files: or Commit:")
@@ -411,6 +426,10 @@ fn main() throws {
     }
     let why = commit_check(files.clone(), partial.clone())
     let earlier = if why == "" { "" } else { commit_earlier(commit_field(report.clone(), "Commit:"), files.clone(), partial.clone()) }
+    if !process::is_operand(earlier) {
+        println(f"REFUSED: git named the earlier commit {earlier}, which reads as an option")
+        process::exit(1)
+    }
     if earlier != "" {
         if !dry { commit_put_pushed(path, report, f"local {earlier}") }
         println(f"already committed {commit_git(["rev-parse", "--short=8", earlier.clone()])} local")
@@ -481,7 +500,7 @@ fn main() throws {
         println(lowered)
         process::exit(1)
     }
-    let committed = process::run("git", ["commit", "-q", "-m", msg]; env: [("GIT_INDEX_FILE", private.clone())]).ok
+    let committed = process::run("git", ["commit", "-q", f"--message={msg}"]; env: [("GIT_INDEX_FILE", private.clone())]).ok
     process::run("rm", ["-rf", tmp])
     if !committed {
         println("REFUSED: git commit failed")

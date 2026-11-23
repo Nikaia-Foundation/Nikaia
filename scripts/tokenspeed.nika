@@ -523,8 +523,8 @@ fn ts_projects() -> String {
 // relative below the working directory; any other is refused.
 fn ts_below(arg: String) -> String throws {
     let rest = (arg.strip_prefix(ts_projects() + "/") ?? arg).clone()
-    if !path::is_below(rest.clone()) {
-        println(f"refused: {arg} lies neither below {ts_projects()} nor below the working directory")
+    if !path::is_below(rest.clone()) || !process::is_operand(rest) {
+        println(f"refused: {arg} lies neither below {ts_projects()} nor below the working directory, or reads as an option")
         process::exit(2)
     }
     return rest

@@ -77,6 +77,11 @@ fn main() throws {
         process::exit(2)
     }
     let range = f"{args[1]}..{args[2]}"
+    // git reads a range that starts with `-` as an option (ADR-raw-sinks-1 D18).
+    if !process::is_operand(range) {
+        println(f"refused: {range} reads as an option")
+        process::exit(2)
+    }
     let log = process::run("git", ["log", "--reverse", "--format=%H%x00%B%x01", range])
     if !log.ok { process::exit(1) }
     let mut seen: Vec[i64] = []
