@@ -3054,7 +3054,7 @@ pub(crate) fn lent_text_container(base: &Expr, maps: bool, lists: bool, ask: &Ti
     let container = last_segment(ask.names.resolve(list.ty.name));
     let mut at: i64 = 0;
     if is_a_map_name(&container) && maps && list.ty.generics.len() == 2 { at = 1; } else if !(lists && (container == "Vec" || container == "Array") && list.ty.generics.len() == 1) { return false; }
-    let element = nikaia_std::index::get(&list.ty.generics, (at) as usize);
+    let element = unsafe { nikaia_std::proven::read(&list.ty.generics, (at) as usize) };
     plain_string(ask.names, element) && !element.is_nullable
 }
 
@@ -3112,6 +3112,12 @@ pub(crate) fn tier_struct_of(expr: &Expr, ask: &TierAsk<'_, '_, '_, '_, '_, '_, 
         Expr::Field { base, name, .. } => { let base = nikaia_std::boxed::open(base); let name = *name; field_struct_or_bytes(base, ask.names.resolve(name), ask, walk) },
         Expr::Index { base, index, .. } => { let base = nikaia_std::boxed::open(base); let index = nikaia_std::boxed::open(index); cut_bytes(base, index, ask, walk) },
         Expr::Call { func, .. } => { let func = nikaia_std::boxed::open(func); called_struct(func, ask, &walk) },
+        Expr::MethodCall { receiver, method, args, .. } => {
+            let receiver = nikaia_std::boxed::open(receiver); let method = *method;
+            let called = ask.names.resolve(method);
+            if !args.is_empty() || called != "clone" && called != "to_owned" { return None; }
+            tier_struct_of(receiver, ask, walk)
+        },
         _ => None,
     }
 }
@@ -4299,11 +4305,15 @@ pub(crate) fn tier_expr(expr: &Expr, ask: &TierAsk<'_, '_, '_, '_, '_, '_, '_>, 
             for field in fields.iter() {
                 let value = match field.value.as_ref() { Some(__nikaia_value) => __nikaia_value, None => continue };
                 let kinds = tier_expr(value, ask, walk);
-                let of = match match owner.as_ref() {
+                let of: String = nikaia_std::index::or(match owner.as_ref() {
                     Some(__nikaia_it) => Some(__nikaia_it.clone()),
                     None => None,
-                } { Some(__nikaia_value) => __nikaia_value, None => continue };
+                }, || "".into());
                 let key = (nikaia_std::block::Text::from(of.to_string()), nikaia_std::block::Text::from(ask.names.resolve(field.name).to_string()));
+                if of == "" || !walk.declared.fields.contains_key(&key) {
+                    if kinds.still { kept_unseen(value, ask, walk); }
+                    continue;
+                }
                 let found = match match *nikaia_std::index::get(&walk.declared.fields, &key) {
                     Some(__nikaia_it) => Some(__nikaia_it.clone()),
                     None => None,

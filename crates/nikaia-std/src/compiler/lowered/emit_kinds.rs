@@ -235,6 +235,7 @@ pub struct EmitScope {
     pub channel: String,
     pub caught_sum: Option<String>,
     pub caught_member: Option<String>,
+    pub caught_boxed: Vec<String>,
     pub bound: String,
     pub changed: Vec<winnow_grammar::Symbol>,
     pub awaited: Vec<winnow_grammar::Symbol>,
@@ -243,6 +244,6 @@ pub struct EmitScope {
 }
 
 impl EmitScope {
-    pub fn plain() -> EmitScope { EmitScope { origin: String::from(""), function: String::from(""), channel: String::from("std::boxed::Box<dyn std::error::Error>"), caught_sum: None, caught_member: None, bound: String::from(""), changed: vec![], awaited: vec![], tasks_channel: String::from(""), tasks_function: String::from("") } }
+    pub fn plain() -> EmitScope { EmitScope { origin: String::from(""), function: String::from(""), channel: String::from("std::boxed::Box<dyn std::error::Error>"), caught_sum: None, caught_member: None, caught_boxed: vec![], bound: String::from(""), changed: vec![], awaited: vec![], tasks_channel: String::from(""), tasks_function: String::from("") } }
 }
 

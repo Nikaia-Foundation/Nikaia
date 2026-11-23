@@ -351,6 +351,10 @@ pub struct EmitScope {
     pub channel: String,
     pub caught_sum: String?,
     pub caught_member: String?,
+    /// **The names a handler binds to the caught box** (#1242): `error` in a
+    /// handler over the box, and an arm's own binding in a `match error`'s
+    /// catch-all. A `throw` of one passes the box on as it is.
+    pub caught_boxed: Vec[String],
     pub bound: String,
     pub changed: Vec[winnow_grammar::Symbol],
     pub awaited: Vec[winnow_grammar::Symbol],
@@ -364,6 +368,6 @@ pub struct EmitScope {
 impl EmitScope {
     /// Nothing around: the opaque channel, no names.
     pub fn plain() -> EmitScope {
-        return EmitScope { origin: "", function: "", channel: "std::boxed::Box<dyn std::error::Error>", caught_sum: null, caught_member: null, bound: "", changed: [], awaited: [], tasks_channel: "", tasks_function: "" }
+        return EmitScope { origin: "", function: "", channel: "std::boxed::Box<dyn std::error::Error>", caught_sum: null, caught_member: null, caught_boxed: [], bound: "", changed: [], awaited: [], tasks_channel: "", tasks_function: "" }
     }
 }

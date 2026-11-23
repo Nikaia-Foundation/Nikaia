@@ -398,6 +398,7 @@ pub(crate) fn numbers_expr(expr: Expr, st: &mut NodeNumbersState) -> Expr {
         Expr::LitChar(text, id) => { return Expr::LitChar(text, numbers_id(id, st)); },
         Expr::LitBool(value, id) => { return Expr::LitBool(value, numbers_id(id, st)); },
         Expr::LitNull(id) => { return Expr::LitNull(numbers_id(id, st)); },
+        Expr::TypeArgument(ty, id) => { return Expr::TypeArgument(ty, numbers_id(id, st)); },
         Expr::Variable(name, id) => { return Expr::Variable(name, numbers_id(id, st)); },
         Expr::Block(block, id) => {
             let id2 = numbers_id(id, st);

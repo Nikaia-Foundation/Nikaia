@@ -1,0 +1,15 @@
+// `hand` hands back its parameter, a view of the argument; a view of a
+// nullable number is read as the nullable number, as a view of a number is
+// read as the number (ADR-views-v4 D12, #1239).
+fn hand[T](x: T) -> T {
+	return x
+}
+
+fn main() throws {
+	let b: i64? = null
+	let a: i64? = hand(b)
+	println(f"{a ?? 0}")
+	let c: u8? = 7
+	let d = hand(c)
+	println(f"{d ?? 0}")
+}

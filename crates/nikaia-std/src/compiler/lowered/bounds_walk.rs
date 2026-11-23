@@ -3244,6 +3244,28 @@ pub(crate) fn bounding_leave(walk: &mut BoundsWalk, facts: &mut BoundsFacts, nam
             break;
         }
     }
+    if value.is_none() {
+        for fact in facts.facts.iter() {
+            let fact = nikaia_std::num::value(fact);
+            match walk.arena.at(fact) {
+                logic::SolverTerm::Eq(a, b) => {
+                    let d = walk.arena.sub(a, b);
+                    let count = nikaia_std::index::or(bounding_count_of(&walk, d, name), || 0);
+                    if count == 1 || count == -1 {
+                        let mut none: collections::BTreeMap<String, i64> = collections::BTreeMap::new();
+                        none.insert(nikaia_std::block::Text::from(name.to_string()), walk.arena.int(0));
+                        let rest = walk.arena.substitute(d, &none);
+                        value = Some(if count == 1 { walk.arena.neg(rest) } else { rest });
+                    }
+                },
+                _ => { },
+            }
+            if value.is_some() {
+                by = fact;
+                break;
+            }
+        }
+    }
     if value.is_some() {
         let mut given: collections::BTreeMap<String, i64> = collections::BTreeMap::new();
         given.insert(nikaia_std::block::Text::from(name.to_string()), nikaia_std::index::or(value, || 0));
@@ -3254,8 +3276,84 @@ pub(crate) fn bounding_leave(walk: &mut BoundsWalk, facts: &mut BoundsFacts, nam
             if walk.arena.mentions(fact, name) { kept.push(walk.arena.substitute(fact, &given)); } else { kept.push(fact); }
         }
         facts.facts = kept;
-    }
+    } else { bounding_leave_by_bounds(walk, facts, name); }
     bounding_forget(&walk, facts, name);
+}
+
+pub(crate) fn bounding_leave_by_bounds(walk: &mut BoundsWalk, facts: &mut BoundsFacts, name: &str) {
+    let one = walk.arena.int(1);
+    let mut lower: Vec<i64> = nikaia_std::block::list(nikaia_std::block::Place::Block);
+    let mut upper: Vec<i64> = nikaia_std::block::list(nikaia_std::block::Place::Block);
+    for fact in facts.facts.iter() {
+        let fact = nikaia_std::num::value(fact);
+        let mut sides: Vec<i64> = nikaia_std::block::list(nikaia_std::block::Place::Block);
+        match walk.arena.at(fact) {
+            logic::SolverTerm::Ge(a, b) => { sides.push(walk.arena.sub(a, b)); },
+            logic::SolverTerm::Le(a, b) => { sides.push(walk.arena.sub(b, a)); },
+            logic::SolverTerm::Gt(a, b) => {
+                let d = walk.arena.sub(a, b);
+                sides.push(walk.arena.sub(d, one));
+            },
+            logic::SolverTerm::Lt(a, b) => {
+                let d = walk.arena.sub(b, a);
+                sides.push(walk.arena.sub(d, one));
+            },
+            _ => { },
+        }
+        for d in sides.iter() {
+            let d = nikaia_std::num::value(d);
+            let count = nikaia_std::index::or(bounding_count_of(&walk, d, name), || 0);
+            if count == 1 { lower.push(d); } else if count == -1 { upper.push(d); }
+        }
+    }
+    let mut none: collections::BTreeMap<String, i64> = collections::BTreeMap::new();
+    none.insert(nikaia_std::block::Text::from(name.to_string()), walk.arena.int(0));
+    let zero = walk.arena.int(0);
+    let mut pairs = 0;
+    for l in lower.iter() {
+        let l = nikaia_std::num::value(l);
+        for u in upper.iter() {
+            let u = nikaia_std::num::value(u);
+            if pairs >= 32 { return; }
+            pairs += 1;
+            let sum = walk.arena.add(l, u);
+            let rest = walk.arena.substitute(sum, &none);
+            let fact = walk.arena.ge(rest, zero);
+            bounding_push(&walk, facts, fact);
+        }
+    }
+}
+
+pub(crate) fn bounding_count_of(walk: &BoundsWalk, term: i64, name: &str) -> Option<i64> {
+    if !walk.arena.mentions(term, name) { return Some(0); }
+    match walk.arena.at(term) {
+        logic::SolverTerm::Var(_) => Some(1),
+        logic::SolverTerm::Neg(a) => {
+            let x = match bounding_count_of(walk, a, name) { Some(__nikaia_value) => __nikaia_value, None => return None };
+            x.checked_neg()
+        },
+        logic::SolverTerm::Add(a, b) => {
+            let x = match bounding_count_of(walk, a, name) { Some(__nikaia_value) => __nikaia_value, None => return None };
+            let y = match bounding_count_of(walk, b, name) { Some(__nikaia_value) => __nikaia_value, None => return None };
+            x.checked_add(y)
+        },
+        logic::SolverTerm::Sub(a, b) => {
+            let x = match bounding_count_of(walk, a, name) { Some(__nikaia_value) => __nikaia_value, None => return None };
+            let y = match bounding_count_of(walk, b, name) { Some(__nikaia_value) => __nikaia_value, None => return None };
+            x.checked_sub(y)
+        },
+        logic::SolverTerm::Mul(a, b) => {
+            let k = walk.arena.constant(a);
+            if k.is_some() {
+                let y = match bounding_count_of(walk, b, name) { Some(__nikaia_value) => __nikaia_value, None => return None };
+                return y.checked_mul(nikaia_std::index::or(k, || 0));
+            }
+            let m = match walk.arena.constant(b) { Some(__nikaia_value) => __nikaia_value, None => return None };
+            let x = match bounding_count_of(walk, a, name) { Some(__nikaia_value) => __nikaia_value, None => return None };
+            x.checked_mul(m)
+        },
+        _ => None,
+    }
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -5747,6 +5845,20 @@ pub(crate) fn bounding_expr_leaves(walk: &mut BoundsWalk, expr: &Expr, facts: &m
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn bounding_if_leaves(walk: &mut BoundsWalk, cond: &Expr, then_branch: &Block, else_branch: Option<&Block>, facts: &mut BoundsFacts, context: &BoundsContext, program: &Program, words: &winnow_grammar::InternerContext, ask: &mut dyn FnMut(&logic::TermArena, &[i64], i64) -> bool) -> bool {
     bounding_expr(walk, cond, facts, context, program, words, &mut &mut *ask);
+    let mut changed = bounding_changed(then_branch, context, words);
+    bounding_extend_maybe(&mut changed, else_branch, context, words);
+    for x in changed.values.iter() {
+        if x.contains('.') || !facts.ints.contains(x) { continue; }
+        let mut read = false;
+        for fact in facts.facts.iter() {
+            let fact = nikaia_std::num::value(fact);
+            if walk.arena.mentions(fact, x) {
+                read = true;
+                break;
+            }
+        }
+        if read { bounding_rename(walk, facts, x); }
+    }
     let mut then_facts = facts.clone();
     bounding_assume(walk, &mut then_facts, cond, context, program, words);
     let mut then_leaves = bounding_block(walk, then_branch, &mut then_facts, context, program, words, &mut &mut *ask);
@@ -5763,8 +5875,6 @@ pub(crate) fn bounding_if_leaves(walk: &mut BoundsWalk, cond: &Expr, then_branch
         facts.ints = then_facts.ints;
         facts.facts = then_facts.facts;
     } else {
-        let mut changed = bounding_changed(then_branch, context, words);
-        bounding_extend_maybe(&mut changed, else_branch, context, words);
         bounding_after_change(walk, facts, &changed);
         bounding_if_join(walk, facts, &changed, &then_facts, &else_facts, &mut &mut *ask);
         bounding_flag_join(walk, facts, &changed, &then_facts, &else_facts, &mut &mut *ask);
@@ -5974,11 +6084,23 @@ pub(crate) fn bounding_if_join(walk: &mut BoundsWalk, facts: &mut BoundsFacts, c
     let mut kept: Vec<i64> = vec![];
     for fact in bounding_join_candidates(walk, &facts, changed, then_facts) { if else_facts.facts.contains(&fact) || bounding_proves(&walk, else_facts, fact, &mut *ask) { kept.push(fact); } }
     for fact in bounding_join_candidates(walk, &facts, changed, else_facts) { if !kept.contains(&fact) && bounding_proves(&walk, then_facts, fact, &mut *ask) { kept.push(fact); } }
+    bounding_hull_join(walk, &facts, changed, then_facts, else_facts, &mut kept, &mut *ask);
+    bounding_hull_join(walk, &facts, changed, else_facts, then_facts, &mut kept, &mut *ask);
     bounding_emptied_join(walk, &facts, changed, then_facts, else_facts, &mut kept);
     bounding_emptied_join(walk, &facts, changed, else_facts, then_facts, &mut kept);
     for fact in kept.iter() {
         let fact = nikaia_std::num::value(fact);
         bounding_push(&walk, facts, fact);
+    }
+}
+
+pub(crate) fn bounding_hull_join(walk: &mut BoundsWalk, facts: &BoundsFacts, changed: &BoundsChanged, one: &BoundsFacts, other: &BoundsFacts, kept: &mut Vec<i64>, ask: &mut impl FnMut(&logic::TermArena, &[i64], i64) -> bool) {
+    for fact in bounding_join_candidates(walk, facts, changed, one) {
+        if kept.contains(&fact) { continue; }
+        match walk.arena.at(fact) {
+            logic::SolverTerm::Eq(a, b) => { for half in [walk.arena.ge(a, b), walk.arena.le(a, b)] { if !kept.contains(&half) && bounding_proves(&walk, other, half, &mut *ask) { kept.push(half); } } },
+            _ => { },
+        }
     }
 }
 

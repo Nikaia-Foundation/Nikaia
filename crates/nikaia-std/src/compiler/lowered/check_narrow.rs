@@ -302,9 +302,9 @@ pub(crate) fn check_narrow_as_proved(state: &mut CheckState, node: i64, ty: &Ty,
     let operand = state.narrowing.operand_reads.contains(&node);
     let mut bits: i64 = 0;
     if copied || a_view { bits = unsafe { nikaia_std::proven::add::<i64>(bits, 1) }; }
-    if operand { bits = bits + 2; }
-    if lent && !a_view { bits = bits + 4; }
-    if viewed { bits = bits + 32; }
+    if operand { bits = unsafe { nikaia_std::proven::add::<i64>(bits, 2) }; }
+    if lent && !a_view { bits = unsafe { nikaia_std::proven::add::<i64>(bits, 4) }; }
+    if viewed { bits = unsafe { nikaia_std::proven::add::<i64>(bits, 32) }; }
     state.facts.narrowed_reads.insert(node, bits);
     if viewed && !inner.is_a_view() { return view_of_type(inner); }
     inner.clone()

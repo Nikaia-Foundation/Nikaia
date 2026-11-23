@@ -5523,6 +5523,31 @@ fn bounding_leave(mut walk: BoundsWalk, mut facts: BoundsFacts, name: ref String
 			break
 		}
 	}
+	// **An equality that counts the name once is solved for it** (#2457):
+	// `j - 1 == i#4` past `let mut j = start` and `j += 1` gives `j == i#4 +
+	// 1`, so `i == j + 1` keeps `i == i#4 + 2` and the outer counter its
+	// `i >= 0`; forgotten, the outer loop dropped it.
+	if value == null {
+		for fact in facts.facts {
+			match walk.arena.at(fact) {
+				logic::SolverTerm::Eq(a, b) => {
+					let d = walk.arena.sub(a, b)
+					let count = bounding_count_of(walk, d, name) ?? 0
+					if count == 1 || count == -1 {
+						let mut none: collections::BTreeMap[String, i64] = collections::BTreeMap()
+						none.insert(name.clone(), walk.arena.int(0))
+						let rest = walk.arena.substitute(d, none)
+						value = if count == 1 { walk.arena.neg(rest) } else { rest }
+					}
+				},
+				else => {},
+			}
+			if value != null {
+				by = fact
+				break
+			}
+		}
+	}
 	if value != null {
 		let mut given: collections::BTreeMap[String, i64] = collections::BTreeMap()
 		given.insert(name.clone(), value ?? 0)
@@ -5538,8 +5563,98 @@ fn bounding_leave(mut walk: BoundsWalk, mut facts: BoundsFacts, name: ref String
 			}
 		}
 		facts.facts = kept
+	} else {
+		bounding_leave_by_bounds(walk, facts, name)
 	}
 	bounding_forget(walk, facts, name)
+}
+
+/// **A name no equality pins leaves by its bounds** (#2457): each lower
+/// bound `name >= l` and upper bound `name <= u` that count it once give `u
+/// >= l`, so `j >= j#0` and `i >= j + 1` keep `i >= j#0 + 1` past the
+/// block of `let mut j`, and the outer counter its `i >= 0`. At most 32
+/// pairs, so a name with many bounds costs no more than a few.
+fn bounding_leave_by_bounds(mut walk: BoundsWalk, mut facts: BoundsFacts, name: ref String) {
+	let one = walk.arena.int(1)
+	let mut lower: Vec[i64] = []
+	let mut upper: Vec[i64] = []
+	for fact in facts.facts {
+		let mut sides: Vec[i64] = []
+		match walk.arena.at(fact) {
+			logic::SolverTerm::Ge(a, b) => sides.push(walk.arena.sub(a, b)),
+			logic::SolverTerm::Le(a, b) => sides.push(walk.arena.sub(b, a)),
+			logic::SolverTerm::Gt(a, b) => {
+				let d = walk.arena.sub(a, b)
+				sides.push(walk.arena.sub(d, one))
+			},
+			logic::SolverTerm::Lt(a, b) => {
+				let d = walk.arena.sub(b, a)
+				sides.push(walk.arena.sub(d, one))
+			},
+			else => {},
+		}
+		for d in sides {
+			let count = bounding_count_of(walk, d, name) ?? 0
+			if count == 1 {
+				lower.push(d)
+			} else if count == -1 {
+				upper.push(d)
+			}
+		}
+	}
+	let mut none: collections::BTreeMap[String, i64] = collections::BTreeMap()
+	none.insert(name.clone(), walk.arena.int(0))
+	let zero = walk.arena.int(0)
+	let mut pairs = 0
+	for l in lower {
+		for u in upper {
+			if pairs >= 32 {
+				return
+			}
+			pairs += 1
+			let sum = walk.arena.add(l, u)
+			let rest = walk.arena.substitute(sum, none)
+			let fact = walk.arena.ge(rest, zero)
+			bounding_push(walk, facts, fact)
+		}
+	}
+}
+
+/// **How many times the linear term `term` counts `name`** (#2457): null
+/// where it reads `name` under a product of two names, a quotient or another
+/// form that is no sum of multiples.
+fn bounding_count_of(walk: ref BoundsWalk, term: i64, name: ref String) -> i64? {
+	if !walk.arena.mentions(term, name) {
+		return 0
+	}
+	return match walk.arena.at(term) {
+		logic::SolverTerm::Var(_) => 1,
+		logic::SolverTerm::Neg(a) => {
+			let x = bounding_count_of(walk, a, name) ?? return null
+			x.checked_neg()
+		},
+		logic::SolverTerm::Add(a, b) => {
+			let x = bounding_count_of(walk, a, name) ?? return null
+			let y = bounding_count_of(walk, b, name) ?? return null
+			x.checked_add(y)
+		},
+		logic::SolverTerm::Sub(a, b) => {
+			let x = bounding_count_of(walk, a, name) ?? return null
+			let y = bounding_count_of(walk, b, name) ?? return null
+			x.checked_sub(y)
+		},
+		logic::SolverTerm::Mul(a, b) => {
+			let k = walk.arena.constant(a)
+			if k != null {
+				let y = bounding_count_of(walk, b, name) ?? return null
+				return y.checked_mul(k ?? 0)
+			}
+			let m = walk.arena.constant(b) ?? return null
+			let x = bounding_count_of(walk, a, name) ?? return null
+			x.checked_mul(m)
+		},
+		else => null,
+	}
 }
 
 /// **The statements of `block` from the one at `from`**, the names they
@@ -9876,6 +9991,27 @@ fn bounding_if_leaves(
 	ask: fn(ref logic::TermArena, ref Vec[i64], i64) -> bool sync,
 ) -> bool {
 	bounding_expr(walk, cond, facts, context, program, words, ask)
+	let mut changed = bounding_changed(then_branch, context, words)
+	bounding_extend_maybe(changed, else_branch, context, words)
+	// **A counter both branches may set keeps its value here by name**
+	// (#2457): `start == i` before `if c { i = j + 2 } else { i = j + 1 }`
+	// is also kept as `start == i#k`, which both ends hold, so the join
+	// keeps it where each branch's own snapshot of `i` was lost.
+	for x in changed.values {
+		if x.contains(".") || !facts.ints.contains(x) {
+			continue
+		}
+		let mut read = false
+		for fact in facts.facts {
+			if walk.arena.mentions(fact, x) {
+				read = true
+				break
+			}
+		}
+		if read {
+			bounding_rename(walk, facts, x)
+		}
+	}
 	let mut then_facts = facts.clone()
 	bounding_assume(walk, then_facts, cond, context, program, words)
 	let mut then_leaves = bounding_block(
@@ -9918,8 +10054,6 @@ fn bounding_if_leaves(
 		facts.ints = then_facts.ints
 		facts.facts = then_facts.facts
 	} else {
-		let mut changed = bounding_changed(then_branch, context, words)
-		bounding_extend_maybe(changed, else_branch, context, words)
 		bounding_after_change(walk, facts, changed)
 		bounding_if_join(walk, facts, changed, then_facts, else_facts, ask)
 		bounding_flag_join(walk, facts, changed, then_facts, else_facts, ask)
@@ -10390,10 +10524,44 @@ fn bounding_if_join(
 			kept.push(fact)
 		}
 	}
+	// **Two equalities keep their hull** (#2457): `if c { i = j + 2 } else {
+	// i = j + 1 }` keeps `i <= j + 2` of the first and `i >= j + 1` of the
+	// second, each the half the other end proves.
+	bounding_hull_join(walk, facts, changed, then_facts, else_facts, kept, ask)
+	bounding_hull_join(walk, facts, changed, else_facts, then_facts, kept, ask)
 	bounding_emptied_join(walk, facts, changed, then_facts, else_facts, kept)
 	bounding_emptied_join(walk, facts, changed, else_facts, then_facts, kept)
 	for fact in kept {
 		bounding_push(walk, facts, fact)
+	}
+}
+
+/// **The halves of an equality one end holds and the other does not**
+/// (#2457): `a >= b` and `a <= b` of the end's `a == b` that reads a changed
+/// name, each kept where the other end proves it.
+fn bounding_hull_join(
+	mut walk: BoundsWalk,
+	facts: ref BoundsFacts,
+	changed: ref BoundsChanged,
+	one: ref BoundsFacts,
+	other: ref BoundsFacts,
+	mut kept: Vec[i64],
+	ask: fn(ref logic::TermArena, ref Vec[i64], i64) -> bool sync,
+) {
+	for fact in bounding_join_candidates(walk, facts, changed, one) {
+		if kept.contains(fact) {
+			continue
+		}
+		match walk.arena.at(fact) {
+			logic::SolverTerm::Eq(a, b) => {
+				for half in [walk.arena.ge(a, b), walk.arena.le(a, b)] {
+					if !kept.contains(half) && bounding_proves(walk, other, half, ask) {
+						kept.push(half)
+					}
+				}
+			},
+			else => {},
+		}
 	}
 }
 
