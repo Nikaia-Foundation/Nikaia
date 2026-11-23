@@ -876,3 +876,25 @@ receiver and none is dropped without a trace; `a`'s error is received once, and
 `c`'s read receives its own error, which points to it. A read of `c` therefore
 throws `task::Abandoned` where `c` waits for a task that can fail, and the
 checker counts it at that read like any thrown error.
+
+### D42 - `async(detached)` may stand inside a loop's body; `NK2120` counts a group's tasks only (supervisor, 2026-11-23, by D13 and D30; #990).
+
+```nika
+while let Some(conn) = listener.accept() {
+    async(detached) fn { handle(conn) }   // one free task per connection
+}
+```
+
+D30 counts the tasks of a group in the source, so that a group of fixed size is
+laid out without an allocation and is waited for at its end. A detached task
+belongs to no group of the function: its group is the process (D13), nobody in
+the function waits for it, and no layout of the function holds it. The count
+D30 keeps has nothing to count there, and a lambda written in the loop may
+already hold an `async(detached)` (D30), so the refusal only forced a detour.
+`NK2120` refuses the value form, `async { }`, `async(handle)` and
+`async(deferred)` inside a loop's body, and not `async(detached)` (with or
+without `deferred`): its handle is a free `TaskHandle`, bound or unbound, and
+ADR-346 D2-D6 and `NK2109` hold for it as anywhere. `spawn fn { … }` in a loop
+therefore gets the edit `async(detached) fn { … }` like every other `spawn`
+(D39).
+

@@ -4004,7 +4004,9 @@ refused (`NK2111`).
 same function, branches between them included; where there is none, to the
 innermost block that holds the `async` form. **`async` starts only tasks whose
 number stands in the source**: an `async` form inside a loop's body is refused
-(`NK2120`), and the help writes `xs.par_iter().for_each fn(x) { … }`. A
+(`NK2120`), and the help writes `xs.par_iter().for_each fn(x) { … }`. A free
+task, `async(detached)`, is not counted: its group is the process (8.2), so it
+may stand in a loop's body ([ADR-async-5](adr/adr-async-5.md) D42). A
 lambda's body is a function of its own (5.3), so a lambda written in a loop may
 hold one. What was bound inside the group, in a block that ends before the
 group does, the task takes with it as a free task does (8.3). A `break`,
