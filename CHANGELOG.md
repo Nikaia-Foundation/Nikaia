@@ -8,6 +8,15 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1553] — 2026-11-23
+
+**Builders' changes (#2779, #2780, #988)**
+- A `par_iter` walk whose lambda fails in two of the program's own errors keeps a later failure of the other one in the first's list ("and then:"), instead of dropping it (ADR-async-5 D26).
+- `error.message()` and `error.full()` work on a caught `task::OverBudget`, `task::TimedOut` or `task::Crashed` alone, as on every error (Part I 7.1).
+- `println(error.message())` in a handler the box reached no longer stops in rustc with "type annotations needed".
+- async: where a pending value two tasks wait for fails, the first mention in written order receives the failure and the other task is cancelled at its wait, with no second error at the group's end (ADR-async-5 D8)
+- async: a task's fallback takes the failure of a pending value its body names, also where the callee cannot fail
+
 ## [0.0.1552] — 2026-11-23
 
 **Builders' changes (#2585, #2587)**
