@@ -75,6 +75,14 @@ fn main() throws {
 	)
 	said(
 		nikaia,
+		"a copy proved where it is bound",
+		"",
+		"    let dir = name.clone()\n    if !process::is_operand(dir) {\n        process::exit(2)\n    }\n    process::run(\"ls\", [dir.clone()])\n    let mut args: Vec[String] = [\"-l\"]\n    args.push(dir)\n    process::run(\"ls\", args)\n",
+		"",
+		check,
+	)
+	said(
+		nikaia,
 		"run where it is an operand",
 		"",
 		"    if process::is_operand(name) {\n        process::run(\"rm\", [name])\n    }\n",

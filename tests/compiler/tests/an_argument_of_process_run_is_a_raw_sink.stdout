@@ -7,6 +7,8 @@ warning[NK1308]: `name` reaches the start of an argument of `process::run`, whic
 exit 0
 -- proved by a function that never comes back
 exit 0
+-- a copy proved where it is bound
+exit 0
 -- run where it is an operand
 exit 0
 -- after a literal --

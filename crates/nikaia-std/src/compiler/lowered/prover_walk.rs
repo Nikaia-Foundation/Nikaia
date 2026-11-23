@@ -2194,7 +2194,7 @@ pub(crate) fn raw_sink_through(walk: &mut ProverWalk, callee: &str, args: &[Expr
             continue;
         }
         if sink.kind == "option" {
-            let first = match raw_sink_option_start(unsafe { nikaia_std::proven::read(&all, (sink.index) as usize) }, scope, words, &mut *written_of) { Some(__nikaia_value) => __nikaia_value, None => continue };
+            let first = match raw_sink_option_judged(walk, unsafe { nikaia_std::proven::read(&all, (sink.index) as usize) }, scope, words, &mut *ask, &mut *written_of) { Some(__nikaia_value) => __nikaia_value, None => continue };
             raw_sink_part(walk, sink, &shown, &first, span, scope, at, program, words, library, &mut *holes_of, &mut *ask, &mut *written_of);
             continue;
         }
@@ -2399,7 +2399,7 @@ pub(crate) fn raw_sink_options(walk: &mut ProverWalk, list: &Expr, through: &str
             let sink = ParamSink { index: -1, kind: String::from("option"), sink: String::from("the start of an argument of `process::run`, which the program may read as an option"), operation: String::from(""), root_part: false, guard: String::from("process::is_operand") };
             let shown = format!("{}{}", sink.sink, through);
             for item in items.iter() {
-                let first = match raw_sink_option_start(item, scope, words, &mut *written_of) { Some(__nikaia_value) => __nikaia_value, None => continue };
+                let first = match raw_sink_option_judged(walk, item, scope, words, &mut *ask, &mut *written_of) { Some(__nikaia_value) => __nikaia_value, None => continue };
                 raw_sink_part(walk, &sink, &shown, &first, span, scope, at, program, words, library, &mut *holes_of, &mut *ask, &mut *written_of);
             }
         },
@@ -2433,6 +2433,12 @@ pub(crate) fn raw_sink_first_part(expr: &Expr, written_of: &mut dyn FnMut(&Expr)
         Expr::LitStr { .. } => return None,
         _ => return Some(expr.clone()),
     }
+}
+
+pub(crate) fn raw_sink_option_judged(walk: &mut ProverWalk, item: &Expr, scope: &ProverScope, words: &winnow_grammar::InternerContext, ask: &mut impl FnMut(&logic::TermArena, &[i64], i64) -> SolverAnswer, written_of: &mut impl FnMut(&Expr) -> String) -> Option<Expr> {
+    let first = match raw_sink_first_part(item, &mut *written_of) { Some(__nikaia_value) => __nikaia_value, None => return None };
+    if raw_sink_name(&first, words).is_some() && raw_sink_guarded(walk, &first, "process::is_operand", scope, words, &mut *ask) { return None; }
+    raw_sink_option_start(item, scope, words, &mut *written_of)
 }
 
 pub(crate) fn raw_sink_option_start(item: &Expr, scope: &ProverScope, words: &winnow_grammar::InternerContext, written_of: &mut dyn FnMut(&Expr) -> String) -> Option<Expr> {
@@ -2521,7 +2527,7 @@ pub(crate) fn raw_sink_option_list(walk: &mut ProverWalk, stmt: &Stmt, scope: &P
 
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn raw_sink_option_pushed(walk: &mut ProverWalk, item: &Expr, scope: &ProverScope, words: &winnow_grammar::InternerContext, library: &Ledger, holes_of: &mut impl FnMut(&Expr) -> Vec<Expr>, ask: &mut impl FnMut(&logic::TermArena, &[i64], i64) -> SolverAnswer, written_of: &mut impl FnMut(&Expr) -> String) -> i64 {
-    let first = match raw_sink_option_start(item, scope, words, &mut *written_of) { Some(__nikaia_value) => __nikaia_value, None => return 0 };
+    let first = match raw_sink_option_judged(walk, item, scope, words, &mut *ask, &mut *written_of) { Some(__nikaia_value) => __nikaia_value, None => return 0 };
     if raw_sink_outside(&first, scope, words, library, &walk.state, &mut *holes_of) && !raw_sink_passes(walk, "process::is_operand", &first, scope, words, &mut *ask) { return 2; }
     0
 }

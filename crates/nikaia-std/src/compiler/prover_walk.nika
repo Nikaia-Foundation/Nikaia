@@ -3037,7 +3037,7 @@ fn raw_sink_through(mut walk: ProverWalk, callee: ref String, args: ref Vec[Expr
             continue
         }
         if sink.kind == "option" {
-            let first = raw_sink_option_start(all[sink.index], scope, words, written_of) ?? continue
+            let first = raw_sink_option_judged(walk, all[sink.index], scope, words, ask, written_of) ?? continue
             raw_sink_part(walk, sink, shown, first, span, scope, at, program, words, library, holes_of, ask, written_of)
             continue
         }
@@ -3361,7 +3361,7 @@ fn raw_sink_options(mut walk: ProverWalk, list: ref Expr, through: ref String, s
             let sink = ParamSink { index: -1, kind: "option", sink: "the start of an argument of `process::run`, which the program may read as an option", operation: "", root_part: false, guard: "process::is_operand" }
             let shown = f"{sink.sink}{through}"
             for item in items {
-                let first = raw_sink_option_start(item, scope, words, written_of) ?? continue
+                let first = raw_sink_option_judged(walk, item, scope, words, ask, written_of) ?? continue
                 raw_sink_part(walk, sink, shown, first, span, scope, at, program, words, library, holes_of, ask, written_of)
             }
         },
@@ -3410,6 +3410,18 @@ fn raw_sink_first_part(expr: ref Expr, written_of: fn(ref Expr) -> String sync) 
         Expr::LitStr { .. } => return null,
         else => return expr.clone(),
     }
+}
+
+/// **The part of an argument of `process::run` to judge**
+/// (`raw_sink_option_start`), none where the name it starts with is proved
+/// `process::is_operand` itself (ADR-raw-sinks-1 D18 item 1): `let dir =
+/// lane.clone()` checked as `dir` is proved, whatever `lane` holds.
+fn raw_sink_option_judged(mut walk: ProverWalk, item: ref Expr, scope: ref ProverScope, words: ref winnow_grammar::InternerContext, ask: fn(ref logic::TermArena, ref Vec[i64], i64) -> SolverAnswer sync, written_of: fn(ref Expr) -> String sync) -> Expr? {
+    let first = raw_sink_first_part(item, written_of) ?? return null
+    if raw_sink_name(first, words) != null && raw_sink_guarded(walk, first, "process::is_operand", scope, words, ask) {
+        return null
+    }
+    return raw_sink_option_start(item, scope, words, written_of)
 }
 
 /// **The part an argument of `process::run` starts with, through a root**
@@ -3528,7 +3540,7 @@ fn raw_sink_option_list(mut walk: ProverWalk, stmt: ref Stmt, scope: ref ProverS
 /// 2 for a value from outside whose start is not proved
 /// `process::is_operand`, else 0.
 fn raw_sink_option_pushed(mut walk: ProverWalk, item: ref Expr, scope: ref ProverScope, words: ref winnow_grammar::InternerContext, library: ref Ledger, holes_of: fn(ref Expr) -> Vec[Expr] sync, ask: fn(ref logic::TermArena, ref Vec[i64], i64) -> SolverAnswer sync, written_of: fn(ref Expr) -> String sync) -> i64 {
-    let first = raw_sink_option_start(item, scope, words, written_of) ?? return 0
+    let first = raw_sink_option_judged(walk, item, scope, words, ask, written_of) ?? return 0
     if raw_sink_outside(first, scope, words, library, walk.state, holes_of) && !raw_sink_passes(walk, "process::is_operand", first, scope, words, ask) {
         return 2
     }
