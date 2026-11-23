@@ -10882,7 +10882,17 @@ fn bounding_method(
 			return
 		}
 	}
+	// **A length forgotten is still never negative** (#1642): after `pop`
+	// on a list whose length was known, `0 <= len(xs)` stands again, so a
+	// field set to `0` after it is seen within the list.
+	let known = facts.facts.len()
 	bounding_forget_length(walk, facts, name)
+	if facts.facts.len() < known {
+		let len = walk.arena.var(length)
+		let zero = walk.arena.int(0)
+		let fact = walk.arena.ge(len, zero)
+		bounding_push(walk, facts, fact)
+	}
 }
 
 /// Each expression directly inside `expr`, then each block, of the
