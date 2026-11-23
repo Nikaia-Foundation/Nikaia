@@ -10,7 +10,7 @@ pub struct Reached {
 }
 
 impl Reached {
-    pub fn might_be_same(&self, other: &Reached) -> bool {
+    pub(crate) fn might_be_same(&self, other: &Reached) -> bool {
         if family(&self.kind) != family(&other.kind) { return false; }
         if self.unknown || other.unknown { return true; }
         let mine = match match self.named.as_ref() {
@@ -92,7 +92,7 @@ pub struct TouchGraph {
     pub reaches: collections::BTreeMap<String, Reach>,
 }
 
-pub fn unit_touches(items: &[Spanned<Item>], names: &winnow_grammar::InternerContext, unaliased: &mut impl FnMut(&str) -> String, holes_of: &mut impl FnMut(&Expr) -> Vec<Expr>, own: &Ledger, library: &Ledger, graph: &mut TouchGraph) {
+pub(crate) fn unit_touches(items: &[Spanned<Item>], names: &winnow_grammar::InternerContext, unaliased: &mut impl FnMut(&str) -> String, holes_of: &mut impl FnMut(&Expr) -> Vec<Expr>, own: &Ledger, library: &Ledger, graph: &mut TouchGraph) {
     for item in items.iter() {
         match &item.node {
             Item::Fn { name, body, .. } => {
@@ -134,7 +134,7 @@ pub fn unit_touches(items: &[Spanned<Item>], names: &winnow_grammar::InternerCon
     }
 }
 
-pub fn touches_of_graph(graph: &TouchGraph) -> collections::BTreeMap<String, Vec<Touch>> {
+pub(crate) fn touches_of_graph(graph: &TouchGraph) -> collections::BTreeMap<String, Vec<Touch>> {
     let mut unknown: collections::BTreeMap<String, bool> = collections::BTreeMap::new();
     let mut outside: collections::BTreeMap<String, Vec<Touch>> = collections::BTreeMap::new();
     let mut calls: collections::BTreeMap<String, collections::BTreeSet<String>> = collections::BTreeMap::new();
@@ -165,7 +165,7 @@ pub fn touches_infer(ledger: &mut Ledger, units: &[ParsedView<'_, '_, '_, '_, '_
     }
 }
 
-pub fn in_ledger_order(touches: &[Touch]) -> Vec<Touch> {
+pub(crate) fn in_ledger_order(touches: &[Touch]) -> Vec<Touch> {
     let mut found: collections::BTreeMap<(String, Option<String>, Option<String>, bool), Touch> = collections::BTreeMap::new();
     for touch in touches.iter() {
         found.insert((nikaia_std::block::Text::from(touch.kind.to_string()), match touch.parameter.as_ref() {
@@ -181,7 +181,7 @@ pub fn in_ledger_order(touches: &[Touch]) -> Vec<Touch> {
     kept
 }
 
-pub fn touches_of_unit(unit: &[String], reaches: &collections::BTreeMap<String, Reach>, stored: &collections::BTreeMap<String, Vec<Touch>>) -> collections::BTreeMap<String, Vec<Touch>> {
+pub(crate) fn touches_of_unit(unit: &[String], reaches: &collections::BTreeMap<String, Reach>, stored: &collections::BTreeMap<String, Vec<Touch>>) -> collections::BTreeMap<String, Vec<Touch>> {
     let mut members: collections::BTreeSet<String> = collections::BTreeSet::new();
     let mut known: collections::BTreeMap<String, bool> = collections::BTreeMap::new();
     for name in unit.iter() {
@@ -234,7 +234,7 @@ pub fn touches_of_unit(unit: &[String], reaches: &collections::BTreeMap<String, 
     settled
 }
 
-pub fn touches_callees_first(graph: &TouchGraph) -> collections::BTreeMap<String, Vec<Touch>> {
+pub(crate) fn touches_callees_first(graph: &TouchGraph) -> collections::BTreeMap<String, Vec<Touch>> {
     let mut stored: collections::BTreeMap<String, Vec<Touch>> = collections::BTreeMap::new();
     for unit in touch_units(&graph.reaches) {
         let column = touches_of_unit(&unit, &graph.reaches, &stored);
@@ -253,7 +253,7 @@ pub(crate) struct TouchComponents {
     pub(crate) next: i64,
 }
 
-pub fn touch_units(reaches: &collections::BTreeMap<String, Reach>) -> Vec<Vec<String>> {
+pub(crate) fn touch_units(reaches: &collections::BTreeMap<String, Reach>) -> Vec<Vec<String>> {
     let mut walk = TouchComponents { index: collections::BTreeMap::new(), low: collections::BTreeMap::new(), open: collections::BTreeSet::new(), stack: vec![], units: vec![], next: 0 };
     for (name, _) in reaches.iter() { if !walk.index.contains_key(name) { touch_connect(reaches, name, &mut walk); } }
     walk.units

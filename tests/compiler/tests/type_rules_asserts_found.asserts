@@ -1,0 +1,7 @@
+asserts in tests/type_rules_asserts_found.nika: 2 - not proved 0 (refused 0, checked at run time 0, checked by a test 0); checked where the words arrive 0; proved 2 (proved 2, preconditions proved at every call 0); derived from the callers 1; type rules 3 (written 1, found 2, not found 0)
+  tests/type_rules_asserts_found.nika  derived  piece: 0 <= a, a <= b, a < b, 0 <= b, proved at the calls on lines 40
+  tests/type_rules_asserts_found.nika  written  the rule of `Piece`: a piece ends after it starts: checked at 2 points
+    tests/type_rules_asserts_found.nika:13  where a value of it is built  proved
+    tests/type_rules_asserts_found.nika:39  where a value of it is built  proved
+  tests/type_rules_asserts_found.nika  found  `Cursor`: 0 <= at - every literal builds it so, and every body that may write its fields keeps it: `step`, `main`
+  tests/type_rules_asserts_found.nika  found  `Cursor`: at <= c.len() - a statement of its methods names `at` beside `c`, and every literal builds it within, and every body that may write its fields keeps it: `step`, `main`

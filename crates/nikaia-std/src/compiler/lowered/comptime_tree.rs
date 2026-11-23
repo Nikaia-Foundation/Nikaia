@@ -658,7 +658,7 @@ pub const COMPTIME_VALUE_DIR: &str = "comptime-value";
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 #[allow(clippy::too_many_arguments)]
-pub fn comptime_computed<H: ComptimeComputeHost>(host: &H, here: i64, bound: &str, value: &Expr, ty: &Ty, known: &mut dyn FnMut(&str) -> Option<BuildValue>, typed: &mut dyn FnMut(&str) -> Option<Ty>, answered: &mut String) -> CheckComputed {
+pub(crate) fn comptime_computed<H: ComptimeComputeHost>(host: &H, here: i64, bound: &str, value: &Expr, ty: &Ty, known: &mut dyn FnMut(&str) -> Option<BuildValue>, typed: &mut dyn FnMut(&str) -> Option<Ty>, answered: &mut String) -> CheckComputed {
     #[allow(unused_mut)] let mut not_here: nikaia_std::func::Kept<dyn Fn(&str) -> CheckComputed + std::marker::Send + std::marker::Sync> = nikaia_std::func::Kept(std::sync::Arc::new(move |why| { CheckComputed::NotHere(nikaia_std::block::Text::from(why.to_string())) }));
     match host.remembered(here, bound, value, ty) {
         None => { },

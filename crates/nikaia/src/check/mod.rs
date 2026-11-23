@@ -788,7 +788,7 @@ pub fn claims_report(
         &Newly::new(),
         reads,
     );
-    let derived = crate::bounds_report::derived(
+    let (derived, rules) = crate::bounds_report::derived(
         parsed,
         package,
         source,
@@ -803,6 +803,7 @@ pub fn claims_report(
         path,
         &checked.facts.published,
         &derived,
+        &rules,
         colour,
         refuses,
     )

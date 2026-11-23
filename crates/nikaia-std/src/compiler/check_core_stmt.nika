@@ -4843,7 +4843,7 @@ fn check_core_names_read_in(file: ref ParsedView) -> collections::BTreeSet[Strin
 /// whether the file to be checked is among `files`: a package's check hands
 /// every file, `lower-std` the whole package once, and a check with no
 /// package fact the files beside it.
-pub fn check_core_names_read(files: ref Vec[ParsedView], with_here: bool) -> CheckNamesRead {
+fn check_core_names_read(files: ref Vec[ParsedView], with_here: bool) -> CheckNamesRead {
     let mut named: collections::BTreeMap[String, i64] = collections::BTreeMap()
     let mut grammars = 0
     for file in files {
