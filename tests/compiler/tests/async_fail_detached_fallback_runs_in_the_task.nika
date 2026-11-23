@@ -1,0 +1,34 @@
+// A detached task nobody joins runs its fallback in the task itself when it
+// fails, instead of the error going only to standard error (Part I 8.1.2,
+// ADR-async-5 D13, D22 step 3, #989): unbound, and bound then detached.
+use std::time
+
+struct Bad {}
+
+impl Error for Bad {
+	fn message(ref self) -> String {
+		return "bad"
+	}
+}
+
+fn fails(n: i64) -> i64 throws {
+	if n > 1 {
+		throw Bad {}
+	}
+	return n
+}
+
+fn main() throws {
+	async(detached) fn { fails(2) } catch {
+		println(f"the unbound task's fallback: {error}")
+		0
+	}
+	time::sleep(50.millis())
+	let h = async(detached) fn { fails(3) } catch {
+		println(f"the detached handle's fallback: {error}")
+		0
+	}
+	h.detach()
+	time::sleep(50.millis())
+	println("main ends")
+}
