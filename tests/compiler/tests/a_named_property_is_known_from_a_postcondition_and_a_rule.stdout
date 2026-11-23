@@ -1,10 +1,11 @@
 == check --asserts --unproved-claims=warn post.nika
-asserts in post.nika: 5 - not proved 1 (refused 0, checked at run time 1, checked by a test 0); checked where the words arrive 0; proved 4 (proved 4, preconditions proved at every call 0)
+asserts in post.nika: 5 - not proved 1 (refused 0, checked at run time 1, checked by a test 0); checked where the words arrive 0; proved 4 (proved 4, preconditions proved at every call 0); type rules 1 (written 1, found 0, not found 0)
   post.nika:15  assert(is_sorted(r))  checked at run time: nothing before it shows it; no invariant found for the loop that changes `r.len()`, `i` carries it
   post.nika:24  assert(is_sorted(b.items))  proved
   post.nika:25  assert(is_sorted(b.items))  proved: known from the rule of `Bag`
   post.nika:31  assert(is_sorted(c))  proved: known from what `made(3)` ensures
-  post.nika:32  assert(is_sorted(c); message: "the rule of `Bag`")  proved: known from what `made(3)` ensures
+  post.nika  written  the rule of `Bag`: checked at 1 points
+    post.nika:32  where a value of it is built  proved: known from what `made(3)` ensures
 Checked post.nika
 warning[NK1300]: `assert(is_sorted(r))` is not proved: nothing before it shows it; no invariant found for the loop that changes `r.len()`, `i` carries it.
    --> post.nika:15:2

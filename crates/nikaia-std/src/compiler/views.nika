@@ -274,7 +274,7 @@ pub fn views_stored(asked: ref Asked, items: ref Vec[Spanned[Item]], own_buffer:
 
 /// `views_stored` with the package's `ResultPackage` made once by the caller
 /// (#2685): a file check of a package is handed it, not one per file.
-pub fn views_stored_in(asked: ref Asked, package: ref ResultPackage, items: ref Vec[Spanned[Item]], own_buffer: fn(ref Expr) -> bool sync) -> Vec[Stored] {
+fn views_stored_in(asked: ref Asked, package: ref ResultPackage, items: ref Vec[Spanned[Item]], own_buffer: fn(ref Expr) -> bool sync) -> Vec[Stored] {
     let mut unit = plain_unit(package, borrowing_types(asked.names, items), view_fields(asked.names, items))
     method_table(asked, items, unit)
     // **The methods to their least fixpoint** (#818): a parameter handed to a

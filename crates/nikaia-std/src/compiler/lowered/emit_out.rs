@@ -101,7 +101,7 @@ impl EmitOut {
         self.buf.insert_str(nikaia_std::count::of(at), text);
         self.shift_entries(at, text.len() as i64);
     }
-    pub fn push_around(&mut self, text: &str, marker: &str, inner: &EmitOut) {
+    pub(crate) fn push_around(&mut self, text: &str, marker: &str, inner: &EmitOut) {
         if !text.contains(AsRef::<str>::as_ref(marker)) {
             self.buf.push_str(text);
             return;

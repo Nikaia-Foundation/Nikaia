@@ -3,7 +3,7 @@
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn check_simd_kind(ty: &Ty) -> String {
+pub(crate) fn check_simd_kind(ty: &Ty) -> String {
     match ty {
         Ty::Named { name, view, .. } => { let view = *view; if view { String::from("") } else if name == "simd::Lanes" { String::from("Lanes") } else if name == "simd::Fixed" { String::from("Fixed") } else if name == "simd::Mask" { String::from("Mask") } else { String::from("") } },
         _ => String::from(""),
@@ -28,18 +28,18 @@ pub(crate) fn check_simd_bits_of(name: &str) -> i64 {
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn check_simd_float(name: &str) -> bool { name == "f32" || name == "f64" }
+pub(crate) fn check_simd_float(name: &str) -> bool { name == "f32" || name == "f64" }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn check_simd_float_vector(ty: &Ty) -> bool {
+pub(crate) fn check_simd_float_vector(ty: &Ty) -> bool {
     let kind = check_simd_kind(ty);
     (kind == "Fixed" || kind == "Lanes") && check_simd_float(&check_simd_lane_of(ty))
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn check_simd_lane_bits(name: &str) -> i64 {
+pub(crate) fn check_simd_lane_bits(name: &str) -> i64 {
     match name {
         "f32" => 32,
         "f64" => 64,
@@ -196,7 +196,7 @@ pub(crate) fn check_simd_a_call(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn check_simd_wanted(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, value: &Expr, want: Option<&Ty>) -> Option<Ty> {
+pub(crate) fn check_simd_wanted(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, value: &Expr, want: Option<&Ty>) -> Option<Ty> {
     let ty: Ty = match match want {
         Some(__nikaia_it) => Some(__nikaia_it.copy_owned()),
         None => None,
@@ -209,7 +209,7 @@ pub fn check_simd_wanted(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, val
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn check_simd_element(declared: Option<&Ty>) -> Option<Ty> {
+pub(crate) fn check_simd_element(declared: Option<&Ty>) -> Option<Ty> {
     let ty: Ty = match match declared {
         Some(__nikaia_it) => Some(__nikaia_it.copy_owned()),
         None => None,
@@ -377,7 +377,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn lanes_at_most(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, value: &Expr) -> Option<i64> {
+    pub(crate) fn lanes_at_most(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, value: &Expr) -> Option<i64> {
         match value {
             Expr::Call { func, args, .. } => { let func = nikaia_std::boxed::open(func); self.lanes_at_most_made(world, func, args) },
             Expr::Binary { op, lhs, rhs, .. } => { let lhs = nikaia_std::boxed::open(lhs); let rhs = nikaia_std::boxed::open(rhs); if *op == BinaryOp::BitAnd { check_simd_least(self.lanes_at_most(world, lhs), self.lanes_at_most(world, rhs)) } else { None } },
@@ -464,7 +464,7 @@ pub(crate) fn check_simd_float_only(method: &str) -> bool { method == "sqrt" || 
 impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_lane_method_not_offered(&mut self, on: &Ty, method: &str, span: &Span) {
+    pub(crate) fn a_lane_method_not_offered(&mut self, on: &Ty, method: &str, span: &Span) {
         let kind = check_simd_kind(on);
         if kind != "Fixed" && kind != "Lanes" { return; }
         let lane = check_simd_lane_of(on);

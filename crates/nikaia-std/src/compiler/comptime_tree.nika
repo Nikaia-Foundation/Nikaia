@@ -949,7 +949,7 @@ pub comptime COMPTIME_VALUE_DIR: ref String = "comptime-value"
 
 /// **Compute the value of `comptime` `bound`** in file `here`; `answered` is
 /// set to the text the run handed back where a run answered.
-pub fn comptime_computed[H: ComptimeComputeHost](host: ref H, here: i64, bound: String, value: ref Expr, ty: ref Ty, known: fn(ref String) -> BuildValue? sync, typed: fn(ref String) -> Ty? sync, mut answered: String) -> CheckComputed sync {
+fn comptime_computed[H: ComptimeComputeHost](host: ref H, here: i64, bound: String, value: ref Expr, ty: ref Ty, known: fn(ref String) -> BuildValue? sync, typed: fn(ref String) -> Ty? sync, mut answered: String) -> CheckComputed sync {
     let not_here: fn(ref String) -> CheckComputed sync = fn(why) { CheckComputed::NotHere(why.clone()) }
     match host.remembered(here, bound, value, ty) {
         null => {},

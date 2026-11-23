@@ -659,7 +659,7 @@ impl CheckState {
     /// **Whether a rule's value is lent** (ADR-grammar-actions-v1 D7): written plain or
     /// `ref`, neither `mut` nor `keep`, and of a type a word does not hold
     /// (ADR-279 D8), which is copied as a function's is.
-    pub fn a_lent_rule_value[H: CheckHost](ref self, world: ref CheckWorld, host: ref H, arg: ref FnArg) -> bool sync {
+    fn a_lent_rule_value[H: CheckHost](ref self, world: ref CheckWorld, host: ref H, arg: ref FnArg) -> bool sync {
         if arg.mutable || arg.keep || arg.ty.code != null {
             return false
         }

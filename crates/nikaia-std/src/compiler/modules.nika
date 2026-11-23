@@ -196,27 +196,6 @@ fn pause_path(chain: ref Vec[String]) -> String {
     return steps.join(", which ")
 }
 
-/// **[ADR-288](../../../docs/specification/adr/adr-288.md) D32's warning**:
-/// every `pub` function of the program's own that the committed ledger says
-/// could not pause (`"inferred"`) and that now can, at the statement that
-/// made it, with the calls that lead there - empty where none has.
-///
-/// Under D1 no consumer is refused by this, since none relied on the
-/// inference; what the author loses is the promise D2 offered, and the
-/// property the package's own callers may count on. The committed ledger is
-/// the acknowledgement: once the new entry is committed it is not said
-/// again. A written `sync` needs no warning, because a body that breaks it
-/// is refused (`NK2202`). `render` says a finding at the statement of the unit
-/// it names (`diagnostics::render_finding`).
-///
-/// **In two steps** (#2395): what the program says of each function
-/// (`lost_sync_all`) is stored with a cached lowering, and the committed
-/// ledger, which is not part of the cache's key, picks from it
-/// (`lost_sync_against`), so a cache hit says what a miss would.
-pub fn lost_sync(contracts: ref Ledger, theirs: ref collections::BTreeMap[String, Ledger], pauses: ref collections::BTreeMap[String, ModulesPause], committed: ref Ledger, render: fn(ref CheckFinding, i64) -> String sync) -> String {
-    return lost_sync_against(lost_sync_all(contracts, theirs, pauses, render), committed)
-}
-
 /// **ADR-288 D32's warning for one function**, said whatever the committed
 /// ledger holds: `lost_sync_against` keeps it where that ledger says the
 /// function could not pause. **A `par_iter` call's** (ADR-async-5 D32,
@@ -227,7 +206,7 @@ pub struct SyncLost {
     pub said: String,
 }
 
-/// The warning of `lost_sync` for every `pub` function of the program's own
+/// **ADR-288 D32's warning** for every `pub` function of the program's own
 /// that can pause now and promises nothing about it, before the committed
 /// ledger is asked.
 pub fn lost_sync_all(contracts: ref Ledger, theirs: ref collections::BTreeMap[String, Ledger], pauses: ref collections::BTreeMap[String, ModulesPause], render: fn(ref CheckFinding, i64) -> String sync) -> Vec[SyncLost] {
@@ -326,7 +305,7 @@ pub fn lost_pieces_all(sites: ref Vec[ParSite], pauses: ref collections::BTreeMa
 
 /// **The ledger's `par_iter` column** (ADR-async-5 D32): each function's
 /// calls, `"pieces"` or `"tasks"`, in their order.
-pub fn par_iter_column(mut ledger: Ledger, sites: ref Vec[ParSite]) {
+fn par_iter_column(mut ledger: Ledger, sites: ref Vec[ParSite]) {
     for site in sites {
         let mut contract = ledger.functions[site.function] ?? continue
         let runs = if site.pausing == null { "pieces" } else { "tasks" }
@@ -734,7 +713,7 @@ fn modules_test_only_mark() -> String {
 /// item in the file's order: the name of each private function without a
 /// receiver and of each private struct or enum (`""` for any other item),
 /// whether the item is a `test` block, and the plain names its text calls
-/// (`modules_call_starts`) or the type names it writes (`modules_type_words`),
+/// or the type names it writes,
 /// in a comment or a string too. The files of a package share one namespace,
 /// so the reach is worked out over all of them (`modules_only_tests_package`).
 pub struct ModulesReach {
@@ -743,73 +722,8 @@ pub struct ModulesReach {
     calls: Vec[collections::BTreeSet[String]],
 }
 
-/// The reach of one file (`ModulesReach`): `items` parsed from `source`,
-/// their names in `words`.
-pub fn modules_reach_of(items: ref Vec[Spanned[Item]], words: ref winnow_grammar::InternerContext, source: ref String) -> ModulesReach {
-    let mut names: Vec[String] = []
-    let mut tests: Vec[bool] = []
-    let mut calls: Vec[collections::BTreeSet[String]] = []
-    for item in items {
-        let mut called: String = ""
-        let mut is_test = false
-        match item.node {
-            Item::Fn { name, receiver, is_public, is_extern, .. } => {
-                if receiver == null && !is_public && !is_extern {
-                    match name {
-                        held => { called = words.resolve(held).clone() },
-                        null => {},
-                    }
-                }
-            },
-            Item::Struct { name, is_public, is_extern, .. } => {
-                if !is_public && !is_extern {
-                    called = words.resolve(name).clone()
-                }
-            },
-            Item::Enum { name, is_public, is_extern, .. } => {
-                if !is_public && !is_extern {
-                    called = words.resolve(name).clone()
-                }
-            },
-            Item::Test { .. } => { is_test = true },
-            else => {},
-        }
-        names.push(called)
-        tests.push(is_test)
-        calls.push(collections::BTreeSet())
-    }
-    // The calls come in the text's order, the items too: each call goes to
-    // the item it stands in, one between two items to none.
-    let mut k = 0
-    for (word, start) in modules_call_starts(source) {
-        while k < items.len() && start >= items[k].span.end as i64 {
-            k += 1
-        }
-        if k >= items.len() {
-            break
-        }
-        if start >= items[k].span.start as i64 {
-            calls[k].insert(word.clone())
-        }
-    }
-    // A type is named, not called: each word that starts with a capital.
-    k = 0
-    for (word, start) in modules_type_words(source) {
-        while k < items.len() && start >= items[k].span.end as i64 {
-            k += 1
-        }
-        if k >= items.len() {
-            break
-        }
-        if start >= items[k].span.start as i64 {
-            calls[k].insert(word.clone())
-        }
-    }
-    return ModulesReach { names: names, tests: tests, calls: calls }
-}
-
 /// **The private functions and types of a package that only `test` blocks
-/// reach** (#1160), by name, one set per file of `parts` (`modules_reach_of`):
+/// reach** (#1160), by name, one set per file of `parts` (`ModulesReach`):
 /// a function without a receiver and not `pub`, or a struct or an enum not
 /// `pub` (an `impl` of it is no test, so keeps it), called or named by a
 /// `test` block of any file or by another such item, and by nothing else - no other item of
@@ -818,7 +732,7 @@ pub fn modules_reach_of(items: ref Vec[Spanned[Item]], words: ref winnow_grammar
 /// `#[cfg(test)]`, such a function is not dead code to a build without the
 /// tests; one the rest names without calling it (a function value) fails that
 /// build loudly, never silently.
-pub fn modules_only_tests_package(parts: ref Vec[ModulesReach]) -> Vec[collections::BTreeSet[String]] {
+fn modules_only_tests_package(parts: ref Vec[ModulesReach]) -> Vec[collections::BTreeSet[String]] {
     // Every item's calls in one list; each candidate's place in it and file.
     let mut bodies: Vec[collections::BTreeSet[String]] = []
     let mut candidates: collections::BTreeMap[String, i64] = collections::BTreeMap()
@@ -877,87 +791,6 @@ pub fn modules_only_tests_package(parts: ref Vec[ModulesReach]) -> Vec[collectio
     return found
 }
 
-// Each call of a plain name in `text` with the byte it starts at: a word not
-// after a `.` (a method, a field) and followed by `(`, spaces between. A word
-// in a comment or a string counts too.
-fn modules_call_starts(text: ref String) -> Vec[(String, i64)] {
-    let mut out: Vec[(String, i64)] = []
-    let mut word: String = ""
-    let mut start = 0
-    let mut before = 32
-    let mut last = 32
-    let mut waiting: String = ""
-    let mut waiting_at = 0
-    let mut at = 0
-    for b in text.bytes() {
-        let c = b as i64
-        let in_word = (c >= 48 && c <= 57) || (c >= 65 && c <= 90) || (c >= 97 && c <= 122) || c == 95
-        if !waiting.is_empty() && c != 32 {
-            if c == 40 {
-                out.push((waiting.clone(), waiting_at))
-            }
-            waiting = ""
-        }
-        if in_word {
-            if word.is_empty() {
-                before = last
-                start = at
-            }
-            word.push_str(f"{(c as u8) as char}")
-            last = 97
-        } else {
-            if !word.is_empty() {
-                if before != 46 {
-                    if c == 40 {
-                        out.push((word.clone(), start))
-                    } else if c == 32 {
-                        waiting = word.clone()
-                        waiting_at = start
-                    }
-                }
-                word = ""
-            }
-            if c != 32 {
-                last = c
-            }
-        }
-        at += 1
-    }
-    return out
-}
-
-// Each word of `text` that starts with a capital, not after a `.`, with the
-// byte it starts at: the names of types. A word in a comment or a string
-// counts too.
-fn modules_type_words(text: ref String) -> Vec[(String, i64)] {
-    let mut out: Vec[(String, i64)] = []
-    let mut word: String = ""
-    let mut start = 0
-    let mut before = 32
-    let mut at = 0
-    for b in text.bytes() {
-        let c = b as i64
-        let in_word = (c >= 48 && c <= 57) || (c >= 65 && c <= 90) || (c >= 97 && c <= 122) || c == 95
-        if in_word {
-            if word.is_empty() {
-                start = at
-            }
-            word.push_str(f"{(c as u8) as char}")
-        } else {
-            if !word.is_empty() {
-                let first = word.bytes().next() ?? 0
-                if before != 46 && first >= 65 && first <= 90 {
-                    out.push((word.clone(), start))
-                }
-                word = ""
-            }
-            before = c
-        }
-        at += 1
-    }
-    return out
-}
-
 // `names` with every candidate a candidate in it mentions, until nothing new
 // is added.
 fn modules_close_over(mut names: collections::BTreeSet[String], candidates: ref collections::BTreeMap[String, i64], mentions: ref Vec[collections::BTreeSet[String]]) {
@@ -980,47 +813,6 @@ fn modules_close_over(mut names: collections::BTreeSet[String], candidates: ref 
     }
 }
 
-
-/// **The functions a tools file lowers under `#[cfg(test)]`** (#1160): its
-/// tests, which `modules_tests_as_functions` turned into functions, and those
-/// of `only_tests` (`modules_only_tests_package`) carry `modules_test_only_mark`.
-/// `tests` is how many tests the file has, numbered from 0.
-pub fn modules_mark_test_only(mut items: Vec[Spanned[Item]], only_tests: ref collections::BTreeSet[String], tests: i64, words: ref winnow_grammar::InternerContext, intern: fn(ref String) -> winnow_grammar::Symbol sync) {
-    let mut marks = only_tests.clone()
-    for k in 0..<tests {
-        marks.insert(test_function(k))
-    }
-    let mut kept: Vec[Spanned[Item]] = []
-    for item in items.drain() {
-        let mut marked = false
-        match item.node {
-            Item::Fn { name, receiver, .. } => {
-                match name {
-                    held => {
-                        let written = words.resolve(held)
-                        marked = receiver == null && marks.contains(written)
-                    },
-                    null => {},
-                }
-            },
-            Item::Struct { name, .. } => {
-                marked = only_tests.contains(words.resolve(name))
-            },
-            Item::Enum { name, .. } => {
-                marked = only_tests.contains(words.resolve(name))
-            },
-            else => {},
-        }
-        if marked {
-            let mut attributes = item.attributes
-            attributes.push(Attribute { name: intern(modules_test_only_mark()), args: [], config: [], span: item.span })
-            kept.push(Spanned { node: item.node, span: item.span, doc: item.doc, attributes: attributes })
-        } else {
-            kept.push(item)
-        }
-    }
-    items.extend(kept)
-}
 
 // The line the byte `at` of `source` stands on, the first being 1.
 fn modules_line_of(source: ref String, at: i64) -> i64 {

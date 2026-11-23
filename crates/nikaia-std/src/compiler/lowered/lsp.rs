@@ -264,7 +264,7 @@ pub(crate) fn lsp_hex(b: u8) -> i64 {
     -1
 }
 
-pub fn lsp_position(source: &str, at: i64) -> (i64, i64) {
+pub(crate) fn lsp_position(source: &str, at: i64) -> (i64, i64) {
     let mut line = 0;
     let mut column = 0;
     let mut byte: i64 = 0;

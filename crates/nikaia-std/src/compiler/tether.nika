@@ -53,7 +53,7 @@ impl PackageTypes {
 }
 
 /// One unit's declarations, added to the package's.
-pub fn declare_unit(names: ref winnow_grammar::InternerContext, items: ref Vec[Spanned[Item]], mut package: PackageTypes) {
+fn declare_unit(names: ref winnow_grammar::InternerContext, items: ref Vec[Spanned[Item]], mut package: PackageTypes) {
     package.borrowing.extend(borrowing_types(names, items))
     for item in items {
         match item.node {
@@ -73,7 +73,7 @@ pub fn declare_unit(names: ref winnow_grammar::InternerContext, items: ref Vec[S
 /// it names only types with no room for a view; or - anything this walk did
 /// not read a declaration for - it may. One question with two readers, the
 /// `views` column and `keeps`, and the polarity of the second.
-pub fn a_parse_that_views(names: ref winnow_grammar::InternerContext, result: ref Type?, package: ref PackageTypes) -> bool {
+fn a_parse_that_views(names: ref winnow_grammar::InternerContext, result: ref Type?, package: ref PackageTypes) -> bool {
     let ty = result ?? return false
     let name = names.resolve(ty.name)
     if (ty.is_view && !ty.lasting) || package.borrowing.contains(name) {
@@ -110,7 +110,7 @@ fn a_type_with_no_room_for_a_view(name: ref String) -> bool {
 /// result where it does - all Borrowed, the column's one author for anything
 /// else being the walk that follows views (`keep::infer`). Empty where the
 /// signature has no view.
-pub fn function_views(item: ref Item, target: ref String?, names: ref winnow_grammar::InternerContext, borrowing: ref collections::BTreeSet[String]) -> Vec[Held] {
+fn function_views(item: ref Item, target: ref String?, names: ref winnow_grammar::InternerContext, borrowing: ref collections::BTreeSet[String]) -> Vec[Held] {
     let mut held: Vec[Held] = []
     match item {
         Item::Fn { receiver, args, ret_type, .. } => {
@@ -207,7 +207,7 @@ pub fn tether_of_function(item: ref Item, target: ref String?, key: ref String, 
 
 /// **An `entry` rule's column**: its input and result Borrowed where its
 /// result may point into the text it parsed, else nothing.
-pub fn tether_of_entry_rule(names: ref winnow_grammar::InternerContext, result: ref Type?, package: ref PackageTypes) -> Vec[Held] {
+fn tether_of_entry_rule(names: ref winnow_grammar::InternerContext, result: ref Type?, package: ref PackageTypes) -> Vec[Held] {
     if !a_parse_that_views(names, result, package) {
         return []
     }
@@ -463,7 +463,7 @@ fn padded(word: ref String, width: i64) -> String {
 /// D5, #2514): the first byte of the site, its line from 0 and what it says,
 /// in the order of the file, once per line and text (`x = x.replace(..)` is
 /// narrated as an assignment and as the last use of `x`, which is one site).
-pub fn narrated_lines(narrated: ref collections::BTreeSet[(i64, String)], source: ref String) -> Vec[(i64, i64, String)] {
+fn narrated_lines(narrated: ref collections::BTreeSet[(i64, String)], source: ref String) -> Vec[(i64, i64, String)] {
     let mut out: Vec[(i64, i64, String)] = []
     let mut said: collections::BTreeSet[(i64, String)] = collections::BTreeSet()
     for (at, text) in narrated {

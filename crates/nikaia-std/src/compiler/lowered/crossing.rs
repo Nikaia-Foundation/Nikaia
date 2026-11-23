@@ -43,7 +43,7 @@ pub(crate) fn is_plain(name: &str) -> bool {
     false
 }
 
-pub fn generic_of(written: &str, name: &str) -> Option<String> {
+pub(crate) fn generic_of(written: &str, name: &str) -> Option<String> {
     let text = written.trim();
     if !text.starts_with(AsRef::<str>::as_ref(name)) { return None; }
     let c: Vec<scalar> = nikaia_std::list::scalars(text.chars());
@@ -55,7 +55,7 @@ pub fn generic_of(written: &str, name: &str) -> Option<String> {
     Some(slice(&r, 1, unsafe { nikaia_std::proven::sub::<i64>(r.len() as i64, 1) }))
 }
 
-pub fn bounds_send(text: &str) -> bool {
+pub(crate) fn bounds_send(text: &str) -> bool {
     let c: Vec<scalar> = nikaia_std::list::scalars(text.chars());
     let mut start: i64 = 0;
     for at in 0..unsafe { nikaia_std::proven::add::<i64>(c.len() as i64, 1) } {
@@ -68,7 +68,7 @@ pub fn bounds_send(text: &str) -> bool {
     false
 }
 
-pub fn a_list(names: &[String], one: &str, many: &str) -> String {
+pub(crate) fn a_list(names: &[String], one: &str, many: &str) -> String {
     if names.is_empty() { return String::from(""); }
     let mut word = nikaia_std::block::Text::from(many.to_string());
     if names.len() == 1 { word = nikaia_std::block::Text::from(one.to_string()); }
@@ -82,7 +82,7 @@ pub fn a_list(names: &[String], one: &str, many: &str) -> String {
     out
 }
 
-pub fn reaches_a_thread(from: &str, calls: &collections::BTreeMap<String, Vec<String>>) -> Option<Vec<String>> {
+pub(crate) fn reaches_a_thread(from: &str, calls: &collections::BTreeMap<String, Vec<String>>) -> Option<Vec<String>> {
     let mut seen: collections::BTreeSet<String> = collections::BTreeSet::new();
     #[allow(unused_mut)] let mut queue: Vec<String> = nikaia_std::block::List::from_array_in([nikaia_std::block::Text::from(from.to_string())], nikaia_std::block::Place::Block);
     let mut ways: Vec<Vec<String>> = nikaia_std::block::List::from_array_in([vec![]], nikaia_std::block::Place::Block); #[allow(unused_mut, clippy::redundant_locals)] let mut queue = queue;
@@ -115,7 +115,7 @@ pub fn reaches_a_thread(from: &str, calls: &collections::BTreeMap<String, Vec<St
     None
 }
 
-pub fn the_crates_own(call: &str, calls: &collections::BTreeMap<String, Vec<String>>) -> Option<String> {
+pub(crate) fn the_crates_own(call: &str, calls: &collections::BTreeMap<String, Vec<String>>) -> Option<String> {
     if calls.contains_key(call) { return Some(nikaia_std::block::Text::from(call.to_string())); }
     let ending = format!("::{}", call);
     let mut found: Option<String> = None;

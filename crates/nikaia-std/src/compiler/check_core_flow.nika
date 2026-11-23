@@ -237,7 +237,7 @@ fn check_core_flow_disagree(mut state: CheckState, world: ref CheckWorld, expr: 
 
 /// **What arms that disagree come to**: text, `null` beside a value, or
 /// nothing known, said.
-pub fn check_core_flow_meet(mut state: CheckState, world: ref CheckWorld, expr: ref Expr, arms: ref Vec[CheckArm], span: ref Span) -> Ty sync {
+fn check_core_flow_meet(mut state: CheckState, world: ref CheckWorld, expr: ref Expr, arms: ref Vec[CheckArm], span: ref Span) -> Ty sync {
     let text = check_core_flow_meet_at_text(state, world, arms, span)
     if text != null {
         return text ?? Ty::Unknown
@@ -255,7 +255,7 @@ pub fn check_core_flow_meet(mut state: CheckState, world: ref CheckWorld, expr: 
 }
 
 /// **`unsafe { … }`** (ADR-c-boundary-v1 D3): a block whose calls may name an `extern`.
-pub fn check_core_flow_unsafe[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, block: ref Block) -> Ty sync {
+fn check_core_flow_unsafe[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, block: ref Block) -> Ty sync {
     let outer = state.inside_unsafe
     state.inside_unsafe = true
     let value = check_core_block(state, world, host, block)
@@ -278,7 +278,7 @@ fn check_core_flow_branch[H: CheckHost](mut state: CheckState, world: ref CheckW
 
 /// **`overlap { … }`** (Part I 8.1.2, ADR-292 D2): each statement is a
 /// branch, an `async` block of its own, and the value is their tuple.
-pub fn check_core_flow_overlap[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, whole: ref Expr, block: ref Block, span: ref Span) -> Ty sync {
+fn check_core_flow_overlap[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, whole: ref Expr, block: ref Block, span: ref Span) -> Ty sync {
     let in_a_loop = state.flow.loops > 0
     let caught = state.flow.caught_overlap
     state.flow.caught_overlap = false
@@ -350,7 +350,7 @@ fn check_core_flow_select_arm[H: CheckHost](mut state: CheckState, world: ref Ch
 
 /// **`select`** (Part II 12.4, ADR-292 D12): the `match` rule one construct
 /// over.
-pub fn check_core_flow_select[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, arms: ref Vec[SelectArm], span: ref Span) -> Ty sync {
+fn check_core_flow_select[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, arms: ref Vec[SelectArm], span: ref Span) -> Ty sync {
     let mut seen = Ty::Unknown
     let mut any = false
     let mut agree = true
@@ -408,7 +408,7 @@ fn check_core_flow_else[H: CheckHost](mut state: CheckState, world: ref CheckWor
 /// **`if`** (Part I 3.2): a `bool` decides, a stamped condition reaches inward
 /// (ADR-281 D25), and what the test proves holds in each branch and, after an
 /// early exit, in the rest of the block (ADR-382).
-pub fn check_core_flow_if[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, expr: ref Expr, cond: ref Expr, then_branch: ref Block, else_branch: ref Block?, span: ref Span) -> Ty sync {
+fn check_core_flow_if[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, expr: ref Expr, cond: ref Expr, then_branch: ref Block, else_branch: ref Block?, span: ref Span) -> Ty sync {
     // **The condition is walked at its own place** (#810): a value it hands
     // over ends where the condition ends, so an `else if` after it, which is
     // inside this statement's span, reads it again.
@@ -1513,7 +1513,7 @@ fn check_core_flow_caught(state: ref CheckState, world: ref CheckWorld, on: ref 
 
 /// **`match`** (Part I 3.4): the subject, read as what it is below; each arm
 /// in a scope of its own; and the arms' types, met.
-pub fn check_core_flow_match[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, expr: ref Expr, value: ref Expr, arms: ref Vec[MatchArm], span: ref Span) -> Ty sync {
+fn check_core_flow_match[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, expr: ref Expr, value: ref Expr, arms: ref Vec[MatchArm], span: ref Span) -> Ty sync {
     let on = check_core_expr(state, world, host, value, span)
     // **A name an enclosing arm bound** (`match_on_a_lent_name.rs`): where that arm
     // lends it, the lowering matches what it points to.
@@ -1915,7 +1915,7 @@ fn check_core_flow_widened_by_null(value: ref Ty, answers: ref Ty) -> bool sync 
 /// **`expr catch { … }`** (Part I 7.1): the guarded expression needs no
 /// `throws` (`NK2605`), the handler binds `error`, and the value is the
 /// guarded one's type where the handler agrees (0.0.230).
-pub fn check_core_flow_try_catch[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, whole: ref Expr, guarded_expr: ref Expr, handler: ref Block, span: ref Span) -> Ty sync {
+fn check_core_flow_try_catch[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, whole: ref Expr, guarded_expr: ref Expr, handler: ref Block, span: ref Span) -> Ty sync {
     let outer = state.flow.caught
     state.flow.caught = true
     // **What a handler keeps is not the function's** (#725): the walk of
