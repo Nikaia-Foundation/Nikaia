@@ -661,7 +661,9 @@ let small = q.narrow()                 // i64? where it fits
   it is not in the prelude.
 * **Made** with `BigInt::of(v)` from any integer type of Part I 2.2 and
   `BigInt::from_wide(w)`; read back with `narrow() -> i64?`, `sign() -> i64`,
-  `bits() -> i64` and its decimal text.
+  `bits() -> i64` and its decimal text, `to_text()`. `BigInt::parse(text) ->
+  BigInt?` reads that text back: the digits as `text::parse_i64` reads them,
+  with no limit on their number, and `null` where they write no number.
 * **Exact, never wrapped, never `null` for size**: `add`, `sub`, `neg`, `mul`,
   `abs` and `gcd` give a `BigInt`; `div_rem` and `rem` round as `/` and `%`
   round and give `null` only for a zero divisor. `==` and the comparisons are
