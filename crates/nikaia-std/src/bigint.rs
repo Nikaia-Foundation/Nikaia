@@ -5,7 +5,138 @@
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct BigInt {
     sign: i64,
+    low: u64,
     digits: Vec<u64>,
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+fn small(sign: i64, d: u64) -> BigInt {
+    if d == 0u64 { return BigInt { sign: 0, low: 0, digits: vec![] }; }
+    BigInt { sign, low: d, digits: vec![] }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+fn signed(sign: i64, n: &BigInt) -> BigInt {
+    if n.sign == 0 { return small(0, 0u64); }
+    BigInt { sign, low: n.low, digits: n.digits.copy_owned() }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+fn digit_of(n: &BigInt, at: i64) -> u64 {
+    if n.digits.is_empty() { return if at == 0 { n.low } else { 0u64 }; }
+    if at >= 0 && at < n.digits.len() as i64 { *unsafe { nikaia_std::proven::read(&n.digits, (at) as usize) } } else { 0u64 }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+fn magnitudes_compared(x: &BigInt, y: &BigInt) -> i64 {
+    let xl = x.digits.len() as i64;
+    let yl = y.digits.len() as i64;
+    if xl == 0 && yl == 0 { return if x.low < y.low { -1 } else if x.low > y.low { 1 } else { 0 }; }
+    if xl == 0 { return -1; }
+    if yl == 0 { return 1; }
+    magnitude_compare(&x.digits, &y.digits)
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+fn summed(xs: i64, x: &BigInt, ys: i64, y: &BigInt) -> BigInt {
+    if xs == 0 { return signed(ys, y); }
+    if ys == 0 { return signed(xs, x); }
+    let xl = x.digits.len() as i64;
+    let yl = y.digits.len() as i64;
+    if xl == 0 && yl == 0 {
+        if xs == ys {
+            let (s, o) = x.low.overflowing_add(y.low);
+            if !o { return small(xs, s); }
+            return BigInt { sign: xs, low: 0, digits: vec![s, 1] };
+        }
+        if x.low > y.low { return small(xs, x.low - y.low); }
+        return small(ys, y.low - x.low);
+    }
+    if yl == 0 {
+        if xs == ys { return made(xs, magnitude_add_digit(&x.digits, y.low)); }
+        return made(xs, magnitude_sub_digit(&x.digits, y.low));
+    }
+    if xl == 0 {
+        if xs == ys { return made(ys, magnitude_add_digit(&y.digits, x.low)); }
+        return made(ys, magnitude_sub_digit(&y.digits, x.low));
+    }
+    if xs == ys { return made(xs, magnitude_add(&x.digits, &y.digits)); }
+    let order = magnitude_compare(&x.digits, &y.digits);
+    if order == 0 { return small(0, 0u64); }
+    if order > 0 { return made(xs, magnitude_sub(&x.digits, &y.digits)); }
+    made(ys, magnitude_sub(&y.digits, &x.digits))
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+fn magnitude_add_digit(a: &[u64], d: u64) -> Vec<u64> {
+    let mut sum: Vec<u64> = Vec::with_capacity(nikaia_std::count::of(unsafe { nikaia_std::proven::add::<i64>(a.len() as i64, 1) }));
+    let mut carry: u64 = d;
+    for at in 0..a.len() as i64 {
+        let (s, o) = (*unsafe { nikaia_std::proven::read(&a, (at) as usize) }).overflowing_add(carry);
+        sum.push(s);
+        carry = if o { 1 } else { 0 };
+    }
+    if carry > 0u64 { sum.push(carry); }
+    sum
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+fn magnitude_sub_digit(a: &[u64], d: u64) -> Vec<u64> {
+    let mut rest: Vec<u64> = Vec::with_capacity(nikaia_std::count::of(a.len() as i64));
+    let mut borrow: u64 = d;
+    for at in 0..a.len() as i64 {
+        let (s, o) = (*unsafe { nikaia_std::proven::read(&a, (at) as usize) }).overflowing_sub(borrow);
+        rest.push(s);
+        borrow = if o { 1 } else { 0 };
+    }
+    rest
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+fn magnitude_add_digit_in(a: &mut Vec<u64>, d: u64) {
+    let mut carry: u64 = d;
+    for at in 0..a.len() as i64 {
+        if carry == 0u64 { break; }
+        let (s, o) = (*unsafe { nikaia_std::proven::read(&a, (at) as usize) }).overflowing_add(carry);
+        { let __nikaia_stored = s; unsafe { nikaia_std::proven::write(&mut *a, (at) as usize, __nikaia_stored) }; }
+        carry = if o { 1 } else { 0 };
+    }
+    if carry > 0u64 { a.push(carry); }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+fn magnitude_sub_digit_in(a: &mut Vec<u64>, d: u64) {
+    let mut borrow: u64 = d;
+    for at in 0..a.len() as i64 {
+        if borrow == 0u64 { break; }
+        let (s, o) = (*unsafe { nikaia_std::proven::read(&a, (at) as usize) }).overflowing_sub(borrow);
+        { let __nikaia_stored = s; unsafe { nikaia_std::proven::write(&mut *a, (at) as usize, __nikaia_stored) }; }
+        borrow = if o { 1 } else { 0 };
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+fn magnitude_mul_digit(a: &[u64], d: u64) -> Vec<u64> {
+    let mut product: Vec<u64> = Vec::with_capacity(nikaia_std::count::of(unsafe { nikaia_std::proven::add::<i64>(a.len() as i64, 1) }));
+    let mut carry: u64 = 0u64;
+    for at in 0..a.len() as i64 {
+        let (low, high) = { let __wide = (*unsafe { nikaia_std::proven::read(&a, (at) as usize) }) as u128 * (d) as u128; (__wide as u64, (__wide >> 64) as u64) };
+        let (s, o) = low.overflowing_add(carry);
+        product.push(s);
+        carry = high + if o { 1u64 } else { 0u64 };
+    }
+    if carry > 0u64 { product.push(carry); }
+    product
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -20,8 +151,9 @@ fn trimmed(digits: Vec<u64>) -> Vec<u64> {
 // this was written - see `contracts::sync`.
 fn made(sign: i64, digits: Vec<u64>) -> BigInt {
     let kept = trimmed(digits);
-    if kept.is_empty() { return BigInt { sign: 0, digits: vec![] }; }
-    BigInt { sign, digits: kept }
+    if kept.is_empty() { return small(0, 0u64); }
+    if kept.len() == 1 { return small(sign, *unsafe { nikaia_std::proven::read(&kept, (0) as usize) }); }
+    BigInt { sign, low: 0, digits: kept }
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -100,21 +232,24 @@ fn magnitude_sub_from_in(a: &mut Vec<u64>, b: &[u64]) {
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-fn added_in(own: i64, kept: Vec<u64>, sign: i64, digits: &[u64]) -> BigInt {
-    if own == 0 { return made(sign, digits.copy_owned()); }
+fn added_in(own: i64, kept: Vec<u64>, sign: i64, other: &BigInt) -> BigInt {
     let mut sum = kept;
     if sign == 0 { return made(own, sum); }
+    if other.digits.is_empty() {
+        if own == sign { magnitude_add_digit_in(&mut sum, other.low); } else { magnitude_sub_digit_in(&mut sum, other.low); }
+        return made(own, sum);
+    }
     if own == sign {
-        magnitude_add_in(&mut sum, digits);
+        magnitude_add_in(&mut sum, &other.digits);
         return made(own, sum);
     }
-    let order = magnitude_compare(&sum, digits);
-    if order == 0 { return made(0, vec![]); }
+    let order = magnitude_compare(&sum, &other.digits);
+    if order == 0 { return small(0, 0u64); }
     if order > 0 {
-        magnitude_sub_in(&mut sum, digits);
+        magnitude_sub_in(&mut sum, &other.digits);
         return made(own, sum);
     }
-    magnitude_sub_from_in(&mut sum, digits);
+    magnitude_sub_from_in(&mut sum, &other.digits);
     made(sign, sum)
 }
 
@@ -268,20 +403,16 @@ fn magnitude_div_long(a: &[u64], b: &[u64]) -> (Vec<u64>, Vec<u64>) {
 // this was written - see `contracts::sync`.
 fn magnitude_div(a: &[u64], b: &[u64]) -> (Vec<u64>, Vec<u64>) {
     if magnitude_compare(&a, &b) < 0 { return (vec![], a.copy_owned()); }
-    if b.len() == 1 {
-        let (q, r) = magnitude_div_digit(&a, *unsafe { nikaia_std::proven::read(&b, (0) as usize) });
-        return (q, trimmed(vec![r]));
-    }
     magnitude_div_long(&a, &b)
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-fn bits_from(a: &[u64], from: i64) -> i64 {
+fn bits_from(n: &BigInt, from: i64) -> i64 {
     let at = from / 64;
     let by = from % 64;
-    let mut value: u64 = if at < a.len() as i64 { *nikaia_std::index::get(&a, nikaia_std::index::at(at)) >> by } else { 0u64 };
-    if by > 0 && unsafe { nikaia_std::proven::add::<i64>(at, 1) } < a.len() as i64 { value = value | unsafe { nikaia_std::proven::shl::<u64>(*nikaia_std::index::get(&a, nikaia_std::index::at(nikaia_std::proven::add::<i64>(at, 1))), (nikaia_std::proven::sub::<i64>(64, by)) as u32) }; }
+    let mut value: u64 = digit_of(n, at) >> by;
+    if by > 0 { value = value | unsafe { nikaia_std::proven::shl::<u64>(digit_of(n, nikaia_std::proven::add::<i64>(at, 1)), (nikaia_std::proven::sub::<i64>(64, by)) as u32) }; }
     nikaia_std::index::or(i64::try_from(value & 4611686018427387903u64).ok(), || 0)
 }
 
@@ -293,14 +424,15 @@ impl BigInt {
     // this was written - see `contracts::sync`.
     pub fn from_wide(w: i128) -> BigInt {
         let (low, high) = { let __wide: u128 = { let __wide: i128 = w; __wide.unsigned_abs() }; (__wide as u64, (__wide >> 64) as u64) };
-        made({ let __wide: i128 = w; __wide.signum() as i64 }, vec![low, high])
+        if high == 0u64 { return small({ let __wide: i128 = w; __wide.signum() as i64 }, low); }
+        BigInt { sign: { let __wide: i128 = w; __wide.signum() as i64 }, low: 0, digits: vec![low, high] }
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     pub fn narrow(&self) -> Option<i64> {
-        if self.digits.is_empty() { return Some(0); }
-        if self.digits.len() > 1 { return None; }
-        let d = *unsafe { nikaia_std::proven::read(&self.digits, (0) as usize) };
+        if self.sign == 0 { return Some(0); }
+        if !self.digits.is_empty() { return None; }
+        let d = self.low;
         if self.sign < 0 && d == 9223372036854775808u64 { return Some(-9223372036854775807i64 - 1i64); }
         let v = match i64::try_from(d).ok() { Some(__nikaia_value) => __nikaia_value, None => return None };
         Some(if self.sign < 0 { -v } else { v })
@@ -312,7 +444,11 @@ impl BigInt {
     // this was written - see `contracts::sync`.
     pub fn bits(&self) -> i64 {
         let n = self.digits.len() as i64;
-        if n == 0 { return 0; }
+        if n == 0 {
+            if self.sign == 0 { return 0; }
+            let width: i64 = i64::from(self.low.leading_zeros());
+            return unsafe { nikaia_std::proven::sub::<i64>(64, width) };
+        }
         let top: i64 = i64::from((*unsafe { nikaia_std::proven::read(&self.digits, (nikaia_std::proven::sub::<i64>(n, 1)) as usize) }).leading_zeros());
         unsafe { nikaia_std::proven::sub::<i64>(n * 64, top) }
     }
@@ -320,6 +456,7 @@ impl BigInt {
     // this was written - see `contracts::sync`.
     pub fn to_text(&self) -> String {
         if self.sign == 0 { return String::from("0"); }
+        if self.digits.is_empty() { return if self.sign < 0 { format!("-{}", self.low) } else { format!("{}", self.low) }; }
         let n = self.digits.len() as i64;
         let mut chunks: Vec<u64> = nikaia_std::block::List::with_capacity_in(nikaia_std::count::of(unsafe { nikaia_std::proven::add::<i64>(nikaia_std::proven::add::<i64>(n, n / 64), 1) }), nikaia_std::block::Place::Block);
         let mut rest = self.digits.copy_owned();
@@ -340,48 +477,70 @@ impl BigInt {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn add(&self, other: &BigInt) -> BigInt {
-        if self.sign == 0 { return other.clone(); }
-        if other.sign == 0 { return self.clone(); }
-        if self.sign == other.sign { return made(self.sign, magnitude_add(&self.digits, &other.digits)); }
-        let order = magnitude_compare(&self.digits, &other.digits);
-        if order == 0 { return made(0, vec![]); }
-        if order > 0 { return made(self.sign, magnitude_sub(&self.digits, &other.digits)); }
-        made(other.sign, magnitude_sub(&other.digits, &self.digits))
+    pub fn add(&self, other: &BigInt) -> BigInt { summed(self.sign, self, other.sign, other) }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn sub(&self, other: &BigInt) -> BigInt { summed(self.sign, self, -other.sign, other) }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn neg(&self) -> BigInt { signed(-self.sign, self) }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn abs(&self) -> BigInt { signed(1, self) }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub fn add_own(self, other: &BigInt) -> BigInt {
+        if self.digits.is_empty() { return summed(self.sign, &self, other.sign, other); }
+        added_in(self.sign, self.digits, other.sign, other)
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn sub(&self, other: &BigInt) -> BigInt { self.add(&other.neg()) }
-    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
-    // this was written - see `contracts::sync`.
-    pub fn neg(&self) -> BigInt { made(-self.sign, self.digits.copy_owned()) }
-    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
-    // this was written - see `contracts::sync`.
-    pub fn abs(&self) -> BigInt { made(1, self.digits.copy_owned()) }
-    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
-    // this was written - see `contracts::sync`.
-    pub fn add_own(self, other: &BigInt) -> BigInt { added_in(self.sign, self.digits, other.sign, &other.digits) }
-    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
-    // this was written - see `contracts::sync`.
-    pub fn sub_own(self, other: &BigInt) -> BigInt { added_in(self.sign, self.digits, -other.sign, &other.digits) }
+    pub fn sub_own(self, other: &BigInt) -> BigInt {
+        if self.digits.is_empty() { return summed(self.sign, &self, -other.sign, other); }
+        added_in(self.sign, self.digits, -other.sign, other)
+    }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     pub fn neg_own(self) -> BigInt {
         let sign = self.sign;
+        if self.digits.is_empty() { return small(-sign, self.low); }
         made(-sign, self.digits)
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn abs_own(self) -> BigInt { made(1, self.digits) }
+    pub fn abs_own(self) -> BigInt {
+        if self.digits.is_empty() { return small(1, self.low); }
+        made(1, self.digits)
+    }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn mul(&self, other: &BigInt) -> BigInt { made(self.sign * other.sign, magnitude_mul(&self.digits, &other.digits)) }
+    pub fn mul(&self, other: &BigInt) -> BigInt {
+        let sign = self.sign * other.sign;
+        if sign == 0 { return small(0, 0u64); }
+        let xl = self.digits.len() as i64;
+        let yl = other.digits.len() as i64;
+        if xl == 0 && yl == 0 {
+            let (low, high) = { let __wide = (self.low) as u128 * (other.low) as u128; (__wide as u64, (__wide >> 64) as u64) };
+            if high == 0u64 { return small(sign, low); }
+            return BigInt { sign, low: 0, digits: vec![low, high] };
+        }
+        if yl == 0 { return made(sign, magnitude_mul_digit(&self.digits, other.low)); }
+        if xl == 0 { return made(sign, magnitude_mul_digit(&other.digits, self.low)); }
+        made(sign, magnitude_mul(&self.digits, &other.digits))
+    }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     pub fn div_rem(&self, d: &BigInt) -> Option<(BigInt, BigInt)> {
         if d.sign == 0 { return None; }
+        let sign = self.sign * d.sign;
+        if d.digits.is_empty() {
+            if self.digits.is_empty() { return Some((small(sign, self.low / d.low), small(self.sign, self.low % d.low))); }
+            let (q, r) = magnitude_div_digit(&self.digits, d.low);
+            return Some((made(sign, q), small(self.sign, r)));
+        }
+        if self.digits.is_empty() { return Some((small(0, 0u64), self.clone())); }
         let (q, r) = magnitude_div(&self.digits, &d.digits);
-        Some((made(self.sign * d.sign, q), made(self.sign, r)))
+        Some((made(sign, q), made(self.sign, r)))
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
@@ -400,19 +559,19 @@ impl BigInt {
             v = t;
         }
         while v.sign != 0 {
-            if u.digits.len() == 1 {
-                let mut x = *unsafe { nikaia_std::proven::read(&u.digits, (0) as usize) };
-                let mut y = *nikaia_std::index::get(&v.digits, 0);
+            if u.digits.is_empty() {
+                let mut x = u.low;
+                let mut y = v.low;
                 while y != 0u64 {
                     let t = x % y;
                     x = y;
                     y = t;
                 }
-                return made(1, vec![x]);
+                return small(1, x);
             }
             let from = u.bits() - 62;
-            let mut uh = bits_from(&u.digits, from);
-            let mut vh = bits_from(&v.digits, from);
+            let mut uh = bits_from(&u, from);
+            let mut vh = bits_from(&v, from);
             let mut a: i64 = 1;
             let mut b: i64 = 0;
             let mut c: i64 = 0;
@@ -450,7 +609,7 @@ impl BigInt {
     // this was written - see `contracts::sync`.
     fn compare(&self, other: &BigInt) -> Ordering {
         if self.sign != other.sign { return if self.sign < other.sign { Ordering::Less } else { Ordering::Greater }; }
-        let order = magnitude_compare(&self.digits, &other.digits) * self.sign;
+        let order = magnitudes_compared(self, &other) * self.sign;
         if order < 0 { Ordering::Less } else if order > 0 { Ordering::Greater } else { Ordering::Equal }
     }
 }

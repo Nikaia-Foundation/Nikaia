@@ -5,9 +5,12 @@
 // width. A program names it `bigint::BigInt` after `use std::bigint`; it is
 // not in the prelude (Part I 1.3).
 //
-// A sign and a list of 64-bit digits, least significant first, with no
-// leading zero digit; zero has no digits and sign 0, so the derived `==`
-// is equality of value. Every digit step is one of the integer methods of
+// A sign and a magnitude in 64-bit digits, least significant first, with no
+// leading zero digit. **A magnitude of one digit has no heap buffer**
+// (#2824): it sits in `low` and `digits` is empty; one of two digits or more
+// is all in `digits` and `low` is 0. Zero has sign 0, `low` 0 and no digits.
+// Each value has one form, so the derived `==` and hash are those of value.
+// Every digit step is one of the integer methods of
 // Part I 2.2: `widening_mul` for a digit's product, `overflowing_add` and
 // `overflowing_sub` for the carry and the borrow, `narrowing_div_rem` for a
 // digit's quotient. No literal, operator or `as` (ADR-294).
@@ -16,7 +19,171 @@
 /// An exact signed integer of any size.
 pub struct BigInt {
     sign: i64,
+    low: u64,
     digits: Vec[u64],
+}
+
+/// The number of this sign and one-digit magnitude `d`, zero where `d` is.
+fn small(sign: i64, d: u64) -> BigInt sync {
+    if d == 0 {
+        return BigInt { sign: 0, low: 0, digits: [] }
+    }
+    return BigInt { sign: sign, low: d, digits: [] }
+}
+
+/// `n` with the sign `sign`, or zero where `n` is.
+fn signed(sign: i64, n: ref BigInt) -> BigInt sync {
+    if n.sign == 0 {
+        return small(0, 0)
+    }
+    return BigInt { sign: sign, low: n.low, digits: n.digits.clone() }
+}
+
+/// Digit `at` of `n`'s magnitude, 0 past its last.
+fn digit_of(n: ref BigInt, at: i64) -> u64 sync {
+    if n.digits.len() == 0 {
+        return if at == 0 { n.low } else { 0 }
+    }
+    return if at >= 0 && at < n.digits.len() { n.digits[at] } else { 0 }
+}
+
+/// -1, 0 or 1 as `x`'s magnitude is below, at or above `y`'s.
+fn magnitudes_compared(x: ref BigInt, y: ref BigInt) -> i64 sync {
+    let xl = x.digits.len()
+    let yl = y.digits.len()
+    if xl == 0 && yl == 0 {
+        return if x.low < y.low { -1 } else if x.low > y.low { 1 } else { 0 }
+    }
+    if xl == 0 {
+        return -1
+    }
+    if yl == 0 {
+        return 1
+    }
+    return magnitude_compare(x.digits, y.digits)
+}
+
+/// The number of sign `xs` and `x`'s magnitude plus the one of sign `ys`
+/// and `y`'s magnitude.
+fn summed(xs: i64, x: ref BigInt, ys: i64, y: ref BigInt) -> BigInt sync {
+    if xs == 0 {
+        return signed(ys, y)
+    }
+    if ys == 0 {
+        return signed(xs, x)
+    }
+    let xl = x.digits.len()
+    let yl = y.digits.len()
+    if xl == 0 && yl == 0 {
+        if xs == ys {
+            let (s, o) = x.low.overflowing_add(y.low)
+            if !o {
+                return small(xs, s)
+            }
+            return BigInt { sign: xs, low: 0, digits: [s, 1] }
+        }
+        if x.low > y.low {
+            return small(xs, x.low - y.low)
+        }
+        return small(ys, y.low - x.low)
+    }
+    if yl == 0 {
+        if xs == ys {
+            return made(xs, magnitude_add_digit(x.digits, y.low))
+        }
+        return made(xs, magnitude_sub_digit(x.digits, y.low))
+    }
+    if xl == 0 {
+        if xs == ys {
+            return made(ys, magnitude_add_digit(y.digits, x.low))
+        }
+        return made(ys, magnitude_sub_digit(y.digits, x.low))
+    }
+    if xs == ys {
+        return made(xs, magnitude_add(x.digits, y.digits))
+    }
+    let order = magnitude_compare(x.digits, y.digits)
+    if order == 0 {
+        return small(0, 0)
+    }
+    if order > 0 {
+        return made(xs, magnitude_sub(x.digits, y.digits))
+    }
+    return made(ys, magnitude_sub(y.digits, x.digits))
+}
+
+/// `a + d` for a magnitude and one digit.
+fn magnitude_add_digit(a: Vec[u64], d: u64) -> Vec[u64] sync {
+    let mut sum: Vec[u64] = Vec(capacity: a.len() + 1)
+    let mut carry: u64 = d
+    for at in 0..<a.len() {
+        let (s, o) = a[at].overflowing_add(carry)
+        sum.push(s)
+        carry = if o { 1 } else { 0 }
+    }
+    if carry > 0 {
+        sum.push(carry)
+    }
+    return sum
+}
+
+/// `a - d` for a magnitude above the digit `d`; the leading zero digits
+/// are left for `made`.
+fn magnitude_sub_digit(a: Vec[u64], d: u64) -> Vec[u64] sync {
+    let mut rest: Vec[u64] = Vec(capacity: a.len())
+    let mut borrow: u64 = d
+    for at in 0..<a.len() {
+        let (s, o) = a[at].overflowing_sub(borrow)
+        rest.push(s)
+        borrow = if o { 1 } else { 0 }
+    }
+    return rest
+}
+
+/// `a + d` written into `a`'s digits (ADR-text-reuse-1 D6).
+fn magnitude_add_digit_in(mut a: Vec[u64], d: u64) sync {
+    let mut carry: u64 = d
+    for at in 0..<a.len() {
+        if carry == 0 {
+            break
+        }
+        let (s, o) = a[at].overflowing_add(carry)
+        a[at] = s
+        carry = if o { 1 } else { 0 }
+    }
+    if carry > 0 {
+        a.push(carry)
+    }
+}
+
+/// `a - d` written into `a`'s digits, for a magnitude above the digit `d`;
+/// the leading zero digits are left for `made` (ADR-text-reuse-1 D6).
+fn magnitude_sub_digit_in(mut a: Vec[u64], d: u64) sync {
+    let mut borrow: u64 = d
+    for at in 0..<a.len() {
+        if borrow == 0 {
+            break
+        }
+        let (s, o) = a[at].overflowing_sub(borrow)
+        a[at] = s
+        borrow = if o { 1 } else { 0 }
+    }
+}
+
+/// `a * d` for a magnitude and one digit, not zero.
+fn magnitude_mul_digit(a: Vec[u64], d: u64) -> Vec[u64] sync {
+    let mut product: Vec[u64] = Vec(capacity: a.len() + 1)
+    let mut carry: u64 = 0
+    for at in 0..<a.len() {
+        let (low, high) = a[at].widening_mul(d)
+        let (s, o) = low.overflowing_add(carry)
+        product.push(s)
+        carry = high + (if o { 1 } else { 0 })
+    }
+    if carry > 0 {
+        product.push(carry)
+    }
+    return product
 }
 
 /// The magnitude without its leading zero digits.
@@ -32,9 +199,12 @@ fn trimmed(keep digits: Vec[u64]) -> Vec[u64] sync {
 fn made(sign: i64, keep digits: Vec[u64]) -> BigInt sync {
     let kept = trimmed(digits)
     if kept.len() == 0 {
-        return BigInt { sign: 0, digits: [] }
+        return small(0, 0)
     }
-    return BigInt { sign: sign, digits: kept }
+    if kept.len() == 1 {
+        return small(sign, kept[0])
+    }
+    return BigInt { sign: sign, low: 0, digits: kept }
 }
 
 /// -1, 0 or 1 as `a` is below, at or above `b`, magnitudes.
@@ -123,29 +293,35 @@ fn magnitude_sub_from_in(mut a: Vec[u64], b: Vec[u64]) sync {
     }
 }
 
-/// The number of sign `own` and magnitude `kept` plus the one of sign `sign`
-/// and magnitude `digits`, written into `kept` (ADR-text-reuse-1 D6).
-fn added_in(own: i64, keep kept: Vec[u64], sign: i64, digits: ref Vec[u64]) -> BigInt sync {
-    if own == 0 {
-        return made(sign, digits.clone())
-    }
+/// The number of sign `own` and magnitude `kept`, of two digits or more,
+/// plus the one of sign `sign` and `other`'s magnitude, written into `kept`
+/// (ADR-text-reuse-1 D6).
+fn added_in(own: i64, keep kept: Vec[u64], sign: i64, other: ref BigInt) -> BigInt sync {
     let mut sum = kept
     if sign == 0 {
         return made(own, sum)
     }
-    if own == sign {
-        magnitude_add_in(sum, digits)
+    if other.digits.len() == 0 {
+        if own == sign {
+            magnitude_add_digit_in(sum, other.low)
+        } else {
+            magnitude_sub_digit_in(sum, other.low)
+        }
         return made(own, sum)
     }
-    let order = magnitude_compare(sum, digits)
+    if own == sign {
+        magnitude_add_in(sum, other.digits)
+        return made(own, sum)
+    }
+    let order = magnitude_compare(sum, other.digits)
     if order == 0 {
-        return made(0, [])
+        return small(0, 0)
     }
     if order > 0 {
-        magnitude_sub_in(sum, digits)
+        magnitude_sub_in(sum, other.digits)
         return made(own, sum)
     }
-    magnitude_sub_from_in(sum, digits)
+    magnitude_sub_from_in(sum, other.digits)
     return made(sign, sum)
 }
 
@@ -308,26 +484,22 @@ fn magnitude_div_long(a: Vec[u64], b: Vec[u64]) -> (Vec[u64], Vec[u64]) sync {
     return (trimmed(quotient), shifted_down(low_part, by))
 }
 
-/// `a / b` and `a % b` for magnitudes, `b` not zero.
+/// `a / b` and `a % b` for magnitudes, `b` of two digits or more.
 fn magnitude_div(a: Vec[u64], b: Vec[u64]) -> (Vec[u64], Vec[u64]) sync {
     if magnitude_compare(a, b) < 0 {
         return ([], a.clone())
     }
-    if b.len() == 1 {
-        let (q, r) = magnitude_div_digit(a, b[0])
-        return (q, trimmed([r]))
-    }
     return magnitude_div_long(a, b)
 }
 
-/// The 62 bits of a magnitude from bit `from` up, which are all its bits
-/// above `from` when it has no more than `from + 62`.
-fn bits_from(a: Vec[u64], from: i64) -> i64 sync {
+/// The 62 bits of `n`'s magnitude from bit `from` up, which are all its
+/// bits above `from` when it has no more than `from + 62`.
+fn bits_from(n: ref BigInt, from: i64) -> i64 sync {
     let at = from / 64
     let by = from % 64
-    let mut value: u64 = if at < a.len() { a[at] >> by } else { 0 }
-    if by > 0 && at + 1 < a.len() {
-        value = value | (a[at + 1] << (64 - by))
+    let mut value: u64 = digit_of(n, at) >> by
+    if by > 0 {
+        value = value | (digit_of(n, at + 1) << (64 - by))
     }
     return (value & 4611686018427387903).checked_i64() ?? 0
 }
@@ -341,18 +513,21 @@ impl BigInt {
     /// The integer a `Wide[i64]` holds.
     pub fn from_wide(w: Wide[i64]) -> BigInt sync {
         let (low, high) = w.abs().halves()
-        return made(w.sign(), [low, high])
+        if high == 0 {
+            return small(w.sign(), low)
+        }
+        return BigInt { sign: w.sign(), low: 0, digits: [low, high] }
     }
 
     /// The value as an `i64`, or `null` where it does not fit one.
     pub fn narrow(self) -> i64? sync {
-        if self.digits.len() == 0 {
+        if self.sign == 0 {
             return 0
         }
-        if self.digits.len() > 1 {
+        if self.digits.len() > 0 {
             return null
         }
-        let d = self.digits[0]
+        let d = self.low
         if self.sign < 0 && d == 9223372036854775808 {
             return -9223372036854775807 - 1
         }
@@ -369,7 +544,11 @@ impl BigInt {
     pub fn bits(self) -> i64 sync {
         let n = self.digits.len()
         if n == 0 {
-            return 0
+            if self.sign == 0 {
+                return 0
+            }
+            let width: i64 = self.low.leading_zeros()
+            return 64 - width
         }
         let top: i64 = self.digits[n - 1].leading_zeros()
         return n * 64 - top
@@ -379,6 +558,9 @@ impl BigInt {
     pub fn to_text(self) -> String sync {
         if self.sign == 0 {
             return "0"
+        }
+        if self.digits.len() == 0 {
+            return if self.sign < 0 { f"-{self.low}" } else { f"{self.low}" }
         }
         // **Room for every chunk up front** (#2805): a digit of 64 bits is
         // 19.27 decimal places and a chunk 19, so `n` digits make at most
@@ -404,64 +586,81 @@ impl BigInt {
 
     /// `self + other`.
     pub fn add(self, other: ref BigInt) -> BigInt sync {
-        if self.sign == 0 {
-            return other.clone()
-        }
-        if other.sign == 0 {
-            return self.clone()
-        }
-        if self.sign == other.sign {
-            return made(self.sign, magnitude_add(self.digits, other.digits))
-        }
-        let order = magnitude_compare(self.digits, other.digits)
-        if order == 0 {
-            return made(0, [])
-        }
-        if order > 0 {
-            return made(self.sign, magnitude_sub(self.digits, other.digits))
-        }
-        return made(other.sign, magnitude_sub(other.digits, self.digits))
+        return summed(self.sign, self, other.sign, other)
     }
 
     /// `self - other`.
     pub fn sub(self, other: ref BigInt) -> BigInt sync {
-        return self.add(other.neg())
+        return summed(self.sign, self, -other.sign, other)
     }
 
     /// `-self`.
     pub fn neg(self) -> BigInt sync {
-        return made(-self.sign, self.digits.clone())
+        return signed(-self.sign, self)
     }
 
     /// The magnitude, never negative.
     pub fn abs(self) -> BigInt sync {
-        return made(1, self.digits.clone())
+        return signed(1, self)
     }
 
     /// **The consuming twins** (ADR-text-reuse-1 D6): `add`, `sub`, `neg`
     /// and `abs` where the receiver is not read again, the result written
     /// into its digits. The emitter picks them at such a site; they are no
     /// name of the ledger, so no program calls them.
+    /// A receiver of one digit has no buffer to work in, and its result
+    /// needs none unless `other`'s is copied.
     pub fn add_own(keep self, other: ref BigInt) -> BigInt sync {
-        return added_in(self.sign, self.digits, other.sign, other.digits)
+        if self.digits.len() == 0 {
+            return summed(self.sign, self, other.sign, other)
+        }
+        return added_in(self.sign, self.digits, other.sign, other)
     }
 
     pub fn sub_own(keep self, other: ref BigInt) -> BigInt sync {
-        return added_in(self.sign, self.digits, -other.sign, other.digits)
+        if self.digits.len() == 0 {
+            return summed(self.sign, self, -other.sign, other)
+        }
+        return added_in(self.sign, self.digits, -other.sign, other)
     }
 
     pub fn neg_own(keep self) -> BigInt sync {
         let sign = self.sign
+        if self.digits.len() == 0 {
+            return small(-sign, self.low)
+        }
         return made(-sign, self.digits)
     }
 
     pub fn abs_own(keep self) -> BigInt sync {
+        if self.digits.len() == 0 {
+            return small(1, self.low)
+        }
         return made(1, self.digits)
     }
 
-    /// `self * other`, schoolbook.
+    /// `self * other`, schoolbook; a factor of one digit in one pass.
     pub fn mul(self, other: ref BigInt) -> BigInt sync {
-        return made(self.sign * other.sign, magnitude_mul(self.digits, other.digits))
+        let sign = self.sign * other.sign
+        if sign == 0 {
+            return small(0, 0)
+        }
+        let xl = self.digits.len()
+        let yl = other.digits.len()
+        if xl == 0 && yl == 0 {
+            let (low, high) = self.low.widening_mul(other.low)
+            if high == 0 {
+                return small(sign, low)
+            }
+            return BigInt { sign: sign, low: 0, digits: [low, high] }
+        }
+        if yl == 0 {
+            return made(sign, magnitude_mul_digit(self.digits, other.low))
+        }
+        if xl == 0 {
+            return made(sign, magnitude_mul_digit(other.digits, self.low))
+        }
+        return made(sign, magnitude_mul(self.digits, other.digits))
     }
 
     /// `self / d` and `self % d`, rounded as `/` and `%` round: the quotient
@@ -470,8 +669,19 @@ impl BigInt {
         if d.sign == 0 {
             return null
         }
+        let sign = self.sign * d.sign
+        if d.digits.len() == 0 {
+            if self.digits.len() == 0 {
+                return (small(sign, self.low / d.low), small(self.sign, self.low % d.low))
+            }
+            let (q, r) = magnitude_div_digit(self.digits, d.low)
+            return (made(sign, q), small(self.sign, r))
+        }
+        if self.digits.len() == 0 {
+            return (small(0, 0), self.clone())
+        }
         let (q, r) = magnitude_div(self.digits, d.digits)
-        return (made(self.sign * d.sign, q), made(self.sign, r))
+        return (made(sign, q), made(self.sign, r))
     }
 
     /// `self % d`, with the sign of `self`; `null` for `d` zero.
@@ -491,19 +701,19 @@ impl BigInt {
             v = t
         }
         while v.sign != 0 {
-            if u.digits.len() == 1 {
-                let mut x = u.digits[0]
-                let mut y = v.digits[0]
+            if u.digits.len() == 0 {
+                let mut x = u.low
+                let mut y = v.low
                 while y != 0 {
                     let t = x % y
                     x = y
                     y = t
                 }
-                return made(1, [x])
+                return small(1, x)
             }
             let from = u.bits() - 62
-            let mut uh = bits_from(u.digits, from)
-            let mut vh = bits_from(v.digits, from)
+            let mut uh = bits_from(u, from)
+            let mut vh = bits_from(v, from)
             let mut a: i64 = 1
             let mut b: i64 = 0
             let mut c: i64 = 0
@@ -543,7 +753,7 @@ impl Ord for BigInt {
         if self.sign != other.sign {
             return if self.sign < other.sign { Ordering::Less } else { Ordering::Greater }
         }
-        let order = magnitude_compare(self.digits, other.digits) * self.sign
+        let order = magnitudes_compared(self, other) * self.sign
         return if order < 0 { Ordering::Less } else if order > 0 { Ordering::Greater } else { Ordering::Equal }
     }
 }
