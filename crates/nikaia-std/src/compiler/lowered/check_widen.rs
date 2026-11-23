@@ -25,7 +25,7 @@ pub fn common_integer(a: &str, b: &str) -> Option<String> {
     let names = vec!["u8", "u32", "u64", "i32", "i64"];
     if low == 0 { return Some(nikaia_std::block::Text::from((*nikaia_std::index::get(&names, nikaia_std::index::at(high))).to_string())); }
     if low == 1 {
-        if high <= 2 { return Some(nikaia_std::block::Text::from((*nikaia_std::index::get(&names, nikaia_std::index::at(high))).to_string())); }
+        if high <= 2 { return Some(nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&names, (high) as usize) }).to_string())); }
         return Some(String::from("i64"));
     }
     if low == 2 {

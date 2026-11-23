@@ -203,7 +203,7 @@ pub(crate) fn check_core_call_code_args(state: &mut CheckState, world: &CheckWor
     let mut i: i64 = -1;
     if signature.takes_a_receiver() { i = -2; }
     for (param, ty) in signature.params.iter() {
-        i += 1;
+        i = unsafe { nikaia_std::proven::add::<i64>(i, 1) };
         if i < 0 || i >= args.len() as i64 || nikaia_std::list::contains(&contract.keeps, &param) || nikaia_std::list::contains(&signature.mutable, &param) { continue; }
         match ty {
             Ty::Fn { .. } => { },
@@ -252,7 +252,7 @@ pub(crate) fn check_core_call_std_code_args(state: &mut CheckState, world: &Chec
     let mut i: i64 = -1;
     if signature.takes_a_receiver() { i = -2; }
     for (param, ty) in signature.params.iter() {
-        i += 1;
+        i = unsafe { nikaia_std::proven::add::<i64>(i, 1) };
         if i < 0 || i >= args.len() as i64 || nikaia_std::list::contains(&contract.keeps, &param) || nikaia_std::list::contains(&signature.mutable, &param) { continue; }
         match ty {
             Ty::Fn { .. } => { },

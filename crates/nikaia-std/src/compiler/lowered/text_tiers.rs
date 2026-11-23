@@ -3054,7 +3054,7 @@ pub(crate) fn lent_text_container(base: &Expr, maps: bool, lists: bool, ask: &Ti
     let container = last_segment(ask.names.resolve(list.ty.name));
     let mut at: i64 = 0;
     if is_a_map_name(&container) && maps && list.ty.generics.len() == 2 { at = 1; } else if !(lists && (container == "Vec" || container == "Array") && list.ty.generics.len() == 1) { return false; }
-    let element = nikaia_std::index::get(&list.ty.generics, (at) as usize);
+    let element = unsafe { nikaia_std::proven::read(&list.ty.generics, (at) as usize) };
     plain_string(ask.names, element) && !element.is_nullable
 }
 
