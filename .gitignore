@@ -33,12 +33,14 @@ node_modules/
 /examples/nikaia.contracts
 /examples/nikaia.derived
 # What `nikaia test` or `nikaia run` leaves inside an example package: the build
-# and the lockfile of a run in place, which is how `tests/examples.rs` runs them
-# (#534): its builds are reused from one run to the next.
+# of a run in place, which is how `tests/examples.rs` runs them (#534): its
+# builds are reused from one run to the next. Its `nikaia.lock` and ledgers are
+# committed and checked by `scripts/ledgers.nika` (#2797).
 /examples/*/target/
-/examples/*/nikaia.lock
 # The yaml bench's programs check in a package each (#1974); a check or a run
-# in place leaves its build and lockfile there.
+# in place leaves its build and lockfile there. `bench.nika` builds each from
+# a copy with a manifest of its own, never in place, so no build checks this
+# lock (#2797).
 /benches/yaml/*/target/
 /benches/yaml/*/nikaia.lock
 /benches/*.rs
@@ -53,6 +55,14 @@ node_modules/
 # had been committed by accident at 0.0.169).
 /crates/nikaia-std/src/compiler/nikaia.contracts
 /crates/nikaia-std/src/compiler/nikaia.derived
+# The toolchain's own packages (`within = "std"`, #1976) are lowered by
+# `nikaia lower-std`, never built in place, so no build checks a lock or a
+# ledger of theirs: what a `nikaia build` or `check` run there by hand leaves
+# is not a record of anything (#2797).
+/crates/nikaia-std/src/compiler/nikaia.lock
+/crates/nikaia-std/src/runtime/nikaia.lock
+/crates/nikaia-std/src/runtime/nikaia.contracts
+/crates/nikaia-std/src/runtime/nikaia.derived
 
 # The documentation site, as `scripts/site-build.sh` builds it, and what the
 # build and `wrangler` leave beside it.
@@ -64,20 +74,12 @@ node_modules/
 /.wrangler/
 /scripts/site-jekyll/Gemfile.lock
 
-# The language package builds in place, so a test run of it reuses its build;
-# what a build writes beside it changes with the compiler and is not committed.
+# The test packages build in place, so a test run of one reuses its build;
+# their `nikaia.lock` and ledgers are committed like every in-place project's
+# and checked by CI (#2797).
 /tests/language/target
-/tests/language/nikaia.lock
-/tests/language/nikaia.contracts
-/tests/language/nikaia.derived
-/tests/language/nikaia.proofs
 /tests/build-time/target
 /tests/compiler/target
-/tests/build-time/nikaia.lock
-/tests/compiler/nikaia.lock
-/tests/build-time/nikaia.contracts
-/tests/build-time/nikaia.derived
-/tests/build-time/nikaia.proofs
 
 # A package built in place keeps its build tree beside it.
 packages/*/target

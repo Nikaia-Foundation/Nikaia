@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1556] — 2026-11-23
+
+**Commit the lock and ledgers of every project built in place, as ledgers.nika --refresh writes them (#2797)**
+- The locks and ledgers of every project built in place are committed and checked by CI
+
 ## [0.0.1555] — 2026-11-23
 
 **Builders' changes (#1755, #1831, #2519)**
