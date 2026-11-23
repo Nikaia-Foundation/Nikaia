@@ -1,0 +1,26 @@
+// A function that hands back a part of its tuple parameter that copies
+// takes nothing of the tuple (#2444): the caller uses its value again, and
+// the function, named as a value, sorts and searches a list of such tuples.
+fn first(site: (int, String, int)) -> int sync {
+    return site.0
+}
+
+fn make(s: String) -> String {
+    let mut g = String()
+    g.push_str(s)
+    return g
+}
+
+fn main() throws {
+    let t = (5, make("a"), 1)
+    let a = first(t)
+    let b = first(t)
+    println(f"{a} {b} {t.1}")
+    let mut sites: Vec[(int, String, int)] = []
+    sites.push((5, make("e"), 1))
+    sites.push((2, make("b"), 3))
+    sites.push(t)
+    sites.sort_by_key(first)
+    let at = sites.binary_search_by_key(5, first) ?? -1
+    println(f"{sites[0].1} {at >= 1}")
+}

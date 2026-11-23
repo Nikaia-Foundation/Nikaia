@@ -691,7 +691,8 @@ impl Layout {
     pub fn resolve(input: &Path) -> Layout {
         let start = Self::start_of(input);
         for dir in start.ancestors() {
-            if dir.join("nikaia.toml").is_file() {
+            let manifest = dir.join("nikaia.toml");
+            if manifest.is_file() && !Self::names_nothing(&manifest) {
                 return Layout {
                     root: dir.to_path_buf(),
                     lock: dir.join("nikaia.lock"),
@@ -701,6 +702,30 @@ impl Layout {
             }
         }
         Self::outside(start)
+    }
+
+    /// **Whether `manifest` names nothing**: no table and no key, only
+    /// blanks and comments (#2407). Such a file names no package and no
+    /// program, so it is no project's root: an empty `/nikaia.toml` some
+    /// failed write left behind made every script below `/` "not the entry
+    /// point of the project at /" (ADR-260 D4). The search goes on above it,
+    /// with a warning, once per process. A file that does not parse is a
+    /// manifest still, and its reading refuses it.
+    fn names_nothing(manifest: &Path) -> bool {
+        static WARNED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+        let Ok(text) = std::fs::read_to_string(manifest) else {
+            return false;
+        };
+        let empty = text
+            .parse::<toml::Table>()
+            .is_ok_and(|table| table.is_empty());
+        if empty && !WARNED.swap(true, std::sync::atomic::Ordering::Relaxed) {
+            eprintln!(
+                "warning: {} names no package, so it is not taken as a project's manifest; the search for one goes on above it.",
+                manifest.display()
+            );
+        }
+        empty
     }
 
     /// **The file as one outside every project**, whatever is above it: a

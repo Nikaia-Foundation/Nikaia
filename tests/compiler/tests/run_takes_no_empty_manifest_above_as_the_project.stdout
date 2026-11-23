@@ -1,0 +1,11 @@
+-- an empty manifest above
+exit 0
+hello
+warning: TMP/nikaia.toml names no package, so it is not taken as a project's manifest; the search for one goes on above it.
+-- a manifest of a comment above
+exit 0
+hello
+warning: TMP/nikaia.toml names no package, so it is not taken as a project's manifest; the search for one goes on above it.
+-- a manifest naming a package above
+exit 1
+scripts/hello.nika is not the entry point of the project at TMP.

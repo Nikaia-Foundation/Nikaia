@@ -2658,6 +2658,26 @@ pub(crate) fn bounding_each_present(walk: &mut BoundsWalk, list: &str) -> i64 {
     walk.arena.ge(len, one)
 }
 
+pub(crate) fn bounding_each_unguarded(walk: &mut BoundsWalk, list: &str, fact: i64) -> i64 {
+    let parts = match walk.arena.at(fact) {
+        logic::SolverTerm::Or(parts) => parts,
+        _ => return fact,
+    };
+    let length = length_of(list);
+    let mut kept: Vec<i64> = vec![];
+    for part in parts.iter() {
+        let part = nikaia_std::num::value(part);
+        let guard = match walk.arena.at(part) {
+            logic::SolverTerm::Le(a, b) => walk.arena.is_the_variable(a, &length) && nikaia_std::index::or(walk.arena.constant(b), || 1) == 0,
+            _ => false,
+        };
+        if !guard { kept.push(part); }
+    }
+    if (kept.len() as i64) == parts.len() as i64 || kept.is_empty() { return fact; }
+    if kept.len() == 1 { return *unsafe { nikaia_std::proven::read(&kept, (0) as usize) }; }
+    walk.arena.or(kept)
+}
+
 pub(crate) fn bounding_variable(expr: &Expr, words: &winnow_grammar::InternerContext) -> Option<String> {
     match expr {
         Expr::Variable(name, _) => { let name = *name; Some(nikaia_std::block::Text::from(words.resolve(name).to_string())) },
