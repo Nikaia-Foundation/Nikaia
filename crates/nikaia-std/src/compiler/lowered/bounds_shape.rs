@@ -31,6 +31,7 @@ pub struct Around {
     pub changing_receivers: collections::BTreeSet<String>,
     pub frames: collections::BTreeMap<String, BoundsChanged>,
     pub rules: Vec<BoundsRule>,
+    pub rules_unread: collections::BTreeSet<String>,
     pub held: collections::BTreeMap<String, Vec<BoundsRule>>,
     pub checked: collections::BTreeMap<String, RulesChecked>,
     pub checked_returning: collections::BTreeSet<String>,

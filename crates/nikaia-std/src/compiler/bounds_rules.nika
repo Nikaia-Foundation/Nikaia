@@ -103,13 +103,15 @@ fn rules_rounds() -> i64 {
 // --- The candidates, read off the source -------------------------------------
 
 /// **Every candidate of the program**, read with the frames `context`
-/// holds.
+/// holds, and beside them the fields of the types searched that no
+/// candidate is read over (`Type.field`, `Type.field[]` of its elements,
+/// `Type.` of every field), for `--asserts` (ADR-369 D5).
 fn rules_candidates(
     program: ref Program,
     beside: ref Vec[ref BoundsBeside],
     context: ref BoundsContext,
     words: ref winnow_grammar::InternerContext,
-) -> Vec[BoundsRule] {
+) -> (Vec[BoundsRule], collections::BTreeSet[String]) {
     // **A `pub` field is a candidate where every write to it is in the
     // build** (ADR-306 D22): its type is not `pub`, or the package is a
     // program no other package imports. A field, `pub` or not, is a
@@ -215,7 +217,7 @@ fn rules_candidates(
         }
     }
     if lists.is_empty() {
-        return []
+        return ([], collections::BTreeSet())
     }
     // **What a method of such a type writes, its own type's methods aside**:
     // they are checked themselves, so a call to one writes nothing here.
@@ -467,7 +469,14 @@ fn rules_candidates(
             }
         }
     }
-    return out
+    let mut unread: collections::BTreeSet[String] = collections::BTreeSet()
+    for name in dropped {
+        let at = name.find(".") ?? continue
+        if lists.contains_key(name.before(at.start)) && !name.contains("#") {
+            unread.insert(name.clone())
+        }
+    }
+    return (out, unread)
 }
 
 fn rules_has(rules: ref Vec[BoundsRule], owner: ref String, kind: ref String, a: ref String, b: ref String) -> bool {
@@ -1582,6 +1591,51 @@ fn rules_roots(owner: ref String, args: ref Vec[FnArg], shape: ref BodyShape, ru
 /// walk failed is read from `context.around.checked` or `checked` where the
 /// same walk ran before, and kept in `checked` where not (#2396).
 fn rules_holding(owner: ref String, context: ref BoundsContext, program: ref Program, words: ref winnow_grammar::InternerContext, ask: fn(ref logic::TermArena, ref Vec[i64], i64) -> bool sync, mut checked: collections::BTreeMap[String, RulesChecked]) -> Vec[BoundsRule] {
+    let mut why = rules_why_none()
+    return rules_holding_why(owner, context, program, words, ask, checked, why)
+}
+
+/// **Why each candidate of a type held or not** (ADR-369 D5), for
+/// `--asserts`: the bodies walked to check the candidates, and of each
+/// candidate dropped (by `rules_key`) the bodies that did not keep it;
+/// `rounds` where the search ran out of rounds before it settled.
+pub struct RulesWhy {
+    pub bodies: Vec[String],
+    pub broken: collections::BTreeMap[String, Vec[String]],
+    pub rounds: bool,
+}
+
+fn rules_why_none() -> RulesWhy {
+    return RulesWhy { bodies: [], broken: collections::BTreeMap(), rounds: false }
+}
+
+/// A candidate by its kind and fields, its owner aside.
+fn rules_key(rule: ref BoundsRule) -> String {
+    return f"{rule.kind}|{rule.a}|{rule.b}|{rule.times}"
+}
+
+/// **What `rules_check_once` just failed, said of whom** (ADR-369 D5): each
+/// candidate of `held` in `failed` and not in `before` is broken by `body`,
+/// which is walked to check them.
+fn rules_why_note(mut why: RulesWhy, body: ref String, held: ref Vec[BoundsRule], before: ref collections::BTreeSet[i64], failed: ref collections::BTreeSet[i64]) {
+    if !why.bodies.contains(body) {
+        why.bodies.push(body.clone())
+    }
+    for at in failed {
+        if before.contains(at) || at >= held.len() {
+            continue
+        }
+        let key = rules_key(held[at])
+        let mut by = why.broken.get(key)?.clone() ?? []
+        if !by.contains(body) {
+            by.push(body.clone())
+        }
+        why.broken.insert(key, by)
+    }
+}
+
+/// `rules_holding`, with why each candidate held or not written into `why`.
+fn rules_holding_why(owner: ref String, context: ref BoundsContext, program: ref Program, words: ref winnow_grammar::InternerContext, ask: fn(ref logic::TermArena, ref Vec[i64], i64) -> bool sync, mut checked: collections::BTreeMap[String, RulesChecked], mut why: RulesWhy) -> Vec[BoundsRule] {
     let mut held: Vec[BoundsRule] = []
     // Each rule held by its place among all candidates, for `checked`'s key.
     let mut ids: Vec[i64] = []
@@ -1601,14 +1655,20 @@ fn rules_holding(owner: ref String, context: ref BoundsContext, program: ref Pro
                 // **A body outside the type's methods that holds a value of
                 // it by a name whose type it knows**: each write it makes is
                 // checked where it stands (ADR-306 D22, D28).
-                Item::Fn { args, body, .. } => {
+                Item::Fn { name, args, body, .. } => {
                     let locals = rules_locals(owner, args, body, "", context, words)
                     if !locals.is_empty() || rules_names_lists(body, owner, "", held, words) {
                         let mut owners: collections::BTreeSet[String] = collections::BTreeSet()
                         owners.insert(owner.clone())
                         let made = rules_builder(body, owners, program, words)
                         let key = rules_checked_key(given, "", made.0, args, body, context)
+                        let before = failed.clone()
                         rules_check_once(key, shared, held, owner, "", made.0, args, body, locals, context, program, words, ask, failed, checked)
+                        let called = match name {
+                            written => words.resolve(written).clone(),
+                            null => "the constructor",
+                        }
+                        rules_why_note(why, f"`{called}`", held, before, failed)
                     }
                 },
                 Item::Impl { target, methods, .. } => {
@@ -1623,13 +1683,17 @@ fn rules_holding(owner: ref String, context: ref BoundsContext, program: ref Pro
                                 if own && receiver != null && (changing || rules_has_result(held, m)) {
                                     let locals = rules_locals(owner, args, body, impl_of, context, words)
                                     let key = rules_checked_key(given, m, "", args, body, context)
+                                    let before = failed.clone()
                                     rules_check_once(key, shared, held, owner, m, "", args, body, locals, context, program, words, ask, failed, checked)
+                                    rules_why_note(why, f"`{m}`", held, before, failed)
                                     continue
                                 }
                                 let locals = rules_locals(owner, args, body, impl_of, context, words)
                                 if !locals.is_empty() || rules_names_lists(body, owner, impl_of, held, words) {
                                     let key = rules_checked_key(given, "", "", args, body, context)
+                                    let before = failed.clone()
                                     rules_check_once(key, shared, held, owner, "", "", args, body, locals, context, program, words, ask, failed, checked)
+                                    rules_why_note(why, f"`{impl_of}::{m}`", held, before, failed)
                                 }
                             },
                             else => {},
@@ -1655,9 +1719,93 @@ fn rules_holding(owner: ref String, context: ref BoundsContext, program: ref Pro
         round += 1
     }
     if round >= rules_rounds() {
+        why.rounds = true
         return []
     }
     return held
+}
+
+/// **Each rule the walk looked for, found or not, with why** (ADR-369 D4,
+/// D5), for `--asserts`: of each type with candidates, every candidate as
+/// `found` or `not found`, the type, the claim and what found it or what
+/// broke it, one row each, `\t` between the parts. Asked once over the
+/// file, after every body was walked, with what the walks left in
+/// `context`.
+pub fn rules_report(context: ref BoundsContext, program: ref Program, words: ref winnow_grammar::InternerContext, ask: fn(ref logic::TermArena, ref Vec[i64], i64) -> bool sync) -> Vec[String] {
+    let mut owners: collections::BTreeSet[String] = collections::BTreeSet()
+    for rule in context.around.rules {
+        owners.insert(rule.owner.clone())
+    }
+    let mut out: Vec[String] = []
+    // **A field no candidate is read over** (ADR-369 D4): an edit that
+    // writes it where the search cannot follow shows here.
+    for name in context.around.rules_unread {
+        let at = name.find(".") ?? continue
+        let owner = name.before(at.start).clone()
+        let field = name.after(at.end).clone()
+        let over = if field.is_empty() { "its fields" } else if field.ends_with("[]") { f"the elements of `{field.strip_suffix("[]") ?? ""}`" } else { f"`{field}`" }
+        out.push(f"not looked for\t{owner}\tno rule over {over}\ta body outside its methods may change it (a call handed the field counts), a `with` sets it, or a `mut` parameter may be handed it (ADR-369 D4), so nothing is found of it")
+    }
+    for owner in owners {
+        let mut checked: collections::BTreeMap[String, RulesChecked] = collections::BTreeMap()
+        let mut why = rules_why_none()
+        let held = rules_holding_why(owner, context, program, words, ask, checked, why)
+        let kept = if why.bodies.is_empty() { "no body writes its fields" } else { f"every body that may write its fields keeps it: {why.bodies.join(", ")}" }
+        for rule in context.around.rules {
+            if rule.owner != owner {
+                continue
+            }
+            let key = rules_key(rule)
+            let claim = rules_claim(rule)
+            if held.iter().any(fn(h) { rules_key(h) == key }) {
+                out.push(f"found\t{owner}\t{claim}\t{rules_found_by(rule)}, and {kept}")
+                continue
+            }
+            let by = why.broken.get(key)?.clone() ?? []
+            let broken = if !by.is_empty() {
+                f"{by.join(", ")} does not keep it"
+            } else if why.rounds {
+                "the search ran out of rounds before it settled"
+            } else {
+                "a rule it rests on is not found"
+            }
+            out.push(f"not found\t{owner}\t{claim}\t{broken}, so what it would prove is checked")
+        }
+    }
+    return out
+}
+
+/// A candidate's claim as a program would write it of the type's fields.
+fn rules_claim(rule: ref BoundsRule) -> String {
+    return match rule.kind {
+        "floor" => f"0 <= {rule.a}",
+        "cap" => f"{rule.a} <= {rule.b}.len()",
+        "atmost" => f"{rule.a} <= {rule.b}",
+        "length" => if rule.times == 1 { f"{rule.a}.len() == {rule.b}.len()" } else { f"{rule.a}.len() == {rule.times} * {rule.b}.len()" },
+        "index" => f"every element of {rule.a} is in 0..<{rule.b}.len()",
+        "result" => f"{rule.a}() hands back a position of {rule.b}",
+        "ascending" => f"{rule.a} ascends: {rule.a}[i] <= {rule.a}[i + 1]",
+        "capped" => f"every element of {rule.a} is in 0..{rule.b}.len()",
+        "inner" => f"every value of every inner list of {rule.a} is in 0..<{rule.b}.len()",
+        else => f"{rule.kind} of {rule.a} and {rule.b}",
+    }
+}
+
+/// **What found a candidate** (ADR-369 D4): the shape of the source the
+/// walk read it off (`rules_candidates`).
+fn rules_found_by(rule: ref BoundsRule) -> String {
+    return match rule.kind {
+        "floor" => "every literal builds it so",
+        "cap" => f"a statement of its methods names `{rule.a}` beside `{rule.b}`, and every literal builds it within",
+        "atmost" => f"a statement of its methods compares `{rule.a}` with `{rule.b}`, and every literal builds it at most",
+        "length" => "every method that writes one length writes the other, and every literal builds them so",
+        "index" => f"`{rule.a}` holds whole numbers and every literal builds it empty",
+        "result" => f"each push to a list of positions of `{rule.b}` puts what `{rule.a}` hands back",
+        "ascending" => f"every literal builds `{rule.a}` of at most one item",
+        "capped" => f"a statement of its methods names `{rule.a}` beside `{rule.b}`, and every literal builds `{rule.a}` empty",
+        "inner" => f"every literal builds `{rule.a}` of empty inner lists",
+        else => "the walk",
+    }
 }
 
 /// **The values of `owner` a body names by one name of known type**, `self`

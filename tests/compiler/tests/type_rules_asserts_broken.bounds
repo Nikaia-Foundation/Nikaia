@@ -1,0 +1,5 @@
+bounds in tests/type_rules_asserts_broken.nika: 1 indexes, 0 proved; 2 operations, 1 proved
+    28  self.c[self.at]  checked: no fact bounds what it reads - a counter, a loop, a length, or one list as long as another (#432, #383, #388)
+    33  self.at += 1     proved
+    38  self.at += 2     checked: a field no rule of its type bounds: the walk finds `a <= b` only of two private fields a method compares (ADR-369 D4, #1681), and a count of work done has none (#1531)
+  derived  piece: 0 <= a, a <= b, a < b, 0 <= b, proved at the calls on lines 44
