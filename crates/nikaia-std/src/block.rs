@@ -104,6 +104,14 @@ pub fn for_a_task() -> Block {
     Block::with_budget(bytes(PROGRAM.load(Ordering::Relaxed)))
 }
 
+/// **A `par_iter` piece's block** (ADR-async-5 D28): the program's budget,
+/// which each element that runs in it has as a task does. Unlike
+/// [`for_a_task`], it leaves the budget a decision granted the next task to
+/// that task.
+pub fn for_a_piece() -> Block {
+    Block::with_budget(bytes(PROGRAM.load(Ordering::Relaxed)))
+}
+
 /// **A map whose table may be refused**: `std`'s own map
 /// ([`crate::map::HashMap`]), whose table is placed by its handle and grows
 /// in a block only through `try_reserve`.

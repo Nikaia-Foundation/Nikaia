@@ -112,6 +112,31 @@ impl EmitState {
         return out
     }
 
+    /// **The sets a lambda a `std` step fails through ends with** (#2736),
+    /// two or more that no function's is, each a sum too: in the box a
+    /// `par_iter` walk's failures could not cross a worker (it is not
+    /// `Send`), and a `par_iter` element's `task::OverBudget` joins what its
+    /// lambda throws (ADR-async-5 D28). Only in a file alone or the entry,
+    /// which writes its sums at the crate root: another module of several
+    /// names a sum the entry writes, which knows nothing of its lambdas, so
+    /// there the box stays.
+    pub fn lambda_sums(ref self, world: ref EmitWorld, mut sums: collections::BTreeMap[Vec[String], String]) {
+        for (_, thrown) in self.facts.failing_through_lambdas {
+            if thrown.len() < 2 || sums.contains_key(thrown) {
+                continue
+            }
+            let mut all_named = true
+            for member in thrown {
+                if self.name_of_error(world, member) == 0 {
+                    all_named = false
+                }
+            }
+            if all_named {
+                sums.insert(thrown.clone(), sum_name(thrown))
+            }
+        }
+    }
+
     /// **The sums the functions this file declares fail with**, by name: in
     /// `std` and the tools the ledger holds the files beside it too (#1347).
     fn sums_used_here(ref self, world: ref EmitWorld) -> collections::BTreeSet[String] {
@@ -307,8 +332,16 @@ impl EmitState {
             }
             // Boxing asks for `'static`: only a sum without parameters. And
             // for `Send` and `Sync`, which a scope's channel has and a
-            // supervisor's `Handed` has not: only a scope's.
-            if params == "" && crashed {
+            // supervisor's `Handed` has not: only a scope's, and one holding
+            // `task::OverBudget`, a task's or a `par_iter` element's, whose
+            // failures cross workers too (ADR-async-5 D26, D28).
+            let mut over_budget = false
+            for member in members {
+                if member == "task::OverBudget" {
+                    over_budget = true
+                }
+            }
+            if params == "" && (crashed || over_budget) {
                 for member in members {
                     let variant = sum_variant(member)
                     let held = self.sum_member_held(world, member, params)

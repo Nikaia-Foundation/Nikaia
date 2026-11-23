@@ -613,8 +613,19 @@ chain without `within:` keeps no failure slot (D28).
 
 * A failure slot only for a lambda that can throw, and its list is allocated on
   the failure path; a lambda that cannot throw has no slot.
-* A block reset per element only for a lambda that allocates and keeps memory
-  past its element; one that does not shares its piece's block untouched.
+* A block only for a lambda that places an allocation in it (ADR-327 D13); a
+  lambda that places none runs without one and cannot end with
+  `task::OverBudget`. One that does runs each element as a task for its memory
+  too, so the meaning does not depend on D25's choice: the element has a task's
+  budget in its piece's block; what it hands back, and anything else that
+  outlives it, is built outside the block (ADR-327 D9), so what it leaves there
+  is freed when it ends (ADR-327 D10) and the block needs no reset between
+  elements; a full block unwinds that element alone (D19), and the piece
+  catches it at the element's boundary and keeps `task::OverBudget` among the
+  call's failures (D26), with no failure slot in the lambda (supervisor,
+  2026-11-22, with the owner, #2678: this follows from D19, D25, D26 and
+  ADR-327 D9, D10, D13; the earlier text asked for a reset that cannot be
+  needed).
 * Every check (`NK2104`, `NK2107`, `NK2119`) is compile-time only.
 
 Before the lowering is accepted, `par_iter().map(…).collect()` over 10^6

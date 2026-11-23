@@ -199,6 +199,8 @@ impl EmitState {
         let fails = a_task && scope.tasks_channel != "nikaia_std::task::Crashed";
         if a_task && !fails { if pauses { out.push("nikaia_std::task::plain_paused("); } else { out.push("nikaia_std::task::plain("); } }
         if pauses { out.push("async "); }
+        let blocked = !pauses && self.facts.blocked_lambdas.contains(&node_key(node));
+        if blocked { out.push("nikaia_std::par::in_block("); }
         let pattern = self.facts.filter_patterns.contains(&node_key(node));
         let mut takes_out = false;
         let mut place: i64 = 0;
@@ -255,10 +257,12 @@ impl EmitState {
             out.push(if leaves { "{ " } else { "{ let __nikaia_done = " });
             self.emit_core_block(world, walk, out, host, body, depth, EmitFlow { can_throw: true, ..inside }, &inside_scope, &value_tail)?;
             out.push(if leaves { " }" } else { "; Ok(__nikaia_done) }" });
+            if blocked { out.push(")"); }
             if a_task { out.push(")"); }
             return Ok(());
         }
         self.emit_core_block(world, walk, out, host, body, depth, inside, &inside_scope, &return_tail)?;
+        if blocked { out.push(")"); }
         if copied && pauses { out.push(&format!(".await; *__nikaia_slot = {}; }}", *nikaia_std::index::get(&names, 0))); } else if copied { out.push(&format!(")(); *__nikaia_slot = {}; }}", *nikaia_std::index::get(&names, 0))); }
         if a_task { out.push(")"); }
         Ok(())

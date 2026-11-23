@@ -228,7 +228,14 @@ pub fn emit_contracts_state[H: EmitContractsHost, P: EmitHolesHost](host: ref H,
     state.template_errors = holes.errors
     state.kept_calls = holes.kept_calls
     let world = EmitWorld { words: words, aliases: units[0].aliases, items: items, library: library }
-    state.sums = state.error_sums(world)
+    let mut sums = state.error_sums(world)
+    // A file alone (`units` is the file and what is beside it, which in a
+    // package's lowering holds the file itself too), or the one that
+    // declares `main`, the entry, which writes the sums at the crate root.
+    if units.len() <= 2 || emit_contracts_declares_main(words, items) {
+        state.lambda_sums(world, sums)
+    }
+    state.sums = sums
     state.sums_written = emit_sums_written(state.sums, units, state.sums_used_here(world))
     let coalesced = vc_coalesced(state.facts)
     let mut_viewed = vc_mut_viewed(state.facts)
@@ -294,4 +301,21 @@ fn emit_contracts_code_cycle_graph(units: ref Vec[ParsedView], contracts: ref Le
         }
     }
     return graph
+}
+
+/// **Whether the file declares a program's `main`**: the entry of its
+/// package, the file that writes the package's sums (`write_error_sums`).
+fn emit_contracts_declares_main(words: ref winnow_grammar::InternerContext, items: ref Vec[Spanned[Item]]) -> bool {
+    for item in items {
+        match item.node {
+            Item::Fn { name, receiver, .. } => {
+                let called = name ?? continue
+                if words.resolve(called) == "main" && receiver == null {
+                    return true
+                }
+            },
+            else => {},
+        }
+    }
+    return false
 }

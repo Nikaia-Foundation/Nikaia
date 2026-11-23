@@ -117,7 +117,7 @@ fn main() throws {
 	println("")
 	println("| lambda | Nikaia: instructions | mispredicted | Rayon: instructions | mispredicted |")
 	println("|---|--:|--:|--:|--:|")
-	for row in ["allocates"] {
+	for row in ["throws", "allocates"] {
 		let ours = build(nikaia, repo, out, row)
 		let theirs = f"{repo}/target/release/par_map_{row}"
 		must(f"{env} {ours} {n} > {out}/{row}.nikaia.out", f"{row}, the Nikaia side")
