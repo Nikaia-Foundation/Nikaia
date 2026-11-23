@@ -661,7 +661,9 @@ let small = q.narrow()                 // i64? where it fits
   it is not in the prelude.
 * **Made** with `BigInt::of(v)` from any integer type of Part I 2.2 and
   `BigInt::from_wide(w)`; read back with `narrow() -> i64?`, `sign() -> i64`,
-  `bits() -> i64` and its decimal text.
+  `bits() -> i64` and its decimal text, `to_text()`. `BigInt::parse(text) ->
+  BigInt?` reads that text back: the digits as `text::parse_i64` reads them,
+  with no limit on their number, and `null` where they write no number.
 * **Exact, never wrapped, never `null` for size**: `add`, `sub`, `neg`, `mul`,
   `abs` and `gcd` give a `BigInt`; `div_rem` and `rem` round as `/` and `%`
   round and give `null` only for a zero divisor. `==` and the comparisons are
@@ -1663,8 +1665,10 @@ The claim reads the fields by name, and it is the type's **invariant**. It
 holds after every construction - a literal, a `with`, the constructor's
 result - at the end of every method that changes the value, and after every
 write to a field from outside such a method; inside a method it may be broken
-for a while. Each of these points is proved, or where the compiler cannot,
-refused or checked as the build says, as any `assert` is (Part III 14.2). Wherever a value of the
+for a while. A write to a field is any change to it: `x.f = v`, `x.f op= v`, a
+method that takes `mut self` called on `x.f`, and `x.f` passed as a `mut`
+argument, where the rule holds once the call returns. Each of these points is
+proved, or where the compiler cannot, refused or checked as the build says, as any `assert` is (Part III 14.2). Wherever a value of the
 type is read, the rule is a fact the compiler proves from. Where a struct with
 private fields writes no rule, the compiler may find one its package's code
 always keeps, and uses it only as a fact.
