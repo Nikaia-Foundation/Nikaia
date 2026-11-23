@@ -1,0 +1,84 @@
+// A `for` binding over a lent list stands for an element of it
+// (ADR-views-v4 D5, D16, D32, #2478): a text field of the binding, the
+// binding itself where the list holds text, or a field of `ns[0]`, put
+// into a struct literal that is pushed into a `mut` parameter or handed
+// back, or handed back as it is, is a view of the list. Nothing is copied:
+// `walk` lowers to `fn walk<'a>(ns: &'a Vec<N>, out: &mut Vec<E<'a>>)`.
+
+struct N {
+	raw: String,
+}
+
+struct E {
+	v: String,
+}
+
+fn walk(ns: Vec[N], mut out: Vec[E]) {
+	for n in ns {
+		out.push(E { v: n.raw })
+	}
+}
+
+fn first(ns: Vec[N]) -> E {
+	for n in ns {
+		return E { v: n.raw }
+	}
+	return E { v: "none" }
+}
+
+fn found(ns: Vec[N]) -> E? {
+	for n in ns {
+		return E { v: n.raw }
+	}
+	return null
+}
+
+fn first_raw(ns: Vec[N]) -> String {
+	for n in ns {
+		return n.raw
+	}
+	return "none"
+}
+
+fn at_first(ns: Vec[N]) -> E {
+	return E { v: ns[0].raw }
+}
+
+fn raw_at_first(ns: Vec[N]) -> String {
+	return ns[0].raw
+}
+
+fn put(ss: Vec[String], mut out: Vec[E]) {
+	for s in ss {
+		out.push(E { v: s })
+	}
+}
+
+fn first_text(ss: Vec[String]) -> String {
+	for s in ss {
+		return s
+	}
+	return "none"
+}
+
+fn make(text: String) -> String {
+	let mut g = String()
+	g.push_str(text)
+	return g
+}
+
+fn main() throws {
+	let ns = [N { raw: make("abc") }, N { raw: make("def") }]
+	let ss = [make("ghi"), make("jkl")]
+	let mut out: Vec[E] = []
+	walk(ns, out)
+	println(f"{out[0].v} {out[1].v}")
+	println(first(ns).v)
+	println(found(ns)?.v ?? "none")
+	println(first_raw(ns))
+	println(f"{at_first(ns).v} {raw_at_first(ns)}")
+	put(ss, out)
+	println(f"{out[2].v} {out[3].v}")
+	println(first_text(ss))
+	println(ns[0].raw)
+}
