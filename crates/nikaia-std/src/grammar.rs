@@ -308,14 +308,14 @@ impl Span {
 /// a `@stream` step from its window's (#1443): the window's `origin` is taken
 /// off first (0 outside a stream).
 #[doc(hidden)]
-pub fn covered<'a, S: Clone + std::fmt::Debug>(
-    input: &winnow_grammar::ParseInput<'a, S>,
+pub fn covered<'a, C: winnow_grammar::Ctx>(
+    input: &winnow_grammar::ParseInputOf<'a, C>,
     at: std::ops::Range<usize>,
 ) -> &'a str {
     let mut whole = input.input;
     whole.reset_to_start();
     let all: &'a str = *whole;
-    let origin = input.state.origin;
+    let origin = winnow_grammar::Ctx::cx(&input.state).origin;
     &all[at.start - origin..at.end - origin]
 }
 
@@ -324,11 +324,11 @@ pub fn covered<'a, S: Clone + std::fmt::Debug>(
 /// start, less the window's `origin`, as in [`covered`].
 #[doc(hidden)]
 #[inline]
-pub fn position<S: Clone + std::fmt::Debug>(
-    input: &winnow_grammar::ParseInput<'_, S>,
+pub fn position<C: winnow_grammar::Ctx>(
+    input: &winnow_grammar::ParseInputOf<'_, C>,
     at: usize,
 ) -> crate::text::Pos {
-    crate::text::Pos::at(at - input.state.origin)
+    crate::text::Pos::at(at - winnow_grammar::Ctx::cx(&input.state).origin)
 }
 
 /// **`span(p)` over text, a `text::Match` of the input** (ADR-374 D7): the
@@ -336,33 +336,33 @@ pub fn position<S: Clone + std::fmt::Debug>(
 /// covered text.
 #[doc(hidden)]
 #[inline]
-pub fn matched<'a, S: Clone + std::fmt::Debug>(
-    input: &winnow_grammar::ParseInput<'a, S>,
+pub fn matched<'a, C: winnow_grammar::Ctx>(
+    input: &winnow_grammar::ParseInputOf<'a, C>,
     at: std::ops::Range<usize>,
 ) -> crate::text::Match<'a> {
     let mut whole = input.input;
     whole.reset_to_start();
     let all: &'a str = *whole;
-    let origin = input.state.origin;
+    let origin = winnow_grammar::Ctx::cx(&input.state).origin;
     crate::text::Match::of(all, at.start - origin..at.end - origin)
 }
 
 /// [`covered`] over a `Bytes`: the covered bytes checked as UTF-8 where they
 /// become text, failing as the backend's `text(p)` does (ADR-grammar-input-v1 D2).
 #[doc(hidden)]
-pub fn covered_bytes<'a, S, E>(
-    input: &mut winnow_grammar::ParseBytes<'a, S>,
+pub fn covered_bytes<'a, C, E>(
+    input: &mut winnow_grammar::ParseBytesOf<'a, C>,
     at: std::ops::Range<usize>,
 ) -> Result<&'a str, winnow_grammar::winnow::error::ErrMode<E>>
 where
-    S: Clone + std::fmt::Debug,
+    C: winnow_grammar::Ctx,
     E: winnow_grammar::error::Diagnostics,
 {
     use winnow_grammar::winnow::stream::Stream;
     let mut whole = input.input;
     whole.reset_to_start();
     let all: &'a [u8] = *whole;
-    let origin = input.state.origin;
+    let origin = winnow_grammar::Ctx::cx(&input.state).origin;
     let at = at.start - origin..at.end - origin;
     match std::str::from_utf8(&all[at.clone()]) {
         Ok(text) => Ok(text),
@@ -382,14 +382,14 @@ where
 /// [`covered`] of a bound `bytes(p)` over a `Bytes`, where `p` binds names
 /// (#2409): the covered bytes as they are, unchecked (ADR-grammar-input-v1 D4).
 #[doc(hidden)]
-pub fn covered_raw<'a, S: Clone + std::fmt::Debug>(
-    input: &winnow_grammar::ParseBytes<'a, S>,
+pub fn covered_raw<'a, C: winnow_grammar::Ctx>(
+    input: &winnow_grammar::ParseBytesOf<'a, C>,
     at: std::ops::Range<usize>,
 ) -> &'a [u8] {
     let mut whole = input.input;
     whole.reset_to_start();
     let all: &'a [u8] = *whole;
-    let origin = input.state.origin;
+    let origin = winnow_grammar::Ctx::cx(&input.state).origin;
     &all[at.start - origin..at.end - origin]
 }
 

@@ -99,9 +99,30 @@ fn emit_default_ws() -> String {
 /// current position came right after a skipped run that held a line break,
 /// and covers nothing. One per grammar copy, so the text copy and the one over
 /// bytes, written in the same module, do not collide.
-fn emit_same_line_function(name: ref String) -> String {
+///
+/// In a grammar with a `@stream` entry the engine's rules are generic over
+/// the context, `C: Ctx` (winnow-grammar d5eb090: a stream lends its context
+/// to a step), and so is this function: it reaches the state through
+/// `cx_mut()`, and fails with `from_stream`, since the engine's `from_input`,
+/// which leaves the error empty in the fast pass, takes the held context only.
+fn emit_same_line_function(name: ref String, stream: bool) -> String {
     let mut out: Vec[String] = []
     out.push("#[allow(non_snake_case, dead_code)]\n")
+    if stream {
+        out.push(f"fn {emit_same_line_rule()}_{name}<B, C>(i: &mut ::winnow_grammar::rt::InputOf<B, C>) -> ::core::result::Result<(), ::winnow_grammar::ParseError>\n")
+        out.push("where\n")
+        out.push("    B: ::winnow_grammar::rt::Slice,\n")
+        out.push("    C: ::winnow_grammar::Ctx,\n")
+        out.push("    C::State: ::winnow_grammar::StateOf<::nikaia_std::grammar::LineBreaks>,\n")
+        out.push("{\n")
+        out.push("    let at = ::winnow::stream::Location::current_token_start(&*i) as i64;\n")
+        out.push("    if ::winnow_grammar::StateOf::<::nikaia_std::grammar::LineBreaks>::state(&mut ::winnow_grammar::Ctx::cx_mut(&mut i.state).user_state).began_a_line(at) {\n")
+        out.push("        return Err(::winnow_grammar::ParseError::from_stream(&*i));\n")
+        out.push("    }\n")
+        out.push("    Ok(())\n")
+        out.push("}\n")
+        return out.join("")
+    }
     out.push(f"fn {emit_same_line_rule()}_{name}<B, S>(i: &mut ::winnow_grammar::rt::Input<B, S>) -> ::core::result::Result<(), ::winnow_grammar::ParseError>\n")
     out.push("where\n")
     out.push("    B: ::winnow_grammar::rt::Slice,\n")
@@ -678,7 +699,7 @@ impl EmitState {
             out.push("}\n")
         }
         if lines {
-            out.push(emit_same_line_function(name))
+            out.push(emit_same_line_function(name, def.rules.iter().any(fn(rule) { rule.stream && rule.is_entry })))
         }
     }
 
@@ -781,13 +802,16 @@ impl EmitState {
                             prelude = f"{prelude}let {name} = ::nikaia_std::grammar::covered(input, {range}); "
                         }
                     }
-                    // The backend lends `_state = &mut input.state` before
-                    // the action, and the prelude above reads `input`: taken
-                    // again after it, the backend's loan ends before that
-                    // read, and an `emit` or `_state.user()` in the action
-                    // borrows the new one (#2254).
+                    // The backend lends `_state` (the context of
+                    // `input.state`, `Ctx::cx_mut`) before the action, and
+                    // the prelude above reads `input`: taken again after it,
+                    // the backend's loan ends before that read, and an `emit`
+                    // or `_state.user()` in the action borrows the new one
+                    // (#2254). Through `Ctx::cx_mut` as the backend does,
+                    // since in a grammar with a `@stream` entry `input.state`
+                    // is the generic context `C: Ctx` (winnow-grammar d5eb090).
                     if as_texts.len() > 0 || (positions && as_spans.len() > 0) {
-                        prelude = f"{prelude}let _state = &mut input.state; "
+                        prelude = f"{prelude}let _state = ::winnow_grammar::Ctx::cx_mut(&mut input.state); "
                     }
                     // A grammar action is the rule's own body: what it ends
                     // in is what the rule hands back, so a `return` there is

@@ -50,9 +50,24 @@ pub(crate) fn emit_own_ws_rule() -> &'static str { "NIKAIA_OWN_WS" }
 
 pub(crate) fn emit_default_ws() -> String { String::from("multispace0") }
 
-pub(crate) fn emit_same_line_function(name: &str) -> String {
+pub(crate) fn emit_same_line_function(name: &str, stream: bool) -> String {
     let mut out: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     out.push(String::from("#[allow(non_snake_case, dead_code)]\n"));
+    if stream {
+        out.push(format!("fn {}_{}<B, C>(i: &mut ::winnow_grammar::rt::InputOf<B, C>) -> ::core::result::Result<(), ::winnow_grammar::ParseError>\n", emit_same_line_rule(), name));
+        out.push(String::from("where\n"));
+        out.push(String::from("    B: ::winnow_grammar::rt::Slice,\n"));
+        out.push(String::from("    C: ::winnow_grammar::Ctx,\n"));
+        out.push(String::from("    C::State: ::winnow_grammar::StateOf<::nikaia_std::grammar::LineBreaks>,\n"));
+        out.push(String::from("{\n"));
+        out.push(String::from("    let at = ::winnow::stream::Location::current_token_start(&*i) as i64;\n"));
+        out.push(String::from("    if ::winnow_grammar::StateOf::<::nikaia_std::grammar::LineBreaks>::state(&mut ::winnow_grammar::Ctx::cx_mut(&mut i.state).user_state).began_a_line(at) {\n"));
+        out.push(String::from("        return Err(::winnow_grammar::ParseError::from_stream(&*i));\n"));
+        out.push(String::from("    }\n"));
+        out.push(String::from("    Ok(())\n"));
+        out.push(String::from("}\n"));
+        return nikaia_std::block::Text::from(out.join(""));
+    }
     out.push(format!("fn {}_{}<B, S>(i: &mut ::winnow_grammar::rt::Input<B, S>) -> ::core::result::Result<(), ::winnow_grammar::ParseError>\n", emit_same_line_rule(), name));
     out.push(String::from("where\n"));
     out.push(String::from("    B: ::winnow_grammar::rt::Slice,\n"));
@@ -441,7 +456,7 @@ impl EmitState {
         }
         out.push("    }\n");
         if !bytes && !emit_stream_readers(def, self.offered_to_rust).is_empty() { out.push("} }\n"); } else { out.push("}\n"); }
-        if lines { out.push(&emit_same_line_function(name)); }
+        if lines { out.push(&emit_same_line_function(name, def.rules.iter().any(|rule| { rule.stream && rule.is_entry }))); }
         Ok(())
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -508,7 +523,7 @@ impl EmitState {
                     let mut bound_bytes: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut as_texts = as_texts; #[allow(unused_mut, clippy::redundant_locals)] let mut covered = covered;
                     emit_bytes_bindings(world, &alt.pattern.node, &mut bound_bytes);
                     for (name, range) in as_texts.iter().zip(covered.iter()) { if nikaia_std::list::contains(&bound_bytes, &name) { if bytes { prelude = format!("{}let {} = ::nikaia_std::grammar::covered_raw(input, {}); ", prelude, name, range); } else { prelude = format!("{}let {} = ::nikaia_std::grammar::covered(input, {}).as_bytes(); ", prelude, name, range); } } else if bytes { prelude = format!("{}let {} = ::nikaia_std::grammar::covered_bytes::<_, __WgEr>(input, {})?; ", prelude, name, range); } else { prelude = format!("{}let {} = ::nikaia_std::grammar::covered(input, {}); ", prelude, name, range); } }
-                    if !as_texts.is_empty() || positions && !as_spans.is_empty() { prelude = format!("{}let _state = &mut input.state; ", prelude); }
+                    if !as_texts.is_empty() || positions && !as_spans.is_empty() { prelude = format!("{}let _state = ::winnow_grammar::Ctx::cx_mut(&mut input.state); ", prelude); }
                     if self.emit_action_can_fail(world, action) {
                         if prelude != "" { out.push(&format!("{{ {}", prelude)); }
                         self.emit_failing_action(world, walk, out, host, action, emit_passes_a_cut(&alt.pattern.node))?;
