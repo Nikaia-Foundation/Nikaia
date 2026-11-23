@@ -1,0 +1,29 @@
+// **A list made by its constructor is placed in the task's block** (ADR-327
+// D9, #2805): `Vec(capacity: n)` and `Vec()` that stay in their function
+// are `[]` with room ahead, built with `Place::Block` as `[]` is, the room
+// held by `List::with_capacity_in`. A list made the same way and returned
+// can outlive the task and stays `Vec::with_capacity` on the heap.
+use std::env
+use std::fs
+use std::process
+
+fn toolchain() -> String throws {
+    let exe = env::current_exe()?.display() ?? ""
+    if exe.len() > 0 { return exe }
+    return "target/fast/nikaia"
+}
+
+fn main() throws {
+    let tmp = fs::scratch()
+    let source = "fn roomy(n: i64) -> i64 sync {\n    let mut v: Vec[i64] = Vec(capacity: 8)\n    for i in 0..<n { v.push(i) }\n    return v.len()\n}\n\nfn plain(n: i64) -> i64 sync {\n    let mut v: Vec[i64] = Vec()\n    for i in 0..<n { v.push(i) }\n    return v.len()\n}\n\nfn handed(n: i64) -> Vec[i64] sync {\n    let mut v: Vec[i64] = Vec(capacity: 4)\n    for i in 0..<n { v.push(i) }\n    return v\n}\n\nfn main() throws {\n    println(f\"{roomy(20)} {plain(20)} {handed(3).len()}\")\n}\n"
+    fs::write("p.nika", tmp, source)
+    let lowered = process::run(toolchain(), ["lower", "p.nika", "-o", "p.rs"]; dir: tmp.path().to_text())
+    if lowered.stdout.contains("Lowered p.nika") == false { println(lowered.stderr) }
+    let rust = fs::read_to_string("p.rs", tmp)
+    println(f"room in the block: {rust.split("nikaia_std::block::List::with_capacity_in(nikaia_std::count::of(8), nikaia_std::block::Place::Block)").count() - 1}")
+    println(f"no room, in the block: {rust.split("nikaia_std::block::list(nikaia_std::block::Place::Block)").count() - 1}")
+    println(f"returned, on the heap: {rust.split("Vec::with_capacity(nikaia_std::count::of(4))").count() - 1}")
+    let ran = process::run(toolchain(), ["run", "p.nika"]; dir: tmp.path().to_text())
+    println(ran.stdout.trim())
+    println(ran.stderr.trim())
+}

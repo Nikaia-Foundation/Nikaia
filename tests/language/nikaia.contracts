@@ -1265,6 +1265,7 @@ signature = "(s: ref String) -> i64"
 [fn."handed_over_two_loops"]
 sync = "inferred"
 panics = false
+places = true
 touches = []
 signature = "() -> i64"
 

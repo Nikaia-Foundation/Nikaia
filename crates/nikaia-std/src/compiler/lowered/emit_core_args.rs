@@ -1732,6 +1732,15 @@ impl EmitState {
         }
         if self.emit_call_supervised(world, walk, out, host, func, args, config, depth, flow, scope)? { return Ok(true); }
         if args.is_empty() && self.facts.placed_in_block.contains(&node_key(func)) {
+            let listed = match func {
+                Expr::Variable(name, _) => { let name = *name; emit_text(world, name) == "Vec" },
+                _ => false,
+            };
+            if listed {
+                if self.emit_call_room(world, walk, out, host, "nikaia_std::block::List::new_in", config, depth, flow, scope)? { return Ok(true); }
+                out.push("nikaia_std::block::list(nikaia_std::block::Place::Block)");
+                return Ok(true);
+            }
             if self.emit_call_room(world, walk, out, host, "nikaia_std::block::Text::new_in", config, depth, flow, scope)? { return Ok(true); }
             out.push("nikaia_std::block::Text::new_in(nikaia_std::block::Place::Block)");
             return Ok(true);

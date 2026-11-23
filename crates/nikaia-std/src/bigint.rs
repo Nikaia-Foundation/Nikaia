@@ -256,7 +256,8 @@ impl BigInt {
     // this was written - see `contracts::sync`.
     pub fn to_text(&self) -> String {
         if self.sign == 0 { return String::from("0"); }
-        let mut chunks: Vec<u64> = nikaia_std::block::list(nikaia_std::block::Place::Block);
+        let n = self.digits.len() as i64;
+        let mut chunks: Vec<u64> = nikaia_std::block::List::with_capacity_in(nikaia_std::count::of(unsafe { nikaia_std::proven::add::<i64>(nikaia_std::proven::add::<i64>(n, n / 64), 1) }), nikaia_std::block::Place::Block);
         let mut rest = self.digits.copy_owned();
         while !rest.is_empty() {
             let (q, r) = magnitude_div_digit(&rest, 10000000000000000000u64);

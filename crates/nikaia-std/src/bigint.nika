@@ -301,7 +301,11 @@ impl BigInt {
         if self.sign == 0 {
             return "0"
         }
-        let mut chunks: Vec[u64] = []
+        // **Room for every chunk up front** (#2805): a digit of 64 bits is
+        // 19.27 decimal places and a chunk 19, so `n` digits make at most
+        // `n + n / 64 + 1` chunks. The list stays here, in the task's block.
+        let n = self.digits.len()
+        let mut chunks: Vec[u64] = Vec(capacity: n + n / 64 + 1)
         let mut rest = self.digits.clone()
         while rest.len() > 0 {
             let (q, r) = magnitude_div_digit(rest, 10000000000000000000)

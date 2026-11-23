@@ -8,7 +8,7 @@ pub fn distance(a: &str, b: &str) -> i64 {
     let y: Vec<scalar> = nikaia_std::list::scalars(b.chars());
     let rows = unsafe { nikaia_std::proven::add::<i64>(x.len() as i64, 1) };
     let cols = unsafe { nikaia_std::proven::add::<i64>(y.len() as i64, 1) };
-    let mut d: Vec<Vec<i64>> = Vec::new();
+    let mut d: Vec<Vec<i64>> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     for i in 0..rows {
         let mut row: Vec<i64> = Vec::new();
         for j in 0..cols { if i == 0 { row.push(j); } else if j == 0 { row.push(i); } else { row.push(0); } }
