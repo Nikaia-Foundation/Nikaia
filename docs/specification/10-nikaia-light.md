@@ -1665,8 +1665,10 @@ The claim reads the fields by name, and it is the type's **invariant**. It
 holds after every construction - a literal, a `with`, the constructor's
 result - at the end of every method that changes the value, and after every
 write to a field from outside such a method; inside a method it may be broken
-for a while. Each of these points is proved, or where the compiler cannot,
-refused or checked as the build says, as any `assert` is (Part III 14.2). Wherever a value of the
+for a while. A write to a field is any change to it: `x.f = v`, `x.f op= v`, a
+method that takes `mut self` called on `x.f`, and `x.f` passed as a `mut`
+argument, where the rule holds once the call returns. Each of these points is
+proved, or where the compiler cannot, refused or checked as the build says, as any `assert` is (Part III 14.2). Wherever a value of the
 type is read, the rule is a fact the compiler proves from. Where a struct with
 private fields writes no rule, the compiler may find one its package's code
 always keeps, and uses it only as a fact.
