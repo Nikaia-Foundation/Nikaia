@@ -1,0 +1,20 @@
+// #990: `nikaia fix --only NK2123` writes `async(detached)` for `spawn`
+// (ADR-async-5 D39), the same task under its new word.
+use std::env
+use std::fs
+use std::process
+
+fn toolchain() -> String throws {
+    let exe = env::current_exe()?.display() ?? ""
+    if exe.len() > 0 { return exe }
+    return "target/fast/nikaia"
+}
+
+fn main() throws {
+    let tmp = fs::scratch()
+    let nikaia = toolchain()
+    fs::write("main.nika", tmp, "fn work(n: i64) -> i64 sync {\n    return n * 2\n}\n\nfn main() throws {\n    let h = spawn fn { work(1) }\n    println(h.join())\n    println(\"done\")\n}\n")
+    let fixed = process::run(nikaia, ["fix", "--only", "NK2123", f"{tmp.path().to_text()}/main.nika"])
+    print(f"--only NK2123: {fixed.stdout}{fixed.stderr}".replace(tmp.path().to_text(), "TMP"))
+    print(fs::read_to_string("main.nika", tmp))
+}

@@ -18,6 +18,6 @@ fn half(n: i64) -> i64 throws {
 }
 
 fn main() throws {
-    let task = spawn fn { half(8) }
+    let task = async(detached) fn { half(8) }
     println(f"half of 8 is {task.join()}")
 }

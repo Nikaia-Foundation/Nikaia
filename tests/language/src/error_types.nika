@@ -161,10 +161,7 @@ test "the long form says there is no site" {
 // envelope into, and `rustc` refused the file; now it is the envelope, and the
 // handler reads both failures, in each of the two places.
 fn error_types_pair() -> String throws {
-    let both = overlap {
-        fs::read_to_string("missing-one.txt", fs::Root::Anywhere)
-        fs::read_to_string("missing-two.txt", fs::Root::Anywhere)
-    }
+    let both = (async fs::read_to_string("missing-one.txt", fs::Root::Anywhere), async fs::read_to_string("missing-two.txt", fs::Root::Anywhere))
     return f"{both.0}{both.1}"
 }
 

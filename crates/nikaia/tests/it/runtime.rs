@@ -469,7 +469,7 @@ fn no_nika_file_says_async_or_names_a_mechanism() {
             let code = outside_string_literals(&without_comments);
             checked += 1;
             for forbidden in [
-                "async",
+                "async move",
                 "await",
                 "io_uring",
                 "epoll",

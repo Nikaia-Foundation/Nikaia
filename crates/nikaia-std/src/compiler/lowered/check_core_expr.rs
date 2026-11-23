@@ -235,13 +235,14 @@ pub(crate) fn check_core_value_of<H: CheckHost>(state: &mut CheckState, world: &
         },
         Expr::Block(block, _) => check_core_block(state, world, host, block),
         Expr::Unsafe(block, _) => check_core_flow_unsafe(state, world, host, block),
-        Expr::Overlap(block, _) => check_core_flow_overlap(state, world, host, block, span),
+        Expr::Overlap(block, _) => check_core_flow_overlap(state, world, host, expr, block, span),
         Expr::Select(arms, _) => check_core_flow_select(state, world, host, arms, span),
         Expr::If { cond, then_branch, else_branch, .. } => { let cond = nikaia_std::boxed::open(cond); check_core_flow_if(state, world, host, expr, cond, then_branch, (else_branch).as_ref(), span) },
         Expr::Match { value, arms, .. } => { let value = nikaia_std::boxed::open(value); nikaia_std::index::or(check_reflect_match(state, world, host, expr, value, arms, span), || check_core_flow_match(state, world, host, expr, value, arms, span).into()) },
         Expr::Call { func, args, config, .. } => {
             let func = nikaia_std::boxed::open(func);
             state.declared_callee_at(world, expr, func);
+            state.a_scope_replaced(world, expr, func, args, span);
             check_core_call(state, world, host, func, args, config, span)
         },
         Expr::MethodCall { receiver, method, args, config, .. } => {
@@ -414,12 +415,17 @@ pub(crate) fn check_core_value_of<H: CheckHost>(state: &mut CheckState, world: &
             read
         },
         Expr::Range { start, end, .. } => { let start = nikaia_std::boxed::open(start); let end = nikaia_std::boxed::open(end); check_core_range(state, world, host, start, end, span) },
-        Expr::TryCatch { expr: guarded, handler, .. } => { let guarded = nikaia_std::boxed::open(guarded); check_core_flow_try_catch(state, world, host, expr, guarded, handler, span) },
+        Expr::TryCatch { expr: guarded, handler, .. } => {
+            let guarded = nikaia_std::boxed::open(guarded);
+            state.flow.caught_overlap = matches!(guarded, Expr::Overlap(_, _));
+            check_core_flow_try_catch(state, world, host, expr, guarded, handler, span)
+        },
         Expr::Spawn { body, written_async, child, within, admission, .. } => {
             let body = nikaia_std::boxed::open(body); let within = nikaia_std::boxed::open(within); let admission = nikaia_std::boxed::open(admission); let child = *child; let written_async = *written_async;
             check_core_async_within(state, world, host, (within).as_ref(), span);
             check_core_async_admission(state, world, host, (admission).as_ref(), span);
             if written_async && state.flow.loops > 0 { state.an_async_inside_a_loop(span); }
+            if !written_async && !child { state.a_spawn_replaced(world, expr, span); }
             if child {
                 state.flow.async_started += 1;
                 state.flow.starts_async = true;

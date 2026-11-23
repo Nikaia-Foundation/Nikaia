@@ -7,7 +7,7 @@ use std::channel
 // Part II 12.5's own example, as a program that runs (§5 step 3).
 test "the pages own example runs" {
     let (tx, rx) = channel::bounded[String](100)
-    spawn fn {
+    async(detached) fn {
         let state = "complete"
         tx.send(f"Calculation {state}")
     }
@@ -21,7 +21,7 @@ test "the pages own example runs" {
 // a `catch`.
 test "a closed channel hands back nothing" {
     let (tx, rx) = channel::bounded(4)
-    spawn fn { tx.send(5) }
+    async(detached) fn { tx.send(5) }
     let first = rx.recv() ?? 0
     let second = rx.recv() ?? -1
     assert(first == 5)
@@ -33,7 +33,7 @@ test "a closed channel hands back nothing" {
 // the sender wakes, and both values come out in order.
 test "a full channel waits for room" {
     let (tx, rx) = channel::bounded(1)
-    spawn fn {
+    async(detached) fn {
         tx.send(1)
         tx.send(2)
         tx.send(3)

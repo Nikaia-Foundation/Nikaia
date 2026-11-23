@@ -1,0 +1,17 @@
+--only NK2125: TMP/main.nika:9: NK2125: replaced `task::scope fn(s) {
+        for v in xs {
+            s.spawn fn { ` with `xs.par_iter().for_each fn(v) { `
+TMP/main.nika:11: NK2125: replaced ` }
+        }
+    }` with ` }`
+use std::task
+
+fn work(n: i64) -> i64 sync {
+    return n * 2
+}
+
+fn main() throws {
+    let xs = [1, 2, 3]
+    xs.par_iter().for_each fn(v) { work(v) }
+    println(xs.len())
+}

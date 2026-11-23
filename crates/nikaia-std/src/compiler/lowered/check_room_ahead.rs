@@ -80,7 +80,7 @@ pub(crate) fn stmt_value(stmt: &Stmt) -> Option<&Expr> {
 // this was written - see `contracts::sync`.
 pub(crate) fn room_edit(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, value: Option<&Expr>, room: &str) -> Option<CheckEdit> {
     let at = match world.here.spans.get(&id_of(match value { Some(__nikaia_value) => __nikaia_value, None => return None })) { Some(__nikaia_value) => __nikaia_value, None => return None };
-    Some(CheckEdit { span: Span { start: at.start, end: at.end }, text: nikaia_std::block::Text::from(room.to_string()) })
+    Some(CheckEdit { span: Span { start: at.start, end: at.end }, text: nikaia_std::block::Text::from(room.to_string()), also: vec![] })
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before

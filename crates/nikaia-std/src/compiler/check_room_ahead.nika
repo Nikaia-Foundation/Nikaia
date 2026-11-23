@@ -120,7 +120,7 @@ fn stmt_value(stmt: ref Stmt) -> ref Expr? sync {
 // **The edit `NK1385` suggests**: the empty text's value replaced by the room.
 fn room_edit(world: ref CheckWorld, value: ref Expr?, room: ref String) -> CheckEdit? sync {
     let at = world.here.spans.get(id_of(value ?? return null)) ?? return null
-    return CheckEdit { span: Span { start: at.start, end: at.end }, text: room.clone() }
+    return CheckEdit { span: Span { start: at.start, end: at.end }, text: room.clone(), also: [] }
 }
 
 // A plain name, `String` or `s`, as written; else "".
