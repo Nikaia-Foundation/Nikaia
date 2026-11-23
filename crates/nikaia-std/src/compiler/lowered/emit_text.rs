@@ -149,7 +149,7 @@ pub(crate) fn plain_named(written: &str, args: &[Ty], view: bool) -> String {
     format!("{}{}", name, inner)
 }
 
-pub fn format_compared_check(kind: &str, pieces: &[String]) -> String {
+pub(crate) fn format_compared_check(kind: &str, pieces: &[String]) -> String {
     if kind == "!=" { return format!("!({})", format_compared_check("==", pieces)); }
     if pieces.is_empty() { return if kind == "==" { String::from("__nikaia_t.is_empty()") } else { String::from("true") }; }
     if pieces.len() == 1 && kind != "==" { return format!("__nikaia_t.{}({})", kind, nikaia_std::block::Text::from(pieces.join(""))); }

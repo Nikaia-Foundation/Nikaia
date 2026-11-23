@@ -113,15 +113,6 @@ fn names_listed(names: ref Vec[String]) -> String {
     return f"{rest.join(", ")} and `{names[names.len() - 1]}`"
 }
 
-/// Every line of a text, indented to sit under a note.
-pub fn indented_text(text: ref String) -> String {
-    let mut lines: Vec[String] = []
-    for line in text.trim_end().lines() {
-        lines.push(f"       {line}")
-    }
-    return lines.join("\n")
-}
-
 /// Every `{…}` group in a string, by the text between the braces - a
 /// `\u{…}` escape is not one, and an empty group is left out.
 fn brace_groups(text: ref String) -> Vec[String] {

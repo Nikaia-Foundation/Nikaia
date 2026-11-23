@@ -128,7 +128,7 @@ pub struct SysrootNames {
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn sysroot_words(text: &str) -> Vec<String> {
+pub(crate) fn sysroot_words(text: &str) -> Vec<String> {
     let mut seen: collections::BTreeSet<String> = collections::BTreeSet::new();
     let mut out: Vec<String> = vec![];
     let n = text.as_bytes().len() as i64;

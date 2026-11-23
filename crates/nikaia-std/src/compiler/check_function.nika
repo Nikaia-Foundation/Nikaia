@@ -80,7 +80,7 @@ fn check_function_compared(world: ref CheckWorld, beside: ref collections::BTree
 /// **One file's shape walks** (ADR-304 D4, ADR-330 D1 and D2), into
 /// `walks`: each function that walks a type's fields, by the parameter it
 /// walks.
-pub fn check_function_field_walks(file: ref ParsedView, mut walks: collections::BTreeMap[String, String]) sync {
+fn check_function_field_walks(file: ref ParsedView, mut walks: collections::BTreeMap[String, String]) sync {
     for item in file.items {
         match item.node {
             Item::Fn { name, generics, args, body, .. } => {

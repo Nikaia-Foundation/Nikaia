@@ -253,7 +253,7 @@ fn lsp_hex(b: u8) -> i64 {
 /// column in UTF-16 code units from 0, as LSP counts by default. A span is in
 /// bytes; a character outside ASCII is more than one byte and one code unit,
 /// and one above U+FFFF is two code units.
-pub fn lsp_position(source: ref String, at: i64) -> (i64, i64) {
+fn lsp_position(source: ref String, at: i64) -> (i64, i64) {
     let mut line = 0
     let mut column = 0
     let mut byte = 0

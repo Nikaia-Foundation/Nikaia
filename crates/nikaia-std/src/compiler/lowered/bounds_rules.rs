@@ -1251,7 +1251,7 @@ pub(crate) fn rules_checked_fresh(got: &RulesChecked, context: &BoundsContext) -
     true
 }
 
-pub fn rules_checked_keep(context: &mut BoundsContext, found: &collections::BTreeMap<String, RulesChecked>) {
+pub(crate) fn rules_checked_keep(context: &mut BoundsContext, found: &collections::BTreeMap<String, RulesChecked>) {
     if !rules_checked_valid(&context) {
         context.around.checked.clear();
         context.around.checked_returning = context.around.returning.copy_owned();

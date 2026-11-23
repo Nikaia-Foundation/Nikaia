@@ -170,7 +170,7 @@ fn check_narrow_tested(world: ref CheckWorld, side: ref Expr, other: ref Expr) -
 }
 
 /// The names and paths a condition proves not `null` where it is `holds`.
-pub fn check_narrow_proved_names(world: ref CheckWorld, cond: ref Expr, holds: bool) -> Vec[String] {
+fn check_narrow_proved_names(world: ref CheckWorld, cond: ref Expr, holds: bool) -> Vec[String] {
     let mut names: Vec[String] = []
     match cond {
         Expr::Binary { op, lhs, rhs, .. } => {
@@ -218,7 +218,7 @@ fn check_narrow_bound_where(state: ref CheckState, name: ref String) -> CheckBou
 
 /// The markers for `names`, each a `T?` binding proved here, for a frame
 /// that will be pushed at `frame`.
-pub fn check_narrow_proofs_for(mut state: CheckState, names: ref Vec[String], frame: i64) -> Vec[CheckLocal] sync {
+fn check_narrow_proofs_for(mut state: CheckState, names: ref Vec[String], frame: i64) -> Vec[CheckLocal] sync {
     let mut markers: Vec[CheckLocal] = []
     for name in names {
         let path = name.contains(".")
@@ -270,7 +270,7 @@ pub fn check_narrow_proofs_for(mut state: CheckState, names: ref Vec[String], fr
 }
 
 /// The markers a condition proves where it `holds`, for the frame pushed next.
-pub fn check_narrow_proved_here(mut state: CheckState, world: ref CheckWorld, cond: ref Expr, holds: bool) -> Vec[CheckLocal] sync {
+fn check_narrow_proved_here(mut state: CheckState, world: ref CheckWorld, cond: ref Expr, holds: bool) -> Vec[CheckLocal] sync {
     let names = check_narrow_proved_names(world, cond, holds)
     let frame = state.scope.len() as i64
     return check_narrow_proofs_for(state, names, frame)
@@ -278,7 +278,7 @@ pub fn check_narrow_proved_here(mut state: CheckState, world: ref CheckWorld, co
 
 /// What `cond` proves for the rest of the block being walked: an `if` above
 /// left it where the names were `null`.
-pub fn check_narrow_proved_from_here(mut state: CheckState, world: ref CheckWorld, cond: ref Expr, holds: bool) sync {
+fn check_narrow_proved_from_here(mut state: CheckState, world: ref CheckWorld, cond: ref Expr, holds: bool) sync {
     let names = check_narrow_proved_names(world, cond, holds)
     if state.scope.len() == 0 {
         return
@@ -293,7 +293,7 @@ pub fn check_narrow_proved_from_here(mut state: CheckState, world: ref CheckWorl
 /// Whether a write to `written` ends a proof about `path`: it is the path
 /// or a part of it that holds it (ADR-382 D5). A sibling (`p.age` beside
 /// `p.name`) and a part inside it (`p.name.x`) do not.
-pub fn check_narrow_ends(path: ref String, written: ref String) -> bool {
+fn check_narrow_ends(path: ref String, written: ref String) -> bool {
     return path == written || path.starts_with(f"{written}.")
 }
 
@@ -372,7 +372,7 @@ fn check_narrow_a_maybe_read(mut state: CheckState, read: ref Expr) sync {
 
 /// The reads below `expr` that ask about the `T?` itself, and are not
 /// read as the `T` a proof makes it.
-pub fn check_narrow_reads_of_the_maybe(mut state: CheckState, expr: ref Expr) sync {
+fn check_narrow_reads_of_the_maybe(mut state: CheckState, expr: ref Expr) sync {
     match expr {
         Expr::Coalesce { value, .. } => check_narrow_a_maybe_read(state, value),
         Expr::SafeField { base, .. } => check_narrow_a_maybe_read(state, base),
@@ -413,7 +413,7 @@ fn check_narrow_copied(inner: ref Ty) -> bool {
 ///
 /// The written name of an assignment is not read (`reading_only`), and the
 /// assignment's own write is after the value it is given is read.
-pub fn check_narrow_read_as_proved(mut state: CheckState, expr: ref Expr, name: ref String, ty: ref Ty, span: ref Span) -> Ty sync {
+fn check_narrow_read_as_proved(mut state: CheckState, expr: ref Expr, name: ref String, ty: ref Ty, span: ref Span) -> Ty sync {
     let nullable = match ty {
         Ty::Nullable(_) => true,
         else => false,
@@ -506,7 +506,7 @@ fn check_narrow_as_proved(mut state: CheckState, node: i64, ty: ref Ty, inner: r
 
 /// **A read of a path of fields whose type is `ty`**: the `T` where a test
 /// proves it (ADR-382 D4). The place an assignment writes is not read.
-pub fn check_narrow_path_read(mut state: CheckState, world: ref CheckWorld, expr: ref Expr, ty: ref Ty, span: ref Span) -> Ty sync {
+fn check_narrow_path_read(mut state: CheckState, world: ref CheckWorld, expr: ref Expr, ty: ref Ty, span: ref Span) -> Ty sync {
     let inner: Ty = match ty {
         Ty::Nullable(inner) => inner.clone(),
         else => return ty.clone(),
@@ -557,7 +557,7 @@ fn check_narrow_not_a_path(expr: ref Expr) -> String? {
 /// **A path handed over `mut`** (a receiver a method changes or takes, a
 /// `mut` argument) at `at`: the proofs about it and about the paths inside
 /// it end there (ADR-382 D5).
-pub fn check_narrow_handed(mut state: CheckState, world: ref CheckWorld, expr: ref Expr, at: i64) sync {
+fn check_narrow_handed(mut state: CheckState, world: ref CheckWorld, expr: ref Expr, at: i64) sync {
     let path: String = dotted_path(world, check_peeled(expr)) ?? return
     state.narrowing.handed_at.push((path, at))
 }
@@ -565,7 +565,7 @@ pub fn check_narrow_handed(mut state: CheckState, world: ref CheckWorld, expr: r
 /// **A place written through** (an assignment's target, a receiver a method
 /// changes, a `mut` argument): a proved read on the way to it is lent `mut`
 /// out of its option (`as_mut`, bit 16).
-pub fn check_narrow_written_through(mut state: CheckState, expr: ref Expr) sync {
+fn check_narrow_written_through(mut state: CheckState, expr: ref Expr) sync {
     let walked = check_peeled(expr)
     let node = id_of(walked) as i64
     let bits = state.facts.narrowed_reads.get(node) ?? -1
@@ -580,7 +580,7 @@ pub fn check_narrow_written_through(mut state: CheckState, expr: ref Expr) sync 
 
 /// **A loop begins** at `frame`: what is written in it from here
 /// on is weighed against the path reads in it (`check_narrow_turn_ends`).
-pub fn check_narrow_turn_begins(mut state: CheckState, frame: i64) sync {
+fn check_narrow_turn_begins(mut state: CheckState, frame: i64) sync {
     state.narrowing.turns.push(CheckNarrowTurn {
         frame: frame,
         written: state.written_at.len() as i64,
@@ -593,7 +593,7 @@ pub fn check_narrow_turn_begins(mut state: CheckState, frame: i64) sync {
 /// outside it is reached again, on the next turn, after a write or
 /// a `mut` hand-over in it at or after the read (ADR-382 D5), and then it
 /// may be `null`: `NK1102`, naming the write.
-pub fn check_narrow_turn_ends(mut state: CheckState) sync {
+fn check_narrow_turn_ends(mut state: CheckState) sync {
     let turn: CheckNarrowTurn = state.narrowing.turns.pop() ?? return
     let mut at = turn.reads
     while at < state.narrowing.path_reads.len() {
@@ -646,7 +646,7 @@ fn check_narrow_label(lost: ref CheckLost) -> CheckLabel {
 
 /// `NK1102` over an operand whose proof a write took back: the note and
 /// the label say where.
-pub fn check_narrow_a_proof_taken_back(mut state: CheckState, lhs: ref Expr, rhs: ref Expr, before: i64) sync {
+fn check_narrow_a_proof_taken_back(mut state: CheckState, lhs: ref Expr, rhs: ref Expr, before: i64) sync {
     if state.findings.len() as i64 == before {
         return
     }

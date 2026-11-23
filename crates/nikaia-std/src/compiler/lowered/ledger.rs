@@ -165,10 +165,6 @@ grammar! {
     }
 }
 
-pub fn unquote(value: &str) -> Result<String, nikaia_std::error::Thrown<Refused>> {
-    Ok(unquote_at(value, "")?)
-}
-
 pub(crate) fn unquote_at(value: &str, at: &str) -> Result<String, nikaia_std::error::Thrown<Refused>> {
     if value.len() < 2 || !value.starts_with("\"") || !value.ends_with("\"") { return Err(nikaia_std::error::throwing(Refused::Because(format!("{}expected a quoted string, found `{}`", at, value)), &"unquote_at")); }
     let opened: String = nikaia_std::block::Text::from(nikaia_std::index::or(value.strip_prefix("\""), || "").to_string());
@@ -551,7 +547,7 @@ pub fn touch_of(written: &str) -> Result<Touch, nikaia_std::error::Thrown<Refuse
     Ok(Touch { kind, parameter, named, write })
 }
 
-pub fn held_of(written: &str) -> Option<Held> {
+pub(crate) fn held_of(written: &str) -> Option<Held> {
     let c: Vec<scalar> = nikaia_std::list::scalars(written.chars());
     let colon = find_last(&c, ':');
     if colon < 0 { return None; }

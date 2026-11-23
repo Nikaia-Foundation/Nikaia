@@ -181,7 +181,7 @@ pub fn grammar_run_driver[H: GrammarDriverHost](host: ref H, names: ref winnow_g
 /// so a shape a `const` cannot hold is refused *before* a parser is compiled:
 /// pushed onto `out`, or the wall that names the type with no crossed form.
 /// What the Rust `dumper` keeps is handing over the program's file.
-pub fn grammar_run_dump(names: ref winnow_grammar::InternerContext, aliases: ref collections::BTreeMap[String, String], program: ref Program, ledger: ref Ledger, result: ref Ty, mut out: String) -> CheckWall? {
+fn grammar_run_dump(names: ref winnow_grammar::InternerContext, aliases: ref collections::BTreeMap[String, String], program: ref Program, ledger: ref Ledger, result: ref Ty, mut out: String) -> CheckWall? {
     let shapes = grammar_run_shapes(names, aliases, program, ledger)
     return grammar_run_dump_shaped(shapes, result, out)
 }

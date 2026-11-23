@@ -120,7 +120,7 @@ impl EmitState {
     /// which writes its sums at the crate root: another module of several
     /// names a sum the entry writes, which knows nothing of its lambdas, so
     /// there the box stays.
-    pub fn lambda_sums(ref self, world: ref EmitWorld, mut sums: collections::BTreeMap[Vec[String], String]) {
+    fn lambda_sums(ref self, world: ref EmitWorld, mut sums: collections::BTreeMap[Vec[String], String]) {
         for (_, thrown) in self.facts.failing_through_lambdas {
             if thrown.len() < 2 || sums.contains_key(thrown) {
                 continue

@@ -135,7 +135,7 @@ pub fn first_literal(args: ref Vec[Expr]) -> String? {
 
 /// Whether a call by name of `source` reads the operator's text (ADR-397
 /// D1, D2), as `read_by_operator` decides it.
-pub fn operator_read(library: ref Ledger, source: ref String, args: ref Vec[Expr]) -> bool {
+fn operator_read(library: ref Ledger, source: ref String, args: ref Vec[Expr]) -> bool {
     let contract = library.functions[source] ?? return false
     return read_by_operator(contract, first_literal(args))
 }

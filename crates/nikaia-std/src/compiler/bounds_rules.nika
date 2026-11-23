@@ -1747,7 +1747,7 @@ fn rules_checked_fresh(got: ref RulesChecked, context: ref BoundsContext) -> boo
 /// into `context.around.checked`, emptied first where it was found under
 /// other list-returning functions than `context` holds; of the rest, an
 /// entry whose walk read a field bound that changed since is dropped.
-pub fn rules_checked_keep(mut context: BoundsContext, found: ref collections::BTreeMap[String, RulesChecked]) {
+fn rules_checked_keep(mut context: BoundsContext, found: ref collections::BTreeMap[String, RulesChecked]) {
     if !rules_checked_valid(context) {
         context.around.checked.clear()
         context.around.checked_returning = context.around.returning.clone()

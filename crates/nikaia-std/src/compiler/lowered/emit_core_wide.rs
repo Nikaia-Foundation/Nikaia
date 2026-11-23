@@ -3,7 +3,7 @@
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub fn emit_wide_native(element: &str) -> (String, String, i64) {
+pub(crate) fn emit_wide_native(element: &str) -> (String, String, i64) {
     match element {
         "u8" => (String::from("u16"), String::from("u8"), 8),
         "u32" => (String::from("u64"), String::from("u32"), 32),

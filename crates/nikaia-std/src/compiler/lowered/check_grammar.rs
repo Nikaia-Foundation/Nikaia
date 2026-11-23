@@ -499,7 +499,7 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub fn a_lent_rule_value<H: CheckHost>(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, host: &H, arg: &FnArg) -> bool {
+    pub(crate) fn a_lent_rule_value<H: CheckHost>(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, host: &H, arg: &FnArg) -> bool {
         if arg.mutable || arg.keep || (*arg.ty.code).is_some() { return false; }
         let ty = host.type_of(&arg.ty);
         !ty.is_unknown() && !self.a_word_by_its_kind(world, &ty.owned())
