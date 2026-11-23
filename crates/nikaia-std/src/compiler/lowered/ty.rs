@@ -194,7 +194,7 @@ impl Ty {
     pub(crate) fn holds_views(&self) -> bool { holds_a_view(self) }
 }
 
-pub fn ty_shown(ty: &Ty) -> String {
+pub(crate) fn ty_shown(ty: &Ty) -> String {
     match ty {
         Ty::Var { name, .. } => format!("${}", name),
         Ty::Named { name, args, .. } => shown_named(name, args),
@@ -403,7 +403,7 @@ pub fn spoken(ty: &Ty, other: Option<&Ty>) -> String {
     format!("{} `{}` {}", article_of(&written), written, parts_said_as_own(&parts))
 }
 
-pub fn spoken_in(message: &str, first: &Ty, second: Option<&Ty>) -> String {
+pub(crate) fn spoken_in(message: &str, first: &Ty, second: Option<&Ty>) -> String {
     let first_text = text(first);
     let second_text = if second.is_some() { text(nikaia_std::index::or(second, || &Ty::Unknown)) } else { String::from("") };
     let parts: Vec<&str> = message.split('`').collect::<Vec<_>>();
@@ -440,7 +440,7 @@ pub(crate) fn said_for(part: &str, first: &Ty, first_text: &str, second: Option<
     Some(said)
 }
 
-pub fn shown_in(message: &str, first: &Ty, second: Option<&Ty>) -> String {
+pub(crate) fn shown_in(message: &str, first: &Ty, second: Option<&Ty>) -> String {
     let mut out = nikaia_std::block::Text::from(message.replace(&*format!("`{}`", text(first)), &*format!("`{}`", ty_shown(first))));
     if second.is_some() {
         let other = nikaia_std::index::or(second, || &Ty::Unknown);
@@ -784,7 +784,7 @@ pub enum Crosses {
 
 impl Crosses {
     pub fn may(&self) -> bool { *self == Crosses::May }
-    pub fn may_not(&self) -> bool { *self == Crosses::MayNot }
+    pub(crate) fn may_not(&self) -> bool { *self == Crosses::MayNot }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -796,7 +796,6 @@ pub enum Threads {
 
 impl Threads {
     pub fn may(&self) -> bool { *self == Threads::May }
-    pub fn may_not(&self) -> bool { *self == Threads::MayNot }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -1785,14 +1784,14 @@ pub(crate) fn __nikaia_test_13() -> Result<(), std::boxed::Box<dyn std::error::E
     Ok(())
 }
 
-pub fn failures_joined(first: &[String], second: &[String]) -> Vec<String> {
+pub(crate) fn failures_joined(first: &[String], second: &[String]) -> Vec<String> {
     let mut out: Vec<String> = vec![];
     for name in first.iter() { if !nikaia_std::list::contains(&out, &name) { out.push(nikaia_std::block::Text::from(name.to_string())); } }
     for name in second.iter() { if !nikaia_std::list::contains(&out, &name) { out.push(nikaia_std::block::Text::from(name.to_string())); } }
     out
 }
 
-pub fn unnamed_failure() -> Vec<String> {
+pub(crate) fn unnamed_failure() -> Vec<String> {
     let mut name = String::new();
     name.push_str("?");
     vec![name]

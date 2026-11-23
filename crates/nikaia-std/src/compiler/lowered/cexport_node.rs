@@ -81,7 +81,7 @@ impl CxNode {
             let ty = (*nikaia_std::index::get(&entry.arg_types, (place) as usize)).clone();
             place = unsafe { nikaia_std::proven::add::<i64>(place, 1) };
             let at: i64 = position;
-            position += 1;
+            position = unsafe { nikaia_std::proven::add::<i64>(position, 1) };
             let value = format!("argv[{}]", at);
             let taken = cx_taken(words, &ctx.plains, &ctx.handles, &ctx.records, &ty);
             if taken.is_none() { continue; }

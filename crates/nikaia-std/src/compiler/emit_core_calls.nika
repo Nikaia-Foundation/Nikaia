@@ -551,7 +551,7 @@ impl EmitState {
         // ADR-grammar-typed-read-v1 D11), its types written after the callee's name.
         match func {
             Expr::Index { base, index, .. } => {
-                let types: String = self.emit_call_path_types(world, base, index) ?? ""
+                let types: String = self.emit_call_path_types(world, walk, host, base, index) ?? ""
                 if types != "" {
                     walk.path_types = types
                     self.emit_core_call_inner(world, walk, out, host, base, args, config, unchecked, depth, flow, scope)

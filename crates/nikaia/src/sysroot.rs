@@ -729,7 +729,7 @@ pub fn bounds_tools(
             ));
         }
         if asserts_report {
-            let derived = crate::bounds_report::derived(
+            let (derived, rules) = crate::bounds_report::derived(
                 &parsed[at],
                 &beside,
                 &texts[at],
@@ -744,6 +744,7 @@ pub fn bounds_tools(
                 &path,
                 &checked.facts.published,
                 &derived,
+                &rules,
                 false,
                 true,
             ));

@@ -208,13 +208,6 @@ fn code_lends_unmarked(names: ref winnow_grammar::InternerContext, ty: ref Type)
     return false
 }
 
-/// Whether a type is a function type whose result writes `from`
-/// (ADR-views-v4 D14).
-pub fn code_writes_from(ty: ref Type) -> bool {
-    let code = ty.code ?? return false
-    return !code.result_from.is_empty()
-}
-
 /// Whether a function type's `from` names its parameter at `at` (ADR-views-v4
 /// D14): the code lends it, and its result may point into it.
 fn code_reads(code: ref Code, at: i64) -> bool {

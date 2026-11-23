@@ -99,7 +99,7 @@ pub fn unit_panics(program: ref Program, names: ref winnow_grammar::InternerCont
 /// **The fixpoint**: each function's answer, its own reach joined with its
 /// callees' answers. A callee the graph does not hold answers what its
 /// ledger entry says.
-pub fn panics_of_graph(graph: ref PanicsGraph, own: ref Ledger) -> collections::BTreeMap[String, Panics] {
+fn panics_of_graph(graph: ref PanicsGraph, own: ref Ledger) -> collections::BTreeMap[String, Panics] {
     let mut answers: collections::BTreeMap[String, Panics] = collections::BTreeMap()
     for (name, reach) in graph.reaches {
         answers.insert(name.clone(), panics_own(reach))
@@ -130,7 +130,7 @@ pub fn panics_of_graph(graph: ref PanicsGraph, own: ref Ledger) -> collections::
 /// D13): its own reach, or a callee's answer, of this package by the graph
 /// and of a library by its ledger (absorbed on the walk). A call nobody can
 /// see into does not count: no list of ours is placed through it.
-pub fn places_of_graph(graph: ref PanicsGraph, own: ref Ledger) -> collections::BTreeSet[String] {
+fn places_of_graph(graph: ref PanicsGraph, own: ref Ledger) -> collections::BTreeSet[String] {
     let mut placing: collections::BTreeSet[String] = collections::BTreeSet()
     for (name, reach) in graph.reaches {
         if reach.places {
@@ -162,7 +162,7 @@ pub fn places_of_graph(graph: ref PanicsGraph, own: ref Ledger) -> collections::
 /// it is a part of, and `stored` the final columns of the callees outside
 /// it. The fixpoint runs inside the unit only; a callee neither in it nor
 /// stored answers what its ledger entry says, as in `panics_of_graph`.
-pub fn panics_of_unit(unit: ref Vec[String], graph: ref PanicsGraph, stored: ref collections::BTreeMap[String, Panics], own: ref Ledger) -> collections::BTreeMap[String, Panics] {
+fn panics_of_unit(unit: ref Vec[String], graph: ref PanicsGraph, stored: ref collections::BTreeMap[String, Panics], own: ref Ledger) -> collections::BTreeMap[String, Panics] {
     let mut answers: collections::BTreeMap[String, Panics] = collections::BTreeMap()
     for name in unit {
         let reach = graph.reaches[name] ?? continue
@@ -197,7 +197,7 @@ pub fn panics_of_unit(unit: ref Vec[String], graph: ref PanicsGraph, stored: ref
 /// that do, `settled` every callee already derived); a callee neither in the
 /// unit nor derived answers what its ledger entry says, as in
 /// `places_of_graph`.
-pub fn places_of_unit(unit: ref Vec[String], graph: ref PanicsGraph, stored: ref collections::BTreeSet[String], settled: ref collections::BTreeSet[String], own: ref Ledger) -> collections::BTreeSet[String] {
+fn places_of_unit(unit: ref Vec[String], graph: ref PanicsGraph, stored: ref collections::BTreeSet[String], settled: ref collections::BTreeSet[String], own: ref Ledger) -> collections::BTreeSet[String] {
     let mut placing: collections::BTreeSet[String] = collections::BTreeSet()
     let mut members: collections::BTreeSet[String] = collections::BTreeSet()
     for name in unit {
@@ -243,7 +243,7 @@ pub fn panics_callees_first(graph: ref PanicsGraph, own: ref Ledger) -> collecti
 
 /// **The `places` column of the whole package, callees first** (ADR-100 D7):
 /// what `places_of_graph`, the reference, answers.
-pub fn places_callees_first(graph: ref PanicsGraph, own: ref Ledger) -> collections::BTreeSet[String] {
+fn places_callees_first(graph: ref PanicsGraph, own: ref Ledger) -> collections::BTreeSet[String] {
     let mut stored: collections::BTreeSet[String] = collections::BTreeSet()
     let mut settled: collections::BTreeSet[String] = collections::BTreeSet()
     for unit in panics_units(graph) {
@@ -299,7 +299,7 @@ struct PanicsComponents {
 /// The graph's recursive groups, each a unit, in reverse topological order:
 /// a unit comes after every unit it calls into. A call to a function the
 /// graph does not hold leaves it.
-pub fn panics_units(graph: ref PanicsGraph) -> Vec[Vec[String]] {
+fn panics_units(graph: ref PanicsGraph) -> Vec[Vec[String]] {
     let mut walk = PanicsComponents { index: collections::BTreeMap(), low: collections::BTreeMap(), open: collections::BTreeSet(), stack: [], units: [], next: 0 }
     for (name, _) in graph.reaches {
         if !walk.index.contains_key(name) {
@@ -350,7 +350,7 @@ fn panics_connect(graph: ref PanicsGraph, name: ref String, mut walk: PanicsComp
 
 /// Whether a unit's checks are worth asking the bounds walk about: one of
 /// its functions answers `No` with its checks left out, and has some.
-pub fn panics_worth_proving(graph: ref PanicsGraph, answers: ref collections::BTreeMap[String, Panics], walked: ref Vec[String]) -> bool {
+fn panics_worth_proving(graph: ref PanicsGraph, answers: ref collections::BTreeMap[String, Panics], walked: ref Vec[String]) -> bool {
     for key in walked {
         let reach = graph.reaches[key] ?? continue
         let answer: Panics = answers[key]?.clone() ?? Panics::Unknown

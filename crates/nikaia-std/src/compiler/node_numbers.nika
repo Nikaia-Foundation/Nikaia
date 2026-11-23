@@ -482,6 +482,9 @@ fn numbers_expr(expr: Expr, mut st: NodeNumbersState) -> Expr {
         Expr::LitNull(id) => {
             return Expr::LitNull(numbers_id(id, st))
         },
+        Expr::TypeArgument(ty, id) => {
+            return Expr::TypeArgument(ty, numbers_id(id, st))
+        },
         Expr::Variable(name, id) => {
             return Expr::Variable(name, numbers_id(id, st))
         },

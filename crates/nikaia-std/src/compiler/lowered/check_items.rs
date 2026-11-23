@@ -630,7 +630,7 @@ pub(crate) fn item_declared_type_name(file: &ParsedView<'_, '_, '_, '_, '_, '_, 
     }
 }
 
-pub fn item_contain_themselves(files: &[ParsedView<'_, '_, '_, '_, '_, '_, '_>], boxed: &mut collections::BTreeMap<String, collections::BTreeSet<String>>) {
+pub(crate) fn item_contain_themselves(files: &[ParsedView<'_, '_, '_, '_, '_, '_, '_>], boxed: &mut collections::BTreeMap<String, collections::BTreeSet<String>>) {
     let mut generics: collections::BTreeMap<String, ItemGeneric<'_>> = collections::BTreeMap::new();
     for file in files.iter() {
         for item in file.items.iter() {

@@ -1,0 +1,7 @@
+exit 1
+error[NK1300]: `level::Level's rule 0 <= v && v <= 10` is not proved: an argument is not a whole number the prover reads.
+--> src/main.nika:8:5
+error[NK1207]: This write breaks `level::Level`'s rule `0 <= v && v <= 10` every time it is reached.
+--> src/main.nika:13:5
+error[NK1207]: This call breaks `put`'s precondition `0 <= x && x <= 10` every time it is reached.
+--> src/main.nika:14:5

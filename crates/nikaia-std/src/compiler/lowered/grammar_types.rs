@@ -625,6 +625,7 @@ pub(crate) fn grammar_types_written(expr: &Expr, words: &winnow_grammar::Interne
                 _ => return None,
             }
         },
+        Expr::TypeArgument(ty, _) => return Some(ty.clone()),
         _ => return None,
     }
 }
@@ -835,6 +836,11 @@ pub(crate) fn grammar_types_put_in(expr: &mut Expr, words: &winnow_grammar::Inte
         Expr::Cast { expr: _, .. } => {
             let Expr::Cast { expr: inner, ty, id } = std::mem::replace(expr, Expr::LitNull(Default::default())) else { unreachable!("the pattern matched it") }; let inner = nikaia_std::boxed::open(inner);
             *expr = Expr::Cast { expr: nikaia_std::block::Boxed::new(inner), ty: grammar_types_put(&ty, &walk.bound, words), id };
+            return;
+        },
+        Expr::TypeArgument(ty, id) => {
+            let id = *id;
+            *expr = Expr::TypeArgument(grammar_types_put(ty, &walk.bound, words), id);
             return;
         },
         Expr::Call { .. } => {

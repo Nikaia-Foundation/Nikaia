@@ -533,7 +533,7 @@ pub struct ProverOutside {
 
 impl ProverOutside {
     pub fn nothing() -> ProverOutside { ProverOutside { results: collections::BTreeMap::new(), fields: collections::BTreeMap::new(), returning: collections::BTreeSet::new(), valued: collections::BTreeSet::new(), leads: collections::BTreeMap::new(), operand_valued: collections::BTreeSet::new() } }
-    pub fn proved_result(&self, key: &str) -> bool { self.returning.contains(key) && !self.valued.contains(key) }
+    pub(crate) fn proved_result(&self, key: &str) -> bool { self.returning.contains(key) && !self.valued.contains(key) }
     pub fn operand_result(&self, key: &str) -> bool { self.returning.contains(key) && !self.operand_valued.contains(key) }
 }
 

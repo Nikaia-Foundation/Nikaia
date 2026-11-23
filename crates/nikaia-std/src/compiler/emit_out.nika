@@ -170,7 +170,7 @@ impl EmitOut {
     /// #2199): `inner`'s map entries move to where it lands, so a body
     /// wrapped in text of its own (a task's closure) keeps its `.nika` lines.
     /// A `text` without `marker` is written as it is.
-    pub fn push_around(ref mut self, text: ref String, marker: ref String, inner: ref EmitOut) {
+    fn push_around(ref mut self, text: ref String, marker: ref String, inner: ref EmitOut) {
         if !text.contains(marker) {
             self.buf.push_str(text)
             return

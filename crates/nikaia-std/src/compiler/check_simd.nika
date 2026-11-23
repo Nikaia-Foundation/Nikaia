@@ -14,7 +14,7 @@ use std::collections
 
 /// **`std::simd`'s kinds**: `"Lanes"`, `"Fixed"` or `"Mask"` for one of its
 /// vectors or masks, `""` for any other type.
-pub fn check_simd_kind(ty: ref Ty) -> String sync {
+fn check_simd_kind(ty: ref Ty) -> String sync {
     return match ty {
         Ty::Named { name, view, .. } => if view {
             ""
@@ -41,20 +41,20 @@ fn check_simd_bits_of(name: ref String) -> i64 sync {
 }
 
 /// **A float lane** (D9): `f32` or `f64`.
-pub fn check_simd_float(name: ref String) -> bool sync {
+fn check_simd_float(name: ref String) -> bool sync {
     return name == "f32" || name == "f64"
 }
 
 /// **A vector of float lanes** (D9), not a mask of them: it has no bit
 /// operators.
-pub fn check_simd_float_vector(ty: ref Ty) -> bool sync {
+fn check_simd_float_vector(ty: ref Ty) -> bool sync {
     let kind = check_simd_kind(ty)
     return (kind == "Fixed" || kind == "Lanes") && check_simd_float(check_simd_lane_of(ty))
 }
 
 /// The bits of any lane of type `name`, integer or float: 8 to 64, 0 for a
 /// type that is no lane.
-pub fn check_simd_lane_bits(name: ref String) -> i64 sync {
+fn check_simd_lane_bits(name: ref String) -> i64 sync {
     return match name {
         "f32" => 32, "f64" => 64,
         else => check_simd_bits_of(name),
@@ -224,7 +224,7 @@ fn check_simd_a_call(world: ref CheckWorld, value: ref Expr) -> bool sync {
 /// parameter's, an assigned place's or a result's declared type. A list
 /// literal declared a `Vec` or `Array` of vectors takes it too, and hands
 /// its element type on to each constructor in it, as under a `let`.
-pub fn check_simd_wanted(world: ref CheckWorld, value: ref Expr, want: ref Ty?) -> Ty? sync {
+fn check_simd_wanted(world: ref CheckWorld, value: ref Expr, want: ref Ty?) -> Ty? sync {
     let ty: Ty = want?.clone() ?? return null
     let list = match value {
         Expr::ListLit { .. } => true,
@@ -241,7 +241,7 @@ pub fn check_simd_wanted(world: ref CheckWorld, value: ref Expr, want: ref Ty?) 
 
 /// **The vector a list's elements are**, where the list is declared a
 /// `Vec` or an `Array` of one (D3); nothing for any other type.
-pub fn check_simd_element(declared: ref Ty?) -> Ty? sync {
+fn check_simd_element(declared: ref Ty?) -> Ty? sync {
     let ty: Ty = declared?.clone() ?? return null
     return match ty {
         Ty::Named { name, args, view } => if !view && (name == "Vec" || name == "Array") && args.len() > 0 && check_simd_kind(args[0]).len() > 0 { args[0].clone() } else { null },
@@ -448,7 +448,7 @@ impl CheckState {
     /// `c`), a `simd::select` of two such, a lookup from such a table, an
     /// element of a list of such, and a name a `let` bound to one. Nothing
     /// where it says none of these.
-    pub fn lanes_at_most(ref self, world: ref CheckWorld, value: ref Expr) -> i64? sync {
+    fn lanes_at_most(ref self, world: ref CheckWorld, value: ref Expr) -> i64? sync {
         return match value {
             Expr::Call { func, args, .. } => self.lanes_at_most_made(world, func, args),
             Expr::Binary { op, lhs, rhs, .. } => if op == BinaryOp::BitAnd {
@@ -558,7 +558,7 @@ impl CheckState {
     /// float lanes have no wrapping, saturating, shuffling or widening
     /// operation, integer lanes no `sqrt`, `abs` or `sum`. The ledger
     /// describes each method for every `T`; this is where the lane decides.
-    pub fn a_lane_method_not_offered(ref mut self, on: ref Ty, method: ref String, span: ref Span) sync {
+    fn a_lane_method_not_offered(ref mut self, on: ref Ty, method: ref String, span: ref Span) sync {
         let kind = check_simd_kind(on)
         if kind != "Fixed" && kind != "Lanes" {
             return

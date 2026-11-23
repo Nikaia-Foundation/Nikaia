@@ -1,0 +1,14 @@
+bounds in tests/a_counter_set_past_an_inner_scan_keeps_its_indexes_proved.nika: 5 indexes, 5 proved; 8 operations, 8 proved
+    15  bs[j]   proved
+    16  j += 1  proved
+    21  bs[j]   proved
+    22  j + 2   proved
+    24  j + 1   proved
+    39  bs[j]   proved
+    40  j += 1  proved
+    45  bs[j]   proved
+    46  j + 2   proved
+    50  j + 1   proved
+    61  bs[i]   proved
+    64  j += 1  proved
+    65  j + 1   proved

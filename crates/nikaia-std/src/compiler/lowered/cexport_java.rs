@@ -49,7 +49,7 @@ pub(crate) fn cx_java_pascal(name: &str) -> String {
     out
 }
 
-pub fn cx_java_file(package: &str) -> String { format!("{}.java", cx_java_pascal(&nikaia_std::block::Text::from(package.replace('-', "_")))) }
+pub(crate) fn cx_java_file(package: &str) -> String { format!("{}.java", cx_java_pascal(&nikaia_std::block::Text::from(package.replace('-', "_")))) }
 
 pub(crate) fn cx_java_scalar(shape: &CxByValue) -> String {
     if shape.rust == "i64" { return String::from("long"); }

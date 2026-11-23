@@ -46,7 +46,7 @@ pub(crate) fn scale_at(c: &[scalar], from: i64) -> Option<Scale> {
         base = 1024;
         len = 2;
     }
-    if from + len < c.len() as i64 && an_ascii_word(*unsafe { nikaia_std::proven::read(&c, (nikaia_std::proven::add::<i64>(from, len)) as usize) }) { return None; }
+    if unsafe { nikaia_std::proven::add::<i64>(from, len) } < c.len() as i64 && an_ascii_word(*unsafe { nikaia_std::proven::read(&c, (nikaia_std::proven::add::<i64>(from, len)) as usize) }) { return None; }
     let mut by: u64 = 1u64;
     let mut turns: i64 = 0;
     while turns < power {
@@ -61,9 +61,9 @@ pub(crate) fn upper_exponent(c: &[scalar], from: i64) -> i64 {
     let mut sign: i64 = 0;
     if unsafe { nikaia_std::proven::add::<i64>(from, 1) } < c.len() as i64 && (*unsafe { nikaia_std::proven::read(&c, (nikaia_std::proven::add::<i64>(from, 1)) as usize) } == '+' || *unsafe { nikaia_std::proven::read(&c, (nikaia_std::proven::add::<i64>(from, 1)) as usize) } == '-') { sign = 1; }
     let mut digits: i64 = 0;
-    while unsafe { nikaia_std::proven::add::<i64>(from, 1) } + sign + digits < c.len() as i64 && an_ascii_digit(*unsafe { nikaia_std::proven::read(&c, (nikaia_std::proven::add::<i64>(nikaia_std::proven::add::<i64>(nikaia_std::proven::add::<i64>(from, 1), sign), digits)) as usize) }) { digits = unsafe { nikaia_std::proven::add::<i64>(digits, 1) }; }
+    while unsafe { nikaia_std::proven::add::<i64>(nikaia_std::proven::add::<i64>(from, 1), sign) } + digits < c.len() as i64 && an_ascii_digit(*unsafe { nikaia_std::proven::read(&c, (nikaia_std::proven::add::<i64>(nikaia_std::proven::add::<i64>(nikaia_std::proven::add::<i64>(from, 1), sign), digits)) as usize) }) { digits = unsafe { nikaia_std::proven::add::<i64>(digits, 1) }; }
     if digits == 0 { return 0; }
-    1 + sign + digits
+    (unsafe { nikaia_std::proven::add::<i64>(1, sign) } + digits)
 }
 
 pub fn float_end(text: &str) -> Option<String> {

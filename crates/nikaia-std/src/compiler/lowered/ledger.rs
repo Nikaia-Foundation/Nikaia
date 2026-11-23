@@ -165,10 +165,6 @@ grammar! {
     }
 }
 
-pub fn unquote(value: &str) -> Result<String, nikaia_std::error::Thrown<Refused>> {
-    Ok(unquote_at(value, "")?)
-}
-
 pub(crate) fn unquote_at(value: &str, at: &str) -> Result<String, nikaia_std::error::Thrown<Refused>> {
     if value.len() < 2 || !value.starts_with("\"") || !value.ends_with("\"") { return Err(nikaia_std::error::throwing(Refused::Because(format!("{}expected a quoted string, found `{}`", at, value)), &"unquote_at")); }
     let opened: String = nikaia_std::block::Text::from(nikaia_std::index::or(value.strip_prefix("\""), || "").to_string());
@@ -551,7 +547,7 @@ pub fn touch_of(written: &str) -> Result<Touch, nikaia_std::error::Thrown<Refuse
     Ok(Touch { kind, parameter, named, write })
 }
 
-pub fn held_of(written: &str) -> Option<Held> {
+pub(crate) fn held_of(written: &str) -> Option<Held> {
     let c: Vec<scalar> = nikaia_std::list::scalars(written.chars());
     let colon = find_last(&c, ':');
     if colon < 0 { return None; }
@@ -1069,7 +1065,7 @@ pub fn spell(text: &str, key: &str, borrows: &[String], mutates: bool) -> Spelle
         open = unsafe { nikaia_std::proven::add::<i64>(close, 1) };
         while open < c.len() as i64 && (*unsafe { nikaia_std::proven::read(&c, (open) as usize) }).is_whitespace() { open = unsafe { nikaia_std::proven::add::<i64>(open, 1) }; }
     }
-    if open >= c.len() as i64 || *nikaia_std::index::get(&c, nikaia_std::index::at(open)) != '(' { return as_written(text); }
+    if open >= c.len() as i64 || *unsafe { nikaia_std::proven::read(&c, (open) as usize) } != '(' { return as_written(text); }
     let close = matching(&c, unsafe { nikaia_std::proven::add::<i64>(open, 1) }, '(', ')');
     if close < 0 { return as_written(text); }
     let inside: Vec<scalar> = nikaia_std::list::scalars(slice(&c, unsafe { nikaia_std::proven::add::<i64>(open, 1) }, close).chars());

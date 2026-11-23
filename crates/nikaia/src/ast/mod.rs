@@ -92,6 +92,7 @@ fn id_slot(expr: &mut Expr) -> &mut NodeId {
         | Expr::LitFloat(_, slot)
         | Expr::Unsafe(_, slot)
         | Expr::LitNull(slot)
+        | Expr::TypeArgument(_, slot)
         | Expr::Break(slot)
         | Expr::Continue(slot) => slot,
     }

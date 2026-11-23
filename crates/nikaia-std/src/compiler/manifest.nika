@@ -43,14 +43,14 @@ pub fn known() -> Vec[String] {
 /// per raw sink, each letting data from outside the program reach it
 /// unproved, a path one per operation and `untrusted-paths-anywhere` for all
 /// three. A key outside these is refused naming them, as a `[build]` typo is.
-pub fn raw_sinks_allow_keys() -> Vec[String] {
+fn raw_sinks_allow_keys() -> Vec[String] {
     return ["untrusted-shell", "untrusted-sql", "untrusted-markup", "untrusted-program", "untrusted-option", "untrusted-paths-read", "untrusted-paths-write", "untrusted-paths-remove", "untrusted-paths-anywhere"]
 }
 
 /// **The sources a path key's list may name** (ADR-raw-sinks-1 D15, ADR-010
 /// D7): `untrusted-paths-read = ["args"]` admits a path from the command
 /// line, and no other.
-pub fn raw_sinks_allow_sources() -> Vec[String] {
+fn raw_sinks_allow_sources() -> Vec[String] {
     return ["args", "stdin", "env", "request", "file", "process", "network"]
 }
 
@@ -89,7 +89,7 @@ fn raw_sinks_allow_value(table: ref String, key: ref String, word: ref String, t
 /// **One `[allow]` key, checked** (ADR-raw-sinks-1 D4, D5): one of the keys,
 /// where `table` is how the message names its table (`[allow]`,
 /// `[allow.packages.thumbs]`).
-pub fn raw_sinks_allow_key(table: ref String, key: ref String) throws {
+fn raw_sinks_allow_key(table: ref String, key: ref String) throws {
     if !contains(raw_sinks_allow_keys(), key) {
         let expected = choices(raw_sinks_allow_keys())
         throw Refused::Because(f"`{table}` has no key called `{key}`. The keys are: {expected}.")

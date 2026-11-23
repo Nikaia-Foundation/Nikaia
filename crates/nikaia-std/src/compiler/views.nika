@@ -274,7 +274,7 @@ pub fn views_stored(asked: ref Asked, items: ref Vec[Spanned[Item]], own_buffer:
 
 /// `views_stored` with the package's `ResultPackage` made once by the caller
 /// (#2685): a file check of a package is handed it, not one per file.
-pub fn views_stored_in(asked: ref Asked, package: ref ResultPackage, items: ref Vec[Spanned[Item]], own_buffer: fn(ref Expr) -> bool sync) -> Vec[Stored] {
+fn views_stored_in(asked: ref Asked, package: ref ResultPackage, items: ref Vec[Spanned[Item]], own_buffer: fn(ref Expr) -> bool sync) -> Vec[Stored] {
     let mut unit = plain_unit(package, borrowing_types(asked.names, items), view_fields(asked.names, items))
     method_table(asked, items, unit)
     // **The methods to their least fixpoint** (#818): a parameter handed to a
@@ -1732,6 +1732,7 @@ fn mentions(unit: ref Unit, asked: ref Asked, here: ref Here, node: ref Expr) ->
         Expr::LitBool(_, _) => false,
         // `null` holds nothing, so it borrows nothing.
         Expr::LitNull(_) => false,
+        Expr::TypeArgument(_, _) => false,
     }
 }
 
@@ -1963,6 +1964,7 @@ fn descend(unit: ref Unit, asked: ref Asked, node: ref Expr, span: ref Span, own
         Expr::LitChar(_, _) => {}
         Expr::LitBool(_, _) => {}
         Expr::LitNull(_) => {}
+        Expr::TypeArgument(_, _) => {}
     }
 }
 
@@ -2470,6 +2472,7 @@ fn rsrc_eval_node(unit: ref Unit, asked: ref Asked, here: ref Here, known: ref c
         Expr::LitChar(_, _) => rsrc_none(),
         Expr::LitBool(_, _) => rsrc_none(),
         Expr::LitNull(_) => rsrc_none(),
+        Expr::TypeArgument(_, _) => rsrc_none(),
     }
 }
 

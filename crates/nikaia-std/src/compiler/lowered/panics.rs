@@ -59,7 +59,7 @@ pub fn unit_panics(program: &Program, names: &winnow_grammar::InternerContext, h
     walked
 }
 
-pub fn panics_of_graph(graph: &PanicsGraph, own: &Ledger) -> collections::BTreeMap<String, Panics> {
+pub(crate) fn panics_of_graph(graph: &PanicsGraph, own: &Ledger) -> collections::BTreeMap<String, Panics> {
     let mut answers: collections::BTreeMap<String, Panics> = collections::BTreeMap::new();
     for (name, reach) in graph.reaches.iter() { answers.insert(nikaia_std::block::Text::from(name.to_string()), panics_own(reach)); }
     let mut changed = true;
@@ -91,7 +91,7 @@ pub fn panics_of_graph(graph: &PanicsGraph, own: &Ledger) -> collections::BTreeM
     answers
 }
 
-pub fn places_of_graph(graph: &PanicsGraph, own: &Ledger) -> collections::BTreeSet<String> {
+pub(crate) fn places_of_graph(graph: &PanicsGraph, own: &Ledger) -> collections::BTreeSet<String> {
     let mut placing: collections::BTreeSet<String> = collections::BTreeSet::new();
     for (name, reach) in graph.reaches.iter() { if reach.places { placing.insert(nikaia_std::block::Text::from(name.to_string())); } }
     let mut changed = true;
@@ -112,7 +112,7 @@ pub fn places_of_graph(graph: &PanicsGraph, own: &Ledger) -> collections::BTreeS
     placing
 }
 
-pub fn panics_of_unit(unit: &[String], graph: &PanicsGraph, stored: &collections::BTreeMap<String, Panics>, own: &Ledger) -> collections::BTreeMap<String, Panics> {
+pub(crate) fn panics_of_unit(unit: &[String], graph: &PanicsGraph, stored: &collections::BTreeMap<String, Panics>, own: &Ledger) -> collections::BTreeMap<String, Panics> {
     let mut answers: collections::BTreeMap<String, Panics> = collections::BTreeMap::new();
     for name in unit.iter() {
         let reach = match *nikaia_std::index::get(&graph.reaches, name) { Some(__nikaia_value) => __nikaia_value, None => continue };
@@ -151,7 +151,7 @@ pub fn panics_of_unit(unit: &[String], graph: &PanicsGraph, stored: &collections
     answers
 }
 
-pub fn places_of_unit(unit: &[String], graph: &PanicsGraph, stored: &collections::BTreeSet<String>, settled: &collections::BTreeSet<String>, own: &Ledger) -> collections::BTreeSet<String> {
+pub(crate) fn places_of_unit(unit: &[String], graph: &PanicsGraph, stored: &collections::BTreeSet<String>, settled: &collections::BTreeSet<String>, own: &Ledger) -> collections::BTreeSet<String> {
     let mut placing: collections::BTreeSet<String> = collections::BTreeSet::new();
     let mut members: collections::BTreeSet<String> = collections::BTreeSet::new();
     for name in unit.iter() {
@@ -187,7 +187,7 @@ pub fn panics_callees_first(graph: &PanicsGraph, own: &Ledger) -> collections::B
     stored
 }
 
-pub fn places_callees_first(graph: &PanicsGraph, own: &Ledger) -> collections::BTreeSet<String> {
+pub(crate) fn places_callees_first(graph: &PanicsGraph, own: &Ledger) -> collections::BTreeSet<String> {
     let mut stored: collections::BTreeSet<String> = collections::BTreeSet::new();
     let mut settled: collections::BTreeSet<String> = collections::BTreeSet::new();
     for unit in panics_units(graph) {
@@ -229,7 +229,7 @@ pub(crate) struct PanicsComponents {
     pub(crate) next: i64,
 }
 
-pub fn panics_units(graph: &PanicsGraph) -> Vec<Vec<String>> {
+pub(crate) fn panics_units(graph: &PanicsGraph) -> Vec<Vec<String>> {
     let mut walk = PanicsComponents { index: collections::BTreeMap::new(), low: collections::BTreeMap::new(), open: collections::BTreeSet::new(), stack: vec![], units: vec![], next: 0 };
     for (name, _) in graph.reaches.iter() { if !walk.index.contains_key(name) { panics_connect(graph, name, &mut walk); } }
     walk.units
@@ -264,7 +264,7 @@ pub(crate) fn panics_connect(graph: &PanicsGraph, name: &str, walk: &mut PanicsC
     walk.units.push(unit);
 }
 
-pub fn panics_worth_proving(graph: &PanicsGraph, answers: &collections::BTreeMap<String, Panics>, walked: &[String]) -> bool {
+pub(crate) fn panics_worth_proving(graph: &PanicsGraph, answers: &collections::BTreeMap<String, Panics>, walked: &[String]) -> bool {
     for key in walked.iter() {
         let reach = match *nikaia_std::index::get(&graph.reaches, key) { Some(__nikaia_value) => __nikaia_value, None => continue };
         let answer: Panics = nikaia_std::index::or(match *nikaia_std::index::get(&answers, key) {

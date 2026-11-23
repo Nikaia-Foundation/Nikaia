@@ -111,8 +111,6 @@ pub(crate) fn pause_path(chain: &[String]) -> String {
     nikaia_std::block::Text::from(steps.join(", which "))
 }
 
-pub fn lost_sync(contracts: &Ledger, theirs: &collections::BTreeMap<String, Ledger>, pauses: &collections::BTreeMap<String, ModulesPause>, committed: &Ledger, render: &mut impl FnMut(&CheckFinding, i64) -> String) -> String { lost_sync_against(&lost_sync_all(contracts, theirs, pauses, &mut *render), committed) }
-
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct SyncLost {
     pub key: String,
@@ -193,7 +191,7 @@ pub fn lost_pieces_all(sites: &[ParSite], pauses: &collections::BTreeMap<String,
     out
 }
 
-pub fn par_iter_column(ledger: &mut Ledger, sites: &[ParSite]) {
+pub(crate) fn par_iter_column(ledger: &mut Ledger, sites: &[ParSite]) {
     for site in sites.iter() {
         let contract = match nikaia_std::index::get_mut(&mut ledger.functions, &site.function) { Some(__nikaia_value) => __nikaia_value, None => continue };
         let runs = if site.pausing.is_none() { "pieces" } else { "tasks" };
@@ -435,54 +433,7 @@ pub struct ModulesReach {
     pub(crate) calls: Vec<collections::BTreeSet<String>>,
 }
 
-pub fn modules_reach_of(items: &[Spanned<Item>], words: &winnow_grammar::InternerContext, source: &str) -> ModulesReach {
-    #[allow(unused_mut)] let mut names: Vec<String> = vec![];
-    let mut tests: Vec<bool> = vec![];
-    let mut calls: Vec<collections::BTreeSet<String>> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut names = names;
-    for item in items.iter() {
-        let mut called: String = String::from("");
-        let mut is_test = false;
-        match &item.node {
-            Item::Fn { name, receiver, is_public, is_extern, .. } => {
-                let is_extern = *is_extern; let is_public = *is_public; let name = *name;
-                if receiver.is_none() && !is_public && !is_extern {
-                    match name {
-                        Some(held) => { called = nikaia_std::block::Text::from(words.resolve(held).to_string()); },
-                        None => { },
-                    }
-                }
-            },
-            Item::Struct { name, is_public, is_extern, .. } => {
-                let is_extern = *is_extern; let is_public = *is_public; let name = *name;
-                if !is_public && !is_extern { called = nikaia_std::block::Text::from(words.resolve(name).to_string()); }
-            },
-            Item::Enum { name, is_public, is_extern, .. } => {
-                let is_extern = *is_extern; let is_public = *is_public; let name = *name;
-                if !is_public && !is_extern { called = nikaia_std::block::Text::from(words.resolve(name).to_string()); }
-            },
-            Item::Test { .. } => { is_test = true; },
-            _ => { },
-        }
-        names.push(called);
-        tests.push(is_test);
-        calls.push(collections::BTreeSet::new());
-    }
-    let mut k: i64 = 0;
-    for (word, start) in modules_call_starts(source) {
-        while ((k) as usize) < items.len() && start >= unsafe { nikaia_std::proven::read(&items, (k) as usize) }.span.end as i64 { k = unsafe { nikaia_std::proven::add::<i64>(k, 1) }; }
-        if ((k) as usize) >= items.len() { break; }
-        if start >= unsafe { nikaia_std::proven::read(&items, (k) as usize) }.span.start as i64 { (*unsafe { nikaia_std::proven::slot(&mut calls, (k) as usize) }).insert(nikaia_std::block::Text::from(word.to_string())); }
-    }
-    k = 0;
-    for (word, start) in modules_type_words(source) {
-        while ((k) as usize) < items.len() && start >= unsafe { nikaia_std::proven::read(&items, (k) as usize) }.span.end as i64 { k = unsafe { nikaia_std::proven::add::<i64>(k, 1) }; }
-        if ((k) as usize) >= items.len() { break; }
-        if start >= unsafe { nikaia_std::proven::read(&items, (k) as usize) }.span.start as i64 { (*unsafe { nikaia_std::proven::slot(&mut calls, (k) as usize) }).insert(nikaia_std::block::Text::from(word.to_string())); }
-    }
-    ModulesReach { names, tests, calls }
-}
-
-pub fn modules_only_tests_package(parts: &[ModulesReach]) -> Vec<collections::BTreeSet<String>> {
+pub(crate) fn modules_only_tests_package(parts: &[ModulesReach]) -> Vec<collections::BTreeSet<String>> {
     let mut bodies: Vec<collections::BTreeSet<String>> = vec![];
     let mut candidates: collections::BTreeMap<String, i64> = collections::BTreeMap::new();
     let mut home: collections::BTreeMap<String, i64> = collections::BTreeMap::new();
@@ -525,71 +476,6 @@ pub fn modules_only_tests_package(parts: &[ModulesReach]) -> Vec<collections::BT
     found
 }
 
-pub(crate) fn modules_call_starts(text: &str) -> Vec<(String, i64)> {
-    let mut out: Vec<(String, i64)> = vec![];
-    let mut word: String = String::from("");
-    let mut start = 0;
-    let mut before: i64 = 32;
-    let mut last: i64 = 32;
-    let mut waiting: String = String::from("");
-    let mut waiting_at = 0;
-    let mut at = 0;
-    for b in text.bytes() {
-        let c = b as i64;
-        let in_word = c >= 48 && c <= 57 || c >= 65 && c <= 90 || c >= 97 && c <= 122 || c == 95;
-        if !waiting.is_empty() && c != 32 {
-            if c == 40 { out.push((nikaia_std::block::Text::from(waiting.to_string()), waiting_at)); }
-            waiting = String::from("");
-        }
-        if in_word {
-            if word.is_empty() {
-                before = last;
-                start = at;
-            }
-            { use ::core::fmt::Write as _; let _ = word.write_fmt(format_args!("{}", (u8::try_from(c).unwrap_or_else(|_| panic!("the value does not fit in an `u8`"))) as char)); };
-            last = 97;
-        } else {
-            if !word.is_empty() {
-                if before != 46 {
-                    if c == 40 { out.push((nikaia_std::block::Text::from(word.to_string()), start)); } else if c == 32 {
-                        waiting = nikaia_std::block::Text::from(word.to_string());
-                        waiting_at = start;
-                    }
-                }
-                word = String::from("");
-            }
-            if c != 32 { last = c; }
-        }
-        at += 1;
-    }
-    out
-}
-
-pub(crate) fn modules_type_words(text: &str) -> Vec<(String, i64)> {
-    let mut out: Vec<(String, i64)> = vec![];
-    let mut word: String = String::from("");
-    let mut start = 0;
-    let mut before: i64 = 32;
-    let mut at = 0;
-    for b in text.bytes() {
-        let c = b as i64;
-        let in_word = c >= 48 && c <= 57 || c >= 65 && c <= 90 || c >= 97 && c <= 122 || c == 95;
-        if in_word {
-            if word.is_empty() { start = at; }
-            { use ::core::fmt::Write as _; let _ = word.write_fmt(format_args!("{}", (u8::try_from(c).unwrap_or_else(|_| panic!("the value does not fit in an `u8`"))) as char)); };
-        } else {
-            if !word.is_empty() {
-                let first = nikaia_std::index::or(word.bytes().next(), || 0);
-                if before != 46 && first >= 65 && first <= 90 { out.push((nikaia_std::block::Text::from(word.to_string()), start)); }
-                word = String::from("");
-            }
-            before = c;
-        }
-        at += 1;
-    }
-    out
-}
-
 pub(crate) fn modules_close_over(names: &mut collections::BTreeSet<String>, candidates: &collections::BTreeMap<String, i64>, mentions: &[collections::BTreeSet<String>]) {
     loop {
         let mut added: Vec<String> = vec![];
@@ -600,35 +486,6 @@ pub(crate) fn modules_close_over(names: &mut collections::BTreeSet<String>, cand
         if added.is_empty() { return; }
         for name in added.into_iter() { names.insert(name); }
     }
-}
-
-pub fn modules_mark_test_only(items: &mut Vec<Spanned<Item>>, only_tests: &collections::BTreeSet<String>, tests: i64, words: &winnow_grammar::InternerContext, intern: &mut impl FnMut(&str) -> winnow_grammar::Symbol) {
-    let mut marks = only_tests.copy_owned();
-    for k in 0..tests { marks.insert(test_function(k)); }
-    let mut kept: Vec<Spanned<Item>> = vec![];
-    for item in items.drain(..) {
-        let mut marked = false;
-        match item.node {
-            Item::Fn { name, receiver, .. } => {
-                match name {
-                    Some(held) => {
-                        let written = words.resolve(held);
-                        marked = receiver.is_none() && marks.contains(written);
-                    },
-                    None => { },
-                }
-            },
-            Item::Struct { name, .. } => { marked = only_tests.contains(words.resolve(name)); },
-            Item::Enum { name, .. } => { marked = only_tests.contains(words.resolve(name)); },
-            _ => { },
-        }
-        if marked {
-            let mut attributes = item.attributes;
-            attributes.push(Attribute { name: intern(&modules_test_only_mark()), args: vec![], config: vec![], span: item.span });
-            kept.push(Spanned { node: item.node, span: item.span, doc: item.doc, attributes });
-        } else { kept.push(item); }
-    }
-    items.extend(kept);
 }
 
 pub(crate) fn modules_line_of(source: &str, at: i64) -> i64 {

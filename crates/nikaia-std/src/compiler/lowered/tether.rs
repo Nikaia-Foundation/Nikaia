@@ -22,7 +22,7 @@ impl PackageTypes {
     pub fn empty() -> PackageTypes { PackageTypes { borrowing: collections::BTreeSet::new(), named: collections::BTreeSet::new() } }
 }
 
-pub fn declare_unit(names: &winnow_grammar::InternerContext, items: &[Spanned<Item>], package: &mut PackageTypes) {
+pub(crate) fn declare_unit(names: &winnow_grammar::InternerContext, items: &[Spanned<Item>], package: &mut PackageTypes) {
     package.borrowing.extend(borrowing_types(names, items));
     for item in items.iter() {
         match &item.node {
@@ -39,7 +39,7 @@ pub fn declare_unit(names: &winnow_grammar::InternerContext, items: &[Spanned<It
     }
 }
 
-pub fn a_parse_that_views(names: &winnow_grammar::InternerContext, result: Option<&Type>, package: &PackageTypes) -> bool {
+pub(crate) fn a_parse_that_views(names: &winnow_grammar::InternerContext, result: Option<&Type>, package: &PackageTypes) -> bool {
     let ty = match result { Some(__nikaia_value) => __nikaia_value, None => return false };
     let name = names.resolve(ty.name);
     if ty.is_view && !ty.lasting || package.borrowing.contains(name) { return true; }
@@ -62,7 +62,7 @@ pub(crate) fn a_type_with_no_room_for_a_view(name: &str) -> bool {
     false
 }
 
-pub fn function_views(item: &Item, target: Option<&str>, names: &winnow_grammar::InternerContext, borrowing: &collections::BTreeSet<String>) -> Vec<Held> {
+pub(crate) fn function_views(item: &Item, target: Option<&str>, names: &winnow_grammar::InternerContext, borrowing: &collections::BTreeSet<String>) -> Vec<Held> {
     let mut held: Vec<Held> = vec![];
     match item {
         Item::Fn { receiver, args, ret_type, .. } => {
@@ -123,7 +123,7 @@ pub fn tether_of_function(item: &Item, target: Option<&str>, key: &str, names: &
     lent_text(held, item, key, own, library, names)
 }
 
-pub fn tether_of_entry_rule(names: &winnow_grammar::InternerContext, result: Option<&Type>, package: &PackageTypes) -> Vec<Held> {
+pub(crate) fn tether_of_entry_rule(names: &winnow_grammar::InternerContext, result: Option<&Type>, package: &PackageTypes) -> Vec<Held> {
     if !a_parse_that_views(names, result, package) { return vec![]; }
     vec![Held { position: nikaia_std::block::Text::from(INPUT_POSITION.to_string()), state: State::Borrowed }, Held { position: nikaia_std::block::Text::from(RESULT_POSITION.to_string()), state: State::Borrowed }]
 }
@@ -308,7 +308,7 @@ pub(crate) fn padded(word: &str, width: i64) -> String {
     out
 }
 
-pub fn narrated_lines(narrated: &collections::BTreeSet<(i64, String)>, source: &str) -> Vec<(i64, i64, String)> {
+pub(crate) fn narrated_lines(narrated: &collections::BTreeSet<(i64, String)>, source: &str) -> Vec<(i64, i64, String)> {
     let mut out: Vec<(i64, i64, String)> = vec![];
     let mut said: collections::BTreeSet<(i64, String)> = collections::BTreeSet::new();
     for (at, text) in narrated.iter() {

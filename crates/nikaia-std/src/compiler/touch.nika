@@ -39,7 +39,7 @@ impl Reached {
     /// soon as somebody writes `2>&1`); the same family under two different
     /// known names never are. Everything else might be, and "might be" is the
     /// answer that keeps the order.
-    pub fn might_be_same(ref self, other: ref Reached) -> bool {
+    fn might_be_same(ref self, other: ref Reached) -> bool {
         if family(self.kind) != family(other.kind) {
             return false
         }
@@ -154,7 +154,7 @@ pub struct TouchGraph {
 /// Every function, method and `pub` grammar rule of one unit, into `graph`.
 /// What a call by name goes to is `callee_named`, the one resolution every
 /// analysis shares (ADR-288); a method call is the type checker's answer.
-pub fn unit_touches(items: ref Vec[Spanned[Item]], names: ref winnow_grammar::InternerContext, unaliased: fn(ref String) -> String sync, holes_of: fn(ref Expr) -> Vec[Expr] sync, own: ref Ledger, library: ref Ledger, mut graph: TouchGraph) {
+fn unit_touches(items: ref Vec[Spanned[Item]], names: ref winnow_grammar::InternerContext, unaliased: fn(ref String) -> String sync, holes_of: fn(ref Expr) -> Vec[Expr] sync, own: ref Ledger, library: ref Ledger, mut graph: TouchGraph) {
     for item in items {
         match item.node {
             Item::Fn { name, body, .. } => {
@@ -201,7 +201,7 @@ pub fn unit_touches(items: ref Vec[Spanned[Item]], names: ref winnow_grammar::In
 
 /// The fixpoint over a graph the walk built (`touches_of`), the whole package
 /// at once: the reference the callees-first route is held to (ADR-100 D7).
-pub fn touches_of_graph(graph: ref TouchGraph) -> collections::BTreeMap[String, Vec[Touch]] {
+fn touches_of_graph(graph: ref TouchGraph) -> collections::BTreeMap[String, Vec[Touch]] {
     let mut unknown: collections::BTreeMap[String, bool] = collections::BTreeMap()
     let mut outside: collections::BTreeMap[String, Vec[Touch]] = collections::BTreeMap()
     let mut calls: collections::BTreeMap[String, collections::BTreeSet[String]] = collections::BTreeMap()
@@ -245,7 +245,7 @@ pub fn touches_infer(mut ledger: Ledger, units: ref Vec[ParsedView], library: re
 /// then read before write - the order the derive gave while `Touch` was Rust
 /// (ADR-204 §4), so a ledger written before and after reads the same. A touch
 /// twice is kept once.
-pub fn in_ledger_order(touches: ref Vec[Touch]) -> Vec[Touch] {
+fn in_ledger_order(touches: ref Vec[Touch]) -> Vec[Touch] {
     let mut found: collections::BTreeMap[(String, String?, String?, bool), Touch] = collections::BTreeMap()
     for touch in touches {
         found.insert((touch.kind.clone(), touch.parameter?.clone(), touch.named?.clone(), touch.write), touch.clone())
@@ -266,7 +266,7 @@ pub fn in_ledger_order(touches: ref Vec[Touch]) -> Vec[Touch] {
 /// member whose claim holds touches what the unit's bodies it reaches touch
 /// and what its stored callees do; one whose claim falls is left out, as
 /// `touches_of` leaves it out.
-pub fn touches_of_unit(unit: ref Vec[String], reaches: ref collections::BTreeMap[String, Reach], stored: ref collections::BTreeMap[String, Vec[Touch]]) -> collections::BTreeMap[String, Vec[Touch]] {
+fn touches_of_unit(unit: ref Vec[String], reaches: ref collections::BTreeMap[String, Reach], stored: ref collections::BTreeMap[String, Vec[Touch]]) -> collections::BTreeMap[String, Vec[Touch]] {
     let mut members: collections::BTreeSet[String] = collections::BTreeSet()
     let mut known: collections::BTreeMap[String, bool] = collections::BTreeMap()
     for name in unit {
@@ -335,7 +335,7 @@ pub fn touches_of_unit(unit: ref Vec[String], reaches: ref collections::BTreeMap
 /// `touches_of_unit` from the columns its callees already have. The greatest
 /// fixpoint is unique, so this answers what `touches_of_graph` answers, each
 /// set the same touches (the order a set is kept in is `in_ledger_order`'s).
-pub fn touches_callees_first(graph: ref TouchGraph) -> collections::BTreeMap[String, Vec[Touch]] {
+fn touches_callees_first(graph: ref TouchGraph) -> collections::BTreeMap[String, Vec[Touch]] {
     let mut stored: collections::BTreeMap[String, Vec[Touch]] = collections::BTreeMap()
     for unit in touch_units(graph.reaches) {
         let column = touches_of_unit(unit, graph.reaches, stored)
@@ -359,7 +359,7 @@ struct TouchComponents {
 /// The graph's recursive groups, each a unit, in reverse topological order: a
 /// unit comes after every unit it calls into. A call that leaves the graph is
 /// no edge.
-pub fn touch_units(reaches: ref collections::BTreeMap[String, Reach]) -> Vec[Vec[String]] {
+fn touch_units(reaches: ref collections::BTreeMap[String, Reach]) -> Vec[Vec[String]] {
     let mut walk = TouchComponents { index: collections::BTreeMap(), low: collections::BTreeMap(), open: collections::BTreeSet(), stack: [], units: [], next: 0 }
     for (name, _) in reaches {
         if !walk.index.contains_key(name) {

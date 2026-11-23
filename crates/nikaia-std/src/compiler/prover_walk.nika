@@ -518,6 +518,7 @@ fn prover_stmt(mut walk: ProverWalk, stmt: ref Spanned[Stmt], mut scope: ProverS
                     }
                     scope.carry(n, carried)
                 },
+                Expr::Field { base, name, .. } => prover_field_write(walk, target, base, name, op, value, span, scope, at, program, words, own, library, ask, model, escape, condition),
                 else => {},
             }
             false
@@ -2637,10 +2638,11 @@ fn prover_calls_in(mut walk: ProverWalk, expr: ref Expr, span: Span, scope: ref 
                 prover_calls_in(walk, arm.body, span, scope, at, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition)
             }
         },
-        Expr::StructLit { fields, .. } => {
+        Expr::StructLit { name, fields, .. } => {
             for field in fields {
                 prover_calls_in_maybe(walk, field.value, span, scope, at, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition)
             }
+            prover_rule_literal(walk, expr, name, fields, span, scope, at, program, words, own, library, ask, model, escape, unaliased, condition)
         },
         Expr::ListRepeat { value, count, .. } => {
             prover_calls_in(walk, value, span, scope, at, program, words, own, library, ask, model, escape, holes_of, unaliased, written_of, condition)
@@ -4467,6 +4469,150 @@ fn prover_record_call(mut walk: ProverWalk, callee: ref String, params: ref Vec[
     } else {
         walk.reaches.insert(key, outcome.reach)
     }
+}
+
+/// **Another package's type with a rule**, as its ledger entry publishes it
+/// (ADR-369 D1, ADR-269 D18): `null` for a type this program declares, whose
+/// own rule's rewrite checks it (`type_rules`), and for one with no rule.
+fn prover_ruled_type(owner: ref String, program: ref Program, words: ref winnow_grammar::InternerContext, own: ref Ledger, library: ref Ledger) -> TypeContract? {
+    for item in program.items {
+        match item.node {
+            Item::Struct { name, .. } => {
+                if words.resolve(name) == owner {
+                    return null
+                }
+            },
+            else => {},
+        }
+    }
+    let contract = own.types[owner]?.clone() ?? library.types[owner]?.clone() ?? return null
+    if contract.rules.is_empty() {
+        return null
+    }
+    return contract
+}
+
+/// The claim and the `message:` of a published rule,
+/// `assert(claim; message: "…")`; the message only where it is text.
+fn prover_rule_parts(rule: ref String) -> (String, String?) {
+    let mut inner = rule.clone()
+    if rule.starts_with("assert(") && rule.ends_with(")") {
+        inner = (rule.strip_prefix("assert(") ?? "").clone()
+        inner = (inner.strip_suffix(")") ?? "").clone()
+    }
+    let cut = inner.rfind("; message:") ?? return (inner.trim().clone(), null)
+    let claim = inner.before(cut.start).trim().clone()
+    let said = inner.after(cut.end).trim().clone()
+    if said.len() < 2 || !said.starts_with("\"") || !said.ends_with("\"") {
+        return (claim, null)
+    }
+    let quoted = (said.strip_prefix("\"") ?? "").clone()
+    let text = (quoted.strip_suffix("\"") ?? "").replace("\\\"", "\"").replace("\\\\", "\\")
+    return (claim, text)
+}
+
+/// **A write to a `pub` field of another package's type keeps the type's
+/// rule** (ADR-369 D2, #2766): `x.f = v` (and `x.f op= v`) asks each rule
+/// with `f` as `v` and every other field as `x`'s own.
+fn prover_field_write(mut walk: ProverWalk, target: ref Expr, base: ref Expr, name: winnow_grammar::Symbol, op: ref BinaryOp?, value: ref Expr, span: Span, scope: ref ProverScope, at: ref ProverWhere, program: ref Program, words: ref winnow_grammar::InternerContext, own: ref Ledger, library: ref Ledger, ask: fn(ref logic::TermArena, ref Vec[i64], i64) -> SolverAnswer sync, model: fn(ref logic::TermArena, ref Vec[i64], i64) -> collections::BTreeMap[String, i64]? sync, escape: fn(ref String) -> String sync, condition: fn(ref String, ref collections::BTreeSet[String]) -> Vec[logic::SolverTerm] sync) {
+    let owner: String = walk.state.field_owners.get(id_of(base) as i64)?.clone() ?? return
+    let contract = prover_ruled_type(owner, program, words, own, library) ?? return
+    let field = words.resolve(name).clone()
+    let mut written = value.clone()
+    if op != null {
+        let given: BinaryOp = op?.clone() ?? BinaryOp::Add
+        written = Expr::Binary { op: given, lhs: target.clone(), rhs: value.clone(), span: span, grouped: false, id: fresh_id() }
+    }
+    // The other fields are the value's own: `self.g`, which the base's path
+    // gives at the write (`given_paths`).
+    let mut renamed: collections::BTreeMap[String, String] = collections::BTreeMap()
+    for one in contract.fields {
+        if one.name != field {
+            renamed.insert(one.name.clone(), f"self.{one.name}")
+        }
+    }
+    let params: Vec[String] = ["self", field]
+    let args: Vec[Expr] = [base.clone(), written]
+    prover_rule_kept(walk, owner, contract, "write", params, args, renamed, id_of(target) as i64, span, scope, at, words, ask, model, escape, condition)
+}
+
+/// **A literal of another package's type keeps the type's rule** (ADR-369
+/// D2, #2766): each rule with the fields as the literal gives them.
+fn prover_rule_literal(mut walk: ProverWalk, literal: ref Expr, name: winnow_grammar::Symbol, fields: ref Vec[FieldInit], span: Span, scope: ref ProverScope, at: ref ProverWhere, program: ref Program, words: ref winnow_grammar::InternerContext, own: ref Ledger, library: ref Ledger, ask: fn(ref logic::TermArena, ref Vec[i64], i64) -> SolverAnswer sync, model: fn(ref logic::TermArena, ref Vec[i64], i64) -> collections::BTreeMap[String, i64]? sync, escape: fn(ref String) -> String sync, unaliased: fn(ref String) -> String sync, condition: fn(ref String, ref collections::BTreeSet[String]) -> Vec[logic::SolverTerm] sync) {
+    let owner = unaliased(words.resolve(name))
+    let contract = prover_ruled_type(owner, program, words, own, library) ?? return
+    let mut params: Vec[String] = []
+    let mut args: Vec[Expr] = []
+    for field in fields {
+        // `Ring { n }` gives the field the name `n`.
+        let value = field.value?.clone() ?? Expr::Variable(field.name, fresh_id())
+        params.push(words.resolve(field.name).clone())
+        args.push(value)
+    }
+    prover_rule_kept(walk, owner, contract, "literal", params, args, collections::BTreeMap(), id_of(literal) as i64, span, scope, at, words, ask, model, escape, condition)
+}
+
+/// **The rules of `owner`, asked where a value of it is written or built**
+/// (ADR-369 D2, ADR-269 D4, D5): as a `std` precondition is at a call, with
+/// `args` in place of `params` - proved, carried back to the function's
+/// entry (D15), shown false (`NK1207`, as the type's own rule is where the
+/// package builds it), or a claim not proved (`NK1300`). A rule that does
+/// not read back is not proved. `renamed` names a field as the claim reads
+/// it at this point; `key` is the write's or the literal's node.
+fn prover_rule_kept(mut walk: ProverWalk, owner: ref String, contract: ref TypeContract, kind: ref String, params: ref Vec[String], args: ref Vec[Expr], renamed: ref collections::BTreeMap[String, String], key: i64, span: Span, scope: ref ProverScope, at: ref ProverWhere, words: ref winnow_grammar::InternerContext, ask: fn(ref logic::TermArena, ref Vec[i64], i64) -> SolverAnswer sync, model: fn(ref logic::TermArena, ref Vec[i64], i64) -> collections::BTreeMap[String, i64]? sync, escape: fn(ref String) -> String sync, condition: fn(ref String, ref collections::BTreeSet[String]) -> Vec[logic::SolverTerm] sync) {
+    let mut names: collections::BTreeSet[String] = collections::BTreeSet()
+    let mut renames: collections::BTreeMap[String, i64] = collections::BTreeMap()
+    for field in contract.fields {
+        match field.ty {
+            Ty::Named { name, args: held, view } => {
+                if held.is_empty() && !view && is_whole_number(name) {
+                    names.insert(field.name.clone())
+                    let as_read = renamed[field.name] ?? continue
+                    let read = walk.arena.var(as_read)
+                    renames.insert(field.name.clone(), read)
+                }
+                if has_a_length(name) {
+                    names.insert(length_of(field.name))
+                    let as_read = renamed[field.name] ?? continue
+                    let read = walk.arena.var(length_of(as_read))
+                    renames.insert(length_of(field.name), read)
+                }
+            },
+            else => {},
+        }
+    }
+    let callee = f"the rule of `{owner}`"
+    let mut claims: Vec[PreClaim] = []
+    let mut conditions: Vec[String] = []
+    let mut unread = false
+    for rule in contract.rules {
+        let (claim, message) = prover_rule_parts(rule)
+        conditions.push(claim.clone())
+        let term = prover_condition_term(walk.arena, claim, names, condition)
+        if term < 0 {
+            unread = true
+            continue
+        }
+        let read = walk.arena.substitute(term, renames)
+        claims.push(PreClaim { term: read, written: claim, computed: null, message: message, origin: null, site: null })
+    }
+    let outcome = walk.state.precondition_call(walk.arena, words, callee, params, claims, args, true, span, scope, at, ask, model, escape)
+    for found in outcome.findings {
+        let mut one = found.clone()
+        one.message = one.message.replace(f"This call breaks `{callee}`'s precondition", f"This {kind} breaks `{owner}`'s rule")
+        one.help = f"Give `{owner}` values for which its rule holds, or check them with a guard before the {kind}."
+        walk.findings.push(one)
+    }
+    let mut held = outcome.held.clone()
+    if unread && !walk.state.in_test {
+        held.push(ClaimHeld::AtRunTime("the rule does not read back as a claim the prover reads"))
+    }
+    if held.is_empty() {
+        return
+    }
+    let at_key = (span.start as i64, key)
+    walk.std_claims.insert(at_key, f"{owner}'s rule {conditions.join(" && ")}")
+    walk.held.insert(at_key, prover_std_held(held))
 }
 
 /// **Another package's contract, read back into terms** (ADR-269 D18), once

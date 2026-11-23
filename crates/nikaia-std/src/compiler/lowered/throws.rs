@@ -31,7 +31,7 @@ pub fn throws_graph(own: &Ledger, library: &Ledger, resolved: &collections::BTre
     ThrowsGraph { methods, direct: collections::BTreeMap::new(), calls: collections::BTreeMap::new(), fatal_calls: collections::BTreeMap::new(), fatal: fatal_types(own, library) }
 }
 
-pub fn fatal_types(own: &Ledger, library: &Ledger) -> collections::BTreeSet<String> {
+pub(crate) fn fatal_types(own: &Ledger, library: &Ledger) -> collections::BTreeSet<String> {
     let mut out: collections::BTreeSet<String> = collections::BTreeSet::new();
     out.extend(nikaia_std::index::or(match *nikaia_std::index::get(&own.implementations, "Fatal") {
         Some(__nikaia_it) => Some(__nikaia_it.clone()),
@@ -143,7 +143,7 @@ pub(crate) fn methods_into(resolved: Option<&MethodsCalled>, own: &Ledger, libra
 }
 
 #[allow(clippy::too_many_arguments)]
-pub fn stored_throws(field: &str, resolved: &collections::BTreeSet<String>, unresolved: bool, free: &collections::BTreeSet<String>, thrown: &collections::BTreeSet<String>, own: &Ledger, library: &Ledger, graph: &mut ThrowsGraph) {
+pub(crate) fn stored_throws(field: &str, resolved: &collections::BTreeSet<String>, unresolved: bool, free: &collections::BTreeSet<String>, thrown: &collections::BTreeSet<String>, own: &Ledger, library: &Ledger, graph: &mut ThrowsGraph) {
     let mut named: collections::BTreeSet<String> = thrown.copy_owned();
     let mut called: collections::BTreeSet<String> = collections::BTreeSet::new();
     if unresolved { named.insert(nikaia_std::block::Text::from(UNNAMED.to_string())); }
@@ -155,7 +155,7 @@ pub fn stored_throws(field: &str, resolved: &collections::BTreeSet<String>, unre
     graph.calls.insert(nikaia_std::block::Text::from(field.to_string()), called);
 }
 
-pub fn params_as_places(own: &Ledger, stored: &mut collections::BTreeMap<String, CheckStoredCode>) -> collections::BTreeSet<String> {
+pub(crate) fn params_as_places(own: &Ledger, stored: &mut collections::BTreeMap<String, CheckStoredCode>) -> collections::BTreeSet<String> {
     let mut open: collections::BTreeSet<String> = collections::BTreeSet::new();
     let mut kept: collections::BTreeSet<String> = collections::BTreeSet::new();
     let named: CheckStoredCode = nikaia_std::index::or(stored.remove(AS_VALUE), || CheckStoredCode::empty());
@@ -187,7 +187,7 @@ pub fn params_as_places(own: &Ledger, stored: &mut collections::BTreeMap<String,
 
 pub fn throws_given(error: &str) -> bool { error.starts_with("from(") && error.ends_with(')') }
 
-pub fn throws_published(name: &str, errors: &[String]) -> Vec<String> {
+pub(crate) fn throws_published(name: &str, errors: &[String]) -> Vec<String> {
     let prefix = format!("from({}::", name);
     let mut out: collections::BTreeSet<String> = collections::BTreeSet::new();
     for error in errors.iter() {
@@ -206,7 +206,7 @@ pub(crate) fn fails_with_of(library: &Ledger, callee: &str) -> Vec<String> {
     contract.fails_with.copy_owned()
 }
 
-pub fn error_sets(direct: &collections::BTreeMap<String, collections::BTreeSet<String>>, calls: &collections::BTreeMap<String, collections::BTreeSet<String>>, fatal_calls: &collections::BTreeMap<String, collections::BTreeMap<String, collections::BTreeSet<String>>>, fatal: &collections::BTreeSet<String>, own: &Ledger, places: &collections::BTreeSet<String>) -> collections::BTreeMap<String, Vec<String>> {
+pub(crate) fn error_sets(direct: &collections::BTreeMap<String, collections::BTreeSet<String>>, calls: &collections::BTreeMap<String, collections::BTreeSet<String>>, fatal_calls: &collections::BTreeMap<String, collections::BTreeMap<String, collections::BTreeSet<String>>>, fatal: &collections::BTreeSet<String>, own: &Ledger, places: &collections::BTreeSet<String>) -> collections::BTreeMap<String, Vec<String>> {
     let mut sets = direct.copy_owned();
     throws_grow(&mut sets, calls, fatal_calls, fatal, own);
     let unnamed = names_nothing(&sets, own, places);
@@ -232,7 +232,7 @@ pub(crate) fn names_nothing(sets: &collections::BTreeMap<String, collections::BT
 }
 
 #[allow(clippy::too_many_arguments)]
-pub fn throws_of_unit(unit: &[String], direct: &collections::BTreeMap<String, collections::BTreeSet<String>>, calls: &collections::BTreeMap<String, collections::BTreeSet<String>>, fatal_calls: &collections::BTreeMap<String, collections::BTreeMap<String, collections::BTreeSet<String>>>, fatal: &collections::BTreeSet<String>, stored: &collections::BTreeMap<String, collections::BTreeSet<String>>, own: &Ledger, places: &collections::BTreeSet<String>) -> collections::BTreeMap<String, collections::BTreeSet<String>> {
+pub(crate) fn throws_of_unit(unit: &[String], direct: &collections::BTreeMap<String, collections::BTreeSet<String>>, calls: &collections::BTreeMap<String, collections::BTreeSet<String>>, fatal_calls: &collections::BTreeMap<String, collections::BTreeMap<String, collections::BTreeSet<String>>>, fatal: &collections::BTreeSet<String>, stored: &collections::BTreeMap<String, collections::BTreeSet<String>>, own: &Ledger, places: &collections::BTreeSet<String>) -> collections::BTreeMap<String, collections::BTreeSet<String>> {
     let mut sets: collections::BTreeMap<String, collections::BTreeSet<String>> = collections::BTreeMap::new();
     for name in unit.iter() {
         let itself: collections::BTreeSet<String> = nikaia_std::index::or(match *nikaia_std::index::get(&direct, name) {
@@ -287,7 +287,7 @@ pub(crate) fn theirs_stored(sets: &collections::BTreeMap<String, collections::BT
     theirs(stored, own, callee)
 }
 
-pub fn error_sets_callees_first(direct: &collections::BTreeMap<String, collections::BTreeSet<String>>, calls: &collections::BTreeMap<String, collections::BTreeSet<String>>, fatal_calls: &collections::BTreeMap<String, collections::BTreeMap<String, collections::BTreeSet<String>>>, fatal: &collections::BTreeSet<String>, own: &Ledger, places: &collections::BTreeSet<String>) -> collections::BTreeMap<String, Vec<String>> {
+pub(crate) fn error_sets_callees_first(direct: &collections::BTreeMap<String, collections::BTreeSet<String>>, calls: &collections::BTreeMap<String, collections::BTreeSet<String>>, fatal_calls: &collections::BTreeMap<String, collections::BTreeMap<String, collections::BTreeSet<String>>>, fatal: &collections::BTreeSet<String>, own: &Ledger, places: &collections::BTreeSet<String>) -> collections::BTreeMap<String, Vec<String>> {
     let mut stored: collections::BTreeMap<String, collections::BTreeSet<String>> = collections::BTreeMap::new();
     for unit in throws_callees_first(direct, calls, fatal_calls) {
         let column = throws_of_unit(&unit, direct, calls, fatal_calls, fatal, &stored, own, places);
@@ -306,7 +306,7 @@ pub(crate) struct ThrowsComponents {
     pub(crate) next: i64,
 }
 
-pub fn throws_callees_first(direct: &collections::BTreeMap<String, collections::BTreeSet<String>>, calls: &collections::BTreeMap<String, collections::BTreeSet<String>>, fatal_calls: &collections::BTreeMap<String, collections::BTreeMap<String, collections::BTreeSet<String>>>) -> Vec<Vec<String>> {
+pub(crate) fn throws_callees_first(direct: &collections::BTreeMap<String, collections::BTreeSet<String>>, calls: &collections::BTreeMap<String, collections::BTreeSet<String>>, fatal_calls: &collections::BTreeMap<String, collections::BTreeMap<String, collections::BTreeSet<String>>>) -> Vec<Vec<String>> {
     let mut walk = ThrowsComponents { index: collections::BTreeMap::new(), low: collections::BTreeMap::new(), open: collections::BTreeSet::new(), stack: vec![], units: vec![], next: 0 };
     for (name, _) in direct.iter() { if !walk.index.contains_key(name) { throws_connect(direct, calls, fatal_calls, name, &mut walk); } }
     walk.units

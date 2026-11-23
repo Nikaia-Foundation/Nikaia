@@ -394,6 +394,10 @@ fn check_core_type_argument(mut state: CheckState, world: ref CheckWorld, arg: r
                 }
             }
         },
+        // A type no expression spells, `id[i64?](null)` (ADR-330 D9, #1079).
+        Expr::TypeArgument(ty, _) => {
+            return check_walked_declared(state, world, ty, check_span_at(world, arg, span))
+        },
         else => {},
     }
     let at = check_span_at(world, arg, span)

@@ -276,6 +276,7 @@ pub(crate) fn check_core_type_argument(state: &mut CheckState, world: &CheckWorl
                 }
             }
         },
+        Expr::TypeArgument(ty, _) => { return check_walked_declared(state, world, ty, &check_span_at(world, arg, span)); },
         _ => { },
     }
     let at = check_span_at(world, arg, span);

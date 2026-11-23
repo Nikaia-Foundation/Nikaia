@@ -3,8 +3,11 @@
 Programs of the [Computer Language Benchmarks Game](https://benchmarksgame-team.pages.debian.net/benchmarksgame/),
 each counted against the **fastest Rust entry published there** on
 2026-11-16, not a Rust program written here, plus the `json` package against
-`serde_json`. The Rust entries are copied unchanged, with their header, the
-link to the entry and its revised BSD licence.
+`serde_json`. The one exception is k-nucleotide: its entries #7 and #6 link
+unmaintained crates (tokio-threadpool 0.1, fxhash; #2806), so it is counted
+against the fastest entry that does not, Rust #3 (2.57 s, 2.79 s and 3.28 s
+on the game's machine). The Rust entries are copied unchanged, with their
+header, the link to the entry and its revised BSD licence.
 
 ```sh
 nikaia run benches/game/game.nika             # every problem, the table below
@@ -21,7 +24,7 @@ nikaia run benches/game/game.nika -- json     # json-small, -large, -deep
 | fannkuch-redux | small arrays, permutations | [`main.nika`](fannkuch-redux/main.nika): lists, a clone per permutation | [`speed.nika`](fannkuch-redux/speed.nika): arrays of 16, no allocation | [Rust #6](fannkuch-redux/rust-6.rs), threads |
 | binary-trees | many short-lived small objects | [`main.nika`](binary-trees/main.nika): a recursive enum | none: the faster form is an arena, which Nikaia does not offer | [Rust #5](binary-trees/rust-5.rs), bumpalo arena, threads |
 | fasta | generated text, a random generator, output | [`main.nika`](fasta/main.nika): a `String` a line | [`speed.nika`](fasta/speed.nika): a letter table, `Bytes` written a block at a time | [Rust #7](fasta/rust-7.rs), held to one core |
-| k-nucleotide | hash maps keyed by short text | [`main.nika`](k-nucleotide/main.nika) | [`speed.nika`](k-nucleotide/speed.nika): two-bit codes as `u64` keys | [Rust #7](k-nucleotide/rust-7.rs), threads |
+| k-nucleotide | hash maps keyed by short text | [`main.nika`](k-nucleotide/main.nika) | [`speed.nika`](k-nucleotide/speed.nika): two-bit codes as `u64` keys | [Rust #3](k-nucleotide/rust-3.rs), threads: the fastest entry without an unmaintained crate |
 | reverse-complement | large byte buffers, table lookup | [`main.nika`](reverse-complement/main.nika): text split and rebuilt | [`speed.nika`](reverse-complement/speed.nika): in place, an `Array[u8, 256]` table | [Rust #1](reverse-complement/rust-1.rs), threads |
 | json | reading and writing JSON | [`json/tree.nika`](json/tree.nika) | none | [`serde_json`](json/rust-tree.rs), [its own README](json/README.md) |
 
@@ -60,8 +63,12 @@ By [`docs/measuring.md`](../../docs/measuring.md):
 
 ## The table
 
-Counted on 2026-11-18 with Nikaia 0.0.1431 and rustc 1.97.0 on an Intel Xeon
-at 2.10 GHz. Each row gives instructions and mispredicted branches per unit.
+Counted on 2026-11-23 with Nikaia 0.0.1557 and rustc 1.97.0 on an Intel Xeon
+at 2.10 GHz, the Rust entries built against the `Cargo.lock` of the commit
+*benches/game: k-nucleotide counted against Rust #3 (hashbrown, std threads)
+instead of #7* (898eb049c), on which `cargo audit` reports no advisory
+(#2806). `nikaia run benches/game/game.nika` on that commit prints this
+table. Each row gives instructions and mispredicted branches per unit.
 The column *off / Rust* divides the program's instructions with checks off by
 those of the Rust entry. Tokens are given once per program.
 
@@ -87,45 +94,45 @@ those of the Rust entry. Tokens are given once per program.
 | n-body | Nikaia for speed, `--cpu=x86-64-v3` | 249.5 | 0.008 | 249.5 | 0.008 | 1.27 |  |
 | spectral-norm | Rust #6, `target-cpu=ivybridge` | 20.3 | 0.001 | 10.0 | 0.001 | 1.00 | 1012 |
 | spectral-norm | Rust #6, one thread, `target-cpu=ivybridge` | 20.3 | 0.001 | 10.0 | 0.001 | 1.00 |  |
-| spectral-norm | Nikaia, `--cpu=x86-64` | 21.5 | 0.001 | 19.0 | 0.001 | 1.90 | 415 |
+| spectral-norm | Nikaia, `--cpu=x86-64` | 21.5 | 0.001 | 19.0 | 0.001 | 1.89 | 415 |
 | spectral-norm | Nikaia, `--cpu=x86-64-v3` | 19.5 | 0.001 | 14.3 | 0.001 | 1.42 |  |
 | spectral-norm | Nikaia for speed, `--cpu=x86-64` | 17.4 | 0.250 | 9.5 | 0.001 | 0.95 | 792 |
 | spectral-norm | Nikaia for speed, `--cpu=x86-64-v3` | 15.9 | 0.001 | 8.0 | 0.001 | 0.80 |  |
-| fannkuch-redux | Rust #6, `target-cpu=ivybridge` | 87.3 | 1.945 | 81.5 | 1.794 | 1.00 | 954 |
+| fannkuch-redux | Rust #6, `target-cpu=ivybridge` | 87.3 | 1.945 | 81.5 | 1.795 | 1.00 | 954 |
 | fannkuch-redux | Rust #6, one thread, `target-cpu=ivybridge` | 87.2 | 1.945 | 81.5 | 1.794 | 1.00 |  |
-| fannkuch-redux | Nikaia, `--cpu=x86-64` | 513.1 | 8.842 | 510.1 | 11.056 | 6.26 | 378 |
-| fannkuch-redux | Nikaia, `--cpu=x86-64-v3` | 514.3 | 9.130 | 511.3 | 9.304 | 6.27 |  |
-| fannkuch-redux | Nikaia for speed, `--cpu=x86-64` | 943.5 | 2.088 | 925.8 | 2.052 | 11.36 | 590 |
-| fannkuch-redux | Nikaia for speed, `--cpu=x86-64-v3` | 121.5 | 2.084 | 111.6 | 2.058 | 1.37 |  |
+| fannkuch-redux | Nikaia, `--cpu=x86-64` | 543.0 | 10.727 | 548.5 | 8.890 | 6.73 | 378 |
+| fannkuch-redux | Nikaia, `--cpu=x86-64-v3` | 546.9 | 11.227 | 549.5 | 8.890 | 6.74 |  |
+| fannkuch-redux | Nikaia for speed, `--cpu=x86-64` | 942.6 | 2.579 | 925.8 | 2.052 | 11.35 | 592 |
+| fannkuch-redux | Nikaia for speed, `--cpu=x86-64-v3` | 121.6 | 2.084 | 111.6 | 2.058 | 1.37 |  |
 | binary-trees | Rust #5, `target-cpu=ivybridge` | 49.3 | 0.577 | 43.3 | 0.471 | 1.00 | 502 |
 | binary-trees | Rust #5, one thread, `target-cpu=ivybridge` | 49.3 | 0.577 | 43.3 | 0.471 | 1.00 |  |
-| binary-trees | Nikaia, `--cpu=x86-64` | 183.0 | 1.209 | 145.8 | 1.108 | 3.37 | 237 |
+| binary-trees | Nikaia, `--cpu=x86-64` | 183.0 | 1.210 | 145.8 | 1.108 | 3.37 | 237 |
 | binary-trees | Nikaia, `--cpu=x86-64-v3` | 182.7 | 1.175 | 145.4 | 1.108 | 3.36 |  |
 | fasta | Rust entry 7, `taskset -c 0`, `target-cpu=ivybridge` | 33.3 | 0.014 | 25.7 | 0.014 | 1.00 | 1895 |
-| fasta | Nikaia, `--cpu=x86-64` | 81.4 | 1.039 | 79.3 | 1.058 | 3.08 | 633 |
-| fasta | Nikaia, `--cpu=x86-64-v3` | 80.6 | 1.063 | 77.7 | 1.029 | 3.02 |  |
-| fasta | Nikaia for speed, `--cpu=x86-64` | 27.5 | 0.015 | 20.2 | 0.016 | 0.78 | 773 |
-| fasta | Nikaia for speed, `--cpu=x86-64-v3` | 27.5 | 0.015 | 20.2 | 0.015 | 0.78 |  |
-| k-nucleotide | Rust entry 7, `target-cpu=ivybridge` | 359.5 | 0.215 | 314.3 | 0.247 | 1.00 | 1543 |
-| k-nucleotide | Nikaia, `--cpu=x86-64` | 923.7 | 0.203 | 869.1 | 0.170 | 2.76 | 509 |
-| k-nucleotide | Nikaia, `--cpu=x86-64-v3` | 953.6 | 0.162 | 822.0 | 0.174 | 2.62 |  |
-| k-nucleotide | Nikaia for speed, `--cpu=x86-64` | 349.6 | 0.167 | 295.0 | 0.174 | 0.94 | 634 |
-| k-nucleotide | Nikaia for speed, `--cpu=x86-64-v3` | 321.4 | 0.167 | 280.8 | 0.176 | 0.89 |  |
+| fasta | Nikaia, `--cpu=x86-64` | 84.3 | 1.007 | 82.0 | 1.045 | 3.19 | 633 |
+| fasta | Nikaia, `--cpu=x86-64-v3` | 83.5 | 1.028 | 80.3 | 1.096 | 3.12 |  |
+| fasta | Nikaia for speed, `--cpu=x86-64` | 27.5 | 0.015 | 20.2 | 0.015 | 0.78 | 773 |
+| fasta | Nikaia for speed, `--cpu=x86-64-v3` | 27.5 | 0.015 | 20.1 | 0.015 | 0.78 |  |
+| k-nucleotide | Rust entry 3, `target-cpu=ivybridge` | 359.2 | 0.214 | 304.7 | 0.206 | 1.00 | 1201 |
+| k-nucleotide | Nikaia, `--cpu=x86-64` | 923.7 | 0.186 | 869.2 | 0.170 | 2.85 | 509 |
+| k-nucleotide | Nikaia, `--cpu=x86-64-v3` | 953.6 | 0.162 | 822.0 | 0.174 | 2.70 |  |
+| k-nucleotide | Nikaia for speed, `--cpu=x86-64` | 349.6 | 0.167 | 295.0 | 0.174 | 0.97 | 634 |
+| k-nucleotide | Nikaia for speed, `--cpu=x86-64-v3` | 321.4 | 0.167 | 280.8 | 0.176 | 0.92 |  |
 | reverse-complement | Rust entry 1, `target-cpu=ivybridge` | 1.9 | 0.000 | 1.9 | 0.000 | 1.00 | 1966 |
 | reverse-complement | Rust entry 1, one thread, `target-cpu=ivybridge` | 1.9 | 0.000 | 1.9 | 0.000 | 1.00 |  |
-| reverse-complement | Nikaia, `--cpu=x86-64` | 45.5 | 0.069 | 40.4 | 0.069 | 20.86 | 385 |
-| reverse-complement | Nikaia, `--cpu=x86-64-v3` | 45.5 | 0.069 | 40.4 | 0.069 | 20.87 |  |
-| reverse-complement | Nikaia for speed, `--cpu=x86-64` | 10.8 | 0.020 | 10.6 | 0.020 | 5.48 | 571 |
-| reverse-complement | Nikaia for speed, `--cpu=x86-64-v3` | 10.2 | 0.020 | 10.1 | 0.020 | 5.21 |  |
-| json-small | serde_json 1 (`preserve_order`, `arbitrary_precision`), `target-cpu=x86-64` | 491.9 | 8.622 | 489.1 | 8.662 | 1.00 | 148 |
-| json-small | Nikaia, `--cpu=x86-64` | 657.1 | 11.499 | 651.1 | 11.728 | 1.33 | 55 |
-| json-small | Nikaia, `--cpu=x86-64-v3` | 658.1 | 11.555 | 650.2 | 11.593 | 1.33 |  |
-| json-large | serde_json 1 (`preserve_order`, `arbitrary_precision`), `target-cpu=x86-64` | 137.5 | 1.063 | 136.6 | 1.040 | 1.00 | 148 |
-| json-large | Nikaia, `--cpu=x86-64` | 230.4 | 2.159 | 225.2 | 2.082 | 1.65 | 55 |
-| json-large | Nikaia, `--cpu=x86-64-v3` | 229.4 | 1.995 | 224.1 | 2.334 | 1.64 |  |
-| json-deep | serde_json 1 (`preserve_order`, `arbitrary_precision`), `target-cpu=x86-64` | 387.3 | 0.899 | 382.4 | 0.900 | 1.00 | 148 |
-| json-deep | Nikaia, `--cpu=x86-64` | 748.1 | 5.381 | 739.4 | 5.595 | 1.93 | 55 |
-| json-deep | Nikaia, `--cpu=x86-64-v3` | 745.4 | 5.137 | 737.2 | 5.357 | 1.93 |  |
+| reverse-complement | Nikaia, `--cpu=x86-64` | 46.0 | 0.069 | 40.9 | 0.069 | 21.11 | 385 |
+| reverse-complement | Nikaia, `--cpu=x86-64-v3` | 46.0 | 0.069 | 40.9 | 0.069 | 21.12 |  |
+| reverse-complement | Nikaia for speed, `--cpu=x86-64` | 10.7 | 0.020 | 10.6 | 0.020 | 5.48 | 571 |
+| reverse-complement | Nikaia for speed, `--cpu=x86-64-v3` | 10.2 | 0.022 | 10.1 | 0.020 | 5.21 |  |
+| json-small | serde_json 1 (`preserve_order`, `arbitrary_precision`), `target-cpu=x86-64` | 495.2 | 8.698 | 492.8 | 8.750 | 1.00 | 148 |
+| json-small | Nikaia, `--cpu=x86-64` | 594.5 | 10.847 | 591.2 | 10.827 | 1.20 | 55 |
+| json-small | Nikaia, `--cpu=x86-64-v3` | 595.3 | 10.918 | 590.0 | 10.967 | 1.20 |  |
+| json-large | serde_json 1 (`preserve_order`, `arbitrary_precision`), `target-cpu=x86-64` | 137.4 | 1.003 | 136.6 | 1.040 | 1.00 | 148 |
+| json-large | Nikaia, `--cpu=x86-64` | 123.9 | 1.144 | 121.6 | 1.070 | 0.89 | 55 |
+| json-large | Nikaia, `--cpu=x86-64-v3` | 122.8 | 1.129 | 120.5 | 1.146 | 0.88 |  |
+| json-deep | serde_json 1 (`preserve_order`, `arbitrary_precision`), `target-cpu=x86-64` | 386.6 | 0.900 | 382.4 | 0.900 | 1.00 | 148 |
+| json-deep | Nikaia, `--cpu=x86-64` | 321.7 | 0.534 | 316.8 | 0.531 | 0.83 | 55 |
+| json-deep | Nikaia, `--cpu=x86-64-v3` | 318.3 | 0.529 | 313.7 | 0.530 | 0.82 |  |
 
 ## Where Nikaia is behind
 
@@ -145,13 +152,13 @@ figure has moved since, the paragraph says so.
   is scalar, one `divsd` an entry, where Rust #6 divides two lanes by hand.
   `i64`'s signed `/ 2` also costs a shift, an add and a shift, 3 of an entry's
   13 instructions, where Rust's `usize` costs one shift.
-* **fannkuch-redux**, 6.26x and 1.37x at `x86-64-v3`. The plain program
+* **fannkuch-redux**, 6.74x and 1.37x at `x86-64-v3`. The plain program
   costs what the same algorithm in plain Rust does (499 a permutation). The
   speed row holds the permutation in one `simd::Fixed[u8, 16]` and flips a
   prefix with one `lookup` whose indices a table picks by the first item
   (ADR-377 D10), as Rust #6's `pshufb` does (re-counted on 2026-11-22 with
   Nikaia 0.0.1545: 215.6 before). At `x86-64`, a level without SSSE3, the
-  lookup goes byte by byte and counts 11.36x.
+  lookup goes byte by byte and counts 11.35x.
 * **binary-trees**, 3.37x (re-counted on 2026-11-21 with Nikaia 0.0.1517;
   5.75x before). Each node's box is built in the task's block (ADR-327 D16,
   D17), `main`'s here, so `malloc` and `free` are no longer counted (71 % of
@@ -162,30 +169,35 @@ figure has moved since, the paragraph says so.
   Rust #5 bumps a pointer in a `bumpalo` arena and frees each tree whole,
   without a count per page. The same boxed tree in plain Rust counted 197.1
   a node when binary-trees was added, so Nikaia is now below it.
-* **fasta**, 3.08x as first written, 0.78x for speed. The plain program's
-  draw walks the cumulative probabilities and mispredicts about once a
-  letter, where the entry counts with SSE2. It also grows one `String` a line
-  and writes it line-buffered. This is the program's algorithm: when fasta
-  was added the same algorithm in plain Rust counted 84.1 against Nikaia's
-  97.3, all of the extra in `Text::push`. Since then `Text::push` is inlined
-  at the call site (#1864), and the plain row fell from 3.66x to 3.08x.
-* **k-nucleotide**, 2.76x and 0.94x. The input is the one fasta wrote for
-  the run, so both programs read it with `trusted: true` (ADR-365 D2) and
+* **fasta**, 3.12x as first written, 0.78x for speed, at `x86-64-v3`. The
+  plain program's draw walks the cumulative probabilities and mispredicts
+  about once a letter, where the entry counts with SSE2. It also grows one
+  `String` a line and writes it line-buffered. This is the program's
+  algorithm: when fasta was added the same algorithm in plain Rust counted
+  84.1 against Nikaia's 97.3, all of the extra in `Text::push`. Since then
+  `Text::push` is inlined at the call site (#1864), and the plain row fell
+  from 3.66x to 3.08x (3.19x at `x86-64` on 2026-11-23).
+* **k-nucleotide**, 2.85x and 0.97x at `x86-64`, against Rust #3 since
+  2026-11-23 (2.76x and 0.94x against #7). The input is the one fasta wrote
+  for the run, so both programs read it with `trusted: true` (ADR-365 D2) and
   their maps take the fast hash, as Rust's foldhash is; with the keyed
   SipHash-1-3 of untrusted input they counted 6.37x and 3.14x. When it was
   added, the plain program also spent 545 instructions a letter in UTF-8
-  checks of each cut of the input; it fell from 8.08x to 6.37x once a cut of
-  a text's own bytes read back as text without the check. The program for
-  speed fell from 1.12x to 0.94x when `count` refused `k < 1` as well: only
-  then is `k - 1` a valid index, and the compiler drops the bounds check on
-  each letter's read.
-* **reverse-complement**, 20.9x and 5.5x. The same two algorithms in plain
+  checks of each cut of the input; it fell from 8.08x to 6.37x once a cut of a
+  text's own bytes read back as text without the check. The program for speed
+  fell from 1.12x to 0.94x when `count` refused `k < 1` as well: only then is
+  `k - 1` a valid index, and the compiler drops the bounds check on each
+  letter's read.
+* **reverse-complement**, 21.1x and 5.5x. The same two algorithms in plain
   Rust count 39.2 and 15.3 a letter. The entry's algorithm makes the gap: it
   uses SSSE3 `pshufb` as a run-time complement table on 16 bytes at a time,
   stores them back with vector stores and finds headers with `memchr`.
   `std::simd` has neither a run-time shuffle nor a store into a buffer
   (ADR-377, section 4, undecided). The speed program also looks for `>` a
   byte at a time, since a `Vec[u8]` has no `find`.
-* **json**, 1.33x to 1.93x serde_json. The package builds the path text of
-  every value while it reads, text only an error shows. It also copies text
-  a character at a time. Both are in [json/README.md](json/README.md).
+* **json**, 1.20x serde_json on the small input, 0.89x and 0.83x on the
+  large and deep ones. The two causes the first count found, the path text
+  of every value built while reading and text copied a character at a time,
+  are gone since *json builds a value's path only when reading fails* and
+  *json reads the input's bytes in place and cuts numbers and strings from
+  it*; [json/README.md](json/README.md) has the table.

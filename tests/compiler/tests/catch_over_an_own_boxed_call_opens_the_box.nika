@@ -1,0 +1,47 @@
+// A `catch` over a call of this program's function that fails in the box
+// opens the box (ADR-280 D11, #1242): an arm names a type it holds, a
+// `throw error` passes it on as it is, and its message is read off it.
+struct Broke {}
+
+impl Error for Broke {
+    fn message(self) -> String {
+        "the task broke"
+    }
+}
+
+fn work() -> i64 throws {
+    throw Broke {}
+}
+
+fn waited() -> i64 throws {
+    let h = async(detached) fn { work() }
+    return h.join(within: 1000.millis(), on_timeout: task::OnTimeout::Cancel) catch {
+        match error {
+            task::TimedOut => 0,
+            else => throw error,
+        }
+    }
+}
+
+fn passed() -> i64 throws {
+    return waited() catch { throw error }
+}
+
+fn matched() -> i64 throws {
+    return waited() catch {
+        match error {
+            task::TimedOut => 1,
+            Broke => 7,
+            else => throw error,
+        }
+    }
+}
+
+fn main() throws {
+    println(f"{matched() catch { -1 }}")
+    let v = passed() catch {
+        println(f"main got: {error.message()}")
+        -1
+    }
+    println(f"{v}")
+}

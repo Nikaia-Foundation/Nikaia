@@ -99,7 +99,7 @@ fn cx_java_pascal(name: ref String) -> String {
 }
 
 /// The file `nikaia bind java` writes for `package`: `Wordtally.java`.
-pub fn cx_java_file(package: ref String) -> String {
+fn cx_java_file(package: ref String) -> String {
     return f"{cx_java_pascal(package.replace("-", "_"))}.java"
 }
 

@@ -48,6 +48,9 @@ pub struct BoundsAllProven {
 	pub gates: collections::BTreeMap[String, String],
 	/// What `--bounds-trace` shows (#1495), each goal's rows once.
 	pub trace: Vec[String],
+	/// **The rules the walk looked for**, found or not, with why (ADR-369
+	/// D5, `rules_report`), where `--asserts` asked for them; empty else.
+	pub rules: Vec[String],
 }
 
 /// **Every index and every operation the walks prove**, whatever a build
@@ -64,6 +67,7 @@ pub fn bounds_proven(
 	nonnegative: ref collections::BTreeSet[i64],
 	through_loops: bool,
 	trace: ref Vec[i64],
+	rules_asked: bool,
 	read: fn(ref String, ref collections::BTreeSet[String]) -> Vec[logic::SolverTerm] sync,
 	ask: fn(ref logic::TermArena, ref Vec[i64], i64) -> bool sync,
 	ask_in: fn(ref String, i64, ref logic::TermArena, ref Vec[i64], i64) -> bool sync,
@@ -80,6 +84,7 @@ pub fn bounds_proven(
 		derived: [],
 		gates: collections::BTreeMap(),
 		trace: [],
+		rules: [],
 	}
 	// What each call may change, each function's frame among it (ADR-306
 	// D17, ADR-391 D2): `tools/bounds_frame.nika`.
@@ -192,6 +197,11 @@ pub fn bounds_proven(
 	context.owner = ""
 	out.derived = derived_rows(context.around)
 	out.gates = derived_gates(context.around.derived)
+	// **Each type's rules, found or not, and why** (ADR-369 D5): only where
+	// `--asserts` asks, since it walks each type's methods once more.
+	if rules_asked {
+		out.rules = rules_report(context, program, words, ask)
+	}
 	// **A grammar's actions, walked like a function's body** (ADR-314 D1),
 	// from what each binding matched.
 	let none: Vec[FnArg] = []

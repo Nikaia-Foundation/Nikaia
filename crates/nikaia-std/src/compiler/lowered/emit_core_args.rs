@@ -1767,6 +1767,15 @@ impl EmitState {
         }
         if self.emit_call_supervised(world, walk, out, host, func, args, config, depth, flow, scope)? { return Ok(true); }
         if args.is_empty() && self.facts.placed_in_block.contains(&node_key(func)) {
+            let listed = match func {
+                Expr::Variable(name, _) => { let name = *name; emit_text(world, name) == "Vec" },
+                _ => false,
+            };
+            if listed {
+                if self.emit_call_room(world, walk, out, host, "nikaia_std::block::List::new_in", config, depth, flow, scope)? { return Ok(true); }
+                out.push("nikaia_std::block::list(nikaia_std::block::Place::Block)");
+                return Ok(true);
+            }
             if self.emit_call_room(world, walk, out, host, "nikaia_std::block::Text::new_in", config, depth, flow, scope)? { return Ok(true); }
             out.push("nikaia_std::block::Text::new_in(nikaia_std::block::Place::Block)");
             return Ok(true);
@@ -1883,6 +1892,7 @@ impl EmitState {
             for part in parts.iter() {
                 match part {
                     Expr::Variable(name, _) => { let name = *name; types.push(nikaia_std::block::Text::from(emit_text(world, name).to_string())); },
+                    Expr::TypeArgument(ty, _) => { types.push(self.emit_core_ty(world, walk, host.crossings_are_possible(), host.overlaps_user_code(), ty, &EmitLifetimes::Elided)); },
                     _ => { return Ok(false); },
                 }
             }
@@ -1898,7 +1908,7 @@ impl EmitState {
         out.push(")");
         Ok(true)
     }
-    pub(crate) fn emit_call_path_types(&self, world: &EmitWorld<'_, '_, '_, '_>, base: &Expr, index: &Expr) -> Option<String> {
+    pub(crate) fn emit_call_path_types<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, host: &H, base: &Expr, index: &Expr) -> Option<String> {
         let segments = match base {
             Expr::Path(segments, _) => segments,
             _ => return None,
@@ -1929,6 +1939,7 @@ impl EmitState {
             match part {
                 Expr::Variable(name, _) => { let name = *name; types.push(nikaia_std::block::Text::from(emit_text(world, name).to_string())); },
                 Expr::Path(named, _) => { types.push(unaliased_in(world.aliases, &emit_arg_joined(world, named))); },
+                Expr::TypeArgument(ty, _) => { types.push(self.emit_core_ty(world, walk, host.crossings_are_possible(), host.overlaps_user_code(), ty, &EmitLifetimes::Elided)); },
                 _ => { return None; },
             }
         }

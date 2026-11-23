@@ -2434,7 +2434,7 @@ pub(crate) fn check_core_place_in_block(state: &mut CheckState, world: &CheckWor
                         }
                     }
                 }
-                if names.len() == 1 && check_core_placeable_literal(value) {
+                if names.len() == 1 && (check_core_placeable_literal(value) || check_core_placeable_list_call(world, value)) {
                     let name = format!("{}", world.words.resolve(*unsafe { nikaia_std::proven::read(&names, (0) as usize) }));
                     if check_core_a_plain_list(&state, &name) && check_core_view_list_bound_once(world, block, &name) {
                         let mut local = true;
@@ -2443,7 +2443,12 @@ pub(crate) fn check_core_place_in_block(state: &mut CheckState, world: &CheckWor
                             local = check_core_stays_in_stmt(&state, world, &unsafe { nikaia_std::proven::read(&block.stmts, (later) as usize) }.node, &name);
                             later = unsafe { nikaia_std::proven::add::<i64>(later, 1) };
                         }
-                        if local { state.facts.placed_in_block.insert(node_key(value)); }
+                        if local {
+                            match value {
+                                Expr::Call { func, .. } => { let func = nikaia_std::boxed::open(func); state.facts.placed_in_block.insert(node_key(func)); },
+                                _ => { state.facts.placed_in_block.insert(node_key(value)); },
+                            }
+                        }
                     }
                 }
             },
@@ -2456,6 +2461,18 @@ pub(crate) fn check_core_place_in_block(state: &mut CheckState, world: &CheckWor
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 pub(crate) fn check_core_placeable_literal(value: &Expr) -> bool { matches!(value, Expr::ListLit { .. }) }
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn check_core_placeable_list_call(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, value: &Expr) -> bool {
+    match value {
+        Expr::Call { func, args, config, .. } => { let func = nikaia_std::boxed::open(func); args.is_empty() && config.iter().all(|option| { world.words.resolve(option.name) == "capacity" }) && match func {
+            Expr::Variable(found, _) => { let found = *found; world.words.resolve(found) == "Vec" },
+            _ => false,
+        } },
+        _ => false,
+    }
+}
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
@@ -3532,7 +3549,7 @@ pub(crate) fn check_core_names_read_in(file: &ParsedView<'_, '_, '_, '_, '_, '_,
     Some(read)
 }
 
-pub fn check_core_names_read(files: &[ParsedView<'_, '_, '_, '_, '_, '_, '_>], with_here: bool) -> CheckNamesRead {
+pub(crate) fn check_core_names_read(files: &[ParsedView<'_, '_, '_, '_, '_, '_, '_>], with_here: bool) -> CheckNamesRead {
     let mut named: collections::BTreeMap<String, i64> = collections::BTreeMap::new();
     let mut grammars: i64 = 0;
     for file in files.iter() {

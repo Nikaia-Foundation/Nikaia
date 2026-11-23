@@ -20,7 +20,7 @@ pub struct Reaches {
     pub callees: collections::BTreeSet<String>,
 }
 
-pub fn stored_reaches(field: &str, resolved: &collections::BTreeSet<String>, unresolved: bool, free: &collections::BTreeSet<String>, graph: &mut collections::BTreeMap<String, Reaches>) {
+pub(crate) fn stored_reaches(field: &str, resolved: &collections::BTreeSet<String>, unresolved: bool, free: &collections::BTreeSet<String>, graph: &mut collections::BTreeMap<String, Reaches>) {
     let mut reaches = Reaches { itself: Lock::No, callees: collections::BTreeSet::new() };
     if unresolved { reaches.itself = reaches.itself.or(&Lock::Undecided); }
     if any_in(resolved, &DOORS) || any_in(free, &MULTI) { reaches.itself = reaches.itself.or(&Lock::Holds); }
@@ -107,7 +107,7 @@ pub(crate) fn declared_types(items: &[Spanned<Item>], names: &winnow_grammar::In
     }
 }
 
-pub fn locking_of(graph: &collections::BTreeMap<String, Reaches>, declared: &collections::BTreeSet<String>, library: &Ledger, own: &Ledger) -> Locking {
+pub(crate) fn locking_of(graph: &collections::BTreeMap<String, Reaches>, declared: &collections::BTreeSet<String>, library: &Ledger, own: &Ledger) -> Locking {
     let mut itself: collections::BTreeMap<String, Lock> = collections::BTreeMap::new();
     let mut callees: collections::BTreeMap<String, collections::BTreeSet<String>> = collections::BTreeMap::new();
     for (name, reaches) in graph.iter() {
@@ -250,7 +250,7 @@ pub(crate) fn theirs_of(touches: &collections::BTreeMap<String, Lock>, stored: &
 
 pub(crate) fn nothing_stored() -> collections::BTreeMap<String, Lock> { collections::BTreeMap::new() }
 
-pub fn locks_of_unit(unit: &[String], graph: &collections::BTreeMap<String, Reaches>, stored: &collections::BTreeMap<String, Lock>, declared: &collections::BTreeSet<String>, library: &Ledger) -> collections::BTreeMap<String, Lock> {
+pub(crate) fn locks_of_unit(unit: &[String], graph: &collections::BTreeMap<String, Reaches>, stored: &collections::BTreeMap<String, Lock>, declared: &collections::BTreeSet<String>, library: &Ledger) -> collections::BTreeMap<String, Lock> {
     let mut touches: collections::BTreeMap<String, Lock> = collections::BTreeMap::new();
     for name in unit.iter() {
         let itself = nikaia_std::index::or(match (*nikaia_std::index::get(&graph, name)).as_ref().map(|__nikaia_it| &__nikaia_it.itself) {
@@ -281,7 +281,7 @@ pub fn locks_of_unit(unit: &[String], graph: &collections::BTreeMap<String, Reac
     touches
 }
 
-pub fn locking_callees_first(graph: &collections::BTreeMap<String, Reaches>, declared: &collections::BTreeSet<String>, library: &Ledger, own: &Ledger) -> Locking {
+pub(crate) fn locking_callees_first(graph: &collections::BTreeMap<String, Reaches>, declared: &collections::BTreeSet<String>, library: &Ledger, own: &Ledger) -> Locking {
     let mut stored: collections::BTreeMap<String, Lock> = collections::BTreeMap::new();
     for unit in callees_first(graph, library) {
         let column = locks_of_unit(&unit, graph, &stored, declared, library);
@@ -308,7 +308,7 @@ pub(crate) struct Components {
     pub(crate) next: i64,
 }
 
-pub fn callees_first(graph: &collections::BTreeMap<String, Reaches>, library: &Ledger) -> Vec<Vec<String>> {
+pub(crate) fn callees_first(graph: &collections::BTreeMap<String, Reaches>, library: &Ledger) -> Vec<Vec<String>> {
     let mut walk = Components { index: collections::BTreeMap::new(), low: collections::BTreeMap::new(), open: collections::BTreeSet::new(), stack: vec![], units: vec![], next: 0 };
     for (name, _) in graph.iter() { if !walk.index.contains_key(name) { connect(graph, library, name, &mut walk); } }
     walk.units

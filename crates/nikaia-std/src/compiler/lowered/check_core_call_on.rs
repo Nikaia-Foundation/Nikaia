@@ -497,7 +497,7 @@ pub(crate) fn check_core_call_on_now_expected(state: &CheckState, world: &CheckW
     let mut at: i64 = 0;
     for ty in expected.iter() {
         let unsaid = matches!(ty, Ty::Unknown | Ty::Var { .. });
-        if unsaid && !(*nikaia_std::index::get(&parts, (from + at) as usize)).is_unknown() { out.push((*nikaia_std::index::get(&parts, (from + at) as usize)).clone()); } else { out.push(ty.clone()); }
+        if unsaid && !(*unsafe { nikaia_std::proven::read(&parts, (nikaia_std::proven::add::<i64>(from, at)) as usize) }).is_unknown() { out.push((*unsafe { nikaia_std::proven::read(&parts, (nikaia_std::proven::add::<i64>(from, at)) as usize) }).clone()); } else { out.push(ty.clone()); }
         at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
     }
     out

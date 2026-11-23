@@ -151,7 +151,7 @@ pub(crate) enum Root {
 
 pub fn views_stored(asked: &Asked<'_, '_, '_>, items: &[Spanned<Item>], own_buffer: &mut impl FnMut(&Expr) -> bool) -> Vec<Stored> { views_stored_in(asked, &result_package(asked), items, &mut *own_buffer) }
 
-pub fn views_stored_in(asked: &Asked<'_, '_, '_>, package: &ResultPackage, items: &[Spanned<Item>], own_buffer: &mut impl FnMut(&Expr) -> bool) -> Vec<Stored> {
+pub(crate) fn views_stored_in(asked: &Asked<'_, '_, '_>, package: &ResultPackage, items: &[Spanned<Item>], own_buffer: &mut impl FnMut(&Expr) -> bool) -> Vec<Stored> {
     let mut unit = plain_unit(package, borrowing_types(asked.names, items), view_fields(asked.names, items));
     method_table(asked, items, &mut unit);
     let mut round: Vec<Stored> = vec![];
@@ -1192,6 +1192,7 @@ pub(crate) fn mentions(unit: &Unit, asked: &Asked<'_, '_, '_>, here: &Here, node
         Expr::LitChar(_, _) => false,
         Expr::LitBool(_, _) => false,
         Expr::LitNull(_) => false,
+        Expr::TypeArgument(_, _) => false,
     }
 }
 
@@ -1373,6 +1374,7 @@ pub(crate) fn descend(unit: &Unit, asked: &Asked<'_, '_, '_>, node: &Expr, span:
         Expr::LitChar(_, _) => { },
         Expr::LitBool(_, _) => { },
         Expr::LitNull(_) => { },
+        Expr::TypeArgument(_, _) => { },
     }
 }
 
@@ -1711,6 +1713,7 @@ pub(crate) fn rsrc_eval_node(unit: &Unit, asked: &Asked<'_, '_, '_>, here: &Here
         Expr::LitChar(_, _) => rsrc_none(),
         Expr::LitBool(_, _) => rsrc_none(),
         Expr::LitNull(_) => rsrc_none(),
+        Expr::TypeArgument(_, _) => rsrc_none(),
     }
 }
 
@@ -2416,7 +2419,7 @@ pub(crate) fn rsrc_function(unit: &Unit, asked: &Asked<'_, '_, '_>, subject: Opt
             declared.reserve(args.iter().size_hint().0); for arg in args.iter() {
                 declared.push((arg.name, arg.ty.clone()));
                 if rsrc_a_source(unit, asked, arg, (own_contract).as_ref(), position) { sources.push(nikaia_std::block::Text::from(asked.names.resolve(arg.name).to_string())); }
-                position += 1;
+                position = unsafe { nikaia_std::proven::add::<i64>(position, 1) };
             }
             declared.reserve(config.iter().size_hint().0); for option in config.iter() {
                 declared.push((option.name, option.ty.clone()));
@@ -2729,7 +2732,7 @@ pub(crate) fn places_of(unit: &Unit, asked: &Asked<'_, '_, '_>, subject: Option<
             for arg in args.iter() {
                 let named = nikaia_std::block::Text::from(asked.names.resolve(arg.name).to_string());
                 if arg.mutable && (*arg.ty.code).is_none() && !rsrc_scalar(asked, &arg.ty) && rsrc_type_holds_view(asked, &arg.ty) { places.insert(nikaia_std::block::Text::from(named.to_string())); } else if !arg.mutable && (*arg.ty.code).is_none() && (rsrc_plain_text(asked, &arg.ty) || arg.ty.is_view) && (arg.ty.is_view || rsrc_lent(asked, (own_contract).as_ref(), position)) { sources.push(nikaia_std::block::Text::from(named.to_string())); }
-                position += 1;
+                position = unsafe { nikaia_std::proven::add::<i64>(position, 1) };
             }
             if places.is_empty() || sources.is_empty() { return; }
             let mut declared: Vec<(winnow_grammar::Symbol, Type)> = vec![];
