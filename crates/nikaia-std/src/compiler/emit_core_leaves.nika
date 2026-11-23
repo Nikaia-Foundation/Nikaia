@@ -728,10 +728,19 @@ impl EmitState {
             return
         }
         // A sequential entry rule: the parser is driven over the whole input once.
+        // **An input made in the call is kept beside it** (Part II 10.6,
+        // #2496): what the entry hands back may view it.
+        let keep = if made_in_the_call(input) { self.argument_keep(walk, scope.function, flow.statement, f"{name}::{rule_name}", 0) ?? "" } else { "" }
         match table {
             null => {
-                out.push(f"nikaia_std::grammar::parse{over}(&*")
-                self.emit_expr(world, walk, out, host, input, depth, flow, scope)
+                if keep != "" {
+                    out.push(f"nikaia_std::grammar::parse{over}(&**({keep}).put(")
+                    self.emit_expr(world, walk, out, host, input, depth, flow, scope)
+                    out.push(")")
+                } else {
+                    out.push(f"nikaia_std::grammar::parse{over}(&*")
+                    self.emit_expr(world, walk, out, host, input, depth, flow, scope)
+                }
             },
             words => {
                 out.push(f"nikaia_std::grammar::parse{over}_in(&*")

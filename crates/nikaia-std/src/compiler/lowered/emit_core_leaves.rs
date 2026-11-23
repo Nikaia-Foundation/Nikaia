@@ -523,10 +523,17 @@ impl EmitState {
             out.push(&format!("{}", question));
             return Ok(());
         }
+        let keep = if made_in_the_call(input) { nikaia_std::index::or(self.argument_keep(&walk, &scope.function, flow.statement, &format!("{}::{}", name, rule_name), 0), || "".into()) } else { String::from("") };
         match table {
             None => {
-                out.push(&format!("nikaia_std::grammar::parse{}(&*", over));
-                self.emit_expr(world, walk, out, host, input, depth, flow, scope)?;
+                if keep != "" {
+                    out.push(&format!("nikaia_std::grammar::parse{}(&**({}).put(", over, keep));
+                    self.emit_expr(world, walk, out, host, input, depth, flow, scope)?;
+                    out.push(")");
+                } else {
+                    out.push(&format!("nikaia_std::grammar::parse{}(&*", over));
+                    self.emit_expr(world, walk, out, host, input, depth, flow, scope)?;
+                }
             },
             Some(ref words) => {
                 out.push(&format!("nikaia_std::grammar::parse{}_in(&*", over));

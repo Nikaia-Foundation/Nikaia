@@ -1503,7 +1503,8 @@ pub(crate) fn made_arguments(contract: &FnContract, named: &str, args: &[Expr], 
     if !a_result_of_views(result, ask) { return; }
     let copying: Vec<&Ledger> = vec![ask.own, ask.library];
     for k in 0..args.len() as i64 {
-        if !made_in_the_call(unsafe { nikaia_std::proven::read(&args, (k) as usize) }) || !lends_in(contract, k, &copying) || buffers_view_call(unsafe { nikaia_std::proven::read(&args, (k) as usize) }, ask, &mut *unaliased) { continue; }
+        let lent = lends_in(contract, k, &copying) || k == 0 && a_grammar_entry_input(contract);
+        if !made_in_the_call(unsafe { nikaia_std::proven::read(&args, (k) as usize) }) || !lent || buffers_view_call(unsafe { nikaia_std::proven::read(&args, (k) as usize) }, ask, &mut *unaliased) { continue; }
         let id = (walk.statement, format!("{}#{}", named, k));
         if !walk.sources.contains_key(&id) {
             let source = Source::Argument { at: walk.statement, callee: nikaia_std::block::Text::from(named.to_string()), index: k, span: Span { start: u32::try_from(walk.statement).unwrap_or_else(|_| panic!("the value does not fit in an `u32`")), end: u32::try_from(walk.statement).unwrap_or_else(|_| panic!("the value does not fit in an `u32`")) } };
@@ -1511,6 +1512,12 @@ pub(crate) fn made_arguments(contract: &FnContract, named: &str, args: &[Expr], 
         }
         out.insert(id);
     }
+}
+
+pub(crate) fn a_grammar_entry_input(contract: &FnContract) -> bool {
+    if contract.fails_with.len() != 1 || *unsafe { nikaia_std::proven::read(&contract.fails_with, (0) as usize) } != "ParseError" { return false; }
+    let signature = match contract.signature.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return false };
+    !signature.params.is_empty() && unsafe { nikaia_std::proven::read(&signature.params, (0) as usize) }.0 == "input"
 }
 
 pub(crate) fn stored_arguments(contract: &FnContract, named: &str, args: &[Expr], ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_, '_, '_, '_>, unaliased: &mut impl FnMut(&str) -> String, walk: &mut BufferWalk) {

@@ -2034,7 +2034,8 @@ fn made_arguments(contract: ref FnContract, named: ref String, args: ref Vec[Exp
     }
     let copying: Vec[ref Ledger] = [ask.own, ask.library]
     for k in 0..<args.len() {
-        if !made_in_the_call(args[k]) || !lends_in(contract, k, copying) || buffers_view_call(args[k], ask, unaliased) {
+        let lent = lends_in(contract, k, copying) || (k == 0 && a_grammar_entry_input(contract))
+        if !made_in_the_call(args[k]) || !lent || buffers_view_call(args[k], ask, unaliased) {
             continue
         }
         let id = (walk.statement, f"{named}#{k}")
@@ -2044,6 +2045,18 @@ fn made_arguments(contract: ref FnContract, named: ref String, args: ref Vec[Exp
         }
         out.insert(id)
     }
+}
+
+/// **A grammar entry's input is lent** (Part II 10.6, #2496): the parse
+/// reads it in place, and what the entry hands back may view it, so an input
+/// made in the call - `J::read[Line](Bytes(…))` - is kept beside the call.
+/// Its type is `String` or `Bytes`, written `?` in the contract.
+fn a_grammar_entry_input(contract: ref FnContract) -> bool {
+    if contract.fails_with.len() != 1 || contract.fails_with[0] != "ParseError" {
+        return false
+    }
+    let signature = contract.signature ?? return false
+    return signature.params.len() >= 1 && signature.params[0].0 == "input"
 }
 
 // **An argument made in the call whose view the callee keeps in another
