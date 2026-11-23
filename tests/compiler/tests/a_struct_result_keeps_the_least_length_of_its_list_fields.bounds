@@ -1,0 +1,9 @@
+bounds in tests/a_struct_result_keeps_the_least_length_of_its_list_fields.nika: 6 indexes, 4 proved; 0 operations, 0 proved
+    52  s.xs[1]  proved
+    57  s.xs[0]  proved
+    59  t.xs[0]  proved
+    61  u.xs[1]  proved
+    63  v.xs[0]  checked: no fact bounds what it reads - a counter, a loop, a length, or one list as long as another (#432, #383, #388)
+    67  w.xs[0]  checked: no fact bounds what it reads - a counter, a loop, a length, or one list as long as another (#432, #383, #388)
+  derived  maybe: 0 <= a, proved at the calls on lines 62
+  derived  split: 0 <= a, proved at the calls on lines 51

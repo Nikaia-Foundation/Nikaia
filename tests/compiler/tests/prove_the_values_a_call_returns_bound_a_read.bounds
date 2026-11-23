@@ -1,8 +1,8 @@
-bounds in tests/prove_the_values_a_call_returns_bound_a_read.nika: 8 indexes, 5 proved; 6 operations, 4 proved
+bounds in tests/prove_the_values_a_call_returns_bound_a_read.nika: 8 indexes, 6 proved; 6 operations, 4 proved
     22  c[k]                proved
     34  n - 1               proved
     48  n - 1               proved
-    49  out[out.len() - 1]  checked: no fact bounds what it reads - a counter, a loop, a length, or one list as long as another (#432, #383, #388)
+    49  out[out.len() - 1]  proved
     49  out.len() - 1       proved
     50  last + 1            checked: a value read out of a list, of which the walk knows no fact (#797, #798): an element of a call's result (ADR-306 D24)
     66  ten[d]              proved

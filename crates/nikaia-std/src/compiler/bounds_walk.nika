@@ -179,6 +179,27 @@ pub struct BoundsReturns {
 	/// return that builds the struct by a literal; empty for the result
 	/// itself.
 	pub projected: String,
+	/// **The least length of what it hands back** (ADR-306 D23, D35): of a list
+	/// it returns (`""`) or of each list field of a struct it returns, the
+	/// whole number every return was proved to reach, at least 1 (`[a]`, a
+	/// list pushed into before it is handed back). A `return null` of a
+	/// nullable result hands back no value and bounds nothing.
+	pub floors: collections::BTreeMap[String, i64],
+}
+
+/// **The floor a length is first asked** (ADR-306 D23, D35): two, the pair of
+/// literals a split hands back; a return that reaches less is asked 1.
+fn floors_most() -> i64 {
+	return 2
+}
+
+/// The floors a function returning `measures` is asked first.
+fn bounding_floors_asked(measures: ref Vec[String]) -> collections::BTreeMap[String, i64] {
+	let mut out: collections::BTreeMap[String, i64] = collections::BTreeMap()
+	for m in measures {
+		out.insert(m.clone(), floors_most())
+	}
+	return out
 }
 
 /// **What a callee's ledger entry ensures** (ADR-314 D3): each condition read
@@ -493,6 +514,12 @@ struct BoundsWalk {
 	return_reaches: collections::BTreeMap[String, collections::BTreeSet[i64]]?,
 	return_alike: collections::BTreeSet[String]?,
 	return_measured: collections::BTreeSet[i64],
+	/// **The least length of what is handed back looked for** (ADR-306
+	/// D23, D35): by measure, the floor asked; the floor every return seen was
+	/// proved to reach (`null` before the first), and the returns seen.
+	return_floors_wanted: collections::BTreeMap[String, i64],
+	return_floors: collections::BTreeMap[String, i64]?,
+	return_floored: collections::BTreeSet[i64],
 	/// The parameters a walk of found lengths takes at zero or more
 	/// (`BoundsReturns.guards`).
 	return_assumed: Vec[String],
@@ -959,6 +986,9 @@ fn bounding_new(
 		return_reaches: null,
 		return_alike: null,
 		return_measured: collections::BTreeSet(),
+		return_floors_wanted: collections::BTreeMap(),
+		return_floors: null,
+		return_floored: collections::BTreeSet(),
 		return_assumed: [],
 		return_field: "",
 		found_at: -1,
@@ -1041,6 +1071,8 @@ fn bounding_pass(
 	walk.return_reaches = null
 	walk.return_alike = null
 	walk.return_measured.clear()
+	walk.return_floors = null
+	walk.return_floored.clear()
 	let mut facts = BoundsFacts { ints: collections::BTreeSet(), facts: [], evicted: 0 }
 	for arg in args {
 		let name = words.resolve(arg.name).clone()
@@ -11568,6 +11600,7 @@ fn bounds_returns(
 						listed: collections::BTreeSet(),
 						alike: collections::BTreeSet(),
 						guards: collections::BTreeSet(),
+						floors: bounding_floors_asked(measures),
 						projected: "",
 					}
 					if kind == null {
@@ -11602,6 +11635,7 @@ fn bounds_returns(
 						listed: collections::BTreeSet(),
 						alike: collections::BTreeSet(),
 						guards: collections::BTreeSet(),
+						floors: collections::BTreeMap(),
 						projected: projected.clone(),
 					})
 					bodies.push(item)
@@ -11678,6 +11712,7 @@ fn bounds_returns(
 									listed: collections::BTreeSet(),
 									alike: collections::BTreeSet(),
 									guards: collections::BTreeSet(),
+									floors: bounding_floors_asked(measures),
 									projected: "",
 								}
 								if kind == null {
@@ -11712,6 +11747,7 @@ fn bounds_returns(
 									listed: collections::BTreeSet(),
 									alike: collections::BTreeSet(),
 									guards: collections::BTreeSet(),
+									floors: collections::BTreeMap(),
 									projected: projected.clone(),
 								})
 								bodies.push(method)
@@ -11818,6 +11854,7 @@ struct ReturnsWalked {
 	at_least: collections::BTreeSet[i64],
 	within: collections::BTreeSet[i64],
 	under: collections::BTreeSet[i64],
+	floors: collections::BTreeMap[String, i64],
 }
 
 /// **What the walk that measures a body's lengths found** (#1756, #2464),
@@ -11901,6 +11938,7 @@ fn bounding_returns_round(
 				walk.return_each = wanted.each && wanted.plain
 				walk.return_ranging = !wanted.each && wanted.plain
 				walk.return_field = wanted.projected.clone()
+				walk.return_floors_wanted = wanted.floors.clone()
 				// **The relations looked for** (D31), of a parameter the body
 				// does not bind again and a list whose length it keeps.
 				for k in 0..<args.len() {
@@ -11970,6 +12008,12 @@ fn bounding_returns_round(
 					}
 					let related = !wanted.each && !walk.return_lost
 						&& !seek_block(body, Seek::Unvisited(walk.return_seen.clone()), words)
+					// **The least lengths** (ADR-306 D23, D35): every return
+					// handed back a value proved to reach them.
+					let mut floors_seen: collections::BTreeMap[String, i64] = collections::BTreeMap()
+					if !seek_block(body, Seek::Unvisited(walk.return_floored.clone()), words) {
+						floors_seen = walk.return_floors?.clone() ?? collections::BTreeMap()
+					}
 					let made = ReturnsWalked {
 						asked: asked,
 						reads: reads.clone(),
@@ -11981,6 +12025,7 @@ fn bounding_returns_round(
 						at_least: walk.return_at_least?.clone() ?? collections::BTreeSet(),
 						within: walk.return_within?.clone() ?? collections::BTreeSet(),
 						under: walk.return_under?.clone() ?? collections::BTreeSet(),
+						floors: floors_seen,
 					}
 					if fresh {
 						walked.insert(key.clone(), made.clone())
@@ -11998,6 +12043,7 @@ fn bounding_returns_round(
 						}
 					}
 				}
+				let floors = last.floors.clone()
 				let mut range = last.range?.clone()
 				let mut at_least: collections::BTreeSet[i64] = collections::BTreeSet()
 				let mut within: collections::BTreeSet[i64] = collections::BTreeSet()
@@ -12084,7 +12130,7 @@ fn bounding_returns_round(
 					guards = got.guards.clone()
 				}
 				if !held.is_empty() || range != null || !at_least.is_empty() || !within.is_empty()
-					|| !lengths.is_empty() || !reaches.is_empty() || !alike.is_empty() {
+					|| !lengths.is_empty() || !reaches.is_empty() || !alike.is_empty() || !floors.is_empty() {
 					found.insert(key.clone(), BoundsReturns {
 						each: wanted.each,
 						below: held,
@@ -12102,6 +12148,7 @@ fn bounding_returns_round(
 						listed: wanted.listed.clone(),
 						alike: alike,
 						guards: guards,
+						floors: floors,
 						projected: wanted.projected.clone(),
 					})
 				}
@@ -12193,6 +12240,9 @@ fn bounding_returns_count(returns: ref collections::BTreeMap[String, BoundsRetur
 		if found.range != null {
 			out += 1
 		}
+		for (_m, floor) in found.floors {
+			out += floor
+		}
 	}
 	return out
 }
@@ -12217,9 +12267,11 @@ fn bounding_returned(
 	// **A `return null` of a nullable result** (#1758) hands back no
 	// value, so it bounds nothing the found facts say of one.
 	if bounding_null_returned(returned) {
+		walk.return_floored.insert(node_key(returned ?? return))
 		walk.return_seen.insert(node_key(returned ?? return))
 		return
 	}
+	bounding_return_floors(walk, facts, returned, context, program, words, ask)
 	bounding_return_lengths(walk, facts, returned, context, program, words, ask)
 	if !walk.return_field.is_empty() {
 		// **One field of the struct handed back** (ADR-306 D35): its value
@@ -12342,10 +12394,13 @@ fn bounding_returns_measures(
 	fields: ref collections::BTreeMap[String, Vec[String]],
 	words: ref winnow_grammar::InternerContext,
 ) -> Vec[String] {
-	if ty.is_nullable || ty.is_tuple {
+	if ty.is_tuple {
 		return []
 	}
 	if bounding_is_list_type(ty, words) {
+		if ty.is_nullable {
+			return []
+		}
 		return [""]
 	}
 	if !ty.generics.is_empty() {
@@ -12526,6 +12581,72 @@ fn bounding_return_lengths(
 	walk.return_alike = alike
 }
 
+/// **A return, against the least lengths the walk looks for** (ADR-306
+/// D23, D35): the length of the list handed back, or of each list field of
+/// the struct, proved at least the floor asked, else at least 1; the least
+/// kept over every return. A value read by a path is asked by its path; any
+/// other one as `result#`, with what its literal builds, as
+/// [`bounding_return_lengths`] asks.
+fn bounding_return_floors(
+	mut walk: BoundsWalk,
+	facts: ref BoundsFacts,
+	returned: ref Expr?,
+	context: ref BoundsContext,
+	program: ref Program,
+	words: ref winnow_grammar::InternerContext,
+	ask: fn(ref logic::TermArena, ref Vec[i64], i64) -> bool sync,
+) {
+	if walk.return_floors_wanted.is_empty() {
+		return
+	}
+	let value = returned ?? {
+		walk.return_floors = collections::BTreeMap()
+		return
+	}
+	walk.return_floored.insert(node_key(value))
+	let mut given = facts.clone()
+	let mut base = path_of(value, words) ?? ""
+	if base.is_empty() {
+		base = "result#"
+		let measured = bounding_measured(walk, facts, base, base, value, context, program, words)
+		bounding_forget(walk, given, base)
+		bounding_built(walk, given, base, value, words)
+		for fact in measured {
+			bounding_push(walk, given, fact)
+		}
+	}
+	let before = walk.return_floors?.clone()
+	let mut now: collections::BTreeMap[String, i64] = collections::BTreeMap()
+	for (m, asked) in walk.return_floors_wanted.clone() {
+		let mut floor = asked
+		if before != null {
+			floor = before?.get(m)?.clone() ?? 0
+		}
+		let mut path = if m.is_empty() { base.clone() } else { f"{base}.{m}" }
+		// A field the literal hands a list read by a path (`S { xs: xs }`)
+		// is as long as that list.
+		if !m.is_empty() {
+			match bounding_field_built(value, m, words) {
+				null => {},
+				given => {
+					path = path_of(given, words) ?? path
+				},
+			}
+		}
+		let len = bounding_length_named(walk, path, false)
+		while floor >= 1 {
+			let least = walk.arena.int(floor)
+			let goal = walk.arena.ge(len, least)
+			if bounding_proves(walk, given, goal, ask) {
+				now.insert(m.clone(), floor)
+				break
+			}
+			floor = if floor > 1 { 1 } else { 0 }
+		}
+	}
+	walk.return_floors = now
+}
+
 /// The names both sets hold.
 fn bounding_kept_names(before: ref collections::BTreeSet[String], now: ref collections::BTreeSet[String]) -> collections::BTreeSet[String] {
 	let mut kept: collections::BTreeSet[String] = collections::BTreeSet()
@@ -12555,6 +12676,15 @@ fn bounding_measured(
 ) -> Vec[i64] {
 	let mut out: Vec[i64] = []
 	match value {
+		// **A call's result taken out of its option** (`f(x) ?? return`): what
+		// every value it hands back holds (ADR-306 D23, D35).
+		Expr::Coalesce { .. } => {
+			let inner = bounding_unwrapped(value)
+			if node_key(inner) == node_key(value) {
+				return out
+			}
+			return bounding_measured(walk, facts, root, name, inner, context, program, words)
+		},
 		Expr::StructLit { fields, .. } => {
 			for field in fields {
 				let given = field.value ?? continue
@@ -12577,6 +12707,14 @@ fn bounding_measured(
 	let found = context.returns.get(callee) ?? return out
 	if found.pending {
 		return out
+	}
+	// **Its least lengths** (ADR-306 D23, D35), found with no argument
+	// assumed.
+	for (m, floor) in found.floors {
+		let path = if m.is_empty() { name.clone() } else { f"{name}.{m}" }
+		let len = bounding_length_named(walk, path, false)
+		let least = walk.arena.int(floor)
+		out.push(walk.arena.ge(len, least))
 	}
 	// Each holds where every guarded argument is zero or more.
 	let mut below: Vec[i64] = []

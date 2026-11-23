@@ -1,0 +1,68 @@
+/// A struct result keeps the least length of its list fields (ADR-306
+/// D23, D35): `one` builds `S { xs: [a] }`, `pushed` pushes once before
+/// handing back, `pair` builds two literals and `split` returns null or a
+/// pair, so the caller's reads below those lengths are proved; `maybe` may
+/// hand back `S { xs: [] }`, so its caller's `s.xs[0]` stays checked.
+struct S { xs: Vec[i64] }
+
+struct Book { atoms: Vec[i64] }
+
+impl Book {
+	fn split(mut self, a: i64) -> S? sync {
+		if a < 0 {
+			return null
+		}
+		self.atoms.push(a)
+		return S { xs: [a, a] }
+	}
+
+	fn learn(mut self, a: i64) -> S sync {
+		let mut xs: Vec[i64] = [0]
+		for k in 0..<a {
+			xs.push(k)
+		}
+		self.atoms.push(a)
+		return S { xs: xs }
+	}
+}
+
+fn one(a: i64) -> S sync {
+	return S { xs: [a] }
+}
+
+fn pushed(a: i64) -> S sync {
+	let mut xs: Vec[i64] = []
+	xs.push(a)
+	return S { xs: xs }
+}
+
+fn pair(a: i64) -> S sync {
+	return S { xs: [a, 2] }
+}
+
+fn maybe(a: i64) -> S sync {
+	if a > 1 {
+		return S { xs: [] }
+	}
+	return S { xs: [a] }
+}
+
+fn first(mut b: Book) -> i64? sync {
+	let s = b.split(3) ?? return null
+	return s.xs[1]
+}
+
+fn main() throws {
+	let s = one(1)
+	println(s.xs[0])
+	let t = pushed(2)
+	println(t.xs[0])
+	let u = pair(3)
+	println(u.xs[1])
+	let v = maybe(1)
+	println(v.xs[0])
+	let mut b = Book { atoms: [] }
+	println(first(b) ?? 0)
+	let w = b.learn(2)
+	println(w.xs[0])
+}

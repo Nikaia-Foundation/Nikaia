@@ -2,8 +2,9 @@
 /// is not empty (#1832): every caller hands `last` and `first` a list it
 /// knows holds something, so `xs[xs.len() - 1]` and `xs[0]` need no check,
 /// also through a path of fields (`body.stmts`, as `check_function.nika`
-/// reads it). `top`'s caller hands a list a call made, of which it knows
-/// nothing, and its read stays checked.
+/// reads it). `top`'s caller hands a list a call made: `made` returns a
+/// list of one item, a length its callers keep (#2782), so its read needs
+/// no check either.
 struct Body {
 	stmts: Vec[i64],
 }

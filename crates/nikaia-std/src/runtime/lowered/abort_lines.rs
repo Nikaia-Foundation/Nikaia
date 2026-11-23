@@ -30,7 +30,7 @@ pub(crate) fn __nikaia_test_1() -> Result<(), std::boxed::Box<dyn std::error::Er
     let table = sites();
     let found = lookup(&table, 24, &mut |site| { site.0 });
     if !(nikaia_std::index::or(found, || -1) == 1) { nikaia_std::abort::assertion_failed("assert((found ?? -1) == 1)", None, &[("found ?? -1", (&&nikaia_std::abort::Operand(&(nikaia_std::index::or(found, || -1)))).shown()), ]) };
-    if !(nikaia_std::index::get(&table, 1).1 == "src/parse.nika") { nikaia_std::abort::assertion_failed("assert(table[1].1 == \"src/parse.nika\")", None, &[("table[1].1", (&&nikaia_std::abort::Operand(&(nikaia_std::index::get(&table, 1).1))).shown()), ]) };
+    if !(unsafe { nikaia_std::proven::read(&table, (1) as usize) }.1 == "src/parse.nika") { nikaia_std::abort::assertion_failed("assert(table[1].1 == \"src/parse.nika\")", None, &[("table[1].1", (&&nikaia_std::abort::Operand(&(unsafe { nikaia_std::proven::read(&table, (1) as usize) }.1))).shown()), ]) };
     if !(unsafe { nikaia_std::proven::read(&table, (1) as usize) }.2 == 41) { nikaia_std::abort::assertion_failed("assert(table[1].2 == 41)", None, &[("table[1].2", (&&nikaia_std::abort::Operand(&(unsafe { nikaia_std::proven::read(&table, (1) as usize) }.2))).shown()), ]) };
     Ok(())
 }

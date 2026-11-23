@@ -1124,7 +1124,7 @@ pub(crate) fn check_core_call_on_described<H: CheckHost>(state: &mut CheckState,
             let mut taken: Vec<bool> = vec![];
             for index in 0..2 {
                 let part = unsafe { nikaia_std::proven::read(&parts, (index) as usize) };
-                let open = *nikaia_std::index::get(&opens, (index) as usize) >= 0;
+                let open = *unsafe { nikaia_std::proven::read(&opens, (index) as usize) } >= 0;
                 let copies = open || !part.is_unknown() && !part.is_a_view() && !moves(part);
                 taken.push(copies);
                 if open { state.flow.open_params.insert(nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&names, (index) as usize) }).to_string()), *unsafe { nikaia_std::proven::read(&opens, (index) as usize) }); }

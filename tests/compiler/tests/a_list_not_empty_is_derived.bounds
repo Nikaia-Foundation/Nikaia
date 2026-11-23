@@ -1,10 +1,11 @@
-bounds in tests/a_list_not_empty_is_derived.nika: 4 indexes, 3 proved; 2 operations, 2 proved
-    12  xs[xs.len() - 1]                  proved
-    12  xs.len() - 1                      proved
-    16  xs[0]                             proved
-    20  body.stmts[body.stmts.len() - 1]  proved
-    20  body.stmts.len() - 1              proved
-    24  xs[0]                             checked: no fact bounds what it reads - a counter, a loop, a length, or one list as long as another (#432, #383, #388)
-  derived  first: 0 < xs.len(), proved at the calls on lines 34
-  derived  last: 0 < xs.len(), proved at the calls on lines 34
-  derived  tail: 0 < body.stmts.len(), proved at the calls on lines 38
+bounds in tests/a_list_not_empty_is_derived.nika: 4 indexes, 4 proved; 2 operations, 2 proved
+    13  xs[xs.len() - 1]                  proved
+    13  xs.len() - 1                      proved
+    17  xs[0]                             proved
+    21  body.stmts[body.stmts.len() - 1]  proved
+    21  body.stmts.len() - 1              proved
+    25  xs[0]                             proved
+  derived  first: 0 < xs.len(), proved at the calls on lines 35
+  derived  last: 0 < xs.len(), proved at the calls on lines 35
+  derived  tail: 0 < body.stmts.len(), proved at the calls on lines 39
+  derived  top: 0 < xs.len(), proved at the calls on lines 42
