@@ -104,11 +104,13 @@ fn emit_flow_never_returns(world: ref EmitWorld, node: ref Expr) -> bool {
 }
 
 /// Whether the fallback of a `??` is a struct written out or a `bool`: the type
-/// already, whatever the option holds.
+/// already, whatever the option holds. So is a `??` whose own fallback is
+/// one: `a ?? b ?? false` is a `bool` whichever side answers.
 fn emit_flow_a_struct_written(node: ref Expr) -> bool {
     return match node {
         Expr::StructLit { .. } => true,
         Expr::LitBool(_, _) => true,
+        Expr::Coalesce { fallback, .. } => emit_flow_a_struct_written(fallback),
         else => false,
     }
 }
@@ -1175,7 +1177,7 @@ impl EmitState {
             },
             else => {},
         }
-        let nested = !joined && !fallback && self.emit_catch_nests_a_failure(world, guarded_expr)
+        let nested = !joined && !fallback && (self.emit_catch_nests_a_failure(world, guarded_expr) || emit_catch_reads_a_pending(world, walk, guarded_expr))
         let at = node_key(guarded_expr)
         // A block is bound first: inside `Ok(…)` its braces would be
         // reported as unneeded, which the author may not even have written

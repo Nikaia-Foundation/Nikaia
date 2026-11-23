@@ -1031,7 +1031,7 @@ impl EmitState {
         // `unused_parens`.
         let shared = emit_arg_a_shared_read(world, walk, arg)
         if shared != "" && out.buf.len() == arg_start && in_place == 0 && !future {
-            out.push(shared)
+            out.push(emit_pending_read_caught(shared, inside.breaks_to))
         } else if future {
             self.emit_arg_future(world, walk, out, host, arg, i, depth, inside, scope)
         } else {
@@ -1615,6 +1615,52 @@ fn emit_arg_a_shared_read(world: ref EmitWorld, walk: ref EmitWalk, arg: ref Exp
         },
         else => return "",
     }
+}
+
+/// **A read of a pending value inside a `catch`'s guarded half** (ADR-async-5
+/// D8, D22, #988): `let c = async g(a) catch { … }` in a task's body leaves
+/// the guarded labelled block with `a`'s failure, as a failing call does,
+/// instead of its `?` leaving the task past the fallback. `read` is the join
+/// as the walk holds it (`arrived(…)?`, `(*arrived(…)?)`, `*arrived(…)?`);
+/// outside such a half (`breaks_to` below 0), or a read with no `?`, as it is.
+fn emit_pending_read_caught(read: ref String, breaks_to: i64) -> String {
+    if breaks_to < 0 {
+        return read.clone()
+    }
+    let mut open: String = ""
+    let mut close: String = ""
+    let mut inner = read.clone()
+    if inner.starts_with("(") && inner.ends_with(")") {
+        let opened = inner.strip_prefix("(") ?? return read.clone()
+        inner = (opened.strip_suffix(")") ?? return read.clone()).clone()
+        open = "("
+        close = ")"
+    }
+    if inner.starts_with("*") {
+        inner = (inner.strip_prefix("*") ?? return read.clone()).clone()
+        open = f"{open}*"
+    }
+    let joined = inner.strip_suffix("?") ?? return read.clone()
+    return f"{open}match {joined} {{ Ok(value) => value, Err(error) => break '__nikaia_caught_{breaks_to} Err(error.into()) }}{close}"
+}
+
+/// **Whether a `catch`'s guarded half names a pending value whose read can
+/// fail** (ADR-async-5 D8, #988): a binding of `async e` only tasks name,
+/// read in this task's body; its failure is the `catch`'s, so the guarded half
+/// is a labelled block it leaves (`emit_pending_read_caught`).
+fn emit_catch_reads_a_pending(world: ref EmitWorld, walk: ref EmitWalk, guarded: ref Expr) -> bool {
+    for each in visited_in_expr(guarded) {
+        match each {
+            Expr::Variable(name, _) => {
+                let handle = walk.async_handles.get(emit_text(world, name)) ?? ""
+                if handle.ends_with("?") || handle.ends_with("?)") {
+                    return true
+                }
+            },
+            else => {},
+        }
+    }
+    return false
 }
 
 /// **Where a task's or a group's body goes in the text around it**

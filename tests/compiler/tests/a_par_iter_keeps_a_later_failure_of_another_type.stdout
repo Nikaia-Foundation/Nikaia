@@ -1,0 +1,7 @@
+bad
+  raised at a
+  (no trace; set NIKAIA_TRACE=1 to capture one)
+  and then:
+  worse
+    raised at b
+got: 0

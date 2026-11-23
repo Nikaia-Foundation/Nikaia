@@ -72,6 +72,10 @@ impl<E> Group<E> {
 
 impl<E: From<Crashed>> Group<E> {
     pub(super) fn crash(&mut self, at: usize, crash: Crashed) {
+        // A cancelled waiter (D8) is no failure: nothing to keep.
+        if crash.cancelled {
+            return;
+        }
         // A full block fails only its own task (ADR-async-5 D19).
         self.crashed |= !crash.over_budget();
         self.failed.push((at, E::from(crash)));
@@ -209,6 +213,7 @@ fn run_now<T, E>(
     let caught = caught(|| outcome = Some(body()));
     drop(entered);
     let end = match caught {
+        Err(crash) if crash.cancelled => Ended::Cancelled,
         Err(crash) => {
             // A full block fails only its own task (ADR-async-5 D19).
             if !crash.over_budget() {
@@ -350,6 +355,7 @@ async fn held_task<'g, T: 'g, E: 'g, F>(
     .await;
     drop(running);
     let end = match outcome {
+        Err(crash) if crash.cancelled => Ended::Cancelled,
         Err(crash) => {
             // A full block fails only its own task (ADR-async-5 D19).
             if !crash.over_budget() {
@@ -897,8 +903,10 @@ impl<T, E: From<Crashed>> ChildHandle<'_, T, E> {
 /// async f(a)` and `let c = async g(a)` both wait for `a` and read the one
 /// value. The first to wait joins `a`'s task and keeps its value here; every
 /// other reads it. Where `a` failed, the first receives the error and every
-/// other waiter is cancelled ([`Crashed`] in the group's channel, as a task a
-/// crash before it cancelled is).
+/// other waiter is cancelled where it waits: it unwinds with [`WaitCancelled`],
+/// its values torn down, and ends as [`Ended::Cancelled`], which is no failure
+/// (D22): the group keeps nothing of it and no fallback runs. One error, one
+/// receiver (ADR-346 D1).
 ///
 /// What #986 lowers onto it: `let __task_N = Read::new(group.start_here(…))`,
 /// and a mention of `a` in another task as `(*__task_N.join_now()?)`, or
@@ -930,7 +938,7 @@ impl<'g, T: 'g, E: From<Crashed> + 'g> Read<'g, T, E> {
         let handle = self.handle.borrow_mut().take();
         match handle {
             Some(handle) => self.kept(handle.join_now()),
-            None => joined_end(Ended::Cancelled),
+            None => cancelled_waiter(),
         }
     }
 
@@ -979,9 +987,19 @@ impl<'g, T: 'g, E: From<Crashed> + 'g> Read<'g, T, E> {
     fn read(&self) -> Result<&T, E> {
         match self.value.get() {
             Some(value) => Ok(value),
-            None => joined_end(Ended::Cancelled),
+            None => cancelled_waiter(),
         }
     }
+}
+
+/// **The payload a cancelled waiter unwinds with** (D8): its task's runner
+/// ends it as [`Ended::Cancelled`]; `resume_unwind` runs no panic hook.
+pub(crate) struct WaitCancelled;
+
+/// A waiter of a pending value whose failure an earlier mention received: it
+/// cannot go on, and is cancelled where it waits (ADR-async-5 D8).
+fn cancelled_waiter<T>() -> T {
+    std::panic::resume_unwind(Box::new(WaitCancelled))
 }
 
 /// What `join` hands back for a task's end.
