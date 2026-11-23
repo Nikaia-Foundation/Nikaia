@@ -276,6 +276,21 @@ impl EmitState {
                         j += 1
                     }
                 }
+            } else if self.facts.lent_args.contains(node_key(arg)) {
+                // **And one lent to a `ref` parameter that a later argument
+                // changes** (#2783): Rust holds the `&` from the first
+                // argument to the call, so `f(w, w.a.bump())` with `bump`
+                // taking `mut self` is `({ let a = w.a.bump(); f(&w, a) })`.
+                let name = root_of(world.words, arg) ?? ""
+                if name != "" {
+                    let mut j = 0
+                    for later in args {
+                        if j > i && j > last && made_in_the_call(later) && !emit_arg_is_closure(later) && self.emit_changes_root(world, later, name) {
+                            last = j
+                        }
+                        j += 1
+                    }
+                }
             }
             i += 1
         }
@@ -305,6 +320,21 @@ impl EmitState {
             k += 1
         }
         return hoisted
+    }
+
+    /// Whether `expr` lends the local `name` to be changed anywhere in it: a
+    /// method written `ref mut self` on a receiver rooted there, or an
+    /// argument rooted there lent to a `mut` parameter.
+    fn emit_changes_root(ref self, world: ref EmitWorld, expr: ref Expr, name: ref String) -> bool {
+        for each in visited_in_expr(expr) {
+            let key = node_key(each)
+            if self.facts.mut_receivers.contains(key) || self.facts.mut_args.contains(key) || self.facts.relent_args.contains(key) {
+                if (root_of(world.words, each) ?? "") == name {
+                    return true
+                }
+            }
+        }
+        return false
     }
 
     /// Whether `name` is a parameter of code of `function`, the function

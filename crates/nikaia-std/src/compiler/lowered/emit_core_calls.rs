@@ -204,6 +204,15 @@ impl EmitState {
                         j = unsafe { nikaia_std::proven::add::<i64>(j, 1) };
                     }
                 }
+            } else if self.facts.lent_args.contains(&node_key(arg)) {
+                let name = nikaia_std::index::or(root_of(world.words, arg), || "".into());
+                if name != "" {
+                    let mut j: i64 = 0;
+                    for later in args.iter() {
+                        if j > i && j > last && made_in_the_call(later) && !emit_arg_is_closure(later) && self.emit_changes_root(world, later, &name) { last = j; }
+                        j = unsafe { nikaia_std::proven::add::<i64>(j, 1) };
+                    }
+                }
             }
             i = unsafe { nikaia_std::proven::add::<i64>(i, 1) };
         }
@@ -225,6 +234,13 @@ impl EmitState {
             k = unsafe { nikaia_std::proven::add::<i64>(k, 1) };
         }
         hoisted
+    }
+    pub(crate) fn emit_changes_root(&self, world: &EmitWorld<'_, '_, '_, '_>, expr: &Expr, name: &str) -> bool {
+        for each in visited_in_expr(expr) {
+            let key = node_key(each);
+            if self.facts.mut_receivers.contains(&key) || self.facts.mut_args.contains(&key) || self.facts.relent_args.contains(&key) { if nikaia_std::index::or(root_of(world.words, each), || "".into()) == name { return true; } }
+        }
+        false
     }
     pub(crate) fn emit_call_names_code_taken(&self, function: &str, name: &str) -> bool {
         let contract = match self.own_contracts.functions.get(function) { Some(__nikaia_value) => __nikaia_value, None => return false };
@@ -1644,8 +1660,8 @@ pub(crate) fn emit_tuple_part_copy(i: i64, word: &str) -> String {
 }
 
 pub(crate) fn emit_tuple_part_copies(parts: &[String]) -> String {
-    let copies: Vec<String> = parts.iter().enumerate().map(|(at, item)| (at as i64, item)).map(|__nikaia_tuple126479| {
-        let (i, word) = __nikaia_tuple126479;
+    let copies: Vec<String> = parts.iter().enumerate().map(|(at, item)| (at as i64, item)).map(|__nikaia_tuple127988| {
+        let (i, word) = __nikaia_tuple127988;
         emit_tuple_part_copy(i, word)
     }).collect::<Vec<_>>();
     if copies.len() == 1 { return format!("({},)", *unsafe { nikaia_std::proven::read(&copies, (0) as usize) }); }

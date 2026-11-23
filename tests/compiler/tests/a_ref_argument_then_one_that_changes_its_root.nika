@@ -1,0 +1,30 @@
+/// An argument lent to a `ref` parameter, then a later one that changes the
+/// same local (a `mut self` method on a part of it, #2783): the later one
+/// runs first, as arguments are made before the call lends them, so
+/// `look(w, out, w.a.bump())` sees the bumped value and compiles.
+struct A { n: i64 }
+struct W { a: A }
+
+impl A {
+	fn bump(mut self) -> i64 sync {
+		self.n += 1
+		return self.n
+	}
+}
+
+fn look(w: ref W, mut out: Vec[i64], x: i64) sync {
+	out.push(w.a.n + x)
+}
+
+fn run(mut w: W, mut out: Vec[i64]) sync {
+	look(w, out, w.a.bump())
+}
+
+fn main() throws {
+	let mut w = W { a: A { n: 1 } }
+	let mut out: Vec[i64] = []
+	run(w, out)
+	look(w, out, w.a.bump())
+	println(out[0])
+	println(out[1])
+}
