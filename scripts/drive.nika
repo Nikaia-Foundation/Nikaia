@@ -487,7 +487,7 @@ fn drive_child_exe() -> String throws {
 	let owner = drive_read(drive_merge_lock_dir() + "/owner").split(" ").collect()[0].trim().clone()
 	let held = owner == drive_pid()
 	drive_merge_lock("building the compiler of HEAD for a child driver")
-	let head = process::run("git", ["rev-parse", f"HEAD^{{tree}}"]).stdout.trim().clone()
+	let head = drive_operand(process::run("git", ["rev-parse", f"HEAD^{{tree}}"]).stdout.trim().clone())
 	let built = drive_tree_exe(head)
 	if !held { drive_merge_unlock() }
 	if built == "" { return "" }
@@ -516,7 +516,7 @@ fn drive_now() -> i64 throws {
 fn drive_elapsed() -> i64 throws {
 	let started = text::parse_i64(env::var("NIKAIA_DRIVE_STARTED") ?? "") ?? 0
 	if started > 0 { return drive_now() - started }
-	let age = process::run("ps", ["-o", "etimes=", "-p", drive_pid()]).stdout.trim().clone()
+	let age = process::run("ps", ["-o", "etimes=", "-p", drive_operand(drive_pid())]).stdout.trim().clone()
 	return text::parse_i64(age) ?? 0
 }
 
@@ -567,7 +567,7 @@ fn drive_run_minutes(dir: String) -> i64 throws {
 // untracked like cost.txt), SECONDS by drive_run_seconds; nothing without a
 // BRIEF.run.json.
 fn drive_run_record(dir: String, brief: String) throws {
-	let abs = process::run("realpath", [brief]).stdout.trim().clone()
+	let abs = drive_abs(brief)
 	let json = f"{abs}.run.json"
 	if !fs::exists(json.clone(), drive_here()) { return }
 	let seconds = drive_run_seconds(json)
@@ -637,7 +637,7 @@ fn drive_adopt() throws {
 	let owner = drive_read(drive_lock_dir() + "/owner").trim()
 	let words = owner.split(" ").collect()
 	if words.len() < 2 { return }
-	if process::run("kill", ["-0", words[0].trim().clone()]).ok { return }
+	if process::run("kill", ["-0", drive_operand(words[0].trim().clone())]).ok { return }
 	let lane = words[1].trim().clone()
 	fs::write(drive_lock_dir() + "/owner", drive_here(), f"{drive_pid()} {lane}\n")
 	process::run("rm", ["-f", handover])
@@ -687,7 +687,7 @@ fn drive_lock(dir: String) throws {
 		let pid = owner.split(" ").collect()[0]
 		if pid == "" { blank += 1 }
 		if pid == me { return }
-		let live = if pid == "" { blank <= 2 } else { process::run("kill", ["-0", pid.clone()]).ok }
+		let live = if pid == "" { blank <= 2 } else { process::run("kill", ["-0", drive_operand(pid.clone())]).ok }
 		if !live {
 			process::run("rm", ["-rf", drive_lock_dir()])
 			continue
@@ -738,7 +738,7 @@ fn drive_merge_lock(what: String) throws {
 		let pid = owner.split(" ").collect()[0]
 		if pid == me { break }
 		if pid == "" { blank += 1 }
-		let live = if pid == "" { blank <= 12 } else { process::run("kill", ["-0", pid.clone()]).ok }
+		let live = if pid == "" { blank <= 12 } else { process::run("kill", ["-0", drive_operand(pid.clone())]).ok }
 		if !live {
 			process::run("rm", ["-rf", dir.clone()])
 			continue
@@ -936,7 +936,7 @@ fn drive_say(dry: bool, line: String) throws {
 // merge would push HEAD's untested commits; "none", and the next suite, on
 // HEAD, pushes them all.
 fn drive_push(dir: String, sha: String) -> String throws {
-	let before = process::run("git", ["rev-parse", "-q", "--verify", "origin/develop"]).stdout.trim().clone()
+	let before = drive_operand(process::run("git", ["rev-parse", "-q", "--verify", "origin/develop"]).stdout.trim().clone())
 	let first = process::run("git", ["push", "origin", f"{sha}:develop"])
 	let mut pushed = sha.clone()
 	let mut head = "sha"
@@ -1058,7 +1058,7 @@ fn drive_push_merges(sha: String, lower: String, build: String, badges: String, 
 	while k <= rounds {
 		// Builders committed on the last merge during its checks: a merge now
 		// would push their untested commits; the next suite pushes them all.
-		let before = process::run("git", ["rev-parse", "HEAD"]).stdout.trim().clone()
+		let before = drive_operand(process::run("git", ["rev-parse", "HEAD"]).stdout.trim().clone())
 		if before != expect {
 			println(f"SUITE {drive_short(sha.clone())} green, push rejected and HEAD moved on: the next suite pushes")
 			return ""
@@ -1075,7 +1075,7 @@ fn drive_push_merges(sha: String, lower: String, build: String, badges: String, 
 		// badges depend on both sides, and on 2026-11-07 a merge pushed without
 		// them left develop red (`lowered/sv_smtlib.rs`, `self-hosted.svg`).
 		drive_merge_fetched("push rejected", lower.clone(), build.clone(), badges.clone())
-		let merge = process::run("git", ["rev-parse", "HEAD"]).stdout.trim().clone()
+		let merge = drive_operand(process::run("git", ["rev-parse", "HEAD"]).stdout.trim().clone())
 		println(f"MERGE {drive_short(merge.clone())} round {k}")
 		let mut failed: String = ""
 		if check == "" {
@@ -1154,7 +1154,7 @@ fn drive_no_bump() -> bool throws {
 // died is removed after 6 hours.
 fn drive_proved_start(dir: String, pushed: String) throws {
 	let mut sha = pushed.clone()
-	let head = process::run("git", ["rev-parse", "HEAD"]).stdout.trim().clone()
+	let head = drive_operand(process::run("git", ["rev-parse", "HEAD"]).stdout.trim().clone())
 	if head != pushed
 		&& process::run("git", ["merge-base", "--is-ancestor", pushed.clone(), head.clone()]).ok
 		&& process::run("git", ["merge-base", "--is-ancestor", head.clone(), "refs/remotes/origin/develop"]).ok {
@@ -1171,9 +1171,9 @@ fn drive_proved_start(dir: String, pushed: String) throws {
 	if stamp != "" && stamp == crates && process::run("cp", [built, f"{base}/bin/nikaia"]).ok {
 		from = "with the ledger step's compiler"
 	}
-	let exe = process::run("realpath", [drive_exe()]).stdout.trim().clone()
+	let exe = drive_abs(drive_exe())
 	let script = process::run("realpath", ["scripts/drive.nika"]).stdout.trim().clone()
-	let lane = process::run("realpath", ["-m", dir.clone()]).stdout.trim().clone()
+	let lane = drive_abs(dir.clone())
 	let run = f"'{exe}' run '{script}' -- --proved '{lane}' {sha}"
 	let started = process::run("sh", ["-c", f"( {run} ) < /dev/null > /dev/null 2>&1 &"])
 	if !started.ok {
@@ -1193,7 +1193,7 @@ fn drive_proved_dir(sha: String) -> String throws {
 fn drive_proved(dir: String, sha: String) throws {
 	let out = f"{dir}/proved.out"
 	let short = drive_short(sha)
-	let base = process::run("realpath", ["-m", drive_proved_dir(sha.clone())]).stdout.trim().clone()
+	let base = drive_abs(drive_proved_dir(sha.clone()))
 	let tree = f"{base}/tree"
 	process::run("mkdir", ["-p", base.clone()])
 	let made = process::run("git", ["worktree", "add", "--detach", "-f", tree.clone(), sha.clone()])
@@ -1483,7 +1483,7 @@ fn drive_pull_or_restart(exe: String, when: String) throws {
 // (drive_merge_regenerate): the compiler of the merged tree, in the tree
 // target directory, never the checkout's `target/fast` a builder rebuilds.
 fn drive_merge_build() -> String throws {
-	let target = process::run("realpath", ["-m", drive_tree_target()]).stdout.trim().clone()
+	let target = drive_abs(drive_tree_target())
 	return f"CARGO_TARGET_DIR='{target}' cargo build -q --profile fast -p nikaia"
 }
 
@@ -1494,10 +1494,10 @@ fn drive_merge_build() -> String throws {
 // build it is the compiler of the last tree built there; none yet, it is built
 // from HEAD first. Called under the merge lock.
 fn drive_merge_lower() -> String throws {
-	let target = process::run("realpath", ["-m", drive_tree_target()]).stdout.trim().clone()
+	let target = drive_abs(drive_tree_target())
 	let exe = f"{target}/fast/nikaia"
 	if !fs::exists(exe.clone(), drive_here()) {
-		let head = process::run("git", ["rev-parse", f"HEAD^{{tree}}"]).stdout.trim().clone()
+		let head = drive_operand(process::run("git", ["rev-parse", f"HEAD^{{tree}}"]).stdout.trim().clone())
 		drive_tree_exe(head)
 	}
 	return f"'{exe}' lower-std"
@@ -1653,7 +1653,7 @@ fn drive_all_generated(paths: Vec[String]) -> bool throws {
 // Moves PATHS into a fresh directory under the git directory, keeping their
 // relative paths, and returns that directory: nothing is deleted.
 fn drive_move_aside(paths: Vec[String]) -> String throws {
-	let git_dir = process::run("git", ["rev-parse", "--git-dir"]).stdout.trim().clone()
+	let git_dir = drive_operand(process::run("git", ["rev-parse", "--git-dir"]).stdout.trim().clone())
 	let stamp = process::run("date", ["+%Y%m%d-%H%M%S"]).stdout.trim().clone()
 	let aside = f"{git_dir}/drive-aside-{stamp}"
 	for p in paths {
@@ -1848,7 +1848,7 @@ fn drive_merge_regenerate(cause: String, unmerged: String, lower: String, build:
 		wt = drive_tree_move(merged.stdout.trim().clone(), "MERGE not regenerated")
 		if wt == "" { drive_merge_abort_paths(cause, unmerged, "re-lowering failed (no worktree of the merged tree)") }
 		// The binary there is about to be rebuilt from other sources than its stamp names.
-		process::run("rm", ["-f", process::run("realpath", ["-m", drive_tree_target()]).stdout.trim() + "/fast/nikaia.crates"])
+		process::run("rm", ["-f", drive_abs(drive_tree_target()) + "/fast/nikaia.crates"])
 		at = drive_now()
 		// With their emitter (#2432) the merged index is lowered first: both
 		// sides already showed that it does not build as it stands.
@@ -1921,7 +1921,7 @@ fn drive_merge_regenerate(cause: String, unmerged: String, lower: String, build:
 				}
 				if !took.ok { drive_merge_abort_paths(cause, unmerged, f"re-lowering failed ({failed_theirs} from theirs, {failed_ours} from ours), and taking their side of {p} again failed") }
 			}
-			let their_tree = process::run("git", ["rev-parse", f"MERGE_HEAD^{{tree}}"]).stdout.trim().clone()
+			let their_tree = drive_operand(process::run("git", ["rev-parse", f"MERGE_HEAD^{{tree}}"]).stdout.trim().clone())
 			at = drive_now()
 			let exe = if their_tree == "" { "" } else { drive_tree_exe(their_tree) }
 			times.push(f"their build {drive_now() - at}s")
@@ -2012,12 +2012,12 @@ fn drive_merge_regenerate(cause: String, unmerged: String, lower: String, build:
 	times.push(f"badges {drive_now() - at}s")
 	// The ledgers of the merged tree, with the compiler built from it (#1591).
 	at = drive_now()
-	let tree_now = process::run("git", ["write-tree"]).stdout.trim().clone()
+	let tree_now = drive_operand(process::run("git", ["write-tree"]).stdout.trim().clone())
 	// The lowering settled on the compiler the last round built: the merged
 	// tree differs from its sources at most in `LOWERED_DIGEST`, so that
 	// binary runs the merged tree's code and the ledgers take it, without a
 	// build of their own (#2154). Only where BUILD built it in the tree target.
-	let built = process::run("realpath", ["-m", drive_tree_target()]).stdout.trim() + "/fast/nikaia"
+	let built = drive_abs(drive_tree_target()) + "/fast/nikaia"
 	let settled_on = if build == drive_merge_build() && fs::exists(built.clone(), drive_here()) { built } else { "" }
 	let ledgers = drive_ledgers_refresh_on(tree_now, settled_on)
 	times.push(f"ledgers {drive_now() - at}s")
@@ -2304,7 +2304,7 @@ fn drive_tree_move(tree: String, why: String) -> String throws {
 	}
 	// `git -C` on a missing worktree would reach the shared checkout's index.
 	let top = process::run("git", ["-C", wt.clone(), "rev-parse", "--show-toplevel"]).stdout.trim().clone()
-	let want = process::run("realpath", [wt.clone()]).stdout.trim().clone()
+	let want = drive_abs(wt.clone())
 	if top != want {
 		println(f"{why}: {wt} is not a worktree of its own")
 		return ""
@@ -2327,7 +2327,7 @@ fn drive_tree_move(tree: String, why: String) -> String throws {
 fn drive_tree_exe(tree: String) -> String throws {
 	let want = drive_tree_move(tree.clone(), "LEDGERS not refreshed")
 	if want == "" { return "" }
-	let target = process::run("realpath", ["-m", drive_tree_target()]).stdout.trim().clone()
+	let target = drive_abs(drive_tree_target())
 	// The `crates/` tree the binary was built from, for drive_proved_start;
 	// gone while a build runs, so a failed one is never taken for the tree.
 	let stamp = f"{target}/fast/nikaia.crates"
@@ -2365,7 +2365,7 @@ fn drive_ledgers_refresh(name: String) -> Vec[String] throws {
 fn drive_ledgers_refresh_on(name: String, built: String) -> Vec[String] throws {
 	if !fs::exists("scripts/ledgers.nika", drive_here()) { return [] }
 	// Resolved here: in the worktree `HEAD` names the worktree's own commit.
-	let tree = process::run("git", ["rev-parse", f"{name}^{{tree}}"]).stdout.trim().clone()
+	let tree = drive_operand(process::run("git", ["rev-parse", f"{name}^{{tree}}"]).stdout.trim().clone())
 	if tree == "" {
 		println(f"LEDGERS not refreshed: {name} names no tree")
 		return []
@@ -2379,7 +2379,7 @@ fn drive_ledgers_refresh_on(name: String, built: String) -> Vec[String] throws {
 		if crates != "" { fs::write(f"{exe}.crates", drive_here(), crates + "\n") }
 	}
 	if exe == "" { return [] }
-	let wt = process::run("realpath", [drive_tree_dir()]).stdout.trim().clone()
+	let wt = drive_abs(drive_tree_dir())
 	let out = process::run(
 		"sh",
 		["-c", f"cd '{wt}' && '{exe}' run scripts/ledgers.nika -- --refresh --tree {tree}"],
@@ -2404,10 +2404,10 @@ fn drive_launch(dir: String) throws {
 		drive_badges()
 		drive_ledgers("cargo build -q --profile fast -p nikaia")
 	}
-	let sha = process::run("git", ["rev-parse", "HEAD"]).stdout.trim().clone()
+	let sha = drive_operand(process::run("git", ["rev-parse", "HEAD"]).stdout.trim().clone())
 	let branch = drive_ci_branch(dir)
-	let log = process::run("realpath", [dir.clone()]).stdout.trim() + "/suite.log"
-	let exit = process::run("realpath", [drive_lock_dir()]).stdout.trim() + f"/exit-{sha}"
+	let log = drive_abs(dir.clone()) + "/suite.log"
+	let exit = drive_abs(drive_lock_dir()) + f"/exit-{sha}"
 	process::run("rm", ["-f", exit.clone(), log.clone(), drive_waiter_file(sha.clone(), "pid"), drive_waiter_file(sha.clone(), "err")])
 	let mut covered: i64 = 0
 	for l in drive_read(f"{dir}/unpushed.txt").split("\n") {
@@ -2463,7 +2463,7 @@ fn drive_launch(dir: String) throws {
 // (the waiter's process, written as it starts) or `err` (its standard error,
 // #2458: it went to /dev/null, so a waiter that died left no trace).
 fn drive_waiter_file(sha: String, kind: String) -> String throws {
-	return process::run("realpath", ["-m", drive_lock_dir()]).stdout.trim() + f"/wait-{sha}.{kind}"
+	return drive_abs(drive_lock_dir()) + f"/wait-{sha}.{kind}"
 }
 
 // Starts the CI waiter of SHA in the background (`--ci-wait SHA LOG EXIT`,
@@ -2473,8 +2473,8 @@ fn drive_waiter_file(sha: String, kind: String) -> String throws {
 fn drive_waiter_start(dir: String, sha: String) -> String throws {
 	let exe = drive_child_exe()
 	if exe == "" { return "the compiler of HEAD did not build (the lines above)" }
-	let log = process::run("realpath", ["-m", dir]).stdout.trim() + "/suite.log"
-	let exit = process::run("realpath", ["-m", drive_lock_dir()]).stdout.trim() + f"/exit-{sha}"
+	let log = drive_abs(dir) + "/suite.log"
+	let exit = drive_abs(drive_lock_dir()) + f"/exit-{sha}"
 	let script = process::run("realpath", ["scripts/drive.nika"]).stdout.trim().clone()
 	let pid = drive_waiter_file(sha.clone(), "pid")
 	let err = drive_waiter_file(sha.clone(), "err")
@@ -3033,7 +3033,7 @@ fn drive_suite(exe: String, dry: bool, dir: String) throws {
 		return
 	}
 	if drive_docs_only(drive_unpushed_paths()) {
-		let head = process::run("git", ["rev-parse", "HEAD"]).stdout.trim().clone()
+		let head = drive_operand(process::run("git", ["rev-parse", "HEAD"]).stdout.trim().clone())
 		println(f"SUITE {drive_short(head)} docs-only, pushed without the suite")
 		drive_push(dir, head)
 		fs::write(f"{dir}/unpushed.txt", drive_here(), "")
@@ -3193,7 +3193,7 @@ fn drive_run_comment(
 	cost_from: i64,
 	fallback: String,
 ) -> String throws {
-	let abs = process::run("realpath", [brief]).stdout.trim().clone()
+	let abs = drive_abs(brief)
 	let report_path = drive_report_of(abs)
 	let report = if report_path == "" { "" } else { drive_read(report_path) }
 	let field = drive_field(report, "Result")
@@ -4657,7 +4657,7 @@ fn drive_focus_blocking(dir: String) -> String throws {
 	for brief in drive_unrun(dir) {
 		for line in drive_read(brief).split("\n") {
 			if line.trim().starts_with("Blocks:") {
-				return process::run("realpath", [brief]).stdout.trim().clone()
+				return drive_abs(brief)
 			}
 		}
 	}
@@ -6191,4 +6191,32 @@ fn main() throws {
 		return
 	}
 	drive_settle(exe, dir)
+}
+
+
+// A word handed to `process::run` as an argument that a program or the
+// lane's files gave (a sha, a pid, a path git or realpath printed): it reads
+// as no option, or the driver stops here (ADR-raw-sinks-1 D18).
+fn drive_operand(word: String) -> String throws {
+	if !process::is_operand(word) {
+		throw io::IoError::Other(f"refused: {word} would reach a program as an option")
+	}
+	return word
+}
+
+// The absolute path of REL, a path below the working directory: joined
+// under a root of the canonical working directory, it starts with text the
+// driver wrote (ADR-raw-sinks-1 D18 item 4).
+fn drive_abs(given: String) -> String throws {
+	let cwd = fs::canonical(".", fs::Root::Dir(".")).display()
+	let rel = drive_below(cwd.clone(), given)
+	return fs::Root::Dir(cwd).join(rel).path().to_text()
+}
+
+// GIVEN below the working directory CWD: an absolute path under it loses
+// `CWD/`, any other comes back as given.
+fn drive_below(cwd: String, given: String) -> String {
+	let rel = given.strip_prefix(cwd + "/") ?? ""
+	if rel == "" { return given }
+	return rel.clone()
 }
