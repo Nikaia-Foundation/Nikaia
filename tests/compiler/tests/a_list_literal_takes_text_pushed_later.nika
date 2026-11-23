@@ -1,0 +1,18 @@
+// A list literal's text literals are built as text of its own where such
+// text is pushed into the list later (#1303, ADR-282 D4): in a tuple's part
+// and as a plain item, without an annotation.
+fn main() throws {
+	let d = "a"
+	let mut files = [("x", d + "1")]
+	for n in 2..3 { files.push((f"s{n}", d + "2")) }
+	for (name, t) in files { println(f"{name} {t}") }
+	let mut names = ["x", "y"]
+	for n in 2..3 { names.push(f"s{n}") }
+	for name in names { println(name) }
+	let mut counted = [("one", 1)]
+	counted.insert(0, (f"zero{d}", 0))
+	for (name, k) in counted { println(f"{name} {k}") }
+	let mut kept = ["p"]
+	kept.push("q")
+	for name in kept { println(name) }
+}

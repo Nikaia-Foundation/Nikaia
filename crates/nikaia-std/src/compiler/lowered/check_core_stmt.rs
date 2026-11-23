@@ -1275,6 +1275,10 @@ pub(crate) fn check_core_stmt_let<H: CheckHost>(state: &mut CheckState, world: &
     local.constant = constant;
     local.lent = read_through_a_jump;
     local.empty_list = pending;
+    if ty.is_none() && names.len() == 1 && shape.is_empty() {
+        let texts = check_core_stmt_listed_texts(value);
+        if !texts.is_empty() { state.flow.listed_texts.insert(local.id, texts); }
+    }
     local.open_number = open;
     if !mutable && names.len() == 1 && shape.is_empty() && (check_simd_kind(&local.ty) == "Fixed" || check_simd_element(Some(&local.ty)).is_some()) { local.lanes_at_most = state.lanes_at_most(world, value); }
     local.literal = literal;
@@ -3723,5 +3727,33 @@ pub(crate) fn check_core_returned_expr(state: &CheckState, world: &CheckWorld<'_
         },
         _ => { check_core_returned_leaves(world, expr, owner, candidates, calls); },
     }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn check_core_stmt_listed_texts(value: &Expr) -> Vec<(i64, i64)> {
+    let items = match value {
+        Expr::ListLit { items, .. } => items,
+        _ => return vec![],
+    };
+    let mut out: Vec<(i64, i64)> = nikaia_std::block::list(nikaia_std::block::Place::Block);
+    let mut other: Vec<i64> = vec![];
+    for item in items.iter() {
+        match item {
+            Expr::LitStr { .. } => { out.push((-1, id_of(item) as i64)); },
+            Expr::Tuple(parts, _) => {
+                let mut p: i64 = 0;
+                for part in parts.iter() {
+                    match part {
+                        Expr::LitStr { .. } => { out.push((p, id_of(part) as i64)); },
+                        _ => { other.push(p); },
+                    }
+                    p = unsafe { nikaia_std::proven::add::<i64>(p, 1) };
+                }
+            },
+            _ => { other.push(-1); },
+        }
+    }
+    out.iter().filter(|&found| { !other.contains(&found.0) }).cloned().collect::<Vec<_>>()
 }
 

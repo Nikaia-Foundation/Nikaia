@@ -355,6 +355,10 @@ pub struct CheckFlow {
     /// A list written in number literals: the binding and the entry of
     /// `open_numbers` it names (ADR-285 D34).
     pub open_elements: collections::BTreeMap[i64, i64],
+    /// **The text literals of a list literal a `let` bound without a type**
+    /// (#1303), by the binding: each one's tuple part (-1 for a plain item)
+    /// and its node, built as text of its own where such text is put in.
+    pub listed_texts: collections::BTreeMap[i64, Vec[(i64, i64)]],
     /// **A list of lists written in numbers** (#938): the binding and how
     /// many lists stand around the number in it, where more than one; its
     /// number is in `open_elements`. An index or a walk of it hands on one
@@ -643,6 +647,7 @@ impl CheckFlow {
             wide_chars: collections::BTreeMap(),
             chars_refused: collections::BTreeSet(),
             open_elements: collections::BTreeMap(),
+            listed_texts: collections::BTreeMap(),
             open_levels: collections::BTreeMap(),
             open_keys: collections::BTreeMap(),
             open_parts: collections::BTreeMap(),

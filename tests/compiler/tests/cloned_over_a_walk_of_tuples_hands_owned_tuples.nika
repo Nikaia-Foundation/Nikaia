@@ -1,0 +1,13 @@
+// `cloned` over a walk of a list of tuples hands the tuples themselves, not
+// views of them (#1303, ADR-384 D2): a tuple of numbers and one with text.
+fn kept(out: Vec[(i64, i64)], other: Vec[i64]) -> Vec[(i64, i64)] {
+	return out.iter().filter(fn(found) { !other.contains(found.0) }).cloned().collect()
+}
+
+fn main() throws {
+	let left = kept([(1, 2), (3, 4)], [1])
+	println(f"{left.len()} {left[0].0} {left[0].1}")
+	let named: Vec[(String, i64)] = [(f"a{1}", 1)]
+	let copied: Vec[(String, i64)] = named.iter().cloned().collect()
+	println(f"{copied[0].0} {copied[0].1}")
+}

@@ -1784,6 +1784,12 @@ fn check_core_stmt_let[H: CheckHost](mut state: CheckState, world: ref CheckWorl
     local.constant = constant
     local.lent = read_through_a_jump
     local.empty_list = pending
+    if ty == null && names.len() == 1 && shape.len() == 0 {
+        let texts = check_core_stmt_listed_texts(value)
+        if texts.len() > 0 {
+            state.flow.listed_texts.insert(local.id, texts)
+        }
+    }
     local.open_number = open
     // **What a `let` says of a byte vector's lanes proves a lookup's index**
     // (ADR-377 D10): a name bound once to a proved vector, or to a list of them.
@@ -5041,4 +5047,34 @@ fn check_core_returned_expr(state: ref CheckState, world: ref CheckWorld, expr: 
         },
         else => check_core_returned_leaves(world, expr, owner, candidates, calls),
     }
+}
+
+/// The text literals of a list literal, each with its tuple part (-1 for a
+/// plain item): those text of its own put into the list later builds
+/// (`check_core_call_on_listed_texts`, #1303). Only a part every item holds
+/// a literal at: a view beside them would stay one.
+fn check_core_stmt_listed_texts(value: ref Expr) -> Vec[(i64, i64)] sync {
+    let items = match value {
+        Expr::ListLit { items, .. } => items,
+        else => return [],
+    }
+    let mut out: Vec[(i64, i64)] = []
+    let mut other: Vec[i64] = []
+    for item in items {
+        match item {
+            Expr::LitStr { .. } => out.push((-1, id_of(item) as i64)),
+            Expr::Tuple(parts, _) => {
+                let mut p = 0
+                for part in parts {
+                    match part {
+                        Expr::LitStr { .. } => out.push((p, id_of(part) as i64)),
+                        else => other.push(p),
+                    }
+                    p += 1
+                }
+            },
+            else => other.push(-1),
+        }
+    }
+    return out.iter().filter(fn(found) { !other.contains(found.0) }).cloned().collect()
 }
