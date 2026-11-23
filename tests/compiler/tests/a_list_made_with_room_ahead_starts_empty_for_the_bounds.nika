@@ -1,0 +1,42 @@
+// A list made with room ahead holds no element (#2798, Part I 10, ADR-149
+// D5): `Vec(capacity: n)` and `Vec()` start at length 0 as `[]` does, so a
+// list filled by one push per element of `a` and then indexed below
+// `a.len()` is proved the same way for each of the three (`std::bigint`'s
+// quotient buffer).
+fn plain(a: ref Vec[i64]) -> Vec[i64] sync {
+	let mut out: Vec[i64] = []
+	for _ in 0..<a.len() {
+		out.push(0)
+	}
+	for at in 0..<a.len() {
+		out[at] = a[at]
+	}
+	return out
+}
+
+fn made(a: ref Vec[i64]) -> Vec[i64] sync {
+	let mut out: Vec[i64] = Vec()
+	for _ in 0..<a.len() {
+		out.push(0)
+	}
+	for at in 0..<a.len() {
+		out[at] = a[at]
+	}
+	return out
+}
+
+fn roomy(a: ref Vec[i64]) -> Vec[i64] sync {
+	let mut out: Vec[i64] = Vec(capacity: a.len())
+	for _ in 0..<a.len() {
+		out.push(0)
+	}
+	for at in 0..<a.len() {
+		out[at] = a[at]
+	}
+	return out
+}
+
+fn main() throws {
+	let a: Vec[i64] = [4, 5, 6]
+	println(f"{plain(a)[2]} {made(a)[1]} {roomy(a)[0]}")
+}
