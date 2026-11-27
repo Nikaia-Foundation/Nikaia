@@ -466,6 +466,26 @@ impl EmitState {
         if plan.element_keepers.contains(bound) { holding = Some(nikaia_std::index::or(plan.widths.get(bound), || 1)); }
         EmitStmtKept { put, packed, holding }
     }
+    pub(crate) fn emit_stmt_held_keeps(&self, walk: &EmitWalk, function: &str, at: i64, bound: &str) -> Option<String> {
+        let key = match self.keep_plan_key(walk, function) { Some(__nikaia_value) => __nikaia_value, None => return None };
+        let plan = match self.keep_plans.get(&key) { Some(__nikaia_value) => __nikaia_value, None => return None };
+        let holds = match plan.holds.get(&(at, nikaia_std::block::Text::from(bound.to_string()))) { Some(__nikaia_value) => __nikaia_value, None => return None };
+        let width = nikaia_std::index::or(plan.widths.get(bound), || 1);
+        let mut keeps: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
+        for (_, buffers) in holds.iter() {
+            keeps.reserve(buffers.iter().size_hint().0); for b in buffers.iter() {
+                let b = nikaia_std::num::value(b);
+                keeps.push(format!("std::sync::Arc::clone(&__keep_{})", b));
+            }
+        }
+        while (keeps.len() as i64) < width {
+            if keeps.is_empty() { keeps.push(String::from("std::sync::Arc::new(nikaia_std::tether::Keep::new())")); } else {
+                let last = nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&keeps, (nikaia_std::proven::sub::<i64>(keeps.len() as i64, 1)) as usize) }).to_string());
+                keeps.push(last);
+            }
+        }
+        Some(nikaia_std::block::Text::from(keeps.join(", ")))
+    }
     pub(crate) fn emit_stmt_late_puts(&self, walk: &mut EmitWalk, function: &str, statement: i64) -> String {
         let key = match self.keep_plan_key(&walk, function) { Some(__nikaia_value) => __nikaia_value, None => return String::from("") };
         let plan = match self.keep_plans.get(&key) { Some(__nikaia_value) => __nikaia_value, None => return String::from("") };
@@ -592,6 +612,13 @@ impl EmitState {
             out.push(&format!("let {}{} = {}", mut_word, local, nikaia_std::index::or(kept.put.as_deref(), || "")));
             self.emit_expr(world, walk, out, host, value, depth, flow, &inner)?;
             out.push(");");
+            return Ok(());
+        }
+        let held_keeps = self.emit_stmt_held_keeps(&walk, &scope.function, at, &bound);
+        if held_keeps.is_some() {
+            out.push(&format!("let {}{}{} = {{ use nikaia_std::tether::Hold as _; (", mut_word, local, annotation));
+            self.emit_expr(world, walk, out, host, value, depth, flow, &inner)?;
+            out.push(&format!(").hold([{}]) }};", nikaia_std::index::or(held_keeps.as_deref(), || "")));
             return Ok(());
         }
         let (before, after) = emit_around(self.facts.nullable_sites.get(&at))?;
@@ -733,7 +760,15 @@ impl EmitState {
         let appended = op.is_some() && self.facts.appended_texts.contains(&at);
         if appended { out.push("::core::convert::AsRef::<str>::as_ref(&"); }
         let either_back = op.is_none() && !own_view && !reputted && self.either_result(world, value);
-        if !own_view {
+        let held_keeps = match target {
+            Expr::Variable(assigned, _) => { let assigned = *assigned; if op.is_none() && !own_view { self.emit_stmt_held_keeps(&walk, &scope.function, at, &emit_text(world, assigned)) } else { None } },
+            _ => None,
+        };
+        if held_keeps.is_some() {
+            out.push("{ use nikaia_std::tether::Hold as _; (");
+            self.emit_expr(world, walk, out, host, value, depth, flow, scope)?;
+            out.push(&format!(").hold([{}]) }}", nikaia_std::index::or(held_keeps.as_deref(), || "")));
+        } else if !own_view {
             self.emit_expr(world, walk, out, host, value, depth, flow, scope)?;
             if op.is_none() && self.facts.stored_handles.contains(&node_key(value)) { out.push(".clone()"); }
         }

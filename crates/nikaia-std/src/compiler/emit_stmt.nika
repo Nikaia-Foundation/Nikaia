@@ -645,6 +645,32 @@ impl EmitState {
         return EmitStmtKept { put: put, packed: packed, holding: holding }
     }
 
+    /// **The keeps a value bound or assigned whole to `bound` at `at` is held
+    /// by** (ADR-tether-v1 D12, #2841): those of the buffers the plan follows
+    /// it to, padded to the name's widest value, or - where it names none, a
+    /// literal - a keep of its own each, which the view is copied into (D15).
+    fn emit_stmt_held_keeps(ref self, walk: ref EmitWalk, function: ref String, at: i64, bound: ref String) -> String? {
+        let key = self.keep_plan_key(walk, function) ?? return null
+        let plan = self.keep_plans.get(key) ?? return null
+        let holds = plan.holds.get((at, bound.clone())) ?? return null
+        let width = plan.widths.get(bound) ?? 1
+        let mut keeps: Vec[String] = []
+        for (_, buffers) in holds {
+            for b in buffers {
+                keeps.push(f"std::sync::Arc::clone(&__keep_{b})")
+            }
+        }
+        while keeps.len() < width {
+            if keeps.len() == 0 {
+                keeps.push("std::sync::Arc::new(nikaia_std::tether::Keep::new())")
+            } else {
+                let last = keeps[keeps.len() - 1].clone()
+                keeps.push(last)
+            }
+        }
+        return keeps.join(", ")
+    }
+
     /// **The buffers put into their keep after the statement at `statement`**
     /// (#1276): each changed there last, put under its own name from here on.
     fn emit_stmt_late_puts(ref self, mut walk: EmitWalk, function: ref String, statement: i64) -> String {
@@ -816,6 +842,16 @@ impl EmitState {
             out.push(f"let {mut_word}{local} = {kept.put ?? ""}")
             self.emit_expr(world, walk, out, host, value, depth, flow, inner)
             out.push(");")
+            return
+        }
+        // **A name assigned held views whole holds its first value too**
+        // (ADR-tether-v1 D12, #2841), so its type is `Held` whether written or
+        // not.
+        let held_keeps = self.emit_stmt_held_keeps(walk, scope.function, at, bound)
+        if held_keeps != null {
+            out.push(f"let {mut_word}{local}{annotation} = {{ use nikaia_std::tether::Hold as _; (")
+            self.emit_expr(world, walk, out, host, value, depth, flow, inner)
+            out.push(f").hold([{held_keeps ?? ""}]) }};")
             return
         }
         // **The annotation is no longer the constructor** (ADR-281 D2).
@@ -1019,7 +1055,17 @@ impl EmitState {
         // `text = bang(text, k)`; `.into()` owns it, and is the identity where
         // the place is `EitherText` itself.
         let either_back = op == null && !own_view && !reputted && self.either_result(world, value)
-        if !own_view {
+        // **A view assigned whole to a name that holds its views is held**
+        // (ADR-tether-v1 D12, #2841): by the keeps of the buffers it points into.
+        let held_keeps = match target {
+            Expr::Variable(assigned, _) => if op == null && !own_view { self.emit_stmt_held_keeps(walk, scope.function, at, emit_text(world, assigned)) } else { null },
+            else => null,
+        }
+        if held_keeps != null {
+            out.push("{ use nikaia_std::tether::Hold as _; (")
+            self.emit_expr(world, walk, out, host, value, depth, flow, scope)
+            out.push(f").hold([{held_keeps ?? ""}]) }}")
+        } else if !own_view {
             self.emit_expr(world, walk, out, host, value, depth, flow, scope)
             // **A handle assigned is duplicated** where its name is read
             // afterwards (ADR-312 D1, D2, #1212).

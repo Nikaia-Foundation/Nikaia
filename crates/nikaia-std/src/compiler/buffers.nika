@@ -180,6 +180,9 @@ struct BufferWalk {
     /// The statement that is the body's value, where a method call changes
     /// nothing: `out.trim()` as the last expression reads (#1276).
     value_tail: i64,
+    /// An assignment of a whole local, by its statement and the name, to the
+    /// `let` of that local (#2841).
+    wholes: collections::BTreeMap[(i64, String), i64],
 }
 
 // Where a local is changed last: the statement of its `let`'s own block that
@@ -276,7 +279,7 @@ fn plan_of(item: ref Item, target: String?, ask: ref BufferAsk, holes_of: fn(ref
         Item::Fn { ret_type, .. } => carries_maybe(ret_type, ask),
         else => false,
     }
-    let mut walk = BufferWalk { target: target, locals: collections::BTreeMap(), frames: [], path: [], sources: collections::BTreeMap(), escapes: [], sheds: collections::BTreeMap(), puts_into: collections::BTreeMap(), struct_puts: collections::BTreeMap(), taken: collections::BTreeMap(), reassigned: collections::BTreeMap(), handed: collections::BTreeMap(), captured: collections::BTreeMap(), statement: 0, result_carries: carries, last_seen: collections::BTreeMap(), holders: collections::BTreeMap(), hoisted: collections::BTreeMap(), mutated: collections::BTreeMap(), value_tail: -1 }
+    let mut walk = BufferWalk { target: target, locals: collections::BTreeMap(), frames: [], path: [], sources: collections::BTreeMap(), escapes: [], sheds: collections::BTreeMap(), puts_into: collections::BTreeMap(), struct_puts: collections::BTreeMap(), taken: collections::BTreeMap(), reassigned: collections::BTreeMap(), handed: collections::BTreeMap(), captured: collections::BTreeMap(), statement: 0, result_carries: carries, last_seen: collections::BTreeMap(), holders: collections::BTreeMap(), hoisted: collections::BTreeMap(), mutated: collections::BTreeMap(), value_tail: -1, wholes: collections::BTreeMap() }
     open_scope(walk)
     for arg in args {
         let parameter = Local { at: 0, path: [], origins: collections::BTreeSet(), ty: arg.ty.clone(), parameter: true, keeps: arg.mutable && ask.context.carries(ask.names, arg.ty), buffer: false, text: false, number: false, parts: [] }
@@ -435,6 +438,13 @@ fn buffer_statement(stmt: ref Stmt, span: ref Span, ask: ref BufferAsk, holes_of
                     walk.handed.insert(at, from?.at ?? 0)
                 }
                 shed(root, walk)
+                // **A view assigned whole is put into the name** (#2841), as
+                // `push` puts one into a list: where the name drops it at the
+                // next turn, the view is held (D12).
+                if bound != null && !(bound?.parameter ?? true) {
+                    put_into(root, 0, origins, walk)
+                    walk.wholes.insert((at, root.clone()), bound?.at ?? 0)
+                }
             }
             // **A buffer handed over whole is a move**, the rule a `return`
             // and a `let` already have: `inner = args` takes the buffer along,
@@ -2463,6 +2473,16 @@ fn held_one_per_buffer(id: (i64, String), source: ref Source, shedding: ref Vec[
         for (arg, origins) in puts.by_arg {
             if origins.contains(id) {
                 hold(place.clone(), arg.clone(), source_at(source), plan)
+                // **A name assigned a held view whole holds its value from its
+                // `let` on** (#2841): the value bound there, where the plan
+                // names no buffer for it (a literal), is copied into a keep of
+                // its own (D15).
+                let bound = walk.wholes.get(place) ?? -1
+                if bound >= 0 && !plan.holds.contains_key((bound, place.1.clone())) {
+                    let mut first: collections::BTreeMap[i64, collections::BTreeSet[i64]] = collections::BTreeMap()
+                    first.insert(0, collections::BTreeSet())
+                    plan.holds.insert((bound, place.1.clone()), first)
+                }
             }
         }
     }

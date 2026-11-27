@@ -117,6 +117,7 @@ pub(crate) struct BufferWalk {
     pub(crate) hoisted: collections::BTreeMap<i64, i64>,
     pub(crate) mutated: collections::BTreeMap<i64, Mutated>,
     pub(crate) value_tail: i64,
+    pub(crate) wholes: collections::BTreeMap<(i64, String), i64>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -203,7 +204,7 @@ pub(crate) fn plan_of(item: &Item, target: Option<String>, ask: &BufferAsk<'_, '
         Item::Fn { ret_type, .. } => carries_maybe((ret_type).as_ref(), ask),
         _ => false,
     };
-    let mut walk = BufferWalk { target, locals: collections::BTreeMap::new(), frames: vec![], path: vec![], sources: collections::BTreeMap::new(), escapes: vec![], sheds: collections::BTreeMap::new(), puts_into: collections::BTreeMap::new(), struct_puts: collections::BTreeMap::new(), taken: collections::BTreeMap::new(), reassigned: collections::BTreeMap::new(), handed: collections::BTreeMap::new(), captured: collections::BTreeMap::new(), statement: 0, result_carries: carries, last_seen: collections::BTreeMap::new(), holders: collections::BTreeMap::new(), hoisted: collections::BTreeMap::new(), mutated: collections::BTreeMap::new(), value_tail: -1 };
+    let mut walk = BufferWalk { target, locals: collections::BTreeMap::new(), frames: vec![], path: vec![], sources: collections::BTreeMap::new(), escapes: vec![], sheds: collections::BTreeMap::new(), puts_into: collections::BTreeMap::new(), struct_puts: collections::BTreeMap::new(), taken: collections::BTreeMap::new(), reassigned: collections::BTreeMap::new(), handed: collections::BTreeMap::new(), captured: collections::BTreeMap::new(), statement: 0, result_carries: carries, last_seen: collections::BTreeMap::new(), holders: collections::BTreeMap::new(), hoisted: collections::BTreeMap::new(), mutated: collections::BTreeMap::new(), value_tail: -1, wholes: collections::BTreeMap::new() };
     open_scope(&mut walk);
     for arg in args.iter() {
         let parameter = Local { at: 0, path: vec![], origins: collections::BTreeSet::new(), ty: Some(arg.ty.clone()), parameter: true, keeps: arg.mutable && ask.context.carries(ask.names, &arg.ty), buffer: false, text: false, number: false, parts: vec![] };
@@ -334,6 +335,10 @@ pub(crate) fn buffer_statement(stmt: &Stmt, span: &Span, ask: &BufferAsk<'_, '_,
                 };
                 if from.is_some() && nikaia_std::index::or(from.as_ref().map(|__nikaia_it| __nikaia_it.buffer), || false) { walk.handed.insert(at, nikaia_std::index::or(from.as_ref().map(|__nikaia_it| __nikaia_it.at), || 0)); }
                 shed(&root, walk);
+                if bound.is_some() && !nikaia_std::index::or(bound.as_ref().map(|__nikaia_it| __nikaia_it.parameter), || true) {
+                    put_into(&root, 0, &origins, walk);
+                    walk.wholes.insert((at, nikaia_std::block::Text::from(root.to_string())), nikaia_std::index::or(bound.as_ref().map(|__nikaia_it| __nikaia_it.at), || 0));
+                }
             }
             if whole && is_the_buffer(value, ask, &walk) {
                 let mut local = match local_of(&root, &walk) { Some(__nikaia_value) => __nikaia_value, None => return };
@@ -1804,7 +1809,15 @@ pub(crate) fn held_one_per_buffer(id: &(i64, String), source: &Source, shedding:
         if !a_name_among(&place.1, shedding) { continue; }
         for (arg, origins) in puts.by_arg.iter() {
             let arg = nikaia_std::num::value(arg);
-            if origins.contains(&id) { hold(&place.clone(), arg.clone(), source_at(source), plan); }
+            if origins.contains(&id) {
+                hold(&place.clone(), arg.clone(), source_at(source), plan);
+                let bound = nikaia_std::index::or(walk.wholes.get(place), || -1);
+                if bound >= 0 && !plan.holds.contains_key(&(bound, nikaia_std::block::Text::from(place.1.to_string()))) {
+                    let mut first: collections::BTreeMap<i64, collections::BTreeSet<i64>> = collections::BTreeMap::new();
+                    first.insert(0, collections::BTreeSet::new());
+                    plan.holds.insert((bound, nikaia_std::block::Text::from(place.1.to_string())), first);
+                }
+            }
         }
     }
 }
