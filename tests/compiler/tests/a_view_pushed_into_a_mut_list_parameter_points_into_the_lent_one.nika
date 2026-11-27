@@ -1,5 +1,5 @@
 // A view of a lent parameter pushed into a `mut` list parameter points into
-// the caller's argument (ADR-283 D27, #1228): the two parameters share one
+// the caller's argument (ADR-tether-v1 D27, #1228): the two parameters share one
 // lifetime, as for text.
 struct Expr { n: i64, name: String }
 struct Block { exprs: Vec[Expr] }

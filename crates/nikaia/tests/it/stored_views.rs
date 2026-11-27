@@ -175,7 +175,7 @@ fn a_field_that_holds_no_view_is_not_a_destination() {
 // for. They are tests rather than prose so that extending the reach is a visible
 // change to this file rather than a silent one.
 
-/// **Handing back the one parameter is no refusal** (ADR-283 D25): the way out
+/// **Handing back the one parameter is no refusal** (ADR-tether-v1 D25): the way out
 /// reaches `name` and not the receiver, so the result points into `name` alone.
 /// What the signature then says is `result_source.rs`'s.
 #[test]
@@ -370,7 +370,7 @@ impl Holder {
 }
 
 /// **A view into a parameter the body only reads borrows from the caller's
-/// argument** ([ADR-283](../../../docs/specification/adr/adr-283.md) D24).
+/// argument** ([ADR-tether-v1](../../../docs/specification/adr/adr-tether-v1.md) D24).
 ///
 /// `xs: Vec[String]` that the body only reads is lowered as a view, `&[String]`
 /// (Part I 6.5), so it is something to borrow from and the result keeps the
@@ -390,7 +390,7 @@ fn a_view_into_a_lent_parameter_borrows_from_the_argument() {
 }
 
 /// **A result that *carries* a view needs the same lifetime a result that *is*
-/// one needs** ([ADR-283](../../../docs/specification/adr/adr-283.md) D7).
+/// one needs** ([ADR-tether-v1](../../../docs/specification/adr/adr-tether-v1.md) D7).
 ///
 /// D9 writes `'static` where a function has nothing to borrow from, because
 /// there is nothing for Rust's elision to take and `-> ref String` is *missing
@@ -680,7 +680,7 @@ fn a_view_handed_to_a_read_only_parameter_of_a_local_struct_keeps_nothing() {
 }
 
 /// #706: a view of a parameter kept in another parameter's list
-/// ([ADR-283](../../../docs/specification/adr/adr-283.md) D27): the two share
+/// ([ADR-tether-v1](../../../docs/specification/adr/adr-tether-v1.md) D27): the two share
 /// one lifetime, and an argument made in the call is put into the caller's
 /// keep. What it computes is `tests/accepted/706_*.nika`.
 #[test]

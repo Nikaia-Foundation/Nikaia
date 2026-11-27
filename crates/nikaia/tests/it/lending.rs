@@ -288,7 +288,7 @@ fn a_narrowing_cast_over_a_for_binding_still_aborts() {
 /// A `for` lends (D4), so the binding is a **view** and an annotation naming
 /// the element is a type the value does not have. `rustc` said *mismatched
 /// types* with *consider using clone here* — an instruction to insert exactly
-/// the copy [ADR-283](../../../docs/specification/adr/adr-283.md) D3 says is
+/// the copy [ADR-tether-v1](../../../docs/specification/adr/adr-tether-v1.md) D3 says is
 /// written and never inserted, about a file nobody wrote.
 ///
 /// **A diagnostic and not a lowering**, which is the whole of why it is this

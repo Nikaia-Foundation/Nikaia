@@ -1,4 +1,4 @@
-// A view that outlives its buffer is tethered (ADR-283): what a program that
+// A view that outlives its buffer is tethered (ADR-tether-v1): what a program that
 // moves, copies or reassigns a viewed buffer computes. The programs that read
 // real files, and what the lowering writes, stay in
 // `crates/nikaia/tests/tether_keep.rs`.

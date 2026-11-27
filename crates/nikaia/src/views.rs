@@ -8,11 +8,11 @@ use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 // function stores - into a field of its subject, into a struct it builds, into
 // its result or a task - is refused where nothing names the buffer it points
 // into, and written as a view of the subject's (or a struct parameter's)
-// buffer where something does (ADR-283 D1). The reasoning, the four places
+// buffer where something does (ADR-tether-v1 D1). The reasoning, the four places
 // the reach stops and why the walk errs the way it does are in that file.
 // What stays here is the one question a walk of the tree cannot answer -
 // whether a `let`'s value is a buffer of its own (`contracts::tether`,
-// ADR-283) - and the map `contracts::keeps` reads.
+// ADR-tether-v1) - and the map `contracts::keeps` reads.
 
 use std::collections::{HashMap, HashSet};
 
@@ -64,7 +64,7 @@ pub fn check_in(
     .collect()
 }
 
-/// What each function's result points into (ADR-283 D25, `tools/views.nika`),
+/// What each function's result points into (ADR-tether-v1 D25, `tools/views.nika`),
 /// by ledger key: the ledger's `ref(..)`.
 pub fn result_sources(
     parsed: &Parsed,
@@ -149,7 +149,7 @@ pub fn places_stored_in(
     )
 }
 
-/// What each function keeps in a `mut` parameter's place (ADR-283 D27,
+/// What each function keeps in a `mut` parameter's place (ADR-tether-v1 D27,
 /// `tools/views.nika`), by ledger key: `v:s`.
 pub fn places_stored(
     parsed: &Parsed,
@@ -188,7 +188,7 @@ fn asked<'a>(
 }
 
 /// **A buffer of its own carries no view of the parameter**
-/// ([ADR-283](../../docs/specification/adr/adr-283.md)):
+/// ([ADR-tether-v1](../../docs/specification/adr/adr-tether-v1.md)):
 /// `fs::read_to_string(path, …)` mentions `path` and hands back a `String` it
 /// read, so a view cut from that text is a view of the text.
 fn own_buffer(parsed: &Parsed, value: &Expr, own: &Ledger, library: &Ledger) -> bool {

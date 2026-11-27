@@ -1,6 +1,6 @@
 // crates/nikaia-std/src/compiler/buffers.nika
 //
-// **Where each buffer a body reads lives** (ADR-283) - the walk the compiler's
+// **Where each buffer a body reads lives** (ADR-tether-v1) - the walk the compiler's
 // `contracts::keep` runs over a function's body and the plan it decides,
 // moved from Rust (ADR-294, #125). A buffer is text or bytes a body reads -
 // `let text = fs::read_to_string(…)` - or what a call that takes a keep hands
@@ -37,7 +37,7 @@ pub enum Source {
     Buffer { at: i64, name: String, ty: String, span: Span },
     Call { at: i64, callee: String, span: Span },
     /// An argument made in the call, lent to a callee that hands back a view
-    /// (ADR-283 D24): the view may point into it.
+    /// (ADR-tether-v1 D24): the view may point into it.
     Argument { at: i64, callee: String, index: i64, span: Span },
 }
 
@@ -76,7 +76,7 @@ pub struct BufferPlan {
     pub reputs: collections::BTreeMap[i64, KeepAt],
     /// The buffer `let`s whose value is no text or bytes - a struct a call
     /// handed back - put into their keep whole, where no view is found by
-    /// address (ADR-283 D15: one that leaves it is copied).
+    /// address (ADR-tether-v1 D15: one that leaves it is copied).
     pub opaque_puts: collections::BTreeSet[i64],
     /// The buffer `let`s the body changes after they bind (#1276): `xs.push(..)`,
     /// `text += ".."`. Put into their keep only after the last change, where
@@ -324,7 +324,7 @@ fn plan_of(item: ref Item, target: String?, ask: ref BufferAsk, holes_of: fn(ref
             let anchored = untethered_returns(plan.key, ret_type, body, ask)
             plan.refusals.extend(anchored.findings)
             // **The local moves into the caller's keep** (ADR-views-v4 D9,
-            // ADR-283 D23, #1218): a buffer that is no text, which no view is
+            // ADR-tether-v1 D23, #1218): a buffer that is no text, which no view is
             // found in by address, put there whole.
             for (at, source) in anchored.anchored {
                 plan.puts.insert(at, KeepAt::Param)
@@ -505,7 +505,7 @@ fn shed(root: ref String, mut walk: BufferWalk) {
 
 // A `let`: what it makes - a buffer of its own, a second name for one, or
 // views of what its value points into - and an element taken out of a keeper,
-// which stays what it was in there (ADR-283 D16).
+// which stays what it was in there (ADR-tether-v1 D16).
 fn let_statement(stmt: ref Stmt, span: ref Span, ask: ref BufferAsk, holes_of: fn(ref Expr) -> Vec[Expr] sync, unaliased: fn(ref String) -> String sync, mut walk: BufferWalk) {
     // What it makes is asked inside the arm, where `ty` is still the field.
     let (names, value, ty, made) = match stmt {
@@ -2018,7 +2018,7 @@ fn holds_a_struct_of_views(ty: ref Ty, ask: ref BufferAsk) -> bool {
     }
 }
 
-// **An argument made in the call** (ADR-283 D24): lent to a callee that hands
+// **An argument made in the call** (ADR-tether-v1 D24): lent to a callee that hands
 // back a view - or a struct of this unit's that holds one, `Pair { left: a }`
 // (#678) - and takes no keep of its own, the view may point into it, so it
 // is a source - kept beside the call, or in the keep this function is given
@@ -2047,7 +2047,7 @@ fn made_arguments(contract: ref FnContract, named: ref String, args: ref Vec[Exp
 }
 
 // **An argument made in the call whose view the callee keeps in another
-// argument's place** (ADR-283 D27): `words(f"a b {1}", v)` - a source that
+// argument's place** (ADR-tether-v1 D27): `words(f"a b {1}", v)` - a source that
 // flows into `v`, so it lives in the keep of the frame that keeps `v`.
 fn stored_arguments(contract: ref FnContract, named: ref String, args: ref Vec[Expr], ask: ref BufferAsk, unaliased: fn(ref String) -> String sync, mut walk: BufferWalk) {
     let copying: Vec[ref Ledger] = [ask.own, ask.library]
@@ -2232,7 +2232,7 @@ fn call_source(callee: ref String, mut walk: BufferWalk) -> collections::BTreeSe
 }
 
 // From what the walk found to what the lowering writes (D2-D5), and the
-// refusals where it cannot. **No permission is asked for** (ADR-283 D5): which
+// refusals where it cannot. **No permission is asked for** (ADR-tether-v1 D5): which
 // buffer lives where is the compiler's decision, shown by `--tethers` and in
 // the ledger rather than demanded of the source.
 fn decide(key: String, body: ref Block, walk: ref BufferWalk, ask: ref BufferAsk) -> BufferPlan {
@@ -2255,7 +2255,7 @@ fn decide(key: String, body: ref Block, walk: ref BufferWalk, ask: ref BufferAsk
         }
         plan.reputs.insert(statement.clone(), keep)
     }
-    // **One keep per buffer, as many as the widest value needs** (ADR-283 D2).
+    // **One keep per buffer, as many as the widest value needs** (ADR-tether-v1 D2).
     for (place, by_arg) in plan.holds {
         let mut widest = 1
         for (_, statements) in by_arg {
@@ -2270,7 +2270,7 @@ fn decide(key: String, body: ref Block, walk: ref BufferWalk, ask: ref BufferAsk
             plan.widths.insert(place.1.clone(), width)
         }
     }
-    // **Which keepers hold structs** (ADR-283 D17): read through the handle.
+    // **Which keepers hold structs** (ADR-tether-v1 D17): read through the handle.
     for keeper in plan.element_keepers {
         let written = keeper_type(keeper, walk)
         let names_one = struct_of_views_maybe(written, ask)
@@ -2504,7 +2504,7 @@ fn source_refusal(source: ref Source, what: ref String, why: ref String, help: r
     return refusal("NK2304", span, f"{named} {what}", [why.clone()], help.clone())
 }
 
-// **D4 holds text one view at a time, and ADR-283 a struct of views one handle
+// **D4 holds text one view at a time, and ADR-tether-v1 a struct of views one handle
 // per buffer.** What is left - a value with no shape for that, and a struct in
 // a container whose reads are not a sequence's - is said by name.
 fn element_refusals(walk: ref BufferWalk, ask: ref BufferAsk, mut plan: BufferPlan) {
@@ -2557,7 +2557,7 @@ fn element_refusal(keeper: ref String, why: ref String, help: ref String, plan: 
 // ---------------------------------------------------------------------------
 
 // **A view of a local that is no text or bytes, handed back**, bare or in a
-// field of the struct the function returns (ADR-283 D9, D23; ADR-views-v4 D9,
+// field of the struct the function returns (ADR-tether-v1 D9, D23; ADR-views-v4 D9,
 // D10; #1218): a view of an element of a list the body made, or of a part of
 // a struct it built. The function gives the local up while the result holds a
 // view of it, so the local moves whole into the caller's keep (`anchored`, by
@@ -2952,7 +2952,7 @@ fn untethered_element(value: ref Expr, ask: ref BufferAsk, walk: ref UntetheredW
 }
 
 // **An element of a list the body made, read whole** where a text view field
-// or result is handed back (#1275, #1368, ADR-283 D23): the list it points
+// or result is handed back (#1275, #1368, ADR-tether-v1 D23): the list it points
 // into, also through a name a `let` bound to the element.
 fn untethered_text_root(value: ref Expr, ask: ref BufferAsk, walk: ref UntetheredWalk) -> String? {
     return match value {
@@ -3116,7 +3116,7 @@ fn untethered_returned_one(value: ref Expr, at: ref Span, asked: ref UntetheredA
 // **An element of a made local handed back as text of its own** (#1368):
 // the tier pass makes such an element a view only out of a list declared
 // with its type, a list literal of text or a list a call handed back (#1481),
-// and the list then moves into the caller's keep (ADR-283 D23); any other is
+// and the list then moves into the caller's keep (ADR-tether-v1 D23); any other is
 // refused here, not left to rustc.
 fn untethered_unplaced(value: ref Expr, at: ref Span, asked: ref UntetheredAsk, ask: ref BufferAsk, mut walk: UntetheredWalk) {
     if asked.owned_text || asked.text {

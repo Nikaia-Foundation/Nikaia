@@ -1,4 +1,4 @@
-// A view handed back is handed back silently (ADR-283 D23-D24, #442): what the
+// A view handed back is handed back silently (ADR-tether-v1 D23-D24, #442): what the
 // programs compute, the view of a local, of a parameter and of an argument made
 // in the call alike. The refusal and `--tethers` are
 // `crates/nikaia/tests/views_handed_back.rs`.
@@ -38,7 +38,7 @@ fn views_handed_back_c(row: ViewsHandedBackRow) -> String {
     return row.name
 }
 
-// One source on every way out that has one (ADR-283 D25): `a` or a literal. The
+// One source on every way out that has one (ADR-tether-v1 D25): `a` or a literal. The
 // version that handed back `a` or `b` shared one lifetime and is NK2302 now
 // (`result_source.rs::plain_string_longest_is_refused_since_d25`).
 fn views_handed_back_first(keep a: String, b: String) -> String {

@@ -307,7 +307,7 @@ impl EmitState {
         return text
     }
 
-    /// The types that hold one handle per buffer (ADR-283): for each struct of
+    /// The types that hold one handle per buffer (ADR-tether-v1): for each struct of
     /// the file that holds a view and has no type parameters, the `Views`,
     /// `Rebase` and `Hold` implementations. Nothing, unless some plan keeps an
     /// element or a task's keep.
@@ -347,7 +347,7 @@ impl EmitState {
             }
         }
         let rebased = parts.join(", ")
-        let mut text: String = f"\n/// `{ty}` held one handle per buffer (ADR-283).\n"
+        let mut text: String = f"\n/// `{ty}` held one handle per buffer (ADR-tether-v1).\n"
         text = f"{text}#[allow(non_camel_case_types)]\nenum __Views_{ty} {{}}\n\n"
         text = f"{text}impl nikaia_std::tether::Views for __Views_{ty} {{\n    type Of<'a> = {ty}<{a}>;\n"
         text = f"{text}    fn shorten<'long: 's, 's>(x: &'s {ty}<{long}>) -> &'s {ty}<{short}> {{\n        x\n    }}\n}}\n\n"

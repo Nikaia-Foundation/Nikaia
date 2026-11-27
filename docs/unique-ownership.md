@@ -73,7 +73,7 @@ into, so that nobody rediscovers it.
   have a wrong answer that corrupts memory.
 * **The ledger is per package and this property is whole-program.** A value
   handed across a package boundary would need the barrier
-  [ADR-283](specification/adr/adr-283.md) D5 already names for the tether: at a
+  [ADR-tether-v1](specification/adr/adr-tether-v1.md) D5 already names for the tether: at a
   `dyn` boundary or a published API, widen to the safe answer.
 * **The doors are not only locks.** `update` may run more than once
   ([ADR-281](specification/adr/adr-281.md) D14) and `access` holds the door open

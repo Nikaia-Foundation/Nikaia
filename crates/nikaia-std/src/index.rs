@@ -712,7 +712,7 @@ where
 ///
 /// A map read answers `Option<&V>`, because the value reached is the map's and
 /// copying it is never something a compiler does on its own
-/// ([ADR-283](../../../docs/specification/adr/adr-283.md) D3). But the fallback
+/// ([ADR-tether-v1](../../../docs/specification/adr/adr-tether-v1.md) D3). But the fallback
 /// is written as the value it stands for — `m[k] ?? 0` — so the two sides do
 /// not have the same type, and `unwrap_or_else` cannot join them.
 ///
@@ -722,7 +722,7 @@ where
 ///
 /// `T: Copy` on the second and not `Clone`: a copy of a number is what
 /// `m[k] ?? 0` means, and a **clone** of a `String` is an allocation the
-/// program did not write ([ADR-283](../../../docs/specification/adr/adr-283.md)
+/// program did not write ([ADR-tether-v1](../../../docs/specification/adr/adr-tether-v1.md)
 /// D5). Where the value does not copy, the fallback has to be a view too — or
 /// the program says `.to_owned()`, which is the same sentence that section has
 /// everywhere else.

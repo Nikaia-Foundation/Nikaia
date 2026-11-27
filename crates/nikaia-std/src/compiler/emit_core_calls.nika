@@ -1938,7 +1938,7 @@ impl EmitState {
         // The handles of the method the receiver's type resolves to, not of a
         // free function of the same name in another file (#1335).
         let takes = self.takes_a_handle(world, self.facts.method_callees[on_node]?.clone() ?? name.clone())
-        // **Views put into a keeper that drops entries are held** (ADR-283 D12),
+        // **Views put into a keeper that drops entries are held** (ADR-tether-v1 D12),
         // each value with a handle on every buffer it points into - as many as the
         // keeper's widest value needs, so that every element is one type (D15).
         self.emit_call_hold(world, walk, host, receiver, scope, flow)
@@ -1997,7 +1997,7 @@ impl EmitState {
             out.push(f".collect::<{self.rust_result()}<Vec<_>, _>>()")
         }
         // **What hands back an element of a held list reads it through its
-        // handle** (ADR-283 D17), as the brackets and a `for` do.
+        // handle** (ADR-tether-v1 D17), as the brackets and a `for` do.
         if (name == "iter" || name == "first" || name == "last" || name == "get") && receiver != null {
             let on = receiver ?? return
             if self.reads_through_handle(world, walk, scope.function, on) {
@@ -2129,7 +2129,7 @@ impl EmitState {
     }
 
     /// The buffers whose keeps hold the values put by this method call, by
-    /// argument, into `walk` (ADR-283 D12, D15).
+    /// argument, into `walk` (ADR-tether-v1 D12, D15).
     fn emit_call_hold[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, host: ref H, receiver: ref Expr?, scope: ref EmitScope, flow: EmitFlow) sync {
         walk.hold_args = null
         let on = receiver ?? return

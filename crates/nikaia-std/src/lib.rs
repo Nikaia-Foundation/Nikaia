@@ -586,7 +586,7 @@ pub mod prelude {
     pub use crate::channel;
     pub use crate::channel::{Receiver, Sender};
     // **The one shared buffer**
-    // ([ADR-283](../../../docs/specification/adr/adr-283.md) D19): `Bytes` is a
+    // ([ADR-tether-v1](../../../docs/specification/adr/adr-tether-v1.md) D19): `Bytes` is a
     // language type, written bare, so the generated Rust has to find it
     // without a `use` the program did not write.
     // **`panic`** ([Part III A.2](../../../docs/specification/30-nikaia-tooling.md),

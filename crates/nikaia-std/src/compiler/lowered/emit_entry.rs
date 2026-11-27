@@ -209,7 +209,7 @@ impl EmitState {
             if holds_view(&field.ty) || self.names_borrowing(world, &field.ty) { parts.push(format!("{}: nikaia_std::tether::Rebase::rebase(self.{}, keeps)", field_name, field_name)); } else { parts.push(format!("{}: self.{}", field_name, field_name)); }
         }
         let rebased = nikaia_std::block::Text::from(parts.join(", "));
-        let mut text: String = format!("\n/// `{}` held one handle per buffer (ADR-283).\n", ty);
+        let mut text: String = format!("\n/// `{}` held one handle per buffer (ADR-tether-v1).\n", ty);
         text = format!("{}#[allow(non_camel_case_types)]\nenum __Views_{} {{}}\n\n", text, ty);
         text = format!("{}impl nikaia_std::tether::Views for __Views_{} {{\n    type Of<'a> = {}<{}>;\n", text, ty, ty, a);
         text = format!("{}    fn shorten<'long: 's, 's>(x: &'s {}<{}>) -> &'s {}<{}> {{\n        x\n    }}\n}}\n\n", text, ty, long, ty, short);

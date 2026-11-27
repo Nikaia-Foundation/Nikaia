@@ -1,6 +1,6 @@
 // A `let` bound to a choice of names of text of their own that are read after
 // it holds a view of them (ADR-282 D13, #712), not the text moved: handed back,
-// that view lives in the caller's keep (ADR-283), as `let v = if c { a } else {
+// that view lives in the caller's keep (ADR-tether-v1), as `let v = if c { a } else {
 // "q" }` does, instead of failing in rustc (#1658).
 
 fn make(s: String) -> String {

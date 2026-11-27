@@ -340,7 +340,7 @@ impl EmitState {
         if ty.is_view && ty.lasting && name == "String" && ty.generics.len() == 0 {
             return "&'static str"
         }
-        // A view is a borrow of the parser's input (ADR-283).
+        // A view is a borrow of the parser's input (ADR-tether-v1).
         if ty.is_view {
             out.push_str(lifetimes.reference())
         }
@@ -351,7 +351,7 @@ impl EmitState {
         }
         // A view of text is a `&str` (ADR-184 D2).
         if ty.is_view && name == "String" && ty.generics.len() == 0 {
-            // Held, where the keeper drops entries (ADR-283 D12).
+            // Held, where the keeper drops entries (ADR-tether-v1 D12).
             if walk.holding != null {
                 return "nikaia_std::tether::Held"
             }
@@ -399,7 +399,7 @@ impl EmitState {
             out.push_str(f"[{element}; {n}]")
             return out
         }
-        // A struct of views in a keeper that drops entries is held (ADR-283 D14).
+        // A struct of views in a keeper that drops entries is held (ADR-tether-v1 D14).
         if walk.holding != null && self.borrowing.contains(name) && ty.generics.len() == 0 {
             let width = walk.holding ?? 0
             let escaped = escaped_name(name)
@@ -428,7 +428,7 @@ impl EmitState {
         return out
     }
 
-    /// The `Views` type one tethered binding is held by (ADR-283 D11, ADR-218
+    /// The `Views` type one tethered binding is held by (ADR-tether-v1 D11, ADR-218
     /// D4), declared once per type: the value over any lifetime, and
     /// `shorten`, which `rustc` only accepts where the type is covariant.
     fn emit_core_tether_wrapper(ref self, world: ref EmitWorld, mut walk: EmitWalk, crossings: bool, overlaps: bool, ty: ref Type) -> String {
@@ -446,7 +446,7 @@ impl EmitState {
             return f"__Tethered{found}"
         }
         let n = walk.wrappers.len()
-        let text = f"/// A value that carries the keep its views point into (ADR-283 D11), as a `Holding` over it.\n#[allow(non_camel_case_types)]\nenum __Tethered{n} {{}}\n\nimpl nikaia_std::tether::Views for __Tethered{n} {{\n    type Of<'a> = {any};\n    fn shorten<'long: 's, 's>(x: &'s {long}) -> &'s {shortened} {{\n        x\n    }}\n}}\n"
+        let text = f"/// A value that carries the keep its views point into (ADR-tether-v1 D11), as a `Holding` over it.\n#[allow(non_camel_case_types)]\nenum __Tethered{n} {{}}\n\nimpl nikaia_std::tether::Views for __Tethered{n} {{\n    type Of<'a> = {any};\n    fn shorten<'long: 's, 's>(x: &'s {long}) -> &'s {shortened} {{\n        x\n    }}\n}}\n"
         walk.wrappers.push(text)
         return f"__Tethered{n}"
     }

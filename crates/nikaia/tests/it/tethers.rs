@@ -1,5 +1,5 @@
 //! Which of Part I 6.6's states each view in a signature is in
-//! ([ADR-283](../../../docs/specification/adr/adr-283.md) D2, D5).
+//! ([ADR-tether-v1](../../../docs/specification/adr/adr-tether-v1.md) D2, D5).
 //!
 //! **The analysis alone.** Only one of the three states is a representation
 //! this compiler emits — Borrowed is the language below's own lifetime, Owned
@@ -56,7 +56,7 @@ fn a_view_parameter_borrows() {
 ///
 /// This is the state that is **not built**. What stands in its place today is
 /// the backend refusing the program on the Nikaia line, which is
-/// [ADR-283](../../../docs/specification/adr/adr-283.md) D3's residual hard
+/// [ADR-tether-v1](../../../docs/specification/adr/adr-tether-v1.md) D3's residual hard
 /// error.
 #[test]
 fn a_result_built_from_a_local_buffer_tethers() {
@@ -76,7 +76,7 @@ fn a_result_built_from_a_local_buffer_tethers() {
 }
 
 /// **A view of text that outlives the program borrows**, which is
-/// [ADR-283](../../../docs/specification/adr/adr-283.md) D7's own example: it
+/// [ADR-tether-v1](../../../docs/specification/adr/adr-tether-v1.md) D7's own example: it
 /// borrows from nothing and is still the cheapest state.
 #[test]
 fn a_result_that_is_static_text_borrows() {
@@ -235,7 +235,7 @@ fn a_grammar_entry_that_hands_back_a_number_holds_nothing() {
 }
 
 /// **The whole corpus is the free case**, which is
-/// [ADR-283](../../../docs/specification/adr/adr-283.md)'s worked check read
+/// [ADR-tether-v1](../../../docs/specification/adr/adr-tether-v1.md)'s worked check read
 /// off the analysis rather than asserted: *nothing is allocated per row and no
 /// refcount traffic occurs in the parallel section.*
 ///
@@ -286,7 +286,7 @@ fn nothing_in_the_corpus_needs_a_tether() {
 
 // --- The word above a struct ---
 
-/// **`@borrowed` is gone** ([ADR-283](../../../docs/specification/adr/adr-283.md)
+/// **`@borrowed` is gone** ([ADR-tether-v1](../../../docs/specification/adr/adr-tether-v1.md)
 /// D4): no word says where a struct's views live.
 ///
 /// Since [ADR-331](../../../docs/specification/adr/adr-331.md) an `@` line is
@@ -304,8 +304,8 @@ fn no_attribute_stands_above_a_struct() {
 }
 
 /// **No word is needed for a tether**
-/// ([ADR-283](../../../docs/specification/adr/adr-283.md) D4, withdrawing
-/// [ADR-283](../../../docs/specification/adr/adr-283.md) D4): where a buffer
+/// ([ADR-tether-v1](../../../docs/specification/adr/adr-tether-v1.md) D4, withdrawing
+/// [ADR-tether-v1](../../../docs/specification/adr/adr-tether-v1.md) D4): where a buffer
 /// lives is the compiler's decision, shown by `--tethers` and the ledger, and
 /// `@tethers` is not a word of this language - an attribute naming nothing.
 #[test]
@@ -327,7 +327,7 @@ fn findings(source: &str) -> Vec<nikaia::check::Finding> {
 }
 
 /// **A view of a buffer the body owns is tethered, not refused**, with no word
-/// written anywhere (ADR-283 D10, D4). The buffer is a copy: a literal alone
+/// written anywhere (ADR-tether-v1 D10, D4). The buffer is a copy: a literal alone
 /// would be a view of static text, which needs no tether (ADR-282 D29).
 #[test]
 fn a_view_of_a_buffer_the_body_owns_is_tethered() {

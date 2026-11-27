@@ -1,7 +1,7 @@
 // crates/nikaia-std/src/compiler/keep.nika
 //
 // Where a buffer lives once views of it outlive the scope that made it
-// (ADR-283, Part I 6.6) - the questions the compiler's `contracts::keep` asks
+// (ADR-tether-v1, Part I 6.6) - the questions the compiler's `contracts::keep` asks
 // of a type, a method's name and a ledger, moved from Rust (ADR-294, #125).
 // What stays Rust is the walk that follows views by origin and the plan it
 // decides, whose statement numbers are `usize` doors this language does not
@@ -48,7 +48,7 @@ impl KeepContext {
     }
 
     /// Why a value of this type **cannot** be carried into a handle, or
-    /// nothing where it can (ADR-283 D16): every view in it is text, or a list
+    /// nothing where it can (ADR-tether-v1 D16): every view in it is text, or a list
     /// or a nullable of one, or a struct made only of such fields. That is
     /// what `tether::Rebase` is written for, and the one property `Holding`
     /// needs beyond it - covariance - holds for every such struct.

@@ -10,7 +10,7 @@ hand, and the reason: sharing changes when a value is cleaned up) and D7 (the ru
 that sorts written from inferred),
 [ADR-005](specification/adr/adr-005.md) §3 (compiler-inserted clones, rejected:
 "diagnostics suggest, the user decides"),
-[ADR-283](specification/adr/adr-283.md) D3 (the same ban, argued again for the
+[ADR-tether-v1](specification/adr/adr-tether-v1.md) D3 (the same ban, argued again for the
 view case), [ADR-297](specification/adr/adr-297.md) (cleanup, which is what the
 reason is about), Part I [8.3](specification/10-nikaia-light.md) and Part II
 [11.2](specification/20-nikaia-advance.md) (a task moves what it uses, so the
@@ -42,7 +42,7 @@ prohibition has already been written twice on its own account:
 "Nikaia never inserts a clone the user did not write; diagnostics suggest, the
 user decides", with one exception for a handle on a shared value, which copies
 no data ([ADR-312](specification/adr/adr-312.md) D1, D2: duplicated where the
-name is read again, moved at its last use) — and [ADR-283](specification/adr/adr-283.md) D3 re-argues it for
+name is read again, moved at its last use) — and [ADR-tether-v1](specification/adr/adr-tether-v1.md) D3 re-argues it for
 the view case rather than leaning on it. Whoever proposes an automatic clone owes
 an answer to that reasoning: some account of why a moved cleanup point is
 tolerable when inserted by this rule and not by the one D3 refused, and why the

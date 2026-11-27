@@ -318,12 +318,12 @@ on `Reading`, which this program builds a billion times; with parallelism that i
 billion atomic increment/decrement pairs on one refcount word shared by every worker. Nothing
 in the program actually escapes, so the right answer costs nothing at all.
 
-[ADR-283](../docs/specification/adr/adr-283.md) settles it: view types stay (`ref String` is a view
+[ADR-tether-v1](../docs/specification/adr/adr-tether-v1.md) settles it: view types stay (`ref String` is a view
 marker, not a lifetime), the rule is restated over **escape** rather than storage, a view has
 three inferred states (Borrowed ⊑ Tethered ⊑ Owned), the shared handle sits on the *container*
 rather than on each slice, and `.clone()` is never inserted for you. **A struct writes nothing
 to stay a plain reference**, and the word that would let one keep its buffer alive is `@tethers`
-([ADR-283](../docs/specification/adr/adr-283.md) D4) — not built, because the state it permits is
+([ADR-tether-v1](../docs/specification/adr/adr-tether-v1.md) D4) — not built, because the state it permits is
 not. Under those rules the program allocates nothing per row and does no refcount work in the
 parallel section.
 
@@ -368,7 +368,7 @@ and a compute job over operator-chosen data has no adversary in either.
 [ADR-010](../docs/specification/adr/adr-010.md) decides it on the axis that matters, **provenance**,
 and at the level where the user actually knows the answer — the place the input enters. Sources are
 classified by `std` (network, IPC and database rows untrusted; files, argv, env and compile-time data
-trusted), the state travels the edges ADR-283 already tracks and lands in the same Ledger, joins
+trusted), the state travels the edges ADR-tether-v1 already tracks and lands in the same Ledger, joins
 conservatively, and fails safe at `dyn`/FFI barriers. The user overrides it at the source
 (`fs::map(path, root; trusted: false)`) and a DSL for a wire format can pin an `@untrusted` floor its
 callers cannot lower. Only then does the compiler pick an implementation: keyed hash with a random
@@ -399,7 +399,7 @@ a type was a name with optional generic arguments, so the example declared a two
 `struct Step` to say what one line of a tail rule should have said — a struct pretending to be
 a type. Tuples now exist: `(A, B)` as a type, `(a, b)` as a value, `t.0` to read a part
 (Part I, 4.5). The parts live where a named type's arguments live, so everything that already
-walked a type's arguments — the view analysis of ADR-283 among them — walks a tuple's parts
+walked a type's arguments — the view analysis of ADR-tether-v1 among them — walks a tuple's parts
 without knowing about tuples. `mul_tail` yields `(ref String, i64)` and `struct Step` is gone.
 
 **G12 — no sum type.** `calc.nika` has exactly two operators to carry, and an `enum` is what
@@ -490,7 +490,7 @@ Nothing is added to the language. A handler *returns* what answers the request �
 `html::Raw` is 200 text/html (ADR-017 D2 read from the other end: the type that says "this is
 markup" is the type that may be sent as markup), a `Response` is itself, and a `throws` that fails
 is 500 with a **generic** body and the error in the log, because an error message is written for
-the operator. The request's strings are views into the connection buffer (ADR-283), so a parameter
+the operator. The request's strings are views into the connection buffer (ADR-tether-v1), so a parameter
 used inside the request's scope costs nothing and one kept past it has to be owned.
 
 **G7 — HTML escaping belongs in the template grammar's contract.** *Decided and now

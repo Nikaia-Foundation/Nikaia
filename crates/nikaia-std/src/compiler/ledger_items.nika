@@ -752,9 +752,9 @@ pub fn ledger_infer_package[H: LedgerInferHost](mut ledger: Ledger, units: ref V
     // Beside `keeps`: it reads the checker's method answers and the entries
     // the item loop wrote.
     host.infer_locks(ledger)
-    // **Last of the columns, and it reads none of the above** (ADR-283 D5).
+    // **Last of the columns, and it reads none of the above** (ADR-tether-v1 D5).
     host.infer_tether(ledger)
-    // **What a result points into, written** (ADR-283 D25, #580), again, so
+    // **What a result points into, written** (ADR-tether-v1 D25, #580), again, so
     // a callee of another unit is read as written once its unit has been.
     ledger_result_sources(ledger, units.len(), host)
     ledger_evaluate_defaults(ledger, units, defaults, host)

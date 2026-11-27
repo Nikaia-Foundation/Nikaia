@@ -1603,7 +1603,7 @@ grammar! {
 
         // --- Structs ---
         //
-        // **No attribute stands here** ([ADR-283](../../docs/specification/adr/adr-283.md)
+        // **No attribute stands here** ([ADR-tether-v1](../../docs/specification/adr/adr-tether-v1.md)
         // D1). `@borrowed` used to, asserting that no value of this type ever
         // tethers, and it forbade nothing: the transition it refused does not
         // exist. D2 names `@tethers` as the word that will stand here — a

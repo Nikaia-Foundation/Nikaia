@@ -2058,7 +2058,7 @@ pub fn keeps_infer[H: KeepsHost](mut ledger: Ledger, units: ref Vec[ParsedView],
                 // text** (ADR-grammar-syntax-v1 D1). Whether it keeps that text is not a
                 // question about an action block at all: a parse keeps its
                 // input exactly when what it hands back holds a view **into**
-                // the input, which is ADR-283's tether read off the rule's
+                // the input, which is ADR-tether-v1's tether read off the rule's
                 // declared result.
                 //
                 // **Before this the entry was in the ledger with the column

@@ -239,7 +239,7 @@ impl Build {
 }
 
 /// How a view's lifetime is spelled here. The source never says either way
-/// (ADR-283); the position does.
+/// (ADR-tether-v1); the position does.
 use nikaia_std::compiler::emit_kinds::EmitLifetimes as Lifetimes;
 
 // --- The output, and the way back ---
@@ -1192,7 +1192,7 @@ impl nikaia_std::compiler::emit_holes::EmitHolesHost for Parsed {
 
 // ---------------------------------------------------------------------------
 // The tether: where a buffer lives, written out
-// ([ADR-283](../../docs/specification/adr/adr-283.md))
+// ([ADR-tether-v1](../../docs/specification/adr/adr-tether-v1.md))
 // ---------------------------------------------------------------------------
 
 impl Emitter<'_> {}

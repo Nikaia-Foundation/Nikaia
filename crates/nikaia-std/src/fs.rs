@@ -648,7 +648,7 @@ impl AsRef<[u8]> for Mapped {
 }
 
 /// A mapping is a buffer views are cut from, so a view of it kept by a
-/// container that drops entries is found in it again (ADR-283 D15).
+/// container that drops entries is found in it again (ADR-tether-v1 D15).
 impl crate::tether::Viewed for Mapped {
     fn bytes(&self) -> &[u8] {
         self.deref()
@@ -787,7 +787,7 @@ pub fn read_both(
 /// an image, a checksum, a format with a length prefix.
 ///
 /// **`Bytes` and not a `Vec[u8]`**, which is what Part III 17.2 has always
-/// said and [ADR-283](../../../docs/specification/adr/adr-283.md) D21 makes
+/// said and [ADR-tether-v1](../../../docs/specification/adr/adr-tether-v1.md) D21 makes
 /// true: one shared buffer, so handing the file on costs a count rather than a
 /// copy of it.
 pub async fn read(

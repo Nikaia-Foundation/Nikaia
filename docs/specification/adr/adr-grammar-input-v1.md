@@ -15,7 +15,7 @@ decisions are in the other `grammar-*-v1` records) and the whole of two
 records now in [`docs/history/adr/`](../../history/adr/README.md) (`Bytes`
 input; the interning table); [ADR-016](adr-016.md) D1 (a view of a mapping is
 text because the mapping was checked); [ADR-005](adr-005.md) D4,
-[ADR-283](adr-283.md) D11 (the tether a view takes; content equality on views);
+[ADR-tether-v1](adr-tether-v1.md) D11 (the tether a view takes; content equality on views);
 [ADR-010](adr-010.md) (the hasher, chosen by provenance); [ADR-297](adr-297.md)
 (cleanup always runs, the rule D13 relaxes); [ADR-014](adr-014.md) (the mapping
 and the parallel driver); [ADR-310](adr-310.md) (`asset("…")`, what a build may
@@ -121,7 +121,7 @@ done with them.
 
 Identifiers and keywords are interned `Symbol`s; bulk text (string literals,
 comments, doc text, DSL bodies) is a tethered slice ([ADR-005](adr-005.md) D4,
-[ADR-283](adr-283.md) D11). The guarantee is stated positively: the source
+[ADR-tether-v1](adr-tether-v1.md) D11). The guarantee is stated positively: the source
 buffer cannot be freed while a token points into it.
 
 ### D8 — A view takes the input's lifetime, and the struct holding it comes along.
@@ -136,7 +136,7 @@ named limitation.
 
 Hashing a view key from its first 8 bytes mixed with its length is sound;
 comparing only a prefix on a probe hit is not. Equality on views is content
-equality ([ADR-283](adr-283.md) D11). Which hash is used is chosen by
+equality ([ADR-tether-v1](adr-tether-v1.md) D11). Which hash is used is chosen by
 provenance ([ADR-010](adr-010.md)), never at the cost of this property.
 
 ### D10 — The caller hands the table to the entry as `words:`

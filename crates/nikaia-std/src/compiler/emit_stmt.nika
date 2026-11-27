@@ -105,7 +105,7 @@ fn emit_stmt_tuple_part(names: ref Vec[String], shape: ref Vec[i64], mut at: i64
 }
 
 /// What a buffer put into a keep is written with: `put_viewed` where the views
-/// are held one by one (ADR-283 D14) or a task's `Holding` finds them (ADR-218
+/// are held one by one (ADR-tether-v1 D14) or a task's `Holding` finds them (ADR-218
 /// D4), `put` otherwise - and for a buffer that is no text or bytes, which no
 /// view is found in by address.
 fn emit_stmt_put_call(keep: ref KeepAt, opaque: bool) -> String {
@@ -262,7 +262,7 @@ impl EmitState {
         // rendering it, not by guessing from the shape.
         if block.stmts.len() == 1 && opening == null {
             // **A try that is thrown away leaves nothing behind**: the keeps
-            // it declared (ADR-283 D10) are declared again by the rendering
+            // it declared (ADR-tether-v1 D10) are declared again by the rendering
             // that is kept - `println(d())` alone in `main` lost its keep.
             let declared = walk.preluded.clone()
             // So is the deadline a fallback's guarded block takes (D16).
@@ -624,7 +624,7 @@ impl EmitState {
     fn emit_stmt_kept(ref self, walk: ref EmitWalk, function: ref String, at: i64, bound: ref String) -> EmitStmtKept {
         let key = self.keep_plan_key(walk, function) ?? return emit_stmt_kept_none()
         let plan = self.keep_plans.get(key) ?? return emit_stmt_kept_none()
-        // **A buffer whose views outlive this scope goes into a keep** (ADR-283
+        // **A buffer whose views outlive this scope goes into a keep** (ADR-tether-v1
         // D9), and the binding is where it now lives.
         let mut put: String? = null
         let keep = plan.puts.get(at)
@@ -894,7 +894,7 @@ impl EmitState {
     }
 
     /// An assignment: through the brackets (`index::set`, ADR-080 D2), into a
-    /// held struct (ADR-283 D17), a slot or a counter proved inside its type
+    /// held struct (ADR-tether-v1 D17), a slot or a counter proved inside its type
     /// (#387), or plain.
     fn emit_stmt_assign[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, target: ref Expr, op: ref BinaryOp?, value: ref Expr, span: ref Span, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
         let at = span.start as i64
@@ -1128,7 +1128,7 @@ impl EmitState {
         out.push("), __nikaia_stored); }")
     }
 
-    /// **A field of a held struct is written through its handle** (ADR-283
+    /// **A field of a held struct is written through its handle** (ADR-tether-v1
     /// D17): the value first, and then a closure that is handed the struct and
     /// its keeps - where a view made outside is found again in them, or copied
     /// into them, before it is stored.

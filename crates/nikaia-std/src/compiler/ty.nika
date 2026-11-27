@@ -1336,7 +1336,7 @@ fn touched(kind: ref String, parameter: ref String?, write: bool) -> String {
     return f"{kind}({named_text}) {access}"
 }
 
-/// **How a view is held** (ADR-283 D2): borrowed for the call, or tethered to
+/// **How a view is held** (ADR-tether-v1 D2): borrowed for the call, or tethered to
 /// a buffer that has to outlive it.
 pub enum State {
     Borrowed,
@@ -1667,7 +1667,7 @@ pub struct FnContract {
     /// may point into all of `borrows`.
     pub returns: String,
     /// **Views of a parameter kept in a place another parameter holds**
-    /// (ADR-283 D27): `v:s` where a view of `s` is pushed, inserted or
+    /// (ADR-tether-v1 D27): `v:s` where a view of `s` is pushed, inserted or
     /// assigned into `mut v`'s place, `self:s` into the receiver's. Worked
     /// out from the body for this unit's own functions; not spelled.
     pub stores: Vec[String],
