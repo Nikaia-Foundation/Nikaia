@@ -2150,10 +2150,54 @@ impl EmitState {
         walk.hold_args = by_arg
     }
 
+    /// **A call that changes a binding packed for a task writes it through its
+    /// handle** (ADR-tether-v1 D11, #2839): the arguments first, then a closure
+    /// handed the value and the task's keeps, where each view given is found
+    /// again, or copied into them, before the call keeps it. False where the
+    /// call is no such one.
+    fn emit_core_packed_call[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, node: ref Expr, receiver: ref Expr, args: ref Vec[Expr], depth: i64, flow: EmitFlow, scope: ref EmitScope) -> bool sync throws {
+        let on = node_key(receiver)
+        if walk.held.contains_key(on) || !self.facts.mut_receivers.contains(on) {
+            return false
+        }
+        let symbol = match receiver {
+            Expr::Variable(name, _) => name.clone(),
+            else => return false,
+        }
+        let bound = emit_text(world, symbol)
+        let key = self.keep_plan_key(walk, scope.function) ?? return false
+        let plan = self.keep_plans.get(key) ?? return false
+        if !plan.tethered.contains_key(bound) {
+            return false
+        }
+        out.push("{ ")
+        for i in 0..<args.len() {
+            out.push(f"let __nikaia_given_{i} = ")
+            self.emit_expr(world, walk, out, host, args[i], depth, flow, scope)
+            out.push("; ")
+        }
+        let keeps = if args.len() == 0 { "_" } else { "keeps" }
+        out.push(f"{self.emit_expr_read_name(world, symbol, receiver)}.with_mut(|held, {keeps}| ")
+        walk.held.insert(on, "held")
+        for i in 0..<args.len() {
+            walk.held.insert(node_key(args[i]), f"nikaia_std::tether::Rebase::rebase(__nikaia_given_{i}, &keeps)")
+        }
+        self.emit_expr(world, walk, out, host, node, depth, flow, scope)
+        walk.held.remove(on)
+        for each in args {
+            walk.held.remove(node_key(each))
+        }
+        out.push(") }")
+        return true
+    }
+
     /// The `MethodCall` arm of `expr_as_written` (and the `?.` that is a plain
     /// call, ADR-279 D13): the forms that are not the call itself, then the call.
     fn emit_core_method_arm[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, node: ref Expr, receiver: ref Expr, method: winnow_grammar::Symbol, args: ref Vec[Expr], config: ref Vec[ConfigArg], depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
         let name = emit_text(world, method)
+        if self.emit_core_packed_call(world, walk, out, host, node, receiver, args, depth, flow, scope) {
+            return
+        }
         // **`s.find(needle; from:)` on text is `std`'s search** (ADR-374 D2): the
         // language below's `str::find` takes one argument and answers a `usize`.
         // **`a.compare(b)` and `a.eq(b)` are the standard library's** (ADR-341 D2):

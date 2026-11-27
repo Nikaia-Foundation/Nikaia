@@ -1410,8 +1410,39 @@ impl EmitState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
+    pub(crate) fn emit_core_packed_call<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, node: &Expr, receiver: &Expr, args: &[Expr], depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<bool, nikaia_std::error::Thrown<EmitRefused>> {
+        let on = node_key(receiver);
+        if walk.held.contains_key(&on) || !self.facts.mut_receivers.contains(&on) { return Ok(false); }
+        let symbol = match receiver {
+            Expr::Variable(name, _) => { let name = *name; name.copy_owned() },
+            _ => return Ok(false),
+        };
+        let bound = emit_text(world, symbol);
+        let key = match self.keep_plan_key(&walk, &scope.function) { Some(__nikaia_value) => __nikaia_value, None => return Ok(false) };
+        let plan = match self.keep_plans.get(&key) { Some(__nikaia_value) => __nikaia_value, None => return Ok(false) };
+        if !plan.tethered.contains_key(&bound) { return Ok(false); }
+        out.push("{ ");
+        for i in 0..args.len() as i64 {
+            out.push(&format!("let __nikaia_given_{} = ", i));
+            self.emit_expr(world, walk, out, host, unsafe { nikaia_std::proven::read(&args, (i) as usize) }, depth, flow, scope)?;
+            out.push("; ");
+        }
+        let keeps = if args.is_empty() { "_" } else { "keeps" };
+        out.push(&format!("{}.with_mut(|held, {}| ", self.emit_expr_read_name(world, symbol, receiver), keeps));
+        walk.held.insert(on, String::from("held"));
+        for i in 0..args.len() as i64 { walk.held.insert(node_key(unsafe { nikaia_std::proven::read(&args, (i) as usize) }), format!("nikaia_std::tether::Rebase::rebase(__nikaia_given_{}, &keeps)", i)); }
+        self.emit_expr(world, walk, out, host, node, depth, flow, scope)?;
+        walk.held.remove(&on);
+        for each in args.iter() { walk.held.remove(&node_key(each)); }
+        out.push(") }");
+        Ok(true)
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn emit_core_method_arm<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, node: &Expr, receiver: &Expr, method: winnow_grammar::Symbol, args: &[Expr], config: &[ConfigArg], depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
         let name = emit_text(world, method);
+        if self.emit_core_packed_call(world, walk, out, host, node, receiver, args, depth, flow, scope)? { return Ok(()); }
         if (name == "compare" || name == "eq") && args.len() == 1 && self.facts.standard_compares.contains_key(&node_key(receiver)) {
             let flags = nikaia_std::index::or(*nikaia_std::index::get(&self.facts.standard_compares, &(node_key(receiver))), || 0);
             if name == "compare" { out.push("std::cmp::Ord::cmp(&"); } else { out.push("std::cmp::PartialEq::eq(&"); }
@@ -1644,8 +1675,8 @@ pub(crate) fn emit_tuple_part_copy(i: i64, word: &str) -> String {
 }
 
 pub(crate) fn emit_tuple_part_copies(parts: &[String]) -> String {
-    let copies: Vec<String> = parts.iter().enumerate().map(|(at, item)| (at as i64, item)).map(|__nikaia_tuple126497| {
-        let (i, word) = __nikaia_tuple126497;
+    let copies: Vec<String> = parts.iter().enumerate().map(|(at, item)| (at as i64, item)).map(|__nikaia_tuple128602| {
+        let (i, word) = __nikaia_tuple128602;
         emit_tuple_part_copy(i, word)
     }).collect::<Vec<_>>();
     if copies.len() == 1 { return format!("({},)", *unsafe { nikaia_std::proven::read(&copies, (0) as usize) }); }
