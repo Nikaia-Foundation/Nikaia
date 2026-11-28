@@ -385,9 +385,21 @@ pub(crate) fn check_arguments<H: CheckHost>(state: &mut CheckState, world: &Chec
         lent = lent || text_method != "" && check_core_method_pattern_at(&text_method) == at;
         let kept = !lent;
         if own && lent && check_arguments_plain_option(&want) { want = view_of_type(&want); }
-        if kept && !want.is_a_view() && !nikaia_std::list::contains(&signature.mutable, &name) && !state.foreign_names.contains(written) && given_here.is_some() {
+        let read_field = match given_here {
+            None => false,
+            Some(given) => match given {
+                Expr::Field { .. } => found_here == string_ty(),
+                _ => false,
+            },
+        };
+        let bound_view = read_field && at < state.flow.call_expected.len() as i64 && (*nikaia_std::index::get(&state.flow.call_expected, nikaia_std::index::at(at))).is_a_view();
+        if kept && !bound_view && !want.is_a_view() && !nikaia_std::list::contains(&signature.mutable, &name) && !state.foreign_names.contains(written) && given_here.is_some() {
             let value = match given_here { Some(__nikaia_value) => __nikaia_value, None => continue };
             state.hands_over(world, value, &found_here, &format!("passed to `{}`, which keeps it", written), span);
+        }
+        if kept && bound_view {
+            let value = match given_here { Some(__nikaia_value) => __nikaia_value, None => continue };
+            state.facts.lent_args.insert(id_of(value) as i64);
         }
         if given_here.is_some() && check_core_places_a_handle(&declared) {
             let value = match given_here { Some(__nikaia_value) => __nikaia_value, None => continue };

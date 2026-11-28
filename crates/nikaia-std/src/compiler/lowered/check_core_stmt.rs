@@ -2345,10 +2345,19 @@ pub(crate) fn check_core_view_lists_end(state: &mut CheckState, world: &CheckWor
 pub(crate) fn check_core_view_list_rebound(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, block: &Block, name: &str, at: i64, last: i64, start: i64, viewed_ty: &str) {
     if viewed_ty == "" { return; }
     let mut together: collections::BTreeSet<String> = collections::BTreeSet::new();
+    let own_text = !check_core_a_list_of_views(&state, name);
     let mut later = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
     while later <= last {
+        let walks = match &nikaia_std::index::get(&block.stmts, nikaia_std::index::at(later)).node {
+            Stmt::For { iter, .. } => own_text && check_core_is_the_name(world, iter, name),
+            _ => false,
+        };
+        if walks {
+            later = unsafe { nikaia_std::proven::add::<i64>(later, 1) };
+            continue;
+        }
         let mut read: collections::BTreeSet<String> = collections::BTreeSet::new();
-        names_in_statement(&nikaia_std::index::get(&block.stmts, nikaia_std::index::at(later)).node, world.words, &mut read);
+        names_in_statement(&unsafe { nikaia_std::proven::read(&block.stmts, (later) as usize) }.node, world.words, &mut read);
         if read.contains(name) { for one in read.iter() { together.insert(nikaia_std::block::Text::from(one.to_string())); } }
         later = unsafe { nikaia_std::proven::add::<i64>(later, 1) };
     }

@@ -1026,7 +1026,7 @@ pub(crate) fn check_core_call_filled<H: CheckHost>(state: &mut CheckState, world
         Some(__nikaia_it) => Some(__nikaia_it.clone()),
         None => None,
     } { Some(__nikaia_value) => __nikaia_value, None => return None };
-    #[allow(unused_mut)] let mut parameters: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
+    let mut parameters: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     if pathed {
         parameters = signature_type_variables(&signature);
         if parameters.len() != 1 { return None; }
@@ -1053,7 +1053,7 @@ pub(crate) fn check_core_call_filled<H: CheckHost>(state: &mut CheckState, world
     let walked: String = nikaia_std::index::or(match state.walks_fields.get(&name) {
         Some(__nikaia_it) => Some(__nikaia_it.clone()),
         None => None,
-    }, || "".into()); #[allow(unused_mut, clippy::redundant_locals)] let mut parameters = parameters;
+    }, || "".into());
     at = 0;
     for parameter in parameters.iter() {
         if *parameter == walked && at < filled.len() as i64 && !(*unsafe { nikaia_std::proven::read(&filled, (at) as usize) }).is_unknown() { check_core_instantiate(state, world, &name, id_of(base) as i64, unsafe { nikaia_std::proven::read(&filled, (at) as usize) }, false); }
@@ -1065,7 +1065,7 @@ pub(crate) fn check_core_call_filled<H: CheckHost>(state: &mut CheckState, world
         Some(__nikaia_it) => Some(__nikaia_it.clone()),
         None => None,
     } { Some(__nikaia_value) => __nikaia_value, None => return Some(got) };
-    let mut by_brackets: collections::BTreeMap<String, Ty> = collections::BTreeMap::new(); #[allow(unused_mut, clippy::redundant_locals)] let mut parameters = parameters;
+    let mut by_brackets: collections::BTreeMap<String, Ty> = collections::BTreeMap::new();
     at = 0;
     for parameter in parameters.iter() {
         if at < filled.len() as i64 && !(*unsafe { nikaia_std::proven::read(&filled, (at) as usize) }).is_unknown() && !check_core_call_param_names(&signature, parameter) { by_brackets.insert(nikaia_std::block::Text::from(parameter.to_string()), (*unsafe { nikaia_std::proven::read(&filled, (at) as usize) }).clone()); }

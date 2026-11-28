@@ -1311,7 +1311,9 @@ pub(crate) fn check_core_call_on_described<H: CheckHost>(state: &mut CheckState,
     state.flow.option_integers = integers;
     state.flow.option_written = texts;
     state.flow.call_written = format!("{}.{}", check_walked_written(receiver, world.words), written);
+    state.flow.call_expected = expected.copy_owned();
     let result = check_crossings_arguments(state, world, host, key, &written, contract, args, &found, &passed, span);
+    state.flow.call_expected = vec![];
     state.flow.option_values = vec![];
     state.flow.option_literals = vec![];
     state.flow.option_integers = vec![];

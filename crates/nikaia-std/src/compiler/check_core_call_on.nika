@@ -1742,7 +1742,9 @@ fn check_core_call_on_described[H: CheckHost](mut state: CheckState, world: ref 
     state.flow.option_integers = integers
     state.flow.option_written = texts
     state.flow.call_written = f"{check_walked_written(receiver, world.words)}.{written}"
+    state.flow.call_expected = expected.clone()
     let result = check_crossings_arguments(state, world, host, key, written, contract, args, found, passed, span)
+    state.flow.call_expected = []
     state.flow.option_values = []
     state.flow.option_literals = []
     state.flow.option_integers = []

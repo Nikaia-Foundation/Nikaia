@@ -422,12 +422,12 @@ pub fn decided(slots: &mut Slots) -> Sharing {
         let root = slots.class_of(key);
         if !holds_a_word(&handle_type(&slots, key)) { not_a_word.insert(root); }
     }
-    let duplicated = sites_by_slot(&slots.duplicated); #[allow(clippy::redundant_locals)] let keys = keys;
-    let moved_at = sites_by_slot(&slots.moved); #[allow(clippy::redundant_locals)] let keys = keys;
-    let copied_out = sites_by_slot(&slots.copies); #[allow(clippy::redundant_locals)] let keys = keys;
+    let duplicated = sites_by_slot(&slots.duplicated);
+    let moved_at = sites_by_slot(&slots.moved);
+    let copied_out = sites_by_slot(&slots.copies);
     let mut decisions: Vec<Decision> = vec![];
-    let mut counts: collections::BTreeMap<String, Count> = collections::BTreeMap::new(); #[allow(clippy::redundant_locals)] let keys = keys;
-    let mut classes: collections::BTreeMap<String, collections::BTreeMap<i64, Class>> = collections::BTreeMap::new(); #[allow(clippy::redundant_locals)] let keys = keys;
+    let mut counts: collections::BTreeMap<String, Count> = collections::BTreeMap::new();
+    let mut classes: collections::BTreeMap<String, collections::BTreeMap<i64, Class>> = collections::BTreeMap::new();
     for key in keys.iter() {
         let root = slots.class_of(key);
         let handle = match match *nikaia_std::index::get(&slots.handles, key) {
@@ -510,9 +510,9 @@ pub(crate) fn lock_kept(count: &Count, a_word: bool, held_together: bool) -> Opt
 }
 
 pub(crate) fn sorted_once(members: &[String]) -> Vec<String> {
-    #[allow(unused_mut)] let mut sorted = members.copy_owned();
+    let mut sorted = members.copy_owned();
     sorted.sort();
-    let mut out: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut sorted = sorted;
+    let mut out: Vec<String> = vec![];
     for one in sorted.iter() { if out.is_empty() || *unsafe { nikaia_std::proven::read(&out, (nikaia_std::proven::sub::<i64>(out.len() as i64, 1)) as usize) } != *one { out.push(nikaia_std::block::Text::from(one.to_string())); } }
     out
 }

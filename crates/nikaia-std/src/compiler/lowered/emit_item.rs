@@ -394,7 +394,7 @@ impl EmitState {
         }
         let declared = types_declared_in(world.items, world.words);
         let generics = impl_parameters(world.words, target, &declared);
-        #[allow(unused_mut)] let mut head_parts: Vec<String> = vec![]; #[allow(clippy::redundant_locals)] let generics = generics;
+        #[allow(unused_mut)] let mut head_parts: Vec<String> = vec![];
         if borrows { head_parts.push(String::from("'a")); }
         head_parts.reserve(generics.iter().size_hint().0); for g in generics.iter() { head_parts.push(nikaia_std::block::Text::from(g.to_string())); }
         #[allow(unused_mut)] let mut target_parts: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut head_parts = head_parts;

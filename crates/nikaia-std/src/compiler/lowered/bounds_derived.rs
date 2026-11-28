@@ -217,7 +217,7 @@ pub(crate) fn derived_claims(args: &[FnArg], body: &Block, method: bool, steps: 
             ints.push(name);
         } else if ty == "Vec" || ty == "List" || ty == "Array" || ty == "Bytes" { lists.push(name); }
     }
-    let mut literals: collections::BTreeMap<String, i64> = collections::BTreeMap::new(); #[allow(unused_mut, clippy::redundant_locals)] let mut ints = ints; #[allow(unused_mut, clippy::redundant_locals)] let mut lists = lists;
+    let mut literals: collections::BTreeMap<String, i64> = collections::BTreeMap::new(); #[allow(unused_mut, clippy::redundant_locals)] let mut lists = lists;
     for stmt in body.stmts.iter() {
         match &stmt.node {
             Stmt::Let { names, mutable, value, .. } => {

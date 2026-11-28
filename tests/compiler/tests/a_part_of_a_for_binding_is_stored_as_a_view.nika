@@ -1,0 +1,63 @@
+// A part of a `for` binding goes into a struct field or a list as a view
+// (ADR-views-v4 D5, D32, #2478): the loop walks the list in place, so what is
+// stored views the list's text and no copy is made.
+
+struct N { raw: String }
+
+struct E { v: String }
+
+fn make(word: String) -> String {
+    let mut text = String()
+    text.push_str(word)
+    return text
+}
+
+fn walk(ns: Vec[N], mut out: Vec[E]) {
+    for n in ns { out.push(E { v: n.raw }) }
+}
+
+fn walk_text(ss: Vec[String], mut out: Vec[E]) {
+    for s in ss { out.push(E { v: s }) }
+}
+
+fn first(ns: Vec[N]) -> E {
+    for n in ns { return E { v: n.raw } }
+    return E { v: "none" }
+}
+
+fn pushed_here() throws {
+    let ns = [N { raw: make("abc") }, N { raw: make("def") }]
+    let mut es: Vec[E] = []
+    for n in ns { es.push(E { v: n.raw }) }
+    println(f"{es[0].v} {es[1].v}")
+}
+
+fn pushed_bare() throws {
+    let ss = [make("abc"), make("def")]
+    let mut es: Vec[E] = []
+    for s in ss { es.push(E { v: s }) }
+    println(f"{es[0].v} {es[1].v}")
+}
+
+fn pushed_part_into_text() throws {
+    let ns = [N { raw: make("abc") }, N { raw: make("def") }]
+    let mut es: Vec[String] = []
+    for n in ns { es.push(n.raw) }
+    println(f"{es[0]} {es[1]}")
+}
+
+fn main() throws {
+    pushed_here()
+    pushed_part_into_text()
+    pushed_bare()
+    let ns = [N { raw: make("abc") }, N { raw: make("def") }]
+    let mut es: Vec[E] = []
+    walk(ns, es)
+    println(f"{es[0].v} {es[1].v}")
+    let ss = [make("abc"), make("def")]
+    let mut ts: Vec[E] = []
+    walk_text(ss, ts)
+    println(f"{ts[0].v} {ts[1].v}")
+    let ms = [N { raw: make("def") }]
+    println(f"{first(ns).v} {first(ms).v}")
+}

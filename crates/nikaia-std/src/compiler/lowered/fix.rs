@@ -18,10 +18,10 @@ pub(crate) struct FixEdit {
 }
 
 pub async fn fix_run<H: LspHost>(host: &H, named: &[String], dry_run: bool, only: &[String]) -> Result<i64, nikaia_std::error::Thrown<nikaia_std::io::IoError>> {
-    #[allow(unused_mut)] let mut files: Vec<String> = vec![];
+    let mut files: Vec<String> = vec![];
     for path in named.iter() { fix_files_under(path, &mut files).await; }
-    let open: collections::BTreeMap<String, String> = collections::BTreeMap::new(); #[allow(unused_mut, clippy::redundant_locals)] let mut files = files;
-    let mut said_of: collections::BTreeMap<String, Vec<Shown>> = collections::BTreeMap::new(); #[allow(unused_mut, clippy::redundant_locals)] let mut files = files;
+    let open: collections::BTreeMap<String, String> = collections::BTreeMap::new();
+    let mut said_of: collections::BTreeMap<String, Vec<Shown>> = collections::BTreeMap::new();
     let mut code: i64 = 0;
     for file in files.iter() {
         let source = match fs::read_to_string(std::path::Path::new(&(file)), &fs::Root::Anywhere).await {

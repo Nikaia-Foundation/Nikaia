@@ -2313,10 +2313,10 @@ pub(crate) fn rsrc_result_is_receivers(asked: &Asked<'_, '_, '_>, signature: &Si
         None => None,
     } { Some(__nikaia_value) => __nikaia_value, None => return false };
     if signature.params.is_empty() || unsafe { nikaia_std::proven::read(&signature.params, (0) as usize) }.0 != "self" { return false; }
-    #[allow(unused_mut)] let mut wanted: Vec<String> = vec![];
+    let mut wanted: Vec<String> = vec![];
     rsrc_ty_names(&result, &mut wanted);
     let mut generics = 0;
-    let mut receiver: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut wanted = wanted;
+    let mut receiver: Vec<String> = vec![];
     rsrc_ty_names(&unsafe { nikaia_std::proven::read(&signature.params, (0) as usize) }.1, &mut receiver);
     for name in wanted.iter() {
         let generic = !rsrc_plain_name(name) && !name.contains("::") && !asked.own.types.contains_key(name) && !asked.library.types.contains_key(name);
@@ -2545,6 +2545,14 @@ pub(crate) fn rsrc_either_text(asked: &Asked<'_, '_, '_>, ty: Option<&Type>) -> 
 
 pub(crate) fn rsrc_text_or_none(asked: &Asked<'_, '_, '_>, ty: &Type) -> bool { (*ty.code).is_none() && ty.generics.is_empty() && asked.names.resolve(ty.name) == "String" }
 
+pub(crate) fn rsrc_text_list(unit: &Unit, asked: &Asked<'_, '_, '_>, ty: &Type) -> bool {
+    if (*ty.code).is_some() || ty.is_view || ty.is_nullable || ty.generics.len() != 1 { return false; }
+    let name = asked.names.resolve(ty.name);
+    if name != "Vec" && name != "List" && name != "Array" { return false; }
+    let element = unsafe { nikaia_std::proven::read(&ty.generics, (0) as usize) };
+    rsrc_plain_text(asked, element) || !element.is_view && element.generics.is_empty() && !rsrc_textless(unit, asked, element, &vec![]) && unit.fields.contains_key(asked.names.resolve(element.name))
+}
+
 pub(crate) fn rsrc_plain_text(asked: &Asked<'_, '_, '_>, ty: &Type) -> bool { (*ty.code).is_none() && !ty.is_nullable && ty.generics.is_empty() && asked.names.resolve(ty.name) == "String" }
 
 pub(crate) fn rsrc_tail(body: &Block, tail: &collections::BTreeSet<String>, flow: &mut ResultSrcFlow) {
@@ -2582,7 +2590,7 @@ pub(crate) fn rsrc_report(asked: &Asked<'_, '_, '_>, of: &str, sources: &[String
             }
         }
     }
-    #[allow(unused_mut)] let mut named: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
+    let mut named: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     for source in sources.iter() { if reach.contains(source) { named.push(nikaia_std::block::Text::from(source.to_string())); } }
     if trait_name.is_none() || written_from { return; }
     if declared_result.found && !declared_result.view {
@@ -2608,7 +2616,7 @@ pub(crate) fn rsrc_report(asked: &Asked<'_, '_, '_>, of: &str, sources: &[String
         }
         return;
     }
-    let mut allowed: String = String::from(""); #[allow(unused_mut, clippy::redundant_locals)] let mut named = named;
+    let mut allowed: String = String::from("");
     if takes_a_view_of_itself(receiver) { allowed = String::from("self"); } else if declared_views.len() == 1 { allowed = nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&declared_views, (0) as usize) }).to_string()); } else if declared_views.len() > 1 { return; }
     for source in named.iter() {
         if *source != allowed {
@@ -2731,7 +2739,7 @@ pub(crate) fn places_of(unit: &Unit, asked: &Asked<'_, '_, '_>, subject: Option<
             }
             for arg in args.iter() {
                 let named = nikaia_std::block::Text::from(asked.names.resolve(arg.name).to_string());
-                if arg.mutable && (*arg.ty.code).is_none() && !rsrc_scalar(asked, &arg.ty) && rsrc_type_holds_view(asked, &arg.ty) { places.insert(nikaia_std::block::Text::from(named.to_string())); } else if !arg.mutable && (*arg.ty.code).is_none() && (rsrc_plain_text(asked, &arg.ty) || arg.ty.is_view) && (arg.ty.is_view || rsrc_lent(asked, (own_contract).as_ref(), position)) { sources.push(nikaia_std::block::Text::from(named.to_string())); }
+                if arg.mutable && (*arg.ty.code).is_none() && !rsrc_scalar(asked, &arg.ty) && rsrc_type_holds_view(asked, &arg.ty) { places.insert(nikaia_std::block::Text::from(named.to_string())); } else if !arg.mutable && (*arg.ty.code).is_none() && (rsrc_plain_text(asked, &arg.ty) || arg.ty.is_view) && (arg.ty.is_view || rsrc_lent(asked, (own_contract).as_ref(), position)) { sources.push(nikaia_std::block::Text::from(named.to_string())); } else if !arg.mutable && rsrc_text_list(unit, asked, &arg.ty) && rsrc_lent(asked, (own_contract).as_ref(), position) { sources.push(nikaia_std::block::Text::from(named.to_string())); }
                 position = unsafe { nikaia_std::proven::add::<i64>(position, 1) };
             }
             if places.is_empty() || sources.is_empty() { return; }

@@ -3300,8 +3300,20 @@ fn check_core_view_list_rebound(mut state: CheckState, world: ref CheckWorld, bl
         return
     }
     let mut together: collections::BTreeSet[String] = collections::BTreeSet()
+    let own_text = !check_core_a_list_of_views(state, name)
     let mut later = at + 1
     while later <= last {
+        // A `for` that walks a list of own text puts nothing into it: what
+        // it reads together with the list views the list's text (ADR-views-v4
+        // D5, #2478), so the list must outlive it, not be bound after it.
+        let walks = match block.stmts[later].node {
+            Stmt::For { iter, .. } => own_text && check_core_is_the_name(world, iter, name),
+            else => false,
+        }
+        if walks {
+            later += 1
+            continue
+        }
         let mut read: collections::BTreeSet[String] = collections::BTreeSet()
         names_in_statement(block.stmts[later].node, world.words, read)
         if read.contains(name) {

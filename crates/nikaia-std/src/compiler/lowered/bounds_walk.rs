@@ -5310,7 +5310,7 @@ pub(crate) fn bounding_for(walk: &mut BoundsWalk, bindings: &[winnow_grammar::Sy
         if counted { most = bounding_for_turns_most(walk, low, high, closed, &changed, &name, &facts, !multiplies, &mut &mut *ask); }
         scaled = bounding_scaled_bounds(walk, &facts, &scales, most, &mut &mut *ask);
     }
-    let mut entered: Vec<(String, i64)> = nikaia_std::block::list(nikaia_std::block::Place::Block); #[allow(clippy::redundant_locals)] let followers = followers;
+    let mut entered: Vec<(String, i64)> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     entered.reserve(followers.iter().size_hint().0); for x in followers.iter() {
         let e = bounding_rename(walk, &mut inner, x);
         entered.push((nikaia_std::block::Text::from(x.to_string()), e));
@@ -5484,7 +5484,7 @@ pub(crate) fn bounding_for(walk: &mut BoundsWalk, bindings: &[winnow_grammar::Sy
     }
     let mut paired: Vec<i64> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     if !breaks(body, words) { paired = bounding_pair_bounds(walk, facts, &pairs, ""); }
-    let mut left: Vec<(String, i64)> = nikaia_std::block::list(nikaia_std::block::Place::Block); #[allow(clippy::redundant_locals)] let followers = followers;
+    let mut left: Vec<(String, i64)> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     left.reserve(followers.iter().size_hint().0); for x in followers.iter() {
         let e = bounding_rename(walk, facts, x);
         left.push((nikaia_std::block::Text::from(x.to_string()), e));
