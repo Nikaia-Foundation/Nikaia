@@ -156,9 +156,9 @@ fn a_loop_binding_is_not_the_name_it_shadows() {
     );
 }
 
-/// **A binding lent text is a view of it** (0.0.245), and one put where text
-/// of its own is kept is refused with the copy to write - `rustc` said
-/// *expected `String`, found `&String`*.
+/// **A binding lent text is a view of it** (0.0.245): one put where text of
+/// its own is kept (`rustc` said *expected `String`, found `&String`*) is
+/// no longer refused with NK1106: the program checks and runs (#2478).
 #[test]
 fn text_a_loop_lends_is_kept_only_as_a_copy() {
     let found = findings(
@@ -172,11 +172,7 @@ fn text_a_loop_lends_is_kept_only_as_a_copy() {
          \x20   }\n\
          }\n",
     );
-    assert!(
-        found.iter().any(|f| f.code == "NK1106"
-            && f.help.as_deref() == Some("Write `.clone()` to copy it here.")),
-        "{found:#?}"
-    );
+    assert!(found.is_empty(), "{found:#?}");
 }
 
 /// **A graph over a map of lists** (0.0.246), which found four at once: a set
