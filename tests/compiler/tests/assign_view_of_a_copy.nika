@@ -1,0 +1,38 @@
+// A view of a value that copies, assigned to a binding that holds the value,
+// is copied out (ADR-387 D1, ADR-294 D9.1, #2509), as at `let o: Range = k`.
+
+struct Range {
+    lo: i64,
+    hi: i64,
+}
+
+struct Holder {
+    r: Range,
+}
+
+fn plain(k: ref Range) -> i64 {
+    let mut o = Range { lo: 0, hi: 0 }
+    o = k
+    return o.lo + o.hi
+}
+
+fn maybe(k: ref Range) -> i64 {
+    let mut o: Range? = null
+    o = k
+    let got = o ?? return -1
+    return got.hi
+}
+
+fn field(k: ref Range) -> i64 {
+    let mut h = Holder { r: Range { lo: 0, hi: 0 } }
+    h.r = k
+    return h.r.lo
+}
+
+fn main() throws {
+    let r = Range { lo: 3, hi: 4 }
+    println(plain(r))
+    println(maybe(r))
+    println(field(r))
+    println(r.lo)
+}
