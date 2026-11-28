@@ -31,7 +31,7 @@ nikaia kernels benches/solver-kernels.nika
 # checks the whole `logic` package, 52 s natively (2026-11-23), about 45
 # minutes under callgrind.
 row check.drive compile 137939641378 2 5d3da6cc34b87247 {nikaia} check --bounds scripts/drive.nika
-row check.gate compile 5132344282 2 2fde1241626c4a87 {nikaia} check --bounds scripts/gate.nika
+row check.gate compile 5238492242 2 2fde1241626c4a87 {nikaia} check --bounds scripts/gate.nika
 row check.game compile 2944541838 2 fa0874072ae900f2 {nikaia} check --bounds benches/game/game.nika
 #
 # Runtime rows, 1 %: each Nikaia program beside its tuned Rust entry.
