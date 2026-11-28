@@ -516,7 +516,7 @@ impl EmitState {
                 },
             }
             out.push(&emit_stream_batched_start());
-            let each = emit_stream_each("_", self.facts.emitting_entries.contains(&format!("{}::{}", name, rule_name)), true, "__wg_one.clone()");
+            let each = emit_stream_each("_", self.facts.emitting_entries.contains(&format!("{}::{}", name, rule_name)), true);
             out.push(&format!("let __wg_parsed = {}::parse_{}_slice_each(&__wg_source[..], &mut {}, {}{}); ", lowered, rule_name, context, handed, each));
             out.push(&emit_stream_batched_end("__wg_error.render(&__wg_source[..])"));
             out.push(" })");

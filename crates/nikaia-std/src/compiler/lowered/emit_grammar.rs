@@ -215,8 +215,7 @@ impl EmitState {
             }
         }
         let readers = emit_stream_readers(def, self.offered_to_rust);
-        let mut owned_forms: collections::BTreeSet<String> = collections::BTreeSet::new();
-        for rule in readers.iter() { self.emit_stream_reader(world, walk, out, host, &name, rule, &mut owned_forms)?; }
+        for rule in readers.iter() { self.emit_stream_reader(world, walk, out, host, &name, rule)?; }
         for rule in emit_stream_walks(def, self.offered_to_rust) { self.emit_stream_walk(world, walk, out, host, &name, &rule)?; }
         if !readers.is_empty() {
             out.push(&format!("\n#[allow(non_snake_case)]\npub mod {} {{\n    #[allow(unused_imports)]\n    pub use super::{}::{}::*;\n", name, emit_stream_grammar_module(&name), name));
@@ -230,23 +229,13 @@ impl EmitState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    #[allow(clippy::too_many_arguments)]
-    pub(crate) fn emit_stream_reader<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, name: &str, rule: &GrammarRule, owned_forms: &mut collections::BTreeSet<String>) -> Result<(), std::boxed::Box<dyn std::error::Error>> {
+    pub(crate) fn emit_stream_reader<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, name: &str, rule: &GrammarRule) -> Result<(), std::boxed::Box<dyn std::error::Error>> {
         let rule_name = emit_text(world, rule.name);
         let ty = match rule.ret_type.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return Ok(()) };
-        let item = emit_renamed_lifetime(&host.ty_named(walk, ty)?, "'a", "'_");
-        let mut yielded = nikaia_std::block::Text::from(item.to_string());
-        let mut made = String::from("__wg_one.clone()");
-        if !ty.is_nullable && ty.generics.is_empty() {
-            let owned = self.emit_stream_owned_form(world, walk, out, host, &emit_text(world, ty.name), owned_forms)?;
-            if owned.is_some() {
-                yielded = nikaia_std::index::or(owned, || "".into());
-                made = format!("{}::of(__wg_one)", yielded);
-            }
-        }
-        out.push(&format!("\n#[allow(non_snake_case)]\npub fn {}(reader: impl ::std::io::Read + Send + 'static) -> impl Iterator<Item = {}<{}, nikaia_std::grammar::ParseError>> {{ ", emit_stream_reader_name(name, &rule_name), self.rust_result(), yielded));
+        let item = host.ty_named(walk, ty)?;
+        out.push(&format!("\n#[allow(non_snake_case)]\npub fn {}(reader: impl ::std::io::Read + Send + 'static) -> impl Iterator<Item = {}<{}, nikaia_std::grammar::ParseError>> {{ ", emit_stream_reader_name(name, &rule_name), self.rust_result(), item));
         out.push("let (__wg_tx, __wg_rx) = ::std::sync::mpsc::sync_channel(0); ::std::thread::spawn(move || { ");
-        let each = emit_stream_each(&item, self.facts.emitting_entries.contains(&format!("{}::{}", name, rule_name)), false, &made);
+        let each = emit_stream_each(&item, self.facts.emitting_entries.contains(&format!("{}::{}", name, rule_name)), false);
         out.push(&format!("let __wg_parsed = {}::parse_{}_reader_each(reader, &mut winnow_grammar::ParseContext::<()>::default(), winnow_grammar::rt::Reading::default(), {}); ", name, rule_name, each));
         out.push("if let Err(__wg_error) = __wg_parsed { let _ = __wg_tx.send(Err(nikaia_std::grammar::ParseError::of(__wg_error.render_excerpt()))); } }); __wg_rx.into_iter() }\n");
         Ok(())
@@ -280,7 +269,7 @@ impl EmitState {
             }
             out.push(&emit_stream_batched_start());
             out.push("let mut __wg_context = match __wg_words { ::std::option::Option::Some(__wg_table) => winnow_grammar::ParseContext::<()>::with_state_and_interner((), __wg_table), ::std::option::Option::None => winnow_grammar::ParseContext::<()>::default() }; ");
-            let each = emit_stream_each(&item, self.facts.emitting_entries.contains(&format!("{}::{}", name, rule_name)), true, "__wg_one.clone()");
+            let each = emit_stream_each(&item, self.facts.emitting_entries.contains(&format!("{}::{}", name, rule_name)), true);
             out.push(&format!("let __wg_parsed = {}::parse_{}_slice_each(&__wg_source[..], &mut __wg_context, {}{}); ", name, rule_name, handed, each));
             out.push(&emit_stream_batched_end("__wg_error.render(&__wg_source[..])"));
             out.push(" }\n");
@@ -666,9 +655,9 @@ pub(crate) fn stream_item_rule(world: &EmitWorld<'_, '_, '_, '_>, pattern: &Patt
     }
 }
 
-pub(crate) fn emit_stream_each(item: &str, emitting: bool, batched: bool, made: &str) -> String {
-    let mut send = format!("match __wg_tx.send(Ok({})) {{ Ok(()) => ::std::ops::ControlFlow::Continue(()), Err(_) => ::std::ops::ControlFlow::Break(()) }}", made);
-    if batched { send = format!("{{ __wg_batch.push(Ok({})); if __wg_batch.len() < 256 {{ ::std::ops::ControlFlow::Continue(()) }} else {{ match __wg_tx.send(::std::mem::replace(&mut __wg_batch, ::std::vec::Vec::with_capacity(256))) {{ Ok(()) => ::std::ops::ControlFlow::Continue(()), Err(_) => ::std::ops::ControlFlow::Break(()) }} }} }}", made); }
+pub(crate) fn emit_stream_each(item: &str, emitting: bool, batched: bool) -> String {
+    let mut send = "match __wg_tx.send(Ok(__wg_one.clone())) { Ok(()) => ::std::ops::ControlFlow::Continue(()), Err(_) => ::std::ops::ControlFlow::Break(()) }";
+    if batched { send = "{ __wg_batch.push(Ok(__wg_one.clone())); if __wg_batch.len() < 256 { ::std::ops::ControlFlow::Continue(()) } else { match __wg_tx.send(::std::mem::replace(&mut __wg_batch, ::std::vec::Vec::with_capacity(256))) { Ok(()) => ::std::ops::ControlFlow::Continue(()), Err(_) => ::std::ops::ControlFlow::Break(()) } } }"; }
     if emitting { return format!("|__wg_item: &::std::option::Option<{}>| match __wg_item {{ ::std::option::Option::Some(__wg_one) => {}, ::std::option::Option::None => ::std::ops::ControlFlow::Continue(()) }}", item, send); }
     format!("|__wg_one: &{}| {}", item, send)
 }
@@ -698,133 +687,11 @@ impl EmitState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn emit_stream_owned_form<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, name: &str, written: &mut collections::BTreeSet<String>) -> Result<Option<String>, std::boxed::Box<dyn std::error::Error>> {
-        if !self.emit_stream_item_views(name) { return Ok(None); }
-        let twin = format!("{}Owned", name);
-        if written.contains(&twin) { return Ok(Some(escaped_name(&twin))); }
-        for item in world.items.iter() {
-            match &item.node {
-                Item::Struct { name: declared, generics, fields, .. } => {
-                    let declared = *declared;
-                    if emit_text(world, declared) != name || !generics.is_empty() { continue; }
-                    written.insert(nikaia_std::block::Text::from(twin.to_string()));
-                    let mut body = EmitOut::empty();
-                    let mut copied: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-                    copied.reserve(fields.iter().size_hint().0); for field in fields.iter() {
-                        let field_name = escaped_name(&emit_text(world, field.name));
-                        let (ty, made) = self.emit_owned_part(world, walk, out, host, &field.ty, &format!("__wg_from.{}", field_name), written)?;
-                        body.push(&format!("    pub {}: {},\n", field_name, ty));
-                        copied.push(format!("{}: {}", field_name, made));
-                    }
-                    out.push(&format!("\n{}pub struct {} {{\n", emit_owned_derives(&self.derives(world, declared)), escaped_name(&twin)));
-                    out.append(&body);
-                    out.push("}\n");
-                    self.emit_owned_conversion(out, name, &twin, &format!("Self {{ {} }}", nikaia_std::block::Text::from(copied.join(", "))), self.emit_item_slots(name).len() as i64);
-                    return Ok(Some(escaped_name(&twin)));
-                },
-                Item::Enum { name: declared, variants, .. } => {
-                    let declared = *declared;
-                    if emit_text(world, declared) != name { continue; }
-                    written.insert(nikaia_std::block::Text::from(twin.to_string()));
-                    let mut body = EmitOut::empty();
-                    #[allow(unused_mut)] let mut arms: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-                    let me = escaped_name(name); #[allow(unused_mut, clippy::redundant_locals)] let mut arms = arms;
-                    for variant in variants.iter() {
-                        let vname = escaped_name(&emit_text(world, variant.name));
-                        match &variant.fields {
-                            VariantFields::Unit => {
-                                body.push(&format!("    {},\n", vname));
-                                arms.push(format!("{}::{} => Self::{}", me, vname, vname));
-                            },
-                            VariantFields::Tuple(types) => {
-                                #[allow(unused_mut)] let mut parts: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-                                #[allow(unused_mut)] let mut bound: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block); #[allow(unused_mut, clippy::redundant_locals)] let mut parts = parts;
-                                let mut made: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block); #[allow(unused_mut, clippy::redundant_locals)] let mut parts = parts; #[allow(unused_mut, clippy::redundant_locals)] let mut bound = bound;
-                                for i in 0..types.len() as i64 {
-                                    let (ty, one) = self.emit_owned_part(world, walk, out, host, unsafe { nikaia_std::proven::read(&types, (i) as usize) }, &format!("__wg_p{}", i), written)?;
-                                    parts.push(ty);
-                                    bound.push(format!("__wg_p{}", i));
-                                    made.push(one);
-                                }
-                                body.push(&format!("    {}({}),\n", vname, nikaia_std::block::Text::from(parts.join(", "))));
-                                arms.push(format!("{}::{}({}) => Self::{}({})", me, vname, nikaia_std::block::Text::from(bound.join(", ")), vname, nikaia_std::block::Text::from(made.join(", "))));
-                            },
-                            VariantFields::Named(fields) => {
-                                #[allow(unused_mut)] let mut parts: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-                                #[allow(unused_mut)] let mut bound: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block); #[allow(unused_mut, clippy::redundant_locals)] let mut parts = parts;
-                                let mut made: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block); #[allow(unused_mut, clippy::redundant_locals)] let mut parts = parts; #[allow(unused_mut, clippy::redundant_locals)] let mut bound = bound;
-                                for i in 0..fields.len() as i64 {
-                                    let field_name = escaped_name(&emit_text(world, unsafe { nikaia_std::proven::read(&fields, (i) as usize) }.name));
-                                    let (ty, one) = self.emit_owned_part(world, walk, out, host, &unsafe { nikaia_std::proven::read(&fields, (i) as usize) }.ty, &format!("__wg_p{}", i), written)?;
-                                    parts.push(format!("{}: {}", field_name, ty));
-                                    bound.push(format!("{}: __wg_p{}", field_name, i));
-                                    made.push(format!("{}: {}", field_name, one));
-                                }
-                                body.push(&format!("    {} {{ {} }},\n", vname, nikaia_std::block::Text::from(parts.join(", "))));
-                                arms.push(format!("{}::{} {{ {} }} => Self::{} {{ {} }}", me, vname, nikaia_std::block::Text::from(bound.join(", ")), vname, nikaia_std::block::Text::from(made.join(", "))));
-                            },
-                        }
-                    }
-                    out.push(&format!("\n{}pub enum {} {{\n", emit_owned_derives(&self.derives(world, declared)), escaped_name(&twin)));
-                    out.append(&body);
-                    out.push("}\n");
-                    self.emit_owned_conversion(out, name, &twin, &format!("match __wg_from {{ {} }}", nikaia_std::block::Text::from(arms.join(", "))), 1);
-                    return Ok(Some(escaped_name(&twin)));
-                },
-                _ => { },
-            }
-        }
-        Ok(None)
-    }
-    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
-    // this was written - see `contracts::sync`.
-    #[allow(clippy::too_many_arguments)]
-    pub(crate) fn emit_owned_part<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, ty: &Type, from: &str, written: &mut collections::BTreeSet<String>) -> Result<(String, String), std::boxed::Box<dyn std::error::Error>> {
-        if ty.is_nullable {
-            let mut inner = ty.clone();
-            inner.is_nullable = false;
-            let (owned, made) = self.emit_owned_part(world, walk, out, host, &inner, "__wg_v", written)?;
-            return Ok((format!("::std::option::Option<{}>", owned), format!("{}.as_ref().map(|__wg_v| {})", from, made)));
-        }
-        if !ty.is_tuple && (*ty.code).is_none() && ty.count.is_none() {
-            let named = emit_text(world, ty.name);
-            if named == "String" && ty.generics.is_empty() { return Ok((String::from("::std::string::String"), format!("<str as ::std::borrow::ToOwned>::to_owned(&{})", from))); }
-            if named == "Vec" && ty.generics.len() == 1 {
-                let (owned, made) = self.emit_owned_part(world, walk, out, host, unsafe { nikaia_std::proven::read(&ty.generics, (0) as usize) }, "__wg_v", written)?;
-                return Ok((format!("::std::vec::Vec<{}>", owned), format!("{}.iter().map(|__wg_v| {}).collect()", from, made)));
-            }
-            if ty.generics.is_empty() {
-                let twin = self.emit_stream_owned_form(world, walk, out, host, &named, written)?;
-                if twin.is_some() {
-                    let owned = nikaia_std::index::or(twin, || "".into());
-                    return Ok((nikaia_std::block::Text::from(owned.to_string()), format!("{}::of(&{})", owned, from)));
-                }
-            }
-        }
-        Ok((host.ty_named(walk, ty)?, format!("{}.clone()", from)))
-    }
-    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
-    // this was written - see `contracts::sync`.
-    pub(crate) fn emit_owned_conversion(&self, out: &mut EmitOut, name: &str, twin: &str, made: &str, lifetimes: i64) {
-        let mut me = escaped_name(name);
-        if self.borrowing.contains(name) {
-            let mut elided: Vec<&'static str> = vec!["'_"];
-            while (elided.len() as i64) < lifetimes { elided.push("'_"); }
-            me = format!("{}<{}>", me, nikaia_std::block::Text::from(elided.join(", ")));
-        }
-        let owned = escaped_name(twin);
-        out.push(&format!("impl {} {{\n    /// The item copied out of the input it views.\n    #[allow(clippy::clone_on_copy, clippy::redundant_clone)]\n    pub fn of(__wg_from: &{}) -> Self {{\n        {}\n    }}\n}}\n", owned, me, made));
-        out.push(&format!("impl ::std::convert::From<&{}> for {} {{\n    fn from(__wg_from: &{}) -> Self {{\n        Self::of(__wg_from)\n    }}\n}}\n", me, owned, me));
-    }
-    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
-    // this was written - see `contracts::sync`.
     pub(crate) fn emit_stream_thread_refused(&self, walk: &EmitWalk, entry: &str, item: &str, at: Option<i64>) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
         let used = if walk.stream_use == "" { String::from("is used as a value (passed to a call, stored, combined or given to a task)") } else { nikaia_std::block::Text::from(walk.stream_use.to_string()) };
         return Err(nikaia_std::error::throwing(EmitRefused { message: format!("[NK1359] `{}` {}, so it would be walked on a thread of its own, but its items view the input they are parsed from (`{}` holds a view), and a view can't leave the walk over that input. Walk the call with a `for` right where it is made, or bound by a `let` that one `for` walks, in a function that throws, outside a `catch`, with a body that doesn't pause. The other ways to walk such a stream are \"The other methods of a `@stream` walk\" (#2709).", entry, used, item), at }, &"emit_stream_thread_refused"));
     }
 }
-
-pub(crate) fn emit_owned_derives(derives: &str) -> String { nikaia_std::block::Text::from(derives.replace(", Copy", "")) }
 
 pub(crate) fn emit_stream_walk_name(book: &str, rule: &str) -> String { format!("__nikaia_walk_{}__{}", book, rule) }
 
