@@ -1,5 +1,5 @@
 // The items of a `@stream` entry view the input they are parsed from
-// (ADR-grammar-typed-read-v1 D7, ADR-views-v4 D5, #2708): `Item { word: w }`
+// (ADR-grammar-typed-read-v2 D7, ADR-views-v4 D5, #2708): `Item { word: w }`
 // holds the text `w` captured, not a copy of it, so `Item` is tethered to the
 // input. A `for` over the call runs as the parser's `each`, over the input
 // lent, and the text of an item kept past its turn is copied with

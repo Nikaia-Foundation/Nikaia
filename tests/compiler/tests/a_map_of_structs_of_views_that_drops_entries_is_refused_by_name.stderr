@@ -1,0 +1,9 @@
+error[NK2304]: `by_path` keeps views of data read inside a loop and removes entries as it goes, but it isn't a list, and only a list can hold structs of views here yet.
+   --> tests/a_map_of_structs_of_views_that_drops_entries_is_refused_by_name.nika:24:9
+    |
+ 24 |         by_path.insert(path.clone(), Record { name: text.trim() })
+    |         ^
+    |
+    = note: Each view keeps its own data alive here, so that data read for entries that were removed can be freed during the loop.
+    = help: Keep the structs in a list, or store copies made with `.clone()`.
+1 buffer whose views have no one place to live

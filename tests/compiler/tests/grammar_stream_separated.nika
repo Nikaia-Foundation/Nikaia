@@ -1,4 +1,4 @@
-// An `@stream` entry walks `list(item, sep)` item by item (ADR-grammar-typed-read-v1 D7,
+// An `@stream` entry walks `list(item, sep)` item by item (ADR-grammar-typed-read-v2 D7,
 // #1459): the separator is taken between two items, and a separator not
 // followed by an item is left to what follows. Counted repeats walk the same
 // way, and a stream shorter than the count fails.

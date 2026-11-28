@@ -4,7 +4,7 @@ error[NK1371]: `emit` hands an item to the walk of a `@stream` entry, but no `@s
  12 | 		emit Item { word: w.clone() }
     |   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
     |
-    = note: An item goes to the walk of a `@stream` entry (ADR-grammar-typed-read-v1 D7): `for item in G::entry(input)` sees it as the parser produces it. A function, or a rule no `@stream` entry reaches, has no walk to hand it to.
+    = note: An item goes to the walk of a `@stream` entry (ADR-grammar-typed-read-v2 D7): `for item in G::entry(input)` sees it as the parser produces it. A function, or a rule no `@stream` entry reaches, has no walk to hand it to.
     = help: Reach this rule from a `@stream` entry, `@stream entry rule items -> Item = ...`, or let the action build its value instead.
 error[NK1371]: `emit` hands an item to the walk of a `@stream` entry, but no `@stream` entry reaches this place.
    --> tests/grammar_emit_outside_a_stream.nika:20:37
@@ -12,7 +12,7 @@ error[NK1371]: `emit` hands an item to the walk of a `@stream` entry, but no `@s
  20 | 	rule apart = w:until(";") ";" -> { emit Item { word: w.clone() } }
     |                                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
     |
-    = note: An item goes to the walk of a `@stream` entry (ADR-grammar-typed-read-v1 D7): `for item in G::entry(input)` sees it as the parser produces it. A function, or a rule no `@stream` entry reaches, has no walk to hand it to.
+    = note: An item goes to the walk of a `@stream` entry (ADR-grammar-typed-read-v2 D7): `for item in G::entry(input)` sees it as the parser produces it. A function, or a rule no `@stream` entry reaches, has no walk to hand it to.
     = help: Reach this rule from a `@stream` entry, `@stream entry rule items -> Item = ...`, or let the action build its value instead.
 error[NK1371]: `emit` hands an item to the walk of a `@stream` entry, but no `@stream` entry reaches this place.
    --> tests/grammar_emit_outside_a_stream.nika:24:2
@@ -20,6 +20,6 @@ error[NK1371]: `emit` hands an item to the walk of a `@stream` entry, but no `@s
  24 | 	emit Item { word: "loose" }
     |  ^^^^^^^^^^^^^^^^^^^^^^^^^^^
     |
-    = note: An item goes to the walk of a `@stream` entry (ADR-grammar-typed-read-v1 D7): `for item in G::entry(input)` sees it as the parser produces it. A function, or a rule no `@stream` entry reaches, has no walk to hand it to.
+    = note: An item goes to the walk of a `@stream` entry (ADR-grammar-typed-read-v2 D7): `for item in G::entry(input)` sees it as the parser produces it. A function, or a rule no `@stream` entry reaches, has no walk to hand it to.
     = help: Return the value instead, or emit it from the action of a rule a `@stream` entry reaches.
 3 type errors

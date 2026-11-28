@@ -3,7 +3,7 @@
 //!
 //! The question `docs/open-decisions.md` carried, answered A: the claim is a
 //! word on the **type** in the ledger — exactly as
-//! [ADR-025](../../../docs/specification/adr/adr-025.md) D6's `throws` on a
+//! [ADR-loop-failure-v1](../../../docs/specification/adr/adr-loop-failure-v1.md) D6's `throws` on a
 //! `Seq` already says a step can fail — and the emitter writes the awaiting
 //! form for it.
 //!
@@ -181,7 +181,7 @@ fn an_eager_walk_of_a_pausing_sequence_awaits_and_propagates() {
 
 /// **And a function that walks one says `throws`** — `NK2701`, the same code
 /// and the same rule a `for` over the same sequence gets
-/// ([ADR-025](../../../docs/specification/adr/adr-025.md) D1): a step that can
+/// ([ADR-loop-failure-v1](../../../docs/specification/adr/adr-loop-failure-v1.md) D1): a step that can
 /// fail fails the function around it, and nothing marks the call.
 #[test]
 fn a_walk_of_a_failing_sequence_makes_the_function_say_so() {

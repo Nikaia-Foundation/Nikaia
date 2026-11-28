@@ -25,7 +25,7 @@ Rust's with different words:
 | the `;` config zone | Part I 5.1 | the `;` inside a parameter list or a call gets `punctuation.separator.config`, and what follows it is named arguments; a statement's `;` is a terminator instead |
 | `...args: Self::dsl` | ADR-grammar-build-time-v1 D12 | the typed spread, with `Self::dsl` as a type rather than the `dsl` keyword |
 | `break`, `continue` | Part I 3.3, ADR-276 | `keyword.control.flow`, with `return` rather than with `while` and `for`: `keyword.control.loop` is the word that **opens** a loop and these two are words that **leave** one. Neither takes a value and neither takes a label, so in each case the word is the whole token and there is nothing after it to scope |
-| `throws`, `throw`, `catch`, `??` | Part I 7.1, ADR-023, ADR-025 | `catch` is an ordinary keyword in expression position; `throws` carries no type; `??` is the coalescing operator |
+| `throws`, `throw`, `catch`, `??` | Part I 7.1, ADR-023, ADR-loop-failure-v1 | `catch` is an ordinary keyword in expression position; `throws` carries no type; `??` is the coalescing operator |
 | `sync` | Part II 12.1 | `storage.modifier.sync`, on either side of the return type |
 | `fn { … }` | Part I 5.2/5.3, ADR-277 | the one lambda form, including the trailing form outside the parentheses and a chain continuing after its `}` |
 | `seq { … }` | ADR-292 D7 | a keyword only where a block follows it — `seq` is also a perfectly good variable name, and `examples/k-nucleotide/src/main.nika` uses it as one |

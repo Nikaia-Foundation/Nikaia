@@ -789,10 +789,18 @@ signature = "(; trusted: bool = false) -> Vec[u8]"
 # stream larger than memory is a `for` over this. A **step** can fail, because
 # a step of it reads the pipe. The lines are **untrusted** unless the call says
 # `trusted: true` (ADR-365).
+#
+# **A line is a view of a stream buffer** (ADR-stream-buffers-v1 D1,
+# ADR-loop-failure-v1 D4): `iterates = "stream"`. A line used in the loop's
+# body is a borrow, one kept in a fixed number of names across turns is
+# counted, and one kept in anything that grows is `NK2308` (D2); `.clone()`
+# keeps a copy past that. The key sits on the function, not on `io::Lines`,
+# because the signature hands back a `Seq` and names no type.
 [fn."io::lines"]
 pub = true
 panics = false
 provenance = "untrusted"
+iterates = "stream"
 signature = "(; trusted: bool = false) -> Seq[String] pauses throws"
 
 # The whole of standard input, as text.
@@ -6168,7 +6176,7 @@ signature = "(self: ref io::IoError) -> String"
 
 # A step of this one can **fail**, and that is a fact a caller cannot get from
 # anywhere else: a `for` over it is a place the enclosing function can fail
-# from, and the compiler makes that function say `throws` (ADR-025 D1, `NK2701`).
+# from, and the compiler makes that function say `throws` (ADR-loop-failure-v1 D1, `NK2701`).
 # What a `std` call fails with.
 #
 # Part I 7.1's error type, for the library: `NotFound(what)` where the thing is

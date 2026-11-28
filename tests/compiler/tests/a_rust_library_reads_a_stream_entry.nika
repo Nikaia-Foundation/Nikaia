@@ -1,5 +1,5 @@
 // A Rust user reads a grammar's `@stream` entry from a `std::io::Read`
-// (ADR-grammar-typed-read-v1 D7 and ADR-393 D4, amended 2026-11-08, #1442): the package
+// (ADR-grammar-typed-read-v2 D7 and ADR-393 D4, amended 2026-11-08, #1442): the package
 // `rust_library_stream/lines` names the entry `lines::Words::items` as the
 // root of its feature `stream`, which gates `Words::items_reader` alone; the
 // in-crate walk of `counted` is core. The crate `user` reads items from a

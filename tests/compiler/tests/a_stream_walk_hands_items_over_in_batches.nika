@@ -1,5 +1,5 @@
 // A walk of a `@stream` entry over a `String` hands its items over in
-// batches, not one at a time (ADR-grammar-typed-read-v1 D7, #2433): the
+// batches, not one at a time (ADR-grammar-typed-read-v2 D7, #2433): the
 // order stays, a `break` after the third item of many sees three items and
 // ends, and an error after item N is seen after those N items, whether N is
 // a whole number of batches (512), more (600) or fewer (3).

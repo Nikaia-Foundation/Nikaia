@@ -285,7 +285,7 @@ impl LedgerOps for Ledger {
     ///
     /// That is what makes multi-file compilation almost free for everything
     /// built on the ledger. The type checker, the `sync` check, the provenance
-    /// analysis, Kap 5.1's options and ADR-025's fallible loops all resolve a
+    /// analysis, Kap 5.1's options and ADR-loop-failure-v1's fallible loops all resolve a
     /// call by asking a ledger for `a::b`. None of them learns a new trick to
     /// work across files; the file they ask simply has more in it.
     /// **The types inside an entry are qualified too, and not only the keys.**

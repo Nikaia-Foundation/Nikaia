@@ -1053,6 +1053,7 @@ pub struct FnContract {
     pub ends_by_length: bool,
     pub pieces: bool,
     pub interns: bool,
+    pub streams: bool,
     pub consumers: Vec<String>,
     pub requires: Vec<String>,
     pub ensures: Vec<String>,
@@ -1063,7 +1064,7 @@ pub struct FnContract {
 }
 
 impl FnContract {
-    pub fn empty() -> FnContract { FnContract { public: false, sync_claim: Sync::No, fails_with: vec![], throws_from: vec![], touches: vec![], touches_known: false, provenance: None, trusted: vec![], provenance_by: String::from(""), signature: None, borrows: vec![], returns: String::from(""), stores: vec![], by_value: vec![], keeps: vec![], at_once: vec![], par_iter: vec![], os_text: vec![], mutates: false, touches_a_lock: Lock::No, panics: Panics::Unknown, places: false, threads: Threads::Undecided, views: vec![], sharing: vec![], maps: vec![], ends_by_length: false, pieces: false, interns: false, consumers: vec![], requires: vec![], ensures: vec![], ensures_each: vec![], inferred: vec![], from: vec![], described: false } }
+    pub fn empty() -> FnContract { FnContract { public: false, sync_claim: Sync::No, fails_with: vec![], throws_from: vec![], touches: vec![], touches_known: false, provenance: None, trusted: vec![], provenance_by: String::from(""), signature: None, borrows: vec![], returns: String::from(""), stores: vec![], by_value: vec![], keeps: vec![], at_once: vec![], par_iter: vec![], os_text: vec![], mutates: false, touches_a_lock: Lock::No, panics: Panics::Unknown, places: false, threads: Threads::Undecided, views: vec![], sharing: vec![], maps: vec![], ends_by_length: false, pieces: false, interns: false, streams: false, consumers: vec![], requires: vec![], ensures: vec![], ensures_each: vec![], inferred: vec![], from: vec![], described: false } }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]

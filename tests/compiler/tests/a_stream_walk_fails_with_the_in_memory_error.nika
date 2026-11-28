@@ -1,6 +1,6 @@
 // A walk of a `@stream` entry over a `String` fails with the error the
 // in-memory parse of the same items gives: the same message at the same
-// line and column (ADR-grammar-typed-read-v1 D7, #2420). The walk runs the
+// line and column (ADR-grammar-typed-read-v2 D7, #2420). The walk runs the
 // engine's slice entry, whose steps are the plain rules.
 
 struct Item {

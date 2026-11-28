@@ -1,0 +1,30 @@
+// A literal in a view field points into no buffer, and the keep takes a copy
+// of it rather than a reference it cannot vouch for (ADR-tether-v1 D15). Moved
+// from the Rust test of the same name (#2849).
+use std::fs
+
+struct Note {
+    key: String,
+    tag: String,
+}
+
+fn files() -> fs::Root throws {
+    let root = fs::scratch()
+    fs::write("app.conf", root, "# settings\nhost = example.org\nport = 8080\ninclude = extra.conf\n")
+    fs::write("extra.conf", root, "mode = fast\nhost = override.org\n")
+    return root
+}
+
+fn main() throws {
+    let root = files()
+    let mut notes: Vec[Note] = Vec()
+    for path in ["app.conf", "extra.conf", "app.conf"] {
+        let text = fs::read_to_string(path, root)
+        for line in text.lines() {
+            let tag = if line.starts_with("#") { "comment" } else { "setting" }
+            notes.push(Note { key: line, tag: tag })
+        }
+        if notes.len() > 4 { notes.clear() }
+    }
+    println(f"{notes.len()} {notes[0].tag} {notes[1].tag}")
+}

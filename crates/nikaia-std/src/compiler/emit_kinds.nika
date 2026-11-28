@@ -298,7 +298,7 @@ pub struct EmitFlow {
     /// binds by reference and the outer `match` would move out of it.
     pub subject_copies: bool,
     /// **A `return` leaves the body of a `for` over a `@stream` call that
-    /// runs as the parser's `each`** (ADR-grammar-typed-read-v1 D7, #2708):
+    /// runs as the parser's `each`** (ADR-grammar-typed-read-v2 D7, #2708):
     /// the body is a closure of its own, so a `return` there hands its value
     /// out as `Ok(Some(value))`, and the `for` returns it after the parse.
     pub returns_out: bool,

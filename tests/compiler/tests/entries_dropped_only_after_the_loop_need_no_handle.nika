@@ -1,0 +1,29 @@
+// Dropping entries after the loop is not dropping them while it goes on: the
+// frame's keep holds the buffers exactly as long, and the program is not refused
+// (ADR-tether-v1 D18). The run of the Rust test of the same name, whose check of
+// the lowered Rust stays there (#2849).
+use std::fs
+
+struct Record {
+    name: String,
+    size: i64,
+}
+
+fn files() -> fs::Root throws {
+    let root = fs::scratch()
+    fs::write("app.conf", root, "# settings\nhost = example.org\nport = 8080\ninclude = extra.conf\n")
+    fs::write("extra.conf", root, "mode = fast\nhost = override.org\n")
+    return root
+}
+
+fn main() throws {
+    let root = files()
+    let mut kept: Vec[Record] = Vec()
+    for path in ["app.conf", "extra.conf"] {
+        let text = fs::read_to_string(path, root)
+        kept.push(Record { name: text.trim(), size: text.len() as i64 })
+    }
+    println(f"{kept.len()} {kept[1].size}")
+    kept.clear()
+    println(f"{kept.len()}")
+}

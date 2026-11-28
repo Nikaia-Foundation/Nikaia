@@ -21,7 +21,7 @@ there is no `comptime` expression);
 grammar returns a `meta::Statement` whose `row` is a `meta::Type`; there is no
 `meta::column`), D12 (the typed spread, which a driver does not write for
 `execute`);
-[ADR-grammar-typed-read-v1](adr-grammar-typed-read-v1.md) D3, D9 (one mapping
+[ADR-grammar-typed-read-v2](adr-grammar-typed-read-v2.md) D3, D9 (one mapping
 rule with a grammar's `members[S]`, which the column mapping below follows) ·
 Part II 10.5 (the `dsl` protocol and its hybrid binding) ·
 Part I 5.1 (*Subject `;` Config*) ·
@@ -275,7 +275,7 @@ equal type, which the program converts field by field - a type is nominal here
 ### D16 — Columns match fields by name, and only by name.
 
 *D16-D18 are one mapping rule with a grammar's `members[S]`, stated once in
-Part II 10.8 ([ADR-grammar-typed-read-v1](adr-grammar-typed-read-v1.md) D3,
+Part II 10.8 ([ADR-grammar-typed-read-v2](adr-grammar-typed-read-v2.md) D3,
 D9); SQL keeps its strict settings and checks them while building.*
 
 The order of the columns is not read. A field of a scalar type matches the

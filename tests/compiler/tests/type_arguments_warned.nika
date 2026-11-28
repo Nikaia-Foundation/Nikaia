@@ -1,5 +1,5 @@
 // `f[T](…)` where a value argument could have said the type is warned with
-// `NK1233` (ADR-grammar-typed-read-v1 D11, #514): the value says it already.
+// `NK1233` (ADR-grammar-typed-read-v2 D11, #514): the value says it already.
 
 fn id[T](x: T) -> T {
     return x

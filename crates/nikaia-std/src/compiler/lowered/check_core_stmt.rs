@@ -2128,7 +2128,7 @@ pub(crate) fn check_core_stmt_emit<H: CheckHost>(state: &mut CheckState, world: 
     match state.emitting {
         Some(ref item) => { state.expect_type(world, &found, &item.clone(), span, "argument", &mut |was, wanted| { format!("This `emit` hands over `{}`, but the `@stream` entry's items are `{}`.", was, wanted) }); },
         None => {
-            let notes: Vec<String> = vec![String::from("An item goes to the walk of a `@stream` entry (ADR-grammar-typed-read-v1 D7): `for item in G::entry(input)` sees it as the parser produces it. A function, or a rule no `@stream` entry reaches, has no walk to hand it to.")];
+            let notes: Vec<String> = vec![String::from("An item goes to the walk of a `@stream` entry (ADR-grammar-typed-read-v2 D7): `for item in G::entry(input)` sees it as the parser produces it. A function, or a rule no `@stream` entry reaches, has no walk to hand it to.")];
             let help: String = if state.inside_an_action.is_some() { String::from("Reach this rule from a `@stream` entry, `@stream entry rule items -> Item = ...`, or let the action build its value instead.") } else { String::from("Return the value instead, or emit it from the action of a rule a `@stream` entry reaches.") }; #[allow(clippy::redundant_locals)] let notes = notes;
             state.findings.push(check_refusal("NK1371", span, String::from("`emit` hands an item to the walk of a `@stream` entry, but no `@stream` entry reaches this place."), notes, Some(help)));
         },

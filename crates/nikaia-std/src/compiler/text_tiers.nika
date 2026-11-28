@@ -7688,7 +7688,7 @@ fn bind_rule_value(name: winnow_grammar::Symbol, ty: ref Type, ask: ref TierAsk,
 }
 
 /// **A stream entry a Rust reader may read hands over owned items**
-/// (ADR-grammar-typed-read-v1 D7, #2708): the reader a package offered to
+/// (ADR-grammar-typed-read-v2 D7, #2708): the reader a package offered to
 /// Rust writes (`emit_stream_readers`) parses frames of a `std::io::Read`, so
 /// the item outlives the frame it was read from, and the text its type holds
 /// is text of its own. That is an entry of a `pub grammar` that takes no

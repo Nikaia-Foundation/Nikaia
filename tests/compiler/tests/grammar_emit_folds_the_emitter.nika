@@ -1,6 +1,6 @@
 // An emitting `@stream` entry folds the repetition whose items emit, so a
 // second repetition in its body (`"."*` before the end) is a plain step
-// (ADR-grammar-typed-read-v1 D7, amended 2026-11-18, #1443): the walk still stops at a
+// (ADR-grammar-typed-read-v2 D7, amended 2026-11-18, #1443): the walk still stops at a
 // `break`, and the error of a later item is never reported.
 
 struct Item {

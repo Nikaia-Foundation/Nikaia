@@ -1,0 +1,37 @@
+// A task takes a map of views (#84): the packed value is a `Holding` over the
+// task's keep, built by `Rebase`, which reaches the map and its counts
+// (ADR-tether-v1 D11). Moved from `tether_keep::a_task_takes_a_map_of_views` (#2849).
+use std::fs
+use std::collections
+
+fn counts(path: String, root: fs::Root) -> collections::HashMap[String, i64] throws {
+    let text = fs::read_to_string(path, root)
+    let mut seen: collections::HashMap[String, i64] = collections::HashMap()
+    for line in text.lines() {
+        let parts: Vec[String] = line.split("=").collect()
+        if parts.len() == 2 {
+            let key = parts[0].trim()
+            let now = seen.get(key) ?? 0
+            seen.insert(key, now + 1)
+        }
+    }
+    return seen
+}
+
+fn files() -> fs::Root throws {
+    let root = fs::scratch()
+    fs::write("app.conf", root, "# settings\nhost = example.org\nport = 8080\ninclude = extra.conf\n")
+    fs::write("extra.conf", root, "mode = fast\nhost = override.org\n")
+    return root
+}
+
+fn main() throws {
+    let root = files()
+    let seen = counts("app.conf", root)
+    let worker = async(detached) fn {
+        let mut n = 0
+        for (_, v) in seen { n = n + v }
+        n
+    }
+    println(f"{worker.join()} settings")
+}
