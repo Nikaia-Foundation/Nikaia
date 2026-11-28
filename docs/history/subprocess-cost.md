@@ -37,7 +37,7 @@ toolchain's dylibs are resident, which is the case that flatters the subprocess 
 
 **The corpus** is every `.nika` file in `examples/` and `tests/samples/`, lowered with
 `nikaia --backend rust --no-cache` and then compiled with `rustc`: 14 programs from 148 bytes of
-generated Rust (`hello_world`) to 5 910 (`json`). `examples/fortunes.nika` is excluded because the
+generated Rust (`hello_world`) to 5 910 (`json`). `examples/fortunes/src/main.nika` is excluded because the
 bootstrap compiler cannot lower its `dsl postgres` block. Compiling the *generated* Rust is the
 right subject: the subprocess wraps `rustc` on printed text, and what produced the text does not
 change what `rustc` pays to read it.

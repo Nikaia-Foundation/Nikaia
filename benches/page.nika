@@ -1,7 +1,7 @@
 // benches/page.nika
 //
 // The other shape a template has: mostly **static markup**, a few holes, and
-// rendered many times - a page per request, which is what `fortunes.nika` and
+// rendered many times - a page per request, which is what `examples/fortunes` and
 // every server after it will do.
 //
 // `benches/template.nika` is the first shape: one table whose size is the

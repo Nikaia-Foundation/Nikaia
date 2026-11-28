@@ -202,7 +202,7 @@ fn json_game(input: String) -> Game {
 		args: "",
 		units: 0,
 		unit: "byte of input",
-		nikaia: "benches/game/json/tree.nika",
+		nikaia: "benches/game/json/tree/src/main.nika",
 		speed: "",
 		rust: "benches/game/json/rust-tree.rs",
 		label: "serde_json 1 (`preserve_order`, `arbitrary_precision`)",

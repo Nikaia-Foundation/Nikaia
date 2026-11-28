@@ -1,0 +1,15 @@
+# The ordering experiment: pairs of statements, three with a call into the
+# Rust crate `hyper_shim`. A project because a single file has no
+# dependencies (NK1181 for `hyper_shim`, #2872); it declares the shim the way
+# `serve`, `crossing` and `smuggled` do.
+[package]
+name = "foreign-runtime-overlaps"
+version = "0.1.0"
+
+[build]
+user-parallelism = "no"
+
+# `type = "rust"` is ADR-002 D1's passthrough; a relative `path` is resolved
+# against this file (ADR-286 D17).
+[dependencies]
+hyper-shim = { type = "rust", path = "../shim" }

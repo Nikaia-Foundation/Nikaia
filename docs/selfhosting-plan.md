@@ -318,7 +318,7 @@ gives what each core unit calls.
    `crates/nikaia/tests/*.rs`), plus `specification.rs`, `examples.rs`,
    `check_deep_nesting.rs` and `self_hosting.rs`.
 
-**Callgrind:** a baseline at 8164b5d of `lower examples/foreign-runtime/overlaps.nika`:
+**Callgrind:** a baseline at 8164b5d of `lower examples/foreign-runtime/overlaps/src/main.nika`:
 
 | Count | Ir |
 | :--- | ---: |

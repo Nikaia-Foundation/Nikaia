@@ -31,8 +31,9 @@ fn repo_root() -> PathBuf {
 
 /// Written at specification level: they say what the language is meant to look
 /// like and the bootstrap compiler does not handle them yet. Each one's gaps
-/// are listed in `examples/README.md`.
-const SPECIFICATION_LEVEL: &[&str] = &["fortunes.nika"];
+/// are listed in `examples/README.md`. A file or a directory: `fortunes` is a
+/// project because it takes in `http`, which a single file cannot (#2872).
+const SPECIFICATION_LEVEL: &[&str] = &["fortunes"];
 
 /// Runnable, but with a test of its own that checks more than the output.
 const COVERED_ELSEWHERE: &[&str] = &["1brc.nika"];
@@ -104,6 +105,7 @@ fn no_example_is_neither_run_nor_declared() {
             let known = DIRECTORIES_CHECKED_ELSEWHERE
                 .iter()
                 .any(|(dir, _)| *dir == name)
+                || SPECIFICATION_LEVEL.contains(&name)
                 || checks_itself(&path);
             assert!(
                 known,

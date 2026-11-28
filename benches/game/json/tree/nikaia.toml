@@ -1,0 +1,11 @@
+# The json row of the game bench: standard input read into a `json::Value`
+# and written back. A project because it takes in the `json` package: a single
+# file has no dependencies (NK1339, #2872). `benches/game/game.nika` copies
+# `src/main.nika` into a project of its own and declares the package there.
+[package]
+name = "json-tree"
+version = "0.1.0"
+
+# A path is relative to this file (ADR-286 D16).
+[dependencies]
+json = { path = "../../../../packages/json" }

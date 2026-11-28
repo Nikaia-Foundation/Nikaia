@@ -18,7 +18,7 @@ false starts. This one says only what is here and how to run it.
 | `serve/` | A Nikaia project that starts the server, serves one request, and sends a `String` to a thread the foreign runtime owns. **Builds and runs.** |
 | `crossing/` | The same, with a value that may not cross a thread. **Must not build**, and who refuses it is the finding. |
 | `smuggled/` | The same crossing through a foreign API that says `unsafe impl Send` about a type that is not. **Must not build** — and what refuses it is not a `Send` bound, which is the finding ([ADR-rust-boundary-1](../../docs/specification/adr/adr-rust-boundary-1.md) D6, `foreign-runtime.md` §8). |
-| `overlaps.nika` | Four pairs of statements, three of them with a foreign call in, for `--overlaps`. |
+| `overlaps/` | Four pairs of statements, three of them with a foreign call in, for `--overlaps`: a project, because a single file has no dependencies to reach the shim by. Not run, it has no `main`. |
 
 Each project's `nikaia.toml` reaches the shim as
 `hyper-shim = { type = "rust", path = "../shim" }` — the directory beside this
@@ -45,7 +45,7 @@ nikaia build --project examples/foreign-runtime/crossing
 nikaia run --project examples/foreign-runtime/smuggled
 
 # What the ordering analysis says about a call it knows nothing about.
-nikaia lower examples/foreign-runtime/overlaps.nika \
+nikaia lower examples/foreign-runtime/overlaps/src/main.nika \
        --overlaps --user-parallelism yes --output /tmp/o.rs
 ```
 

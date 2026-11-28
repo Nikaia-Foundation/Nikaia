@@ -451,7 +451,7 @@ collided with out of the language.
 * `io::read_to_string("input.txt")?` in Part III C.4's own diagnostic example —
   a postfix `?` that does not exist.
 * `List[Token]`, `List[Row]`, `List[Fortune]` (Part I 6.6, Part II 10.5,
-  `fortunes.nika`) — the type is `Vec[T]`.
+  `examples/fortunes`) — the type is `Vec[T]`.
 * `panic::on_panic fn(info) sync { … }` — a lambda cannot carry `sync`, so the
   panic hook example is three statements.
 * `supervisor::start_link(fn { … }; restart_policy: "always")` — a string where

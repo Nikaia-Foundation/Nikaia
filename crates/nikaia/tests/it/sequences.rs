@@ -519,10 +519,10 @@ fn no_loose_program_in_the_repository_is_refused() {
             continue;
         };
         let name = path.display().to_text();
-        // `fortunes.nika` is the one program that is meant not to build: it
-        // reaches for an `http` package the project does not declare, which is
-        // ADR-277's step 4 and nothing to do with this.
-        if name.contains("fortunes.nika") {
+        // `examples/fortunes` is the one program that is meant not to build:
+        // its `http::Server` with routes and its database are #105's, and
+        // this harness checks the file without the `http` its project declares.
+        if name.contains("fortunes/src/main.nika") {
             continue;
         }
         // **A library's entry points are `NK1238` to a check that has no

@@ -1,0 +1,16 @@
+# What `hyper_shim.contracts` beside this file was written from
+# ([ADR-251](../../../../docs/specification/adr/adr-251.md) D1): which part of
+# the crate was read, and the crate's sources by hash. Hand-kept like the
+# description itself.
+version = 3
+# `+fields` is the one claim here that no signature could give: `crosses = false`
+# is read from `LocalHandle`'s `Rc<String>` ([ADR-123](../../../../docs/specification/adr/adr-123.md)
+# D2), which is a field and not a signature. Named so that a reviewer knows which
+# part of the crate to check it against.
+inference = "described-from-signatures+fields"
+
+# The crate's source, so the description is believed while it holds and demanded
+# again when it moves (D5, on ADR-100 D3's rule). **Nothing compares it yet**:
+# the hash rule is the record's step 3.
+[sources]
+"src/lib.rs" = "1dae18f692df17b39b25a378feb8368a54c42735db75bb811b261a994c14a392"

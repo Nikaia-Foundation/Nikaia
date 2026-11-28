@@ -447,7 +447,7 @@ down as rejected rather than unconsidered.
 > — [ADR-038](adr/adr-038.md) D7
 
 **Confirmed, empirically, and it is the one claim here asserted on every `cargo test`.**
-`nikaia --input examples/foreign-runtime/overlaps.nika --overlaps --user-parallelism yes`:
+`nikaia --input examples/foreign-runtime/overlaps/src/main.nika --overlaps --user-parallelism yes`:
 
 ```text
 control:

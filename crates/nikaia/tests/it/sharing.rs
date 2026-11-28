@@ -331,7 +331,7 @@ fn a_type_whose_fields_are_rust_hides_what_it_holds() {
 /// because it cannot decide - which is the experiment's own finding turned into
 /// a test.
 ///
-/// `examples/fortunes.nika` line 73 takes `db: Shared[postgres::Connection]` and
+/// `examples/fortunes/src/main.nika` line 55 takes `db: Shared[postgres::Connection]` and
 /// hands it to `all.fetch(db)`. Nothing written down describes `fetch` - its body
 /// is the driver's Rust - so ADR-303 D7's case applies and the polarity decides:
 /// atomic. The file's own comment says the opposite about the build it is written
@@ -366,7 +366,13 @@ fn the_one_shared_in_the_repository_comes_out_atomic_undecided() {
             };
             let own = Ledger::infer(&parsed);
             for decision in sharing::analyse(&parsed, &own, &library) {
-                let name = path.file_name().unwrap().to_string_lossy().to_text();
+                // By its path below the root: `examples/fortunes` is a
+                // project, so its file is a `main.nika` too (#2872).
+                let name = path
+                    .strip_prefix(&root)
+                    .unwrap_or(&path)
+                    .to_string_lossy()
+                    .to_text();
                 found.push((name, decision));
             }
             checked += 1;
@@ -377,8 +383,9 @@ fn the_one_shared_in_the_repository_comes_out_atomic_undecided() {
     // **`hello-http`'s counters cross, and the analysis found it** (ADR-328):
     // they are handed to two children of a supervisor, so they are atomic for
     // a reason the analysis proved rather than the floor's.
-    let (crossing, found): (Vec<_>, Vec<_>) =
-        found.into_iter().partition(|(file, _)| file == "main.nika");
+    let (crossing, found): (Vec<_>, Vec<_>) = found.into_iter().partition(|(file, _)| {
+        file.ends_with("/main.nika") && file != "examples/fortunes/src/main.nika"
+    });
     for (_, decision) in &crossing {
         assert!(
             ["asked", "crashed", "refreshed"].contains(&decision.value.as_str()),
@@ -394,7 +401,7 @@ fn the_one_shared_in_the_repository_comes_out_atomic_undecided() {
         "the corpus writes exactly one `Shared` nothing decides: {found:#?}"
     );
     let (file, decision) = &found[0];
-    assert_eq!(file, "fortunes.nika");
+    assert_eq!(file, "examples/fortunes/src/main.nika");
     assert_eq!(decision.value, "db");
     assert_eq!(decision.count, Count::Atomic, "{decision:#?}");
     assert!(

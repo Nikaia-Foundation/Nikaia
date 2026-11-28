@@ -70,7 +70,7 @@ fn said(output: &std::process::Output) -> String {
 /// the foreign crate existing.
 #[test]
 fn a_call_into_a_foreign_crate_orders_against_everything() {
-    let path = experiment().join("overlaps.nika");
+    let path = experiment().join("overlaps/src/main.nika");
     let source = std::fs::read_to_string(&path).expect("the probe is in the repository");
     let parsed = parse_to_ast(&source).expect("it parses");
 
@@ -284,13 +284,14 @@ fn a_foreign_api_that_lies_about_send_is_caught_by_what_a_person_wrote() {
     );
 }
 
-/// The experiment is three projects and a shim, and a test that drives them by
+/// The experiment is four projects and a shim, and a test that drives them by
 /// path says nothing useful once one of them has been renamed away.
 #[test]
 fn the_experiment_is_where_the_tests_say_it_is() {
     for name in [
         "README.md",
-        "overlaps.nika",
+        "overlaps/src/main.nika",
+        "overlaps/nikaia.toml",
         "shim/Cargo.toml",
         "shim/src/lib.rs",
         "serve/nikaia.toml",

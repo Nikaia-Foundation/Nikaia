@@ -39,7 +39,7 @@ nikaia test --bless            # write the expectations from what the program di
 | [`trend/`](trend/) | ten days of readings, looked at **from the end**: a pipeline turned round without a copy, and a range walked twice | ✅ `nikaia test`: its own `tests/` |
 | [`tally/`](tally/) | a pipe read line by line in **constant memory**, and a loop that can fail | ✅ `nikaia test`: its own `tests/`, the file it writes included |
 | [`inventory/`](inventory/) | `report.nika` again, in **three files**: what a module boundary buys and costs | ✅ `nikaia test`: its own `tests/`, the file it writes included |
-| [`fortunes.nika`](fortunes.nika) | the TechEmpower benchmark: a SQL DSL and an HTML template DSL in one handler | ❌ needs G6 and G7 |
+| [`fortunes/`](fortunes/src/main.nika) | the TechEmpower benchmark: a SQL DSL and an HTML template DSL in one handler | ❌ needs G6 and G7 |
 | [`http/`](http/) | the `http` **package**: what a handler is given and gives back, and **the server** — one connection at a time, with the caps as options | ✅ through its consumer |
 | [`hello-http/`](hello-http/) | a **server**, and a program that reaches `http` **by a path**: one address and one function that decides | ✅ `crates/nikaia/tests/it/project.rs`, over a real socket |
 | [`sqlite/`](sqlite/) | a real **C library**, end to end: a buffer, two handles with their `cleanup`, an out-parameter and text the library owns | ✅ `crates/nikaia/tests/it/foreign_pointers.rs`, skipped where the machine has no `libsqlite3` |
@@ -191,7 +191,7 @@ Small, self-contained, no external services. `n-body` is the usual first one bec
 This is the benchmark that matches Nikaia's pitch: implicit async, IO density, share-nothing,
 WASM-compatible single-threaded build. `fortunes` in particular exercises the 0.0.7 DSL protocol
 end-to-end — a SQL DSL with deferred parameters *and* an HTML template DSL with capture holes,
-in one request handler. See `fortunes.nika`.
+in one request handler. See `fortunes/src/main.nika`.
 
 The cost is real: it needs an HTTP server, a Postgres driver and the Docker harness. This is a
 target for after self-hosting, not before.
@@ -225,7 +225,7 @@ Writing the two programs surfaced spec questions that a real implementation must
 
 **G16 — a type could not be named by a path.** `Shared[postgres::Connection]` did not parse:
 a type was a name with optional arguments, and `postgres::Connection` is a name with a path in
-front of it. Found by `fortunes.nika` the moment its template stopped being the first thing that
+front of it. Found by `fortunes/src/main.nika` the moment its template stopped being the first thing that
 failed. The whole path is interned as one name, because that is what the name *is* to a compiler
 that lowers name for name (ADR-grammar-lowering-v1 D2) — nothing here resolves a module, and a path can therefore
 never collide with a struct the file declares, which is correct.
@@ -513,7 +513,7 @@ hole and does not have to know which case it is. `examples/escaping/src/main.nik
 **Control flow is there too**: `<for row in :rows> … </for>`, written as an *element* because
 the file is markup and an editor that highlights it keeps working, with `:rows` captured from the
 enclosing scope (ADR-grammar-build-time-v1 D11). The position check runs through a loop's body, so nothing becomes
-safe by being repeated. `fortunes.nika`'s `render` lowers and runs today; what that file still
+safe by being repeated. `fortunes/src/main.nika`'s `render` lowers and runs today; what that file still
 waits on is the `postgres` block and **G6**'s runtime binding — since
 [ADR-277](../docs/specification/adr/adr-277.md) removed the `fn:` form, the whole file parses.
 

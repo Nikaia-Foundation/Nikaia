@@ -231,7 +231,7 @@ is left is 3 and 4, and neither is a performance question.
    modules that have them, and the lattice is tested against a ledger that has
    one so the join is checked rather than assumed on that day.
 
-4. **What `fortunes.nika` waits on — moved.** G7 is built; the two runtime pieces
+4. **What `examples/fortunes` waits on — moved.** G7 is built; the two runtime pieces
    that are left are an entry in [[#105](https://github.com/Nikaia-Foundation/Nikaia/issues/105)](https://github.com/Nikaia-Foundation/Nikaia/issues), because open work
    belongs in the list of open work and this file is a guide to the parser
    backend. Kept below for the reasoning, which is not repeated there.
@@ -239,7 +239,7 @@ is left is 3 and 4, and neither is a performance question.
    is compiled where it is written, every hole goes through `html::Render`, a
    hole in a position escaping cannot make safe is refused with the position
    named, and `<for row in :rows>` repeats a body. **The `render` function in
-   `fortunes.nika` lowers and runs today**, and `examples/escaping/src/main.nika` is the
+   `examples/fortunes` lowers and runs today**, and `examples/escaping/src/main.nika` is the
    whole contract in one page.
 
    Since [ADR-277](specification/adr/adr-277.md) removed the `fn:` form, the
@@ -284,7 +284,7 @@ is left is 3 and 4, and neither is a performance question.
   is one value: `?`, the absence of a claim. An error is reported only where
   **both** sides are written down and disagree, so it never rejects a program
   that is correct — which is the only way to build one on a `std` that is half
-  Rust. Its first find was real: `fortunes.nika` put a `&str` literal in a
+  Rust. Its first find was real: `examples/fortunes` put a `&str` literal in a
   `String` field, which no `rustc` had ever seen because that file does not run
   yet. What it does not catch — a method on an unwritten receiver, an element
   type, what a `?` unwraps — becomes checkable when a signature is written,

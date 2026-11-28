@@ -87,11 +87,11 @@ fn no_program_in_the_repository_has_a_type_error() {
             let parsed = parse_to_ast(&source)
                 .unwrap_or_else(|e| panic!("{} does not parse: {e}", path.display()));
             let name = path.display().to_text();
-            // **`fortunes.nika` is written at specification level**
-            // (`examples.rs`'s `SPECIFICATION_LEVEL`): its `env::var` names a
-            // `std::env` that does not exist, which is `NK1181` since #488 and
-            // #105's to fix.
-            if name.ends_with("fortunes.nika") {
+            // **`examples/fortunes` is written at specification level**
+            // (`examples.rs`'s `SPECIFICATION_LEVEL`): `postgres::connect` and
+            // `http::Server::new()` are not built, so their types are `NK1245`,
+            // and #105's to build.
+            if name.ends_with("fortunes/src/main.nika") {
                 checked += 1;
                 continue;
             }

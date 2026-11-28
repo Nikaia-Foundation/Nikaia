@@ -51,7 +51,7 @@ that question was worth, and what it found.
    bounded above by that 9 ns. At `no` it can only lose: per-build gives every
    `Shared` a plain count with no analysis, and a per-value inference that may
    not fail open gives an atomic one to everything it cannot see past. **The one
-   `Shared` in this repository is such a value**: `examples/fortunes.nika`'s
+   `Shared` in this repository is such a value**: `examples/fortunes/src/main.nika`'s
    `db`, which the prototype makes atomic where the build makes it plain (§6).
 4. **It does not stretch far enough to reach the program it was wanted for.**
    Part II 12.2's counter is `Shared[Locked[i32]]`, and `Locked` expands from the
@@ -422,7 +422,7 @@ seen at all (§5.2).
 
 ### The one `Shared` in the repository
 
-`examples/fortunes.nika` is the only program in this repository that writes the
+`examples/fortunes/src/main.nika` is the only program in this repository that writes the
 word, and it writes it once:
 
 ```nika
@@ -431,7 +431,7 @@ fn fortunes(db: Shared[postgres::Connection]) -> String throws {
     let mut rows = all.fetch(db)
 ```
 
-`nikaia --sharing --input examples/fortunes.nika` says:
+`nikaia --sharing --input examples/fortunes/src/main.nika` says:
 
 ```text
 fortunes: `db`: atomic (Shared[postgres::Connection])
@@ -537,7 +537,7 @@ does not care about the order; only that guard did.
 
 **The prototype's first corpus test asserted the wrong thing.** It asserted that
 no program in the repository writes a `Shared` — and failed, because
-`examples/fortunes.nika` does. The test now asserts what is actually true,
+`examples/fortunes/src/main.nika` does. The test now asserts what is actually true,
 including *why* it comes out atomic, and §6 is the finding that fell out of being
 wrong.
 
@@ -598,7 +598,7 @@ benches/refcount/refcount.sh                    # the table, 50 M ops, 9 repeats
 benches/refcount/refcount.sh 20000000 9 4       # …quicker, and the second run of §3.1
 cargo test -p refcount-bench                    # §2's six equivalence assertions
 cargo test -p nikaia --test sharing             # the prototype's 14
-nikaia --sharing --input examples/fortunes.nika --output /tmp/out.rs
+nikaia --sharing --input examples/fortunes/src/main.nika --output /tmp/out.rs
 ```
 
 The last one prints the report and then fails to *lower* `fortunes.nika`, because
@@ -636,7 +636,7 @@ thing that does, a cleanup running on another thread, can only happen to a value
 that crosses, which is a value the analysis has no freedom about.
 
 So **§6's four cases stop being a cost and become the default**, and what §6
-called a regression on `examples/fortunes.nika`'s `db` is now simply the floor
+called a regression on `examples/fortunes/src/main.nika`'s `db` is now simply the floor
 holding: `db` is atomic because nothing describes `fetch`, which is where it would
 have been anyway. Two of §6's own limits turned out to be fail-open holes rather
 than gaps, and they were found by asking what §8's guard had siblings — a handle

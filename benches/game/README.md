@@ -26,7 +26,7 @@ nikaia run benches/game/game.nika -- json     # json-small, -large, -deep
 | fasta | generated text, a random generator, output | [`main.nika`](fasta/main.nika): a `String` a line | [`speed.nika`](fasta/speed.nika): a letter table, `Bytes` written a block at a time | [Rust #7](fasta/rust-7.rs), held to one core |
 | k-nucleotide | hash maps keyed by short text | [`main.nika`](k-nucleotide/main.nika) | [`speed.nika`](k-nucleotide/speed.nika): two-bit codes as `u64` keys | [Rust #3](k-nucleotide/rust-3.rs), threads: the fastest entry without an unmaintained crate |
 | reverse-complement | large byte buffers, table lookup | [`main.nika`](reverse-complement/main.nika): text split and rebuilt | [`speed.nika`](reverse-complement/speed.nika): in place, an `Array[u8, 256]` table | [Rust #1](reverse-complement/rust-1.rs), threads |
-| json | reading and writing JSON | [`json/tree.nika`](json/tree.nika) | none | [`serde_json`](json/rust-tree.rs), [its own README](json/README.md) |
+| json | reading and writing JSON | [`json/tree/src/main.nika`](json/tree/src/main.nika) | none | [`serde_json`](json/rust-tree.rs), [its own README](json/README.md) |
 
 Not here yet: mandelbrot, whose binary image output waits for its program
 (#1616; `print` of `Bytes`, ADR-019 D7, is built since); regex-redux, which

@@ -77,7 +77,7 @@ fn no_program_in_the_repository_keeps_a_naked_view() {
 
         for path in paths {
             let source = std::fs::read_to_string(&path).expect("read the program");
-            // `fortunes.nika` is the one program in the corpus that does not
+            // `examples/fortunes` is the one program in the corpus that does not
             // lower (`dsl postgres::Sql` has no lowering); it parses, so it is still
             // asked this question.
             let parsed = parse_to_ast(&source)

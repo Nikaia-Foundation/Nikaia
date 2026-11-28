@@ -1,0 +1,13 @@
+# The TechEmpower "fortunes" benchmark, a project because it takes in the
+# `http` package: a single file has no dependencies (NK1339), so as a loose
+# `examples/fortunes.nika` it could not be checked at all (#2872).
+[package]
+name = "fortunes"
+version = "0.1.0"
+
+[build]
+user-parallelism = "no"
+
+# A path is relative to this file (ADR-286 D16).
+[dependencies]
+http = { path = "../http" }

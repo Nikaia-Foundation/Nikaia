@@ -19,7 +19,7 @@ Durations are observed wall clock of build tools, not program measurements
 | Full suite, locally | ~45 min | the same 267 binaries, all run | nobody locally |
 | Full suite, CI (`bootstrap_compiler`) | 8 min tests + 1.5 min sweep, ~17 min the whole run | off this machine; arm64 runs in parallel | every push, automatically |
 | Oracle (`scripts/c6/oracle.py`) | ~35 s | 142 files lowered by two binaries | moves of `check`/`emit` |
-| callgrind of one small file (`lower overlaps.nika`) | seconds; 42.6 M instructions | valgrind runs the program 50-100x slower | tasks whose point is a number |
+| callgrind of one small file (`lower overlaps/src/main.nika`) | seconds; 42.6 M instructions | valgrind runs the program 50-100x slower | tasks whose point is a number |
 | callgrind of the whole `lower-std` | over 25 min and still running (the #667 run of today) | the same slowdown on ~40 s of work | nobody |
 
 This machine has **no hardware counters** (`/sys/bus/event_source/devices`

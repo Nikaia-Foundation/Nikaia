@@ -28,7 +28,7 @@ Written first, because each of these looks like one.
 
 **Perfect hashing for a route table** — *as a first change*. ADR-026 §3 names it, and it has no
 target today: there is no HTTP server. `crates/nikaia-std/src/` holds `cli`, `fs`, `hash`, `html`, `io`, `list`, `text` and
-nothing else; `route` appears only in `examples/fortunes.nika` and `examples/README.md`, at
+nothing else; `route` appears only in `examples/fortunes/src/main.nika` and `examples/README.md`, at
 specification level. ADR-018 marked this "a decision and not a delivery". Building it means building
 the server first — a feature, not a first step.
 

@@ -124,7 +124,7 @@ fn a_name_with_a_package_in_front_is_somebody_elses_question() {
 
 /// **The corpus, which is what found the two real defects.**
 ///
-/// `examples/fortunes.nika` wrote `List[Fortune]` — a name the language does
+/// `examples/fortunes/src/main.nika` wrote `List[Fortune]` — a name the language does
 /// not have, in a file that never built for another reason and so never said
 /// so — and a `typecheck.rs` fixture had been standing on the absence this
 /// closes. Both are fixed; this is what keeps them fixed.

@@ -122,7 +122,7 @@ Measured on every `.nika` in the repository, both increments, both directions:
 | second increment | 33 | 22 | identical, byte for byte |
 
 The 22 are the 21 deliberately broken files in `tests/errors/` plus
-`examples/fortunes.nika`, whose `dsl postgres` has no lowering. Nothing in the
+`examples/fortunes/src/main.nika`, whose `dsl postgres` has no lowering. Nothing in the
 repository has the shape, in either direction: seventeen naked view parameters
 stand on fifteen declarations in ten files, and **none of them is a method of a
 struct that holds a view**, which is the position where `'a` exists at all. So
