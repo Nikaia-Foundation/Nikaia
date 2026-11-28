@@ -1,0 +1,30 @@
+// A function with two `ref` parameters that hands back a struct able to hold
+// views, holding none, borrows from neither (#2836): its result is `'static`,
+// as a written view's is, and rustc is not left to guess which one it views.
+struct N {
+	raw: String,
+	tag: String?,
+}
+
+struct E {
+	value: String,
+	tag: String?,
+}
+
+fn view(n: ref N) -> E sync {
+	return E { value: n.raw, tag: null }
+}
+
+fn opening(n: ref N, ds: ref Vec[N]) -> E sync {
+	return E { value: "", tag: null }
+}
+
+fn main() throws {
+	let mut src = String()
+	src.push_str("abc")
+	let n = N { raw: src, tag: "t" }
+	let ds: Vec[N] = []
+	let a = view(n)
+	let b = opening(n, ds)
+	println(f"{a.value} {b.tag ?? "-"}")
+}

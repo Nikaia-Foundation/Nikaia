@@ -390,7 +390,7 @@ impl EmitState {
                 if emit_is_elided(&lifetimes) && plain_signature && !has_kept && has_borrows && named.is_empty() {
                     match ret_type {
                         Some(ty) => {
-                            if holds_view(ty) {
+                            if holds_view(ty) || self.carries_a_view(world, ty) {
                                 let mut any_view = receiver.is_some() || lowered_views > 0;
                                 for each in args.iter() { if self.carries_a_view(world, &each.ty) { any_view = true; } }
                                 nothing_borrowed = any_view;

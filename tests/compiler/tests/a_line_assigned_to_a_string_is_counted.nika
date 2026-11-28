@@ -1,0 +1,22 @@
+// `io::lines()` hands out views of its stream's pool, written so in its
+// signature (`Seq[ref String]`, ADR-stream-buffers-v1 D10): a line assigned
+// to a name that holds a `String` is a counted keep, as a line of
+// `text.lines()` is, also where one turn gives it to two names, and the
+// loop's pool counts both.
+use std::io
+
+fn main() throws {
+    let mut first: String = String()
+    let mut last: String = String()
+    let mut longest: String = String()
+    for line in io::lines() {
+        if first.is_empty() {
+            first = line
+        }
+        if line.len() > longest.len() {
+            longest = line
+        }
+        last = line
+    }
+    println(f"first: {first}, longest: {longest}, last: {last}")
+}
