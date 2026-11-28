@@ -69,7 +69,11 @@ impl KeepContext {
         if !self.carries(names, ty) {
             return null
         }
-        if name == "Vec" || name == "List" {
+        // **A map or a set of text views is held too** (ADR-tether-v1 D12:
+        // a view is compared and hashed by content; #2858); a struct of views
+        // in one is refused by `element_refusals`, which names the list.
+        let kind = last_segment(name)
+        if name == "Vec" || name == "List" || kind == "HashMap" || kind == "BTreeMap" || kind == "HashSet" || kind == "BTreeSet" {
             for argument in ty.generics {
                 let why = self.not_held(names, argument, seen)
                 if why != null {
@@ -245,7 +249,7 @@ comptime OWNED: Array[ref String, 16] = ["to_owned", "clone_text", "len", "is_em
 comptime KEEPS: Array[ref String, 6] = ["push", "insert", "extend", "append", "push_front", "push_back"]
 
 // Methods that drop entries from their receiver.
-comptime SHEDS: Array[ref String, 9] = ["clear", "remove", "drain", "pop", "truncate", "retain", "pop_front", "pop_back", "take"]
+comptime SHEDS: Array[ref String, 10] = ["clear", "remove", "swap_remove", "drain", "pop", "truncate", "retain", "pop_front", "pop_back", "take"]
 
 // Methods that hand back the element they remove.
 comptime TAKES: Array[ref String, 6] = ["remove", "pop", "pop_front", "pop_back", "swap_remove", "take"]

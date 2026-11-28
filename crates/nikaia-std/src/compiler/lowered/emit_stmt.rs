@@ -858,7 +858,12 @@ impl EmitState {
         let (before, after) = emit_around(self.facts.nullable_sites.get(&at))?;
         out.push("{ let __nikaia_stored = ");
         out.push(&before);
-        self.emit_expr(world, walk, out, host, value, depth, flow, scope)?;
+        let root = nikaia_std::index::or(emit_read_root(world, base), || "".into());
+        let held_keeps = if root == "" { None } else { self.emit_stmt_held_keeps(&walk, &scope.function, at, &root) };
+        if held_keeps.is_some() {
+            let no_buffers: Vec<i64> = vec![];
+            self.emit_held_value(world, walk, out, host, value, nikaia_std::index::or(held_keeps.as_deref(), || ""), &no_buffers, self.emit_stmt_held_place(&walk, &scope.function, at, &root), &scope.function, depth, flow, scope)?;
+        } else { self.emit_expr(world, walk, out, host, value, depth, flow, scope)?; }
         if self.facts.stored_handles.contains(&node_key(value)) { out.push(".clone()"); }
         out.push(&after);
         let mut lent_on = false;

@@ -38,7 +38,8 @@ impl KeepContext {
         if ty.is_tuple && self.carries(names, ty) { return Some(String::from("a tuple of views")); }
         if self.structs.contains_key(name) && self.borrowing.contains(name) { return self.struct_not_held(names, name, seen); }
         if !self.carries(names, ty) { return None; }
-        if name == "Vec" || name == "List" {
+        let kind = last_segment(name);
+        if name == "Vec" || name == "List" || kind == "HashMap" || kind == "BTreeMap" || kind == "HashSet" || kind == "BTreeSet" {
             for argument in ty.generics.iter() {
                 let why = self.not_held(names, argument, seen);
                 if why.is_some() { return std::convert::identity(why); }
@@ -156,7 +157,7 @@ pub(crate) const OWNED: [&str; 16] = ["to_owned", "clone_text", "len", "is_empty
 
 pub(crate) const KEEPS: [&str; 6] = ["push", "insert", "extend", "append", "push_front", "push_back"];
 
-pub(crate) const SHEDS: [&str; 9] = ["clear", "remove", "drain", "pop", "truncate", "retain", "pop_front", "pop_back", "take"];
+pub(crate) const SHEDS: [&str; 10] = ["clear", "remove", "swap_remove", "drain", "pop", "truncate", "retain", "pop_front", "pop_back", "take"];
 
 pub(crate) const TAKES: [&str; 6] = ["remove", "pop", "pop_front", "pop_back", "swap_remove", "take"];
 

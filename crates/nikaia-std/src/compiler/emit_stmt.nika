@@ -1197,7 +1197,17 @@ impl EmitState {
         let (before, after) = emit_around(self.facts.nullable_sites.get(at))
         out.push("{ let __nikaia_stored = ")
         out.push(before)
-        self.emit_expr(world, walk, out, host, value, depth, flow, scope)
+        // **A view overwriting an element of a container that holds its views
+        // is held** (ADR-tether-v1 D12, #2858): by the keeps of the buffers it
+        // points into, as `push` holds one.
+        let root = emit_read_root(world, base) ?? ""
+        let held_keeps = if root == "" { null } else { self.emit_stmt_held_keeps(walk, scope.function, at, root) }
+        if held_keeps != null {
+            let no_buffers: Vec[i64] = []
+            self.emit_held_value(world, walk, out, host, value, held_keeps ?? "", no_buffers, self.emit_stmt_held_place(walk, scope.function, at, root), scope.function, depth, flow, scope)
+        } else {
+            self.emit_expr(world, walk, out, host, value, depth, flow, scope)
+        }
         // A handle stored is duplicated where it is read again (#1212).
         if self.facts.stored_handles.contains(node_key(value)) {
             out.push(".clone()")
