@@ -1,0 +1,23 @@
+// One line of a mapped file handed back keeps the mapping, and its cleanup,
+// alive in the caller (ADR-tether-v1). Moved from `tether_keep::mapped` (#2849).
+use std::fs
+
+fn first_line(path: String, root: fs::Root) -> String throws {
+    let file = fs::map(path, root)
+    for line in file.text().lines() {
+        return line
+    }
+    return ""
+}
+
+fn files() -> fs::Root throws {
+    let root = fs::scratch()
+    fs::write("app.conf", root, "# settings\nhost = example.org\nport = 8080\ninclude = extra.conf\n")
+    fs::write("extra.conf", root, "mode = fast\nhost = override.org\n")
+    return root
+}
+
+fn main() throws {
+    let root = files()
+    println(first_line("app.conf", root))
+}

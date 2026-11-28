@@ -1,0 +1,29 @@
+// A buffer whose views stay in its scope is a plain local, and a buffer handed
+// on whole is a move (ADR-tether-v1). The run of
+// `tether_keep::a_buffer_nothing_outlives_is_left_alone`, whose check of the
+// lowered Rust stays there (#2849).
+use std::fs
+
+fn count(path: String, root: fs::Root) -> i64 throws {
+    let text = fs::read_to_string(path, root)
+    let mut n = 0
+    for line in text.lines() { n = n + line.len() as i64 }
+    return n
+}
+
+fn whole(path: String, root: fs::Root) -> String throws {
+    let text = fs::read_to_string(path, root)
+    return text
+}
+
+fn files() -> fs::Root throws {
+    let root = fs::scratch()
+    fs::write("app.conf", root, "# settings\nhost = example.org\nport = 8080\ninclude = extra.conf\n")
+    fs::write("extra.conf", root, "mode = fast\nhost = override.org\n")
+    return root
+}
+
+fn main() throws {
+    let root = files()
+    println(f"{count("app.conf", root)} {whole("app.conf", root).len()}")
+}
