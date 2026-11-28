@@ -628,7 +628,7 @@ impl EmitState {
         out.push("\n            -> { __wg_n }\n");
         match wrapped {
             Some(ref repeated) => {
-                out.push(&format!("\n        rule __wg_{}_item{} -> {} =\n          ", rule_name, taken, folded));
+                out.push(&format!("\n        rule __wg_{}_item{} -> ::std::option::Option<{}> =\n          ", rule_name, taken, item));
                 self.emit_pattern(world, walk, out, host, repeated)?;
                 out.push("\n            -> { ::std::option::Option::None }\n");
             },

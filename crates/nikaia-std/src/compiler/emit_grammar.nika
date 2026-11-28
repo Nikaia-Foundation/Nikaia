@@ -986,7 +986,10 @@ impl EmitState {
         out.push("\n            -> { __wg_n }\n")
         match wrapped {
             repeated => {
-                out.push(f"\n        rule __wg_{rule_name}_item{taken} -> {folded} =\n          ")
+                // The item rule is a rule of its own, which reads the
+                // input at the grammar's `'a` (#2835): its result names
+                // that lifetime, not the fold closure's `'_`.
+                out.push(f"\n        rule __wg_{rule_name}_item{taken} -> ::std::option::Option<{item}> =\n          ")
                 self.emit_pattern(world, walk, out, host, repeated)
                 out.push("\n            -> { ::std::option::Option::None }\n")
             },
