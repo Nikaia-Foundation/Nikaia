@@ -1,11 +1,13 @@
 // A walk of a sequence whose step can fail can fail (ADR-loop-failure-v1 D1), so a
 // `catch` around it has something to handle: `io::lines()` meets a line
 // that is not UTF-8, `collect` ends there, and the handler runs. It was
-// refused as `NK1134`, "Nothing here can fail" (#2692).
+// refused as `NK1134`, "Nothing here can fail" (#2692). The lines are
+// copied (`.cloned()`): a list of the lines themselves is `NK2308`
+// (ADR-stream-buffers-v1 D2).
 use std::io
 
 fn main() throws {
-    let got: Vec[String] = io::lines().collect() catch {
+    let got: Vec[String] = io::lines().cloned().collect() catch {
         println("caught")
         []
     }

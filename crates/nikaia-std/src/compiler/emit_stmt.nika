@@ -837,8 +837,29 @@ impl EmitState {
         let inner = scope.clone() with { bound: bound.clone() }
         let kept = self.emit_stmt_kept(walk, scope.function, at, bound)
         walk.holding = kept.holding
-        let annotation = self.emit_stmt_annotation(world, walk, host, ty, at, count, kept.put != null || kept.packed)
+        let mut annotation = self.emit_stmt_annotation(world, walk, host, ty, at, count, kept.put != null || kept.packed)
         walk.holding = null
+        // **A name a loop over a stream counts holds each line with a handle
+        // on its buffer** (ADR-stream-buffers-v1 D2, D3): `Held`, whatever
+        // its first value; a literal takes no keep (ADR-tether-v1 D15).
+        let streamed = names.len() == 1 && ty != null && self.stream_counted(walk, scope.function, bound)
+        if streamed {
+            annotation = ": nikaia_std::tether::Held"
+            let local = self.emit_stmt_local(bound)
+            match value {
+                Expr::LitStr { text, .. } => {
+                    out.push(f"let {mut_word}{local}{annotation} = nikaia_std::tether::Held::literal(\"{text}\");")
+                    return
+                },
+                else => {},
+            }
+            if self.emit_stmt_held_keeps(walk, scope.function, at, bound) == null {
+                out.push(f"let {mut_word}{local}{annotation} = {{ use nikaia_std::tether::Hold as _; (")
+                self.emit_expr(world, walk, out, host, value, depth, flow, inner)
+                out.push(").hold([std::sync::Arc::new(nikaia_std::tether::Keep::new())]) };")
+                return
+            }
+        }
         let local = self.emit_stmt_local(bound)
         if kept.packed {
             let held = emit_tethered_type(world, ty, value)
@@ -1485,6 +1506,20 @@ impl EmitState {
             } else if lent_item != "" {
                 unwrap = f"let {bound} = &{plain};"
             }
+            // **A loop over a stream reads into a pool and its line is a
+            // view** (ADR-stream-buffers-v1 D1, D3): the pool's size is the
+            // plan's count, and the chunk's keep and place are bound beside
+            // the line for the names that hold it across turns.
+            let pool = self.stream_pool(walk, scope.function, at)
+            let mut stepped = "next"
+            let mut opened = ""
+            if pool != null {
+                stepped = "next_line"
+                opened = f".in_pool({pool ?? 2})"
+                let step = if self.facts.fallible_loops.contains(at) { "__nikaia_line?" } else { "__nikaia_line" }
+                unwrap = f"let ({bound}, __keep_{at}, __place_{at}) = {step}.parts();"
+            }
+            let stepped_bound = if pool != null { "__nikaia_line" } else { bound.clone() }
             let pad = "    ".repeat(depth)
             let inner = "    ".repeat(depth + 1)
             out.push("{\n")
@@ -1492,11 +1527,11 @@ impl EmitState {
             out.push("let mut __nikaia_sequence = ")
             self.emit_expr(world, walk, out, host, iter, depth + 1, flow, scope)
             // A produced sequence is walked by value (ADR-105 D2).
-            out.push(";\n")
+            out.push(f"{opened};\n")
             out.push(inner)
             // **Each step is a pause of the main line** (ADR-async-5 D37):
             // under a gate, the waiting tasks start meanwhile.
-            out.push(f"{allowed}while let Some({bound}) = __nikaia_sequence.next(){emit_async_pause(walk)} ")
+            out.push(f"{allowed}while let Some({stepped_bound}) = __nikaia_sequence.{stepped}(){emit_async_pause(walk)} ")
             self.emit_stmt_block_opening_with(world, walk, out, host, body, depth + 1, flow.inside_a_loop(), scope, EmitTail::Statement, emit_counted_turn(host.counts_steps(), unwrap))
             out.push("\n")
             out.push(pad)

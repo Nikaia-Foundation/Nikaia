@@ -242,6 +242,10 @@ struct BufferWalk {
     /// The statement being walked, for a refusal's place.
     stream_span: Span,
     stream_keeps: Vec[StreamKeep],
+    /// **Every line of a stream gathered at once** (ADR-stream-buffers-v1
+    /// D2, supervisor decision 2 on #2851): a `.collect()` of the stream's
+    /// items, by the call that reads it and the statement.
+    stream_gathers: Vec[(String, Span)],
 }
 
 // Where a local is changed last: the statement of its `let`'s own block that
@@ -340,6 +344,9 @@ fn plan_of(item: ref Item, target: String?, ask: ref BufferAsk, holes_of: fn(ref
     }
     let walk = walked(item, target?.clone(), carries, false, ask, holes_of, unaliased) ?? return null
     let mut plan = decide(key, body, walk, ask)
+    for (callee, span) in walk.stream_gathers {
+        plan.refusals.push(stream_gather_refusal(callee, span))
+    }
     // **A body with a loop over a stream is walked once more**, its items
     // followed (ADR-stream-buffers-v1 D2), and only that walk answers where
     // they live: the plan's keeps stay the first walk's.
@@ -457,6 +464,38 @@ fn stream_callee(iter: ref Expr, ask: ref BufferAsk, unaliased: fn(ref String) -
     return named
 }
 
+// **A `.collect()` of a stream's lines** keeps every one of them at once
+// (ADR-stream-buffers-v1 D2's last row, supervisor decision 2 on #2851):
+// noted once per statement, where what is gathered is still the lines.
+fn note_stream_gather(gathered: ref Expr, ask: ref BufferAsk, unaliased: fn(ref String) -> String sync, mut walk: BufferWalk) {
+    let callee = stream_items_of(gathered, ask, unaliased) ?? return
+    for (_, span) in walk.stream_gathers {
+        if span.start == walk.stream_span.start {
+            return
+        }
+    }
+    walk.stream_gathers.push((callee, walk.stream_span.clone()))
+}
+
+// The call whose stream's items `expr` still yields: the call itself, or a
+// step that hands its items on as they are (`filter`, `take`, ...).
+fn stream_items_of(expr: ref Expr, ask: ref BufferAsk, unaliased: fn(ref String) -> String sync) -> String? {
+    return match expr {
+        Expr::Call { .. } => stream_callee(expr, ask, unaliased),
+        Expr::MethodCall { receiver, method, .. } => match ["filter", "take", "skip", "step_by", "take_while", "skip_while", "chain", "enumerate", "zip"].contains(ask.names.resolve(method)) {
+            true => stream_items_of(receiver, ask, unaliased),
+            false => null,
+        },
+        else => null,
+    }
+}
+
+fn stream_gather_refusal(callee: ref String, span: ref Span) -> Finding {
+    let message = f"Every line `{callee}()` reads is gathered here, each a view of a buffer of the stream's pool, and their number grows with the input."
+    let help = f"Gather copies with `.cloned()` before `.collect()`, process each line in a `for` over `{callee}()`, or hand the lines to a task over a bounded channel."
+    return refusal("NK2308", span.clone(), message, ["A stream reads into a fixed pool of buffers, sized by the places that hold a view of its items from one turn to the next; a list of all its items would need a new buffer for every one."], help)
+}
+
 // A keep of a stream's item, once per loop, place and way.
 fn note_stream_keep(origin: (i64, String), escaping: ref Escape, mut walk: BufferWalk) {
     if !walk.streams || origin.1 != STREAM {
@@ -493,7 +532,7 @@ fn walked(item: ref Item, target: String?, carries: bool, streams: bool, ask: re
         Item::Fn { receiver, args, body, .. } => (receiver, args, body),
         else => return null,
     }
-    let mut walk = BufferWalk { target: target, locals: collections::BTreeMap(), frames: [], path: [], sources: collections::BTreeMap(), escapes: [], sheds: collections::BTreeMap(), puts_into: collections::BTreeMap(), struct_puts: collections::BTreeMap(), taken: collections::BTreeMap(), reassigned: collections::BTreeMap(), handed: collections::BTreeMap(), captured: collections::BTreeMap(), statement: 0, result_carries: carries, last_seen: collections::BTreeMap(), holders: collections::BTreeMap(), hoisted: collections::BTreeMap(), mutated: collections::BTreeMap(), value_tail: -1, wholes: collections::BTreeMap(), plain: collections::BTreeSet(), streams: streams, stream_loops: [], stream_how: "", stream_span: Span { start: 0, end: 0 }, stream_keeps: [] }
+    let mut walk = BufferWalk { target: target, locals: collections::BTreeMap(), frames: [], path: [], sources: collections::BTreeMap(), escapes: [], sheds: collections::BTreeMap(), puts_into: collections::BTreeMap(), struct_puts: collections::BTreeMap(), taken: collections::BTreeMap(), reassigned: collections::BTreeMap(), handed: collections::BTreeMap(), captured: collections::BTreeMap(), statement: 0, result_carries: carries, last_seen: collections::BTreeMap(), holders: collections::BTreeMap(), hoisted: collections::BTreeMap(), mutated: collections::BTreeMap(), value_tail: -1, wholes: collections::BTreeMap(), plain: collections::BTreeSet(), streams: streams, stream_loops: [], stream_how: "", stream_span: Span { start: 0, end: 0 }, stream_keeps: [], stream_gathers: [] }
     open_scope(walk)
     for arg in args {
         let parameter = Local { at: 0, path: [], origins: collections::BTreeSet(), ty: arg.ty.clone(), parameter: true, keeps: arg.mutable && ask.context.carries(ask.names, arg.ty), buffer: false, text: false, number: false, parts: [] }
@@ -779,15 +818,17 @@ fn walked_statement(stmt: ref Stmt, span: ref Span, ask: ref BufferAsk, holes_of
                 if !known {
                     walk.stream_loops.push((at, binding.clone(), streamed ?? ""))
                 }
-                if walk.streams {
-                    let marker: String = "<stream>"
-                    let id = (at, marker)
-                    if !walk.sources.contains_key(id) {
-                        let source = Source::Buffer { at: at, name: binding, ty: "stream", span: span.clone() }
-                        walk.sources.insert(id.clone(), Sourced { source: source, path: walk.path.clone() })
-                    }
-                    origins.insert(id)
+                // **The first walk files the item as a buffer too**
+                // (ADR-stream-buffers-v1 D1), so that a name holding it
+                // across turns is held by the chunk's keep, as a per-turn
+                // buffer's views are (#2841).
+                let marker: String = "<stream>"
+                let id = (at, marker)
+                if !walk.sources.contains_key(id) {
+                    let source = Source::Buffer { at: at, name: binding, ty: "stream", span: span.clone() }
+                    walk.sources.insert(id.clone(), Sourced { source: source, path: walk.path.clone() })
                 }
+                origins.insert(id)
             }
             // **A word of a split buffer is plainly a view of it** (#2842).
             let plain = !mutable && bindings.len() == 1 && plain_pieces(iter, ask, walk)
@@ -1622,7 +1663,10 @@ fn nested_blocks(expr: ref Expr, at: i64, ask: ref BufferAsk, holes_of: fn(ref E
                 nested_blocks(setting.value, at, ask, holes_of, unaliased, walk)
             }
         }
-        Expr::MethodCall { receiver, args, config, .. } => {
+        Expr::MethodCall { receiver, method, args, config, .. } => {
+            if ask.names.resolve(method) == "collect" {
+                note_stream_gather(receiver, ask, unaliased, walk)
+            }
             nested_blocks(receiver, at, ask, holes_of, unaliased, walk)
             for arg in args {
                 nested_blocks(arg, at, ask, holes_of, unaliased, walk)
