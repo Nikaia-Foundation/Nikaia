@@ -16,7 +16,7 @@ fn toolchain() -> String throws {
 
 fn main() throws {
 	let tmp = fs::scratch()
-	let source = "fn tails(mut all: Vec[String], lines: Vec[String]) {\n    for each in lines {\n        let line = each + \"!\"\n        if !line.contains(\";\") { continue }\n        all.push(line[0..<line.len() - \"!\".len()])\n    }\n}\n\nfn echoed(mut all: Vec[String], lines: Vec[String]) throws {\n    for each in lines {\n        let line = each + \"?\"\n        if !line.contains(\";\") { continue }\n        all.push(line[0..<line.len() - \"!\".len()])\n        println(line)\n    }\n}\n\nfn main() throws {\n    let mut all: Vec[String] = []\n    tails(all, [\"Hamburg;12\", \"none\", \"Kiel;7\"])\n    let mut kept: Vec[String] = []\n    echoed(kept, [\"Bonn;3\"])\n    println(all.join(\",\"))\n    println(kept.join(\",\"))\n}\n"
+	let source = "fn tails(mut all: Vec[String], lines: Vec[String]) {\n    for each in lines {\n        let line = each + \"!\"\n        let m = line.find(\";\") ?? continue\n        all.push(line.after(m.end))\n    }\n}\n\nfn echoed(mut all: Vec[String], lines: Vec[String]) throws {\n    for each in lines {\n        let line = each + \"?\"\n        let m = line.find(\";\") ?? continue\n        all.push(line.after(m.end))\n        println(line)\n    }\n}\n\nfn main() throws {\n    let mut all: Vec[String] = []\n    tails(all, [\"Hamburg;12\", \"none\", \"Kiel;7\"])\n    let mut kept: Vec[String] = []\n    echoed(kept, [\"Bonn;3\"])\n    println(all.join(\",\"))\n    println(kept.join(\",\"))\n}\n"
 	fs::write("p.nika", tmp, source)
 	let lowered = process::run(toolchain(), ["lower", "p.nika", "-o", "p.rs"]; dir: tmp.path().to_text())
 	if lowered.stdout.contains("Lowered p.nika") == false { println(lowered.stderr) }

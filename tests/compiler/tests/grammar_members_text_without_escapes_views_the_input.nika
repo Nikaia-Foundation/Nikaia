@@ -1,0 +1,39 @@
+// A typed read keeps a string without escapes as a view of the input, and
+// decodes one with escapes into text of its own (ADR-grammar-typed-read-v2
+// D5, Part II 10.6, #2496): the value rule's `Text` arm hands back either, so
+// each `String` field of the struct takes either, per value. The action that
+// hands back the view drew NK1104 before (*builds a view of a `String`, but
+// its rule returns a `String` of its own*), and every field was a copy.
+struct Rec { plain: String, esc: String, note: String?, }
+grammar J {
+	rule WS = "" -> { }
+	entry rule read[T] -> T = v:Value[T] eof -> { v }
+	rule Ch -> i64 = x:any if(x != '"' && x != '\\') -> { 1 }
+	rule Part -> String = s:text(Ch+) -> { s }
+		| "\\\"" -> { "\"" }
+		| "\\\\" -> { "\\" }
+		| "\\n" -> { "\n" }
+	rule Key -> String = "\"" s:text(Ch*) "\"" ":" -> { s }
+	rule Null = "null" -> { }
+	rule Value[T] -> T = match T::kind {
+		Text => "\"" s:text(Ch*) "\"" -> { s }
+			| "\"" ps:Part* "\"" -> { ps.join("") }
+		Maybe(A) => v:Value[A] -> { v }
+		Struct(_) => "{" m:members[T](Key, Value[_], ","; null: Null) "}" -> { m }
+	}
+}
+fn main() throws {
+	let given = "{\"esc\":\"a\\\"b\\\\c\\nd\",\"plain\":\"abc\",\"note\":\"x\\\\y\"" + "}"
+	let r: Rec = J::read[Rec](given) catch {
+		println(f"error: {error}")
+		return
+	}
+	println(r.plain)
+	println(r.esc)
+	println(r.note ?? "-")
+	let q: Rec = J::read[Rec]("{\"plain\":\"p\",\"esc\":\"e\",\"note\":null}") catch {
+		println(f"error: {error}")
+		return
+	}
+	println(f"{q.plain} {q.esc} {q.note ?? "-"}")
+}

@@ -143,6 +143,20 @@ full (a program that holds views and waits for the next item hangs); a pool
 that grows (unbounded, an out-of-memory end from outside); copying when the
 pool is full (a copy the program did not ask for, ADR-tether-v1 D3).
 
+### D10 — A stream's signature writes its items as views with no source named.
+
+(supervisor, 2026-11-28, #2870) A free function whose ledger entry says
+`iterates = "stream"` hands out views of its own pool: `io::lines` is
+`-> Seq[ref String] pauses throws`. The item is checked as an item of
+`text.lines()` is, with the stream's pool as its source; assigned to a place
+that holds a `String`, it is a counted keep (D2, D5). `.collect()` stays
+`NK2308`, `.cloned()` is the copy. Outside such an entry, `ref String` with no
+source keeps its meaning elsewhere: a ledger entry's own result, a warning
+in user code. No new syntax: this is D1 applied to the signature. Built for
+a `for` over the call; a combinator over it (`map`, `filter`, `take`, ...)
+still walks owned items, a copy per line that D1 does not allow, to be
+removed (#2881).
+
 ## 5. Consequences
 
 * A program reads a stream of any size in the memory of its pool, and an item's

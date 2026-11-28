@@ -832,6 +832,28 @@ pub(crate) fn check_core_method<H: CheckHost>(state: &mut CheckState, world: &Ch
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
+pub(crate) fn check_core_method_stream_walked(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, receiver: &Expr, on: Ty) -> Ty {
+    if !check_core_a_stream_call(world, receiver) { return on; }
+    match on {
+        Ty::Seq { ref item, is_sync, pauses, ref fails, parallel, shape } => { let item = nikaia_std::boxed::open(item); Ty::Seq { item: nikaia_std::block::Boxed::new(unviewed_type(item)), is_sync, pauses, fails: fails.copy_owned(), parallel, shape: shape.clone() } },
+        _ => on,
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn check_core_a_stream_call(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, expr: &Expr) -> bool {
+    let func = match expr {
+        Expr::Call { func, .. } => { let func = nikaia_std::boxed::open(func); func },
+        _ => return false,
+    };
+    let named = match check_core_call_free_callee(world, func) { Some(__nikaia_value) => __nikaia_value, None => return false };
+    let contract = match world.library.functions.get(&named) { Some(__nikaia_value) => __nikaia_value, None => match world.own.functions.get(&named) { Some(__nikaia_value) => __nikaia_value, None => return false } };
+    contract.streams
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
 pub(crate) fn check_core_method_deadline(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, receiver: &Expr, config: &[ConfigArg], found: Ty) -> Ty {
     let key = match match state.facts.method_callees.get(&(id_of(receiver) as i64)) {
         Some(__nikaia_it) => Some(__nikaia_it.clone()),
@@ -935,6 +957,7 @@ pub(crate) fn check_core_method_walked<H: CheckHost>(state: &mut CheckState, wor
     let mut on: Ty = check_core_expr(state, world, host, receiver, span);
     for held in empty_entry.iter() { state.flow.empty_lists.insert(empty_map, held.clone()); }
     on = check_core_method_literal(state, receiver, on);
+    on = check_core_method_stream_walked(world, receiver, on);
     state.open_receiver_placed(world, receiver, &on, span);
     if safe {
         let mut unknown = false;

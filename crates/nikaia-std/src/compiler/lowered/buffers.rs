@@ -2017,7 +2017,8 @@ pub(crate) fn made_arguments(contract: &FnContract, named: &str, args: &[Expr], 
     if !a_result_of_views(result, ask) { return; }
     let copying: Vec<&Ledger> = vec![ask.own, ask.library];
     for k in 0..args.len() as i64 {
-        if !made_in_the_call(unsafe { nikaia_std::proven::read(&args, (k) as usize) }) || !lends_in(contract, k, &copying) || buffers_view_call(unsafe { nikaia_std::proven::read(&args, (k) as usize) }, ask, &mut *unaliased) { continue; }
+        let lent = lends_in(contract, k, &copying) || k == 0 && a_grammar_entry_input(contract);
+        if !made_in_the_call(unsafe { nikaia_std::proven::read(&args, (k) as usize) }) || !lent || buffers_view_call(unsafe { nikaia_std::proven::read(&args, (k) as usize) }, ask, &mut *unaliased) { continue; }
         let id = (walk.statement, format!("{}#{}", named, k));
         if !walk.sources.contains_key(&id) {
             let source = Source::Argument { at: walk.statement, callee: nikaia_std::block::Text::from(named.to_string()), index: k, span: Span { start: u32::try_from(walk.statement).unwrap_or_else(|_| panic!("the value does not fit in an `u32`")), end: u32::try_from(walk.statement).unwrap_or_else(|_| panic!("the value does not fit in an `u32`")) } };
@@ -2025,6 +2026,12 @@ pub(crate) fn made_arguments(contract: &FnContract, named: &str, args: &[Expr], 
         }
         out.insert(id);
     }
+}
+
+pub(crate) fn a_grammar_entry_input(contract: &FnContract) -> bool {
+    if contract.fails_with.len() != 1 || *unsafe { nikaia_std::proven::read(&contract.fails_with, (0) as usize) } != "ParseError" { return false; }
+    let signature = match contract.signature.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return false };
+    !signature.params.is_empty() && unsafe { nikaia_std::proven::read(&signature.params, (0) as usize) }.0 == "input"
 }
 
 pub(crate) fn stored_arguments(contract: &FnContract, named: &str, args: &[Expr], ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_, '_, '_, '_>, unaliased: &mut impl FnMut(&str) -> String, walk: &mut BufferWalk) {
@@ -2225,7 +2232,7 @@ pub(crate) fn decide_source(id: &(i64, String), source: &Source, path: &[(i64, b
     for (known, way) in walk.escapes.iter() { if known.0 == id.0 && known.1 == id.1 { ways.insert(escape_word(way), way.clone()); } }
     let mut leaves = false;
     let mut task = false;
-    #[allow(unused_mut)] let mut outer: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
+    #[allow(unused_mut)] let mut outer: Vec<String> = vec![];
     for (_, way) in ways.iter() {
         plan.escapes.push((source.clone(), way.clone()));
         match way {
@@ -2235,7 +2242,7 @@ pub(crate) fn decide_source(id: &(i64, String), source: &Source, path: &[(i64, b
             Escape::Outer(name) => { outer.push(nikaia_std::block::Text::from(name.to_string())); },
         }
     }
-    let mut shedding: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut outer = outer;
+    let mut shedding: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block); #[allow(unused_mut, clippy::redundant_locals)] let mut outer = outer;
     for keeper in outer.iter() { if sheds_across(keeper, path, walk) { shedding.push(nikaia_std::block::Text::from(keeper.to_string())); } }
     if task && leaves {
         plan.refusals.push(source_refusal(source, "is passed to a task and also returned from this function.", "The task may outlive the caller, or the caller the task, so neither can be the one that keeps the data alive.", "Give the task a copy with `.clone()`, or pass the task only what it needs and return the rest."));
@@ -2250,7 +2257,7 @@ pub(crate) fn decide_source(id: &(i64, String), source: &Source, path: &[(i64, b
         plan.takes_keep = true;
     } else if !shedding.is_empty() {
         keep = KeepAt::Element(source_at(source));
-        held_one_per_buffer(&id.clone(), source, &shedding, walk, plan);
+        held_one_per_buffer(&id.clone(), source, &outer, walk, plan);
         if walk.reads.contains(&source_at(source)) { plan.reads.insert(source_at(source)); }
     } else if !outer.is_empty() { plan.frame_keep = true; } else {
         match source {

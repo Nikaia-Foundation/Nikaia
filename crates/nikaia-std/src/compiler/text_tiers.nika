@@ -499,10 +499,13 @@ struct TextDeclared {
     /// text field handed back lends (#1341), as their fields' text is the
     /// program's own to decide.
     private_structs: collections::BTreeSet[String],
+    /// Their text and copied scalar fields, keyed `Struct.field`
+    /// (`hb_private_fields`, #2478).
+    private_fields: collections::BTreeMap[String, bool],
 }
 
 fn declared_of(program: ref Program, names: ref winnow_grammar::InternerContext, beside_calls: ref collections::BTreeSet[String]) -> TextDeclared {
-    let mut declared = TextDeclared { fields: collections::BTreeMap(), variants: collections::BTreeMap(), variant_fields: collections::BTreeMap(), public_enums: collections::BTreeSet(), fns: collections::BTreeMap(), types: collections::BTreeSet(), methods: collections::BTreeMap(), rules: collections::BTreeSet(), comptime_texts: collections::BTreeSet(), private_structs: collections::BTreeSet() }
+    let mut declared = TextDeclared { fields: collections::BTreeMap(), variants: collections::BTreeMap(), variant_fields: collections::BTreeMap(), public_enums: collections::BTreeSet(), fns: collections::BTreeMap(), types: collections::BTreeSet(), methods: collections::BTreeMap(), rules: collections::BTreeSet(), comptime_texts: collections::BTreeSet(), private_structs: collections::BTreeSet(), private_fields: hb_private_fields(program.items, names) }
     for item in program.items {
         match item.node {
             Item::Struct { name, fields, is_public, .. } => {
@@ -758,6 +761,11 @@ struct TierLocal {
     /// a list of lists or one read out of it (`let words = runs[0]`, #2184):
     /// where its text stands in that position.
     inner: InnerList?,
+    /// The element type of a list a `for` walks that the function only
+    /// borrows (`lent_walked_list`, ADR-views-v4 D5, #2478): the element it
+    /// binds is a view into that list, as `ns[0]` is, so a field of it or the
+    /// element itself handed back or stored is a view of the list.
+    lent_walk: Type?,
 }
 
 /// A list inside a declared position: the declared position's owner with
@@ -1040,7 +1048,7 @@ fn tier_arm_read(node: i64, mut walk: TierWalk) -> bool {
 }
 
 fn plain_local(kinds: Kinds) -> TierLocal {
-    return TierLocal { kinds: kinds, of: null, literal: -1, declared: null, from: null, empty: -1, listed: -1, through: [], lent: false, made: false, unkept: false, items_of: null, walked: false, cut: false, element_of: null, text_items: false, called: false, inner: null }
+    return TierLocal { kinds: kinds, of: null, literal: -1, declared: null, from: null, empty: -1, listed: -1, through: [], lent: false, made: false, unkept: false, items_of: null, walked: false, cut: false, element_of: null, text_items: false, called: false, inner: null, lent_walk: null }
 }
 
 fn tier_at(word: ref String, mut walk: TierWalk) -> Tier {
@@ -3174,7 +3182,11 @@ fn tier_statement(stmt: ref Stmt, at: i64, ask: ref TierAsk, mut walk: TierWalk)
             }
         }
         Stmt::For { bindings, iter, body, .. } => {
-            let kinds = tier_expr(iter, ask, walk)
+            let mut kinds = tier_expr(iter, ask, walk)
+            let streamed = a_stream_read(iter, ask)
+            if streamed {
+                kinds = view_kinds()
+            }
             let from = element_word(iter, ask, walk)
             let mut walked: String? = null
             if bindings.len() == 1 {
@@ -3195,8 +3207,11 @@ fn tier_statement(stmt: ref Stmt, at: i64, ask: ref TierAsk, mut walk: TierWalk)
                     local.from = from?.clone()
                     local.of = walked?.clone()
                     local.inner = walked_list(iter, ask, walk)
-                    local.unkept = (only_own_text(kinds) && !rooted_in_a_parameter(iter, ask, walk)) || views_a_temporary(iter, ask, walk)
+                    // A line of a stream is kept by its buffer's count, not
+                    // copied as a temporary's view is (D10).
+                    local.unkept = !streamed && ((only_own_text(kinds) && !rooted_in_a_parameter(iter, ask, walk)) || views_a_temporary(iter, ask, walk))
                     local.walked = a_walked_place(iter) && (walk.local_walks || rooted_in_a_parameter(iter, ask, walk))
+                    local.lent_walk = lent_walked_list(iter, ask, walk)
                 }
                 if map != null {
                     let found = map?.clone() ?? continue
@@ -3359,7 +3374,7 @@ fn tier_let(names: ref Vec[winnow_grammar::Symbol], value: ref Expr, ty: ref Typ
         if declared == null {
             inner = read_list(value, ask, walk)
         }
-        let local = TierLocal { kinds: bound, of: of, literal: literal, declared: declared, from: from, empty: empty, listed: listed, through: through, lent: false, made: !a_read(value), unkept: unkept, items_of: items_of, walked: false, cut: a_cut(value, ask), element_of: element_of, text_items: text_items, called: !written && a_function_call(value), inner: inner }
+        let local = TierLocal { kinds: bound, of: of, literal: literal, declared: declared, from: from, empty: empty, listed: listed, through: through, lent: false, made: !a_read(value), unkept: unkept, items_of: items_of, walked: false, cut: a_cut(value, ask), element_of: element_of, text_items: text_items, called: !written && a_function_call(value), inner: inner, lent_walk: null }
         bind_tier_local(ask.names.resolve(names[0]).clone(), local, walk)
         return
     }
@@ -4028,8 +4043,34 @@ fn lent_field(value: ref Expr, ask: ref TierAsk, mut walk: TierWalk) -> bool {
             plain_string(ask.names, place.ty) && !place.ty.is_nullable && lent_root(base, ask, walk)
         },
         Expr::Index { base, .. } => lent_element(base, false, ask, walk),
+        // **An element a `for` walks of a lent list of text** is a view of
+        // it, as `ss[0]` is (ADR-views-v4 D5, #2478).
+        Expr::Variable(name, _) => match tier_local(ask.names.resolve(name), walk)?.lent_walk {
+            null => false,
+            element => plain_string(ask.names, element) && !element.is_nullable,
+        },
         else => false,
     }
+}
+
+/// **The element type of a list a `for` walks that the function only
+/// borrows** (ADR-views-v4 D5, #2478): a `ref` list parameter, or a list
+/// field read through a lent root. Each element the loop binds is a view
+/// into it, as `ns[0]` is; `null` for any other walk.
+fn lent_walked_list(iter: ref Expr, ask: ref TierAsk, mut walk: TierWalk) -> Type? {
+    let list = place_of(iter, ask, walk) ?? return null
+    if list.ty.is_nullable || list.ty.generics.len() != 1 || !is_a_container_name(ask.names.resolve(list.ty.name)) || a_map(ask.names, list.ty) {
+        return null
+    }
+    let lent = match iter {
+        Expr::Variable(name, _) => lent_list_parameter(ask.names.resolve(name), walk),
+        Expr::Field { base: inner, .. } => !list.ty.is_view && lent_root(inner, ask, walk),
+        else => false,
+    }
+    if !lent {
+        return null
+    }
+    return list.ty.generics[0].clone()
 }
 
 /// **An element of a list a `ref` parameter lends is a view of it** (#738,
@@ -4363,13 +4404,24 @@ fn lent_text_container(base: ref Expr, maps: bool, lists: bool, ask: ref TierAsk
 
 fn lent_root(base: ref Expr, ask: ref TierAsk, mut walk: TierWalk) -> bool {
     return match base {
-        Expr::Variable(name, _) => lent_parameter(ask.names.resolve(name), walk),
+        Expr::Variable(name, _) => lent_parameter(ask.names.resolve(name), walk) || lent_walked(ask.names.resolve(name), walk),
         Expr::Field { base: inner, .. } => {
             let place = place_of(base, ask, walk) ?? return false
             !place.ty.is_view && !place.ty.is_nullable && lent_root(inner, ask, walk)
         },
+        // **An element of a lent list** (ADR-views-v4 D5, #2478): `ns[0]` of
+        // `ns: ref Vec[N]`, whose fields are read through `ns`.
+        Expr::Index { base: list, index, .. } => !a_range(index) && lent_walked_list(list, ask, walk) != null,
         else => false,
     }
+}
+
+/// **A struct a `for` binds out of a list the function only borrows**
+/// (`lent_walked_list`, ADR-views-v4 D5, #2478): its fields are read through
+/// that list, as those of `ns[0]` are.
+fn lent_walked(name: ref String, walk: ref TierWalk) -> bool {
+    let local = tier_local(name, walk) ?? return false
+    return local.lent_walk != null && local.of != null && local.declared == null
 }
 
 /// A name bound to the borrowed subject or to a `ref` parameter of a struct.
@@ -6514,6 +6566,19 @@ fn tier_struct_field(owner: ref String, field: ref FieldInit, back: bool, ask: r
             kinds = view_kinds()
         }
     }
+    // **A field of a lent struct, handed back or stored in a field** of the
+    // struct handed back or put into a `mut` parameter, is a view of that
+    // struct (ADR-views-v4 D5, D16, D32, #2478): `E { v: n.raw }` out of
+    // `n: N`, as `return n.raw` is (`handed_kinds`).
+    if back && plain_string(ask.names, found.ty) && !found.ty.is_nullable && same_kinds(kinds, owned_kinds()) {
+        let through = match field.value {
+            null => false,
+            value => lent_field(value, ask, walk),
+        }
+        if through {
+            kinds = view_kinds()
+        }
+    }
     flow_value(going_into(into, found.ty, [], false), field.value, kinds, ask, walk)
     if field.value == null {
         kept_literal(shorthand, into, no_path(), found.ty, ask, walk)
@@ -7380,6 +7445,21 @@ fn std_result(callee: ref String, ask: ref TierAsk) -> Kinds {
     return owned_kinds()
 }
 
+/// **A `for` over a stream's call binds views of its pool**
+/// (ADR-stream-buffers-v1 D10): `io::lines() -> Seq[ref String]`, as a `for`
+/// over `lines()` of a text does, so a declared `String` a line is assigned
+/// to holds a view. A method called on the call walks it the general way,
+/// which hands out text of its own (`std_result`).
+fn a_stream_read(iter: ref Expr, ask: ref TierAsk) -> bool {
+    let func = match iter {
+        Expr::Call { func, .. } => func,
+        else => return false,
+    }
+    let callee = tier_callee(func, ask) ?? return false
+    let contract = ask.library.functions[callee] ?? return false
+    return contract.streams
+}
+
 /// Walk every function of the program once against the tiers found so far.
 /// **The units a round walks** (#727): each function, each method of an
 /// `impl`, and each other item, as (item, method), the method -1 for none.
@@ -7897,7 +7977,7 @@ fn walk_function(item: ref Item, target: String?, ask: ref TierAsk, mut walk: Ti
     let of_a_trait = walk.declared.fns[key]?.of_a_trait ?? false
     let held = walk_lists_of_views(key, args.len() as i64, walk)
     let free: String? = if target == null { key.clone() } else { null }
-    let lent_fields: collections::BTreeSet[String] = if of_a_trait { collections::BTreeSet() } else { hb_text_field_roots(item, ask.names, walk.declared.private_structs, free, held) }
+    let lent_fields: collections::BTreeSet[String] = if of_a_trait { collections::BTreeSet() } else { hb_text_field_roots(item, ask.names, walk.declared.private_structs, walk.declared.private_fields, free, held) }
     let mut at = 0
     for arg in args {
         let owner = TextOwner::Param(key.clone(), at)
@@ -7907,7 +7987,7 @@ fn walk_function(item: ref Item, target: String?, ask: ref TierAsk, mut walk: Ti
         if lent_fields.contains(ask.names.resolve(arg.name)) {
             ty.is_view = true
         }
-        let local = TierLocal { kinds: kinds, of: of, literal: -1, declared: Declaring { owner: owner, ty: ty }, from: null, empty: -1, listed: -1, through: [], lent: false, made: false, unkept: false, items_of: null, walked: false, cut: false, element_of: null, text_items: false, called: false, inner: null }
+        let local = TierLocal { kinds: kinds, of: of, literal: -1, declared: Declaring { owner: owner, ty: ty }, from: null, empty: -1, listed: -1, through: [], lent: false, made: false, unkept: false, items_of: null, walked: false, cut: false, element_of: null, text_items: false, called: false, inner: null, lent_walk: null }
         bind_tier_local(ask.names.resolve(arg.name).clone(), local, walk)
         at += 1
     }
@@ -7920,7 +8000,7 @@ fn walk_function(item: ref Item, target: String?, ask: ref TierAsk, mut walk: Ti
     walk.lent_self = false
     if receiver != null && target != null {
         walk.lent_self = receiver?.is_ref ?? false
-        let local = TierLocal { kinds: owned_kinds(), of: target?.clone(), literal: -1, declared: null, from: null, empty: -1, listed: -1, through: [], lent: false, made: false, unkept: false, items_of: null, walked: false, cut: false, element_of: null, text_items: false, called: false, inner: null }
+        let local = TierLocal { kinds: owned_kinds(), of: target?.clone(), literal: -1, declared: null, from: null, empty: -1, listed: -1, through: [], lent: false, made: false, unkept: false, items_of: null, walked: false, cut: false, element_of: null, text_items: false, called: false, inner: null, lent_walk: null }
         bind_tier_local("self", local, walk)
     }
     walk.handed_back = -1
@@ -9200,12 +9280,13 @@ pub fn tier_hand_back(mut program: Program, words: ref winnow_grammar::InternerC
     let plain = hb_plain_enums(program.items, words)
     let opted = keep_marks_opted_in_items(program.items)
     let private = hb_private_structs(program.items, words)
+    let fields = hb_private_fields(program.items, words)
     let mut views: collections::BTreeMap[String, Vec[i64]] = collections::BTreeMap()
     let mut made: collections::BTreeSet[String] = collections::BTreeSet()
     while true {
         let before = views.len()
         for mut item in program.items {
-            hb_item(item.node, words, plain, private, held, views, made)
+            hb_item(item.node, words, plain, private, fields, held, views, made)
         }
         if views.len() == before {
             break
@@ -9676,13 +9757,13 @@ fn sv_through_an_index(expr: ref Expr) -> bool {
 
 /// `views` holds, for each free function of the file whose result the pass
 /// made a view, the positions of the parameters it points into.
-fn hb_item(mut item: Item, words: ref winnow_grammar::InternerContext, plain: ref collections::BTreeSet[String], private: ref collections::BTreeSet[String], held: ref collections::BTreeSet[String], mut views: collections::BTreeMap[String, Vec[i64]], mut made: collections::BTreeSet[String]) {
+fn hb_item(mut item: Item, words: ref winnow_grammar::InternerContext, plain: ref collections::BTreeSet[String], private: ref collections::BTreeSet[String], fields: ref collections::BTreeMap[String, bool], held: ref collections::BTreeSet[String], mut views: collections::BTreeMap[String, Vec[i64]], mut made: collections::BTreeSet[String]) {
     match item {
-        Item::Fn { .. } => hb_fn(item, words, plain, private, held, views, true),
+        Item::Fn { .. } => hb_fn(item, words, plain, private, fields, held, views, true),
         Item::Impl { trait_name, target, methods } => {
             if trait_name == null {
                 for mut method in methods {
-                    hb_fn(method.node, words, plain, private, held, views, false)
+                    hb_fn(method.node, words, plain, private, fields, held, views, false)
                 }
             } else {
                 let owner = words.resolve(target.name).clone()
@@ -9744,8 +9825,8 @@ fn hb_plain_text(t: ref Type, words: ref winnow_grammar::InternerContext) -> boo
 
 /// `free`: a function of the file, not a method; only such a one is entered
 /// in `views`, where a call names it.
-fn hb_fn(mut item: Item, words: ref winnow_grammar::InternerContext, plain: ref collections::BTreeSet[String], private: ref collections::BTreeSet[String], held: ref collections::BTreeSet[String], mut views: collections::BTreeMap[String, Vec[i64]], free: bool) {
-    let lent_fields = hb_text_field_roots(item, words, private, if free { hb_fn_name(item, words) } else { null }, held)
+fn hb_fn(mut item: Item, words: ref winnow_grammar::InternerContext, plain: ref collections::BTreeSet[String], private: ref collections::BTreeSet[String], fields: ref collections::BTreeMap[String, bool], held: ref collections::BTreeSet[String], mut views: collections::BTreeMap[String, Vec[i64]], free: bool) {
+    let lent_fields = hb_text_field_roots(item, words, private, fields, if free { hb_fn_name(item, words) } else { null }, held)
     if !lent_fields.is_empty() {
         match item {
             Item::Fn { args, .. } => {
@@ -9825,21 +9906,44 @@ fn hb_fn(mut item: Item, words: ref winnow_grammar::InternerContext, plain: ref 
 /// one is the walk's (`lendable_parameter`). A published function keeps its
 /// text of its own (ADR-282 D29), and a trait's method the trait's
 /// signature.
-fn hb_text_field_roots(item: ref Item, words: ref winnow_grammar::InternerContext, private: ref collections::BTreeSet[String], key: String?, held: ref collections::BTreeSet[String]) -> collections::BTreeSet[String] {
+fn hb_text_field_roots(item: ref Item, words: ref winnow_grammar::InternerContext, private: ref collections::BTreeSet[String], fields: ref collections::BTreeMap[String, bool], key: String?, held: ref collections::BTreeSet[String]) -> collections::BTreeSet[String] {
     let mut out: collections::BTreeSet[String] = collections::BTreeSet()
     let (args, ret_type, body, is_extern, ret_from, is_public) = match item {
         Item::Fn { args, ret_type, body, is_extern, ret_from, is_public, .. } => (args, ret_type, body, is_extern, ret_from, is_public),
         else => return out,
     }
-    let t = ret_type ?? return out
-    let text = words.resolve(t.name) == "String" && t.generics.is_empty() && !t.is_view && !t.is_mut && !t.is_slice && t.code == null
-    if is_extern || !text {
+    if is_extern {
         return out
     }
+    let text = match ret_type {
+        null => false,
+        t => words.resolve(t.name) == "String" && t.generics.is_empty() && !t.is_view && !t.is_mut && !t.is_slice && t.code == null,
+    }
+    let result = match ret_type {
+        null => "",
+        t => if t.generics.is_empty() && !t.is_view && t.code == null { words.resolve(t.name) } else { "" },
+    }
     let none: collections::BTreeSet[String] = collections::BTreeSet()
+    // **A `for` binding stands for an element of the list parameter it
+    // walks** (ADR-views-v4 D5, #2478): `for n in ns { out.push(E { v:
+    // n.raw }) }` reads `ns` as `ref Vec[N]`, as `ns[0].raw` would.
+    let mut walks: collections::BTreeMap[String, String] = collections::BTreeMap()
+    let mut iters: collections::BTreeSet[i64] = collections::BTreeSet()
+    hb_walked_lists(body, args, words, walks, iters)
     let mut handed: Vec[ref Expr] = []
-    for way in hb_ways_out(body) {
-        handed.extend(hb_text_arms(way))
+    if text {
+        for way in hb_ways_out(body) {
+            handed.extend(hb_text_arms(way))
+        }
+    }
+    // **A text field put into a struct literal that is handed back or
+    // stored into a `mut` parameter** (ADR-views-v4 D5, D16, D32, #2478):
+    // `out.push(E { v: n.raw })` and `return E { v: n.raw }` read `n` as
+    // `ref N`, so `E.v` is a view of it; the literal's copied fields read it
+    // in place.
+    let (stored, copied) = hb_stored_fields(args, result, body, words, fields, walks)
+    if handed.is_empty() && stored.is_empty() {
+        return out
     }
     // **A published function hands back a view only where every way out is
     // one** (ADR-views-v4 D2, D7; ADR-282 D22, #1254): `pub fn first(v:
@@ -9852,6 +9956,9 @@ fn hb_text_field_roots(item: ref Item, words: ref winnow_grammar::InternerContex
     // The field reads that only read: the ones handed back, and the ones
     // handed to a free function, put in a hole or under an operator.
     let mut reads: Vec[ref Expr] = handed.clone()
+    reads.extend(stored.clone())
+    reads.extend(copied)
+    handed.extend(stored)
     // A list parameter whose element is handed back may also be measured
     // (`v.len()`, `v.is_empty()`, `v.contains(x)`): each reads it in place.
     let mut measured: collections::BTreeSet[i64] = collections::BTreeSet()
@@ -9890,13 +9997,17 @@ fn hb_text_field_roots(item: ref Item, words: ref winnow_grammar::InternerContex
     let free = key != null
     let function = key ?? ""
     for value in handed {
-        let root = hb_field_chain_root(value, words) ?? continue
+        let mut root = hb_field_chain_root(value, words) ?? hb_walked_binding(value, walks, words) ?? continue
+        let binding: String? = if walks.contains_key(root) { root.clone() } else { null }
+        if binding != null {
+            root = walks[root]?.clone() ?? continue
+        }
         // **A result written `from` views only what it names** (ADR-views-v4
         // D8): a field or element read of another parameter is not lent here.
         if ret_from.len() > 0 && !ret_from.iter().any(fn(named) { words.resolve(named) == root }) {
             continue
         }
-        let element = hb_an_element_read(value) || hb_an_element_call(value, words)
+        let element = binding != null || hb_an_element_read(value) || hb_an_element_call(value, words) || hb_a_field_of_an_element(value)
         let mut list = false
         if element && free {
             let mut at = 0
@@ -9913,12 +10024,200 @@ fn hb_text_field_roots(item: ref Item, words: ref winnow_grammar::InternerContex
             continue
         }
         let lendable = args.iter().any(fn(arg) { words.resolve(arg.name) == root && !arg.keep && !arg.mutable && !arg.ty.is_view && !arg.ty.is_mut && arg.ty.code == null && (private.contains(words.resolve(arg.ty.name)) || list) && hb_type_may_be_a_view(arg.ty, words, none) })
-        let only_read = if list { hb_only_field_reads(root, visited, reads, measured, words) } else { hb_only_field_reads(root, visited, reads, nothing, words) }
+        let mut only_read = if list { hb_only_field_reads(root, visited, reads, measured, words) } else { hb_only_field_reads(root, visited, reads, nothing, words) }
+        // The list a `for` walks is read there, and its binding only where
+        // it is handed back or stored, or read in place.
+        if binding != null {
+            let mut walked = measured.clone()
+            for id in iters {
+                walked.insert(id)
+            }
+            only_read = hb_only_field_reads(root, visited, reads, walked, words) && hb_binding_only_read(binding ?? "", visited, reads, words)
+        }
         if lendable && !rebinds(body, root, words) && only_read {
             out.insert(root)
         }
     }
     return out
+}
+
+/// **The field reads a struct literal takes in, where it is handed back or
+/// stored into a `mut` parameter** (ADR-views-v4 D5, D16, D32, #2478): the
+/// literal handed back as the `result` it names, a private struct, or the
+/// one argument of a `push`, `push_back`, `push_front` or `insert` on a place
+/// rooted in a `mut` parameter. First the reads that go into a field of
+/// plain text (`fields` true), then those into a copied scalar field.
+fn hb_stored_fields(args: ref Vec[FnArg], result: ref String, body: ref Block, words: ref winnow_grammar::InternerContext, fields: ref collections::BTreeMap[String, bool], walks: ref collections::BTreeMap[String, String]) -> (Vec[ref Expr], Vec[ref Expr]) {
+    let mut literals: Vec[ref Expr] = []
+    if result != "" {
+        for way in hb_ways_out(body) {
+            for arm in hb_text_arms(way) {
+                match arm {
+                    Expr::StructLit { name, .. } => if words.resolve(name) == result {
+                        literals.push(arm)
+                    },
+                    else => {},
+                }
+            }
+        }
+    }
+    for expr in visited_in_block(body) {
+        match expr {
+            Expr::MethodCall { receiver, method, args: given, .. } => {
+                let word = words.resolve(method)
+                if word != "push" && word != "push_back" && word != "push_front" && word != "insert" {
+                    continue
+                }
+                let root = hb_place_root(receiver, words) ?? continue
+                if !args.iter().any(fn(arg) { arg.mutable && words.resolve(arg.name) == root }) {
+                    continue
+                }
+                for value in given {
+                    match value {
+                        Expr::StructLit { .. } => literals.push(value),
+                        else => {},
+                    }
+                }
+            },
+            else => {},
+        }
+    }
+    let mut texts: Vec[ref Expr] = []
+    let mut copies: Vec[ref Expr] = []
+    for literal in literals {
+        match literal {
+            Expr::StructLit { name, fields: given, .. } => {
+                let owner = words.resolve(name)
+                for field in given {
+                    let value: ref Expr = field.value ?? continue
+                    let kind = fields[f"{owner}.{words.resolve(field.name)}"] ?? continue
+                    // A `for` binding over a list parameter of text is an
+                    // element of it (#2478).
+                    let chain = match value {
+                        Expr::Field { .. } => hb_field_chain_root(value, words) != null,
+                        Expr::Variable(_, _) => kind && hb_walked_binding(value, walks, words) != null,
+                        else => false,
+                    }
+                    if !chain {
+                        continue
+                    }
+                    if kind {
+                        texts.push(value)
+                    } else {
+                        copies.push(value)
+                    }
+                }
+            },
+            else => {},
+        }
+    }
+    return (texts, copies)
+}
+
+/// **The `for` bindings of `block` that walk a list parameter** (ADR-views-v4
+/// D5, #2478): each binding's name to the parameter's, in `walks`, and the
+/// id of each walked name in `iters`. A name bound by two loops over
+/// different lists, or a parameter's own name, is left out (`""`).
+fn hb_walked_lists(block: ref Block, args: ref Vec[FnArg], words: ref winnow_grammar::InternerContext, mut walks: collections::BTreeMap[String, String], mut iters: collections::BTreeSet[i64]) {
+    for stmt in block.stmts {
+        match stmt.node {
+            Stmt::For { bindings, mutable, mut_names, iter, body, .. } => {
+                match iter {
+                    Expr::Variable(name, _) => {
+                        let list = words.resolve(name).clone()
+                        if bindings.len() == 1 && !mutable && mut_names.is_empty() && args.iter().any(fn(arg) { words.resolve(arg.name) == list && hb_a_list_type(arg.ty, words) }) {
+                            let bound = words.resolve(bindings[0]).clone()
+                            let shadows = args.iter().any(fn(arg) { words.resolve(arg.name) == bound })
+                            let before: String = walks[bound]?.clone() ?? list.clone()
+                            if shadows || before != list {
+                                walks.insert(bound, "")
+                            } else {
+                                walks.insert(bound, list)
+                                iters.insert(id_of(iter) as i64)
+                            }
+                        }
+                    },
+                    else => {},
+                }
+                hb_walked_lists(body, args, words, walks, iters)
+            },
+            Stmt::While { body, .. } => hb_walked_lists(body, args, words, walks, iters),
+            else => {},
+        }
+    }
+}
+
+/// The name of a `for` binding over a list parameter (`hb_walked_lists`)
+/// that a value is, as it is: `s` of `for s in ss`.
+fn hb_walked_binding(value: ref Expr, walks: ref collections::BTreeMap[String, String], words: ref winnow_grammar::InternerContext) -> String? {
+    let name = match value {
+        Expr::Variable(name, _) => words.resolve(name).clone(),
+        else => return null,
+    }
+    let list = walks[name] ?? return null
+    if list == "" {
+        return null
+    }
+    return name
+}
+
+/// **Every use of a `for` binding is a read among `reads`** (#2478): the
+/// binding itself or a field read off it, as `hb_only_field_reads` asks of
+/// a parameter.
+fn hb_binding_only_read(binding: ref String, visited: ref Vec[ref Expr], reads: ref Vec[ref Expr], words: ref winnow_grammar::InternerContext) -> bool {
+    let mut read: collections::BTreeSet[i64] = collections::BTreeSet()
+    for value in reads {
+        let name = match value {
+            Expr::Variable(name, _) => words.resolve(name).clone(),
+            else => hb_field_chain_root(value, words) ?? continue,
+        }
+        if name == binding {
+            read.insert(hb_chain_variable_id(value))
+        }
+    }
+    for expr in visited {
+        match expr {
+            Expr::Variable(name, _) => if words.resolve(name) == binding && !read.contains(id_of(expr) as i64) {
+                return false
+            },
+            Expr::Closure { .. } => return false,
+            else => {},
+        }
+    }
+    return true
+}
+
+/// **The fields of the private structs a stored literal may take a view
+/// into** (#2478), keyed `Struct.field`: true for plain text, false for a
+/// copied scalar, which is read in place. Others are not listed.
+fn hb_private_fields(items: ref Vec[Spanned[Item]], words: ref winnow_grammar::InternerContext) -> collections::BTreeMap[String, bool] {
+    let mut out: collections::BTreeMap[String, bool] = collections::BTreeMap()
+    for item in items {
+        match item.node {
+            Item::Struct { name, fields, is_public, .. } => {
+                if is_public {
+                    continue
+                }
+                for field in fields {
+                    let key = f"{words.resolve(name)}.{words.resolve(field.name)}"
+                    if hb_plain_text(field.ty, words) {
+                        out.insert(key, true)
+                    } else if hb_copied_scalar(field.ty, words) {
+                        out.insert(key, false)
+                    }
+                }
+            },
+            else => {},
+        }
+    }
+    return out
+}
+
+/// A number, `bool` or `char`, or an option of one: copied at a read.
+fn hb_copied_scalar(t: ref Type, words: ref winnow_grammar::InternerContext) -> bool {
+    let scalars = ["i8", "i16", "i32", "i64", "isize", "u8", "u16", "u32", "u64", "usize", "f32", "f64", "bool", "char"]
+    let word = words.resolve(t.name)
+    return t.generics.is_empty() && !t.is_view && !t.is_mut && !t.is_slice && t.code == null && scalars.iter().any(fn(s) { s == word })
 }
 
 /// **Every use of `root` is a field read among `reads`** (#1341): a
@@ -10018,6 +10317,19 @@ fn hb_an_element_read(value: ref Expr) -> bool {
         Expr::Index { base, .. } => match base {
             Expr::Variable(..) => true,
             Expr::Index { .. } => hb_an_element_read(base),
+            else => false,
+        },
+        else => false,
+    }
+}
+
+/// A field read off an element read straight out of the parameter:
+/// `ns[0].raw` or `ns[0].head.name` (#2478), so the parameter is the list.
+fn hb_a_field_of_an_element(value: ref Expr) -> bool {
+    return match value {
+        Expr::Field { base, .. } => match base {
+            Expr::Index { .. } => hb_an_element_read(base),
+            Expr::Field { .. } => hb_a_field_of_an_element(base),
             else => false,
         },
         else => false,

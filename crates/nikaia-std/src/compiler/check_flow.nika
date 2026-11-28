@@ -433,6 +433,10 @@ pub struct CheckFlow {
     /// **The text parameters of such a lambda** (#688), by binding: a view
     /// of the item one level or two below, so compared as `str`.
     pub lent_text_params: collections::BTreeSet[i64],
+    /// **The names a `for` over a stream's call binds** (ADR-stream-buffers-v1
+    /// D10), by binding: each a view of the stream's pool, which a name that
+    /// holds a `String` keeps by the loop's count.
+    pub stream_lines: collections::BTreeSet[i64],
     /// Whether the method call just checked hands back a walk that lends.
     pub walk_lent: bool,
     /// The `fn` type the place a lambda stands in declares (#497).
@@ -686,6 +690,7 @@ impl CheckFlow {
             lent_walks: collections::BTreeSet(),
             lent_params: collections::BTreeSet(),
             lent_text_params: collections::BTreeSet(),
+            stream_lines: collections::BTreeSet(),
             walk_lent: false,
             lambda_expected: null,
             lambda_tail: null,

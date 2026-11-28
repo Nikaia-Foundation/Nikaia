@@ -1,0 +1,3 @@
+fn walk<'a>(n: &'a N, out: &mut Vec<E<'a>>) { out.push(E { v: &n.raw }); }
+a copy of the text: false
+abc def

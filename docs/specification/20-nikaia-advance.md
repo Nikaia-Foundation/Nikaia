@@ -735,7 +735,7 @@ a `scalar` checks what it covered as UTF-8; one that matches by comparison (a
 literal, `digit`, whitespace, a frame boundary, `dec[T]`) checks nothing. A
 byte that is not UTF-8 ends the parse there, with no alternative retried: the
 entry throws `ParseError` with `invalid UTF-8 at byte N: 0xXX`, `N` counted from the start
-of the whole input. Over a `String` nothing is checked again. Text an element yields over a `Bytes` that the program uses only as a key to look up or insert into a map whose keys are text is checked where the map does not find it; bytes equal to a key found are that key's, already checked. What a program sees, the error and its `N` included, is the same.
+of the whole input. Over a `String` nothing is checked again. A grammar marked `@text` describes a format that is text throughout: over a `Bytes` it checks the whole input once before the parse, with the same error, and cuts it at text positions with no further check; over a stream it checks each buffer once when it is filled, a sequence cut by the buffer's end checked whole in the next ([ADR-grammar-input-v1](adr/adr-grammar-input-v1.md) D14). Text an element yields over a `Bytes` that the program uses only as a key to look up or insert into a map whose keys are text is checked where the map does not find it; bytes equal to a key found are that key's, already checked. What a program sees, the error and its `N` included, is the same.
 
 **Lexical and syntactic.** A rule whose name starts with an **uppercase**
 letter is lexical: nothing is skipped between its elements. A lowercase name

@@ -463,6 +463,8 @@ pub(crate) fn check_function_grammar<H: CheckHost>(state: &mut CheckState, world
             let one = match written { Some(__nikaia_value) => __nikaia_value, None => continue };
             expected = Some(host.type_of(&one));
         }
+        let outer_either = state.flow.expected_either;
+        state.flow.expected_either = nikaia_std::index::or(rule.ret_type.as_ref().map(|__nikaia_it| __nikaia_it.either), || false);
         let outer_current: Option<String> = match state.current.as_ref() {
             Some(__nikaia_it) => Some(__nikaia_it.clone()),
             None => None,
@@ -495,6 +497,7 @@ pub(crate) fn check_function_grammar<H: CheckHost>(state: &mut CheckState, world
         }
         state.current = outer_current;
         state.emitting = outer_emitting;
+        state.flow.expected_either = outer_either;
     }
 }
 
@@ -523,7 +526,7 @@ pub(crate) fn check_function_action<H: CheckHost>(state: &mut CheckState, world:
             Stmt::Expr(value) => { tail = nikaia_std::index::or(state.text_literal(world, &wanted, value, true), || tail.into()); },
             _ => { },
         }
-        state.expect_type(world, &tail, &wanted, &Span { start: at.start, end: at.end }, "returns", &mut |found, want| { format!("This action builds `{}`, but its rule returns `{}`.", found, want) });
+        if !(state.flow.expected_either && a_plain_str_view(&tail) && a_plain_string(&wanted)) { state.expect_type(world, &tail, &wanted, &Span { start: at.start, end: at.end }, "returns", &mut |found, want| { format!("This action builds `{}`, but its rule returns `{}`.", found, want) }); }
         match &unsafe { nikaia_std::proven::read(&action.stmts, (nikaia_std::proven::sub::<i64>(count, 1)) as usize) }.node {
             Stmt::Expr(value) => { check_function_wrap_tail(state, world, host, &tail, &wanted, value, &Span { start: at.start, end: at.end }); },
             _ => { },

@@ -1177,10 +1177,6 @@ pub(crate) fn check_core_stmt_let<H: CheckHost>(state: &mut CheckState, world: &
         state.text_bytes_lets.insert(id);
         if ty.is_some() { state.facts.text_bytes_typed_lets.insert(span.start as i64); }
     }
-    if !mutable && names.len() == 1 && shape.is_empty() {
-        let position = check_core_places_text_position(&state, world, value);
-        if position.is_some() { state.text_positions.insert(id, nikaia_std::index::or(position, || CheckTextPosition { text: String::from(""), step: -1 })); }
-    }
     if names.len() == 1 && shape.is_empty() {
         let held: Option<CheckPosText> = check_pos_text_of(&state, world, value);
         if held.is_some() { state.facts.pos_texts.insert(id, match held { Some(__nikaia_value) => __nikaia_value, None => return check_core_stmt_unit() }); }
@@ -1681,10 +1677,25 @@ pub(crate) fn check_core_stmt_assign<H: CheckHost>(state: &mut CheckState, world
         }
         let mut assigned: Ty = found.clone();
         if found.is_unknown() && state.number_shaped(world, value) && state.no_integer_is(world, &into) { assigned = Ty::Named { name: String::from("i64"), args: vec![], view: false }; }
-        if !state.a_view_copied_out(world, &assigned, &into, Some(value)) { state.expect_type(world, &assigned, &into, span, "assign", &mut |was, wanted| { format!("You're assigning `{}` to something that holds `{}`.", was, wanted) }); }
+        if !state.a_view_copied_out(world, &assigned, &into, Some(value)) && !check_core_stmt_a_stream_line_kept(&state, world, target, value, &into) { state.expect_type(world, &assigned, &into, span, "assign", &mut |was, wanted| { format!("You're assigning `{}` to something that holds `{}`.", was, wanted) }); }
         state.findings_moved(span, &at, pushed, &waiting);
     }
     check_core_stmt_unit()
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn check_core_stmt_a_stream_line_kept(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, target: &Expr, value: &Expr, into: &Ty) -> bool {
+    match target {
+        Expr::Variable(_, _) => { },
+        _ => { return false; },
+    }
+    let name = match value {
+        Expr::Variable(name, _) => { let name = *name; nikaia_std::block::Text::from(world.words.resolve(name).to_string()) },
+        _ => return false,
+    };
+    let local = match state.binding(&name) { Some(__nikaia_value) => __nikaia_value, None => return false };
+    state.flow.stream_lines.contains(&local.id) && *into == a_string_type()
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -1887,6 +1898,7 @@ pub(crate) fn check_core_stmt_for<H: CheckHost>(state: &mut CheckState, world: &
             }
         } else { state.a_for_mut_over_a_place(world, iter, &over, span); }
     }
+    let streams = check_core_a_stream_call(world, iter);
     let mut frame: Vec<CheckLocal> = vec![];
     let mut at: i64 = 0;
     frame.reserve(bindings.iter().size_hint().0); for b in bindings.iter() {
@@ -1912,6 +1924,7 @@ pub(crate) fn check_core_stmt_for<H: CheckHost>(state: &mut CheckState, world: &
         let mut bound = element.clone();
         if lent && !mut_view && !copied && !declared_copy && named { bound = view_of_type(&element); }
         let id = state.a_new_binding();
+        if streams { state.flow.stream_lines.insert(id); }
         if !lent && name != "_" && (state.flow.lent_walks.contains(&(id_of(iter) as i64)) || element.is_a_view()) && check_owned_text(&bound) { state.flow.lent_text_params.insert(id); }
         state.declared_binding(id, span, &name);
         let mut local = CheckLocal::free(name, bound, id);

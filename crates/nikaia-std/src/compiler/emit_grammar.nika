@@ -99,9 +99,30 @@ fn emit_default_ws() -> String {
 /// current position came right after a skipped run that held a line break,
 /// and covers nothing. One per grammar copy, so the text copy and the one over
 /// bytes, written in the same module, do not collide.
-fn emit_same_line_function(name: ref String) -> String {
+///
+/// In a grammar with a `@stream` entry the engine's rules are generic over
+/// the context, `C: Ctx` (winnow-grammar d5eb090: a stream lends its context
+/// to a step), and so is this function: it reaches the state through
+/// `cx_mut()`, and fails with `from_stream`, since the engine's `from_input`,
+/// which leaves the error empty in the fast pass, takes the held context only.
+fn emit_same_line_function(name: ref String, stream: bool) -> String {
     let mut out: Vec[String] = []
     out.push("#[allow(non_snake_case, dead_code)]\n")
+    if stream {
+        out.push(f"fn {emit_same_line_rule()}_{name}<B, C>(i: &mut ::winnow_grammar::rt::InputOf<B, C>) -> ::core::result::Result<(), ::winnow_grammar::ParseError>\n")
+        out.push("where\n")
+        out.push("    B: ::winnow_grammar::rt::Slice,\n")
+        out.push("    C: ::winnow_grammar::Ctx,\n")
+        out.push("    C::State: ::winnow_grammar::StateOf<::nikaia_std::grammar::LineBreaks>,\n")
+        out.push("{\n")
+        out.push("    let at = ::winnow::stream::Location::current_token_start(&*i) as i64;\n")
+        out.push("    if ::winnow_grammar::StateOf::<::nikaia_std::grammar::LineBreaks>::state(&mut ::winnow_grammar::Ctx::cx_mut(&mut i.state).user_state).began_a_line(at) {\n")
+        out.push("        return Err(::winnow_grammar::ParseError::from_stream(&*i));\n")
+        out.push("    }\n")
+        out.push("    Ok(())\n")
+        out.push("}\n")
+        return out.join("")
+    }
     out.push(f"fn {emit_same_line_rule()}_{name}<B, S>(i: &mut ::winnow_grammar::rt::Input<B, S>) -> ::core::result::Result<(), ::winnow_grammar::ParseError>\n")
     out.push("where\n")
     out.push("    B: ::winnow_grammar::rt::Slice,\n")
@@ -664,7 +685,7 @@ impl EmitState {
             out.push("}\n")
         }
         if lines {
-            out.push(emit_same_line_function(name))
+            out.push(emit_same_line_function(name, def.rules.iter().any(fn(rule) { rule.stream && rule.is_entry })))
         }
     }
 
@@ -767,13 +788,16 @@ impl EmitState {
                             prelude = f"{prelude}let {name} = ::nikaia_std::grammar::covered(input, {range}); "
                         }
                     }
-                    // The backend lends `_state = &mut input.state` before
-                    // the action, and the prelude above reads `input`: taken
-                    // again after it, the backend's loan ends before that
-                    // read, and an `emit` or `_state.user()` in the action
-                    // borrows the new one (#2254).
+                    // The backend lends `_state` (the context of
+                    // `input.state`, `Ctx::cx_mut`) before the action, and
+                    // the prelude above reads `input`: taken again after it,
+                    // the backend's loan ends before that read, and an `emit`
+                    // or `_state.user()` in the action borrows the new one
+                    // (#2254). Through `Ctx::cx_mut` as the backend does,
+                    // since in a grammar with a `@stream` entry `input.state`
+                    // is the generic context `C: Ctx` (winnow-grammar d5eb090).
                     if as_texts.len() > 0 || (positions && as_spans.len() > 0) {
-                        prelude = f"{prelude}let _state = &mut input.state; "
+                        prelude = f"{prelude}let _state = ::winnow_grammar::Ctx::cx_mut(&mut input.state); "
                     }
                     // A grammar action is the rule's own body: what it ends
                     // in is what the rule hands back, so a `return` there is
@@ -787,10 +811,23 @@ impl EmitState {
                         if prelude != "" {
                             out.push(" }")
                         }
-                    } else if prelude != "" {
-                        self.emit_stmt_block_opening_with(world, walk, out, host, action, 3, EmitFlow::plain(), EmitScope::plain(), EmitTail::Return, prelude)
                     } else {
-                        self.emit_core_block(world, walk, out, host, action, 3, EmitFlow::plain(), EmitScope::plain(), EmitTail::Return)
+                        // **A rule's `String` both kinds flow into is
+                        // `EitherText`** (ADR-282 D14, ADR-grammar-typed-read-v2
+                        // D5, #2496): what each action hands back goes in as
+                        // the view or the text of its own it is.
+                        let either = rule.ret_type?.either ?? false
+                        if either {
+                            out.push("{ let __wg_either = ")
+                        }
+                        if prelude != "" {
+                            self.emit_stmt_block_opening_with(world, walk, out, host, action, 3, EmitFlow::plain(), EmitScope::plain(), EmitTail::Return, prelude)
+                        } else {
+                            self.emit_core_block(world, walk, out, host, action, 3, EmitFlow::plain(), EmitScope::plain(), EmitTail::Return)
+                        }
+                        if either {
+                            out.push("; ::nikaia_std::either_text::either(__wg_either) }")
+                        }
                     }
                     out.push("\n")
                 },
@@ -949,7 +986,10 @@ impl EmitState {
         out.push("\n            -> { __wg_n }\n")
         match wrapped {
             repeated => {
-                out.push(f"\n        rule __wg_{rule_name}_item{taken} -> {folded} =\n          ")
+                // The item rule is a rule of its own, which reads the
+                // input at the grammar's `'a` (#2835): its result names
+                // that lifetime, not the fold closure's `'_`.
+                out.push(f"\n        rule __wg_{rule_name}_item{taken} -> ::std::option::Option<{item}> =\n          ")
                 self.emit_pattern(world, walk, out, host, repeated)
                 out.push("\n            -> { ::std::option::Option::None }\n")
             },
@@ -1189,17 +1229,31 @@ impl EmitState {
     /// field owns it. Text goes in by `IntoMember`, a list of text item by
     /// item, so a `Vec[String]` or a `Vec[String]?` field takes the list a
     /// rule read.
-    fn member_into[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, host: ref H, ty: ref Type, value: ref String) -> String sync throws {
+    fn member_into[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, host: ref H, ty: ref Type, value: ref String, from_either: bool) -> String sync throws {
+        // **A field both kinds flow into takes either, per value** (ADR-282
+        // D14, ADR-grammar-typed-read-v2 D5, #2496): a view of the input
+        // goes in as it is, text an escape decoded as text of its own.
+        if ty.either && emit_text(world, ty.name) == "String" && ty.generics.len() == 0 {
+            return f"::nikaia_std::either_text::either({value})"
+        }
+        // Text either kind the value rule hands back, into a field that
+        // keeps text of its own (a published one, ADR-282 D22): a copy of it.
+        if from_either && !ty.is_view && emit_text(world, ty.name) == "String" && ty.generics.len() == 0 {
+            if ty.is_nullable {
+                return f"{value}.map(::std::convert::Into::into)"
+            }
+            return f"::std::convert::Into::into({value})"
+        }
         if !member_lists_text(world, ty) {
             return f"::nikaia_std::grammar::IntoMember::into_member({value})"
         }
         if ty.is_nullable {
             let mut inner = ty.clone()
             inner.is_nullable = false
-            return f"{value}.map(|x| -> {host.ty_named(walk, inner)} {{ {self.member_into(world, walk, host, inner, "x")} }})"
+            return f"{value}.map(|x| -> {host.ty_named(walk, inner)} {{ {self.member_into(world, walk, host, inner, "x", from_either)} }})"
         }
         let item = ty.generics[0]
-        return f"{value}.into_iter().map(|x| -> {host.ty_named(walk, item)} {{ {self.member_into(world, walk, host, item, "x")} }}).collect::<{host.ty_named(walk, ty)}>()"
+        return f"{value}.into_iter().map(|x| -> {host.ty_named(walk, item)} {{ {self.member_into(world, walk, host, item, "x", from_either)} }}).collect::<{host.ty_named(walk, ty)}>()"
     }
 
     /// **An action that can fail** (Part II 10.8, #557): its body runs as a
@@ -1299,7 +1353,8 @@ impl EmitState {
                         null => {},
                     }
                     let mut one = nothing.clone()
-                    one[i] = f"Some(Some({self.member_into(world, walk, host, fields[i].ty, "v")}))"
+                    let from_either = walk.grammar_rule_types.get(emit_text(world, fields[i].value))?.contains("EitherText") ?? false
+                    one[i] = f"Some(Some({self.member_into(world, walk, host, fields[i].ty, "v", from_either)}))"
                     out.push(f"        {separator}if(i == {i}) v:{emit_text(world, fields[i].value)}\n")
                     out.push(f"            -> {{ Some({emit_members_tuple(one)}) }}\n")
                     separator = "| "
@@ -1362,7 +1417,7 @@ fn member_lists_text(world: ref EmitWorld, ty: ref Type) -> bool {
 }
 
 fn member_text_inside(world: ref EmitWorld, ty: ref Type) -> bool {
-    if ty.is_view || ty.is_tuple || ty.code != null {
+    if (ty.is_view && !ty.either) || ty.is_tuple || ty.code != null {
         return false
     }
     if emit_text(world, ty.name) == "String" && ty.generics.len() == 0 {

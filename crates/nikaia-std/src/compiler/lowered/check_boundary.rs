@@ -289,12 +289,25 @@ impl CheckState {
         if found.without_mut.is_some() {
             let held = match found.without_mut { Some(__nikaia_value) => __nikaia_value, None => return false };
             a_parameter = held.kind == CheckKind::Parameter;
+            if held.kind == CheckKind::Loop && held.over != "" { a_parameter = self.a_lent_list_parameter(&held.over); }
         }
         let a_view = match found.ty {
             Ty::Named { view, .. } => view,
             _ => false,
         };
         a_parameter && a_view
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub(crate) fn a_lent_list_parameter(&self, name: &str) -> bool {
+        let found = match self.binding(name) { Some(__nikaia_value) => __nikaia_value, None => return false };
+        let held = match found.without_mut { Some(__nikaia_value) => __nikaia_value, None => return false };
+        if held.kind != CheckKind::Parameter { return false; }
+        match found.ty {
+            Ty::Named { name: ref list, ref args, view } => view && args.len() == 1 && (a_type_base(list) == "Vec" || a_type_base(list) == "Array"),
+            Ty::Pointed { slice, mutable, .. } => slice && !mutable,
+            _ => false,
+        }
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.

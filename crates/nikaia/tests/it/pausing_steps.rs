@@ -100,7 +100,9 @@ fn a_pausing_step_does_not_fit_where_nothing_said_it_would() {
 }
 
 /// **The loop gives its thread up**, which is the whole of D1 in one line of
-/// emitted Rust: the sequence is bound once and stepped with a `.next().await`.
+/// emitted Rust: the sequence is bound once and stepped with an awaited read
+/// (`next_line().await` for `io::lines()`, which reads into a pool of buffers,
+/// ADR-stream-buffers-v1 D1).
 #[test]
 fn a_for_over_a_pausing_sequence_awaits_each_step() {
     let rust = rust(

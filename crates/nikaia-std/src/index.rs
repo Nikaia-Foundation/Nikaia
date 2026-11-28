@@ -795,6 +795,15 @@ impl<'a> Or<&'a str> for &'a Option<String> {
     }
 }
 
+/// **A map of held views, read, with a literal after `??`** (ADR-tether-v1
+/// D12): a map that drops entries keeps each text view as a `Held`, which
+/// derefs to the text, so the answer is a view of text as a `String`'s is.
+impl<'a> Or<&'a str> for Option<&'a crate::tether::Held> {
+    fn or(self, fallback: impl FnOnce() -> &'a str) -> &'a str {
+        self.map(|held| &**held).unwrap_or_else(fallback)
+    }
+}
+
 /// **A block's text, read, with a literal after `??`**, as a `String`'s
 /// (#490): a view of text, nothing copied.
 impl<'a> Or<&'a str> for Option<&'a crate::block::Text> {
