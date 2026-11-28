@@ -1297,6 +1297,7 @@ impl EmitState {
         self.emit_core_args(world, walk, out, host, &name, args, &takes, depth, flow, scope)?;
         out.push(through_suffix);
         walk.hold_args = None;
+        walk.hold_places = None;
         let keeping = keeping_method_key(&self.own_contracts, &self.own_methods, (emit_call_owner(&scope.function)).as_deref(), emit_call_on_self(world, receiver), &name);
         if keeping.is_some() {
             let key = nikaia_std::index::or(keeping, || "".into());
@@ -1390,10 +1391,15 @@ impl EmitState {
     // this was written - see `contracts::sync`.
     pub(crate) fn emit_call_hold<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, host: &H, receiver: Option<&Expr>, scope: &EmitScope, flow: &EmitFlow) {
         walk.hold_args = None;
+        walk.hold_places = None;
         let on = match receiver { Some(__nikaia_value) => __nikaia_value, None => return };
         let root = match root_of(world.words, on) { Some(__nikaia_value) => __nikaia_value, None => return };
         let plan = match self.keep_plans.get(&scope.function) { Some(__nikaia_value) => __nikaia_value, None => match self.keep_plans.get(&walk.keep_function) { Some(__nikaia_value) => __nikaia_value, None => return } };
         let holds = match plan.holds.get(&(flow.statement, nikaia_std::block::Text::from(root.to_string()))) { Some(__nikaia_value) => __nikaia_value, None => return };
+        walk.hold_places = match plan.places.get(&(flow.statement, nikaia_std::block::Text::from(root.to_string()))) {
+            Some(__nikaia_it) => Some(__nikaia_it.clone()),
+            None => None,
+        };
         let width = nikaia_std::index::or(plan.widths.get(&root), || 1);
         let mut by_arg: collections::BTreeMap<i64, Vec<i64>> = collections::BTreeMap::new();
         for (arg, buffers) in holds.iter() {
@@ -1430,7 +1436,19 @@ impl EmitState {
         let keeps = if args.is_empty() { "_" } else { "keeps" };
         out.push(&format!("{}.with_mut(|held, {}| ", self.emit_expr_read_name(world, symbol, receiver), keeps));
         walk.held.insert(on, String::from("held"));
-        for i in 0..args.len() as i64 { walk.held.insert(node_key(unsafe { nikaia_std::proven::read(&args, (i) as usize) }), format!("nikaia_std::tether::Rebase::rebase(__nikaia_given_{}, &keeps)", i)); }
+        let places = plan.places.get(&(flow.statement, nikaia_std::block::Text::from(bound.to_string())));
+        for i in 0..args.len() as i64 {
+            let named = match places {
+                Some(__nikaia_it) => __nikaia_it.get(&i),
+                None => None,
+            };
+            let mut given = format!("nikaia_std::tether::Rebase::rebase(__nikaia_given_{}, &keeps)", i);
+            if named.is_some() {
+                let (buffer, sure) = nikaia_std::index::or(named, || (0, false.into()));
+                given = if sure { format!("keeps.view_in(0, __place_{}, __nikaia_given_{})", buffer, i) } else { format!("nikaia_std::tether::Rebase::rebase_near(__nikaia_given_{}, &keeps, __place_{})", i, buffer) };
+            }
+            walk.held.insert(node_key(unsafe { nikaia_std::proven::read(&args, (i) as usize) }), given);
+        }
         self.emit_expr(world, walk, out, host, node, depth, flow, scope)?;
         walk.held.remove(&on);
         for each in args.iter() { walk.held.remove(&node_key(each)); }
@@ -1675,8 +1693,8 @@ pub(crate) fn emit_tuple_part_copy(i: i64, word: &str) -> String {
 }
 
 pub(crate) fn emit_tuple_part_copies(parts: &[String]) -> String {
-    let copies: Vec<String> = parts.iter().enumerate().map(|(at, item)| (at as i64, item)).map(|__nikaia_tuple128602| {
-        let (i, word) = __nikaia_tuple128602;
+    let copies: Vec<String> = parts.iter().enumerate().map(|(at, item)| (at as i64, item)).map(|__nikaia_tuple129404| {
+        let (i, word) = __nikaia_tuple129404;
         emit_tuple_part_copy(i, word)
     }).collect::<Vec<_>>();
     if copies.len() == 1 { return format!("({},)", *unsafe { nikaia_std::proven::read(&copies, (0) as usize) }); }

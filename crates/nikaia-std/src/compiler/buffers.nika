@@ -82,6 +82,16 @@ pub struct BufferPlan {
     /// `text += ".."`. Put into their keep only after the last change, where
     /// they are written to no more.
     pub late_puts: collections::BTreeMap[i64, LatePut],
+    /// **The one buffer a held or packed view is checked against**
+    /// (ADR-tether-v1 D15, #2842), by the statement and the name it is put
+    /// into, then by argument: the buffer's `let`, and whether the value is
+    /// plainly a view of it (`plain_view`), never a literal - a miss there is
+    /// the compiler's fault. Only where the plan names exactly one buffer, put
+    /// into the task's keep or a keep of its own once, at its `let`.
+    pub places: collections::BTreeMap[(i64, String), collections::BTreeMap[i64, (i64, bool)]],
+    /// The buffer `let`s whose place in their keep is bound beside them, as
+    /// `__place_<at>`, because `places` names them.
+    pub placed: collections::BTreeSet[i64],
 }
 
 /// A buffer put into its keep after the statement that changes it last
@@ -147,6 +157,10 @@ struct Sourced {
 // Which origins went into a keeper, by the argument they went in through.
 struct PutsAt {
     by_arg: collections::BTreeMap[i64, collections::BTreeSet[(i64, String)]],
+    /// By argument, whether every value put through it stood where its
+    /// buffers' names are still in scope, and whether every one was plainly a
+    /// view of them (`plain_view`), for `places` (#2842).
+    shapes: collections::BTreeMap[i64, (bool, bool)],
 }
 
 // The walk's state. Scopes are a stack per name and, per scope, the names it
@@ -183,6 +197,9 @@ struct BufferWalk {
     /// An assignment of a whole local, by its statement and the name, to the
     /// `let` of that local (#2841).
     wholes: collections::BTreeMap[(i64, String), i64],
+    /// The locals, by their `let` and name, that are plainly a view of a
+    /// buffer and never anything else (`plain_view`, #2842).
+    plain: collections::BTreeSet[(i64, String)],
 }
 
 // Where a local is changed last: the statement of its `let`'s own block that
@@ -279,7 +296,7 @@ fn plan_of(item: ref Item, target: String?, ask: ref BufferAsk, holes_of: fn(ref
         Item::Fn { ret_type, .. } => carries_maybe(ret_type, ask),
         else => false,
     }
-    let mut walk = BufferWalk { target: target, locals: collections::BTreeMap(), frames: [], path: [], sources: collections::BTreeMap(), escapes: [], sheds: collections::BTreeMap(), puts_into: collections::BTreeMap(), struct_puts: collections::BTreeMap(), taken: collections::BTreeMap(), reassigned: collections::BTreeMap(), handed: collections::BTreeMap(), captured: collections::BTreeMap(), statement: 0, result_carries: carries, last_seen: collections::BTreeMap(), holders: collections::BTreeMap(), hoisted: collections::BTreeMap(), mutated: collections::BTreeMap(), value_tail: -1, wholes: collections::BTreeMap() }
+    let mut walk = BufferWalk { target: target, locals: collections::BTreeMap(), frames: [], path: [], sources: collections::BTreeMap(), escapes: [], sheds: collections::BTreeMap(), puts_into: collections::BTreeMap(), struct_puts: collections::BTreeMap(), taken: collections::BTreeMap(), reassigned: collections::BTreeMap(), handed: collections::BTreeMap(), captured: collections::BTreeMap(), statement: 0, result_carries: carries, last_seen: collections::BTreeMap(), holders: collections::BTreeMap(), hoisted: collections::BTreeMap(), mutated: collections::BTreeMap(), value_tail: -1, wholes: collections::BTreeMap(), plain: collections::BTreeSet() }
     open_scope(walk)
     for arg in args {
         let parameter = Local { at: 0, path: [], origins: collections::BTreeSet(), ty: arg.ty.clone(), parameter: true, keeps: arg.mutable && ask.context.carries(ask.names, arg.ty), buffer: false, text: false, number: false, parts: [] }
@@ -339,7 +356,73 @@ fn plan_of(item: ref Item, target: String?, ask: ref BufferAsk, holes_of: fn(ref
         else => {}
     }
     late_puts(walk, plan)
+    places(walk, plan)
     return plan
+}
+
+// **The one buffer each held or packed view is checked against**
+// (ADR-tether-v1 D15, #2842): where every value put through an argument points
+// into exactly one buffer, put into the task's keep or a keep of its own at
+// its `let` and never again, and still in scope under its name where the
+// value is put. Anything else is searched for, as before.
+fn places(walk: ref BufferWalk, mut plan: BufferPlan) {
+    for (key, puts) in walk.puts_into {
+        let held = plan.holds.get(key)
+        let packed = plan.tethered.contains_key(key.1)
+        if held == null && !packed {
+            continue
+        }
+        for (arg, origins) in puts.by_arg {
+            if origins.len() != 1 {
+                continue
+            }
+            let shape = puts.shapes.get(arg) ?? continue
+            if !shape.0 {
+                continue
+            }
+            let mut buffer = -1
+            for id in origins {
+                let sourced = walk.sources.get(id) ?? continue
+                buffer = match sourced.source {
+                    Source::Buffer { at, .. } => at.clone(),
+                    else => -1,
+                }
+            }
+            if buffer < 0 || plan.opaque_puts.contains(buffer) || plan.late_puts.contains_key(buffer) || reput_buffer(buffer, walk) {
+                continue
+            }
+            let keep = plan.puts.get(buffer) ?? continue
+            let fits = match keep {
+                KeepAt::Task => packed,
+                KeepAt::Element(own) => own.clone() == buffer && held_in(held, arg, buffer),
+                else => false,
+            }
+            if !fits {
+                continue
+            }
+            let mut by_arg: collections::BTreeMap[i64, (i64, bool)] = plan.places[key]?.clone() ?? collections::BTreeMap()
+            by_arg.insert(arg, (buffer, shape.1))
+            plan.places.insert(key.clone(), by_arg)
+            plan.placed.insert(buffer)
+        }
+    }
+}
+
+// Whether the buffer `let` at `buffer` is assigned again (#293).
+fn reput_buffer(buffer: i64, walk: ref BufferWalk) -> bool {
+    for (_, bound) in walk.reassigned {
+        if bound == buffer {
+            return true
+        }
+    }
+    return false
+}
+
+// Whether the plan holds argument `arg` by the keep of `buffer` alone.
+fn held_in(held: ref collections::BTreeMap[i64, collections::BTreeSet[i64]]?, arg: i64, buffer: i64) -> bool {
+    let by_arg = held ?? return false
+    let buffers = by_arg.get(arg) ?? return false
+    return buffers.len() == 1 && buffers.contains(buffer)
 }
 
 // **A buffer the body changes after its `let` is put after the last change**
@@ -442,7 +525,7 @@ fn buffer_statement(stmt: ref Stmt, span: ref Span, ask: ref BufferAsk, holes_of
                 // `push` puts one into a list: where the name drops it at the
                 // next turn, the view is held (D12).
                 if bound != null && !(bound?.parameter ?? true) {
-                    put_into(root, 0, origins, walk)
+                    put_into(root, 0, origins, put_shape(value, origins, ask, walk), walk)
                     walk.wholes.insert((at, root.clone()), bound?.at ?? 0)
                 }
             }
@@ -460,12 +543,17 @@ fn buffer_statement(stmt: ref Stmt, span: ref Span, ask: ref BufferAsk, holes_of
                 flow_into(root, origins, walk)
             }
         }
-        Stmt::For { bindings, iter, body, .. } => {
+        Stmt::For { bindings, iter, body, mutable, .. } => {
             let origins = origins_of(iter, ask, holes_of, unaliased, walk)
             walk.path.push((at, true))
             open_scope(walk)
+            // **A word of a split buffer is plainly a view of it** (#2842).
+            let plain = !mutable && bindings.len() == 1 && plain_pieces(iter, ask, walk)
             for name in bindings {
                 bind_local(ask.names.resolve(name).clone(), a_local(at, walk.path, origins.clone(), null, false, false), walk)
+                if plain {
+                    walk.plain.insert((at, ask.names.resolve(name).clone()))
+                }
             }
             for inner in body.stmts {
                 walk.statement = inner.span.start as i64
@@ -598,11 +686,20 @@ fn let_statement(stmt: ref Stmt, span: ref Span, ask: ref BufferAsk, holes_of: f
             else => {}
         }
     }
+    // **A view of a plain view, bound once, is one too** (#2842).
+    let fixed = match stmt {
+        Stmt::Let { mutable, .. } => !mutable,
+        else => false,
+    }
+    let plain = fixed && names.len() == 1 && !is_buffer && plain_view(value, ask, walk)
     for bound in names {
         let mut local = a_local(at, walk.path, origins.clone(), ty?.clone(), is_buffer, text)
         local.number = number
         local.parts = parts.clone()
         bind_local(ask.names.resolve(bound).clone(), local, walk)
+        if plain {
+            walk.plain.insert((at, ask.names.resolve(bound).clone()))
+        }
     }
 }
 
@@ -1524,7 +1621,7 @@ fn put_by_method(root: ref String, method: ref String, args: ref Vec[Expr], ask:
     let mut all: collections::BTreeSet[(i64, String)] = collections::BTreeSet()
     for k in 0..<args.len() {
         let of = moved_origins(args[k], ask, holes_of, unaliased, walk)
-        put_into(root, k, of, walk)
+        put_into(root, k, of, put_shape(args[k], of, ask, walk), walk)
         let named = struct_of(args[k], ask, walk)
         if named != null {
             walk.struct_puts.insert(root.clone(), named ?? "")
@@ -1590,13 +1687,65 @@ fn by_arg_of(puts: ref PutsAt?) -> collections::BTreeMap[i64, collections::BTree
     return found.by_arg.clone()
 }
 
-fn put_into(root: ref String, at: i64, of: ref collections::BTreeSet[(i64, String)], mut walk: BufferWalk) {
+fn put_into(root: ref String, at: i64, of: ref collections::BTreeSet[(i64, String)], shape: (bool, bool), mut walk: BufferWalk) {
     let key = (walk.statement, root.clone())
     let mut by_arg: collections::BTreeMap[i64, collections::BTreeSet[(i64, String)]] = by_arg_of(walk.puts_into[key])
+    let mut shapes: collections::BTreeMap[i64, (bool, bool)] = walk.puts_into[key]?.shapes?.clone() ?? collections::BTreeMap()
     let mut here: collections::BTreeSet[(i64, String)] = by_arg[at]?.clone() ?? collections::BTreeSet()
     here.extend(of.clone())
     by_arg.insert(at, here)
-    walk.puts_into.insert(key, PutsAt { by_arg: by_arg })
+    let before = shapes.get(at) ?? (true, true)
+    shapes.insert(at, (before.0 && shape.0, before.1 && shape.1))
+    walk.puts_into.insert(key, PutsAt { by_arg: by_arg, shapes: shapes })
+}
+
+// **Where a value put into a keeper stands** (#2842): whether each buffer it
+// points into is still in scope under its own name - so that its place, bound
+// beside it, is too - and whether it is plainly a view of that buffer.
+fn put_shape(value: ref Expr, of: ref collections::BTreeSet[(i64, String)], ask: ref BufferAsk, walk: ref BufferWalk) -> (bool, bool) {
+    for id in of {
+        let sourced = walk.sources.get(id) ?? return (false, false)
+        let in_scope = match sourced.source {
+            Source::Buffer { at, name, .. } => (local_of(name, walk)?.at ?? -1) == at,
+            else => false,
+        }
+        if !in_scope {
+            return (false, false)
+        }
+    }
+    return (true, plain_view(value, ask, walk))
+}
+
+// **Plainly a view of a buffer, never a literal** (ADR-tether-v1 D15, #2842):
+// a local bound to one (`walk.plain`), or such a view or a buffer trimmed. The
+// origins of `if c { w } else { "none" }` are `w`'s, and its value may be the
+// literal: a miss of the buffer there is planned, so only a value of these
+// shapes makes a miss the compiler's fault.
+fn plain_view(value: ref Expr, ask: ref BufferAsk, walk: ref BufferWalk) -> bool {
+    return match value {
+        Expr::Variable(name, _) => {
+            let named = ask.names.resolve(name)
+            let local = local_of(named, walk) ?? return false
+            walk.plain.contains((local.at, named.clone()))
+        }
+        Expr::MethodCall { receiver, method, args, .. } => {
+            let by = ask.names.resolve(method)
+            args.len() == 0 && (by == "trim" || by == "trim_start" || by == "trim_end") && (plain_view(receiver, ask, walk) || is_the_buffer(receiver, ask, walk))
+        }
+        else => false,
+    }
+}
+
+// Pieces of a buffer, or of a plain view of one: `text.split(" ")`,
+// `text.split_whitespace()`, `text.lines()` (#2842).
+fn plain_pieces(iter: ref Expr, ask: ref BufferAsk, walk: ref BufferWalk) -> bool {
+    return match iter {
+        Expr::MethodCall { receiver, method, .. } => {
+            let by = ask.names.resolve(method)
+            (by == "split" || by == "split_whitespace" || by == "lines") && (plain_view(receiver, ask, walk) || is_the_buffer(receiver, ask, walk))
+        }
+        else => false,
+    }
 }
 
 // **The origins of a value lent to a call**: those of `origins_of`, and a text
@@ -2250,7 +2399,7 @@ fn decide(key: String, body: ref Block, walk: ref BufferWalk, ask: ref BufferAsk
     if body.stmts.len() > 0 {
         first = body.stmts[0].span.start as i64
     }
-    let mut plan = BufferPlan { key: key, first: first, takes_keep: false, frame_keep: false, task_keep: false, local_keeps: collections::BTreeSet(), puts: collections::BTreeMap(), calls: collections::BTreeMap(), tethered: collections::BTreeMap(), element_keepers: collections::BTreeSet(), struct_keepers: collections::BTreeSet(), widths: collections::BTreeMap(), keeper_structs: collections::BTreeMap(), held_locals: collections::BTreeSet(), holds: collections::BTreeMap(), escapes: [], refusals: [], reputs: collections::BTreeMap(), opaque_puts: collections::BTreeSet(), late_puts: collections::BTreeMap() }
+    let mut plan = BufferPlan { key: key, first: first, takes_keep: false, frame_keep: false, task_keep: false, local_keeps: collections::BTreeSet(), puts: collections::BTreeMap(), calls: collections::BTreeMap(), tethered: collections::BTreeMap(), element_keepers: collections::BTreeSet(), struct_keepers: collections::BTreeSet(), widths: collections::BTreeMap(), keeper_structs: collections::BTreeMap(), held_locals: collections::BTreeSet(), holds: collections::BTreeMap(), escapes: [], refusals: [], reputs: collections::BTreeMap(), opaque_puts: collections::BTreeSet(), late_puts: collections::BTreeMap(), places: collections::BTreeMap(), placed: collections::BTreeSet() }
     for (id, found) in walk.sources {
         decide_source(id.clone(), found.source, found.path, walk, plan)
     }

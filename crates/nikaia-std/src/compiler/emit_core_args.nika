@@ -1181,9 +1181,11 @@ impl EmitState {
                 keeps.push(f"std::sync::Arc::clone(&__keep_{b})")
             }
             let joined = keeps.join(", ")
-            out.push("{ use nikaia_std::tether::Hold as _; (")
+            // Checked against the buffer the plan names, where it names one (D15).
+            let (before, after) = emit_held_around(joined, walk.hold_places?.get(i)?.clone())
+            out.push(before)
             self.emit_expr(world, walk, out, host, arg, depth, inside, scope)
-            out.push(f").hold([{joined}]) }}")
+            out.push(after)
             return
         }
         // A kept value handed to a parameter that only runs it: the closure it

@@ -434,11 +434,13 @@ fn each_representation_is_the_one_the_plan_chose() {
     assert!(task.contains("__keep.put_viewed("), "{task}");
 
     let cache = lowered(CACHE, Build::default());
+    // **Checked against the buffer the plan names** (ADR-tether-v1 D15,
+    // #2842): the buffer's place comes with it, and the line is held by it.
     assert!(
-        cache.contains(").hold([std::sync::Arc::clone(&__keep_"),
+        cache.contains("nikaia_std::tether::Held::in_place(std::sync::Arc::clone(&__keep_"),
         "{cache}"
     );
-    assert!(cache.contains(".put_viewed("), "{cache}");
+    assert!(cache.contains(".put_viewed_at("), "{cache}");
     // **No `unsafe` for a held view** (ADR-tether-v1 D14): the keep finds the view
     // again by address, so what the plan claims is checked, not trusted.
     assert!(!cache.contains("unsafe"), "{cache}");
