@@ -1898,7 +1898,7 @@ pub(crate) fn check_core_stmt_for<H: CheckHost>(state: &mut CheckState, world: &
             }
         } else { state.a_for_mut_over_a_place(world, iter, &over, span); }
     }
-    let streams = check_core_a_stream_call(world, iter);
+    let streams = check_core_a_stream_walk(world, iter);
     let mut frame: Vec<CheckLocal> = vec![];
     let mut at: i64 = 0;
     frame.reserve(bindings.iter().size_hint().0); for b in bindings.iter() {

@@ -1,0 +1,35 @@
+// The steps over `io::lines()` see each line as a view of the stream's pool
+// of buffers (ADR-stream-buffers-v1 D1, D10), as a `for` over it does: `map`,
+// `filter`, `take`, `count`, `fold` and `any` copy no line, so a walk asks
+// for the pool and the list it builds, a few requests however many lines it
+// reads. Each walk reads part of the input, and what `take` leaves unread is
+// the next walk's. `.cloned()` is the copy a program asks for, one per line.
+use std::io
+use std::mem
+
+fn few(requests: i64) -> String {
+    return if requests < 30 { "a few requests" } else { f"{requests} requests" }
+}
+
+fn main() throws {
+    let mut start = mem::allocations()
+    let lengths = io::lines().take(1000).map(fn(l) { l.len() }).collect()
+    println(f"map: {lengths.len()} lines, {few(mem::allocations() - start)}")
+
+    start = mem::allocations()
+    let long = io::lines().take(1000).filter(fn(l) { l.len() > 60 }).count()
+    println(f"filter: {long} long lines, {few(mem::allocations() - start)}")
+
+    start = mem::allocations()
+    let widths = io::lines().take(500).filter(fn(l) { l.len() > 60 }).map(fn(l) { l.len() }).collect()
+    println(f"filter then map: {widths.len()} long lines, {few(mem::allocations() - start)}")
+
+    start = mem::allocations()
+    let copies = io::lines().take(200).cloned().collect()
+    println(f"cloned: {copies.len()} copies, at least one request per line: {mem::allocations() - start >= 200}")
+
+    start = mem::allocations()
+    let seen = io::lines().any(fn(l) { l.starts_with("line 0280") })
+    let bytes = io::lines().fold(0, fn(sum, l) { sum + l.len() })
+    println(f"any: {seen}, the rest: {bytes} bytes, {few(mem::allocations() - start)}")
+}

@@ -2174,7 +2174,7 @@ pub(crate) fn tier_statement(stmt: &Stmt, at: i64, ask: &TierAsk<'_, '_, '_, '_,
         },
         Stmt::For { bindings, iter, body, .. } => {
             let mut kinds = tier_expr(iter, ask, walk);
-            let streamed = a_stream_read(iter, ask);
+            let streamed = a_stream_walk(iter, ask);
             if streamed { kinds = view_kinds(); }
             let from = element_word(iter, ask, walk);
             let mut walked: Option<String> = None;
@@ -4941,7 +4941,8 @@ pub(crate) fn parsed_parameter(value: &Expr, ask: &TierAsk<'_, '_, '_, '_, '_, '
 pub(crate) fn method_kinds(receiver: &Expr, method: &str, args: &[Expr], ask: &TierAsk<'_, '_, '_, '_, '_, '_, '_>, walk: &mut TierWalk) -> Kinds {
     for arg in args.iter() { tie_stored(receiver, arg, ask, walk); }
     walk.read_here = true;
-    let received = tier_expr(receiver, ask, walk);
+    let mut received = tier_expr(receiver, ask, walk);
+    if a_stream_walk(receiver, ask) { received = if a_view_step(method) { view_kinds() } else { owned_kinds() }; }
     if changes_its_text(method) { changed_in_place(receiver, format!("{}.{}(..)", tier_written(receiver, ask), method), ask, walk); }
     let mut given: Vec<Kinds> = vec![];
     given.reserve(args.iter().size_hint().0); for arg in args.iter() { given.push(tier_expr(arg, ask, walk)); }
@@ -5220,6 +5221,15 @@ pub(crate) fn std_result(callee: &str, ask: &TierAsk<'_, '_, '_, '_, '_, '_, '_>
     if result.text() == "ref String" { return view_kinds(); }
     owned_kinds()
 }
+
+pub(crate) fn a_stream_walk(iter: &Expr, ask: &TierAsk<'_, '_, '_, '_, '_, '_, '_>) -> bool {
+    match iter {
+        Expr::MethodCall { receiver, method, .. } => { let receiver = nikaia_std::boxed::open(receiver); let method = *method; nikaia_std::list::contains(&vec!["filter", "take", "skip", "step_by"], &ask.names.resolve(method)) && a_stream_walk(receiver, ask) },
+        _ => a_stream_read(iter, ask),
+    }
+}
+
+pub(crate) fn a_view_step(method: &str) -> bool { nikaia_std::list::contains(&vec!["map", "filter", "take", "skip", "step_by", "count", "join", "fold", "any", "all", "cloned"], &method) }
 
 pub(crate) fn a_stream_read(iter: &Expr, ask: &TierAsk<'_, '_, '_, '_, '_, '_, '_>) -> bool {
     let func = match iter {

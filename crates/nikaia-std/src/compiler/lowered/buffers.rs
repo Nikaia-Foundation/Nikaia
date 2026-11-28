@@ -338,6 +338,16 @@ pub(crate) fn stream_callee(iter: &Expr, ask: &BufferAsk<'_, '_, '_, '_, '_, '_,
     Some(named)
 }
 
+pub(crate) fn stream_walked(iter: &Expr, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_, '_, '_, '_>, unaliased: &mut dyn FnMut(&str) -> String) -> Option<String> {
+    match iter {
+        Expr::MethodCall { receiver, method, .. } => { let receiver = nikaia_std::boxed::open(receiver); let method = *method; match nikaia_std::list::contains(&vec!["filter", "take", "skip", "step_by"], &ask.names.resolve(method)) {
+            true => stream_walked(receiver, ask, &mut &mut *unaliased),
+            false => None,
+        } },
+        _ => stream_callee(iter, ask, &mut &mut *unaliased),
+    }
+}
+
 pub(crate) fn note_stream_gather(gathered: &Expr, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_, '_, '_, '_>, unaliased: &mut impl FnMut(&str) -> String, walk: &mut BufferWalk) {
     let callee = match stream_items_of(gathered, ask, &mut *unaliased) { Some(__nikaia_value) => __nikaia_value, None => return };
     for (_, span) in walk.stream_gathers.iter() {
@@ -677,7 +687,7 @@ pub(crate) fn walked_statement(stmt: &Stmt, span: &Span, ask: &BufferAsk<'_, '_,
             let mut origins = origins_of(iter, ask, &mut &mut *holes_of, &mut &mut *unaliased, walk);
             walk.path.push((at, true));
             open_scope(walk);
-            let streamed = if bindings.len() == 1 { stream_callee(iter, ask, &mut &mut *unaliased) } else { None };
+            let streamed = if bindings.len() == 1 { stream_walked(iter, ask, &mut &mut *unaliased) } else { None };
             let a_stream = streamed.is_some();
             if a_stream {
                 let binding = nikaia_std::block::Text::from(ask.names.resolve(*nikaia_std::index::get(&bindings, 0)).to_string());

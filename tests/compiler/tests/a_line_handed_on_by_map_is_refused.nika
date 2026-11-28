@@ -1,0 +1,10 @@
+// The lambda of `map` over `io::lines()` sees each line in a buffer of the
+// stream's pool for one call (ADR-stream-buffers-v1 D1, D2): a view of the
+// line handed back is kept past that turn, `NK2308`. `.clone()` of it, or
+// `.cloned()` before the `map`, is the copy.
+use std::io
+
+fn main() throws {
+    let trimmed = io::lines().map(fn(l) { l.trim() }).count()
+    println(trimmed)
+}
