@@ -148,12 +148,12 @@ pub struct Shape {
     pub sized: bool,
     /// Walking it does not consume it.
     pub replays: bool,
-    /// **A walk with a deadline** (`par_iter(within: d)`, ADR-async-5 D27):
+    /// **A walk with a deadline** (`par_iter(within: d)`, ADR-async-v6 D27):
     /// the step that ends it throws `task::TimedOut` once the deadline ran
     /// out. Not a word a program writes.
     pub timed: bool,
     /// **A walk whose elements run one at a time** (`par_iter(limit: 1)`,
-    /// the literal, ADR-async-5 D15): a lambda handed to it never meets its
+    /// the literal, ADR-async-v6 D15): a lambda handed to it never meets its
     /// own other runs (D26), wherever the walk was bound. Not a word a
     /// program writes.
     pub one_at_a_time: bool,
@@ -1241,7 +1241,7 @@ impl Lock {
     }
 }
 
-/// **Whether a function can panic** (ADR-async-5 D35): not, yes, or nobody
+/// **Whether a function can panic** (ADR-async-v6 D35): not, yes, or nobody
 /// can say, which counts as yes - no guarantee is given that was not shown.
 pub enum Panics {
     No,
@@ -1685,7 +1685,7 @@ pub struct FnContract {
     /// time, takes a lambda that changes what it captures; one of these
     /// refuses it (`NK2104`), whichever file or package calls.
     pub at_once: Vec[String],
-    /// **How each `par_iter` call of its body runs** (ADR-async-5 D25, D32;
+    /// **How each `par_iter` call of its body runs** (ADR-async-v6 D25, D32;
     /// Part III 13.5 `par_iter`): `"pieces"` on the cores, or `"tasks"`, one
     /// task per element, in the order the calls stand. The build reads the
     /// committed entry and warns (`NK2119`) where a call that ran in pieces
@@ -1697,7 +1697,7 @@ pub struct FnContract {
     pub os_text: Vec[String],
     pub mutates: bool,
     pub touches_a_lock: Lock,
-    /// **Whether it can panic** (ADR-async-5 D35, Part III 13.5 `panics`):
+    /// **Whether it can panic** (ADR-async-v6 D35, Part III 13.5 `panics`):
     /// inferred over the call graph; absent from a ledger is `Unknown`.
     pub panics: Panics,
     /// **Whether it builds a list in the block of the task it runs in**

@@ -233,10 +233,15 @@ pub struct Crashed {
     /// that names `task::OverBudget` takes it as that.
     pub(crate) over_budget: bool,
     /// The task did not panic: it waited for a pending value another task
-    /// waited for first, which received that value's failure (ADR-async-5
+    /// waited for first, which received that value's failure (ADR-async-v6
     /// D8), so it was cancelled. Not a failure (D22): no group records it,
     /// no fallback takes it.
     pub(crate) cancelled: bool,
+    /// **Why the waiter was cancelled** (ADR-async-v6 D41): the pending value
+    /// it waited for failed. On a cancelled waiter's crash, what its unwind
+    /// carried; on the crash its reader receives, what that reader throws as
+    /// [`Abandoned`].
+    pub(crate) abandoned: Option<Box<Abandoned>>,
 }
 
 impl Crashed {
@@ -244,27 +249,64 @@ impl Crashed {
     /// full block, which unwound past the hook and has no site.
     pub(crate) fn of(payload: Box<dyn std::any::Any + Send>) -> Crashed {
         let site = SITE.with(|held| std::mem::take(&mut *held.borrow_mut()));
-        if payload.is::<group::WaitCancelled>() {
-            return Crashed {
-                message: "the task was cancelled: a pending value it waited for failed, and an earlier mention received the failure".to_string(),
-                site: String::new(),
-                over_budget: false,
-                cancelled: true,
-            };
-        }
+        let payload = match payload.downcast::<group::WaitCancelled>() {
+            Ok(waited) => {
+                return Crashed {
+                    message: "the task was cancelled: a pending value it waited for failed, and an earlier mention received the failure".to_string(),
+                    site: String::new(),
+                    over_budget: false,
+                    cancelled: true,
+                    abandoned: Some(waited.0),
+                };
+            }
+            Err(payload) => payload,
+        };
         match payload.is::<task_block::OverBudget>() {
             true => Crashed {
                 message: OverBudget.to_string(),
                 site: String::new(),
                 over_budget: true,
                 cancelled: false,
+                abandoned: None,
             },
             false => Crashed {
                 message: panic_message(payload.as_ref()),
                 site,
                 over_budget: false,
                 cancelled: false,
+                abandoned: None,
             },
+        }
+    }
+
+    /// **What the reader of a waiter that was cancelled is handed**
+    /// (ADR-async-v6 D41): no crash, the failure of what it waited for, which
+    /// a channel naming `task::Abandoned` takes as that.
+    pub(crate) fn abandoned(why: Box<Abandoned>) -> Crashed {
+        Crashed {
+            message: why.to_string(),
+            site: String::new(),
+            over_budget: false,
+            cancelled: false,
+            abandoned: Some(why),
+        }
+    }
+
+    /// **A cancelled waiter's crash, unwound again** where a fallback's body
+    /// caught it (ADR-async-v6 D8, D36): it is no failure of that body.
+    pub(crate) fn wait_again(self) -> ! {
+        let why = self
+            .abandoned
+            .unwrap_or_else(|| Box::new(Abandoned::unknown()));
+        std::panic::resume_unwind(Box::new(group::WaitCancelled(why)))
+    }
+
+    /// **The failure a reader of this crash throws instead** (ADR-async-v6
+    /// D41): the waiter did not crash, what it waited for failed.
+    pub fn abandoned_by(&self) -> Option<&Abandoned> {
+        match self.cancelled {
+            true => None,
+            false => self.abandoned.as_deref(),
         }
     }
 
@@ -275,6 +317,7 @@ impl Crashed {
             site: String::new(),
             over_budget: false,
             cancelled: false,
+            abandoned: None,
         }
     }
 
@@ -286,7 +329,7 @@ impl Crashed {
 }
 
 /// **What a task that ran over its memory budget hands its joiner**
-/// (ADR-327 D13, ADR-async-5 D19): its block was full. The task's cleanups ran, the panic
+/// (ADR-327 D13, ADR-async-v6 D19): its block was full. The task's cleanups ran, the panic
 /// hook did not, and in a group it fails only its own task.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct OverBudget;
@@ -324,7 +367,10 @@ impl From<Crashed> for OverBudget {
 pub fn handed(error: Box<dyn std::error::Error>) -> Box<dyn std::error::Error> {
     match error.downcast::<Crashed>() {
         Ok(crash) if crash.over_budget => Box::new(OverBudget),
-        Ok(crash) => crash,
+        Ok(crash) => match crash.abandoned_by() {
+            Some(why) => Box::new(why.clone()),
+            None => crash,
+        },
         Err(error) => error,
     }
 }
@@ -337,6 +383,9 @@ impl From<Crashed> for crate::error::Thrown<OverBudget> {
 
 impl std::fmt::Display for Crashed {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        if let Some(why) = self.abandoned_by() {
+            return why.fmt(f);
+        }
         match self.site.is_empty() {
             true => write!(f, "the task crashed: {}", self.message),
             false => write!(f, "the task crashed at {}: {}", self.site, self.message),
@@ -503,7 +552,7 @@ impl<T> TaskHandle<T> {
 
     /// The request [`cancel`](TaskHandle::cancel) makes, without taking the
     /// handle: a timed-out `join(within:, on_timeout: task::OnTimeout::Cancel)`
-    /// makes it from a handle it only lends (ADR-async-5 D17).
+    /// makes it from a handle it only lends (ADR-async-v6 D17).
     fn ask_to_stop(&self) {
         self.asked
             .asked
@@ -645,7 +694,7 @@ impl<T: 'static, E: 'static + From<Crashed>> FailingTask<T, E> {
 }
 
 /// **What `join(within:)` throws when the time ran out**
-/// ([ADR-async-5](../../../docs/specification/adr/adr-async-5.md) D17, changing
+/// ([ADR-async-v6](../../../docs/specification/adr/adr-async-v6.md) D17, changing
 /// ADR-346 D4): by default the task keeps running and the handle stays live;
 /// with [`OnTimeout::Cancel`] the task was cancelled and its cleanups ran.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -668,8 +717,109 @@ impl TimedOut {
     }
 }
 
+/// **What a read of a waiter throws that was cancelled because a task it
+/// waits for failed** ([ADR-async-v6](../../../docs/specification/adr/adr-async-v6.md)
+/// D41, D8): `let c = async g(a)` waits for `a`; `a` failed and an earlier
+/// mention received that failure, so `c` did not run to its end. It is no
+/// crash of `c`, and not `a`'s error again: it names `a`'s error, and carries
+/// it as its cause ([`std::error::Error::source`]).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Abandoned {
+    /// The waiter's binding, `c`; empty where the lowering named none.
+    pub(crate) waiter: String,
+    /// The binding it waited for, `a`; empty where the lowering named none.
+    pub(crate) waits_for: String,
+    /// What `a`'s failure said.
+    pub(crate) cause: AbandonedCause,
+}
+
+/// **The failure an [`Abandoned`] waiter waited for**, as its words: the error
+/// itself went to the earlier mention (one error, one receiver, ADR-346 D1).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AbandonedCause(pub(crate) String);
+
+impl std::fmt::Display for AbandonedCause {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.0)
+    }
+}
+
+impl std::error::Error for AbandonedCause {}
+
+impl Abandoned {
+    /// Why a waiter was cancelled: `waits_for` failed, saying `cause`.
+    pub(crate) fn of(waits_for: &str, cause: String) -> Abandoned {
+        Abandoned {
+            waiter: String::new(),
+            waits_for: waits_for.to_string(),
+            cause: AbandonedCause(cause),
+        }
+    }
+
+    /// A waiter cancelled where nothing recorded what it waited for.
+    pub(crate) fn unknown() -> Abandoned {
+        Abandoned::of("", "the failure went to an earlier mention".to_string())
+    }
+
+    /// The same, naming the waiter whose read throws it.
+    pub(crate) fn of_waiter(mut self, waiter: &str) -> Abandoned {
+        if self.waiter.is_empty() {
+            self.waiter = waiter.to_string();
+        }
+        self
+    }
+
+    /// What went wrong, in words: `Error`'s `message` (Part I 7.1), which is
+    /// what the failure prints as. A block's text (#490), the `String` of a
+    /// program.
+    pub fn message(&self) -> crate::block::Text {
+        crate::block::Text::from(self.to_string())
+    }
+}
+
+impl std::fmt::Display for Abandoned {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self.waiter.is_empty() {
+            true => f.write_str("the task did not run to its end")?,
+            false => write!(f, "`{}` did not run to its end", self.waiter)?,
+        }
+        match self.waits_for.is_empty() {
+            true => f.write_str(" because a task it waits for failed")?,
+            false => write!(
+                f,
+                " because `{}`, a task it waits for, failed",
+                self.waits_for
+            )?,
+        }
+        write!(f, ": {}", self.cause)
+    }
+}
+
+impl From<Crashed> for Abandoned {
+    /// Only a crash that carries why reaches a channel of this alone.
+    fn from(crash: Crashed) -> Abandoned {
+        match crash.abandoned_by() {
+            Some(why) => why.clone(),
+            None => std::panic::resume_unwind(Box::new(crash.message)),
+        }
+    }
+}
+
+/// The same, for a channel that holds it in its envelope (ADR-280 D13).
+impl From<Crashed> for crate::error::Thrown<Abandoned> {
+    fn from(crash: Crashed) -> crate::error::Thrown<Abandoned> {
+        crate::error::Thrown::from(Abandoned::from(crash))
+    }
+}
+
+impl std::error::Error for Abandoned {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        Some(&self.cause)
+    }
+}
+
 /// **The deadline of `async(within: d)`**
-/// ([ADR-async-5](../../../docs/specification/adr/adr-async-5.md) D16): `d`
+/// ([ADR-async-v6](../../../docs/specification/adr/adr-async-v6.md) D16): `d`
 /// counted from where the form starts. [`Deadline::bound`] runs a task's body
 /// against it; when it runs out first the body is dropped at its pause, as
 /// `h.cancel()` stops a task, and the task ends with [`TimedOut`], a failure
@@ -710,7 +860,7 @@ impl Deadline {
 }
 
 /// **What a `join(within:)` does with the task when its time ran out**
-/// ([ADR-async-5](../../../docs/specification/adr/adr-async-5.md) D17):
+/// ([ADR-async-v6](../../../docs/specification/adr/adr-async-v6.md) D17):
 /// `Keep`, the default, lets it run on and leaves the handle live; `Cancel`
 /// cancels it as `cancel()` does.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
@@ -741,7 +891,7 @@ impl std::error::Error for Late {}
 
 impl<T> TaskHandle<T> {
     /// Wait for the slot, at most `span`; on time-out, cancel the task where
-    /// `on_timeout` says so (ADR-async-5 D17). **It lends the handle**: on
+    /// `on_timeout` says so (ADR-async-v6 D17). **It lends the handle**: on
     /// time-out with [`OnTimeout::Keep`] the handle stays live and is joined
     /// again, cancelled or detached; the checker asks for it there (`NK2109`).
     async fn within(
@@ -768,7 +918,7 @@ impl<T> TaskHandle<T> {
         outcome
     }
 
-    /// **`join(within: d, on_timeout: o)`** (ADR-async-5 D17): the value, or
+    /// **`join(within: d, on_timeout: o)`** (ADR-async-v6 D17): the value, or
     /// [`Crashed`], or [`TimedOut`] once `span` ran out - the task running on
     /// with [`OnTimeout::Keep`], cancelled with [`OnTimeout::Cancel`].
     pub async fn join_within(
@@ -1458,6 +1608,13 @@ impl Crosses for Box<dyn std::error::Error> {
 #[derive(Debug)]
 pub struct Boxed(pub Box<dyn std::error::Error>);
 
+/// What the box says: what its error says.
+impl std::fmt::Display for Boxed {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.0.fmt(f)
+    }
+}
+
 impl From<Crashed> for Boxed {
     fn from(crash: Crashed) -> Boxed {
         Boxed(Box::new(crash))
@@ -1531,7 +1688,7 @@ impl Crosses for OverBudget {
 }
 
 /// A crash and a full block have no envelope to record a crossing in
-/// (ADR-async-5 D23): the crash's own message says what it was.
+/// (ADR-async-v6 D23): the crash's own message says what it was.
 impl crate::error::Crossed for Crashed {
     fn started_at(&mut self, _site: crate::error::Origin) {}
     fn arrived_at(&mut self, _site: crate::error::Origin) {}
@@ -1550,6 +1707,12 @@ impl crate::error::Crossed for Late {
 }
 
 impl crate::error::Crossed for TimedOut {
+    fn started_at(&mut self, _site: crate::error::Origin) {}
+    fn arrived_at(&mut self, _site: crate::error::Origin) {}
+}
+
+/// Nor has a waiter's abandoned read (ADR-async-v6 D41): no `throw` raised it.
+impl crate::error::Crossed for Abandoned {
     fn started_at(&mut self, _site: crate::error::Origin) {}
     fn arrived_at(&mut self, _site: crate::error::Origin) {}
 }
@@ -1702,7 +1865,7 @@ impl<'scope, E: From<Crashed>> Scope<'scope, '_, E> {
         ChildHandle::deferred_now(self, body)
     }
 
-    /// **`async e` whose task never pauses** (ADR-async-5 D6, D20, #988): it
+    /// **`async e` whose task never pauses** (ADR-async-v6 D6, D20, #988): it
     /// runs now, to its end, so it may borrow what lives shorter than the
     /// group; the handle holds its end until the wait point.
     pub fn start_here<'g, T: 'g>(
@@ -1726,7 +1889,7 @@ impl<'scope, E: From<Crashed>> Scope<'scope, '_, E> {
         self.seen.borrow_mut().absorb(seen);
     }
 
-    /// **`async e` whose task pauses** (ADR-async-5 D6, D20, #1226): it starts
+    /// **`async e` whose task pauses** (ADR-async-v6 D6, D20, #1226): it starts
     /// here and runs to its first pause; the handle holds the rest, polled
     /// where the checker waits (`join`). It may borrow what lives shorter
     /// than the group, as [`Scope::start_here`]'s task may.
@@ -1758,7 +1921,7 @@ impl<'scope, E: From<Crashed>> Scope<'scope, '_, E> {
     }
 
     /// **`async e` whose task pauses, under the gates of `line`**
-    /// (ADR-async-5 D15, D18, D37, D38): as [`Scope::start_paused`] where a
+    /// (ADR-async-v6 D15, D18, D37, D38): as [`Scope::start_paused`] where a
     /// place is free in each and no task before it waits; else the task
     /// waits, unstarted, for a place, and the main line goes on, and `line`
     /// starts it when a place frees. It holds its places from its start to
@@ -1802,7 +1965,7 @@ impl<'scope, E: From<Crashed>> Scope<'scope, '_, E> {
     }
 
     /// **`async(admission: s) e` whose task pauses, under the gates of
-    /// `line`** (ADR-async-5 D15, D18, D37): as [`Scope::start_paused_gated`],
+    /// `line`** (ADR-async-v6 D15, D18, D37): as [`Scope::start_paused_gated`],
     /// and the task's own strategy `admission` admits it too; until it does,
     /// the task waits unstarted and the main line goes on, and `line` asks
     /// it again where the main line next pauses or waits.
@@ -1848,7 +2011,7 @@ impl<'scope, E: From<Crashed>> Scope<'scope, '_, E> {
     }
 
     /// **`async(deferred) fn { … }` bound to a handle named later**
-    /// (ADR-async-5 D12, #2512): as [`Scope::start_kept`], but nothing runs
+    /// (ADR-async-v6 D12, #2512): as [`Scope::start_kept`], but nothing runs
     /// here; the handle's `start()` queues the task in `rest`, and it starts
     /// where the main line next pauses or waits.
     pub fn deferred_kept<'g, 'b: 'g, T: 'b, F>(
@@ -1924,7 +2087,7 @@ impl<'scope, E: From<Crashed>> Scope<'scope, '_, E> {
 }
 
 impl<E> Scope<'_, '_, E> {
-    /// **A group whose function pauses** (ADR-async-5 D9, D20, #1226), made by
+    /// **A group whose function pauses** (ADR-async-v6 D9, D20, #1226), made by
     /// its caller and run by [`group_paused`]: its tasks borrow it for as
     /// long as they run.
     #[allow(clippy::new_without_default)]
@@ -1995,7 +2158,7 @@ pub fn scope<'env, T, E: From<Crashed> + crate::error::Joined>(
     ended(value, failed)
 }
 
-/// **`async { }`, and the innermost block as a group** (ADR-async-5 D9, D21,
+/// **`async { }`, and the innermost block as a group** (ADR-async-v6 D9, D21,
 /// #988): `body` runs with the group, and the group ends after it and every
 /// task. Where `body` failed, its failure is what this throws, the unread ones
 /// joined to it in start order; else the first unread failure, the later ones
@@ -2016,7 +2179,7 @@ pub fn group<'env, T, E: From<Crashed> + crate::error::Joined>(
     }
 }
 
-/// **[`group`] where the group's function pauses** (ADR-async-5 D9, D20,
+/// **[`group`] where the group's function pauses** (ADR-async-v6 D9, D20,
 /// D21, #1226): `body` is the function as a future over `scope`, which its
 /// caller made with [`Scope::new`]; the group ends after it and every task.
 /// A pausing task of `async e` is polled where it is waited for, inside
@@ -2053,7 +2216,7 @@ pub fn group_plain<'env, T>(
 }
 
 /// **The channel of a group's tasks where the function's own cannot carry a
-/// crash** (ADR-async-5 D35, #1355): the function throws no `task::Crashed`
+/// crash** (ADR-async-v6 D35, #1355): the function throws no `task::Crashed`
 /// because none of its tasks can panic, or each one that can reads its crash
 /// in a fallback. A task's own failure travels as `Failed`; a crash, which
 /// the compiler showed cannot happen there, is raised again where it would
@@ -2065,13 +2228,23 @@ pub enum OrCrash<E> {
     Crashed(Crashed),
 }
 
+/// What the failure or the crash says.
+impl<E: std::fmt::Display> std::fmt::Display for OrCrash<E> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            OrCrash::Failed(error) => error.fmt(f),
+            OrCrash::Crashed(crash) => crash.fmt(f),
+        }
+    }
+}
+
 impl<E> From<Crashed> for OrCrash<E> {
     fn from(crash: Crashed) -> Self {
         OrCrash::Crashed(crash)
     }
 }
 
-/// A task's own failure records where it crossed (ADR-async-5 D23); a crash
+/// A task's own failure records where it crossed (ADR-async-v6 D23); a crash
 /// raised again keeps nothing.
 impl<E: crate::error::Crossed> crate::error::Crossed for OrCrash<E> {
     fn started_at(&mut self, site: crate::error::Origin) {
@@ -2140,7 +2313,7 @@ pub async fn group_paused_raised<T, E: crate::error::Joined>(
     uncrashed(group_paused(scope, async { body.await.map_err(OrCrash::Failed) }).await)
 }
 
-/// **The body of a task with a fallback** (ADR-async-5 D36, #1355): a panic
+/// **The body of a task with a fallback** (ADR-async-v6 D36, #1355): a panic
 /// in it is the task's failure, handed to its fallback, not a crash of the
 /// group, so it cancels no sibling and is not thrown where the group ends.
 pub fn fell<T>(
@@ -2148,7 +2321,7 @@ pub fn fell<T>(
 ) -> Result<T, Box<dyn std::error::Error>> {
     let mut ended = None;
     match caught(|| ended = Some(body())) {
-        Err(crash) if crash.cancelled => std::panic::resume_unwind(Box::new(group::WaitCancelled)),
+        Err(crash) if crash.cancelled => crash.wait_again(),
         Err(crash) => Err(Box::new(crash)),
         Ok(()) => ended.expect("a body that did not panic ended"),
     }
@@ -2160,13 +2333,13 @@ where
     F: std::future::Future<Output = Result<T, Box<dyn std::error::Error>>>,
 {
     match caught_paused(body).await {
-        Err(crash) if crash.cancelled => std::panic::resume_unwind(Box::new(group::WaitCancelled)),
+        Err(crash) if crash.cancelled => crash.wait_again(),
         Err(crash) => Err(Box::new(crash)),
         Ok(ended) => ended,
     }
 }
 
-/// **The end of a task with a fallback** (ADR-async-5 D22, D35): its own
+/// **The end of a task with a fallback** (ADR-async-v6 D22, D35): its own
 /// failure and its crash alike, each for the fallback to take.
 pub fn fallen<T, E: Into<Box<dyn std::error::Error>>>(
     joined: Result<Result<T, Box<dyn std::error::Error>>, E>,
@@ -2550,7 +2723,7 @@ async fn polled<T, F: std::future::Future<Output = ()> + ?Sized>(
                 Ok(std::task::Poll::Pending) => at += 1,
                 Err(payload) => {
                     let crash = Crashed::of(payload);
-                    // A full block fails only its own task (ADR-async-5 D19);
+                    // A full block fails only its own task (ADR-async-v6 D19);
                     // a cancelled waiter (D8) is no failure at all.
                     if crash.cancelled {
                         drop(running.swap_remove(at));

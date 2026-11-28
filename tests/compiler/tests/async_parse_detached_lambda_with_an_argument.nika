@@ -1,4 +1,4 @@
-// A lambda after `async` that names an argument is refused (ADR-async-5 D10,
+// A lambda after `async` that names an argument is refused (ADR-async-v6 D10,
 // `NK2103`): a task is handed nothing.
 
 fn main() throws {

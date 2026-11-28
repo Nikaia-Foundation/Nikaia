@@ -1,5 +1,5 @@
 // `limit:` caps how many accumulators of a `Par::fold` and a grammar's
-// `par_fold` fold at once; it replaced `workers:` (ADR-async-5 D27, Part II
+// `par_fold` fold at once; it replaced `workers:` (ADR-async-v6 D27, Part II
 // 10.7) and changes no result.
 use std::par
 

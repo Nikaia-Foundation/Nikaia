@@ -1,6 +1,6 @@
 // crates/nikaia-std/src/compiler/panics.nika
 //
-// **Whether a function can panic** (ADR-async-5 D35, #1355): the ledger's
+// **Whether a function can panic** (ADR-async-v6 D35, #1355): the ledger's
 // `panics` column, inferred as the throw set is (Part I 7.1). A panic site is
 // a `panic`, a run-time check the build keeps (an index into a list, an
 // overflow, a division, an `assume`), a call to a function that can panic,

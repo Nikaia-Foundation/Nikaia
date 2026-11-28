@@ -1,4 +1,4 @@
-// `overlap` left the reserved words (ADR-async-5): a program may name a
+// `overlap` left the reserved words (ADR-async-v6): a program may name a
 // value so, and `overlap { … }` still parses and runs until #991 removes it.
 
 fn sum(xs: Vec[i64]) -> i64 {

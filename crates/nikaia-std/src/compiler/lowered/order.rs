@@ -612,7 +612,7 @@ pub(crate) fn tasks_of_function(key: &str, body: &Block, lines: &[&str], waits: 
 }
 
 pub(crate) fn task_fields(id: i64, site: &TaskSite, line: i64, lines: &[&str], walk: &TaskWalk, waits: &collections::BTreeMap<i64, CheckAsyncWait>) -> (String, String, String) {
-    if site.detached { return (format!("from line {}, past its group", line), String::from("where its handle is joined, if it is"), String::from("none: it may outlive its group (ADR-async-5 D13)")); }
+    if site.detached { return (format!("from line {}, past its group", line), String::from("where its handle is joined, if it is"), String::from("none: it may outlive its group (ADR-async-v6 D13)")); }
     let wait = match waits.get(&id) { Some(__nikaia_value) => __nikaia_value, None => return (format!("from line {}", line), String::from("not recorded by the checker"), String::from("not recorded by the checker")) };
     let group_end = task_last_line(lines, nikaia_std::index::or(walk.groups.get(&wait.group), || site.end.into()));
     let ends = format!("after line {}", group_end);
@@ -721,8 +721,8 @@ pub fn par_report(items: &[Spanned<Item>], names: &winnow_grammar::InternerConte
             let written = (*nikaia_std::index::get(&lines, nikaia_std::index::at(line - 1))).trim();
             out.push_str(&format!("    par_iter {}, line {}: `{}`\n", site.number, line, written));
             let runs = match &site.pausing {
-                None => String::from("in pieces on the cores: no lambda of it pauses (ADR-async-5 D25)"),
-                Some(pause) => format!("one task per element: a lambda of it pauses at its call of `{}` (ADR-async-5 D25)", pause.callee),
+                None => String::from("in pieces on the cores: no lambda of it pauses (ADR-async-v6 D25)"),
+                Some(pause) => format!("one task per element: a lambda of it pauses at its call of `{}` (ADR-async-v6 D25)", pause.callee),
             };
             out.push_str(&format!("        runs        {}\n", runs));
         }

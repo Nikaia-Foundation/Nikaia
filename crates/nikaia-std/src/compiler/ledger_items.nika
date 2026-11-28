@@ -682,7 +682,7 @@ pub trait LedgerInferHost {
     fn infer_maps(ref self, mut ledger: Ledger) sync
     fn infer_locks(ref self, mut ledger: Ledger) sync
     fn infer_tether(ref self, mut ledger: Ledger) sync
-    /// Whether each function can panic (ADR-async-5 D35).
+    /// Whether each function can panic (ADR-async-v6 D35).
     fn infer_panics(ref self, mut ledger: Ledger) sync
     /// A default a run's sub-program already computed (#468).
     fn known_default(ref self, unit: i64, key: ref String, at: i64) -> String? sync
@@ -713,7 +713,7 @@ pub fn ledger_infer_package[H: LedgerInferHost](mut ledger: Ledger, units: ref V
     // **An expression function's `ensures`** (ADR-314 D3): after `sync`,
     // which it is only given for.
     ledger_expression_ensures(ledger, units, host)
-    // **Whether each function can panic** (ADR-async-5 D35): after the
+    // **Whether each function can panic** (ADR-async-v6 D35): after the
     // `ensures` the bounds walk it asks reads, and before `throws`, which
     // holds `task::Crashed` only where a task can panic.
     host.infer_panics(ledger)

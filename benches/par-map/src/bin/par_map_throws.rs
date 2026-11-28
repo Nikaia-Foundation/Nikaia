@@ -1,4 +1,4 @@
-//! The Rayon twin of `benches/par-map/throws.nika` (ADR-async-5 D28): the
+//! The Rayon twin of `benches/par-map/throws.nika` (ADR-async-v6 D28): the
 //! same list, the same lambda that can fail, written as Rayon's
 //! `par_iter().map().collect::<Result<Vec<_>, _>>()`, the same sum printed.
 //! Kept in step with the `.nika` by hand. Rayon's collect into a `Result`

@@ -80,6 +80,11 @@ impl EmitState {
             if plan.task_keep {
                 lines.push("let __keep_task = std::sync::Arc::new(nikaia_std::tether::Keep::new());")
             }
+            // **A buffer read per turn gets a spare before the loop** (#2859):
+            // the buffer of the turn whose last view died, for the next read.
+            for read in plan.reads {
+                lines.push(f"let __spare_{read} = nikaia_std::tether::Spare::<nikaia_std::block::Text>::new();")
+            }
         }
         if plan.local_keeps.contains(at) {
             lines.push(f"let __keep_{at} = nikaia_std::tether::Keep::new();")
@@ -98,7 +103,12 @@ impl EmitState {
         // **A loop over a stream binds its keep from each line**
         // (ADR-stream-buffers-v1 D1): the chunk's, not one of its own.
         if element && emit_stream_pool(plan, at) == null {
-            lines.push(f"let __keep_{at} = std::sync::Arc::new(nikaia_std::tether::Keep::new());")
+            // **The keep of a turn's read hands its buffer back** (#2859).
+            if plan.reads.contains(at) {
+                lines.push(f"let __keep_{at} = std::sync::Arc::new(nikaia_std::tether::Keep::returning(&__spare_{at}));")
+            } else {
+                lines.push(f"let __keep_{at} = std::sync::Arc::new(nikaia_std::tether::Keep::new());")
+            }
         }
         if lines.len() == 0 {
             return null
@@ -118,6 +128,14 @@ impl EmitState {
             }
         }
         return false
+    }
+
+    /// **Whether the `let` at `at` reads its buffer into the spare of its
+    /// loop** (#2859): a file read into a keep of its own per turn.
+    fn reads_into_spare(ref self, walk: ref EmitWalk, function: ref String, at: i64) -> bool {
+        let key = self.keep_plan_key(walk, function) ?? return false
+        let plan = self.keep_plans.get(key) ?? return false
+        return plan.reads.contains(at)
     }
 
     /// The pool of the loop over a stream at `at`, in the plan of the

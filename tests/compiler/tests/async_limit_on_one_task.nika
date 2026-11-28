@@ -1,4 +1,4 @@
-// `limit:` on a form that starts one task is NK2112 (ADR-async-5 D15, #986).
+// `limit:` on a form that starts one task is NK2112 (ADR-async-v6 D15, #986).
 fn f() -> i64 {
 	return 1
 }

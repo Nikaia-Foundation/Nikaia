@@ -1,4 +1,4 @@
-// The fallback of a detached task (Part I 8.1.2, ADR-async-5 D22, #986): the
+// The fallback of a detached task (Part I 8.1.2, ADR-async-v6 D22, #986): the
 // task fails, and the fallback stands in for its value where the failure
 // arrives, the `join`; a crash would still pass to `main`.
 

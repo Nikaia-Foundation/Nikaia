@@ -85,20 +85,39 @@ pub(crate) fn check_core_expr<H: CheckHost>(state: &mut CheckState, world: &Chec
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 pub(crate) fn check_core_task_walked<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, host: &H, expr: &Expr, span: &Span) -> Ty {
+    let past: Option<bool> = match state.flow.tasks_past_the_catch.get(&(id_of(expr) as i64)) {
+        Some(__nikaia_it) => Some(__nikaia_it.clone()),
+        None => None,
+    };
     let enclosing: Option<CheckGuarded> = match state.flow.guarded.as_ref() {
         Some(__nikaia_it) => Some(__nikaia_it.clone()),
         None => None,
     };
     let probing = state.flow.task_probe;
+    let caught = state.flow.caught;
     state.flow.guarded = Some(CheckGuarded::nothing());
-    state.flow.task_probe = enclosing.is_none() || probing;
+    state.flow.task_probe = enclosing.is_none() || probing || past.is_some();
+    if past.is_some() { state.flow.caught = nikaia_std::index::or(past, || caught); }
     let ty = check_core_value_of(state, world, host, expr, span);
     let found: CheckGuarded = nikaia_std::index::or(match state.flow.guarded.as_ref() {
         Some(__nikaia_it) => Some(__nikaia_it.clone()),
         None => None,
     }, || CheckGuarded::nothing());
     state.flow.task_probe = probing;
+    state.flow.caught = caught;
     if found.fallible { state.flow.fallible_tasks.insert(id_of(expr) as i64); }
+    if past.is_some() {
+        state.flow.guarded = enclosing;
+        let mut escaped = nikaia_std::index::or(match state.flow.escaped.as_ref() {
+            Some(__nikaia_it) => Some(__nikaia_it.clone()),
+            None => None,
+        }, || CheckGuarded::nothing());
+        escaped.fallible = escaped.fallible || found.fallible;
+        escaped.unanswered = escaped.unanswered || found.unanswered;
+        escaped.thrown.extend(found.thrown);
+        state.flow.escaped = Some(escaped);
+        return ty;
+    }
     match enclosing {
         Some(ref outer) => {
             let mut merged = outer.clone();
@@ -333,6 +352,17 @@ pub(crate) fn check_core_value_of<H: CheckHost>(state: &mut CheckState, world: &
             state.flow.loops = loops;
             state.flow.barrier = barrier;
             check_core_async_crash(state, world, host, inner, span);
+            let waits_for = nikaia_std::index::or(match state.facts.async_abandoned.get(&(id_of(expr) as i64)) {
+                Some(__nikaia_it) => Some(__nikaia_it.clone()),
+                None => None,
+            }, || -1);
+            if waits_for >= 0 && state.flow.fallible_tasks.contains(&waits_for) {
+                let function = nikaia_std::index::or(match state.current.as_ref() {
+                    Some(__nikaia_it) => Some(__nikaia_it.clone()),
+                    None => None,
+                }, || "".into());
+                check_core_async_fails(state, span, "task::Abandoned", "This function can fail, because the task started here waits for a pending value another task waits for too.", "Where that value fails, the task that waits for it first receives the failure; this one is cancelled where it waits, and reading it throws `task::Abandoned` (ADR-async-v6 D41).", &format!("Add `throws` to `{}`, or catch it where its binding is read: `… catch {{ … }}`.", function));
+            }
             if state.flow.async_group.is_some() { state.a_task_takes_inner_names(world, inner, id_of(expr) as i64, span); }
             let mut at = changed_from;
             while at < state.changed.len() as i64 {
@@ -727,7 +757,7 @@ pub(crate) fn check_core_async_within<H: CheckHost>(state: &mut CheckState, worl
         Some(__nikaia_it) => Some(__nikaia_it.clone()),
         None => None,
     }, || "".into());
-    check_core_async_fails(state, span, "task::TimedOut", "This function can fail, because the deadline of `within:` can run out.", "When the deadline runs out, the task is cancelled and ends with `task::TimedOut` (ADR-async-5 D16).", &format!("Add `throws` to `{}`, or write a fallback: `async(within: d) … catch {{ … }}`.", function));
+    check_core_async_fails(state, span, "task::TimedOut", "This function can fail, because the deadline of `within:` can run out.", "When the deadline runs out, the task is cancelled and ends with `task::TimedOut` (ADR-async-v6 D16).", &format!("Add `throws` to `{}`, or write a fallback: `async(within: d) … catch {{ … }}`.", function));
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -755,7 +785,7 @@ pub(crate) fn check_core_async_admission<H: CheckHost>(state: &mut CheckState, w
         if types.contains(&named) { return; }
     }
     if !state.structs.contains_key(&named) && !state.enums.contains_key(&named) { return; }
-    state.findings.push(check_refusal("NK1164", span, format!("`admission:` needs a `task::Admission` here, but `{}` isn't one.", named), vec![String::from("The strategy decides when a task of the form starts, through its `decide` method (ADR-async-5 D18).")], Some(format!("Write `impl task::Admission for {} {{ … }}`, or pass a type that already has one.", named))));
+    state.findings.push(check_refusal("NK1164", span, format!("`admission:` needs a `task::Admission` here, but `{}` isn't one.", named), vec![String::from("The strategy decides when a task of the form starts, through its `decide` method (ADR-async-v6 D18).")], Some(format!("Write `impl task::Admission for {} {{ … }}`, or pass a type that already has one.", named))));
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -776,7 +806,7 @@ pub(crate) fn check_core_async_crash<H: CheckHost>(state: &mut CheckState, world
     }, || "".into());
     if places_of_task(task, world.here.items, world.words, &mut |literal| { host.literal_holes(literal) }, &facts, world.own, world.library) { check_core_async_fails(state, span, "task::OverBudget", "This function can fail, because the task started here can run over its memory budget.", "A task builds its lists and texts in its own block; when the block is full, whoever waits for the task gets `task::OverBudget` (ADR-327 D13).", &format!("Add `throws` to `{}`, or write a fallback: `async e catch {{ … }}`.", function)); }
     if !panics_of_task(task, world.here.items, world.words, &mut |literal| { host.literal_holes(literal) }, &facts, world.own, world.library) { return; }
-    check_core_async_fails(state, span, "task::Crashed", "This function can fail, because the task started here can panic.", "A panic in a task ends that task, and whoever waits for it gets `task::Crashed` (ADR-async-5 D35).", &format!("Add `throws` to `{}`, or write a fallback: `async e catch {{ … }}`.", function));
+    check_core_async_fails(state, span, "task::Crashed", "This function can fail, because the task started here can panic.", "A panic in a task ends that task, and whoever waits for it gets `task::Crashed` (ADR-async-v6 D35).", &format!("Add `throws` to `{}`, or write a fallback: `async e catch {{ … }}`.", function));
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -786,7 +816,7 @@ pub(crate) fn check_core_walk_timed_out(state: &mut CheckState, span: &Span) {
         Some(__nikaia_it) => Some(__nikaia_it.clone()),
         None => None,
     }, || "".into());
-    check_core_async_fails(state, span, "task::TimedOut", "This function can fail, because the deadline of `par_iter(within:)` can run out.", "When the deadline runs out, no element starts any more and the step that ends the walk throws `task::TimedOut` (ADR-async-5 D27).", &format!("Add `throws` to `{}`, or handle it at the call: `… catch {{ … }}`.", function));
+    check_core_async_fails(state, span, "task::TimedOut", "This function can fail, because the deadline of `par_iter(within:)` can run out.", "When the deadline runs out, no element starts any more and the step that ends the walk throws `task::TimedOut` (ADR-async-v6 D27).", &format!("Add `throws` to `{}`, or handle it at the call: `… catch {{ … }}`.", function));
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before

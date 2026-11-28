@@ -116,7 +116,7 @@ impl EmitState {
     /// two or more that no function's is, each a sum too: in the box a
     /// `par_iter` walk's failures could not cross a worker (it is not
     /// `Send`), and a `par_iter` element's `task::OverBudget` joins what its
-    /// lambda throws (ADR-async-5 D28). Only in a file alone or the entry,
+    /// lambda throws (ADR-async-v6 D28). Only in a file alone or the entry,
     /// which writes its sums at the crate root: another module of several
     /// names a sum the entry writes, which knows nothing of its lambdas, so
     /// there the box stays.
@@ -225,28 +225,43 @@ impl EmitState {
             }
             out.push("}\n")
             // **A full block arrives as a crash marked over budget** (ADR-327
-            // D13): a sum holding `task::OverBudget` takes it apart, and one
-            // without `task::Crashed` hands any other crash on unwinding.
+            // D13), and **a waiter's abandoned read as a crash that carries
+            // why** (ADR-async-v6 D41): a sum holding `task::OverBudget` or
+            // `task::Abandoned` takes it apart, and one without
+            // `task::Crashed` hands any other crash on unwinding.
             let mut over = false
+            let mut abandoned = false
             let mut crash_member = false
             for member in members {
                 if member == "task::OverBudget" {
                     over = true
                 }
+                if member == "task::Abandoned" {
+                    abandoned = true
+                }
                 if member == "task::Crashed" {
                     crash_member = true
                 }
             }
-            if over {
-                let budget = self.sum_member_value(world, "task::OverBudget", "nikaia_std::task::OverBudget")
+            let parted = over || abandoned
+            if parted {
                 let crash = self.sum_member_value(world, "task::Crashed", "error")
                 let rest = if crash_member { f"{name}::{sum_variant("task::Crashed")}({crash})" } else { "std::panic::resume_unwind(std::boxed::Box::new(error.to_string()))" }
-                out.push(f"impl{decl} From<nikaia_std::task::Crashed> for {name}{params} {{\n    fn from(error: nikaia_std::task::Crashed) -> {name}{params} {{\n        if error.over_budget() {{\n            return {name}::{sum_variant("task::OverBudget")}({budget});\n        }}\n        {rest}\n    }}\n}}\n")
+                let mut taken = ""
+                if over {
+                    let budget = self.sum_member_value(world, "task::OverBudget", "nikaia_std::task::OverBudget")
+                    taken = f"{taken}        if error.over_budget() {{\n            return {name}::{sum_variant("task::OverBudget")}({budget});\n        }}\n"
+                }
+                if abandoned {
+                    let why = self.sum_member_value(world, "task::Abandoned", "why.clone()")
+                    taken = f"{taken}        if let Some(why) = error.abandoned_by() {{\n            return {name}::{sum_variant("task::Abandoned")}({why});\n        }}\n"
+                }
+                out.push(f"impl{decl} From<nikaia_std::task::Crashed> for {name}{params} {{\n    fn from(error: nikaia_std::task::Crashed) -> {name}{params} {{\n{taken}        {rest}\n    }}\n}}\n")
             }
             for member in members {
                 let variant = sum_variant(member)
                 let held = self.sum_member_held(world, member, params)
-                if over && member == "task::Crashed" {
+                if parted && member == "task::Crashed" {
                     continue
                 }
                 out.push(f"impl{decl} From<{held}> for {name}{params} {{\n    fn from(error: {held}) -> {name}{params} {{ {name}::{variant}(error) }}\n}}\n")
@@ -334,7 +349,7 @@ impl EmitState {
             // for `Send` and `Sync`, which a scope's channel has and a
             // supervisor's `Handed` has not: only a scope's, and one holding
             // `task::OverBudget`, a task's or a `par_iter` element's, whose
-            // failures cross workers too (ADR-async-5 D26, D28). **So is
+            // failures cross workers too (ADR-async-v6 D26, D28). **So is
             // the set a lambda a `std` step fails through** (#2779): a
             // `par_iter` element's failure arrives at the call, so each
             // member is a value that may cross (ADR-005 §1 Group B), and a
@@ -367,7 +382,7 @@ impl EmitState {
                 }
             }
             out.push("            _ => {}\n        }\n    }\n}\n")
-            // **Where a failure crossed a task's boundary** (ADR-async-5
+            // **Where a failure crossed a task's boundary** (ADR-async-v6
             // D23): a member in an envelope records it there; one without
             // keeps nothing.
             let mut crossed: String = ""

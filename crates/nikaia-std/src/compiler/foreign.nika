@@ -172,7 +172,7 @@ fn expression_paths(expr: ref Expr, span: ref Span, names: ref winnow_grammar::I
         Expr::Overlap(_, _) => found.seen.push(Seen::Joins { construct: "overlap", span: span.clone() }),
         Expr::Select(_, _) => found.seen.push(Seen::Joins { construct: "select", span: span.clone() }),
         // An `async` form waits for the tasks it starts (ADR-288 D1, D32, as
-        // ADR-async-5 cites them), so a body holding one is not `sync`.
+        // ADR-async-v6 cites them), so a body holding one is not `sync`.
         Expr::Async(_, _, _, _) => found.seen.push(Seen::Joins { construct: "async", span: span.clone() }),
         Expr::AsyncGroup(_, _, _, _, _) => found.seen.push(Seen::Joins { construct: "async", span: span.clone() }),
         Expr::Call { func, args, config, .. } => a_named_call(func, args, config, span, names, root_at, found),

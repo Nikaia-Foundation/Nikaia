@@ -1,4 +1,4 @@
-// `start()` on a handle that is not deferred is `NK2121` (ADR-async-5 D12,
+// `start()` on a handle that is not deferred is `NK2121` (ADR-async-v6 D12,
 // Part III B.2 "a deferred handle only", #2644): the task started when it was
 // made, so the refusal stands at the `start()`, also in a branch and on a
 // detached handle.

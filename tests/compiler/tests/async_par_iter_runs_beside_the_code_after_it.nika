@@ -1,5 +1,5 @@
 // #2500: `async xs.par_iter() … .collect()` is one task of the enclosing
-// group, its elements the tasks of the call's group (ADR-async-5 D31): the
+// group, its elements the tasks of the call's group (ADR-async-v6 D31): the
 // line after the chain runs while the elements still wait, so it sees none
 // of them done, and the results wait for every element.
 use std::time

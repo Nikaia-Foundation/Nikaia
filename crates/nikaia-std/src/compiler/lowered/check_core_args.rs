@@ -995,7 +995,7 @@ pub(crate) fn check_core_fold_option(state: &mut CheckState, world: &CheckWorld<
     let mut wanted: &'static str = "i64";
     if written == "order" { wanted = "par::Order"; } else if written != "limit" && written != "piece" {
         let mut help: String = String::from("Use one of the options it has.");
-        if written == "workers" { help = String::from("`workers:` is now `limit:` (ADR-async-5 D27)."); }
+        if written == "workers" { help = String::from("`workers:` is now `limit:` (ADR-async-v6 D27)."); }
         state.findings.push(check_refusal("NK1109", &at, format!("`par_fold` has no option called `{}`.", written), vec![String::from("Its options are `order:`, `limit:` and `piece:`, as `Par::fold`'s are.")], Some(help)));
         return;
     }

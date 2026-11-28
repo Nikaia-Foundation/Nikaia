@@ -1,4 +1,4 @@
-// A crash its fallback took cancels nothing (ADR-async-5 D36, #1355): `a`
+// A crash its fallback took cancels nothing (ADR-async-v6 D36, #1355): `a`
 // panics and its fallback stands in, and `b`, started after it, cannot panic
 // and still runs; its value is read, and the group ends without a crash.
 

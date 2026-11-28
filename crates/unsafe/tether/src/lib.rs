@@ -25,7 +25,7 @@ use std::any::Any;
 use std::cell::UnsafeCell;
 use std::mem::MaybeUninit;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
-use std::sync::{Arc, OnceLock};
+use std::sync::{Arc, Mutex, OnceLock};
 
 /// **A value whose references may outlive what they point into, as far as the
 /// compiler is told.**
@@ -91,6 +91,9 @@ pub struct Keep {
     rest: OnceLock<Box<Rest>>,
     /// How many places have been handed out.
     taken: AtomicUsize,
+    /// **Where its first buffer goes when it is dropped** ([`Spare`],
+    /// Nikaia's #2859): the next read of the loop that made it reads into it.
+    spare: Option<Arc<dyn Returns>>,
 }
 
 /// The places after the first: chunk `k` holds places `2^k .. 2^(k+1)`,
@@ -219,6 +222,8 @@ type Words = [usize; 4];
 struct Inline {
     value: MaybeUninit<Words>,
     drop: unsafe fn(*mut Words),
+    /// The type of the buffer in `value`, which a [`Spare`] takes it back as.
+    kind: std::any::TypeId,
 }
 
 /// Whether a `B` fits in a slot ([`Inline`]).
@@ -237,6 +242,14 @@ unsafe fn drop_inline<B>(at: *mut Words) {
     unsafe { at.cast::<B>().drop_in_place() }
 }
 
+/// What an [`Inline`] drops once its buffer was moved out to a [`Spare`]:
+/// nothing.
+///
+/// # Safety
+///
+/// None needed; it touches nothing.
+unsafe fn moved_out(_at: *mut Words) {}
+
 impl Drop for Inline {
     fn drop(&mut self) {
         // SAFETY: `value` holds the `B` that `drop` was made for, written in
@@ -251,7 +264,20 @@ impl Keep {
             first: Slot::new(),
             rest: OnceLock::new(),
             taken: AtomicUsize::new(0),
+            spare: None,
         }
+    }
+
+    /// **A keep that hands its first buffer to `spare` when it is dropped**
+    /// (Nikaia's #2859, Perceus's reuse, ADR-stream-buffers-v1 D5): the keep
+    /// of one turn of a loop that reads a buffer per turn. It is dropped when
+    /// the last view of its buffer dies, whenever that is; the next read of
+    /// the loop then reads into that buffer instead of a new one.
+    pub fn returning<B: Viewed>(spare: &Arc<Spare<B>>) -> Keep {
+        let mut keep = Keep::new();
+        let to: Arc<dyn Returns> = spare.clone();
+        keep.spare = Some(to);
+        keep
     }
 
     /// The slot of place `at`, where it has been made.
@@ -328,6 +354,7 @@ impl Keep {
             let (slot, kept, place) = self.keep(Entry::Inline(Inline {
                 value,
                 drop: drop_inline::<B>,
+                kind: std::any::TypeId::of::<B>(),
             }));
             let Entry::Inline(inline) = kept else {
                 unreachable!("the slot holds what was put there");
@@ -470,6 +497,72 @@ fn wrong_plan() -> ! {
     panic!(
         "a view is not in the buffer the compiler planned for it (ADR-tether-v1 D15). This is a bug in Nikaia, not in your program: the compiler's plan of where its text lives was wrong. Please report it, with this message, at https://github.com/Nikaia-Foundation/Nikaia/issues."
     )
+}
+
+/// **The first buffer goes to the keep's [`Spare`]**, where it has one: by
+/// now no view of it is left, since every view borrows the keep or holds it.
+impl Drop for Keep {
+    fn drop(&mut self) {
+        let Some(spare) = self.spare.take() else {
+            return;
+        };
+        if !*self.first.ready.get_mut() {
+            return;
+        }
+        // SAFETY: `ready` is set only after the entry was written.
+        let entry = unsafe { self.first.entry.get_mut().assume_init_mut() };
+        if let Entry::Inline(inline) = entry {
+            spare.give(inline);
+        }
+    }
+}
+
+/// **A buffer a keep was dropped with, for the next read to read into**
+/// (Nikaia's #2859): Perceus's reuse of a freed cell. One per buffer a loop
+/// reads per turn, made before the loop; the keep of each turn
+/// ([`Keep::returning`]) hands its buffer back here when it is dropped, at the
+/// last view of it, and the next turn's read takes it ([`Spare::take`]).
+/// Behind a lock, since the last view may die on another thread; never
+/// contended in one.
+pub struct Spare<B> {
+    buffer: Mutex<Option<B>>,
+}
+
+impl<B: Viewed + Default> Spare<B> {
+    /// An empty spare, shared with the keeps that hand buffers back to it.
+    #[allow(clippy::new_ret_no_self)]
+    pub fn new() -> Arc<Spare<B>> {
+        Arc::new(Spare {
+            buffer: Mutex::new(None),
+        })
+    }
+
+    /// The buffer last handed back, or an empty one, which allocates nothing.
+    pub fn take(&self) -> B {
+        self.buffer
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .take()
+            .unwrap_or_default()
+    }
+}
+
+/// How a dropped keep hands its buffer to a [`Spare`] of whatever type.
+trait Returns: Send + Sync {
+    fn give(&self, inline: &mut Inline);
+}
+
+impl<B: Viewed> Returns for Spare<B> {
+    fn give(&self, inline: &mut Inline) {
+        if inline.kind != std::any::TypeId::of::<B>() {
+            return;
+        }
+        // SAFETY: `value` holds a `B`, as its type id says, written by
+        // `put_viewed_at`; it is read out once, and `drop` no longer drops it.
+        let buffer = unsafe { inline.value.as_ptr().cast::<B>().read() };
+        inline.drop = moved_out;
+        *self.buffer.lock().unwrap_or_else(|e| e.into_inner()) = Some(buffer);
+    }
 }
 
 impl Default for Keep {

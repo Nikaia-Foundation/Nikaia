@@ -1,4 +1,4 @@
-// `async(within: d) { … }` (Part I 8.1.2, ADR-async-5 D16, #986): `d` counts
+// `async(within: d) { … }` (Part I 8.1.2, ADR-async-v6 D16, #986): `d` counts
 // from the group's start; a task of it still running when it runs out is
 // cancelled at its pause and ends with `task::TimedOut`, which arrives at the
 // group's end. A task that ended in time has done its work.

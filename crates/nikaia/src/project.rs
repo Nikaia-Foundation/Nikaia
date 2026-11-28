@@ -1346,7 +1346,7 @@ struct LowerHost<'a> {
     checking: RefCell<Option<Checking>>,
     checked_facts: RefCell<BTreeMap<usize, check::CheckFacts>>,
     /// Every `par_iter` call of the program's own units and the execution
-    /// their check chose, and the `NK2119` each would say (ADR-async-5 D32).
+    /// their check chose, and the `NK2119` each would say (ADR-async-v6 D32).
     par_sites: RefCell<Vec<nikaia_std::compiler::order::ParSite>>,
     pieces_lost: RefCell<Vec<nikaia_std::compiler::modules::SyncLost>>,
     /// The calls of each unit whose path from outside is checked where they
@@ -2105,7 +2105,7 @@ impl project_lower::ProjectLowerHost for LowerHost<'_> {
                 self.raw_path_checks.borrow_mut().insert(at, checks);
             }
         }
-        // **How each `par_iter` call runs** (ADR-async-5 D32), in Nikaia.
+        // **How each `par_iter` call runs** (ADR-async-v6 D32), in Nikaia.
         if let Ok(_) = &checked
             && unit.package.is_none()
             && let Some(facts) = &facts
@@ -2958,7 +2958,7 @@ impl project_check::ProjectCheckExplainHost for ExplainHost<'_> {
         let unit = &program.units[at as usize];
         match kind {
             // The `overlap { … }` blocks, then the tasks `async` forms start
-            // (ADR-async-5 D32).
+            // (ADR-async-v6 D32).
             "overlaps" => {
                 crate::contracts::order::overlap_report(
                     &unit.parsed,

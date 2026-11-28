@@ -1,7 +1,7 @@
 // Under `NIKAIA_TRACE=1` the trace of a failure that crossed two tasks'
 // boundaries is the task's trace, then per crossing a line
 // `── started at <site> ──` and the trace of the code that waited
-// (ADR-async-5 D23, Part I 7.1, #2562). The traces differ from run to run, so
+// (ADR-async-v6 D23, Part I 7.1, #2562). The traces differ from run to run, so
 // this prints the long form's own lines and counts the rest; the control
 // without the switch has the note instead, and no stitching line.
 use std::env

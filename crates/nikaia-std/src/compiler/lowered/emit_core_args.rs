@@ -1093,9 +1093,11 @@ impl EmitState {
     pub(crate) fn emit_core_called<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, func: &Expr, args: &[Expr], config: &[ConfigArg], unchecked: bool, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
         let path_types = nikaia_std::block::Text::from(walk.path_types.to_string());
         walk.path_types = String::from("");
+        let read_into = emit_call_read_into(world, func, (walk.read_into).as_deref());
+        walk.read_into = None;
         if self.emit_call_special(world, walk, out, host, func, args, config, depth, flow, scope)? { return Ok(()); }
         if self.opens_a_paused_scope(world, func, args) && self.emit_call_paused_scope(world, walk, out, host, args, depth, &flow, scope)? { return Ok(()); }
-        self.emit_expr(world, walk, out, host, func, depth, flow, scope)?;
+        if read_into.is_some() { out.push("nikaia_std::fs::read_to_string_into"); } else { self.emit_expr(world, walk, out, host, func, depth, flow, scope)?; }
         if host.overlaps_user_code() {
             match func {
                 Expr::Path(segments, _) => { if emit_call_on_the_pool(&unaliased_in(world.aliases, &emit_arg_joined(world, segments))) { out.push("_on_pool"); } },
@@ -1166,6 +1168,7 @@ impl EmitState {
             valued = written;
             walk.boxed_scope = boxed;
         } else { self.emit_core_args(world, walk, out, host, &callee, args, &takes, depth, flow, scope)?; }
+        if read_into.is_some() { out.push(&format!(", {}.take()", nikaia_std::index::or(read_into.as_deref(), || ""))); }
         match func {
             Expr::Variable(name, _) => { let name = *name; self.emit_core_dsl_parameters(world, walk, out, host, &emit_text(world, name), args.len() as i64, config, depth, flow, scope)?; },
             _ => { },
@@ -1269,11 +1272,12 @@ impl EmitState {
     pub(crate) fn emit_channel_holds_a_crash(&self, channel: &str) -> bool {
         if channel == "nikaia_std::task::Crashed" || channel == "nikaia_std::task::OverBudget" || channel == "std::boxed::Box<dyn std::error::Error>" || channel == "nikaia_std::task::Boxed" { return true; }
         if channel.starts_with("nikaia_std::error::Thrown<") { return channel.ends_with("task::Crashed>") || channel.ends_with("task::OverBudget>"); }
+        if channel == "nikaia_std::task::Abandoned" { return true; }
         let root = self.sum_root();
         for (members, name) in self.sums.iter() {
             let full = format!("{}{}", root, name);
             if channel == full || ::core::convert::identity(match (AsRef::<str>::as_ref(&(channel)), AsRef::<str>::as_ref(&(full)), ) { (__nikaia_t, __nikaia_f0, ) => __nikaia_t.strip_prefix(__nikaia_f0).and_then(|__nikaia_r| __nikaia_r.strip_prefix("<")).is_some() }) {
-                for member in members.iter() { if member == "task::Crashed" || member == "task::OverBudget" { return true; } }
+                for member in members.iter() { if member == "task::Crashed" || member == "task::OverBudget" || member == "task::Abandoned" { return true; } }
                 return false;
             }
         }
@@ -1566,6 +1570,7 @@ impl EmitState {
         let mut tasks: Vec<(Expr, i64)> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         #[allow(unused_mut)] let mut deadlines: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         #[allow(unused_mut)] let mut admissions: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block); #[allow(unused_mut, clippy::redundant_locals)] let mut deadlines = deadlines;
+        let mut fallbacks: Vec<bool> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         let mut named: String = String::from(""); #[allow(unused_mut, clippy::redundant_locals)] let mut deadlines = deadlines; #[allow(unused_mut, clippy::redundant_locals)] let mut admissions = admissions;
         let mut whole = true;
         let mut fallback = false;
@@ -1582,6 +1587,7 @@ impl EmitState {
                                 admissions.push(self.emit_async_option(world, walk, host, (admission).as_ref(), depth, &flow, scope)?);
                                 named = emit_text(world, *unsafe { nikaia_std::proven::read(&names, (0) as usize) });
                                 fallback = true;
+                                fallbacks.push(true);
                             }
                         },
                         _ => { },
@@ -1593,16 +1599,28 @@ impl EmitState {
                             deadlines.push(self.emit_async_deadline(world, walk, host, (within).as_ref(), depth, &flow, scope)?);
                             admissions.push(self.emit_async_option(world, walk, host, (admission).as_ref(), depth, &flow, scope)?);
                             named = emit_text(world, *unsafe { nikaia_std::proven::read(&names, (0) as usize) });
+                            fallbacks.push(false);
                         }
                     },
                     Expr::Tuple(parts, _) => {
                         for part in parts.iter() {
-                            match part {
+                            let mut own = false;
+                            let task: &Expr = match part {
+                                Expr::TryCatch { expr, .. } => {
+                                    let expr = nikaia_std::boxed::open(expr);
+                                    own = true;
+                                    expr
+                                },
+                                _ => part,
+                            };
+                            match task {
                                 Expr::Async(inner, id, within, admission) => {
                                     let inner = nikaia_std::boxed::open(inner); let within = nikaia_std::boxed::open(within); let admission = nikaia_std::boxed::open(admission); let id = *id;
                                     tasks.push((inner.clone(), id.get() as i64));
                                     deadlines.push(self.emit_async_deadline(world, walk, host, (within).as_ref(), depth, &flow, scope)?);
                                     admissions.push(self.emit_async_option(world, walk, host, (admission).as_ref(), depth, &flow, scope)?);
+                                    fallbacks.push(own);
+                                    fallback = fallback || own;
                                 },
                                 _ => { whole = false; },
                             }
@@ -1635,21 +1653,23 @@ impl EmitState {
             out.push(&format!("let {} = ", handle));
             if shared { out.push("nikaia_std::task::Read::new("); }
             let mut started = EmitOut::empty();
-            walk.async_fallback = fallback;
+            let falls_back = *nikaia_std::index::get(&fallbacks, nikaia_std::index::at(index));
+            walk.async_fallback = falls_back;
             walk.async_within = nikaia_std::block::Text::from((*nikaia_std::index::get(&deadlines, nikaia_std::index::at(index))).to_string());
             walk.async_admission = nikaia_std::block::Text::from((*nikaia_std::index::get(&admissions, nikaia_std::index::at(index))).to_string());
             index = unsafe { nikaia_std::proven::add::<i64>(index, 1) };
             self.emit_async_task(world, walk, &mut started, host, &each.0, each.1, "handle", depth, &here, scope)?;
             walk.async_fallback = false;
-            let mut joined = emit_async_joined(&handle, &channel, fallback, &emit_async_site(scope));
+            let mut joined = emit_async_joined(&handle, &channel, falls_back, &emit_async_site(scope));
             let mut alone = nikaia_std::block::Text::from(joined.to_string());
             if started.buf.ends_with(".await") {
-                joined = emit_async_joined_paused(&handle, &channel, fallback, &emit_async_line(&walk.async_gates), &emit_async_site(scope));
-                alone = emit_async_joined_paused(&handle, &channel, fallback, "", &emit_async_site(scope));
+                joined = emit_async_joined_paused(&handle, &channel, falls_back, &emit_async_line(&walk.async_gates), &emit_async_site(scope));
+                alone = emit_async_joined_paused(&handle, &channel, falls_back, "", &emit_async_site(scope));
             }
             if shared { alone = format!("(*{})", alone); }
             inside.push(alone);
             out.append(&started);
+            if named != "" && (shared || self.facts.async_abandoned.contains_key(&each.1)) { out.push(&format!(".named(\"{}\")", named)); }
             if shared { out.push(")"); }
             out.push(";");
             walk.async_joining.insert(each.1, nikaia_std::block::Text::from(joined.to_string()));
@@ -2122,6 +2142,17 @@ impl EmitState {
             return Ok(true);
         }
         Ok(false)
+    }
+}
+
+pub(crate) fn emit_call_read_into(world: &EmitWorld<'_, '_, '_, '_>, func: &Expr, spare: Option<&str>) -> Option<String> {
+    let named = match spare { Some(__nikaia_value) => __nikaia_value, None => return None };
+    match func {
+        Expr::Path(segments, _) => {
+            let callee = unaliased_in(world.aliases, &emit_arg_joined(world, segments));
+            if callee == "fs::read_to_string" || callee == "std::fs::read_to_string" { Some(nikaia_std::block::Text::from(named.to_string())) } else { None }
+        },
+        _ => None,
     }
 }
 

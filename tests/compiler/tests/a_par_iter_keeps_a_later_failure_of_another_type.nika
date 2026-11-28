@@ -1,5 +1,5 @@
 // **A `par_iter` walk keeps a later failure of another type too**
-// (ADR-async-5 D26, #2779): the lambda fails in two of the program's own
+// (ADR-async-v6 D26, #2779): the lambda fails in two of the program's own
 // errors, neither `task::Crashed` nor `task::OverBudget`, and the second
 // element's `Bad` is thrown with the third's `Worse` joined to it, not
 // dropped. A member of a task's error set crosses a worker already, so the

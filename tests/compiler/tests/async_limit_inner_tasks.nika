@@ -1,5 +1,5 @@
 // Tasks started inside a task's body are under the gate around it
-// (ADR-async-5 D15, D38, #986): under `limit: 2`, three parents each start
+// (ADR-async-v6 D15, D38, #986): under `limit: 2`, three parents each start
 // two children; a parent gives its place back while it waits for them and
 // takes one again before it goes on, so the group ends and never more than
 // two of its tasks run at once.

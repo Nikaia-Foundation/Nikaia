@@ -13,7 +13,7 @@ warning[NK2123]: `spawn` is replaced by `async(detached)`, which starts the same
  13 | 	let h = spawn fn { names.len() }
     |  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
     |
-    = note: `spawn fn { … }` is the earlier spelling of `async(detached) fn { … }` (ADR-async-5 D13); it is removed once every use is rewritten.
+    = note: `spawn fn { … }` is the earlier spelling of `async(detached) fn { … }` (ADR-async-v6 D13); it is removed once every use is rewritten.
     = help: Write `async(detached) fn { … }`, the same task; `nikaia fix --only NK2123` makes the edit.
 error[NK2101]: You're using `names` after a background task took it.
    --> tests/async_detached_takes_what_it_uses.nika:14:2

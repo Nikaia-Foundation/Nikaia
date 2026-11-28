@@ -1,5 +1,5 @@
 // A child handle's window ends where it is joined, and a deferred one's
-// opens at its `start()` (ADR-async-5 D11, D12): a `println` before the
+// opens at its `start()` (ADR-async-v6 D11, D12): a `println` before the
 // `start()` or after the `join()` runs alone (#2643).
 fn main() throws {
 	let h = async(handle) fn { println("x") }

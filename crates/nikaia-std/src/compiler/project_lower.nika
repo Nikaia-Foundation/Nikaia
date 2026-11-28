@@ -83,7 +83,7 @@ pub trait ProjectLowerHost {
     /// said it could not pause (ADR-288 D5, `lost_sync_all`).
     fn sync_lost(ref self) -> Vec[SyncLost] sync
     /// **Every `par_iter` call of the program's own files** and the execution
-    /// its check chose (ADR-async-5 D32, `par_sites_checked`), once every unit
+    /// its check chose (ADR-async-v6 D32, `par_sites_checked`), once every unit
     /// is checked: the ledger's `par_iter` column.
     fn par_sites(ref self) -> Vec[ParSite] sync
     /// What each of those that runs one task per element would be warned of
@@ -264,7 +264,7 @@ fn project_lower_made[H: ProjectLowerHost](host: ref H) -> ProjectLowerArtifacts
     let keepers = host.keepers()
     let theirs = host.theirs()
     let mut warnings = project_lower_check(host)
-    // **How each `par_iter` call runs** (ADR-async-5 D32), as the check of
+    // **How each `par_iter` call runs** (ADR-async-v6 D32), as the check of
     // each unit found it: into the ledger, and `NK2119` beside `NK2211`.
     let sites = host.par_sites()
     for each in host.pieces_lost() {

@@ -338,7 +338,7 @@ fn a_typed_error_crosses_the_pool() {
     }
 }
 
-/// ADR-346 D4, ADR-async-5 D17: `join(within: d, on_timeout:
+/// ADR-346 D4, ADR-async-v6 D17: `join(within: d, on_timeout:
 /// task::OnTimeout::Cancel)` hands the value back in time, and throws
 /// `task::TimedOut` (the task cancelled) once `d` ran out.
 #[test]

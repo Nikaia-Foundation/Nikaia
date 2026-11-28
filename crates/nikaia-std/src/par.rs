@@ -9,7 +9,7 @@
 //! outside it (`NK2107`), and for `fold`'s, not pause (`NK2209`) - is asked
 //! by the checker at both. A `map`, `filter` or `for_each` whose lambda
 //! pauses runs one task per element instead, `seq::fan_map` and its
-//! siblings over the walk made here ([`Fanned`], ADR-async-5 D25).
+//! siblings over the walk made here ([`Fanned`], ADR-async-v6 D25).
 //!
 //! **What rayon has only for a walk whose length is known** - `take`, `skip`,
 //! `step_by`, `rev`, `zip` - goes through a list here, so it works after a
@@ -168,7 +168,7 @@ impl<I: Iterator> SeqFold for I {}
 pub struct Par<I>(I, Run);
 
 /// **What a walk's `limit:` and `within:` ask of the step that ends it**
-/// (ADR-async-5 D15, D27): at most `limit` workers run its elements, and once
+/// (ADR-async-v6 D15, D27): at most `limit` workers run its elements, and once
 /// the deadline has passed no element starts and the walk ends with
 /// `task::TimedOut`. A walk with neither carries an open one.
 #[derive(Clone, Default)]
@@ -245,7 +245,7 @@ impl Run {
 
 /// **The elements of `items` on every core at once, under the walk's
 /// options** (`xs.par_iter(limit:, within:, admission:, piece:)`,
-/// ADR-async-5 D15, D27, ADR-372 D6). `admission:` names the strategy of a
+/// ADR-async-v6 D15, D27, ADR-372 D6). `admission:` names the strategy of a
 /// walk whose lambdas pause; its tasks ([`Fanned`]) run under `limit:` alone
 /// so far, so the strategy is read and does nothing else.
 #[track_caller]
@@ -315,7 +315,7 @@ pub struct InOrder<I> {
 }
 
 /// **A `par_iter` walk handed to a step whose lambda pauses**
-/// (ADR-async-5 D25): its elements, and the `limit:` its tasks run under.
+/// (ADR-async-v6 D25): its elements, and the `limit:` its tasks run under.
 /// Each shape `par_iter()` lowers to is one, at both settings.
 pub trait Fanned: IntoIterator {
     /// How many of its tasks may run at once; open where `limit:` is not
@@ -414,7 +414,7 @@ impl<I: DoubleEndedIterator> DoubleEndedIterator for InOrder<I> {
 impl<I: ExactSizeIterator> ExactSizeIterator for InOrder<I> {}
 
 /// **What the step that ends a walk with `within:` comes to**: its value, or
-/// `task::TimedOut` where the deadline ran out first (ADR-async-5 D27). The
+/// `task::TimedOut` where the deadline ran out first (ADR-async-v6 D27). The
 /// lowering writes it around that step.
 pub fn ended<T>(value: T) -> Result<T, crate::task::TimedOut> {
     if TIMED_OUT.with(|t| t.replace(false)) {
@@ -430,7 +430,7 @@ pub fn listed<I: IntoIterator>(walk: I) -> Result<Vec<I::Item>, crate::task::Tim
     ended(all)
 }
 
-/// **Every failure of a `par_iter` walk is kept** (ADR-async-5 D26, Part II
+/// **Every failure of a `par_iter` walk is kept** (ADR-async-v6 D26, Part II
 /// 12.6, #2681): the elements, each a value or a failure, in input order, as
 /// the step that ends the walk gathered them (every element was run). The
 /// values make the result where none failed; else the first failure in input
@@ -508,7 +508,7 @@ impl<T, E: crate::error::Joined> Results for crate::block::List<Result<T, E>> {
 }
 
 /// **[`kept_failures`] where the walk is collected into a list** (#2768,
-/// ADR-async-5 D28): the same values and failures, but where none failed the
+/// ADR-async-v6 D28): the same values and failures, but where none failed the
 /// list the walk's `collect` made becomes the result in its own buffer (a
 /// `map` over `std`'s `vec::IntoIter` is collected in place), so the values
 /// are neither pushed one by one into a new list nor copied into another.
@@ -540,7 +540,7 @@ pub fn kept_failures_listed<L: Results>(items: L) -> Result<L::Values, L::Failur
 }
 
 thread_local! {
-    /// **The block of the piece this worker runs** (ADR-async-5 D28): made
+    /// **The block of the piece this worker runs** (ADR-async-v6 D28): made
     /// the first time an element that places in a block runs here, and kept,
     /// since every element leaves it as empty as it found it (ADR-327 D9,
     /// D10).
@@ -548,7 +548,7 @@ thread_local! {
 }
 
 /// **A `par_iter` element that places in a block runs as a task for its
-/// memory** (ADR-async-5 D28, ADR-327 D13): in its piece's block, with a
+/// memory** (ADR-async-v6 D28, ADR-327 D13): in its piece's block, with a
 /// task's budget, at both settings. What it hands back is built outside the
 /// block (ADR-327 D9), so the block needs no reset between elements. A full
 /// block unwinds that element alone (D19): its failure is
@@ -726,7 +726,7 @@ impl<I: ParallelIterator> Par<I> {
         S: Fn(A, I::Item) -> A + Sync + Send,
         G: Fn(A, A) -> A + Sync + Send,
     {
-        // **A walk's own `limit:` caps its fold's** (ADR-async-5 D15: a task
+        // **A walk's own `limit:` caps its fold's** (ADR-async-v6 D15: a task
         // is under every limit around it).
         let limit = at_least_one("limit", limit);
         let Par(walk, run) = self;

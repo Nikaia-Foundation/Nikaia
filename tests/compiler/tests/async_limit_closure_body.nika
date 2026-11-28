@@ -1,4 +1,4 @@
-// A closure task's own group is under the gates around the task (ADR-async-5
+// A closure task's own group is under the gates around the task (ADR-async-v6
 // D15, D38, #986): under `limit: 2`, two `async fn { … }` tasks each start
 // three children in an `async { … }` of their body, and never more than two
 // tasks run at once.

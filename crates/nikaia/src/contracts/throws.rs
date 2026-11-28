@@ -63,7 +63,7 @@ pub fn infer(
             &parsed.interner,
             &mut |expr: &Expr| crate::emit::literal_expressions(parsed, expr),
             &mut |expr: &Expr| match expr {
-                // **A task's crash, where the task can panic** (ADR-async-5
+                // **A task's crash, where the task can panic** (ADR-async-v6
                 // D35): the walk is `tools/panics.nika`'s.
                 Expr::Async(task, _, _, _) => crashed(parsed, task, &facts, own, library),
                 _ => contribution(parsed, expr, own, library, &fatal),

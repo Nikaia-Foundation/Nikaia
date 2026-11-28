@@ -219,7 +219,7 @@ impl<S: Step> Paused<S> {
     }
 
     /// **`fold(init, step, merge; order:, limit:)` after a step that pauses**
-    /// (ADR-async-5 D29, `xs.par_iter().map fn(u) { http::get(u) }.fold(…)`):
+    /// (ADR-async-v6 D29, `xs.par_iter().map fn(u) { http::get(u) }.fold(…)`):
     /// one accumulator, the items in order as they come, `merge` never
     /// called. The options are checked and do nothing else.
     #[track_caller]
@@ -596,7 +596,7 @@ pub fn then_filter<I: IntoIterator, F: AsyncFnMut(&I::Item) -> bool>(
 }
 
 /// **A `par_iter` step whose lambda pauses runs one task per element**
-/// (ADR-async-5 D24, D25): every element's lambda is started, at most the
+/// (ADR-async-v6 D24, D25): every element's lambda is started, at most the
 /// walk's `limit:` at once, and the call polls them all until each has ended;
 /// the results come back in input order, whatever order they end in (D26).
 /// The call is their group (D4): it returns when every one has ended. The
@@ -691,7 +691,7 @@ impl<I: Iterator, F: AsyncFn(&I::Item) -> bool> Step for FanFilter<I, F> {
     }
 }
 
-/// **`map` of a `par_iter` walk with a lambda that pauses** (ADR-async-5
+/// **`map` of a `par_iter` walk with a lambda that pauses** (ADR-async-v6
 /// D25): one task per element, results in input order.
 pub fn fan_map<W: crate::par::Fanned, U, F: AsyncFn(W::Item) -> U>(
     walk: W,
@@ -705,7 +705,7 @@ pub fn fan_map<W: crate::par::Fanned, U, F: AsyncFn(W::Item) -> U>(
     })
 }
 
-/// **`filter` of a `par_iter` walk with a lambda that pauses** (ADR-async-5
+/// **`filter` of a `par_iter` walk with a lambda that pauses** (ADR-async-v6
 /// D25).
 pub fn fan_filter<W: crate::par::Fanned, F: AsyncFn(&W::Item) -> bool>(
     walk: W,
@@ -719,7 +719,7 @@ pub fn fan_filter<W: crate::par::Fanned, F: AsyncFn(&W::Item) -> bool>(
     })
 }
 
-/// **`for_each` of a `par_iter` walk with a lambda that pauses** (ADR-async-5
+/// **`for_each` of a `par_iter` walk with a lambda that pauses** (ADR-async-v6
 /// D25): one task per element, and the call returns when every one has ended.
 pub async fn fan_for_each<W: crate::par::Fanned, F: AsyncFn(W::Item)>(walk: W, f: F) {
     let limit = walk.task_limit();

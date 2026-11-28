@@ -1,4 +1,4 @@
-// `workers:` is gone; a fold's cap is `limit:` (ADR-async-5 D27), and the
+// `workers:` is gone; a fold's cap is `limit:` (ADR-async-v6 D27), and the
 // refusal says so.
 fn main() throws {
     let xs: Vec[i64] = [1, 2, 3]

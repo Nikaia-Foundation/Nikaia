@@ -210,6 +210,92 @@ pub fn names_in_block(block: ref Block, words: ref winnow_grammar::InternerConte
     }
 }
 
+/// **The waiters of a diamond whose read can be abandoned** (ADR-async-v6
+/// D41, D8), by statement index: `let a = async e` with no fallback, which
+/// two tasks or more read and the main line never names; every reader after
+/// the first, `let c = async g(a)` with no fallback of its own, whose binding
+/// a later statement names, each with the index of `a`'s statement. Where `a`
+/// fails, its first reader receives the failure and `c` is cancelled where it
+/// waits, so a read of `c` throws `task::Abandoned`; whether `a` can fail is
+/// the caller's to ask.
+pub fn diamond_waiters(block: ref Block, words: ref winnow_grammar::InternerContext) -> collections::BTreeMap[i64, i64] {
+    let mut out: collections::BTreeMap[i64, i64] = collections::BTreeMap()
+    let count = block.stmts.len() as i64
+    let mut at: i64 = 0
+    while at < count {
+        let shared = diamond_bare_binding(block.stmts[at].node, words) ?? ""
+        if shared != "" {
+            let mut readers: Vec[i64] = []
+            let mut main_line = false
+            let mut later = at + 1
+            while later < count {
+                let mut seen: collections::BTreeSet[String] = collections::BTreeSet()
+                names_in_statement(block.stmts[later].node, words, seen)
+                if seen.contains(shared) {
+                    if diamond_starts_a_task(block.stmts[later].node) {
+                        readers.push(later)
+                    } else {
+                        main_line = true
+                        break
+                    }
+                }
+                later += 1
+            }
+            if !main_line && readers.len() > 1 {
+                let mut index = 1
+                while index < readers.len() as i64 {
+                    let reader = readers[index]
+                    index += 1
+                    let waiter = diamond_bare_binding(block.stmts[reader].node, words) ?? continue
+                    let mut named = false
+                    let mut after = reader + 1
+                    while after < count && !named {
+                        let mut seen: collections::BTreeSet[String] = collections::BTreeSet()
+                        names_in_statement(block.stmts[after].node, words, seen)
+                        named = seen.contains(waiter)
+                        after += 1
+                    }
+                    if named {
+                        out.insert(reader, at)
+                    }
+                }
+            }
+        }
+        at += 1
+    }
+    return out
+}
+
+/// The name of `let x = async e`, one name and no fallback; `null` for any
+/// other statement.
+fn diamond_bare_binding(stmt: ref Stmt, words: ref winnow_grammar::InternerContext) -> String? {
+    return match stmt {
+        Stmt::Let { names, value, .. } => match value {
+            Expr::Async(_, _, _, _) if names.len() == 1 => words.resolve(names[0]).clone(),
+            else => null,
+        },
+        else => null,
+    }
+}
+
+/// Whether a statement starts a task as a whole, `let x = async e` or `async
+/// e`, with or without a fallback.
+fn diamond_starts_a_task(stmt: ref Stmt) -> bool {
+    let value = match stmt {
+        Stmt::Let { value, .. } => value,
+        Stmt::Expr(value) => value,
+        else => return false,
+    }
+    return match value {
+        Expr::Async(_, _, _, _) => true,
+        Expr::TryCatch { expr, .. } => match expr {
+            Expr::Async(_, _, _, _) => true,
+            else => false,
+        },
+        else => false,
+    }
+}
+
 /// Every name one statement mentions, the blocks it holds included
 /// (`contracts::send`, of a task body's statements).
 pub fn names_in_statement(stmt: ref Stmt, words: ref winnow_grammar::InternerContext, mut out: collections::BTreeSet[String]) {

@@ -1,5 +1,5 @@
 // **A `par_iter` element that places in a block runs as a task for its
-// memory** (ADR-async-5 D28, ADR-327 D13, #987 item 6): each element has a
+// memory** (ADR-async-v6 D28, ADR-327 D13, #987 item 6): each element has a
 // task's budget in its piece's block, at both settings of
 // `user_parallelism`. An element that asks for more than its block holds
 // ends alone with `task::OverBudget`, kept among the call's failures in

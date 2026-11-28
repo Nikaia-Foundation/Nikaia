@@ -1,5 +1,5 @@
 // An `overlap` or a `select` on a gated main line is a pause like any other
-// (ADR-async-5 D37, #986): under `limit: 1`, while the main line waits in one,
+// (ADR-async-v6 D37, #986): under `limit: 1`, while the main line waits in one,
 // the first task ends and the next ones start.
 use std::time
 

@@ -1,5 +1,5 @@
 // A failure that crosses two tasks' boundaries records where each was
-// started and where its failure arrived (ADR-async-5 D23, Part I 7.1, #2562):
+// started and where its failure arrived (ADR-async-v6 D23, Part I 7.1, #2562):
 // `work` fails in a task of `middle`, which fails in a task of `outer`, so the
 // long form shows the `raised` site and one `started`/`arrived` pair per
 // crossing, the innermost first. A failure no task carried has none.

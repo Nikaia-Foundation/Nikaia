@@ -1,4 +1,4 @@
-// A second `start()` of a deferred handle on a path is `NK2121` (ADR-async-5
+// A second `start()` of a deferred handle on a path is `NK2121` (ADR-async-v6
 // D12, #2512): one after the other, after a branch that started it, or in a
 // loop, whose body runs again; the refusal stands at the second `start()`.
 fn twice() throws {

@@ -1,4 +1,4 @@
-// A task that changes a `SharedMut` through `update` runs (ADR-async-5 D7, #1229);
+// A task that changes a `SharedMut` through `update` runs (ADR-async-v6 D7, #1229);
 // the read follows the group, since a `get` beside the task's `update` meets it
 // on the lock (Part II 12.2, #985).
 fn main() throws {

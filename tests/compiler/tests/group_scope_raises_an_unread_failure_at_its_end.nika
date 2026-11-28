@@ -1,4 +1,4 @@
-// ADR-async-5 D21 (#987): a task's failure nobody reads waits for the group's
+// ADR-async-v6 D21 (#987): a task's failure nobody reads waits for the group's
 // end: the group's own function runs on after it, and the failure is thrown
 // where the group ends, to the `catch` around it.
 use std::task

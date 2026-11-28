@@ -1,4 +1,4 @@
-// #2511, ADR-async-5 D32: the ledger records how each `par_iter` call runs,
+// #2511, ADR-async-v6 D32: the ledger records how each `par_iter` call runs,
 // and where the committed ledger says a call ran in pieces and its lambda can
 // now pause, the build warns (`NK2119`) at the call that made it pause, with
 // the calls that lead there. The ledger the build writes acknowledges it, and

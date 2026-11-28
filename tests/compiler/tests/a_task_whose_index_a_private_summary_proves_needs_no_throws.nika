@@ -1,5 +1,5 @@
 // A task whose only panic site is an index a private function's result
-// summary proves cannot panic (ADR-359 D14, ADR-async-5 D35, #2684): `kind`
+// summary proves cannot panic (ADR-359 D14, ADR-async-v6 D35, #2684): `kind`
 // returns 0 unless `t` has one element, so past `kind(t) == 0` the index
 // `t[0]` is proved. The ledger's proof reads the same summaries as the
 // emitter's, so `second`'s ledger says `panics = false` and `both` needs no

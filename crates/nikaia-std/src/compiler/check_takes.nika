@@ -848,7 +848,7 @@ impl CheckState {
             }
             said.insert(used.at)
             // A task handle has no copy (Part I 4.7): `join()`, `cancel()`
-            // and `detach()` take it (ADR-async-5 D12, #2645).
+            // and `detach()` take it (ADR-async-v6 D12, #2645).
             if check_core_method_task_handle(taken.ty) {
                 found.push(check_refusal("NK2105", Span { start: used.at as u32, end: used.at as u32 }, message, [f"`{name}` is a `{taken.ty.shown()}`: a task's handle is not copied, and its `join()`, `cancel()` and `detach()` take it."], "Take the handle once: bind what `join()` gives with `let` and use that."))
                 continue

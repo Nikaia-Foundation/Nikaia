@@ -948,7 +948,7 @@ impl EmitState {
         }
         out.push("    ".repeat(depth + extra))
         out.push(")")
-        // **A pause of a gated main line starts the waiting tasks** (ADR-async-5
+        // **A pause of a gated main line starts the waiting tasks** (ADR-async-v6
         // D37): the read's wait is one, as a call's is.
         let pause = emit_async_pause(walk)
         if !bound {

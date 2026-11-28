@@ -1,6 +1,6 @@
 // A task's own error reaches the caller through the function that starts
 // it (Part II 12.7, ADR-328 D8, #988). `work` cannot panic, so `run` throws
-// no `task::Crashed` (ADR-async-5 D35, #1355): the task fails in `run`'s
+// no `task::Crashed` (ADR-async-v6 D35, #1355): the task fails in `run`'s
 // own channel.
 
 enum Bad { Oops(i64) }

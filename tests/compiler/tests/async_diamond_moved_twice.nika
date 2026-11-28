@@ -1,6 +1,6 @@
 // A diamond where a task moves the pending value: `a` is handed to `b`'s task
 // where it starts, so `c`'s mention is a use after the hand-over
-// (ADR-async-5 D8, #986).
+// (ADR-async-v6 D8, #986).
 
 struct Name {
     text: String,

@@ -1,5 +1,5 @@
 // A detached task with its own strategy whose body is one expression lowers
-// without rustc's "unnecessary braces" warning (ADR-async-5 D15, #1554).
+// without rustc's "unnecessary braces" warning (ADR-async-v6 D15, #1554).
 struct Tight {}
 
 impl task::Admission for Tight {

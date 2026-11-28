@@ -28,7 +28,7 @@ fn findings(source: &str) -> Vec<Finding> {
     let own = Ledger::infer(&parsed);
     let library = Ledger::parse(STD).expect("std's shipped ledger parses");
     // `spawn`, `overlap` and `task::scope` stay accepted, with the deprecation
-    // warnings NK2123-NK2125 (ADR-async-5 D39), until they are removed; these
+    // warnings NK2123-NK2125 (ADR-async-v6 D39), until they are removed; these
     // tests are about what a task means, so the warnings are left out.
     check::check(&parsed, &own, &library)
         .findings

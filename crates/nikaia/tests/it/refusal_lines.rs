@@ -39,7 +39,7 @@ fn a_file(name: &str) -> PathBuf {
 
 /// **A lambda that pauses where it runs on several cores** — `NK2209`
 /// ([ADR-235](../../../docs/specification/adr/adr-235.md) D2; a `fold`'s,
-/// since a `map`'s may pause, ADR-async-5 D24, D29), and the case
+/// since a `map`'s may pause, ADR-async-v6 D24, D29), and the case
 /// that sent this looking, because the refusal it replaced named a callee and
 /// no place.
 #[test]
@@ -111,7 +111,7 @@ fn it_reads_like_a_checkers_refusal() {
         "shape-checker",
     );
     for said in [&lowering, &checker] {
-        // `overlap` warns NK2124 first (ADR-async-5 D39); the refusal is the error.
+        // `overlap` warns NK2124 first (ADR-async-v6 D39); the refusal is the error.
         let head = said
             .lines()
             .find(|l| l.starts_with("error"))

@@ -4,7 +4,7 @@ error[NK2605]: This function can fail, because the task started here can panic.
  11 |     let a = async boom(1)
     |     ^^^^^^^^^^^^^^^^^^^^^
     |
-    = note: A panic in a task ends that task, and whoever waits for it gets `task::Crashed` (ADR-async-5 D35).
+    = note: A panic in a task ends that task, and whoever waits for it gets `task::Crashed` (ADR-async-v6 D35).
     = help: Add `throws` to `total`, or write a fallback: `async e catch { … }`.
 error[NK2605]: This function can fail, because the task started here can panic.
    --> tests/task_crash_unhandled_is_refused.nika:12:5
@@ -12,6 +12,6 @@ error[NK2605]: This function can fail, because the task started here can panic.
  12 |     let b = async boom(0)
     |     ^^^^^^^^^^^^^^^^^^^^^
     |
-    = note: A panic in a task ends that task, and whoever waits for it gets `task::Crashed` (ADR-async-5 D35).
+    = note: A panic in a task ends that task, and whoever waits for it gets `task::Crashed` (ADR-async-v6 D35).
     = help: Add `throws` to `total`, or write a fallback: `async e catch { … }`.
 2 places that can fail without saying so

@@ -81,7 +81,7 @@ pub fn parse_findings_mut_name_in_a_tuple(at: i64) -> Finding {
 }
 
 /// **`async` before a `let`, a loop or a function's declaration** (`NK2115`,
-/// ADR-async-5 D5): `async` is a prefix of an expression, and whether a
+/// ADR-async-v6 D5): `async` is a prefix of an expression, and whether a
 /// function pauses is inferred. `at` is the byte the `async` starts at, `word`
 /// the one after it: `let`, `for`, `while` or `fn`.
 pub fn parse_findings_misplaced_async(at: i64, word: String) -> Finding {
@@ -107,7 +107,7 @@ pub fn parse_findings_misplaced_async(at: i64, word: String) -> Finding {
     return Finding { code: "NK2115", span: span, message: message.clone(), notes: [note.clone()], help: help.clone(), warning: false, labels: [CheckLabel { span: span, word: "async", text: "", main: true }] }
 }
 
-/// **`limit:` on a form that starts one task** (`NK2112`, ADR-async-5 D15):
+/// **`limit:` on a form that starts one task** (`NK2112`, ADR-async-v6 D15):
 /// `async e`, `async fn { … }` and the handle forms run one task, which a limit
 /// on how many run at once does not concern.
 pub fn parse_findings_one_task_limit(at: i64) -> Finding {

@@ -23,7 +23,7 @@ fn findings(source: &str) -> Vec<check::Finding> {
     let parsed = parse_to_ast(source).expect("the source parses");
     let own = Ledger::infer(&parsed);
     let library = Ledger::parse(STD).expect("std's shipped ledger parses");
-    // `overlap` stays accepted with the deprecation warning NK2124 (ADR-async-5
+    // `overlap` stays accepted with the deprecation warning NK2124 (ADR-async-v6
     // D39) until it is removed; these tests are about tuple lets, not it.
     check::check_program(&parsed, &own, &library, &std::collections::BTreeSet::new())
         .findings

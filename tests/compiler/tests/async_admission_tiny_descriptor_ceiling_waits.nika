@@ -1,4 +1,4 @@
-// `std`'s strategy under a tiny descriptor ceiling (ADR-async-5 D18, ADR-327
+// `std`'s strategy under a tiny descriptor ceiling (ADR-async-v6 D18, ADR-327
 // D15, #987): where the process may hold no descriptor beyond the strategy's
 // reserve, `task::Adaptive()` starts none of the waiting tasks beside a
 // running one, so each waits for a place instead of failing; where none runs,

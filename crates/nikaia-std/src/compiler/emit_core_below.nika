@@ -445,7 +445,7 @@ impl EmitState {
         }
     }
 
-    /// Whether **a task an `async` form starts** can pause (ADR-async-5 D20,
+    /// Whether **a task an `async` form starts** can pause (ADR-async-v6 D20,
     /// D32): any call in the form, its lambda's body included, by the key it
     /// resolves to, or a method call the checker said pauses.
     pub fn task_pauses(ref self, world: ref EmitWorld, task: ref Expr) -> bool {

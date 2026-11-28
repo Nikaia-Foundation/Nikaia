@@ -1,4 +1,4 @@
-// `async(handle, within: d) fn { … }` (Part I 8.1.2, ADR-async-5 D16, #986):
+// `async(handle, within: d) fn { … }` (Part I 8.1.2, ADR-async-v6 D16, #986):
 // a child task still running at its deadline is cancelled at its pause and its
 // `join` yields `task::TimedOut`; with a fallback, the fallback's value.
 

@@ -1,5 +1,5 @@
 // A cancellation the program asks for is not a failure, so it runs no
-// fallback (Part I 8.1.2, ADR-async-5 D14, D22, #989): a child handle and a
+// fallback (Part I 8.1.2, ADR-async-v6 D14, D22, #989): a child handle and a
 // detached handle, each cancelled before its task fails.
 use std::time
 

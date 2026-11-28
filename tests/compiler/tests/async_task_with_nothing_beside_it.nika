@@ -1,4 +1,4 @@
-// A task whose window is empty is refused (ADR-async-5 D7, `NK2110`): an
+// A task whose window is empty is refused (ADR-async-v6 D7, `NK2110`): an
 // argument with nothing else computed beside it, a binding named in the very
 // next statement, and an `async` statement that ends its group.
 

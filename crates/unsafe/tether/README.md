@@ -10,6 +10,7 @@ Views that outlive the scope that read their buffer, without copying the text.
 | `Held` | one view of text carrying its own handle on its buffer; compared, hashed and printed as the text; a **safe** constructor |
 | `Holding<V, N>` / `Views` | a struct of views beside the `N` keeps it points into, with a **safe** constructor |
 | `Keeps` / `Rebase` / `Hold` | how a value made *outside* the constructor is carried in: each view found again in its keep |
+| `Spare<B>` / `Keep::returning` | a buffer a keep hands back when it is dropped, at the last view of it, for the next read of the loop to read into (Nikaia's #2859, Perceus's reuse) |
 | `Dangling<T>` | storage for a value whose views are stretched, beside the handle that keeps their buffer — what `Held` and `Holding` keep it in |
 
 ```rust
@@ -44,6 +45,7 @@ anything that needs the same.
 | `Dangling::get`, `Dangling::drop` | `MaybeUninit::assume_init_ref` / `assume_init_drop` | the value is written in `new` and taken apart only in `drop`, once |
 | `Keep::put_at`, `Keep::put_viewed_at` | `&*at` from `Arc::as_ptr` | the `Arc` is stored in a slot set once and never emptied until the `Keep` is dropped, so the buffer stays alive and in place; the reference is tied to the borrow of the `Keep` |
 | `Keep::put_viewed_at`, `Inline`, `drop_inline` | a buffer of up to four words written into the slot's `MaybeUninit`, read back as `&B`, dropped through the function made for its type | `fits` checks size and alignment; the buffer is moved in before any view of it exists, the slot never moves while the `Keep` is borrowed and is never written again, and `Inline::drop` runs once, with the slot. So a keep of one text is one allocation (Nikaia's #2843) |
+| `Keep::drop`, `Spare::give` (`Returns`) | the first slot's entry read with `assume_init_mut`; its inline buffer read out with `ptr::read`, its `drop` set to `moved_out` | the entry is read only after `ready`, which is set after it was written; the buffer is moved out only where the slot's type id is the spare's, once, and the slot then drops nothing, so it is dropped once, by the spare. No view of it is left: every view borrows the `Keep` or holds an `Arc` of it, and this runs as the last one goes |
 | `Slot` (`Send`, `Sync`, `write`, `publish`, `bytes`) | a hand-made `OnceLock`: the entry and its bytes written through `UnsafeCell`, read back with `from_raw_parts` | the place is claimed by one `fetch_add`, so one put alone writes a slot, once, before `ready` is stored with `Release`; a reader looks only after seeing `ready` with `Acquire`; the bytes are the buffer's own, read where it lives, and it is neither moved nor written until the slot is dropped |
 | `within` (inside `find` and `view_in`) | `str::from_utf8_unchecked` | the bytes are found **by address**: they are the very bytes the `&str` asked about is made of, so they are UTF-8 |
 | `Held::new`, `Held::in_place`, `Held::near` | `&str` → `&'static str` | the view came from `Keep::find`, `Keep::view`, `Keep::view_in` or `Keep::view_near`, which hand back nothing but a view of that keep's own buffers, and the keep stored beside it keeps them alive |

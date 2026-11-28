@@ -1,5 +1,5 @@
 // A `join(within:)` that keeps the task on time-out takes the handle only
-// where it succeeds (ADR-async-5 D17): a handler of `task::TimedOut` that
+// where it succeeds (ADR-async-v6 D17): a handler of `task::TimedOut` that
 // does not take it leaves the task live, and that is `NK2109`.
 
 use std::time

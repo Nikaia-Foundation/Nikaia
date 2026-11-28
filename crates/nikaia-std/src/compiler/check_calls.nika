@@ -95,9 +95,9 @@ fn shape_through(contract: ref FnContract, receiver: ref Ty, found: ref Vec[Ty],
             // back still runs on every core, so it has `Par`'s `fold`.
             on_every_core = on_every_core || shape_parallel(receiver)
             // **And a walk's deadline goes on to the step that ends it**
-            // (ADR-async-5 D27).
+            // (ADR-async-v6 D27).
             timed = shape_timed(receiver)
-            // **So does `limit: 1`** (ADR-async-5 D15, D26), from the walk
+            // **So does `limit: 1`** (ADR-async-v6 D15, D26), from the walk
             // the step is called on only.
             one_at_a_time = shape_one_at_a_time(receiver)
             // **And each element's failure goes on to the step that ends
@@ -113,7 +113,7 @@ fn shape_through(contract: ref FnContract, receiver: ref Ty, found: ref Vec[Ty],
                 ends = ends && shape_ends(found[at])
                 sized = sized && shape_sized(found[at])
                 // **A walk handed to another carries its deadline into what
-                // they make** (`zip`, `chain`; ADR-async-5 D27, #1423).
+                // they make** (`zip`, `chain`; ADR-async-v6 D27, #1423).
                 timed = timed || shape_timed(found[at])
             }
             at += 1
@@ -147,7 +147,7 @@ fn shape_parallel(ty: ref Ty) -> bool {
     }
 }
 
-/// Whether a walk carries a deadline to the step that ends it (ADR-async-5
+/// Whether a walk carries a deadline to the step that ends it (ADR-async-v6
 /// D27).
 fn shape_timed(ty: ref Ty) -> bool {
     return match ty {
@@ -157,7 +157,7 @@ fn shape_timed(ty: ref Ty) -> bool {
 }
 
 /// Whether a walk's elements run one at a time, `par_iter(limit: 1)`
-/// (ADR-async-5 D15).
+/// (ADR-async-v6 D15).
 fn shape_one_at_a_time(ty: ref Ty) -> bool {
     return match ty {
         Ty::Seq { shape, .. } => shape.one_at_a_time,
