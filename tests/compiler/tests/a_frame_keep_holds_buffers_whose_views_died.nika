@@ -1,0 +1,28 @@
+fn make(i: i64) -> String {
+	let mut g = String()
+	g.push_str(f"w{i % 50} ")
+	for _k in 0..<64 {
+		g.push_str("abcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefghijk ")
+	}
+	return g
+}
+
+fn main() throws {
+	let mut recent: Vec[String] = []
+	let mut total = 0
+	for i in 0..<4000 {
+		let text = make(i)
+		for w in text.split(" ") {
+			if w.len() > 0 {
+				if recent.len() < 64 {
+					recent.push(w)
+				} else {
+					total += recent[(i % 64)].len() as i64
+					recent[(i % 64)] = w
+				}
+				break
+			}
+		}
+	}
+	println(f"{recent.len()} {total}")
+}
