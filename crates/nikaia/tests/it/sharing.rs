@@ -380,21 +380,16 @@ fn the_one_shared_in_the_repository_comes_out_atomic_undecided() {
     }
 
     assert!(checked >= 12, "only {checked} programs were analysed");
-    // **`hello-http`'s counters cross, and the analysis found it** (ADR-328):
-    // they are handed to two children of a supervisor, so they are atomic for
-    // a reason the analysis proved rather than the floor's.
-    let (crossing, found): (Vec<_>, Vec<_>) = found.into_iter().partition(|(file, _)| {
-        file.ends_with("/main.nika") && file != "examples/fortunes/src/main.nika"
-    });
-    for (_, decision) in &crossing {
-        assert!(
-            ["asked", "crashed", "refreshed"].contains(&decision.value.as_str()),
-            "{decision:#?}"
-        );
-        assert_eq!(decision.count, Count::Atomic, "{decision:#?}");
-        assert!(!decision.undecided(), "a crossing found: {decision:#?}");
-    }
-    assert!(!crossing.is_empty(), "hello-http's supervised counters");
+    // `hello-http`'s counters cross through a kept lambda: what the toolchain
+    // answers for them, with `--user-parallelism yes`, is the claim, in
+    // tests/compiler/tests/corpus_crossings_and_counters_are_the_toolchains
+    // (#2873). Every other `main.nika` of a project is left to it.
+    let found: Vec<_> = found
+        .into_iter()
+        .filter(|(file, _)| {
+            !file.ends_with("/main.nika") || file == "examples/fortunes/src/main.nika"
+        })
+        .collect();
     assert_eq!(
         found.len(),
         1,

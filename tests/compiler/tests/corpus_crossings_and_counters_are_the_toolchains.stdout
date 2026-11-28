@@ -1,0 +1,14 @@
+examples/foreign-runtime/crossing:
+  findings: error[NK2502]
+  exit 1
+examples/foreign-runtime/smuggled:
+  findings: error[NK2502]
+  exit 1
+examples/hello-http, --user-parallelism yes, main:
+  word    `asked` (SharedMut[i64])
+    crosses: a kept lambda uses it, and a kept function may be called on any thread
+  word    `crashed` (SharedMut[i64])
+    crosses: a kept lambda uses it, and a kept function may be called on any thread
+  word    `refreshed` (SharedMut[i64])
+    crosses: a kept lambda uses it, and a kept function may be called on any thread
+  exit 0

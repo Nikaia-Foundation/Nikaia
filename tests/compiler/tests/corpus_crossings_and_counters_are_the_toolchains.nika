@@ -1,0 +1,62 @@
+// What the toolchain answers for the corpus's crossings and counters is the
+// claim (#2873, supervisor's decision): the examples are checked as their
+// projects, with their committed contracts and books, not parsed alone.
+//
+// * `examples/foreign-runtime/crossing` and `.../smuggled` hand a value that
+//   may not leave its thread to a call described as starting one (ADR-303 D7,
+//   Part III C.4); each file's header says it is expected to be refused. Each
+//   is refused with exactly NK2502 and nothing else.
+// * `examples/hello-http`'s three counters are handed to the children of a
+//   supervisor through a kept lambda. With `--user-parallelism yes` the
+//   sharing report says why each is atomic (ADR-328): it crosses there. The
+//   project's own setting, `user-parallelism = "no"`, stays as it is.
+use std::env
+use std::process
+
+fn toolchain() -> String throws {
+    let exe = env::current_exe()?.display() ?? ""
+    if exe.len() > 0 { return exe }
+    return "target/fast/nikaia"
+}
+
+fn root() -> String throws {
+    return env::current_main()?.parent()?.parent()?.parent()?.parent()?.display() ?? "../.."
+}
+
+// The codes of a check's findings, in order, and its exit code.
+fn refused(nikaia: String, dir: String) throws {
+    let out = process::run(nikaia, ["check", "src/main.nika"]; dir: dir)
+    let mut codes = ""
+    for line in f"{out.stdout}\n{out.stderr}".lines() {
+        if line.starts_with("error[") || line.starts_with("warning[") {
+            codes = f"{codes} {line.split(":").next() ?? ""}"
+        }
+    }
+    println(f"  findings:{codes}")
+    println(f"  exit {out.code}")
+}
+
+fn main() throws {
+    let repo = root()
+    let nikaia = toolchain()
+    for name in ["crossing", "smuggled"] {
+        println(f"examples/foreign-runtime/{name}:")
+        refused(nikaia.clone(), f"{repo}/examples/foreign-runtime/{name}")
+    }
+    println("examples/hello-http, --user-parallelism yes, main:")
+    let out = process::run(nikaia, ["check", "--sharing", "--user-parallelism", "yes", "src/main.nika"]; dir: f"{repo}/examples/hello-http")
+    let mut in_main = false
+    for line in out.stdout.lines() {
+        if !line.starts_with(" ") {
+            in_main = line == "main:"
+        } else if in_main {
+            let text = line.trim()
+            if line.starts_with("    ") && !line.starts_with("     ") {
+                println(f"  {text}")
+            } else if text.starts_with("crosses:") {
+                println(f"    {text}")
+            }
+        }
+    }
+    println(f"  exit {out.code}")
+}
