@@ -1,0 +1,26 @@
+a docs file staged:
+  lowered-digest skipped
+  derived skipped
+  exit 0
+a compiler source staged, the lowered set as it is:
+  lowered-digest green
+  derived skipped
+  exit 0
+a lowered file changed and staged:
+  lowered-digest red
+  crates/nikaia-std/src/compiler/lowered.rs names another LOWERED_DIGEST than the staged set hashes to
+  run `nikaia lower-std` and stage what it writes
+  derived skipped
+  exit 1
+a source of tests/compiler changed and staged:
+  lowered-digest skipped
+  derived red
+  tests/compiler/src/list_beside_caller.nika: hashes otherwise than recorded
+  run `cd tests/compiler && nikaia build` and stage the ledgers it writes (tests/compiler/nikaia.derived is stale)
+  exit 1
+a new source of tests/compiler staged:
+  lowered-digest skipped
+  derived red
+  tests/compiler/src/added.nika: not in [sources]
+  run `cd tests/compiler && nikaia build` and stage the ledgers it writes (tests/compiler/nikaia.derived is stale)
+  exit 1
