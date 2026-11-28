@@ -540,7 +540,11 @@ jobs:
             # As the test `the_compiler_test_package_passes_at_both_settings` runs it.
             # No dump: `nikaia test` builds every one of these programs with rustc
             # itself, so the accepted-sweep would only check and prove them again.
-            env -u CARGO_TARGET_DIR -u RUST_BACKTRACE -u NIKAIA_DUMP_ACCEPTED NIKAIA_CACHE_DIR="$PWD/target/nikaia-project-tests" \
+            # `pre_push_generated` runs the builder's pre-push five times (a whole
+            # checkout and `cargo fmt --all` each): about 70 s on a quiet machine,
+            # over the default 300 s on a loaded runner (run 46171646174), so the
+            # runner raises the limit (`project_tests_time_limit`).
+            env -u CARGO_TARGET_DIR -u RUST_BACKTRACE -u NIKAIA_DUMP_ACCEPTED NIKAIA_CACHE_DIR="$PWD/target/nikaia-project-tests" NIKAIA_TEST_TIME_LIMIT=900 \
               ./target/release/nikaia test --both-settings --project tests/compiler $filters 2>&1 |
               tee "$RUNNER_TEMP/test.log"
             ;;
