@@ -1,0 +1,16 @@
+// The lambda of a step over `io::lines()` sees each line in a buffer of the
+// stream's pool for one call (ADR-stream-buffers-v1 D1, D2): a view of the
+// line stored into a name the lambda captures is kept past that turn, as one
+// handed back is, `NK2308`. A view of the line kept in the lambda's own
+// names, a whole number taken from it and a literal stored are not.
+use std::io
+
+fn main() throws {
+    let mut last = ""
+    let mut longest = 0
+    let n = io::lines().filter(fn(l) { last = l; true }).count()
+    let m = io::lines().map(fn(l) { let t = l.trim(); last = t; 1 }).count()
+    let k = io::lines().filter(fn(l) { let mut own = l; own = own.trim(); longest = own.len(); if l.len() > 3 { last = "long" }; true }).count()
+    println(n + m + k + longest)
+    println(last)
+}

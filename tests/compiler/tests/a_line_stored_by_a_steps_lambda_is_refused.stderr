@@ -1,0 +1,17 @@
+error[NK2308]: The lambda of `filter` stores a view of a line of the stream into `last`, which lives in a buffer of the stream's pool only for the call that sees it.
+   --> tests/a_line_stored_by_a_steps_lambda_is_refused.nika:11:40
+    |
+ 11 |     let n = io::lines().filter(fn(l) { last = l; true }).count()
+    |                                        ^^^^^^^^^
+    |
+    = note: A stream reads into a fixed pool of buffers, and a step over it sees each line for one turn; what the step stores outside itself is kept past that turn.
+    = help: Hand back text of its own (`.clone()` of the line), or copy each line first with `.cloned()`.
+error[NK2308]: The lambda of `map` stores a view of a line of the stream into `last`, which lives in a buffer of the stream's pool only for the call that sees it.
+   --> tests/a_line_stored_by_a_steps_lambda_is_refused.nika:12:55
+    |
+ 12 |     let m = io::lines().map(fn(l) { let t = l.trim(); last = t; 1 }).count()
+    |                                                       ^^^^^^^^^
+    |
+    = note: A stream reads into a fixed pool of buffers, and a step over it sees each line for one turn; what the step stores outside itself is kept past that turn.
+    = help: Hand back text of its own (`.clone()` of the line), or copy each line first with `.cloned()`.
+2 views of a stream kept in a place that grows
