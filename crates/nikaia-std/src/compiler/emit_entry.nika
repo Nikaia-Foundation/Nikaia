@@ -338,23 +338,40 @@ impl EmitState {
 
     fn emit_held_struct(ref self, world: ref EmitWorld, ty: String, a: String, any: String, long: String, short: String, fields: ref Vec[FieldDef]) -> String {
         let mut parts: Vec[String] = []
+        // **Each view checked against the buffer the compiler names**
+        // (ADR-tether-v1 D15, #2848): at one place for all of them, or at one
+        // per field, `[At; fields]`, in the order the struct declares them.
+        let mut near: Vec[String] = []
+        let mut at: Vec[String] = []
+        let mut k = 0
         for field in fields {
             let field_name = escaped_name(world.words.resolve(field.name))
             if holds_view(field.ty) || self.names_borrowing(world, field.ty) {
                 parts.push(f"{field_name}: nikaia_std::tether::Rebase::rebase(self.{field_name}, keeps)")
+                near.push(f"{field_name}: nikaia_std::tether::Rebase::rebase_near(self.{field_name}, keeps, at)")
+                at.push(f"{field_name}: nikaia_std::tether::Rebase::rebase_at(self.{field_name}, keeps, at[{k}])")
             } else {
                 parts.push(f"{field_name}: self.{field_name}")
+                near.push(f"{field_name}: self.{field_name}")
+                at.push(f"{field_name}: self.{field_name}")
             }
+            k += 1
         }
         let rebased = parts.join(", ")
+        let rebased_near = near.join(", ")
+        let rebased_at = at.join(", ")
         let mut text: String = f"\n/// `{ty}` held one handle per buffer (ADR-tether-v1).\n"
         text = f"{text}#[allow(non_camel_case_types)]\nenum __Views_{ty} {{}}\n\n"
         text = f"{text}impl nikaia_std::tether::Views for __Views_{ty} {{\n    type Of<'a> = {ty}<{a}>;\n"
         text = f"{text}    fn shorten<'long: 's, 's>(x: &'s {ty}<{long}>) -> &'s {ty}<{short}> {{\n        x\n    }}\n}}\n\n"
         text = f"{text}impl<'a> nikaia_std::tether::Rebase<'a> for {ty}<{any}> {{\n    type At = {ty}<{a}>;\n"
-        text = f"{text}    fn rebase<const N: usize>(self, keeps: &nikaia_std::tether::Keeps<'a, N>) -> {ty}<{a}> {{\n        {ty} {{ {rebased} }}\n    }}\n}}\n\n"
+        text = f"{text}    fn rebase<const N: usize>(self, keeps: &nikaia_std::tether::Keeps<'a, N>) -> {ty}<{a}> {{\n        {ty} {{ {rebased} }}\n    }}\n"
+        text = f"{text}    fn rebase_near<const N: usize>(self, keeps: &nikaia_std::tether::Keeps<'a, N>, at: nikaia_std::tether::Place) -> {ty}<{a}> {{\n        {ty} {{ {rebased_near} }}\n    }}\n}}\n\n"
         text = f"{text}impl<const N: usize> nikaia_std::tether::Hold<N> for {ty}<{any}> {{\n    type Held = nikaia_std::tether::Holding<__Views_{ty}, N>;\n"
-        text = f"{text}    fn hold(self, keeps: [std::sync::Arc<nikaia_std::tether::Keep>; N]) -> Self::Held {{\n        nikaia_std::tether::Holding::new(keeps, move |keeps| nikaia_std::tether::Rebase::rebase(self, &keeps))\n    }}\n}}\n"
+        text = f"{text}    fn hold(self, keeps: [std::sync::Arc<nikaia_std::tether::Keep>; N]) -> Self::Held {{\n        nikaia_std::tether::Holding::new(keeps, move |keeps| nikaia_std::tether::Rebase::rebase(self, &keeps))\n    }}\n"
+        text = f"{text}    fn hold_near(self, keeps: [std::sync::Arc<nikaia_std::tether::Keep>; N], at: nikaia_std::tether::Place) -> Self::Held {{\n        nikaia_std::tether::Holding::new(keeps, move |keeps| nikaia_std::tether::Rebase::rebase_near(self, &keeps, at))\n    }}\n}}\n\n"
+        text = f"{text}impl {ty}<{any}> {{\n    #[allow(dead_code)]\n    fn __rebase_at<'a, const N: usize>(self, keeps: &nikaia_std::tether::Keeps<'a, N>, at: [nikaia_std::tether::At; {k}]) -> {ty}<{a}> {{\n        {ty} {{ {rebased_at} }}\n    }}\n\n"
+        text = f"{text}    #[allow(dead_code)]\n    fn __hold_at<const N: usize>(self, keeps: [std::sync::Arc<nikaia_std::tether::Keep>; N], at: [nikaia_std::tether::At; {k}]) -> nikaia_std::tether::Holding<__Views_{ty}, N> {{\n        nikaia_std::tether::Holding::new(keeps, move |keeps| self.__rebase_at(&keeps, at))\n    }}\n}}\n"
         return text
     }
 }

@@ -49,6 +49,9 @@ pub struct BufferPlan {
     pub late_puts: collections::BTreeMap<i64, LatePut>,
     pub places: collections::BTreeMap<(i64, String), collections::BTreeMap<i64, (i64, bool)>>,
     pub placed: collections::BTreeSet<i64>,
+    pub plain_parts: collections::BTreeSet<i64>,
+    pub field_places: collections::BTreeMap<i64, collections::BTreeMap<String, (i64, bool)>>,
+    pub reput_places: collections::BTreeMap<i64, i64>,
     pub streams: Vec<StreamLoop>,
 }
 
@@ -116,6 +119,17 @@ pub(crate) struct Sourced {
 pub(crate) struct PutsAt {
     pub(crate) by_arg: collections::BTreeMap<i64, collections::BTreeSet<(i64, String)>>,
     pub(crate) shapes: collections::BTreeMap<i64, (bool, bool)>,
+    pub(crate) path: Vec<i64>,
+    pub(crate) structs: collections::BTreeMap<i64, i64>,
+    pub(crate) parts: collections::BTreeMap<i64, Vec<i64>>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub(crate) struct FieldPut {
+    pub(crate) origins: collections::BTreeSet<(i64, String)>,
+    pub(crate) in_scope: bool,
+    pub(crate) plain: bool,
+    pub(crate) literal: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -142,6 +156,7 @@ pub(crate) struct BufferWalk {
     pub(crate) value_tail: i64,
     pub(crate) wholes: collections::BTreeMap<(i64, String), i64>,
     pub(crate) plain: collections::BTreeSet<(i64, String)>,
+    pub(crate) field_puts: collections::BTreeMap<i64, collections::BTreeMap<String, FieldPut>>,
     pub(crate) streams: bool,
     pub(crate) stream_loops: Vec<(i64, String, String)>,
     pub(crate) stream_how: String,
@@ -372,7 +387,7 @@ pub(crate) fn walked(item: &Item, target: Option<String>, carries: bool, streams
         Item::Fn { receiver, args, body, .. } => (receiver, args, body),
         _ => return None,
     };
-    let mut walk = BufferWalk { target, locals: collections::BTreeMap::new(), frames: vec![], path: vec![], sources: collections::BTreeMap::new(), escapes: vec![], sheds: collections::BTreeMap::new(), puts_into: collections::BTreeMap::new(), struct_puts: collections::BTreeMap::new(), taken: collections::BTreeMap::new(), reassigned: collections::BTreeMap::new(), handed: collections::BTreeMap::new(), captured: collections::BTreeMap::new(), statement: 0, result_carries: carries, last_seen: collections::BTreeMap::new(), holders: collections::BTreeMap::new(), hoisted: collections::BTreeMap::new(), mutated: collections::BTreeMap::new(), value_tail: -1, wholes: collections::BTreeMap::new(), plain: collections::BTreeSet::new(), streams, stream_loops: vec![], stream_how: String::from(""), stream_span: Span { start: 0, end: 0 }, stream_keeps: vec![], stream_gathers: vec![] };
+    let mut walk = BufferWalk { target, locals: collections::BTreeMap::new(), frames: vec![], path: vec![], sources: collections::BTreeMap::new(), escapes: vec![], sheds: collections::BTreeMap::new(), puts_into: collections::BTreeMap::new(), struct_puts: collections::BTreeMap::new(), taken: collections::BTreeMap::new(), reassigned: collections::BTreeMap::new(), handed: collections::BTreeMap::new(), captured: collections::BTreeMap::new(), statement: 0, result_carries: carries, last_seen: collections::BTreeMap::new(), holders: collections::BTreeMap::new(), hoisted: collections::BTreeMap::new(), mutated: collections::BTreeMap::new(), value_tail: -1, wholes: collections::BTreeMap::new(), plain: collections::BTreeSet::new(), field_puts: collections::BTreeMap::new(), streams, stream_loops: vec![], stream_how: String::from(""), stream_span: Span { start: 0, end: 0 }, stream_keeps: vec![], stream_gathers: vec![] };
     open_scope(&mut walk);
     for arg in args.iter() {
         let parameter = Local { at: 0, path: vec![], origins: collections::BTreeSet::new(), ty: Some(arg.ty.clone()), parameter: true, keeps: arg.mutable && ask.context.carries(ask.names, &arg.ty), buffer: false, text: false, number: false, parts: vec![] };
@@ -414,39 +429,112 @@ pub(crate) fn walked(item: &Item, target: Option<String>, carries: bool, streams
 
 pub(crate) fn places(walk: &BufferWalk, plan: &mut BufferPlan) {
     for (key, puts) in walk.puts_into.iter() {
-        let held = plan.holds.get(key);
+        let held: Option<collections::BTreeMap<i64, collections::BTreeSet<i64>>> = match plan.holds.get(key) {
+            Some(__nikaia_it) => Some(__nikaia_it.clone()),
+            None => None,
+        };
         let packed = plan.tethered.contains_key(&key.1);
         if held.is_none() && !packed { continue; }
         for (arg, origins) in puts.by_arg.iter() {
             let arg = nikaia_std::num::value(arg);
+            let node = nikaia_std::index::or(puts.structs.get(&arg), || -1);
+            if node >= 0 { field_places(node, arg, (held).as_ref(), packed, &puts.path, walk, plan); }
             if origins.len() != 1 { continue; }
             let shape = match puts.shapes.get(&arg) { Some(__nikaia_value) => __nikaia_value, None => continue };
             if !shape.0 { continue; }
-            let mut buffer: i64 = -1;
-            for id in origins.iter() {
-                let sourced = match walk.sources.get(id) { Some(__nikaia_value) => __nikaia_value, None => continue };
-                buffer = match &sourced.source {
-                    Source::Buffer { at, .. } => { let at = *at; at.clone() },
-                    _ => -1,
-                };
-            }
-            if buffer < 0 || plan.opaque_puts.contains(&buffer) || plan.late_puts.contains_key(&buffer) || reput_buffer(buffer, walk) { continue; }
-            let keep = match plan.puts.get(&buffer) { Some(__nikaia_value) => __nikaia_value, None => continue };
-            let fits = match keep {
-                KeepAt::Task => packed,
-                KeepAt::Element(own) => own.clone() == buffer && held_in(held, arg, buffer),
-                _ => false,
-            };
-            if !fits { continue; }
+            let buffer = buffer_of(origins, walk);
+            let fit = placeable(buffer, arg, (held).as_ref(), packed, true, &puts.path, walk, &plan);
+            if fit == 0 { continue; }
             let mut by_arg: collections::BTreeMap<i64, (i64, bool)> = nikaia_std::index::or(match *nikaia_std::index::get(&plan.places, key) {
                 Some(__nikaia_it) => Some(__nikaia_it.clone()),
                 None => None,
             }, || collections::BTreeMap::new().into());
-            by_arg.insert(arg, (buffer, shape.1));
+            by_arg.insert(arg, (buffer, shape.1 && fit == 2));
             plan.places.insert(key.clone(), by_arg);
             plan.placed.insert(buffer);
+            if fit == 2 {
+                let arms: Vec<i64> = nikaia_std::index::or(match puts.parts.get(&arg) {
+                    Some(__nikaia_it) => Some(__nikaia_it.clone()),
+                    None => None,
+                }, || vec![].into());
+                for part in arms.iter() {
+                    let part = nikaia_std::num::value(part);
+                    plan.plain_parts.insert(part);
+                }
+            }
         }
     }
+    for (statement, bound) in walk.reassigned.iter() {
+        let statement = nikaia_std::num::value(statement);let bound = nikaia_std::num::value(bound);
+        if plan.placed.contains(&bound) && plan.reputs.contains_key(&statement) { plan.reput_places.insert(statement.clone(), bound.clone()); }
+    }
+}
+
+pub(crate) fn field_places(node: i64, arg: i64, held: Option<&collections::BTreeMap<i64, collections::BTreeSet<i64>>>, packed: bool, path: &[i64], walk: &BufferWalk, plan: &mut BufferPlan) {
+    let parts = match walk.field_puts.get(&node) { Some(__nikaia_value) => __nikaia_value, None => return };
+    let mut named: collections::BTreeMap<String, (i64, bool)> = collections::BTreeMap::new();
+    for (field, part) in parts.iter() {
+        if part.literal {
+            named.insert(nikaia_std::block::Text::from(field.to_string()), (-1, false));
+            continue;
+        }
+        if part.origins.len() != 1 || !part.in_scope { continue; }
+        let buffer = buffer_of(&part.origins, walk);
+        let fit = placeable(buffer, arg, held, packed, false, path, walk, &plan);
+        if fit == 0 { continue; }
+        named.insert(nikaia_std::block::Text::from(field.to_string()), (buffer, part.plain && fit == 2));
+        plan.placed.insert(buffer);
+    }
+    if !named.is_empty() { plan.field_places.insert(node, named); }
+}
+
+pub(crate) fn buffer_of(origins: &collections::BTreeSet<(i64, String)>, walk: &BufferWalk) -> i64 {
+    let mut buffer: i64 = -1;
+    for id in origins.iter() {
+        let sourced = match walk.sources.get(id) { Some(__nikaia_value) => __nikaia_value, None => continue };
+        buffer = match &sourced.source {
+            Source::Buffer { at, .. } => { let at = *at; at.clone() },
+            _ => -1,
+        };
+    }
+    buffer
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn placeable(buffer: i64, arg: i64, held: Option<&collections::BTreeMap<i64, collections::BTreeSet<i64>>>, packed: bool, alone: bool, path: &[i64], walk: &BufferWalk, plan: &BufferPlan) -> i64 {
+    if buffer < 0 || plan.opaque_puts.contains(&buffer) { return 0; }
+    let keep = match plan.puts.get(&buffer) { Some(__nikaia_value) => __nikaia_value, None => return 0 };
+    let fits = match keep {
+        KeepAt::Task => packed,
+        KeepAt::Element(own) => own.clone() == buffer && if alone { held_in(held, arg, buffer) } else { held_among(held, arg, buffer) },
+        _ => false,
+    };
+    if !fits { return 0; }
+    let mut strict = !reput_buffer(buffer, walk);
+    let late = plan.late_puts.get(&buffer);
+    if late.is_some() {
+        let depth = buffer_depth(buffer, walk);
+        if depth < 0 || depth >= path.len() as i64 || *unsafe { nikaia_std::proven::read(&path, (depth) as usize) } <= nikaia_std::index::or(late.as_ref().map(|__nikaia_it| __nikaia_it.after), || 0) { return 0; }
+        if nikaia_std::index::or(late.as_ref().map(|__nikaia_it| __nikaia_it.reassigned), || true) { strict = false; }
+    }
+    if strict { 2 } else { 1 }
+}
+
+pub(crate) fn buffer_depth(buffer: i64, walk: &BufferWalk) -> i64 {
+    for (_, sourced) in walk.sources.iter() {
+        let at = match &sourced.source {
+            Source::Buffer { at, .. } => { let at = *at; at.clone() },
+            _ => -1,
+        };
+        if at == buffer { return sourced.path.len() as i64; }
+    }
+    -1
+}
+
+pub(crate) fn held_among(held: Option<&collections::BTreeMap<i64, collections::BTreeSet<i64>>>, arg: i64, buffer: i64) -> bool {
+    let by_arg = match held { Some(__nikaia_value) => __nikaia_value, None => return false };
+    let buffers = match by_arg.get(&arg) { Some(__nikaia_value) => __nikaia_value, None => return false };
+    buffers.contains(&buffer)
 }
 
 pub(crate) fn reput_buffer(buffer: i64, walk: &BufferWalk) -> bool {
@@ -557,6 +645,7 @@ pub(crate) fn walked_statement(stmt: &Stmt, span: &Span, ask: &BufferAsk<'_, '_,
                 shed(&root, walk);
                 if bound.is_some() && !nikaia_std::index::or(bound.as_ref().map(|__nikaia_it| __nikaia_it.parameter), || true) {
                     put_into(&root, 0, &origins, put_shape(value, &origins, ask, &walk), walk);
+                    note_parts(&root, 0, value, ask, &mut &mut *holes_of, &mut &mut *unaliased, walk);
                     walk.wholes.insert((at, nikaia_std::block::Text::from(root.to_string())), nikaia_std::index::or(bound.as_ref().map(|__nikaia_it| __nikaia_it.at), || 0));
                 }
             }
@@ -1379,6 +1468,7 @@ pub(crate) fn put_by_method(root: &str, method: &str, args: &[Expr], ask: &Buffe
     for k in 0..args.len() as i64 {
         let of = moved_origins(unsafe { nikaia_std::proven::read(&args, (k) as usize) }, ask, &mut *holes_of, &mut *unaliased, walk);
         put_into(root, k, &of, put_shape(unsafe { nikaia_std::proven::read(&args, (k) as usize) }, &of, ask, &walk), walk);
+        note_parts(root, k, unsafe { nikaia_std::proven::read(&args, (k) as usize) }, ask, &mut *holes_of, &mut *unaliased, walk);
         let named = struct_of(unsafe { nikaia_std::proven::read(&args, (k) as usize) }, ask, &walk);
         if named.is_some() { walk.struct_puts.insert(nikaia_std::block::Text::from(root.to_string()), nikaia_std::index::or(named, || "".into())); }
         all.extend(of.iter().cloned());
@@ -1448,18 +1538,99 @@ pub(crate) fn put_into(root: &str, at: i64, of: &collections::BTreeSet<(i64, Str
     by_arg.insert(at, here);
     let before = nikaia_std::index::or(shapes.get(&at), || (true, true));
     shapes.insert(at, (before.0 && shape.0, before.1 && shape.1));
-    walk.puts_into.insert(key, PutsAt { by_arg, shapes });
+    let mut path: Vec<i64> = vec![];
+    path.reserve(walk.path.iter().size_hint().0); for open in walk.path.iter() { path.push(open.0); }
+    path.push(walk.statement);
+    let structs: collections::BTreeMap<i64, i64> = nikaia_std::index::or(match (*nikaia_std::index::get(&walk.puts_into, &key)).as_ref().map(|__nikaia_it| &__nikaia_it.structs) {
+        Some(__nikaia_it) => Some(__nikaia_it.copy_owned()),
+        None => None,
+    }, || collections::BTreeMap::new().into());
+    let parts: collections::BTreeMap<i64, Vec<i64>> = nikaia_std::index::or(match (*nikaia_std::index::get(&walk.puts_into, &key)).as_ref().map(|__nikaia_it| &__nikaia_it.parts) {
+        Some(__nikaia_it) => Some(__nikaia_it.copy_owned()),
+        None => None,
+    }, || collections::BTreeMap::new().into());
+    walk.puts_into.insert(key, PutsAt { by_arg, shapes, path, structs, parts });
 }
 
-pub(crate) fn put_shape(value: &Expr, of: &collections::BTreeSet<(i64, String)>, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_, '_, '_, '_>, walk: &BufferWalk) -> (bool, bool) {
+pub(crate) fn note_parts(root: &str, at: i64, value: &Expr, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_, '_, '_, '_>, holes_of: &mut impl FnMut(&Expr) -> Vec<Expr>, unaliased: &mut impl FnMut(&str) -> String, walk: &mut BufferWalk) {
+    let key = (walk.statement, nikaia_std::block::Text::from(root.to_string()));
+    let mut puts = match match *nikaia_std::index::get(&walk.puts_into, &key) {
+        Some(__nikaia_it) => Some(__nikaia_it.clone()),
+        None => None,
+    } { Some(__nikaia_value) => __nikaia_value, None => return };
+    let mut arms: Vec<i64> = nikaia_std::index::or(match *nikaia_std::index::get(&puts.parts, &at) {
+        Some(__nikaia_it) => Some(__nikaia_it.clone()),
+        None => None,
+    }, || vec![].into());
+    plain_arms(value, ask, &walk, &mut arms);
+    puts.parts.insert(at, arms);
+    match value {
+        Expr::StructLit { fields, .. } => {
+            let node = node_key(value);
+            let mut found: collections::BTreeMap<String, FieldPut> = collections::BTreeMap::new();
+            for field in fields.iter() {
+                let named = nikaia_std::block::Text::from(ask.names.resolve(field.name).to_string());
+                let part = match field_put(&named, (field.value).as_ref(), ask, &mut *holes_of, &mut *unaliased, walk) { Some(__nikaia_value) => __nikaia_value, None => continue };
+                found.insert(named, part);
+            }
+            walk.field_puts.insert(node, found);
+            let before = nikaia_std::index::or(puts.structs.get(&at), || node);
+            puts.structs.insert(at, if before == node { node } else { -1 });
+        },
+        _ => { },
+    }
+    walk.puts_into.insert(key, puts);
+}
+
+pub(crate) fn plain_arms(value: &Expr, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_, '_, '_, '_>, walk: &BufferWalk, arms: &mut Vec<i64>) {
+    match value {
+        Expr::If { then_branch, else_branch, .. } => {
+            plain_arm(then_branch, ask, walk, arms);
+            plain_arm(match else_branch { Some(__nikaia_value) => __nikaia_value, None => return }, ask, walk, arms);
+        },
+        _ => { },
+    }
+}
+
+pub(crate) fn plain_arm(block: &Block, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_, '_, '_, '_>, walk: &BufferWalk, arms: &mut Vec<i64>) {
+    if block.stmts.len() != 1 { return; }
+    let tail = match ending_of(block) { Some(__nikaia_value) => __nikaia_value, None => return };
+    if plain_view(&tail, ask, walk) { arms.push(node_key(&tail)); } else { plain_arms(&tail, ask, walk, arms); }
+}
+
+pub(crate) fn field_put(named: &str, value: Option<&Expr>, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_, '_, '_, '_>, holes_of: &mut impl FnMut(&Expr) -> Vec<Expr>, unaliased: &mut impl FnMut(&str) -> String, walk: &mut BufferWalk) -> Option<FieldPut> {
+    if value.is_none() {
+        let local = match local_of(named, &walk) { Some(__nikaia_value) => __nikaia_value, None => return None };
+        if local.buffer { return None; }
+        return Some(FieldPut { origins: local.origins.copy_owned(), in_scope: sources_in_scope(&local.origins, &walk), plain: walk.plain.contains(&(local.at, nikaia_std::block::Text::from(named.to_string()))), literal: false });
+    }
+    let given = match value { Some(__nikaia_value) => __nikaia_value, None => return None };
+    let literal = matches!(given, Expr::LitStr { .. });
+    if literal { return Some(FieldPut { origins: collections::BTreeSet::new(), in_scope: true, plain: false, literal: true }); }
+    let plain = plain_view(given, ask, &walk);
+    let simple = match given {
+        Expr::Variable(_, _) => true,
+        _ => plain,
+    };
+    if !simple || is_the_buffer(given, ask, &walk) { return None; }
+    let origins = origins_of(given, ask, &mut *holes_of, &mut *unaliased, walk);
+    Some(FieldPut { origins: origins.copy_owned(), in_scope: sources_in_scope(&origins, &walk), plain, literal: false })
+}
+
+pub(crate) fn sources_in_scope(of: &collections::BTreeSet<(i64, String)>, walk: &BufferWalk) -> bool {
     for id in of.iter() {
-        let sourced = match walk.sources.get(id) { Some(__nikaia_value) => __nikaia_value, None => return (false, false) };
+        let sourced = match walk.sources.get(id) { Some(__nikaia_value) => __nikaia_value, None => return false };
         let in_scope = match &sourced.source {
             Source::Buffer { at, name, .. } => { let at = *at; nikaia_std::index::or(local_of(name, walk).as_ref().map(|__nikaia_it| __nikaia_it.at), || -1) == at },
             _ => false,
         };
-        if !in_scope { return (false, false); }
+        if !in_scope { return false; }
     }
+    true
+}
+
+pub(crate) fn put_shape(value: &Expr, of: &collections::BTreeSet<(i64, String)>, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_, '_, '_, '_>, walk: &BufferWalk) -> (bool, bool) {
+    if !sources_in_scope(of, walk) { return (false, false); }
     (true, plain_view(value, ask, walk))
 }
 
@@ -1949,7 +2120,7 @@ pub(crate) fn call_source(callee: &str, walk: &mut BufferWalk) -> collections::B
 pub(crate) fn decide(key: String, body: &Block, walk: &BufferWalk, ask: &BufferAsk<'_, '_, '_, '_, '_, '_, '_, '_, '_, '_>) -> BufferPlan {
     let mut first: i64 = -1;
     if !body.stmts.is_empty() { first = unsafe { nikaia_std::proven::read(&body.stmts, (0) as usize) }.span.start as i64; }
-    let mut plan = BufferPlan { key, first, takes_keep: false, frame_keep: false, task_keep: false, local_keeps: collections::BTreeSet::new(), puts: collections::BTreeMap::new(), calls: collections::BTreeMap::new(), tethered: collections::BTreeMap::new(), element_keepers: collections::BTreeSet::new(), struct_keepers: collections::BTreeSet::new(), widths: collections::BTreeMap::new(), keeper_structs: collections::BTreeMap::new(), held_locals: collections::BTreeSet::new(), holds: collections::BTreeMap::new(), escapes: vec![], refusals: vec![], reputs: collections::BTreeMap::new(), opaque_puts: collections::BTreeSet::new(), late_puts: collections::BTreeMap::new(), places: collections::BTreeMap::new(), placed: collections::BTreeSet::new(), streams: vec![] };
+    let mut plan = BufferPlan { key, first, takes_keep: false, frame_keep: false, task_keep: false, local_keeps: collections::BTreeSet::new(), puts: collections::BTreeMap::new(), calls: collections::BTreeMap::new(), tethered: collections::BTreeMap::new(), element_keepers: collections::BTreeSet::new(), struct_keepers: collections::BTreeSet::new(), widths: collections::BTreeMap::new(), keeper_structs: collections::BTreeMap::new(), held_locals: collections::BTreeSet::new(), holds: collections::BTreeMap::new(), escapes: vec![], refusals: vec![], reputs: collections::BTreeMap::new(), opaque_puts: collections::BTreeSet::new(), late_puts: collections::BTreeMap::new(), places: collections::BTreeMap::new(), placed: collections::BTreeSet::new(), plain_parts: collections::BTreeSet::new(), field_places: collections::BTreeMap::new(), reput_places: collections::BTreeMap::new(), streams: vec![] };
     for (id, found) in walk.sources.iter() { decide_source(&id.clone(), &found.source, &found.path, walk, &mut plan); }
     for (statement, bound) in walk.reassigned.iter() {
         let statement = nikaia_std::num::value(statement);let bound = nikaia_std::num::value(bound);

@@ -1,0 +1,47 @@
+// A buffer assigned again binds its place again where it is put, and one put
+// after its last change binds it there: the views held after either are
+// checked against that buffer, not searched for (ADR-tether-v1 D15, #2848).
+fn make(i: i64) -> String {
+	let mut g = String()
+	g.push_str(f"w{i} x{i}")
+	return g
+}
+
+fn assigned_again() -> String {
+	let mut recent: Vec[String] = []
+	let mut total = 0
+	for i in 0..<300 {
+		let mut text = make(i)
+		text = make(i + 1)
+		for w in text.split(" ") {
+			recent.push(w)
+		}
+		while recent.len() > 4 {
+			let old = recent.remove(0)
+			total += old.len() as i64
+		}
+	}
+	return f"{recent.len()} {total} {recent[3]}"
+}
+
+fn put_late() -> String {
+	let mut recent: Vec[String] = []
+	let mut total = 0
+	for i in 0..<300 {
+		let mut text = make(i)
+		text.push_str(" y")
+		for w in text.split(" ") {
+			recent.push(w)
+		}
+		while recent.len() > 4 {
+			let old = recent.remove(0)
+			total += old.len() as i64
+		}
+	}
+	return f"{recent.len()} {total} {recent[3]}"
+}
+
+fn main() throws {
+	println(assigned_again())
+	println(put_late())
+}
