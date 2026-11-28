@@ -1194,6 +1194,33 @@ fn check_core_method[H: CheckHost](mut state: CheckState, world: ref CheckWorld,
     return found
 }
 
+/// **A stream's items are views of its pool in a `for` over the call**
+/// (ADR-stream-buffers-v1 D10): its signature writes them `ref String`. A
+/// method called on the call walks it the general way, which hands each item
+/// over as text of its own (`map`, `filter`, `nth`, `.cloned()` nothing), so
+/// the receiver is typed with owned items there.
+fn check_core_method_stream_walked(world: ref CheckWorld, receiver: ref Expr, on: Ty) -> Ty sync {
+    if !check_core_a_stream_call(world, receiver) {
+        return on
+    }
+    return match on {
+        Ty::Seq { item, is_sync, pauses, fails, parallel, shape } => Ty::Seq { item: unviewed_type(item), is_sync: is_sync, pauses: pauses, fails: fails.clone(), parallel: parallel, shape: shape.clone() },
+        else => on,
+    }
+}
+
+/// Whether `expr` calls a function whose ledger entry says `iterates =
+/// "stream"` (ADR-stream-buffers-v1 D1).
+fn check_core_a_stream_call(world: ref CheckWorld, expr: ref Expr) -> bool sync {
+    let func = match expr {
+        Expr::Call { func, .. } => func,
+        else => return false,
+    }
+    let named = check_core_call_free_callee(world, func) ?? return false
+    let contract = world.library.functions.get(named) ?? world.own.functions.get(named) ?? return false
+    return contract.streams
+}
+
 /// **`xs.par_iter(within: d)` is a walk with a deadline** (ADR-async-v6
 /// D27): what it hands back carries it, through `map`, `filter` and the rest,
 /// to the step that ends the walk, which throws `task::TimedOut`. So does
@@ -1321,6 +1348,7 @@ fn check_core_method_walked[H: CheckHost](mut state: CheckState, world: ref Chec
         state.flow.empty_lists.insert(empty_map, held.clone())
     }
     on = check_core_method_literal(state, receiver, on)
+    on = check_core_method_stream_walked(world, receiver, on)
     state.open_receiver_placed(world, receiver, on, span)
     // **`x?.m(…)`** (Part I 3.5, ADR-279 D13).
     if safe {

@@ -811,13 +811,15 @@ signature = "(; trusted: bool = false) -> Vec[u8]"
 # body is a borrow, one kept in a fixed number of names across turns is
 # counted, and one kept in anything that grows is `NK2308` (D2); `.clone()`
 # keeps a copy past that. The key sits on the function, not on `io::Lines`,
-# because the signature hands back a `Seq` and names no type.
+# because the signature hands back a `Seq` and names no type. The item is
+# written `ref String` with no source named: its source is the stream's pool
+# (ADR-stream-buffers-v1 D10).
 [fn."io::lines"]
 pub = true
 panics = false
 provenance = "untrusted"
 iterates = "stream"
-signature = "(; trusted: bool = false) -> Seq[String] pauses throws"
+signature = "(; trusted: bool = false) -> Seq[ref String] pauses throws"
 
 # The whole of standard input, as text.
 #

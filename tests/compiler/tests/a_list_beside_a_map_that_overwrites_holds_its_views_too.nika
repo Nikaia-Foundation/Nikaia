@@ -1,0 +1,16 @@
+// #2858: a list that only pushes views of a buffer, beside a map that
+// overwrites entries, holds them as the map does; a map's `??` is a view.
+
+use std::collections
+
+fn main() throws {
+    let mut v: Vec[String] = []
+    let mut m: collections::HashMap[String, String] = collections::HashMap()
+    for i in 0..<3 {
+        let line = f"k{i}=v{i}"
+        let (a, b) = line.split_once("=") ?? continue
+        v.push(a)
+        m.insert(a, b)
+    }
+    println(f"{v.len()} {v[0]} {v[2]} {m.len()} {m["k1"] ?? "-"} {m["zz"] ?? "-"}")
+}
