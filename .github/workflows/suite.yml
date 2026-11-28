@@ -324,6 +324,11 @@ jobs:
           - heavy-sysroot-pair
           - heavy-corpus
           - heavy-rest
+          - heavy-tethers
+          - heavy-sharing
+          - heavy-bytes
+          - heavy-contracts
+          - heavy-fmt
           - compiler-0
           - compiler-1
           - compiler-2
@@ -352,11 +357,14 @@ jobs:
       HEAVY_CORPUS: >-
         sequences::the_corpus_has_no_more_unanswered_method_calls_than_it_had
         language::the_build_time_package_passes_its_own_tests
-      HEAVY_REST: >-
-        project::the_http_package_serves_its_example
-        bytes::the_corpus_needs_no_tether
-        contracts::a_toolchain_module_is_not_part_of_std
-        fmt::every_nika_file_formats_to_the_same_tree_and_a_fixed_point
+      HEAVY_REST: project::the_http_package_serves_its_example
+      # One runner each (CI speed, 2026-11-28): each ran 30-40 minutes and
+      # held its shard's wall time alone.
+      HEAVY_TETHERS: tethers::nothing_in_the_corpus_needs_a_tether
+      HEAVY_SHARING: sharing::the_one_shared_in_the_repository_comes_out_atomic_undecided
+      HEAVY_BYTES: bytes::the_corpus_needs_no_tether
+      HEAVY_CONTRACTS: contracts::a_toolchain_module_is_not_part_of_std
+      HEAVY_FMT: fmt::every_nika_file_formats_to_the_same_tree_and_a_fixed_point
       HEAVY_ELSEWHERE: nikaia_test::the_compiler_test_package_passes_at_both_settings
     steps:
       - name: Checkout Code
@@ -499,7 +507,7 @@ jobs:
           export NIKAIA_CACHE_DIR="$PWD/target/nikaia-project-tests"
           it=$(awk -F'\t' '$1 ~ /\/it-[0-9a-f]+$/ {print $1}' target/release/test-binaries.tsv)
           itdir=$(awk -F'\t' '$1 ~ /\/it-[0-9a-f]+$/ {print $2}' target/release/test-binaries.tsv)
-          heavy="$HEAVY_MAP_TRUST $HEAVY_SYSROOT_CORES $HEAVY_SYSROOT_PAIR $HEAVY_CORPUS $HEAVY_REST $HEAVY_ELSEWHERE"
+          heavy="$HEAVY_MAP_TRUST $HEAVY_SYSROOT_CORES $HEAVY_SYSROOT_PAIR $HEAVY_CORPUS $HEAVY_REST $HEAVY_TETHERS $HEAVY_SHARING $HEAVY_BYTES $HEAVY_CONTRACTS $HEAVY_FMT $HEAVY_ELSEWHERE"
           run_it() { (cd "$itdir" && "$it" --exact "$@"); }
           case "$SHARD" in
           it-*)
