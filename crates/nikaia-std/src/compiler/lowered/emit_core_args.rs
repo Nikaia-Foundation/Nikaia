@@ -1565,6 +1565,7 @@ impl EmitState {
         let mut tasks: Vec<(Expr, i64)> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         #[allow(unused_mut)] let mut deadlines: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         #[allow(unused_mut)] let mut admissions: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block); #[allow(unused_mut, clippy::redundant_locals)] let mut deadlines = deadlines;
+        let mut fallbacks: Vec<bool> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         let mut named: String = String::from(""); #[allow(unused_mut, clippy::redundant_locals)] let mut deadlines = deadlines; #[allow(unused_mut, clippy::redundant_locals)] let mut admissions = admissions;
         let mut whole = true;
         let mut fallback = false;
@@ -1581,6 +1582,7 @@ impl EmitState {
                                 admissions.push(self.emit_async_option(world, walk, host, (admission).as_ref(), depth, &flow, scope)?);
                                 named = emit_text(world, *unsafe { nikaia_std::proven::read(&names, (0) as usize) });
                                 fallback = true;
+                                fallbacks.push(true);
                             }
                         },
                         _ => { },
@@ -1592,16 +1594,28 @@ impl EmitState {
                             deadlines.push(self.emit_async_deadline(world, walk, host, (within).as_ref(), depth, &flow, scope)?);
                             admissions.push(self.emit_async_option(world, walk, host, (admission).as_ref(), depth, &flow, scope)?);
                             named = emit_text(world, *unsafe { nikaia_std::proven::read(&names, (0) as usize) });
+                            fallbacks.push(false);
                         }
                     },
                     Expr::Tuple(parts, _) => {
                         for part in parts.iter() {
-                            match part {
+                            let mut own = false;
+                            let task: &Expr = match part {
+                                Expr::TryCatch { expr, .. } => {
+                                    let expr = nikaia_std::boxed::open(expr);
+                                    own = true;
+                                    expr
+                                },
+                                _ => part,
+                            };
+                            match task {
                                 Expr::Async(inner, id, within, admission) => {
                                     let inner = nikaia_std::boxed::open(inner); let within = nikaia_std::boxed::open(within); let admission = nikaia_std::boxed::open(admission); let id = *id;
                                     tasks.push((inner.clone(), id.get() as i64));
                                     deadlines.push(self.emit_async_deadline(world, walk, host, (within).as_ref(), depth, &flow, scope)?);
                                     admissions.push(self.emit_async_option(world, walk, host, (admission).as_ref(), depth, &flow, scope)?);
+                                    fallbacks.push(own);
+                                    fallback = fallback || own;
                                 },
                                 _ => { whole = false; },
                             }
@@ -1634,17 +1648,18 @@ impl EmitState {
             out.push(&format!("let {} = ", handle));
             if shared { out.push("nikaia_std::task::Read::new("); }
             let mut started = EmitOut::empty();
-            walk.async_fallback = fallback;
+            let falls_back = *nikaia_std::index::get(&fallbacks, nikaia_std::index::at(index));
+            walk.async_fallback = falls_back;
             walk.async_within = nikaia_std::block::Text::from((*nikaia_std::index::get(&deadlines, nikaia_std::index::at(index))).to_string());
             walk.async_admission = nikaia_std::block::Text::from((*nikaia_std::index::get(&admissions, nikaia_std::index::at(index))).to_string());
             index = unsafe { nikaia_std::proven::add::<i64>(index, 1) };
             self.emit_async_task(world, walk, &mut started, host, &each.0, each.1, "handle", depth, &here, scope)?;
             walk.async_fallback = false;
-            let mut joined = emit_async_joined(&handle, &channel, fallback, &emit_async_site(scope));
+            let mut joined = emit_async_joined(&handle, &channel, falls_back, &emit_async_site(scope));
             let mut alone = nikaia_std::block::Text::from(joined.to_string());
             if started.buf.ends_with(".await") {
-                joined = emit_async_joined_paused(&handle, &channel, fallback, &emit_async_line(&walk.async_gates), &emit_async_site(scope));
-                alone = emit_async_joined_paused(&handle, &channel, fallback, "", &emit_async_site(scope));
+                joined = emit_async_joined_paused(&handle, &channel, falls_back, &emit_async_line(&walk.async_gates), &emit_async_site(scope));
+                alone = emit_async_joined_paused(&handle, &channel, falls_back, "", &emit_async_site(scope));
             }
             if shared { alone = format!("(*{})", alone); }
             inside.push(alone);

@@ -3157,10 +3157,14 @@ pub(crate) fn check_async_block(state: &mut CheckState, world: &CheckWorld<'_, '
                         let mut computed: i64 = 0;
                         for part in parts.iter() { if check_async_computes(part) { computed = unsafe { nikaia_std::proven::add::<i64>(computed, 1) }; } }
                         for part in parts.iter() {
-                            match part {
+                            let task: &Expr = match part {
+                                Expr::TryCatch { expr, .. } if { let expr = nikaia_std::boxed::peek(&expr); check_an_async_task(expr) } => { let expr = nikaia_std::boxed::open(expr); expr },
+                                _ => part,
+                            };
+                            match task {
                                 Expr::Async(inner, _, _, _) => {
                                     let inner = nikaia_std::boxed::open(inner);
-                                    pending.push(check_async_binding(state, world, block, at, names, part, group, unsafe { nikaia_std::proven::sub::<i64>(beside + computed, 1) }, last, &stmt.span));
+                                    pending.push(check_async_binding(state, world, block, at, names, task, group, unsafe { nikaia_std::proven::sub::<i64>(beside + computed, 1) }, last, &stmt.span));
                                     check_async_in(state, inner, group, &stmt.span);
                                 },
                                 _ => { check_async_in(state, part, group, &stmt.span); },
@@ -3366,10 +3370,14 @@ pub(crate) fn check_async_operands(state: &mut CheckState, parts: &[&Expr], at: 
     }
     for part in parts.iter() {
         let part = *part;
-        match part {
+        let task: &Expr = match part {
+            Expr::TryCatch { expr, .. } if { let expr = nikaia_std::boxed::peek(&expr); check_an_async_task(expr) } => { let expr = nikaia_std::boxed::open(expr); expr },
+            _ => part,
+        };
+        match task {
             Expr::Async(inner, _, _, _) => {
                 let inner = nikaia_std::boxed::open(inner);
-                state.facts.async_waits.insert(id_of(part) as i64, CheckAsyncWait { at: CheckAsyncWaitAt::Before(at), group });
+                state.facts.async_waits.insert(id_of(task) as i64, CheckAsyncWait { at: CheckAsyncWaitAt::Before(at), group });
                 if computed < 2 { state.a_task_with_nothing_beside_it(span, "nothing beside it in the same call or operation is computed while it runs"); }
                 check_async_in(state, inner, group, span);
             },

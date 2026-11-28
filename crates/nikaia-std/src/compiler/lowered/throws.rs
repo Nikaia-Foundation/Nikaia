@@ -463,6 +463,7 @@ pub struct Thrown {
     pub(crate) passes_on: bool,
     pub(crate) named: collections::BTreeSet<String>,
     pub fatal_calls: collections::BTreeMap<String, collections::BTreeSet<String>>,
+    pub(crate) task_caught: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -475,14 +476,14 @@ pub struct Contribution {
 }
 
 pub(crate) fn thrown_by(body: &Block, names: &winnow_grammar::InternerContext, holes_of: &mut impl FnMut(&Expr) -> Vec<Expr>, contribution_of: &mut impl FnMut(&Expr) -> Contribution) -> Thrown {
-    let mut out = Thrown { direct: collections::BTreeSet::new(), calls: collections::BTreeSet::new(), passes_on: false, named: collections::BTreeSet::new(), fatal_calls: collections::BTreeMap::new() };
+    let mut out = Thrown { direct: collections::BTreeSet::new(), calls: collections::BTreeSet::new(), passes_on: false, named: collections::BTreeSet::new(), fatal_calls: collections::BTreeMap::new(), task_caught: false };
     thrown_in_block(body, names, &mut *holes_of, &mut *contribution_of, false, &mut out);
     out
 }
 
 pub(crate) fn thrown_in_block(block: &Block, names: &winnow_grammar::InternerContext, holes_of: &mut dyn FnMut(&Expr) -> Vec<Expr>, contribution_of: &mut dyn FnMut(&Expr) -> Contribution, in_a_handler: bool, out: &mut Thrown) {
     for (_, shared) in diamond_waiters(block, names) {
-        let mut waited = Thrown { direct: collections::BTreeSet::new(), calls: collections::BTreeSet::new(), passes_on: false, named: collections::BTreeSet::new(), fatal_calls: collections::BTreeMap::new() };
+        let mut waited = Thrown { direct: collections::BTreeSet::new(), calls: collections::BTreeSet::new(), passes_on: false, named: collections::BTreeSet::new(), fatal_calls: collections::BTreeMap::new(), task_caught: false };
         match &nikaia_std::index::get(&block.stmts, nikaia_std::index::at(shared)).node {
             Stmt::Let { value, .. } => { thrown_in(value, names, &mut &mut *holes_of, &mut &mut *contribution_of, in_a_handler, false, &mut waited); },
             _ => { },
@@ -557,9 +558,10 @@ pub(crate) fn thrown_in(expr: &Expr, names: &winnow_grammar::InternerContext, ho
         Expr::Try(inner, _) => { let inner = nikaia_std::boxed::open(inner); thrown_in(inner, names, &mut &mut *holes_of, &mut &mut *contribution_of, in_a_handler, caught, out); },
         Expr::Async(inner, _, within, _) => {
             let inner = nikaia_std::boxed::open(inner); let within = nikaia_std::boxed::open(within);
-            if !caught { out.direct.extend(contribution_of(expr).errors.iter().cloned()); }
-            thrown_by_a_deadline((within).as_ref(), names, &mut &mut *holes_of, &mut &mut *contribution_of, in_a_handler, caught, out);
-            thrown_in(inner, names, &mut &mut *holes_of, &mut &mut *contribution_of, in_a_handler, caught, out);
+            let waited = out.task_caught;
+            if !waited { out.direct.extend(contribution_of(expr).errors.iter().cloned()); }
+            thrown_by_a_deadline((within).as_ref(), names, &mut &mut *holes_of, &mut &mut *contribution_of, in_a_handler, waited, out);
+            thrown_in(inner, names, &mut &mut *holes_of, &mut &mut *contribution_of, in_a_handler, waited, out);
         },
         Expr::AsyncGroup(_, _, within, _, _) => { let within = nikaia_std::boxed::open(within); thrown_by_a_deadline((within).as_ref(), names, &mut &mut *holes_of, &mut &mut *contribution_of, in_a_handler, caught, out); },
         Expr::Spawn { within, .. } => { let within = nikaia_std::boxed::open(within); thrown_by_a_deadline((within).as_ref(), names, &mut &mut *holes_of, &mut &mut *contribution_of, in_a_handler, caught, out); },
@@ -588,7 +590,13 @@ pub(crate) fn thrown_in(expr: &Expr, names: &winnow_grammar::InternerContext, ho
             let into_the_handler = caught || !passes_on(handler, names, &mut &mut *holes_of, &mut &mut *contribution_of);
             let outer = out.named.copy_owned();
             if !caught { out.named = fatal_named(handler, names); }
+            let task_outer = out.task_caught;
+            out.task_caught = match expr {
+                Expr::Async(_, _, _, _) => into_the_handler,
+                _ => caught,
+            };
             thrown_in(expr, names, &mut &mut *holes_of, &mut &mut *contribution_of, in_a_handler, into_the_handler, out);
+            out.task_caught = task_outer;
             out.named = outer;
         },
         Expr::If { cond, .. } => { let cond = nikaia_std::boxed::open(cond); thrown_in(cond, names, &mut &mut *holes_of, &mut &mut *contribution_of, in_a_handler, caught, out); },
@@ -707,7 +715,7 @@ pub(crate) fn the_caught_error(expr: &Expr, names: &winnow_grammar::InternerCont
 }
 
 pub(crate) fn passes_on(handler: &Block, names: &winnow_grammar::InternerContext, holes_of: &mut dyn FnMut(&Expr) -> Vec<Expr>, contribution_of: &mut dyn FnMut(&Expr) -> Contribution) -> bool {
-    let mut seen = Thrown { direct: collections::BTreeSet::new(), calls: collections::BTreeSet::new(), passes_on: false, named: collections::BTreeSet::new(), fatal_calls: collections::BTreeMap::new() };
+    let mut seen = Thrown { direct: collections::BTreeSet::new(), calls: collections::BTreeSet::new(), passes_on: false, named: collections::BTreeSet::new(), fatal_calls: collections::BTreeMap::new(), task_caught: false };
     thrown_in_block(handler, names, &mut &mut *holes_of, &mut &mut *contribution_of, false, &mut seen);
     seen.passes_on
 }

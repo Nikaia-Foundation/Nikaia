@@ -1,0 +1,26 @@
+// The fallback per part of a tuple of tasks (ADR-async-v6 D22 step 3,
+// #2829): both run beside each other, and the failing part's fallback
+// becomes its value at its wait point.
+enum LoadError {
+    Broken(String),
+}
+
+impl Error for LoadError {
+    fn message(self) -> String {
+        match self {
+            LoadError::Broken(w) => { return f"{w} is broken" }
+        }
+    }
+}
+
+fn joining_load(keep which: String) -> String throws {
+    if which == "b" {
+        throw LoadError::Broken(which)
+    }
+    return which
+}
+
+fn main() throws {
+    let pair = (async joining_load("a") catch { "x" }, async joining_load("b") catch { "y" })
+    println(f"{pair.0} {pair.1}")
+}

@@ -1915,6 +1915,85 @@ fn check_core_flow_widened_by_null(value: ref Ty, answers: ref Ty) -> bool sync 
     }
 }
 
+/// **The value-form tasks of a guarded expression its `catch` does not
+/// enclose** (ADR-async-v6 D6, D22, #2829): a part of a tuple, an argument,
+/// an operand, outside its blocks and lambdas, is waited for before the
+/// tuple, the call or the operation. The `async` the `catch` is written
+/// directly after (`top`) is the fallback's own task (step 3), and a nested
+/// `catch` holds its own.
+fn check_core_flow_tasks_beside(expr: ref Expr, top: bool, mut out: collections::BTreeSet[i64]) sync {
+    match expr {
+        Expr::Async(_, _, _, _) if !top => {
+            out.insert(id_of(expr) as i64)
+            return
+        },
+        Expr::Async(_, _, _, _) => return,
+        Expr::TryCatch { .. } if !top => return,
+        else => {},
+    }
+    for child in child_exprs_of(expr) {
+        check_core_flow_tasks_beside(child, false, out)
+    }
+}
+
+/// **`NK1134`'s help for tasks the `catch` does not enclose** (D22 step 3,
+/// #2829): each task that can fail written with its fallback, `async a()
+/// catch { … }`; a tuple whole, `(async a() catch { … }, async b() catch {
+/// … })`. Null where none of them can fail.
+fn check_core_flow_fallbacks_per_task(state: ref CheckState, world: ref CheckWorld, guarded: ref Expr, past: ref collections::BTreeSet[i64]) -> String? sync {
+    let mut tasks: Vec[String] = []
+    check_core_flow_fallbacks_written(state, world, guarded, past, tasks)
+    if tasks.len() == 0 {
+        return null
+    }
+    match guarded {
+        Expr::Tuple(items, _) => {
+            let mut shown: Vec[String] = []
+            for item in items {
+                let mut own: Vec[String] = []
+                check_core_flow_fallbacks_written(state, world, item, past, own)
+                if own.len() == 1 && check_core_flow_a_task(item) {
+                    shown.push(own[0].clone())
+                } else {
+                    shown.push(written_expression(world.words, item))
+                }
+            }
+            return f"`({shown.join(", ")})`"
+        },
+        else => {},
+    }
+    let mut quoted: Vec[String] = []
+    for task in tasks {
+        quoted.push(f"`{task}`")
+    }
+    return quoted.join(", ")
+}
+
+fn check_core_flow_a_task(expr: ref Expr) -> bool sync {
+    return match expr {
+        Expr::Async(_, _, _, _) => true,
+        else => false,
+    }
+}
+
+/// The tasks of `past` in `expr` that can fail, each written with a fallback.
+fn check_core_flow_fallbacks_written(state: ref CheckState, world: ref CheckWorld, expr: ref Expr, past: ref collections::BTreeSet[i64], mut out: Vec[String]) sync {
+    match expr {
+        Expr::Async(inner, _, _, _) => {
+            let id = id_of(expr) as i64
+            if past.contains(id) && state.flow.fallible_tasks.contains(id) {
+                out.push(f"async {written_expression(world.words, inner)} catch {{ … }}")
+            }
+            return
+        },
+        Expr::TryCatch { .. } => return,
+        else => {},
+    }
+    for child in child_exprs_of(expr) {
+        check_core_flow_fallbacks_written(state, world, child, past, out)
+    }
+}
+
 /// **`expr catch { … }`** (Part I 7.1): the guarded expression needs no
 /// `throws` (`NK2605`), the handler binds `error`, and the value is the
 /// guarded one's type where the handler agrees (0.0.230).
@@ -1934,10 +2013,40 @@ fn check_core_flow_try_catch[H: CheckHost](mut state: CheckState, world: ref Che
     // A `catch` inside a task's walk is a handler again (`NK2402`).
     let probing = state.flow.task_probe
     state.flow.task_probe = false
+    // **The tasks this `catch` does not enclose** (ADR-async-v6 D6, D22,
+    // #2829): each is waited for before its tuple, call or operation.
+    let mut past: collections::BTreeSet[i64] = collections::BTreeSet()
+    check_core_flow_tasks_beside(guarded_expr, true, past)
+    for task in past {
+        state.flow.tasks_past_the_catch.insert(task, outer)
+    }
+    let escaped_outer: CheckGuarded? = state.flow.escaped?.clone()
+    state.flow.escaped = null
     let answers = check_core_expr(state, world, host, guarded_expr, span)
     state.flow.task_probe = probing
+    for task in past {
+        state.flow.tasks_past_the_catch.remove(task)
+    }
     let held: CheckGuarded? = state.flow.guarded?.clone()
     state.flow.guarded = enclosing
+    // What they met is the guard's outside this `catch`, as if walked there.
+    let escaped: CheckGuarded? = state.flow.escaped?.clone()
+    state.flow.escaped = escaped_outer
+    match escaped {
+        met => {
+            match state.flow.guarded?.clone() {
+                outside => {
+                    let mut merged = outside
+                    merged.fallible = merged.fallible || met.fallible
+                    merged.unanswered = merged.unanswered || met.unanswered
+                    merged.thrown.extend(met.thrown.clone())
+                    state.flow.guarded = merged
+                },
+                null => {},
+            }
+        },
+        null => {},
+    }
     // **A nested `catch` fails the enclosing one only by what passes it**
     // (Part I 7.1, ADR-308, #1641): its handler is walked under the
     // enclosing guard, so a failing call or a `throw` there (`throw error`
@@ -1971,7 +2080,8 @@ fn check_core_flow_try_catch[H: CheckHost](mut state: CheckState, world: ref Che
             }
         }
     }
-    state.nothing_here_can_fail(guarded, task, span)
+    let per_task = check_core_flow_fallbacks_per_task(state, world, guarded_expr, past)
+    state.nothing_here_can_fail(guarded, task, per_task, span)
     let id = state.a_new_binding()
     state.scope.push([CheckLocal::free("error", caught, id)])
     // **A set that cannot be named is open** (ADR-351 D4): a `match` over it

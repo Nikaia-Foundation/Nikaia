@@ -135,9 +135,21 @@ impl CheckState {
     /// Its failure arrives where the binding is waited for, before the whole
     /// statement, so the help writes the fallback after the `async`
     /// expression, where that failure is handled.
-    fn nothing_here_can_fail(ref mut self, guarded: ref CheckGuarded, task: ref String?, span: ref Span) sync {
+    ///
+    /// **Tasks the `catch` does not enclose** (D6, D22, #2829): `per_task`
+    /// writes each part of a tuple, argument or operand that starts a task
+    /// that can fail with its own fallback; each is waited for before the
+    /// tuple, the call or the operation, where this `catch` is not.
+    fn nothing_here_can_fail(ref mut self, guarded: ref CheckGuarded, task: ref String?, per_task: ref String?, span: ref Span) sync {
         if guarded.fallible || guarded.unanswered {
             return
+        }
+        match per_task {
+            written => {
+                self.findings.push(check_refusal("NK1134", span, "Nothing here can fail, so the `catch` has nothing to handle.", ["Each `async` here starts a task; its failure arrives where the task is waited for, before the tuple, call or operation it is part of, so no `catch` of this statement meets it (ADR-async-v6 D6, D22).", "Nothing else here is declared with `throws`."], f"Write the fallback after each task, {written}, and remove this `catch`."))
+                return
+            },
+            null => {},
         }
         match task {
             written => {

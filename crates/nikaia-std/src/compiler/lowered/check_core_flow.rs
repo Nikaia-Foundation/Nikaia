@@ -1443,6 +1443,64 @@ pub(crate) fn check_core_flow_widened_by_null(value: &Ty, answers: &Ty) -> bool 
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
+pub(crate) fn check_core_flow_tasks_beside(expr: &Expr, top: bool, out: &mut collections::BTreeSet<i64>) {
+    match expr {
+        Expr::Async(_, _, _, _) if !top => {
+            out.insert(id_of(expr) as i64);
+            return;
+        },
+        Expr::Async(_, _, _, _) => { return; },
+        Expr::TryCatch { .. } if !top => { return; },
+        _ => { },
+    }
+    for child in child_exprs_of(expr) { check_core_flow_tasks_beside(child, false, out); }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn check_core_flow_fallbacks_per_task(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, guarded: &Expr, past: &collections::BTreeSet<i64>) -> Option<String> {
+    #[allow(unused_mut)] let mut tasks: Vec<String> = vec![];
+    check_core_flow_fallbacks_written(state, world, guarded, past, &mut tasks);
+    if tasks.is_empty() { return None; }
+    match guarded {
+        Expr::Tuple(items, _) => {
+            let mut shown: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
+            for item in items.iter() {
+                let mut own: Vec<String> = vec![];
+                check_core_flow_fallbacks_written(state, world, item, past, &mut own);
+                if own.len() == 1 && check_core_flow_a_task(item) { shown.push(nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&own, (0) as usize) }).to_string())); } else { shown.push(written_expression(world.words, item)); }
+            }
+            return Some(format!("`({})`", nikaia_std::block::Text::from(shown.join(", "))));
+        },
+        _ => { },
+    }
+    let mut quoted: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block); #[allow(unused_mut, clippy::redundant_locals)] let mut tasks = tasks;
+    quoted.reserve(tasks.iter().size_hint().0); for task in tasks.iter() { quoted.push(format!("`{}`", task)); }
+    Some(nikaia_std::block::Text::from(quoted.join(", ")))
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn check_core_flow_a_task(expr: &Expr) -> bool { matches!(expr, Expr::Async(_, _, _, _)) }
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn check_core_flow_fallbacks_written(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, expr: &Expr, past: &collections::BTreeSet<i64>, out: &mut Vec<String>) {
+    match expr {
+        Expr::Async(inner, _, _, _) => {
+            let inner = nikaia_std::boxed::open(inner);
+            let id = id_of(expr) as i64;
+            if past.contains(&id) && state.flow.fallible_tasks.contains(&id) { out.push(format!("async {} catch {{ … }}", written_expression(world.words, inner))); }
+            return;
+        },
+        Expr::TryCatch { .. } => { return; },
+        _ => { },
+    }
+    for child in child_exprs_of(expr) { check_core_flow_fallbacks_written(state, world, child, past, out); }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
 pub(crate) fn check_core_flow_try_catch<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, host: &H, whole: &Expr, guarded_expr: &Expr, handler: &Block, span: &Span) -> Ty {
     let outer = state.flow.caught;
     state.flow.caught = true;
@@ -1459,13 +1517,51 @@ pub(crate) fn check_core_flow_try_catch<H: CheckHost>(state: &mut CheckState, wo
     state.flow.guarded = Some(CheckGuarded::nothing());
     let probing = state.flow.task_probe;
     state.flow.task_probe = false;
+    let mut past: collections::BTreeSet<i64> = collections::BTreeSet::new();
+    check_core_flow_tasks_beside(guarded_expr, true, &mut past);
+    for task in past.iter() {
+        let task = nikaia_std::num::value(task);
+        state.flow.tasks_past_the_catch.insert(task, outer);
+    }
+    let escaped_outer: Option<CheckGuarded> = match state.flow.escaped.as_ref() {
+        Some(__nikaia_it) => Some(__nikaia_it.clone()),
+        None => None,
+    };
+    state.flow.escaped = None;
     let answers = check_core_expr(state, world, host, guarded_expr, span);
     state.flow.task_probe = probing;
+    for task in past.iter() {
+        let task = nikaia_std::num::value(task);
+        state.flow.tasks_past_the_catch.remove(&task);
+    }
     let held: Option<CheckGuarded> = match state.flow.guarded.as_ref() {
         Some(__nikaia_it) => Some(__nikaia_it.clone()),
         None => None,
     };
     state.flow.guarded = enclosing;
+    let escaped: Option<CheckGuarded> = match state.flow.escaped.as_ref() {
+        Some(__nikaia_it) => Some(__nikaia_it.clone()),
+        None => None,
+    };
+    state.flow.escaped = escaped_outer;
+    match escaped {
+        Some(ref met) => {
+            match match state.flow.guarded.as_ref() {
+                Some(__nikaia_it) => Some(__nikaia_it.clone()),
+                None => None,
+            } {
+                Some(outside) => {
+                    let mut merged = outside;
+                    merged.fallible = merged.fallible || met.fallible;
+                    merged.unanswered = merged.unanswered || met.unanswered;
+                    merged.thrown.extend(met.thrown.iter().cloned());
+                    state.flow.guarded = Some(merged);
+                },
+                None => { },
+            }
+        },
+        None => { },
+    }
     if state.flow.guarded.is_some() && check_core_flow_may_pass((held).as_ref()) { check_core_flow_no_answer(state); }
     state.flow.caught = outer;
     state.flow.swallowed = swallowed_outer;
@@ -1489,7 +1585,8 @@ pub(crate) fn check_core_flow_try_catch<H: CheckHost>(state: &mut CheckState, wo
             }
         }
     }
-    state.nothing_here_can_fail(&guarded, (task).as_deref(), span);
+    let per_task = check_core_flow_fallbacks_per_task(&state, world, guarded_expr, &past);
+    state.nothing_here_can_fail(&guarded, (task).as_deref(), (per_task).as_deref(), span);
     let id = state.a_new_binding();
     state.scope.push(vec![CheckLocal::free(String::from("error"), caught, id)]);
     let mut open = false;

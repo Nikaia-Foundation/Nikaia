@@ -2522,6 +2522,9 @@ impl EmitState {
         // Each task's own strategy (D15, D18), by the same index; `""` for
         // none.
         let mut admissions: Vec[String] = []
+        // Whether each task has its fallback (D22 step 3), by the same index:
+        // a tuple's parts each their own (#2829).
+        let mut fallbacks: Vec[bool] = []
         let mut named: String = ""
         let mut whole = true
         let mut fallback = false
@@ -2539,6 +2542,7 @@ impl EmitState {
                                 admissions.push(self.emit_async_option(world, walk, host, admission, depth, flow, scope))
                                 named = emit_text(world, names[0])
                                 fallback = true
+                                fallbacks.push(true)
                             }
                         },
                         else => {},
@@ -2549,15 +2553,27 @@ impl EmitState {
                             deadlines.push(self.emit_async_deadline(world, walk, host, within, depth, flow, scope))
                             admissions.push(self.emit_async_option(world, walk, host, admission, depth, flow, scope))
                             named = emit_text(world, names[0])
+                            fallbacks.push(false)
                         }
                     },
                     Expr::Tuple(parts, _) => {
                         for part in parts {
-                            match part {
+                            // A part with its own fallback (D22 step 3, #2829).
+                            let mut own = false
+                            let task: ref Expr = match part {
+                                Expr::TryCatch { expr, .. } => {
+                                    own = true
+                                    expr
+                                },
+                                else => part,
+                            }
+                            match task {
                                 Expr::Async(inner, id, within, admission) => {
                                     tasks.push((inner.clone(), id.get() as i64))
                                     deadlines.push(self.emit_async_deadline(world, walk, host, within, depth, flow, scope))
                                     admissions.push(self.emit_async_option(world, walk, host, admission, depth, flow, scope))
+                                    fallbacks.push(own)
+                                    fallback = fallback || own
                                 },
                                 else => {
                                     whole = false
@@ -2610,17 +2626,18 @@ impl EmitState {
                 out.push("nikaia_std::task::Read::new(")
             }
             let mut started = EmitOut::empty()
-            walk.async_fallback = fallback
+            let falls_back = fallbacks[index]
+            walk.async_fallback = falls_back
             walk.async_within = deadlines[index].clone()
             walk.async_admission = admissions[index].clone()
             index = index + 1
             self.emit_async_task(world, walk, started, host, each.0, each.1, "handle", depth, here, scope)
             walk.async_fallback = false
-            let mut joined = emit_async_joined(handle, channel, fallback, emit_async_site(scope))
+            let mut joined = emit_async_joined(handle, channel, falls_back, emit_async_site(scope))
             let mut alone = joined.clone()
             if started.buf.ends_with(".await") {
-                joined = emit_async_joined_paused(handle, channel, fallback, emit_async_line(walk.async_gates), emit_async_site(scope))
-                alone = emit_async_joined_paused(handle, channel, fallback, "", emit_async_site(scope))
+                joined = emit_async_joined_paused(handle, channel, falls_back, emit_async_line(walk.async_gates), emit_async_site(scope))
+                alone = emit_async_joined_paused(handle, channel, falls_back, "", emit_async_site(scope))
             }
             if shared {
                 alone = f"(*{alone})"

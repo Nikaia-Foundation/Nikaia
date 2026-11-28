@@ -1,0 +1,26 @@
+// A `catch` after a tuple whose main-line part can fail takes that part's
+// failure (ADR-async-v6 D6, D22, #2829); the task beside it is waited for
+// before the tuple, and its failure would go on to `main`.
+enum LoadError {
+    Broken(String),
+}
+
+impl Error for LoadError {
+    fn message(self) -> String {
+        match self {
+            LoadError::Broken(w) => { return f"{w} is broken" }
+        }
+    }
+}
+
+fn joining_load(keep which: String) -> String throws {
+    if which == "b" {
+        throw LoadError::Broken(which)
+    }
+    return which
+}
+
+fn main() throws {
+    let pair = (async joining_load("a"), joining_load("b")) catch { ("x", "y") }
+    println(f"{pair.0} {pair.1}")
+}

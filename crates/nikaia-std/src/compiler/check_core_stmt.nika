@@ -4332,9 +4332,15 @@ fn check_async_block(mut state: CheckState, world: ref CheckWorld, block: ref Bl
                             }
                         }
                         for part in parts {
-                            match part {
+                            // A part with its own fallback is a task too
+                            // (D22 step 3, #2829).
+                            let task: ref Expr = match part {
+                                Expr::TryCatch { expr, .. } if check_an_async_task(expr) => expr,
+                                else => part,
+                            }
+                            match task {
                                 Expr::Async(inner, _, _, _) => {
-                                    pending.push(check_async_binding(state, world, block, at, names, part, group, beside + computed - 1, last, stmt.span))
+                                    pending.push(check_async_binding(state, world, block, at, names, task, group, beside + computed - 1, last, stmt.span))
                                     check_async_in(state, inner, group, stmt.span)
                                 },
                                 else => check_async_in(state, part, group, stmt.span),
@@ -4583,9 +4589,16 @@ fn check_async_operands(mut state: CheckState, parts: ref Vec[ref Expr], at: i64
         }
     }
     for part in parts {
-        match part {
+        // **A part with its own fallback is a task too** (ADR-async-v6 D22
+        // step 3, #2829): `(async a() catch { … }, async b() catch { … })`
+        // runs both, each fallback at its wait point.
+        let task: ref Expr = match part {
+            Expr::TryCatch { expr, .. } if check_an_async_task(expr) => expr,
+            else => part,
+        }
+        match task {
             Expr::Async(inner, _, _, _) => {
-                state.facts.async_waits.insert(id_of(part) as i64, CheckAsyncWait { at: CheckAsyncWaitAt::Before(at), group: group })
+                state.facts.async_waits.insert(id_of(task) as i64, CheckAsyncWait { at: CheckAsyncWaitAt::Before(at), group: group })
                 if computed < 2 {
                     state.a_task_with_nothing_beside_it(span, "nothing beside it in the same call or operation is computed while it runs")
                 }

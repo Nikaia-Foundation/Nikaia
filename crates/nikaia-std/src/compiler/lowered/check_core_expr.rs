@@ -85,20 +85,39 @@ pub(crate) fn check_core_expr<H: CheckHost>(state: &mut CheckState, world: &Chec
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 pub(crate) fn check_core_task_walked<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, host: &H, expr: &Expr, span: &Span) -> Ty {
+    let past: Option<bool> = match state.flow.tasks_past_the_catch.get(&(id_of(expr) as i64)) {
+        Some(__nikaia_it) => Some(__nikaia_it.clone()),
+        None => None,
+    };
     let enclosing: Option<CheckGuarded> = match state.flow.guarded.as_ref() {
         Some(__nikaia_it) => Some(__nikaia_it.clone()),
         None => None,
     };
     let probing = state.flow.task_probe;
+    let caught = state.flow.caught;
     state.flow.guarded = Some(CheckGuarded::nothing());
-    state.flow.task_probe = enclosing.is_none() || probing;
+    state.flow.task_probe = enclosing.is_none() || probing || past.is_some();
+    if past.is_some() { state.flow.caught = nikaia_std::index::or(past, || caught); }
     let ty = check_core_value_of(state, world, host, expr, span);
     let found: CheckGuarded = nikaia_std::index::or(match state.flow.guarded.as_ref() {
         Some(__nikaia_it) => Some(__nikaia_it.clone()),
         None => None,
     }, || CheckGuarded::nothing());
     state.flow.task_probe = probing;
+    state.flow.caught = caught;
     if found.fallible { state.flow.fallible_tasks.insert(id_of(expr) as i64); }
+    if past.is_some() {
+        state.flow.guarded = enclosing;
+        let mut escaped = nikaia_std::index::or(match state.flow.escaped.as_ref() {
+            Some(__nikaia_it) => Some(__nikaia_it.clone()),
+            None => None,
+        }, || CheckGuarded::nothing());
+        escaped.fallible = escaped.fallible || found.fallible;
+        escaped.unanswered = escaped.unanswered || found.unanswered;
+        escaped.thrown.extend(found.thrown);
+        state.flow.escaped = Some(escaped);
+        return ty;
+    }
     match enclosing {
         Some(ref outer) => {
             let mut merged = outer.clone();
