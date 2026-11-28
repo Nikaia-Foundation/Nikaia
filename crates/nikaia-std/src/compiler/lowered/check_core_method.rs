@@ -828,6 +828,7 @@ pub(crate) fn check_core_method<H: CheckHost>(state: &mut CheckState, world: &Ch
         if listed && state.a_lambda_touching_nothing(world, host, &frame, nikaia_std::index::get(&args, 0)) { state.facts.fused_maps.insert(id_of(expr) as i64); }
     }
     check_core_method_stream_kept(state, world, receiver, &name, &found, span);
+    check_core_method_stream_stored(state, world, receiver, &name, args);
     found
 }
 
@@ -840,6 +841,88 @@ pub(crate) fn check_core_method_stream_kept(state: &mut CheckState, world: &Chec
         _ => found.is_a_view(),
     };
     if kept { state.findings.push(check_refusal("NK2308", span, format!("The lambda of `{}` hands back a view of a line of the stream, which lives in a buffer of the stream's pool only for the call that sees it.", method), vec![String::from("A stream reads into a fixed pool of buffers, and a step over it sees each line for one turn; what the step hands on is kept past that turn.")], Some(String::from("Hand back text of its own (`.clone()` of the line), or copy each line first with `.cloned()`.")))); }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn check_core_method_stream_stored(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, receiver: &Expr, method: &str, args: &[Expr]) {
+    if !check_core_a_view_step(method) || !check_core_a_stream_walk(world, receiver) { return; }
+    for arg in args.iter() {
+        match arg {
+            Expr::Closure { params, body, .. } => {
+                let mut lines = lambda_own(world, params);
+                let mut own = lambda_own(world, params);
+                let mut sites: Vec<(String, Span)> = vec![];
+                check_core_stream_stores_in_block(world, body, &mut lines, &mut own, &mut sites);
+                for (name, at) in sites.iter() {
+                    let at = *at;
+                    let local = match state.binding(name) { Some(__nikaia_value) => __nikaia_value, None => continue };
+                    if local.ty.is_a_view() { state.findings.push(check_refusal("NK2308", &at, format!("The lambda of `{}` stores a view of a line of the stream into `{}`, which lives in a buffer of the stream's pool only for the call that sees it.", method, name), vec![String::from("A stream reads into a fixed pool of buffers, and a step over it sees each line for one turn; what the step stores outside itself is kept past that turn.")], Some(String::from("Hand back text of its own (`.clone()` of the line), or copy each line first with `.cloned()`.")))); }
+                }
+            },
+            _ => { },
+        }
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn check_core_stream_stores_in_block(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, block: &Block, lines: &mut collections::BTreeSet<String>, own: &mut collections::BTreeSet<String>, sites: &mut Vec<(String, Span)>) {
+    for stmt in block.stmts.iter() {
+        match &stmt.node {
+            Stmt::Let { names, value, .. } => {
+                check_core_stream_stores_in_expr(world, value, lines, own, sites);
+                let reads = check_core_stream_reads_a_line(world, value, &lines);
+                for n in names.iter() {
+                    let n = *n;
+                    own.insert(nikaia_std::block::Text::from(world.words.resolve(n).to_string()));
+                    if reads { lines.insert(nikaia_std::block::Text::from(world.words.resolve(n).to_string())); }
+                }
+            },
+            Stmt::Assign { target, value, .. } => {
+                check_core_stream_stores_in_expr(world, value, lines, own, sites);
+                match target {
+                    Expr::Variable(found, _) => {
+                        let found = *found;
+                        let name: String = nikaia_std::block::Text::from(world.words.resolve(found).to_string());
+                        if check_core_stream_reads_a_line(world, value, &lines) { if own.contains(&name) { lines.insert(name); } else { sites.push((name, stmt.span.clone())); } }
+                    },
+                    _ => { },
+                }
+            },
+            Stmt::Expr(value) => { check_core_stream_stores_in_expr(world, value, lines, own, sites); },
+            Stmt::For { body, .. } => { check_core_stream_stores_in_block(world, body, lines, own, sites); },
+            Stmt::While { body, .. } => { check_core_stream_stores_in_block(world, body, lines, own, sites); },
+            _ => { },
+        }
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn check_core_stream_stores_in_expr(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, expr: &Expr, lines: &mut collections::BTreeSet<String>, own: &mut collections::BTreeSet<String>, sites: &mut Vec<(String, Span)>) {
+    match expr {
+        Expr::Block(block, _) => { check_core_stream_stores_in_block(world, block, lines, own, sites); },
+        Expr::Unsafe(block, _) => { check_core_stream_stores_in_block(world, block, lines, own, sites); },
+        Expr::If { then_branch, else_branch, .. } => {
+            check_core_stream_stores_in_block(world, then_branch, lines, own, sites);
+            if else_branch.is_some() {
+                let other: &Block = match else_branch { Some(__nikaia_value) => __nikaia_value, None => return };
+                check_core_stream_stores_in_block(world, other, lines, own, sites);
+            }
+        },
+        Expr::Match { arms, .. } => { for arm in arms.iter() { check_core_stream_stores_in_expr(world, &arm.body, lines, own, sites); } },
+        _ => { },
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn check_core_stream_reads_a_line(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, expr: &Expr, lines: &collections::BTreeSet<String>) -> bool {
+    let mut read: collections::BTreeSet<String> = collections::BTreeSet::new();
+    names_in(expr, world.words, &mut read);
+    for n in read.iter() { if lines.contains(n) { return true; } }
+    false
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before

@@ -1192,6 +1192,7 @@ fn check_core_method[H: CheckHost](mut state: CheckState, world: ref CheckWorld,
         }
     }
     check_core_method_stream_kept(state, world, receiver, name, found, span)
+    check_core_method_stream_stored(state, world, receiver, name, args)
     return found
 }
 
@@ -1210,6 +1211,109 @@ fn check_core_method_stream_kept(mut state: CheckState, world: ref CheckWorld, r
     if kept {
         state.findings.push(check_refusal("NK2308", span, f"The lambda of `{method}` hands back a view of a line of the stream, which lives in a buffer of the stream's pool only for the call that sees it.", ["A stream reads into a fixed pool of buffers, and a step over it sees each line for one turn; what the step hands on is kept past that turn."], "Hand back text of its own (`.clone()` of the line), or copy each line first with `.cloned()`."))
     }
+}
+
+/// **A line of a stream stored by a step's lambda outlives its turn**
+/// (ADR-stream-buffers-v1 D2): a view of the line assigned to a name the
+/// lambda captures is kept past the call that sees it, as one handed back
+/// is, which `NK2308` refuses. A name holds the line where the lambda's
+/// parameters, or a value read from one, are assigned to it; the captured
+/// name must hold a view, so a whole number taken from the line or text of
+/// its own is not this case.
+fn check_core_method_stream_stored(mut state: CheckState, world: ref CheckWorld, receiver: ref Expr, method: ref String, args: ref Vec[Expr]) sync {
+    if !check_core_a_view_step(method) || !check_core_a_stream_walk(world, receiver) {
+        return
+    }
+    for arg in args {
+        match arg {
+            Expr::Closure { params, body, .. } => {
+                let mut lines = lambda_own(world, params)
+                let mut own = lambda_own(world, params)
+                let mut sites: Vec[(String, Span)] = []
+                check_core_stream_stores_in_block(world, body, lines, own, sites)
+                for (name, at) in sites {
+                    let local = state.binding(name) ?? continue
+                    if local.ty.is_a_view() {
+                        state.findings.push(check_refusal("NK2308", at, f"The lambda of `{method}` stores a view of a line of the stream into `{name}`, which lives in a buffer of the stream's pool only for the call that sees it.", ["A stream reads into a fixed pool of buffers, and a step over it sees each line for one turn; what the step stores outside itself is kept past that turn."], "Hand back text of its own (`.clone()` of the line), or copy each line first with `.cloned()`."))
+                    }
+                }
+            },
+            else => {},
+        }
+    }
+}
+
+/// The assignments in a step's lambda body that store a line into a name
+/// it captures, for `check_core_method_stream_stored`: `lines` are the
+/// names that hold a line, `own` the names the lambda binds itself.
+fn check_core_stream_stores_in_block(world: ref CheckWorld, block: ref Block, mut lines: collections::BTreeSet[String], mut own: collections::BTreeSet[String], mut sites: Vec[(String, Span)]) sync {
+    for stmt in block.stmts {
+        match stmt.node {
+            Stmt::Let { names, value, .. } => {
+                check_core_stream_stores_in_expr(world, value, lines, own, sites)
+                let reads = check_core_stream_reads_a_line(world, value, lines)
+                for n in names {
+                    own.insert(world.words.resolve(n).clone())
+                    if reads {
+                        lines.insert(world.words.resolve(n).clone())
+                    }
+                }
+            },
+            Stmt::Assign { target, value, .. } => {
+                check_core_stream_stores_in_expr(world, value, lines, own, sites)
+                match target {
+                    Expr::Variable(found, _) => {
+                        let name: String = world.words.resolve(found).clone()
+                        if check_core_stream_reads_a_line(world, value, lines) {
+                            if own.contains(name) {
+                                lines.insert(name)
+                            } else {
+                                sites.push((name, stmt.span.clone()))
+                            }
+                        }
+                    },
+                    else => {},
+                }
+            },
+            Stmt::Expr(value) => check_core_stream_stores_in_expr(world, value, lines, own, sites),
+            Stmt::For { body, .. } => check_core_stream_stores_in_block(world, body, lines, own, sites),
+            Stmt::While { body, .. } => check_core_stream_stores_in_block(world, body, lines, own, sites),
+            else => {},
+        }
+    }
+}
+
+/// The blocks of an expression a step's lambda body runs in its own call.
+fn check_core_stream_stores_in_expr(world: ref CheckWorld, expr: ref Expr, mut lines: collections::BTreeSet[String], mut own: collections::BTreeSet[String], mut sites: Vec[(String, Span)]) sync {
+    match expr {
+        Expr::Block(block, _) => check_core_stream_stores_in_block(world, block, lines, own, sites),
+        Expr::Unsafe(block, _) => check_core_stream_stores_in_block(world, block, lines, own, sites),
+        Expr::If { then_branch, else_branch, .. } => {
+            check_core_stream_stores_in_block(world, then_branch, lines, own, sites)
+            if else_branch != null {
+                let other: ref Block = else_branch ?? return
+                check_core_stream_stores_in_block(world, other, lines, own, sites)
+            }
+        },
+        Expr::Match { arms, .. } => {
+            for arm in arms {
+                check_core_stream_stores_in_expr(world, arm.body, lines, own, sites)
+            }
+        },
+        else => {},
+    }
+}
+
+/// Whether `expr` reads one of the names that hold a line.
+fn check_core_stream_reads_a_line(world: ref CheckWorld, expr: ref Expr, lines: ref collections::BTreeSet[String]) -> bool sync {
+    let mut read: collections::BTreeSet[String] = collections::BTreeSet()
+    names_in(expr, world.words, read)
+    for n in read {
+        if lines.contains(n) {
+            return true
+        }
+    }
+    return false
 }
 
 /// **A stream's items are views of its pool** (ADR-stream-buffers-v1 D1,
