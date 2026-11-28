@@ -138,7 +138,7 @@ source = "24d519b69f78d5fc11bf0e673a56111ed87089fcc3f9556a0b5c90ab8a08f809"
 source = "8f1d3c067204a0f89424dfcad078c356859c17d177b3c7a7bdb92a8799d9d1d8"
 
 [units."src/main.nika"]
-source = "bcc097b71045db9f42de530925b7ea883ae6d977da4f292016e83cd4d3e86083"
+source = "810abc03acfc351e507d1df450063da803f8e40a770c194054e6b8d0fbf892a8"
 
 [units."src/nest_beside.nika"]
 source = "910250a34f7ed8ecb7cfbfae03802ddcf6dc8c2359680b8ffc957a61cf69c333"

@@ -1,5 +1,5 @@
 // `T()` makes the empty collection only inside a kind arm whose pattern
-// names `Map` or `List` (ADR-grammar-typed-read-v1 D14, #2626); outside
+// names `Map` or `List` (ADR-grammar-typed-read-v2 D14, #2626); outside
 // one it is the call of a function nothing declares.
 fn make[T](x: T) -> T {
 	let y: T = T()

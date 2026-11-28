@@ -238,7 +238,7 @@ pub struct EmitWalk {
     pub grammar_values: collections::BTreeMap[String, GrammarRule],
     /// Each `members[S]` of the grammar being written, in the order its
     /// call `__nikaia_members_N` was written: its rules follow the
-    /// grammar's own (ADR-grammar-typed-read-v1 D3).
+    /// grammar's own (ADR-grammar-typed-read-v2 D3).
     pub grammar_members: Vec[Spanned[Pattern]],
     /// The grammar being written is the copy over bytes.
     pub grammar_bytes: bool,
@@ -326,7 +326,7 @@ pub struct EmitWalk {
     /// clone it again; `-1` for none.
     pub uncopied: i64,
     /// **The type arguments of a call reached by a path** (ADR-330 D9,
-    /// ADR-grammar-typed-read-v1 D11), `::<T>`, written after the callee's name by the
+    /// ADR-grammar-typed-read-v2 D11), `::<T>`, written after the callee's name by the
     /// call being written; `""` for none.
     pub path_types: String,
     /// **The groups of `async e` open where the walk is** (ADR-async-5 D9,
@@ -407,7 +407,7 @@ pub struct EmitWalk {
     /// another binding of the name is no kept buffer (#1073).
     pub kept_names: collections::BTreeMap[String, i64],
     /// **The body of a `for` over a `@stream` call, as the parser's `each`**
-    /// (ADR-grammar-typed-read-v1 D7, #2708): written by `emit_stmt_for_each`
+    /// (ADR-grammar-typed-read-v2 D7, #2708): written by `emit_stmt_for_each`
     /// with the item bound as `__wg_one`, and taken by the call's lowering
     /// (`emit_core_grammar_entry`, `emit_call_grammar`), which wraps it in the
     /// closure the engine calls per item.

@@ -1,5 +1,5 @@
 // A member whose key names no field fails the parse, naming the key, unless
-// `unknown:` names the rule that skips its value (ADR-grammar-typed-read-v1 D5).
+// `unknown:` names the rule that skips its value (ADR-grammar-typed-read-v2 D5).
 struct Point { x: i64, y: i64 = 0, label: String?, }
 grammar J {
 	entry rule loose -> Point = "{" => m:members[Point](Key, Value[_], ","; null: Null, unknown: Skip) "}" eof -> { m }

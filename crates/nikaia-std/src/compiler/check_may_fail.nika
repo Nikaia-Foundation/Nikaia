@@ -1,6 +1,6 @@
 // crates/nikaia-std/src/compiler/check_may_fail.nika
 //
-// **A written call to something that can fail** (`NK2605`, ADR-025 D1), moved
+// **A written call to something that can fail** (`NK2605`, ADR-loop-failure-v1 D1), moved
 // from the compiler's checker (ADR-294, #125, #558, C-5f). What the committed
 // ledger lacks (`NK2402`) is asked of the host: `newly_throws`. Also a fatal
 // error that passes a `catch` (`NK2605`, ADR-345 D2).
@@ -65,7 +65,7 @@ impl CheckState {
         self.findings.push(check_refusal("NK2605", span, f"This function can fail, because it throws{named}.", ["A `throw` fails the function it stands in, as a call that can fail does."], help))
     }
 
-    /// **A written call to something that can fail** (`NK2605`). ADR-025 D1
+    /// **A written call to something that can fail** (`NK2605`). ADR-loop-failure-v1 D1
     /// states the rule for the calls nobody wrote - a block's closing brace, a
     /// loop's step - and says it is "exactly as a written call would" behave.
     /// Reported only where the callee's contract says it can fail, which is

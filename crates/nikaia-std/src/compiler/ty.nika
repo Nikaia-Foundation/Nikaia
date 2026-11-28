@@ -1641,7 +1641,7 @@ pub struct FnContract {
     /// **The lambda parameters it fails through** (#2692): `throws =
     /// "throws(f)"`, the twin of `sync = "sync(f)"`. A lambda handed there may
     /// fail; a step that hands back a sequence then makes one whose step fails
-    /// (ADR-025 D1), and any other call fails where the lambda does. Empty
+    /// (ADR-loop-failure-v1 D1), and any other call fails where the lambda does. Empty
     /// for every function that runs no lambda of the kind.
     pub throws_from: Vec[String],
     pub touches: Vec[Touch],

@@ -206,7 +206,7 @@ impl EmitState {
     /// no such thing, so the declaration decides: a name that is a struct is a
     /// call to the `new` its `impl` provides.
     fn emit_core_call[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, func: ref Expr, args: ref Vec[Expr], config: ref Vec[ConfigArg], depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
-        // **`T()` in a `Map` or `List` arm** (ADR-grammar-typed-read-v1 D14):
+        // **`T()` in a `Map` or `List` arm** (ADR-grammar-typed-read-v2 D14):
         // the empty value of the type `T` is in this copy, which the copy's
         // parameter, or the type written in its place, has as `Default`.
         if self.facts.kind_constructors.contains(node_key(func)) {
@@ -548,7 +548,7 @@ impl EmitState {
         // proved, and the failure is written with what only this compiler knew -
         // the claim as written and its operands by name.
         // **`path::f[T](…)` is the call to the path** (ADR-330 D9,
-        // ADR-grammar-typed-read-v1 D11), its types written after the callee's name.
+        // ADR-grammar-typed-read-v2 D11), its types written after the callee's name.
         match func {
             Expr::Index { base, index, .. } => {
                 let types: String = self.emit_call_path_types(world, walk, host, base, index) ?? ""
@@ -831,7 +831,7 @@ impl EmitState {
                 if contract != null {
                     let held = contract ?? return false
                     pieces = held.pieces
-                    // **A `@stream` entry's call is a sequence** (ADR-grammar-typed-read-v1
+                    // **A `@stream` entry's call is a sequence** (ADR-grammar-typed-read-v2
                     // D7, #1505), walked through the function its package
                     // writes beside the grammar (`emit_stream_walk`).
                     match held.signature {
@@ -863,7 +863,7 @@ impl EmitState {
                     // declared; last the caller's `words:` table (ADR-grammar-input-v1 D10),
                     // which is no option the rule declares.
                     // **A `for` over it runs its body as the parser's `each`**
-                    // (ADR-grammar-typed-read-v1 D7, #2708, `emit_stmt_for_each`):
+                    // (ADR-grammar-typed-read-v2 D7, #2708, `emit_stmt_for_each`):
                     // through the package's `emit_stream_each`, the input lent.
                     let each_body: EmitOut? = match walk.each_body { null => null, held => held.clone() }
                     walk.each_body = null
@@ -2071,7 +2071,7 @@ impl EmitState {
     }
 
     /// **A method a failing lambda passes through, or one on a walk of
-    /// failing elements** (#2736, ADR-025 D1): the name written in its place,
+    /// failing elements** (#2736, ADR-loop-failure-v1 D1): the name written in its place,
     /// or `""` for its own, and what goes before and after its arguments.
     ///
     /// A step whose lambda fails makes a walk of the language below's

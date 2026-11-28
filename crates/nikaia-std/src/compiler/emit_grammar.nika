@@ -341,7 +341,7 @@ impl EmitState {
         }
     }
 
-    /// **The Rust user's reader of a `@stream` entry** (ADR-grammar-typed-read-v1 D7 and
+    /// **The Rust user's reader of a `@stream` entry** (ADR-grammar-typed-read-v2 D7 and
     /// ADR-393 D4, both amended 2026-11-08): `G::<rule>_reader(r)` takes
     /// `impl std::io::Read + Send + 'static` and hands back the items, owned,
     /// as an iterator of `Result<Item, ParseError>`, the shape of the Nikaia
@@ -363,7 +363,7 @@ impl EmitState {
         out.push("if let Err(__wg_error) = __wg_parsed { let _ = __wg_tx.send(Err(nikaia_std::grammar::ParseError::of(__wg_error.render_excerpt()))); } }); __wg_rx.into_iter() }\n")
     }
 
-    /// **Another package's walk of a `@stream` entry** (ADR-grammar-typed-read-v1 D7,
+    /// **Another package's walk of a `@stream` entry** (ADR-grammar-typed-read-v2 D7,
     /// #1505): the engine's `parse_<rule>_slice_each` is the crate's alone
     /// (#1464), so a `pub grammar` writes beside itself, public and hidden,
     /// the function a caller in another package walks: the form of the walk
@@ -413,7 +413,7 @@ impl EmitState {
             out.push(" }\n")
         }
         // **The walk a `for` runs its body in, as the parser's `each`**
-        // (ADR-grammar-typed-read-v1 D7, #2708, `emit_stmt_for_each`): the
+        // (ADR-grammar-typed-read-v2 D7, #2708, `emit_stmt_for_each`): the
         // input lent, no thread, each item handed to the caller's closure by
         // reference. Its value is `Some` of what broke the parse, `None` where
         // it read to the end, or the failure rendered against the input.
@@ -813,7 +813,7 @@ impl EmitState {
         }
     }
 
-    /// **A `@stream` entry is the engine's `#[stream(each)]`** (ADR-grammar-typed-read-v1
+    /// **A `@stream` entry is the engine's `#[stream(each)]`** (ADR-grammar-typed-read-v2
     /// D7, amended 2026-11-08): its `item*` becomes a `fold` that counts, on
     /// the path the reader hands each item over on, and the caller sees the
     /// items through `each` (`nikaia_std::grammar::stream`). The rule is
@@ -822,7 +822,7 @@ impl EmitState {
     /// `parse_<rule>_slice_each`, #1464): the walk calls them inside the crate, and a Rust user reads
     /// the entry only through `G::<rule>_reader` (`emit_stream_reader`).
     ///
-    /// **An entry whose items are emitted** (`emitting`, ADR-grammar-typed-read-v1 D7,
+    /// **An entry whose items are emitted** (`emitting`, ADR-grammar-typed-read-v2 D7,
     /// amended 2026-11-18, #2061) folds a rule of its own around the
     /// repeated one, `__wg_<rule>_item -> Option<Item>`, whose value is
     /// `None`: the engine shows `each` its fold's items and the values its
@@ -995,7 +995,7 @@ fn emit_stream_each(item: ref String, emitting: bool, batched: bool) -> String {
 }
 
 /// **A walk over a `String` or `Bytes` hands its items over in batches**
-/// (ADR-grammar-typed-read-v1 D7, #2433): the parser's thread collects up to
+/// (ADR-grammar-typed-read-v2 D7, #2433): the parser's thread collects up to
 /// 256 items into `__wg_batch` (`emit_stream_each`) and sends each full
 /// batch through a channel that holds one, then the rest and the error, if
 /// there is one, at the end; the iterator flattens the batches. Items and
@@ -1013,7 +1013,7 @@ fn emit_stream_batched_end(rendered: ref String) -> String {
     return f"if let Err(__wg_error) = __wg_parsed {{ __wg_batch.push(Err(nikaia_std::grammar::ParseError::of({rendered}))); }} if !__wg_batch.is_empty() {{ let _ = __wg_tx.send(__wg_batch); }} }}); __wg_rx.into_iter().flatten()"
 }
 
-/// **The `@stream` entries a Rust user reads with a reader** (ADR-grammar-typed-read-v1
+/// **The `@stream` entries a Rust user reads with a reader** (ADR-grammar-typed-read-v2
 /// D7, amended 2026-11-08): those of a `pub grammar` in a package offered to
 /// Rust, which take no values; the walk refuses an entry that does
 /// (`emit_core_grammar_entry`).
@@ -1057,7 +1057,7 @@ impl EmitState {
     }
 
     /// **`NK1359`: a walk that keeps the parser's thread, of items that view
-    /// the input** (ADR-grammar-typed-read-v1 D7, #2708): the thread owns a
+    /// the input** (ADR-grammar-typed-read-v2 D7, #2708): the thread owns a
     /// copy of the input and hands items over a channel, which a view of the
     /// caller's input cannot cross. Only a `for` over the call, whose body is
     /// the parser's `each`, walks such items, until "The other methods of a
@@ -1092,7 +1092,7 @@ fn emit_stream_grammar_module(book: ref String) -> String {
     return f"__nikaia_grammar_{book}"
 }
 
-/// **The repetition a `@stream` entry walks** (ADR-grammar-typed-read-v1 D7, #1459):
+/// **The repetition a `@stream` entry walks** (ADR-grammar-typed-read-v2 D7, #1459):
 /// the rule repeated, the separator between two items, and the counts.
 struct StreamFold {
     item: Spanned[Pattern],
@@ -1184,7 +1184,7 @@ impl EmitState {
         return false
     }
 
-    /// **A member's value into its field** (ADR-grammar-typed-read-v1 D3,
+    /// **A member's value into its field** (ADR-grammar-typed-read-v2 D3,
     /// #2602): a value rule hands text back as a view of the input, and the
     /// field owns it. Text goes in by `IntoMember`, a list of text item by
     /// item, so a `Vec[String]` or a `Vec[String]?` field takes the list a
@@ -1208,7 +1208,7 @@ impl EmitState {
     /// Past a commit point it is the parse's error: no enclosing alternative
     /// is tried; before one, the next alternative is.
     /// **The rules `members[S](key, value, sep; null:, unknown:)` lowers
-    /// to** (ADR-grammar-typed-read-v1 D3, D5; Part II 10.8). The members, `key value`
+    /// to** (ADR-grammar-typed-read-v2 D3, D5; Part II 10.8). The members, `key value`
     /// apart by `sep`, each read into a piece that holds one field, the
     /// value rule chosen by the key's index among the fields; then `S` built
     /// from the pieces by the mapping rule: a field left out takes its

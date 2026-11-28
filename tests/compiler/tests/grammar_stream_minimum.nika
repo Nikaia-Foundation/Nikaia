@@ -1,5 +1,5 @@
 // An `@stream` entry over `item+` checks its minimum at the end of the
-// stream (ADR-grammar-typed-read-v1 D7, #1459): an empty input fails where the first
+// stream (ADR-grammar-typed-read-v2 D7, #1459): an empty input fails where the first
 // item should start, with that item's error.
 
 struct Item {

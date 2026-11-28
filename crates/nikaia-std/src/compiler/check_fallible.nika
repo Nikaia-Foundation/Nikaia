@@ -4,7 +4,7 @@
 // type does when it dies** - moved from the compiler's checker (ADR-294, #125,
 // #558, C-5a): the options a method call leaves out, the sets a call is
 // recorded in as failing or pausing, a `for` or a walk whose step can fail or
-// pause (ADR-025 D1, ADR-172 D1), a `deref` seen through (ADR-288), and the
+// pause (ADR-loop-failure-v1 D1, ADR-172 D1), a `deref` seen through (ADR-288), and the
 // cleanup or teardown a type holds (ADR-297 D1, D12).
 
 use std::collections
@@ -124,7 +124,7 @@ impl CheckState {
         }
     }
 
-    /// **`NK2701` for a walk rather than for a loop** (ADR-025 D1): the same
+    /// **`NK2701` for a walk rather than for a loop** (ADR-loop-failure-v1 D1): the same
     /// rule and code as a `for` over the same sequence, a step that can fail
     /// fails the function around it.
     fn a_walk_of_a_failing_sequence(ref mut self, world: ref CheckWorld, method: winnow_grammar::Symbol, span: ref Span) sync {
@@ -161,7 +161,7 @@ impl CheckState {
         }
     }
 
-    /// A loop over something whose step can fail (ADR-025 D1): the enclosing
+    /// A loop over something whose step can fail (ADR-loop-failure-v1 D1): the enclosing
     /// function must declare `throws`, and the emitter has to make the step
     /// propagate. This records the second and reports the first.
     fn fallible_step(ref mut self, world: ref CheckWorld, over: ref Ty, bindings: i64, span: ref Span) sync {
@@ -189,7 +189,7 @@ impl CheckState {
         }
         // A stream of pairs does not exist in `std`, and taking one apart while
         // also unwrapping a failure is a shape to design rather than to guess
-        // at (ADR-025 §7).
+        // at (ADR-loop-failure-v1 §7).
         if bindings != 1 {
             self.findings.push(check_refusal("NK2701", span, f"A `for` over {name} gives one value at a time, but you're binding {bindings}.", [f"Each turn of {name} can fail, and the loop variable is what's left once that's checked."], "Bind one name and take the pair apart inside the loop."))
             return
@@ -202,7 +202,7 @@ impl CheckState {
     }
 
     /// Whether this method call is an **eager** walk of a sequence whose step
-    /// can fail (ADR-025 D1).
+    /// can fail (ADR-loop-failure-v1 D1).
     fn walks_a_failing_sequence(ref self, on: ref Ty, contract: ref FnContract) -> bool sync {
         let can_fail = match on {
             Ty::Seq { fails, .. } => fails.len() > 0,

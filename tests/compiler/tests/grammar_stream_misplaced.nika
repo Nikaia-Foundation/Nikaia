@@ -1,4 +1,4 @@
-// `@stream` stands on an entry only (ADR-grammar-typed-read-v1 D7, #1440): its items go to
+// `@stream` stands on an entry only (ADR-grammar-typed-read-v2 D7, #1440): its items go to
 // the program's `for`, and only an entry is called by the program.
 
 grammar Words {

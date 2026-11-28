@@ -1,4 +1,4 @@
-// ADR-grammar-typed-read-v1 D1: an entry that takes types takes them in its brackets;
+// ADR-grammar-typed-read-v2 D1: an entry that takes types takes them in its brackets;
 // a value there is NK1230, as a value where a type belongs is.
 grammar Num {
 	rule WS = "" -> { }

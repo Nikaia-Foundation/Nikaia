@@ -1,5 +1,5 @@
 // A `return` and a `throw` inside a walk of `Yaml::events`
-// (ADR-grammar-typed-read-v1 D7, #2708): the `for` runs its body as the
+// (ADR-grammar-typed-read-v2 D7, #2708): the `for` runs its body as the
 // parser's `each`, and either one stops the parse there and leaves the
 // function with its value or its error, as from any loop. The third document
 // does not parse, so a walk that read it would fail with the parse error.

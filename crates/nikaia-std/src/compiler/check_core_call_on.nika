@@ -1442,7 +1442,7 @@ fn check_core_call_on_described[H: CheckHost](mut state: CheckState, world: ref 
     if walks_a_pausing_step && hands_back_a_sequence {
         state.facts.pausing_walks.insert(node)
     }
-    // **A walk of a sequence whose step can fail, can fail** (ADR-025 D1).
+    // **A walk of a sequence whose step can fail, can fail** (ADR-loop-failure-v1 D1).
     let seq_throws = match on {
         Ty::Seq { fails, .. } => fails.len() > 0,
         else => false,
@@ -1603,7 +1603,7 @@ fn check_core_call_on_described[H: CheckHost](mut state: CheckState, world: ref 
         state.flow.guarded = CheckGuarded::nothing()
         state.flow.last_lambda_fails = false
         // **A step that hands back a walk fails where the walk is taken**
-        // (ADR-025 D1), not here: the lambda's failure is the walk's.
+        // (ADR-loop-failure-v1 D1), not here: the lambda's failure is the walk's.
         if hands_back_a_sequence {
             state.flow.caught = true
         }
@@ -1798,7 +1798,7 @@ fn check_core_call_on_described[H: CheckHost](mut state: CheckState, world: ref 
     state.flow.text_walk = views_text_slots(result, bound, false)
     let mut shaped = shape_through(contract, on, found, substituted)
     // **The walk a failing lambda's step makes fails at each element**
-    // (#2736, ADR-025 D1).
+    // (#2736, ADR-loop-failure-v1 D1).
     // **What it fails with is in its type** (#2742), so a binding of the
     // walk keeps it.
     if failed_through && hands_back_a_sequence {

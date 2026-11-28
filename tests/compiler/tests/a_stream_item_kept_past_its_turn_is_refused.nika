@@ -1,5 +1,5 @@
 // An item of a `for` over a `@stream` call is lent from the input
-// (ADR-grammar-typed-read-v1 D7, #2708): kept past its turn without a copy,
+// (ADR-grammar-typed-read-v2 D7, #2708): kept past its turn without a copy,
 // it is refused as any view is, and the help names `.clone()`.
 
 struct Item {

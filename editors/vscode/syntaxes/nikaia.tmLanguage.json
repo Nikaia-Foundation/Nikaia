@@ -306,7 +306,7 @@
           "match": "\\b(return|break|continue)\\b"
         },
         {
-          "comment": "ADR-023 / ADR-025: errors are not a Result. `throw` raises, `catch { … }` is a postfix expression that supplies a replacement value or leaves the function.",
+          "comment": "ADR-023 / ADR-loop-failure-v1: errors are not a Result. `throw` raises, `catch { … }` is a postfix expression that supplies a replacement value or leaves the function.",
           "name": "keyword.control.exception.nika",
           "match": "\\b(throw|catch)\\b"
         },

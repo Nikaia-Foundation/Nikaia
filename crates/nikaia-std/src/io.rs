@@ -285,7 +285,7 @@ pub async fn read() -> Result<crate::block::List<u8>, IoError> {
 /// once consumed. Keeping them would be `read_to_string` with extra steps.
 /// That is also what keeps this expressible at all - an iterator may hand out
 /// views into a buffer it does not own, and never into one it does
-/// ([ADR-025](../../../docs/specification/adr/adr-025.md), Wall B).
+/// ([ADR-loop-failure-v1](../../../docs/specification/adr/adr-loop-failure-v1.md), Wall B).
 ///
 /// **A step can fail**, and the item says so rather than pretending a failed
 /// read is the end of the stream - which would turn a truncated input into a

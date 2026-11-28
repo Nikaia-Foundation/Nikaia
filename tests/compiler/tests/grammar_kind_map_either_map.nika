@@ -1,5 +1,5 @@
 // A grammar arm makes the empty collection of the field's own type with
-// `T()` (ADR-grammar-typed-read-v1 D14, #2626): one `Map` arm reads a
+// `T()` (ADR-grammar-typed-read-v2 D14, #2626): one `Map` arm reads a
 // `HashMap` field and a `BTreeMap` field, one `List` arm a `Vec` field.
 use std::collections
 

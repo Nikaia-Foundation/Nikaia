@@ -287,7 +287,7 @@ fn the_expression_lambda_says_it_was_removed() {
     assert!(help.contains("became part of its body"), "{help}");
 }
 
-/// ADR-025 D1: a loop whose step can fail propagates the failure, and this is
+/// ADR-loop-failure-v1 D1: a loop whose step can fail propagates the failure, and this is
 /// the line that does it.
 ///
 /// One line inside the loop, and it is the one a Rust programmer writes by

@@ -1,7 +1,7 @@
 // `Yaml::events` over a stream of several documents and over one document
 // longer than a Rust reader's default frame (16 MiB): the walk hands over
 // what `events(documents(input))` gives, event for event and span for span
-// (ADR-grammar-typed-read-v1 D7, #2282). The input is all in memory, so the
+// (ADR-grammar-typed-read-v2 D7, #2282). The input is all in memory, so the
 // walk reads it in one block and waits out a document as long as the input.
 use yaml
 

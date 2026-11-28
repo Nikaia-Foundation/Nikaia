@@ -641,7 +641,7 @@ fn features_applied(rust: ref String, manifest: ref String, features: ref Vec[Ma
     return FeaturesMade { rust: lines.join("\n"), table: table, optional: optional, names: names, homes: homes }
 }
 
-/// **A reader's items cross a thread** (ADR-grammar-typed-read-v1 D7, amended
+/// **A reader's items cross a thread** (ADR-grammar-typed-read-v2 D7, amended
 /// 2026-11-08, #1468): the reader a feature roots parses on a thread of its
 /// own and sends each item over, so an item type made of something that is
 /// not `Send` is `NK1345` on the feature's root, before rustc runs. What the

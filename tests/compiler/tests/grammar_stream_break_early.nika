@@ -1,5 +1,5 @@
 // A `break` in a walk of an `@stream` entry ends the parse there
-// (ADR-grammar-typed-read-v1 D7, amended 2026-11-08, #1442): what follows the item it
+// (ADR-grammar-typed-read-v2 D7, amended 2026-11-08, #1442): what follows the item it
 // stopped at is never read, so an error after it is no error. The same input
 // walked to the end fails, with the parse's own message.
 

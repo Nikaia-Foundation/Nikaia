@@ -1,4 +1,4 @@
-// ADR-grammar-typed-read-v1 D6: a `Map(K, V)` arm whose key is not text
+// ADR-grammar-typed-read-v2 D6: a `Map(K, V)` arm whose key is not text
 // says why with `refuse("…")`, and the call is refused with NK1250 and that
 // text (#2599).
 use std::collections

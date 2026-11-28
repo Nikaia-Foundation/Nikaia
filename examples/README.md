@@ -83,7 +83,7 @@ They are deliberately different shapes.
 * **`tally.nika`** is the one whose **memory does not grow with its input**. `k-nucleotide.nika`
   also reads standard input and reads *all* of it, which is right for FASTA and wrong for a log
   that never ends; this one holds one line at a time. It is also the smallest program that shows
-  the rule of [ADR-025](../docs/specification/adr/adr-025.md): each turn of `for line in
+  the rule of [ADR-loop-failure-v1](../docs/specification/adr/adr-loop-failure-v1.md): each turn of `for line in
   io::lines()` reads, a read can fail, nothing marks it, and the failure leaves the function —
   which is why `throws` is on the signature and why the compiler puts it there
   (`NK2701`).
@@ -255,7 +255,7 @@ with the one that was probably meant.
 `examples/tally/src/main.nika` uses both halves: it declares one option and passes one to `fs::write`.
 
 **G17 — a stream of lines that can fail while it is being read.** *Decided and implemented*
-([ADR-025](../docs/specification/adr/adr-025.md)). Found by trying to build `fs::lines` and
+([ADR-loop-failure-v1](../docs/specification/adr/adr-loop-failure-v1.md)). Found by trying to build `fs::lines` and
 `io::lines`, and it turned out to be two problems rather than one.
 
 The **failure** half: `for line in io::lines()` performs a call per turn that nobody wrote and no
