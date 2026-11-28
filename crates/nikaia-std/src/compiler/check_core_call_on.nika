@@ -890,6 +890,74 @@ fn check_core_call_on_open(state: ref CheckState, bound_name: ref String) -> i64
     return state.open_root(at)
 }
 
+/// **A list literal's text literals are built where text of its own is put
+/// into the list** (ADR-282 D4, #1303), as they are beside such text in the
+/// literal: `let mut v = [("x", 1)]` then `v.push((f"s{n}", 2))` holds
+/// `(String, i64)`, and the list's element type says so from here on.
+fn check_core_call_on_listed_texts(mut state: CheckState, world: ref CheckWorld, receiver: ref Expr, entry: ref String, found: ref Vec[Ty]) sync {
+    let mut given: Ty = Ty::Unknown
+    if entry == "push" && found.len() == 1 {
+        given = found[0].clone()
+    } else if entry == "insert" && found.len() == 2 {
+        given = found[1].clone()
+    } else {
+        return
+    }
+    let name: String = check_core_method_receiver_name(world, receiver) ?? return
+    let local = state.binding(name) ?? return
+    let texts = state.flow.listed_texts[local.id]?.clone() ?? return
+    let element: Ty = match local.ty {
+        Ty::Named { args, .. } => if args.len() == 1 { args[0].clone() } else { return },
+        else => return,
+    }
+    let text = Ty::Named { name: "String", args: [], view: false }
+    let mut built: Vec[i64] = []
+    let mut retyped = element.clone()
+    match given {
+        Ty::Tuple(gave) => {
+            match element {
+                Ty::Tuple(held) => {
+                    if gave.len() != held.len() {
+                        return
+                    }
+                    let mut parts: Vec[Ty] = []
+                    let mut p = 0
+                    while p < held.len() {
+                        if check_core_args_plain_name(gave[p]) == "String" && check_core_args_plain_name(held[p]) != "String" {
+                            built.push(p)
+                            parts.push(text.clone())
+                        } else {
+                            parts.push(held[p].clone())
+                        }
+                        p += 1
+                    }
+                    retyped = Ty::Tuple(parts)
+                },
+                else => return,
+            }
+        },
+        else => {
+            if check_core_args_plain_name(given) == "String" && check_core_args_plain_name(element) != "String" {
+                built.push(-1)
+                retyped = text.clone()
+            }
+        },
+    }
+    if built.len() == 0 {
+        return
+    }
+    let mut any = false
+    for (part, node) in texts {
+        if built.contains(part) {
+            state.facts.owned_texts.insert(node)
+            any = true
+        }
+    }
+    if any {
+        check_core_call_on_retyped(state, name, [retyped])
+    }
+}
+
 /// **The element type an empty list's first `push` gives it** (#523), and an
 /// open number's elements (ADR-285 D34).
 fn check_core_call_on_pushed(mut state: CheckState, world: ref CheckWorld, receiver: ref Expr, entry: ref String, args: ref Vec[Expr], found: ref Vec[Ty], span: ref Span) sync {
@@ -1374,7 +1442,7 @@ fn check_core_call_on_described[H: CheckHost](mut state: CheckState, world: ref 
     if walks_a_pausing_step && hands_back_a_sequence {
         state.facts.pausing_walks.insert(node)
     }
-    // **A walk of a sequence whose step can fail, can fail** (ADR-025 D1).
+    // **A walk of a sequence whose step can fail, can fail** (ADR-loop-failure-v1 D1).
     let seq_throws = match on {
         Ty::Seq { fails, .. } => fails.len() > 0,
         else => false,
@@ -1535,7 +1603,7 @@ fn check_core_call_on_described[H: CheckHost](mut state: CheckState, world: ref 
         state.flow.guarded = CheckGuarded::nothing()
         state.flow.last_lambda_fails = false
         // **A step that hands back a walk fails where the walk is taken**
-        // (ADR-025 D1), not here: the lambda's failure is the walk's.
+        // (ADR-loop-failure-v1 D1), not here: the lambda's failure is the walk's.
         if hands_back_a_sequence {
             state.flow.caught = true
         }
@@ -1604,6 +1672,7 @@ fn check_core_call_on_described[H: CheckHost](mut state: CheckState, world: ref 
         check_core_call_on_key_read(state, world, receiver, args[0], span)
     }
     check_core_call_on_pushed(state, world, receiver, entry, args, found, span)
+    check_core_call_on_listed_texts(state, world, receiver, entry, found)
     expected = check_core_call_on_now_expected(state, world, receiver, entry, expected)
     let paused_here: Vec[i64] = state.flow.paused_args.clone()
     state.flow.paused_args = outer_paused
@@ -1729,7 +1798,7 @@ fn check_core_call_on_described[H: CheckHost](mut state: CheckState, world: ref 
     state.flow.text_walk = views_text_slots(result, bound, false)
     let mut shaped = shape_through(contract, on, found, substituted)
     // **The walk a failing lambda's step makes fails at each element**
-    // (#2736, ADR-025 D1).
+    // (#2736, ADR-loop-failure-v1 D1).
     // **What it fails with is in its type** (#2742), so a binding of the
     // walk keeps it.
     if failed_through && hands_back_a_sequence {

@@ -1,4 +1,4 @@
-// An `@stream` entry's body repeats one item on a fixed path (ADR-grammar-typed-read-v1
+// An `@stream` entry's body repeats one item on a fixed path (ADR-grammar-typed-read-v2
 // D7, #1440): each body here is NK1349, for the reason its grammar is named after.
 
 struct Item {

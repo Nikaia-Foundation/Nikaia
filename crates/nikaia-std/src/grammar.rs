@@ -394,7 +394,7 @@ pub fn covered_raw<'a, C: winnow_grammar::Ctx>(
 }
 
 /// **Where a member's key stands among the fields `members[S]` builds**
-/// (ADR-grammar-typed-read-v1 D3): its index, or the number of fields for a key that
+/// (ADR-grammar-typed-read-v2 D3): its index, or the number of fields for a key that
 /// names none. The value rule is chosen by it.
 pub fn member_index<K: AsRef<[u8]> + ?Sized>(key: &K, names: &[&str]) -> usize {
     let key = key.as_ref();
@@ -405,13 +405,13 @@ pub fn member_index<K: AsRef<[u8]> + ?Sized>(key: &K, names: &[&str]) -> usize {
 }
 
 /// The failure of a `members[S]` that names the field: given twice,
-/// missing, or `null` into a field that takes none (ADR-grammar-typed-read-v1 D5).
+/// missing, or `null` into a field that takes none (ADR-grammar-typed-read-v2 D5).
 pub fn member_error(field: &str, what: &str) -> Box<dyn std::error::Error> {
     format!("the field `{field}` {what}").into()
 }
 
 /// The failure of a `members[S]` at a key that names no field and that no
-/// `unknown:` rule skips (ADR-grammar-typed-read-v1 D5).
+/// `unknown:` rule skips (ADR-grammar-typed-read-v2 D5).
 pub fn member_unknown<K: AsRef<[u8]> + ?Sized>(key: &K) -> Box<dyn std::error::Error> {
     format!(
         "the member `{}` names no field",

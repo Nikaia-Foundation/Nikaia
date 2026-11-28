@@ -3,7 +3,7 @@ use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 // crates/nikaia/src/contracts/tether.rs
 //
 // Which of Part I 6.6's three states each view in a signature is in
-// ([ADR-283](../../../../docs/specification/adr/adr-283.md) D2, D5).
+// ([ADR-tether-v1](../../../../docs/specification/adr/adr-tether-v1.md) D2, D5).
 //
 // ## What this is, and what it deliberately is not
 //
@@ -79,7 +79,7 @@ pub const RESULT: &str = "<result>";
 /// Give every entry of this package the states its views solved to (D7):
 /// `tether.nika`'s `tether_infer`, over each unit's view. Then which positions
 /// really leave, over the whole package, to a fixpoint (`keep::infer`,
-/// [ADR-283](../../../../docs/specification/adr/adr-283.md) D6).
+/// [ADR-tether-v1](../../../../docs/specification/adr/adr-tether-v1.md) D6).
 pub fn infer(ledger: &mut Ledger, units: &[&Parsed], library: &Ledger) {
     let views: Vec<_> = units
         .iter()
@@ -109,11 +109,11 @@ pub(crate) fn makes_a_buffer(
 }
 
 /// `--tethers`: what the analysis solved, per function
-/// ([ADR-283](../../../../docs/specification/adr/adr-283.md) D4).
+/// ([ADR-tether-v1](../../../../docs/specification/adr/adr-tether-v1.md) D4).
 ///
 /// *The inverse tool is inspection, not assertion*, and it is the half of D6
 /// that survived: the assertion beside it is gone
-/// ([ADR-283](../../../../docs/specification/adr/adr-283.md) D4) and this shows
+/// ([ADR-tether-v1](../../../../docs/specification/adr/adr-tether-v1.md) D4) and this shows
 /// what was chosen without being asked. Read off the ledger the build produced
 /// rather than computed again here, so that what a person reads is what the file
 /// records.
@@ -136,7 +136,7 @@ pub fn report(parsed: &Parsed, ledger: &Ledger) -> String {
 /// A view handed back that points into a buffer the body **owns** (`NK2303`).
 ///
 /// This is the one shape Part I 6.6's `Tethered` exists for, and
-/// [ADR-283](../../../../docs/specification/adr/adr-283.md) D9 is what to do
+/// [ADR-tether-v1](../../../../docs/specification/adr/adr-tether-v1.md) D9 is what to do
 /// about it while the state is not built: refuse on the Nikaia line, naming the
 /// buffer and the mechanism, rather than lower a function whose result outlives
 /// the buffer it points into and let `rustc` speak about the generated file
@@ -152,7 +152,7 @@ pub fn report(parsed: &Parsed, ledger: &Ledger) -> String {
 /// it was before this check existed.
 pub fn check(parsed: &Parsed, own: &Ledger, library: &Ledger) -> Vec<crate::check::Finding> {
     // **Where a view outlives its buffer is the keep plan's answer**
-    // ([ADR-283](../../../../docs/specification/adr/adr-283.md)): it follows
+    // ([ADR-tether-v1](../../../../docs/specification/adr/adr-tether-v1.md)): it follows
     // views through `push`, `for`, fields and calls, which the walk that stood
     // here did not, and it refuses only what it cannot lower or what no
     // declaration permits.

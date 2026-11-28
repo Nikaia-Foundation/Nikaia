@@ -874,7 +874,7 @@ fn main() throws {
 ///
 /// The three ways to hand back one value that is both a view and an owned one:
 /// a copy on the borrowed branch, which
-/// [ADR-283](../../../docs/specification/adr/adr-283.md) D3 bans outright; a
+/// [ADR-tether-v1](../../../docs/specification/adr/adr-tether-v1.md) D3 bans outright; a
 /// view fallback, which a text literal already is; or saying so here, rather
 /// than letting `rustc` say *expected `String`, found `&str`* about a file
 /// nobody wrote.

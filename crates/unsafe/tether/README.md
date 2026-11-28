@@ -4,8 +4,9 @@ Views that outlive the scope that read their buffer, without copying the text.
 
 | type | what it is |
 | :--- | :--- |
-| `Keep` | an append-only home for buffers; a buffer stays at its address until the `Keep` is dropped |
+| `Keep` | an append-only home for buffers; a buffer stays at its address until the `Keep` is dropped, one of up to four words (owned text) in the keep's own slot |
 | `Keep::put_viewed` / `Keep::view` | a buffer views of text are cut from (`Viewed`), and a view found again in it **by address** — or, where it points into no buffer of the keep, a copy the keep owns |
+| `Place` / `Keep::put_viewed_at` / `Keep::view_in` | where a buffer lives in its keep, handed out when it is put there, and a view checked against **that one buffer** by one comparison (Nikaia's ADR-tether-v1 D15); not there, a program copies it and a run under `nikaia test` panics: the plan was the compiler's |
 | `Held` | one view of text carrying its own handle on its buffer; compared, hashed and printed as the text; a **safe** constructor |
 | `Holding<V, N>` / `Views` | a struct of views beside the `N` keeps it points into, with a **safe** constructor |
 | `Keeps` / `Rebase` / `Hold` | how a value made *outside* the constructor is carried in: each view found again in its keep |
@@ -41,10 +42,11 @@ anything that needs the same.
 | where | what | why it holds |
 | :--- | :--- | :--- |
 | `Dangling::get`, `Dangling::drop` | `MaybeUninit::assume_init_ref` / `assume_init_drop` | the value is written in `new` and taken apart only in `drop`, once |
-| `Keep::put`, `Keep::put_viewed` | `&*at` from `Arc::as_ptr` | the `Arc` is pushed and never removed until the `Keep` is dropped, so the buffer stays alive and in place; the reference is tied to the borrow of the `Keep` |
-| `Keep::find` | `&*Arc::as_ptr` of a stored buffer, beyond the lock | the same argument as `put`: the `Arc` stays until the `Keep` is dropped, so the buffer may be borrowed for as long as the `Keep` is rather than the lock |
-| `within` (inside `find`) | `str::from_utf8_unchecked` | the bytes are found **by address**: they are the very bytes the `&str` asked about is made of, so they are UTF-8 |
-| `Held::new` | `&str` → `&'static str` | the view came from `Keep::find` or `Keep::view`, which hand back nothing but a view of that keep's own buffers, and the clone of the keep stored beside it keeps them alive |
+| `Keep::put_at`, `Keep::put_viewed_at` | `&*at` from `Arc::as_ptr` | the `Arc` is stored in a slot set once and never emptied until the `Keep` is dropped, so the buffer stays alive and in place; the reference is tied to the borrow of the `Keep` |
+| `Keep::put_viewed_at`, `Inline`, `drop_inline` | a buffer of up to four words written into the slot's `MaybeUninit`, read back as `&B`, dropped through the function made for its type | `fits` checks size and alignment; the buffer is moved in before any view of it exists, the slot never moves while the `Keep` is borrowed and is never written again, and `Inline::drop` runs once, with the slot. So a keep of one text is one allocation (Nikaia's #2843) |
+| `Slot` (`Send`, `Sync`, `write`, `publish`, `bytes`) | a hand-made `OnceLock`: the entry and its bytes written through `UnsafeCell`, read back with `from_raw_parts` | the place is claimed by one `fetch_add`, so one put alone writes a slot, once, before `ready` is stored with `Release`; a reader looks only after seeing `ready` with `Acquire`; the bytes are the buffer's own, read where it lives, and it is neither moved nor written until the slot is dropped |
+| `within` (inside `find` and `view_in`) | `str::from_utf8_unchecked` | the bytes are found **by address**: they are the very bytes the `&str` asked about is made of, so they are UTF-8 |
+| `Held::new`, `Held::in_place`, `Held::near` | `&str` → `&'static str` | the view came from `Keep::find`, `Keep::view`, `Keep::view_in` or `Keep::view_near`, which hand back nothing but a view of that keep's own buffers, and the keep stored beside it keeps them alive |
 | `Holding::new`, `Holding::clone` | `transmute_copy` of `V::Of<'_>` to `V::Of<'static>` | the closure must work for every lifetime and is handed only the keeps, so the struct can point only into them or at `'static` data; it is private, dropped before the keeps, and handed out only through `get`, which shortens it back |
 
 **Two things the compiler checks for the caller**, so neither is a comment:

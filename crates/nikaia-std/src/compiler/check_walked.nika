@@ -428,7 +428,7 @@ pub trait CheckWalkedPasses {
     fn view_change_findings(ref self, lent: ref collections::BTreeSet[i64], coalesced: ref collections::BTreeSet[i64], mut_viewed: ref collections::BTreeSet[i64], receiver_views: ref collections::BTreeSet[i64], cut_gives: ref collections::BTreeSet[i64]) -> Vec[CheckFinding] sync
     /// The buffer plans, kept for the emitter where they are made against
     /// `std` alone, as it makes them (#727), and the tether's refusals
-    /// (`NK2303`, ADR-283 D9).
+    /// (`NK2303`, ADR-tether-v1 D9).
     fn tethered(ref self) -> (Vec[BufferPlan]?, Vec[CheckFinding]) sync
     /// What an `impl` owes the `trait` it names (Part I 4.7).
     fn trait_findings(ref self) -> Vec[CheckFinding] sync

@@ -1,5 +1,5 @@
 // A `@stream` entry whose items are handed over by `emit` in the rules it
-// reaches (ADR-grammar-typed-read-v1 D7, amended 2026-11-18, #2061) needs no repetition
+// reaches (ADR-grammar-typed-read-v2 D7, amended 2026-11-18, #2061) needs no repetition
 // of its own: `Events` passes NK1349 with two alternatives and no item rule.
 // What an `emit` hands over is of the entry's item type: `Mistyped` is not.
 

@@ -51,12 +51,15 @@
 // back; a git-ignored lock is never copied in, so it is neither checked nor
 // refreshed. A directory without a lock gets one from its first build, which
 // `--refresh` copies back.
+// `--check` and `--refresh` say on standard error how many seconds each
+// directory's build took (#2804).
 // `--list` prints each directory and the command it is built with. NIKAIA is
 // the compiler (default `target/fast/nikaia`).
 
 use std::cli
 use std::fs
 use std::process
+use std::time
 
 fn ledgers_names() -> Vec[String] {
 	return ["nikaia.contracts", "nikaia.derived", "nikaia.proofs", "nikaia.lock"]
@@ -159,6 +162,14 @@ fn ledgers_build(
 	return (out.stdout, out.ok)
 }
 
+// Says on standard error how long the build of DIR took since BEGAN, so a
+// slower shard names its directory (#2804); standard output stays the
+// verdicts, which do not change from run to run.
+fn ledgers_took(dir: String, began: time::Instant) throws {
+	let ms = began.elapsed().in_millis()
+	eprintln(f"{dir}: built in {ms / 1000} s")
+}
+
 fn ledgers_head(body: String, n: i64) -> String {
 	let mut out: Vec[String] = []
 	for line in body.split("\n") {
@@ -174,12 +185,14 @@ fn ledgers_check(nikaia: String, copy: ref fs::Root) -> bool throws {
 	let dirs = ledgers_dirs(tmp.clone())
 	for dir in dirs { ledgers_keep_lock(copy, dir.clone()) }
 	for dir in dirs {
+		let began = time::now()
 		let (out, ok) = ledgers_build(
 			nikaia.clone(),
 			tmp.clone(),
 			dir.clone(),
 			ledgers_command(dir.clone(), true),
 		)
+		ledgers_took(dir.clone(), began)
 		let (lock_current, lock_diff) = ledgers_lock_current(copy, dir.clone())
 		if ok && lock_current {
 			println(f"{dir}: ledger current")
@@ -206,12 +219,14 @@ fn ledgers_refresh(nikaia: String, copy: ref fs::Root) -> bool throws {
 	let here = fs::Root::Dir(".")
 	let mut green = true
 	for dir in ledgers_dirs(tmp.clone()) {
+		let began = time::now()
 		let (out, ok) = ledgers_build(
 			nikaia.clone(),
 			tmp.clone(),
 			dir.clone(),
 			ledgers_command(dir.clone(), false),
 		)
+		ledgers_took(dir.clone(), began)
 		if !ok {
 			green = false
 			println(f"failed {dir}")
@@ -235,7 +250,9 @@ fn ledgers_refresh(nikaia: String, copy: ref fs::Root) -> bool throws {
 		let has_built = fs::exists(path.clone(), copy)
 		let has_path = fs::exists(path.clone(), here)
 		if !has_built && !has_path { continue }
-		if has_built && has_path && process::run("diff", ["-rq", built.clone(), path.clone()]).ok { continue }
+		if has_built
+			&& has_path
+			&& process::run("diff", ["-rq", built.clone(), path.clone()]).ok { continue }
 		process::run("rm", ["-rf", path.clone()])
 		if has_built { process::run("cp", ["-r", built, path.clone()]) }
 		println(f"refreshed {path}")

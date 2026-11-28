@@ -1,0 +1,51 @@
+// A buffer a `throws` function changes after its `let` and then hands back
+// through the keep is put there after its last change (#2465), as in a body
+// that cannot fail (#1276): an initializer that can fail or not, a view
+// handed back bare and one inside a struct field.
+
+struct Bad { why: String }
+impl Error for Bad { fn message(ref self) -> String { return self.why.clone() } }
+
+struct Line { text: String, at: i64 }
+
+fn src(word: String) -> String throws {
+    if word == "" {
+        throw Bad { why: "empty" }
+    }
+    let mut out = String()
+    out.push_str(word)
+    out.push_str("  ")
+    return out
+}
+
+fn bare(word: String) -> String throws {
+    let mut text = src(word)
+    text.push_str(" end")
+    let w: String = text.trim()
+    return w
+}
+
+fn field(word: String, at: i64) -> Line throws {
+    let mut text = src(word)
+    text.push_str(" end ")
+    if at > 1 {
+        text += "more "
+    }
+    return Line { text: text.trim(), at: at }
+}
+
+fn grown(word: String) -> String throws {
+    let mut text = String()
+    text.push_str(word)
+    text.push_str(" end ")
+    return text.trim()
+}
+
+fn main() throws {
+    println(f"[{bare("hallo welt")}]")
+    let l = field("eins", 2)
+    println(f"[{l.text}] {l.at}")
+    println(f"[{grown("zwei")}]")
+    let missing = bare("") catch { "caught" }
+    println(missing)
+}

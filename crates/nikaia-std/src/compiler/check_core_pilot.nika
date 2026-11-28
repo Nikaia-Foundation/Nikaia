@@ -728,7 +728,7 @@ fn check_reflect_a_field(ty: ref Ty) -> bool {
 }
 
 /// **A function that takes a reflected field, called in an unrolled turn**
-/// (Part II 10.3, ADR-grammar-typed-read-v1 D4): its parameter is `comptime` by its type,
+/// (Part II 10.3, ADR-grammar-typed-read-v2 D4): its parameter is `comptime` by its type,
 /// so the call is made with the turn's field and goes to the copy for it. A
 /// copy for each field of the turn's struct and of each struct that one is
 /// made of, which a walk over `field.ty::fields` reaches.
@@ -755,7 +755,7 @@ fn check_core_field_copies(mut state: CheckState, world: ref CheckWorld, name: r
 }
 
 /// **`NK1320`: a reflected field kept past the build** (Part II 10.3,
-/// ADR-grammar-typed-read-v1 D4): `meta::Field` stands only as a parameter's type, so
+/// ADR-grammar-typed-read-v2 D4): `meta::Field` stands only as a parameter's type, so
 /// `parameter` says the outermost name of `ty` may be it.
 fn check_reflected_field_kept(mut state: CheckState, world: ref CheckWorld, ty: ref Type, span: ref Span, parameter: bool) sync {
     let plain = parameter && !ty.is_nullable && !ty.is_slice
@@ -985,7 +985,7 @@ fn check_reflect_match[H: CheckHost](mut state: CheckState, world: ref CheckWorl
             state.walks_fields.insert(f"$kind {name}", name.clone())
         }
         // **In a `Map` or `List` arm, `T()` is the empty collection of the
-        // type `T` is** (ADR-grammar-typed-read-v1 D14); in any other arm it
+        // type `T` is** (ADR-grammar-typed-read-v2 D14); in any other arm it
         // is not.
         if (case == "Map" || case == "List") && state.type_parameters.contains_key(subject) {
             state.walks_fields.insert(made.clone(), subject.clone())

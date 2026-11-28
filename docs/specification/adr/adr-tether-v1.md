@@ -1,0 +1,551 @@
+# ADR-tether-v1: A View That Escapes Is Tethered — Its Buffer Lives in the Keep of Whatever Keeps the View, the Compiler Decides Where, Nothing Is Written for It, and `Bytes` Is the Language's Buffer
+
+**Status:** Accepted
+**Date:** November 27, 2026 (D15 changed, owner, #2838); the other decisions October 3, 2026
+**History:** the records this one replaces are archived in [`docs/history/adr`](../../history/adr/README.md); read them only for how the decision was reached
+**Answers:** what happens to a view (`ref String`, `ref Array[u8]`) a struct or
+a container keeps longer than the buffer it points into ([ADR-005](adr-005.md)
+D4 states it over storage); whether a program writes a word for it
+([#196](https://github.com/Nikaia-Foundation/Nikaia/issues/196)'s item 7); what
+represents the tether, case by case; `open-decisions.md`'s *a container of
+structs holding views that drops entries in a loop*; and whether `Bytes` is
+`std`'s or the language's ([ADR-313](adr-313.md))
+**Related:** [ADR-005](adr-005.md) D1, D3, D4, D8 (no lifetime annotations; the
+ledger; the rule this restates over escape; determinism),
+[ADR-297](adr-297.md) (`Cleanup`, whose timing D6 moves),
+[ADR-010](adr-010.md) D1 (absence is the safe reading),
+[ADR-037](adr-037.md) D7 (a decision the compiler makes per value and shows
+rather than asks for - D4's model),
+[ADR-276](adr-276.md) (a keyword is the most expensive thing a language adds),
+[ADR-094](adr-094.md) D4 (a read through the brackets is a view),
+[ADR-313](adr-313.md) D1 (the prelude's list),
+[ADR-184](adr-184.md) D1 and D4 (a view is spelled `ref X`; `&` left the
+language),
+[ADR-282](adr-282.md) D8 (the copy is `.clone()`) and D13 there (a declared
+`String` that receives only views becomes one, its buffer placed by D9-D13
+here),
+[ADR-218](adr-218.md) D3 (`tether::Holding`, a crate of its own),
+[ADR-251](adr-251.md) D4 (the ledger writes Nikaia's syntax)
+
+## 1. Question
+
+A body reads a file, cuts it into views, and something keeps the views longer
+than the text would live: the result, a `mut` parameter, a list outside the
+loop, a struct in a map, a task. **What keeps the buffer alive, who pays for
+it, and does the program say anything about it?**
+
+Without an answer every such program is either refused or lowered to Rust that
+`rustc` refuses about a file nobody wrote (Part III C.1), and the first
+promise of the language - no lifetime annotations ([ADR-005](adr-005.md) D1) -
+holds only for programs that never keep a view.
+
+## 2. How others do it
+
+| Language / tool | Its answer | What it costs there | See |
+| :--- | :--- | :--- | :--- |
+| Rust | a lifetime parameter on the struct and on every function touching it | the annotation is viral; storing a slice next to its owner is not expressible in safe code, so `rustc` *refuses* what tethering exists to allow | — |
+| Rust `bytes::Bytes` | a reference-counted buffer, slices hold a count | a small slice pins the whole buffer - the known space-leak shape | D6 |
+| one text type, promoted on escape (2a) | the compiler copies where a view escapes | an invisible allocation per row that scales with the data, and allocation inside a `sync` body | D3 |
+| one text type, error on escape (2b) | refuse every escape | representation becomes a whole-program property; a lifetime error in plain words | — |
+| explicit region binding (3) | `let m = HashMap::new() in file_scope` | the region name is a lifetime with a friendlier spelling: viral, and it leaks buffer provenance through abstractions | D7 |
+| region inference | the compiler finds the frame that outlives the views | nothing written; needs a whole-program analysis | D10 |
+
+What does not transfer: a garbage collector (Nikaia has none, so the buffer's
+life must be decided, not traced), and Rust's own answer, which is the
+annotation this language exists to remove.
+
+## 3. Options, weighed
+
+| Question | Option | Why it lost, or won |
+| :--- | :--- | :--- |
+| how many text types | **views plus inference** (D1) | won: the declaration carries what a diagnostic needs; one sigil, no region name |
+| | one type, auto-promote (2a) | unbounded invisible cost; a refactor three modules away turns 10^9 zero-copy slices into 10^9 allocations |
+| | one type, hard error (2b) | kept only as the residual case (D3), not as the default |
+| | explicit regions (3) | viral and leaks provenance; region inference gives the same guarantee (D7, D10) |
+| where the count lives | per element | a contended atomic per row, `lock xadd` on one cache line in a parallel loop |
+| | per container, views as positions in three layouts | lost: most escapes end in a frame the compiler can see; several buffers are no reason for a layout; positions cost every read |
+| | **a keep per case** (D9-D12) | won: a frame's keep where a frame outlives the views, a handle only where none does |
+| what the program writes | `@borrowed` (*never tethers*) | an assertion whose presence and absence look identical, guarding a transition that does not exist |
+| | `@tethers` (*may tether*) | the right polarity, but the bookkeeping the language removes: a word on every struct a parser yields (D4) |
+| | **nothing; shown by `--tethers`** (D4) | won: like which count a `Shared` gets, the compiler decides and shows |
+| a container of structs of views that drops entries | refuse, `.clone()` per view field | the copy pays per view |
+| | lower each struct a second time with held fields | every read of a field rewritten through a handle |
+| | **hold each element beside its buffers** (D14) | won: the struct is lowered once; only the container's element type changes |
+
+**The number that decided D14**, nanoseconds per record held against copied at
+64 records per file read: 35 against 37 with one view, 45 against 69 with three;
+holding loses only where each file yields one record (122 against 49).
+
+## 4. Decision
+
+### D1 — Views stay a type of their own; a view in a field is a marker, not a lifetime.
+
+Two kinds of type: **owned** (`String`, `Vec[T]`, `Bytes`) and **views**
+(`ref String`, `ref Array[u8]`, `ref T`). A struct with a view field declares
+that it may point into someone else's buffer, and that is the whole annotation:
+no region name, no parameter, nothing propagated into the struct's type. With
+one type instead, the tether state becomes a hidden type parameter, a struct's
+representation a whole-program property, and every cost explained at a site
+remote from it.
+
+### D2 — Every view is Borrowed, Tethered or Owned, solved per construction site, and the event is escape, not storage.
+
+| State | What it is | Cost | Chosen when |
+| :--- | :--- | :--- | :--- |
+| **Borrowed** | a plain reference | nothing | every use lies inside the buffer's live range |
+| **Tethered** | a plain reference; the buffer has moved into a keep (D9) | none where a frame keeps it; one count per task or per buffer otherwise (D10-D12) | the view escapes that range |
+| **Owned** | a copy | one allocation | **only** where the source wrote the copy |
+
+`Borrowed ⊑ Tethered ⊑ Owned`, and the compiler computes the least state that
+makes the program valid: *transient = borrow, escaping = tether, copying =
+yours to ask for*. A view escapes when it outlives the buffer's owning scope -
+returned past it, captured by a `@detached` lambda, kept by a longer-lived
+container, a task or a global. **Storing a view in a struct is not by itself
+an escape**, which is what keeps a struct built and consumed inside the
+buffer's scope free.
+
+### D3 — Promotion to Owned is never automatic.
+
+The compiler never inserts a copy: an implicit one on escape has unbounded
+invisible cost and can allocate inside a `sync` body. Where no tether is
+possible - the buffer lives on the stack or came from a foreign library - the
+program is refused, naming `.clone()` among the ways out.
+
+### D4 — Nothing is written for a tether; the decision is the compiler's and is shown.
+
+There is no `@borrowed` and no `@tethers`. Where a buffer lives is decided like
+which count a `Shared` gets ([ADR-037](adr-037.md) D7) and shown rather than
+asked for: `--tethers` (on `nikaia build` and `nikaia lower`) prints where each
+buffer lives and why, and the ledger's `views` column makes a change of state a
+diff in review. A word asserting *never tethers* guards a change the source
+cannot show, so its presence and absence read alike; a word permitting a tether
+would sit on every struct a parser yields, which is the bookkeeping the
+language exists to remove. The cost a word would have flagged - a small view
+keeping a large buffer - is named in `--tethers`' output (D6).
+
+### D5 — The tether state is in the ledger and inherits its determinism.
+
+Per function, the state of every view in its signature (`views`); the
+function that takes a keep records it, so the decision crosses a package
+boundary like every other column. The lattice is a three-element chain and
+the constraints are monotone, so the solution is a unique least fixpoint
+([ADR-005](adr-005.md) D8), identical at every setting of either switch. A
+barrier - a `dyn` boundary, a published non-generic API, a call the analysis
+cannot see through - widens to Tethered, never to Owned.
+
+### D6 — Retention is a named cost, not a silent leak.
+
+A tether keeps the **whole** buffer alive: a 12-byte name out of a 13 GB
+mapping pins 13 GB. The cost is shown, not warned about: `--tethers` reports
+per function which buffer each view keeps alive and for how long (D4, D13),
+and `.clone()` is the fix where a small extract should not hold a large
+buffer. *As built: a report, not a warning - a warning on every view of a
+mapping would fire on the programs the mapping is for.* A tether also moves a cleanup: a mapping's
+`Cleanup` ([ADR-297](adr-297.md)) runs when the last tether dies, not at the
+end of the scope that made it, and the diagnostic says so where the two orders
+differ.
+
+### D7 — Explicit region binding is rejected as the mechanism.
+
+`let m = HashMap::new() in file_scope` is a lifetime with a friendlier spelling:
+every function touching `m` must name it, and the caller of a grammar would
+have to know which scope the parser's buffer lives in. D10 delivers the same
+guarantee by inference. An explicit **arena for owned data** stays on the shelf
+as a future allocator feature, which is an allocation strategy and not a
+lifetime construct.
+
+### D8 — A result that borrows from nothing is `'static`.
+
+`fn name() -> ref String { "Ada" }`: a function with no view among its
+parameters and no receiver has nothing for the result to borrow from, and
+`'static` is the only lifetime that can be written there. It is derived, not
+chosen, and safe both ways: `rustc` still checks the body, so a body that
+cannot honour it is refused about the body. It applies to a result that
+*carries* a view as well as one that *is* one, and only in a signature that
+declares no lifetime of its own. Where a receiver or a view parameter is
+present, D25 decides which of them the result borrows from, and a result no
+way out of the body hands back a view of any of them borrows from nothing.
+
+### D9 — A buffer lives in the keep of whatever keeps its views.
+
+When views of a buffer outlive the scope that read it, the buffer moves into a
+**keep** (`tether::Keep`), an append-only store in which nothing moves. The
+views stay plain references, checked by `rustc` against the keep's lifetime.
+
+### D10 — The keep belongs to a frame wherever a frame outlives the views.
+
+A function whose views leave through its result, a `mut` parameter or its
+subject takes a keep from its caller as its last parameter, and its signature
+carries the keep's lifetime on exactly those positions. A caller that uses the
+value and ends declares a keep beside the call; one whose loop or outer scope
+keeps the views declares one for the function, first in its body; one that
+hands the value on forwards its own. A view so travels any number of frames
+with no count and no handle, and the body may pause anywhere. This is region
+inference without a region name.
+
+### D11 — A handle travels with the value only where no frame outlives it.
+
+A task outlives every frame the compiler can name. There the function declares
+one shared keep behind a count, and each binding the task takes is packed
+beside a clone of the handle in a type the compiler writes, handing its views
+out for no longer than it is borrowed - a shortening `rustc` checks. **One
+count per task, never per view**: handle traffic is O(containers × buffers),
+never O(elements).
+
+### D12 — A container that drops entries while the loop goes on reading holds each view with its own handle.
+
+Where a local declared outside a loop keeps views of buffers read inside it and
+removes entries inside that loop (D18), each buffer gets a keep of its own and
+each view kept is a `Held`: the view and a handle on its buffer. A buffer is
+freed when its last view leaves. A view is compared and hashed by **content**,
+never by `(buffer, range)`, so a key cut from two buffers is one key.
+
+### D13 — Views are followed by origin, and the analysis errs towards a keep.
+
+Every local carries the set of buffers its views may point into, through
+methods, fields, indexing, `for`, literals, `push`/`insert`, calls to functions
+that take a keep, and the holes of an `f"…"`. It stops at anything that hands
+back a value of its own (`.clone()`, `len`, a call whose result holds no view);
+a buffer handed on whole is a move, not an escape. Where it cannot tell, it
+gives a keep: a keep nobody needed costs a buffer living to the end of a scope,
+a refusal nobody needed is a correct program refused - so a refusal stands only
+on a named buffer, never on a doubt.
+
+### D14 — An element that is a struct of views is held beside its buffers, and the struct is lowered once.
+
+In a container D12 applies to, a struct of views becomes a `tether::Holding`:
+the struct and a handle on the keep of each buffer it points into. Its
+declaration, methods and every other use are untouched; only that container's
+element type changes. The compiler writes three short items per such struct
+(`Views`, `Rebase`, `Hold`), none `unsafe`; text is held by `Held::new`, which
+asks the keep. The emitted code for a held view or struct writes no `unsafe`.
+A value can be held where every view in it is text, a nullable of one, a list
+of those, or a struct without type parameters made only of such fields.
+
+### D15 — One handle per buffer; a held view is checked against the buffer the plan names; where it is not there, a program copies it and a test build panics.
+
+Every element of one container carries as many handles as its widest value
+needs (`--tethers` says how many). The plan is checked, not trusted, and it is
+checked where it points: the lowering hands each held view the keep and the
+buffer D13 followed it to, and the run compares the view's address with that
+one buffer's range. One comparison, no search among the keep's buffers.
+
+* **A view the plan names no buffer for** is copied into the element's first
+  keep, as planned, and `--tethers` names the site: a literal, which is known
+  as one while building and needs no keep (D8), and the cases section 6 lists
+  the lowering does not reach.
+* **A view that is not in the buffer the plan names** means the analysis was
+  wrong, which is the compiler's defect. A program copies it into the
+  element's first keep, so it stays sound where the plan is wrong. A build
+  under `nikaia test` panics there instead, naming the `.nika` site and
+  saying it is the compiler's fault, so a wrong plan is found by the tests and
+  not hidden by a copy. Nikaia has no dev and release builds (ADR-002 D5); the
+  test build is the one whose job is to find it.
+
+**Why:** measured on #2838 (a list keeping 160 000 short views of 20 000
+buffers, against Rust controls): a held view cost 160 instructions more than a
+view counted per buffer, 50 of them the search among the keep's buffers, and
+the held view cost more than copying the text. No Nikaia program in the
+repository reached the copy. **Rejected:** trusting the plan with no check (a
+wrong plan would be a dangling reference, not a copy); keeping the search (it
+buys nothing the range check does not); panicking in every build (a compiler
+defect must not stop a user's program that a copy keeps sound).
+
+### D16 — An element taken out stays held, and a removal is a removal wherever it stands.
+
+`let old = kept.remove(0)` hands back the `Holding` with its handles; `old`
+needs no copy and no keep. A removal bound by a `let` counts as one in a
+statement of its own does.
+
+### D17 — A held element is read and written through its handle.
+
+The brackets, `for`, `iter`, `first`, `last` and `get` hand out the struct
+through `Holding::get` for no longer than the read; a method is called on that
+as on any struct. A field written (`kept[i].field = value`, and the compound
+forms) goes through `Holding::with_mut`, whose closure can store only what
+lives as long as the keeps - a view found again in them first (D15).
+
+### D18 — A removal makes a pruning container only inside the loop that reads the buffer.
+
+A container whose entries are dropped only after the loop, or before it, frees
+nothing earlier with a handle per view: its buffers live in the function's keep
+(D10) - no count, no handle, no refusal.
+
+### D19 — `Bytes` is a language type, written bare.
+
+Like `Vec`, `String` and `Array`, and on Part I 1.3's list. A type whose
+representation the compiler picks is not a type a module owns, and `fs::read`'s
+result must be nameable without a `use`.
+
+### D20 — A `Bytes` is one shared, immutable buffer.
+
+Handing one on costs a count, never a copy; it reads as a run of bytes
+everywhere `ref Array[u8]` is taken. Building one is a `Vec[u8]` handed over,
+the one copy in the type and the program's to write.
+
+*Changed by ADR-373 D1-D2:* a `Vec[u8]` handed over with `Bytes(v)` becomes
+the buffer without a copy; a `Bytes` may also hold a mapping.
+
+### D21 — `fs::read` hands back a `Bytes`.
+
+As Part III 17.1-17.2 say: reading a file and passing it on costs a count.
+
+### D22 — `Mapped` does not deref to `Bytes` yet. *(Superseded by [ADR-016](adr-016.md) D5: it does, and `m.text()` is the text.)*
+
+`fs::map`'s mapping derefs to text, which is what a parser of it reads. Part
+III 17.2's *`Mapped` derefs to `Bytes`* stays a promise rather than becoming a
+lie in code; changing it is the tether's own work, where a mapping and a read
+become the same thing to a parser.
+
+### D23 — A view of what the body owns is handed out as a view of a buffer it made.
+
+*Added October 6, 2026 (#442).*
+
+```nika
+fn d() -> ref String {
+    let s = "x".clone()
+    return ref s                 // s moves into the caller's keep
+}
+```
+
+A local, an owned value and a part of one are buffers the body made, whole or
+cut: D9 and D10 apply, and the value moves into the keep of the frame that
+keeps the view. Nothing is said where it is written; `--tethers` names it.
+
+### D24 — A view handed back through a parameter points into the caller's argument, and an argument made in the call lives in the caller's keep.
+
+*Added October 6, 2026 (#442).*
+
+```nika
+fn e(t: String) -> ref String {
+    return ref t                 // t stays a view; the result borrows from it
+}
+
+let r = e(name.clone())          // the argument lives in this frame's keep
+println(r)
+```
+
+A parameter written with a plain type is a view unless the body keeps the
+value (Part I 6.5), and handing back a view of it does not keep it. The result
+borrows from the argument, so D8's `'static` applies only where no parameter
+is a view **as lowered**, not as written. An argument made in the call itself
+- a copy, a literal, a call's result - would die at the end of the statement
+while the result lives on; it moves into the keep of the frame that keeps the
+result, as D10 places any buffer.
+
+**Why silently.** The developer writes what the program means and solves the
+problem without lifetimes; how long a buffer lives is the compiler's
+bookkeeping, shown by `--tethers` for whoever optimises or learns (ADR-005
+D1, D6 here). The cost is memory held to the end of the keeping frame, never a
+copy and never a count.
+
+**Rejected.** Refusing a view of a local with `-> String` as the help (Rust's
+*cannot return reference to local variable*): `-> String` costs no more, but it
+would refuse a view of the whole where a view of a part is kept, and D13 lets a
+refusal stand only on a named buffer. Turning `-> ref String` into a move: the
+signature and the ledger would promise a view the caller does not get.
+Taking the parameter over so the result can be kept: a copy or a move of the
+caller's value for a function that only reads it. Requiring `ref` on the
+parameter: the one place the declaration would have to write it (Part I 6.5).
+Refusing an argument made in the call, with *bind it to a `let` first*
+(`rustc`'s help): a refusal where the compiler already knows the keep. A hint
+that `-> String` would free sooner: a detail at writing time that `--tethers`
+already answers.
+
+### D25 — A result points into at most one parameter, and the body says which; a result that could point into two is refused.
+
+*Added October 11, 2026 (#580).*
+
+*Changed by [ADR-views-v4](adr-views-v4.md) D8, D9: each view a result holds points into the parameters that reach it, a run-time choice into their union, and nothing is refused for it; a caller may give an argument up while a view of it lives, and only a change in place is refused (`NK2305`).*
+
+```nika
+impl Checker {
+    fn label(ref self, world: ref World) -> ref String {
+        return world.names[self.at]      // points into `world`; `self` is free again
+    }
+}
+
+fn longest(a: ref String, b: ref String) -> ref String {
+    if a.len() >= b.len() {
+        return a
+    }
+    return b                             // NK2302: `a` here, `b` there
+}
+```
+
+Every way out of a body - a `return`, the last expression - is followed back
+to the parameters whose views reach what it hands back, by D13's walk: through
+a field, an index, a `let`, a loop, a `??`, a struct literal, and a call whose
+contract says which of its arguments its result points into. The receiver
+counts, and so does a parameter lowered as a view (D24): `ref` on a parameter
+is an assertion (Part I 6.5), so writing it changes nothing here. A literal, a
+buffer the body made (D23) and a copy reach no parameter.
+
+* **One parameter on every way out that reaches any**: the result points into
+  that parameter and nothing else. The signature below ties the result to it
+  alone, the ledger writes it, `-> ref(world) String` (ADR-251 D4), and a
+  caller keeps that one argument unchanged while it uses the result; every
+  other argument is free when the call returns. A way out that hands back a
+  literal or a buffer the body made fits beside it: the literal outlives
+  everything, and the body's buffer moves into the keep of the same frame.
+* **No parameter**: the result borrows from nothing a caller passed - `'static`
+  (D8), or the caller's keep (D23).
+* **Two or more**: two ways out that reach two parameters, one value that may
+  be a view of either (a `let` given one and then the other), or one value
+  holding views of both (a struct built from both). The function is refused
+  with `NK2302` at the ways out. The message says, at each, whose data it hands
+  back, and names the two ways out: split the function so that each part hands
+  back views of one parameter (what decides between them is a fact the
+  function can return, `fn a_is_longer(a, b) -> bool`), or hand back a copy with
+  `.clone()` and declare `-> String`.
+
+The walk errs towards more parameters, never fewer (D13): a name that ever
+carries a parameter's view keeps carrying it, and a call nothing describes is
+taken to hand back views of every argument. In recursion the answer is the
+least fixpoint, from no parameter upwards (D5).
+
+**Why from the body.** Which buffer a result points into is what the body
+knows and the declaration does not, as whether a parameter is kept is (Part I
+6.5): read off the body, written to the ledger, the same for every caller. A
+caller reads the ledger and never the body - across a package, in recursion,
+through a function value of a named function. A body edit that moves the
+answer moves the contract, and a caller it breaks is told so with the edit
+(`NK2401`). A wrong answer cannot dangle: the lowering names the result's
+lifetime on the one parameter, `rustc` checks the body against that signature
+and every caller against it, and the lowering of a view writes no `unsafe`
+(D14). The worst a defect in the walk can do is a refusal from below, which
+Part III C.1 makes the compiler's bug.
+
+**Why a refusal and not both.** Tying the result to both parameters, Rust's
+`fn longest<'a>(a: &'a str, b: &'a str) -> &'a str`, is sound, and where the
+choice is made at run time it is the true constraint: a caller cannot know
+which buffer it got, so it must leave both unchanged. But it puts that
+constraint on every caller and leaves it unsaid there: the caller meets it as
+a conflict at its own line, *`y` is still borrowed*, about a function it did
+not write and an argument that was perhaps only compared - the reasoning about
+where a view points that D4 takes off the program. The refusal says it once, at
+the function, where the fix is. The cost is small where it was counted: of the
+41 functions in the compiler's own Rust that hand back a view and take a
+receiver or two views, 4 choose the buffer at run time and none at build time.
+A value that holds views of two parameters at once is refused with them, though
+it is no ambiguity: which of its views points where is plain, and the reason
+above does not reach it. Accepting it means one lifetime over several
+parameters, whose cost to a caller this record has not weighed (§6).
+
+**Rejected.**
+* *Both parameters* (above). It was the lowering for plain parameters lowered
+  as views, which compiled `fn longest(a: String, b: String) -> ref String`
+  while the same function written with `ref` was refused.
+* *An explicit result source in the signature*, `-> ref(world) String`: a
+  lifetime with a parameter's name, the annotation the source never has (Part I
+  6.5), for an answer the body already gives. The ledger keeps the spelling.
+* *Making the buffer live longer*: a buffer the body made already moves into
+  the caller's keep (D23), and an argument made in the call lives there too
+  (D24). A parameter's buffer is the caller's, so the callee has nothing to
+  move; a reference made to outlive its buffer is a lifetime cast in `unsafe`
+  code, undefined behaviour the lowering never writes.
+* *Specialising the function* per branch the build can decide - a constant, a
+  type parameter, a guard. A type parameter chooses no value; a guard is a
+  run-time condition; a branch on a constant is still checked below in the
+  copy that does not take it, unless the lowering also drops it; and a copy per
+  call site multiplies code and ledger entries for a case the count above did
+  not find. A function with a `comptime` parameter is emitted once per value
+  already (Part I 4.6); what that does to the count is not decided here.
+* *Copying at the ambiguous way out*: an implicit copy (D3).
+* *Refusing every function with two views and a view result*, as before: it
+  refused functions whose every way out hands back the same parameter.
+
+### D26 — Where there is no body, the declaration says it: the receiver, or the only view.
+
+*Added October 11, 2026 (#580).*
+
+A trait's method and a function type have no body to read. Their result points
+into the receiver where there is one, and otherwise into the one parameter that
+is a view; one with no receiver, two views and a result that holds a view is
+refused with `NK2302` at the declaration. A method implementing a trait hands
+back views of what the trait's declaration names, and a body that reaches
+another parameter is refused with `NK2302`: a caller through the trait reads
+the declaration. A ledger written by hand, or a crate's description, states it
+in its `ref(…)`. Both rules follow the elision of the language below, so a
+declaration means what its lowering does, and one D25 would refuse is refused
+here rather than by `rustc`.
+
+### D27 — A view of a parameter stored into a place another parameter holds points into the caller's argument, and that argument lives as long as the place.
+
+*Added October 19, 2026 (#706).*
+
+```nika
+fn words(s: String, mut v: Vec[String]) {
+    for w in s.split(" ") {
+        v.push(w)                // a view of `s` kept in the caller's list
+    }
+}
+
+let mut v: Vec[String] = []
+words(f"a b {1}", v)             // the argument lives in this frame's keep
+println(v.len())
+```
+
+`s` is only read, so it is lent (ADR-282 D5), and `w` is a view of it. A view
+kept in a `mut` parameter's place - an element pushed or inserted, a field
+assigned - outlives the call, as a view handed back does (D24), and points into
+the same thing: the caller's argument. The lowering gives the two parameters
+one lifetime, `fn words<'a>(s: &'a str, v: &mut Vec<&'a str>)`, which is what
+the language below writes for it. At the call, an argument made in the call
+moves into the keep of the frame that keeps the place's owner (D10), and a
+named argument may not be changed in place while the place is read (`NK2305`,
+[ADR-views-v4](adr-views-v4.md) D9).
+
+**Why.** D24's reasons hold unchanged: the developer writes what the program
+means, and how long the buffer lives is the compiler's bookkeeping. A view
+handed out through a parameter's place differs from one handed back only in
+the door it leaves by.
+
+**Rejected.** Keeping `s` and storing copies in `v`: a copy the program did not
+write, on every element ([ADR-282](adr-282.md) D7). Refusing with `.clone()` as
+the help: a refusal where the compiler knows the keep, as D24 rejects for a
+view handed back.
+
+## 5. Consequences
+
+* A struct with view fields, a map keyed by views, a list of tokens handed back
+  - each compiles with nothing written, and the free case stays free: the
+  1BRC-shaped program solves to Borrowed throughout, no
+  allocation and no count per row.
+* A view of a buffer the body made, or of anything it owns, may be handed out
+  of it (`NK2303` is not a refusal, D23); a view of a parameter handed back
+  borrows from the caller's argument (D24). `NK2302` does not blame a parameter for a view of text read
+  *from* it.
+* A function with several views whose every way out hands back a view of one of
+  them compiles, and its callers keep only that argument (D25); one that hands
+  back views of two is `NK2302`, at the function and not at its callers.
+* **Still refused, `NK2304`, each a real boundary:** one buffer handed both to
+  a task and out of the function (no one owner; the way out is a copy for the
+  task); a map or set of structs of views that drops entries in the loop; a
+  held value of a shape D14 does not cover (type parameters, a tuple of views,
+  a view of something other than text); a task's tethered binding whose type is
+  neither written nor a call to a function of this file.
+* What is accepted: a small view keeps its whole buffer, and nothing in the
+  source says so - `--tethers` does.
+
+## 6. What this does not decide
+
+* **What a `Bytes` offers** beyond `len`, `text` and a copy out - slicing,
+  is [ADR-320](adr-320.md) D7; concatenation is not decided here.
+* **`Mapped`'s deref to `Bytes`** (D22).
+* **A map or a set of structs of views that drops entries**: a map's read
+  answers a value that may be absent, and that is not read through the handle
+  yet; it stays `NK2304`.
+* **Cases the lowering does not reach, which the backend answers:** a
+  `ref mut self` method on a held element through the brackets (as for plain
+  structs); a held element taken out and handed on whole. A buffer read by a
+  call into a held container has views the plan names no buffer for, which
+  D15 copies - sound, planned, and it pays.
+* **Whether the retention warning (D6) is a lint** or only a line in
+  `--tethers`.
+* **An explicit arena for owned data** (D7), as an allocator feature.
+* **A result that holds views of two parameters at once** (D25): a struct
+  built from views of both is refused today, although its views are not
+  ambiguous.
+* **A branch on a `comptime` parameter** (D25): whether the copy emitted per
+  value counts only the ways out it takes.

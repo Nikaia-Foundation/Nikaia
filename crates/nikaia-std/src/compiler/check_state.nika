@@ -980,7 +980,7 @@ pub struct CheckState {
     /// needs the rule's name, because a grammar is a page of rules and a caret
     /// on a call inside one is not enough to find it.
     pub inside_an_action: String?,
-    /// **The item type an `emit` hands over here** (ADR-grammar-typed-read-v1 D7,
+    /// **The item type an `emit` hands over here** (ADR-grammar-typed-read-v2 D7,
     /// amended 2026-11-18, #2061): the `@stream` entry's, while the action of
     /// a rule that entry reaches is walked; `null` anywhere else, where an
     /// `emit` is `NK1371`.

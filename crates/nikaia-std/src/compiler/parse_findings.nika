@@ -131,7 +131,7 @@ pub fn parse_findings_refusal(finding: Finding, source: String) -> ParseFindings
 }
 
 /// **A refusal of the copying of a grammar rule** (`grammar_types.nika`,
-/// ADR-grammar-typed-read-v1), as the parser's: its code and headline are the line.
+/// ADR-grammar-typed-read-v2), as the parser's: its code and headline are the line.
 pub fn parse_findings_types_refusal(refusal: GrammarTypesRefusal) -> ParseFindingsRefusal {
     let line = f"{refusal.code}: {refusal.message}"
     let finding = Finding { code: refusal.code, span: refusal.span, message: refusal.message, notes: [refusal.note], help: refusal.help, warning: false, labels: [CheckLabel { span: refusal.span, word: "", text: "", main: true }] }

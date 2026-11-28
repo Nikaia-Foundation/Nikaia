@@ -1,7 +1,7 @@
 // Part II 10.3, the table of `T::kind`: a map of `std` is `Map(K, V)`
 // written with its module too, `collections::HashMap[K, V]` and
 // `collections::BTreeMap[K, V]`, so a grammar's `match T::kind` reads a map
-// field (ADR-grammar-typed-read-v1 D6, #2599). The arm builds the map by
+// field (ADR-grammar-typed-read-v2 D6, #2599). The arm builds the map by
 // inserting each entry the list read into an empty map of the field's type;
 // the field's map holds text of its own, so a key or value read as a view of
 // the input is copied in with `.clone()`.

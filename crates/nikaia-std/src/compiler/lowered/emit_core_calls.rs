@@ -1297,6 +1297,7 @@ impl EmitState {
         self.emit_core_args(world, walk, out, host, &name, args, &takes, depth, flow, scope)?;
         out.push(through_suffix);
         walk.hold_args = None;
+        walk.hold_places = None;
         let keeping = keeping_method_key(&self.own_contracts, &self.own_methods, (emit_call_owner(&scope.function)).as_deref(), emit_call_on_self(world, receiver), &name);
         if keeping.is_some() {
             let key = nikaia_std::index::or(keeping, || "".into());
@@ -1390,10 +1391,15 @@ impl EmitState {
     // this was written - see `contracts::sync`.
     pub(crate) fn emit_call_hold<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, host: &H, receiver: Option<&Expr>, scope: &EmitScope, flow: &EmitFlow) {
         walk.hold_args = None;
+        walk.hold_places = None;
         let on = match receiver { Some(__nikaia_value) => __nikaia_value, None => return };
         let root = match root_of(world.words, on) { Some(__nikaia_value) => __nikaia_value, None => return };
         let plan = match self.keep_plans.get(&scope.function) { Some(__nikaia_value) => __nikaia_value, None => match self.keep_plans.get(&walk.keep_function) { Some(__nikaia_value) => __nikaia_value, None => return } };
         let holds = match plan.holds.get(&(flow.statement, nikaia_std::block::Text::from(root.to_string()))) { Some(__nikaia_value) => __nikaia_value, None => return };
+        walk.hold_places = match plan.places.get(&(flow.statement, nikaia_std::block::Text::from(root.to_string()))) {
+            Some(__nikaia_it) => Some(__nikaia_it.clone()),
+            None => None,
+        };
         let width = nikaia_std::index::or(plan.widths.get(&root), || 1);
         let mut by_arg: collections::BTreeMap<i64, Vec<i64>> = collections::BTreeMap::new();
         for (arg, buffers) in holds.iter() {
@@ -1410,8 +1416,51 @@ impl EmitState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     #[allow(clippy::too_many_arguments)]
+    pub(crate) fn emit_core_packed_call<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, node: &Expr, receiver: &Expr, args: &[Expr], depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<bool, nikaia_std::error::Thrown<EmitRefused>> {
+        let on = node_key(receiver);
+        if walk.held.contains_key(&on) || !self.facts.mut_receivers.contains(&on) { return Ok(false); }
+        let symbol = match receiver {
+            Expr::Variable(name, _) => { let name = *name; name.copy_owned() },
+            _ => return Ok(false),
+        };
+        let bound = emit_text(world, symbol);
+        let key = match self.keep_plan_key(&walk, &scope.function) { Some(__nikaia_value) => __nikaia_value, None => return Ok(false) };
+        let plan = match self.keep_plans.get(&key) { Some(__nikaia_value) => __nikaia_value, None => return Ok(false) };
+        if !plan.tethered.contains_key(&bound) { return Ok(false); }
+        out.push("{ ");
+        for i in 0..args.len() as i64 {
+            out.push(&format!("let __nikaia_given_{} = ", i));
+            self.emit_expr(world, walk, out, host, unsafe { nikaia_std::proven::read(&args, (i) as usize) }, depth, flow, scope)?;
+            out.push("; ");
+        }
+        let keeps = if args.is_empty() { "_" } else { "keeps" };
+        out.push(&format!("{}.with_mut(|held, {}| ", self.emit_expr_read_name(world, symbol, receiver), keeps));
+        walk.held.insert(on, String::from("held"));
+        let places = plan.places.get(&(flow.statement, nikaia_std::block::Text::from(bound.to_string())));
+        for i in 0..args.len() as i64 {
+            let named = match places {
+                Some(__nikaia_it) => __nikaia_it.get(&i),
+                None => None,
+            };
+            let mut given = format!("nikaia_std::tether::Rebase::rebase(__nikaia_given_{}, &keeps)", i);
+            if named.is_some() {
+                let (buffer, sure) = nikaia_std::index::or(named, || (0, false.into()));
+                given = if sure { format!("keeps.view_in(0, __place_{}, __nikaia_given_{})", buffer, i) } else { format!("nikaia_std::tether::Rebase::rebase_near(__nikaia_given_{}, &keeps, __place_{})", i, buffer) };
+            }
+            walk.held.insert(node_key(unsafe { nikaia_std::proven::read(&args, (i) as usize) }), given);
+        }
+        self.emit_expr(world, walk, out, host, node, depth, flow, scope)?;
+        walk.held.remove(&on);
+        for each in args.iter() { walk.held.remove(&node_key(each)); }
+        out.push(") }");
+        Ok(true)
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn emit_core_method_arm<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, node: &Expr, receiver: &Expr, method: winnow_grammar::Symbol, args: &[Expr], config: &[ConfigArg], depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
         let name = emit_text(world, method);
+        if self.emit_core_packed_call(world, walk, out, host, node, receiver, args, depth, flow, scope)? { return Ok(()); }
         if (name == "compare" || name == "eq") && args.len() == 1 && self.facts.standard_compares.contains_key(&node_key(receiver)) {
             let flags = nikaia_std::index::or(*nikaia_std::index::get(&self.facts.standard_compares, &(node_key(receiver))), || 0);
             if name == "compare" { out.push("std::cmp::Ord::cmp(&"); } else { out.push("std::cmp::PartialEq::eq(&"); }
@@ -1644,8 +1693,8 @@ pub(crate) fn emit_tuple_part_copy(i: i64, word: &str) -> String {
 }
 
 pub(crate) fn emit_tuple_part_copies(parts: &[String]) -> String {
-    let copies: Vec<String> = parts.iter().enumerate().map(|(at, item)| (at as i64, item)).map(|__nikaia_tuple126479| {
-        let (i, word) = __nikaia_tuple126479;
+    let copies: Vec<String> = parts.iter().enumerate().map(|(at, item)| (at as i64, item)).map(|__nikaia_tuple129416| {
+        let (i, word) = __nikaia_tuple129416;
         emit_tuple_part_copy(i, word)
     }).collect::<Vec<_>>();
     if copies.len() == 1 { return format!("({},)", *unsafe { nikaia_std::proven::read(&copies, (0) as usize) }); }

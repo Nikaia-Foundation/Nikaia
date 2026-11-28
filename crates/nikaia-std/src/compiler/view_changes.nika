@@ -1048,7 +1048,7 @@ fn vc_reads_in(stmt: ref Stmt, at: ref Span, views: ref Vec[VcView], ask: ref Vc
     }
 }
 
-/// The views a call keeps in the places its arguments hold (ADR-283 D27):
+/// The views a call keeps in the places its arguments hold (ADR-tether-v1 D27):
 /// the ledger's `stores` says `v:s`, so the argument at `v` holds views of
 /// the one at `s` from here on.
 fn vc_kept_in_places(at: ref Span, func: ref Expr, args: ref Vec[Expr], ask: ref VcAsk) -> Vec[VcView] {
@@ -1162,7 +1162,7 @@ fn vc_block(block: ref Block, outer: ref Vec[VcView], ask: ref VcAsk, holes_of: 
                 }
                 vc_assign(block, j, target, whole, at, views, declared, ask, holes_of, walk)
             }
-            // **A view kept in an argument's place** (ADR-283 D27):
+            // **A view kept in an argument's place** (ADR-tether-v1 D27):
             // `words(t, v)` gives `v` views of `t`.
             Stmt::Expr(expr) => {
                 match expr {

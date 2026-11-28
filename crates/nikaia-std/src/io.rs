@@ -71,7 +71,7 @@
 /// **The payload is owned text and not a view.**
 /// [ADR-023](../../../docs/specification/adr/adr-023.md) D10 says a path that
 /// came from a buffer should travel as a view; that is the tether
-/// ([ADR-283](../../../docs/specification/adr/adr-283.md)), which is not built,
+/// ([ADR-tether-v1](../../../docs/specification/adr/adr-tether-v1.md)), which is not built,
 /// and a lifetime on this type would reach every `std` signature. One
 /// allocation on a path that is already failing is the honest price until then.
 /// What an [`IoError`] from this module was about: a stream has no path, and
@@ -285,7 +285,7 @@ pub async fn read() -> Result<crate::block::List<u8>, IoError> {
 /// once consumed. Keeping them would be `read_to_string` with extra steps.
 /// That is also what keeps this expressible at all - an iterator may hand out
 /// views into a buffer it does not own, and never into one it does
-/// ([ADR-025](../../../docs/specification/adr/adr-025.md), Wall B).
+/// ([ADR-loop-failure-v1](../../../docs/specification/adr/adr-loop-failure-v1.md), Wall B).
 ///
 /// **A step can fail**, and the item says so rather than pretending a failed
 /// read is the end of the stream - which would turn a truncated input into a
@@ -314,7 +314,10 @@ pub async fn read() -> Result<crate::block::List<u8>, IoError> {
 /// [`read_to_string`] is the entry that does, for an input a program is willing
 /// to hold whole.
 pub async fn lines() -> Lines {
-    Lines { _shared: () }
+    Lines {
+        _shared: (),
+        pool: None,
+    }
 }
 
 /// One line of standard input, without its line ending; `null` at the end of
@@ -438,6 +441,105 @@ pub struct Lines {
     /// The buffer is the process's ([`HELD`]), shared with [`read_line`] and
     /// [`read_exact`]; a `Lines` is only the handle a `for` walks.
     _shared: (),
+    /// **The pool a `for` over the lines reads into** ([`Lines::in_pool`]),
+    /// where its lines are views; none where the lines are walked as values.
+    pool: Option<Pool>,
+}
+
+/// **A fixed pool of stream buffers** (ADR-stream-buffers-v1 D1, D3, D5): at
+/// most `size` chunks of standard input, each in a keep of its own, which the
+/// lines of a `for` view. A chunk no line is held in any more (its keep's
+/// count is down to the pool's own) is the next read's buffer, so a loop in
+/// its steady state allocates nothing, per chunk or per line.
+struct Pool {
+    /// The size the compiler counted: the names that hold a line across turns,
+    /// the chunk being read and the one a cut line moves into (D3).
+    size: usize,
+    chunks: Vec<Chunk>,
+    /// The chunk the lines are cut from now.
+    current: usize,
+    /// How far into it the lines already handed out reach.
+    at: usize,
+    /// The stream is over: what is left after `at` is the last line.
+    ended: bool,
+    /// More chunks are held than the compiler counted, under `nikaia test`:
+    /// the next line stops the run at its loop (D9, ADR-tether-v1 D15).
+    over: bool,
+    /// The reply channel of every read of this loop, kept so a read allocates
+    /// none.
+    reply: std::sync::mpsc::SyncSender<(Vec<u8>, std::io::Result<usize>)>,
+    answer: std::sync::mpsc::Receiver<(Vec<u8>, std::io::Result<usize>)>,
+}
+
+/// One buffer of a [`Pool`]: its keep, which the lines' holders count, and
+/// its bytes, shared with that keep while the keep holds them.
+struct Chunk {
+    keep: std::sync::Arc<crate::tether::Keep>,
+    bytes: std::sync::Arc<Vec<u8>>,
+    place: crate::tether::Place,
+}
+
+/// A chunk's bytes as the keep holds them: the other handle on them is the
+/// pool's, which changes them only once this one is dropped
+/// ([`std::sync::Arc::get_mut`]), so they stay where they are while a view of
+/// them lives.
+struct ChunkBytes(std::sync::Arc<Vec<u8>>);
+
+impl crate::tether::Viewed for ChunkBytes {
+    fn bytes(&self) -> &[u8] {
+        &self.0
+    }
+}
+
+/// **One line of a `for` over [`Lines::in_pool`]**: a view of the chunk it was
+/// cut from, the keep that chunk lives in and its place there, which a name
+/// that holds the line across turns takes a count on
+/// (`tether::Held::in_place`, ADR-stream-buffers-v1 D2).
+pub struct Line<'a> {
+    text: &'a str,
+    keep: &'a std::sync::Arc<crate::tether::Keep>,
+    place: crate::tether::Place,
+    /// The pool ran over under `nikaia test` (D9).
+    over: Option<usize>,
+}
+
+impl<'a> Line<'a> {
+    /// The text, its keep and its place, as the loop binds them.
+    ///
+    /// **More buffers held than the compiler counted is the compiler's
+    /// fault** (ADR-stream-buffers-v1 D3, D9; ADR-tether-v1 D15): a program
+    /// takes one more buffer and goes on, and a run under `nikaia test`
+    /// panics here, at the loop's line.
+    #[track_caller]
+    #[inline]
+    pub fn parts(
+        self,
+    ) -> (
+        &'a str,
+        &'a std::sync::Arc<crate::tether::Keep>,
+        crate::tether::Place,
+    ) {
+        if let Some(size) = self.over {
+            over_the_pool(size);
+        }
+        (self.text, self.keep, self.place)
+    }
+}
+
+/// More chunks of a stream held at once than the pool the compiler counted.
+#[track_caller]
+#[cold]
+fn over_the_pool(size: usize) -> ! {
+    panic!(
+        "a loop over a stream holds more than the {size} buffers the compiler counted for it (ADR-stream-buffers-v1 D3, D9). This is a bug in Nikaia, not in your program: the compiler's fault in counting where its lines are kept. Please report it, with this message, at https://github.com/Nikaia-Foundation/Nikaia/issues."
+    )
+}
+
+/// Whether this run is one of `nikaia test`'s, which names a directory for
+/// every test it runs (ADR-247 D5). Read once.
+fn under_test() -> bool {
+    static UNDER_TEST: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *UNDER_TEST.get_or_init(|| std::env::var_os(crate::fs::TEST_DIR_VAR).is_some())
 }
 
 /// What standard input has brought and not yet handed out.
@@ -463,6 +565,75 @@ struct Held {
 const CHUNK: usize = 64 * 1024;
 
 impl Lines {
+    /// **The lines read into a pool of `size` buffers and handed out as
+    /// views** (ADR-stream-buffers-v1 D1, D3): what a `for` over the lines is
+    /// lowered to, `size` the count `--tethers` names for the loop. What
+    /// standard input has brought and not handed out yet is the first
+    /// buffer's start, and what the loop leaves unread goes back there when
+    /// it ends, so [`read_line`] after it finds the next line.
+    pub fn in_pool(mut self, size: i64) -> Lines {
+        let size = usize::try_from(size).unwrap_or(2).max(2);
+        let (held, ended) = with_held(|held| {
+            let rest = held.held.split_off(held.at);
+            held.held.clear();
+            held.at = 0;
+            (rest, held.ended)
+        });
+        let (reply, answer) = std::sync::mpsc::sync_channel(1);
+        let mut pool = Pool {
+            size,
+            chunks: Vec::with_capacity(size),
+            current: 0,
+            at: 0,
+            ended,
+            over: false,
+            reply,
+            answer,
+        };
+        let mut first = Pool::buffer();
+        first.extend_from_slice(&held);
+        pool.chunks.push(Pool::chunk(first));
+        self.pool = Some(pool);
+        self
+    }
+
+    /// **The next line of the pool, as a view** of the chunk it was cut from
+    /// ([`Lines::in_pool`]), pausing while the stream has nothing to give.
+    /// A line that is not UTF-8 is the step's [`IoError`], as in
+    /// [`Lines::next`]; the line endings are the same.
+    pub async fn next_line(&mut self) -> Option<Result<Line<'_>, IoError>> {
+        let pool = self.pool.as_mut()?;
+        let (from, to) = loop {
+            if let Some(found) = pool.cut() {
+                break found;
+            }
+            if pool.ended {
+                return None;
+            }
+            if let Err(e) = pool.refill().await {
+                return Some(Err(e));
+            }
+        };
+        let over = if std::mem::take(&mut pool.over) {
+            Some(pool.size)
+        } else {
+            None
+        };
+        let chunk = &pool.chunks[pool.current];
+        match std::str::from_utf8(&chunk.bytes[from..to]) {
+            Ok(text) => Some(Ok(Line {
+                text,
+                keep: &chunk.keep,
+                place: chunk.place,
+                over,
+            })),
+            Err(e) => Some(Err(IoError::of(
+                std::io::Error::new(std::io::ErrorKind::InvalidData, e),
+                STDIN,
+            ))),
+        }
+    }
+
     /// The next line, **pausing** while the stream has nothing to give
     /// ([ADR-172](../../../docs/specification/adr/adr-172.md) D4).
     ///
@@ -674,6 +845,144 @@ impl Held {
                 STDIN,
             )
         }))
+    }
+}
+
+impl Pool {
+    /// An empty buffer of a chunk's size and room for a cut line.
+    fn buffer() -> Vec<u8> {
+        Vec::with_capacity(CHUNK + CHUNK / 4)
+    }
+
+    /// `bytes` put into a keep of their own.
+    fn chunk(bytes: Vec<u8>) -> Chunk {
+        let bytes = std::sync::Arc::new(bytes);
+        let keep = std::sync::Arc::new(crate::tether::Keep::new());
+        let (_, place) = keep.put_viewed_at(ChunkBytes(std::sync::Arc::clone(&bytes)));
+        Chunk { keep, bytes, place }
+    }
+
+    /// The next whole line of the current chunk, as the range of its bytes
+    /// without the line ending, where it holds one; at the end of the stream
+    /// the rest is a line too.
+    fn cut(&mut self) -> Option<(usize, usize)> {
+        let bytes = &self.chunks[self.current].bytes;
+        let rest = &bytes[self.at..];
+        let (len, step) = match rest.iter().position(|b| *b == b'\n') {
+            Some(at) => (at, at + 1),
+            None if self.ended && !rest.is_empty() => (rest.len(), rest.len()),
+            None => return None,
+        };
+        let from = self.at;
+        let mut to = from + len;
+        if to > from && bytes[to - 1] == b'\r' {
+            to -= 1;
+        }
+        self.at += step;
+        Some((from, to))
+    }
+
+    /// **The buffer the next read goes into**: the current chunk where no
+    /// line is held in it any more, else another such, else a new one while
+    /// the pool is not full. More than that is the compiler's fault (D9): one
+    /// more buffer, and under `nikaia test` the next line says so.
+    fn free(&mut self) -> usize {
+        let unheld = |chunk: &Chunk| std::sync::Arc::strong_count(&chunk.keep) == 1;
+        if unheld(&self.chunks[self.current]) {
+            return self.current;
+        }
+        if let Some(at) = self.chunks.iter().position(unheld) {
+            return at;
+        }
+        if self.chunks.len() >= self.size && under_test() {
+            self.over = true;
+        }
+        self.chunks.push(Pool::chunk(Pool::buffer()));
+        self.chunks.len() - 1
+    }
+
+    /// **One more read of standard input**, into a free buffer whose start is
+    /// the line the current chunk ends in unfinished (D8): standard output
+    /// flushed first, as [`refill`] does.
+    async fn refill(&mut self) -> Result<(), IoError> {
+        {
+            use std::io::Write;
+            let _ = std::io::stdout().flush();
+        }
+        let into = self.free();
+        let mut bytes = {
+            let (current, chunk) = if into == self.current {
+                (None, &mut self.chunks[into])
+            } else if into < self.current {
+                let (low, high) = self.chunks.split_at_mut(self.current);
+                (Some(&high[0]), &mut low[into])
+            } else {
+                let (low, high) = self.chunks.split_at_mut(into);
+                (Some(&low[self.current]), &mut high[0])
+            };
+            if let Some(keep) = std::sync::Arc::get_mut(&mut chunk.keep) {
+                *keep = crate::tether::Keep::new();
+            }
+            let mut bytes = std::mem::take(
+                std::sync::Arc::get_mut(&mut chunk.bytes)
+                    .expect("a free chunk's bytes are the pool's alone"),
+            );
+            match current {
+                None => {
+                    bytes.drain(..self.at);
+                }
+                Some(current) => {
+                    bytes.clear();
+                    bytes.extend_from_slice(&current.bytes[self.at..]);
+                }
+            }
+            bytes
+        };
+        let (back, read) =
+            crate::rt::io::stdin_into(std::mem::take(&mut bytes), CHUNK, &self.reply, &self.answer)
+                .await;
+        let read = match read {
+            Ok(read) => read,
+            Err(e) => {
+                // The stream is over either way: a reader that kept asking
+                // after a failure would loop on it.
+                self.ended = true;
+                return Err(IoError::of(e, STDIN));
+            }
+        };
+        if read == 0 {
+            self.ended = true;
+        }
+        let chunk = &mut self.chunks[into];
+        *std::sync::Arc::get_mut(&mut chunk.bytes)
+            .expect("a free chunk's bytes are the pool's alone") = back;
+        let keep = std::sync::Arc::get_mut(&mut chunk.keep)
+            .expect("a free chunk's keep is the pool's alone");
+        let (_, place) = keep.put_viewed_at(ChunkBytes(std::sync::Arc::clone(&chunk.bytes)));
+        chunk.place = place;
+        self.current = into;
+        self.at = 0;
+        Ok(())
+    }
+}
+
+impl Drop for Lines {
+    /// **What the loop left unread goes back to standard input's buffer**, so
+    /// that a [`read_line`] or a second `io::lines()` after it starts where
+    /// this one stopped.
+    fn drop(&mut self) {
+        let Some(pool) = self.pool.take() else {
+            return;
+        };
+        let rest = &pool.chunks[pool.current].bytes[pool.at..];
+        let ended = pool.ended;
+        with_held(|held| {
+            let mut back = rest.to_vec();
+            back.extend_from_slice(&held.held[held.at..]);
+            held.held = back;
+            held.at = 0;
+            held.ended = held.ended || ended;
+        });
     }
 }
 

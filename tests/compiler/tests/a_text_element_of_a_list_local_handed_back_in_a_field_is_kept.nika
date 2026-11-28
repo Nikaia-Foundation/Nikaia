@@ -1,4 +1,4 @@
-// #1275, ADR-283 D23: text read whole out of a list the body made, handed
+// #1275, ADR-tether-v1 D23: text read whole out of a list the body made, handed
 // back in a `String` field, is a view of the list; the list moves into the
 // caller's keep. Also a tail struct, a struct carried in a local, and the
 // list of a `ref` parameter.

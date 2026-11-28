@@ -1,0 +1,35 @@
+// The lines of `io::lines()` are views of the stream's pool of buffers
+// (ADR-stream-buffers-v1 D1, D3, D5): a line asks for no memory of its own,
+// the lines kept as the previous two are held where they lie, and a line the end
+// of a buffer cuts is moved to the next buffer's start (D8), whole. The input
+// is longer than one buffer of 64 KiB, so the loop refills its pool.
+use std::io
+use std::mem
+
+fn main() throws {
+    let mut lines = 0
+    let mut bytes = 0
+    let mut repeated = 0
+    let mut longest = 0
+    let mut before: String = ""
+    let mut prev: String = ""
+    let start = mem::allocations()
+    for line in io::lines() {
+        lines += 1
+        bytes += line.len()
+        if line == prev {
+            repeated += 1
+        }
+        if line.len() > longest {
+            longest = line.len()
+        }
+        before = prev
+        prev = line
+    }
+    let after = mem::allocations()
+    println(f"{lines} lines, {bytes} bytes, {repeated} repeated")
+    println(f"last: {prev}")
+    println(f"before it: {before}")
+    println(f"longest: {longest} bytes")
+    println(f"fewer requests than one per hundred lines: {(after - start) * 100 < lines}")
+}

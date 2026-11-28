@@ -3,13 +3,13 @@ use nikaia_std::block::names::{String, ToText, Vec, format, vec};
 // crates/nikaia/src/contracts/keep.rs
 //
 // Where a buffer lives once views of it outlive the scope that made it
-// ([ADR-283](../../../../docs/specification/adr/adr-283.md), Part I 6.6).
+// ([ADR-tether-v1](../../../../docs/specification/adr/adr-tether-v1.md), Part I 6.6).
 //
 // ## The question, and the one answer to it
 //
 // A body reads a file into `text`, cuts it into views, and something keeps the
 // views longer than `text` would live: the result, a `mut` parameter, a list
-// declared outside the loop, a task. [ADR-283](../../../../docs/specification/adr/adr-283.md)
+// declared outside the loop, a task. [ADR-tether-v1](../../../../docs/specification/adr/adr-tether-v1.md)
 // calls that value **tethered** and says the buffer has to live as long as the
 // views do. This file decides **where** it lives, and the answer is always the
 // same rule (D1):
@@ -116,7 +116,7 @@ pub enum Source {
         span: Span,
     },
     /// An argument made in the call, lent to a callee that hands back a view
-    /// ([ADR-283](../../../../docs/specification/adr/adr-283.md) D24): the
+    /// ([ADR-tether-v1](../../../../docs/specification/adr/adr-tether-v1.md) D24): the
     /// view may point into it. Its keep is found as the call's, by the
     /// callee's name with `#` and the argument's place.
     Argument {
@@ -174,20 +174,20 @@ pub struct Plan {
     pub tethered: BTreeMap<String, usize>,
     /// Locals whose views are held one handle per element (D4): a view of
     /// text as a `Held`, a struct of views as a `Holding`
-    /// ([ADR-283](../../../../docs/specification/adr/adr-283.md) D14).
+    /// ([ADR-tether-v1](../../../../docs/specification/adr/adr-tether-v1.md) D14).
     pub element_keepers: BTreeSet<String>,
     /// The element keepers whose elements are **structs** of views, read
-    /// through the handle rather than through `Deref` (ADR-283 D17).
+    /// through the handle rather than through `Deref` (ADR-tether-v1 D17).
     pub struct_keepers: BTreeSet<String>,
     /// How many keeps each element of a keeper carries: the most buffers any
-    /// one value put into it points into (ADR-283 D15).
+    /// one value put into it points into (ADR-tether-v1 D15).
     pub widths: BTreeMap<String, usize>,
     /// The struct each such keeper holds, by the keeper's name: what a write
-    /// through its handle asks about a field (ADR-283 D17).
+    /// through its handle asks about a field (ADR-tether-v1 D17).
     pub keeper_structs: BTreeMap<String, String>,
     /// Locals bound to an element **taken out** of such a keeper -
     /// `let old = kept.remove(0)` - which is still held and read through its
-    /// handle (ADR-283 D16).
+    /// handle (ADR-tether-v1 D16).
     pub held_locals: BTreeSet<String>,
     /// Statements that put a view into such a local: by statement and local,
     /// which argument of the call carries it and the buffer statements whose

@@ -37,10 +37,23 @@
 // bare `nikaia` too; `nikaia` on PATH as it is only when neither is built
 // (#1883: the step failed with "no such file or directory: nikaia" wherever
 // target/fast was not on PATH).
+//
+// Two generated records, by hashing only (#2850: a comments-only change
+// through adr-rename.nika passed pre-push and turned develop red):
+// `lowered-digest`, when a staged path is under
+// `crates/nikaia-std/src/compiler/`, recomputes the lowered set's digest as
+// tests/compiler/tests/lowered_digest_names_its_set.nika does and is red,
+// naming `nikaia lower-std`, where `lowered.rs`'s `LOWERED_DIGEST` differs;
+// `derived`, when a staged path is a source (`src/`) or the `nikaia.derived`
+// of a project with a `nikaia.toml`, checks that its `[sources]` hash as the
+// files do, none missing and none left over (what `build --locked` refuses
+// first), and is red naming `cd DIR && nikaia build`, which records them.
+// Neither staged: the line says `skipped`.
 
 use std::cli
 use std::env
 use std::fs
+use std::hash
 use std::process
 
 fn check(name: String, cmd: String, args: Vec[String], dir: String) -> bool throws {
@@ -82,6 +95,158 @@ fn page_examples(copy: String) -> bool throws {
     println("page-examples red")
     println(out.stdout.trim_end())
     println(out.stderr.trim_end())
+    return false
+}
+
+// The staged paths, one per line.
+fn staged_paths() -> Vec[String] throws {
+    let mut out: Vec[String] = []
+    for line in process::run("git", ["diff", "--cached", "--name-only"]).stdout.lines() {
+        out.push(line.clone())
+    }
+    return out
+}
+
+// The lowered set's digest in the copy against the one `lowered.rs` names,
+// when a staged path is under the compiler's sources: as
+// `sysroot_package_digest` computes it, SHA-256 over the index above its
+// digest line, then each file under `lowered/` by path with its own SHA-256,
+// sorted by path.
+fn lowered_digest(copy: String, staged: ref Vec[String]) -> bool throws {
+    let mut touched = false
+    for line in staged {
+        if line.starts_with("crates/nikaia-std/src/compiler/") { touched = true }
+    }
+    if !touched {
+        println("lowered-digest skipped")
+        return true
+    }
+    let dir = f"{copy}/crates/nikaia-std/src/compiler"
+    let index = fs::read_to_string("lowered.rs", fs::Root::Dir(dir.clone())) catch { "" }
+    let marker = "\n/// **The digest of this lowered set**"
+    let at = index.find(marker)?.start ?? index.end()
+    let line = "pub const LOWERED_DIGEST: &str = \""
+    let mut named: String = ""
+    for each in index.lines() {
+        if each.starts_with(line) {
+            named = each.trim_start_matches(line).trim_end_matches("\";").clone()
+        }
+    }
+    let mut all: String = ""
+    all.push_str(hash::sha256_hex(index.before(at).bytes().collect()))
+    all.push_str("\n")
+    let listed = process::run("sh", ["-c", "find lowered -name '*.rs' | LC_ALL=C sort"]; dir: dir.clone()).stdout.clone()
+    for path in listed.lines() {
+        let text = fs::read_to_string(path, fs::Root::Dir(dir.clone())) catch { "" }
+        all.push_str(path)
+        all.push_str("\n")
+        all.push_str(hash::sha256_hex(text.bytes().collect()))
+        all.push_str("\n")
+    }
+    let digest = hash::sha256_hex(all.bytes().collect())
+    if named == digest {
+        println("lowered-digest green")
+        return true
+    }
+    println("lowered-digest red")
+    println(f"crates/nikaia-std/src/compiler/lowered.rs names LOWERED_DIGEST {named}, the staged lowered set hashes to {digest}")
+    println("run `nikaia lower-std` and stage what it writes")
+    return false
+}
+
+// The projects whose sources or `nikaia.derived` are staged: the directory
+// before a `/src/` of the path, or the path's own directory for a
+// `nikaia.derived`, where the copy holds both `nikaia.toml` and
+// `nikaia.derived`.
+fn derived_projects(copy: String, staged: ref Vec[String]) -> Vec[String] throws {
+    let mut out: Vec[String] = []
+    for line in staged {
+        let mut dirs: Vec[String] = []
+        let parts: Vec[String] = line.split("/src/").map(fn(p) { p.clone() }).collect()
+        let mut k = 1
+        while k < parts.len() {
+            let mut head: Vec[String] = []
+            let mut j = 0
+            while j < k {
+                head.push(parts[j].clone())
+                j += 1
+            }
+            dirs.push(head.join("/src/"))
+            k += 1
+        }
+        if line.ends_with("/nikaia.derived") {
+            dirs.push(line.strip_suffix("/nikaia.derived") ?? "")
+        }
+        for dir in dirs {
+            let root = fs::Root::Dir(copy.clone())
+            if fs::exists(f"{dir}/nikaia.toml", root.clone()) && fs::exists(f"{dir}/nikaia.derived", root) && !out.contains(dir) {
+                out.push(dir.clone())
+            }
+        }
+    }
+    return out
+}
+
+// The `[sources]` of a project's `nikaia.derived` in the copy against its
+// `src/*.nika`: what differs, one line each, empty where it is current.
+fn derived_stale(copy: String, project: String) -> Vec[String] throws {
+    let dir = f"{copy}/{project}"
+    let text = fs::read_to_string("nikaia.derived", fs::Root::Dir(dir.clone())) catch { "" }
+    let mut recorded: Vec[(String, String)] = []
+    let mut inside = false
+    for line in text.lines() {
+        if line.starts_with("[") {
+            inside = line == "[sources]"
+            continue
+        }
+        if !inside || !line.starts_with("\"") { continue }
+        let parts: Vec[String] = line.split("\" = \"").map(fn(p) { p.trim_start_matches("\"").trim_end_matches("\"").clone() }).collect()
+        if parts.len() == 2 { recorded.push((parts[0].clone(), parts[1].clone())) }
+    }
+    let mut out: Vec[String] = []
+    let listed = process::run("sh", ["-c", "find . -name '*.nika' | sed 's|^\\./||' | LC_ALL=C sort"]; dir: f"{dir}/src").stdout.clone()
+    for file in listed.lines() {
+        let source = fs::read_to_string(file, fs::Root::Dir(f"{dir}/src")) catch { "" }
+        let now = hash::sha256_hex(source.bytes().collect())
+        let mut was: String = ""
+        for (name, hash) in recorded {
+            if name == file { was = hash.clone() }
+        }
+        if was == "" {
+            out.push(f"{project}/src/{file}: not in [sources]")
+        } else if was != now {
+            out.push(f"{project}/src/{file}: hashes {now}, recorded {was}")
+        }
+    }
+    for (name, _) in recorded {
+        if !listed.lines().any(fn(l) { l == name }) {
+            out.push(f"{project}/src/{name}: recorded, not a source")
+        }
+    }
+    return out
+}
+
+// The derived records of the projects whose sources are staged.
+fn derived_current(copy: String, staged: ref Vec[String]) -> bool throws {
+    let projects = derived_projects(copy.clone(), staged)
+    if projects.len() == 0 {
+        println("derived skipped")
+        return true
+    }
+    let mut said: Vec[String] = []
+    for project in projects {
+        let stale = derived_stale(copy.clone(), project.clone())
+        if stale.len() > 0 {
+            for line in stale { said.push(line.clone()) }
+            said.push(f"run `cd {project} && nikaia build` and stage the ledgers it writes ({project}/nikaia.derived is stale)")
+        }
+    }
+    if said.len() == 0 {
+        println("derived green")
+        return true
+    }
+    println("derived red")
+    for line in said { println(line) }
     return false
 }
 
@@ -154,6 +319,9 @@ fn main() throws {
             println("badges stale (the driver's)")
         }
         ok = check("version", "python3", bump, copy.clone()) && ok
+        let staged = staged_paths()
+        ok = lowered_digest(copy.clone(), staged) && ok
+        ok = derived_current(copy.clone(), staged) && ok
         ok = page_examples(copy) && ok
     }
     if !ok { process::exit(1) }

@@ -1,0 +1,21 @@
+fn make(i: i64) -> String {
+	let mut g = String()
+	g.push_str(f"w{i} x")
+	return g
+}
+
+fn count(words: Vec[String]) -> i64 {
+	return words.len() as i64
+}
+
+fn main() throws {
+	let mut words: Vec[String] = []
+	for i in 0..<3 {
+		let text = make(i)
+		for w in text.split(" ") {
+			words.push(w)
+		}
+	}
+	let n = async(detached) fn { count(words) }
+	println(n.join())
+}

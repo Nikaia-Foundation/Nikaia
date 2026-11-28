@@ -962,7 +962,7 @@ impl EmitState {
                 out.push("&mut ")
             } else {
                 // **Only an argument made in the call is put into a keep**
-                // (ADR-283 D24): the plan keys it by statement, callee and
+                // (ADR-tether-v1 D24): the plan keys it by statement, callee and
                 // place, which a second call of the callee there shares (#678).
                 let keep = if lend && made_in_the_call(arg) { self.argument_keep(walk, scope.function, flow.statement, callee, i) ?? "" } else { "" }
                 if lend && keep != "" {
@@ -1171,7 +1171,7 @@ impl EmitState {
     /// into, copied out of a view, run as an `async` closure, or as it stands.
     fn emit_arg_value[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, arg: ref Expr, i: i64, depth: i64, inside: EmitFlow, scope: ref EmitScope) sync throws {
         let node = node_key(arg)
-        // **Held by the keeps of the buffers it points into** (ADR-283 D12, D14):
+        // **Held by the keeps of the buffers it points into** (ADR-tether-v1 D12, D14):
         // a view of text becomes a `Held`, a struct of views a `Holding`, and
         // which one is the language below's to pick by the value's type.
         let buffers = walk.buffers_held_at(i)
@@ -1181,9 +1181,11 @@ impl EmitState {
                 keeps.push(f"std::sync::Arc::clone(&__keep_{b})")
             }
             let joined = keeps.join(", ")
-            out.push("{ use nikaia_std::tether::Hold as _; (")
+            // Checked against the buffer the plan names, where it names one (D15).
+            let (before, after) = emit_held_around(joined, walk.hold_places?.get(i)?.clone())
+            out.push(before)
             self.emit_expr(world, walk, out, host, arg, depth, inside, scope)
-            out.push(f").hold([{joined}]) }}")
+            out.push(after)
             return
         }
         // A kept value handed to a parameter that only runs it: the closure it
@@ -1866,7 +1868,7 @@ impl EmitState {
             Expr::Variable(name, _) => self.emit_core_dsl_parameters(world, walk, out, host, emit_text(world, name), args.len(), config, depth, flow, scope),
             else => {},
         }
-        // **The keep, last** (ADR-283 D10): where the callee's views leave it, the
+        // **The keep, last** (ADR-tether-v1 D10): where the callee's views leave it, the
         // caller says where they live.
         let mut keep: String = ""
         let keeping = self.keeping_callee(world, func)
@@ -2842,7 +2844,7 @@ impl EmitState {
     }
 
     /// **A call that hands a reflected field to a function** (Part II 10.3,
-    /// ADR-grammar-typed-read-v1 D4): it goes to the copy for the field the binding stands
+    /// ADR-grammar-typed-read-v2 D4): it goes to the copy for the field the binding stands
     /// at in this turn, and the field is no argument of it.
     fn emit_call_field_copy[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, func: ref Expr, args: ref Vec[Expr], depth: i64, flow: EmitFlow, scope: ref EmitScope) -> bool sync throws {
         let callee: String = match func {
@@ -2924,7 +2926,7 @@ impl EmitState {
     }
 
     /// **`path::f[T](…)`, the type parameters of a function reached by a
-    /// path** (ADR-330 D9, ADR-grammar-typed-read-v1 D11): `::<T>`, written after the
+    /// path** (ADR-330 D9, ADR-grammar-typed-read-v2 D11): `::<T>`, written after the
     /// callee's name, where `base` is a path to a function of a ledger whose
     /// signature names one type parameter and every type written is a name or a
     /// type no expression spells (#1079);

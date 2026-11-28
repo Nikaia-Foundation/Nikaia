@@ -1,0 +1,13 @@
+// A line of `io::lines()` views a buffer of the stream's fixed pool
+// (ADR-stream-buffers-v1 D1), so a list that keeps one each turn would need a
+// new buffer every turn: `NK2308`, naming the list and the three ways out
+// (D2). `kept.push(line.clone())` keeps copies and is allowed.
+use std::io
+
+fn main() throws {
+    let mut kept: Vec[String] = []
+    for line in io::lines() {
+        kept.push(line)
+    }
+    println(kept.len())
+}

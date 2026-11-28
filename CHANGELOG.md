@@ -8,6 +8,11 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1560] — 2026-11-28
+
+**ledgers.nika says how long each directory's build took; the shard's growth is the directories #2797 added, and tests/build-time is nearly half of it (#2804)**
+- ledgers.nika says on stderr how long each directory's build took
+
 ## [0.0.1559] — 2026-11-23
 
 **perf gate in CI: suite.yml's perf job runs perfgate.nika after the tests, the driver writes its PERF lines into the suite log (#2811)**

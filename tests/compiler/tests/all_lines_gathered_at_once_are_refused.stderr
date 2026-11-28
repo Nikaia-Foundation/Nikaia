@@ -1,0 +1,17 @@
+error[NK2308]: Every line `io::lines()` reads is gathered here, each a view of a buffer of the stream's pool, and their number grows with the input.
+  --> tests/all_lines_gathered_at_once_are_refused.nika:9:5
+   |
+ 9 |     let all: Vec[String] = io::lines().collect()
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: A stream reads into a fixed pool of buffers, sized by the places that hold a view of its items from one turn to the next; a list of all its items would need a new buffer for every one.
+   = help: Gather copies with `.cloned()` before `.collect()`, process each line in a `for` over `io::lines()`, or hand the lines to a task over a bounded channel.
+error[NK2308]: Every line `io::lines()` reads is gathered here, each a view of a buffer of the stream's pool, and their number grows with the input.
+   --> tests/all_lines_gathered_at_once_are_refused.nika:10:5
+    |
+ 10 |     let long: Vec[String] = io::lines().filter(fn(l) { l.len() > 3 }).collect()
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: A stream reads into a fixed pool of buffers, sized by the places that hold a view of its items from one turn to the next; a list of all its items would need a new buffer for every one.
+    = help: Gather copies with `.cloned()` before `.collect()`, process each line in a `for` over `io::lines()`, or hand the lines to a task over a bounded channel.
+2 views of a stream kept in a place that grows

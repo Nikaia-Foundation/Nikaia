@@ -418,7 +418,7 @@ impl CheckState {
         return null
     }
 
-    /// Whether a step of this type can fail, as a ledger records it (ADR-025
+    /// Whether a step of this type can fail, as a ledger records it (ADR-loop-failure-v1
     /// D6). Matched by suffix, because a library writes the module in front of
     /// a type's name and a value's type does not carry one.
     fn iterates_fallibly(ref self, world: ref CheckWorld, name: ref String) -> bool sync {

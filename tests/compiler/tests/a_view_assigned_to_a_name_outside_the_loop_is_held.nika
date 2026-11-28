@@ -1,0 +1,16 @@
+fn make(i: i64) -> String {
+	let mut g = String()
+	g.push_str(f"w{i} x")
+	return g
+}
+
+fn main() throws {
+	let mut last = ""
+	for i in 0..<3 {
+		let text = make(i)
+		for w in text.split(" ") {
+			last = w
+		}
+	}
+	println(last)
+}

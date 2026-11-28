@@ -25,9 +25,9 @@ and `keep` only (D2, D4);
 `-> T from a | b` (D10);
 [ADR-083](adr-083.md) D2: a field of the subject handed back is a view of it,
 not refused (D7); `NK1131` stands where a field is bound or passed;
-[ADR-283](adr-283.md) D25: a result may point into several parameters, view by
+[ADR-tether-v1](adr-tether-v1.md) D25: a result may point into several parameters, view by
 view, and giving an argument up while viewed is allowed (D8, D9);
-[ADR-283](adr-283.md) D3, D13, D23, D24 (no implicit copy, the walk, the keep):
+[ADR-tether-v1](adr-tether-v1.md) D3, D13, D23, D24 (no implicit copy, the walk, the keep):
 leaned on, unchanged;
 [ADR-293](adr-293.md) D31, D32 (an assignment gives back what was taken);
 [ADR-282](adr-282.md) D7 (a copy is written or refused, never inserted);
@@ -215,7 +215,7 @@ with a help that adds `keep`; a `keep` on a parameter the body never keeps is
 a warning. Methods and trait methods say it too; a trait's signature fixes it
 for every implementation. A caller that hands a value to a `keep` parameter
 and uses it again is refused, with `.clone()` named as the way out; no copy is
-ever inserted (ADR-283 D3).
+ever inserted (ADR-tether-v1 D3).
 
 The receiver follows the same rule: `self` is lent, `mut self` is changed in
 place (D3), `keep self` consumes the object.
@@ -273,7 +273,7 @@ the receiver as the source.
 
 Every view a result holds, the result itself or each view inside it (a field,
 an element, a variant's value), points into the parameters its ways out reach,
-by ADR-283 D13's walk, kept per view: a `Pair` whose `left` comes from `a` and
+by ADR-tether-v1 D13's walk, kept per view: a `Pair` whose `left` comes from `a` and
 whose `right` comes from `b` keeps the two apart. Where the body chooses at run
 time, the view points into the union, and the function is not refused.
 
@@ -296,7 +296,7 @@ body, it is optional.
 While a caller uses a view that may point into an argument, the argument's
 data stays as it was. Giving the value up (a reassignment, the end of its
 scope, a move into another variable, a lent call) moves its buffer into the
-anchor of whatever holds the view (ADR-283 D23, D13 below); it is freed with
+anchor of whatever holds the view (ADR-tether-v1 D23, D13 below); it is freed with
 the last such view, and no copy is made. Changing it in place, or handing it
 to a `keep` parameter, while such a view is still to be used is refused with
 `NK2305`, at the change or the hand-over. The message names the view, the call
@@ -315,7 +315,7 @@ writes them: `-> String from a | b`, a struct result by path,
 written. A change of either on a `pub` function is a contract change. A type
 has one place for a view per field that holds one (`tethered`, in the order the
 fields are written); an `enum` has one place for all its views. A value whose
-views point into what the body owns takes the caller's anchor (ADR-283 D10,
+views point into what the body owns takes the caller's anchor (ADR-tether-v1 D10,
 D23).
 
 ### D11 — `Array[T]` without a length is a view of a run wherever it does not own.
@@ -355,7 +355,7 @@ storing into what outlives the call, giving to a task, and passing to a
 parameter that keeps (D2); a function whose result must own the value it hands
 back takes it with `keep` or returns `.clone()`.
 
-### D13 — `keep` and `from` are words in one position each, not reserved; the noun of ADR-283 D23 is "anchor".
+### D13 — `keep` and `from` are words in one position each, not reserved; the noun of ADR-tether-v1 D23 is "anchor".
 
 `from` names Rust's `From::from`, which a Nikaia program calls through ADR-rust-boundary-1
 descriptions and implements, and both words are names in existing programs. So
@@ -364,9 +364,9 @@ a parameter list, `from` the source only after a result type, and both are
 names everywhere else. A reserved word still means one thing wherever it
 appears (Part I); these two are not reserved words.
 
-The place a given-up buffer moves to while a view of it lives, which ADR-283
+The place a given-up buffer moves to while a view of it lives, which ADR-tether-v1
 D23 calls a *keep*, is called the *anchor* (the caller's anchor, a frame's
-anchor), so that one word has one meaning. ADR-283's text is left as written.
+anchor), so that one word has one meaning. ADR-tether-v1's text is left as written.
 
 ### D14 — Without a body, `from` alone makes a result a view; a function type names the parameters its `from` reads.
 

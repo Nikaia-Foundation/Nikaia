@@ -45,7 +45,7 @@
 //! here that hands back memory it does not own, is a mapping and never
 //! reaches the ring. Ownership is what
 //! Nikaia ADR-005 and
-//! Nikaia ADR-283's tether lattice
+//! Nikaia ADR-tether-v1's tether lattice
 //! infer, and it is what the kernel is handed.
 //!
 //! ## What is *not* completed here

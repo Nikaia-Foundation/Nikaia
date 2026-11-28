@@ -1,0 +1,36 @@
+// A list per file, all kept by a list outside the loop: one keep holds every
+// buffer the loop read (ADR-tether-v1 D2). Moved from `tether_keep::many` (#2849).
+use std::fs
+
+struct Setting {
+    key: String,
+    value: String,
+}
+
+fn load(path: String, root: fs::Root) -> Vec[Setting] throws {
+    let text = fs::read_to_string(path, root)
+    let mut settings: Vec[Setting] = []
+    for line in text.lines() {
+        let parts: Vec[String] = line.split("=").collect()
+        if parts.len() == 2 {
+            settings.push(Setting { key: parts[0].trim(), value: parts[1].trim() })
+        }
+    }
+    return settings
+}
+
+fn files() -> fs::Root throws {
+    let root = fs::scratch()
+    fs::write("app.conf", root, "# settings\nhost = example.org\nport = 8080\ninclude = extra.conf\n")
+    fs::write("extra.conf", root, "mode = fast\nhost = override.org\n")
+    return root
+}
+
+fn main() throws {
+    let root = files()
+    let mut all: Vec[Vec[Setting]] = []
+    for path in ["app.conf", "extra.conf"] {
+        all.push(load(path, root))
+    }
+    println(f"{all.len()} files, {all[0].len() + all[1].len()} settings")
+}

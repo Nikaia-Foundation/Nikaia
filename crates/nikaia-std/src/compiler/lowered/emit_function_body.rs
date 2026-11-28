@@ -122,6 +122,7 @@ impl EmitState {
             if wrap { if binds { out.push(&format!(";\n{}Ok(__nikaia_value)", inner_pad)); } else { out.push(")"); } }
             out.record(&stmt.span, st);
             if ending { out.push(" };"); }
+            out.push(&self.emit_stmt_late_puts(walk, &scope.function, stmt.span.start as i64));
             self.emit_view_list_drops(out, stmt.span.start as i64);
             self.emit_view_list_rebinds(out, stmt.span.start as i64);
             out.push("\n");

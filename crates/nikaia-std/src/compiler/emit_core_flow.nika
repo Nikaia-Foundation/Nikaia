@@ -959,7 +959,7 @@ impl EmitState {
         // Part I 2.4 rather than a special case: a number literal takes the type
         // its use asks for. **`index::or` and not `unwrap_or_else`** (ADR-293 D4):
         // the left of a `??` may be a view into a container. **And except for text
-        // where the left side is a view of text** (ADR-283), **a variant of an enum
+        // where the left side is a view of text** (ADR-tether-v1), **a variant of an enum
         // this file declares**, **a constructor of a type this file declares**, and
         // **a struct written out**, or a `bool`, **or a name of the word the
         // left side holds** (#1841); **and a vector of `std::simd`'s made

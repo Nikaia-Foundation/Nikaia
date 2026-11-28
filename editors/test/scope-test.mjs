@@ -398,7 +398,7 @@ const cases = [
     ],
   },
   {
-    // `@borrowed` stood here and is gone (ADR-283 D4). `@frame` is the same
+    // `@borrowed` stood here and is gone (ADR-tether-v1 D4). `@frame` is the same
     // scope on a word the language still has and a program still writes, so
     // what this holds is the rule - an attribute is coloured as one - rather
     // than a word that left.

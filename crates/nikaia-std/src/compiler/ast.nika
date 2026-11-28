@@ -399,7 +399,7 @@ pub enum Stmt {
     Continue,
 
     /// **`emit item`, in the action of a rule reached from a `@stream`
-    /// entry** ([ADR-grammar-typed-read-v1](../../../../docs/specification/adr/adr-grammar-typed-read-v1.md)
+    /// entry** ([ADR-grammar-typed-read-v2](../../../../docs/specification/adr/adr-grammar-typed-read-v2.md)
     /// D7, #2061): hands one item of the entry to the
     /// caller's walk. Anywhere else it is refused (`NK1371`), and so is one the
     /// parse could still undo (`NK1370`).
@@ -953,7 +953,7 @@ pub enum FPart {
 pub struct Type {
     pub name: winnow_grammar::Symbol,
     pub generics: Vec[Type], // Recursive: Shared[Locked[T]]
-    // Part II, 10.6 / ADR-283: `&str` is a view marker, not a lifetime. The
+    // Part II, 10.6 / ADR-tether-v1: `&str` is a view marker, not a lifetime. The
     // flag records that the source said `&`; what it lowers to is the emitter's
     // business.
     pub is_view: bool,
@@ -1416,7 +1416,7 @@ pub struct GrammarRule {
     pub is_entry: bool,
     /// `@stream entry rule events -> Event = event*`: the entry hands its
     /// items over one at a time, a sequence walked once
-    /// ([ADR-grammar-typed-read-v1](../../../../docs/specification/adr/adr-grammar-typed-read-v1.md) D7).
+    /// ([ADR-grammar-typed-read-v2](../../../../docs/specification/adr/adr-grammar-typed-read-v2.md) D7).
     pub stream: bool,
     /// Part II, 10.7: the rule is a resynchronization unit.
     pub frame: FrameAttr?,
@@ -1434,7 +1434,7 @@ pub struct GrammarRule {
     /// ... and `c`, an option with its default.
     pub config: Vec[ConfigParam],
     /// `rule Value[T] -> T`: the types the rule takes, in brackets before its
-    /// values ([ADR-grammar-typed-read-v1](../../../../docs/specification/adr/adr-grammar-typed-read-v1.md)
+    /// values ([ADR-grammar-typed-read-v2](../../../../docs/specification/adr/adr-grammar-typed-read-v2.md)
     /// D1). Empty after parsing for every rule the program reaches: such a
     /// rule is copied once per list of type arguments (`grammar_types.nika`).
     pub generics: Vec[GenericParam],
@@ -1525,7 +1525,7 @@ pub enum Pattern {
     },
     /// `match T::kind { Bool => "true" -> { true } | … }`: a rule body
     /// chosen by the kind of a type the rule takes
-    /// ([ADR-grammar-typed-read-v1](../../../../docs/specification/adr/adr-grammar-typed-read-v1.md) D2,
+    /// ([ADR-grammar-typed-read-v2](../../../../docs/specification/adr/adr-grammar-typed-read-v2.md) D2,
     /// D6). Never reaches the checker: each copy of the rule keeps the arm its
     /// type takes (`grammar_types.nika`).
     Choose {
@@ -1535,7 +1535,7 @@ pub enum Pattern {
     /// `members[S](Key, Value[_], ","; null: Null, unknown: Skip)`: the
     /// members `key value` of the struct `S`, separated by `sep`, in any
     /// order, built into an `S` by the mapping rule
-    /// ([ADR-grammar-typed-read-v1](../../../../docs/specification/adr/adr-grammar-typed-read-v1.md) D3,
+    /// ([ADR-grammar-typed-read-v2](../../../../docs/specification/adr/adr-grammar-typed-read-v2.md) D3,
     /// D5, Part II 10.8). `value` is the rule written with `_` for its type;
     /// `on_null` and `on_unknown` the rules the options `null:` and
     /// `unknown:` name. `fields` is empty

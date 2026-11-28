@@ -289,9 +289,14 @@ impl SvSmtReader {
     }
     pub(crate) fn fold(&mut self, rel: &str, name: &str, k: &SvRat, c: SvRat) -> Option<i64> {
         let key = format!("{} {}/{} {}/{} {}", rel, k.num, k.den, c.num, c.den, name);
-        let known: i64 = nikaia_std::index::or(self.folds.get(&key), || -1);
-        if known >= 0 { return Some(known); }
-        if known == -2 || self.depth >= sv_nesting_limit() { return None; }
+        match self.folds.get(&key).copied() {
+            None => { },
+            Some(known) => {
+                if known >= 0 { return Some(known); }
+                return None;
+            },
+        }
+        if self.depth >= sv_nesting_limit() { return None; }
         self.depth = unsafe { nikaia_std::proven::add::<i64>(self.depth, 1) };
         let made: i64 = nikaia_std::index::or(self.fold_new(rel, name, &k, c), || -2);
         self.depth -= 1;

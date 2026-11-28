@@ -8,7 +8,10 @@
 // a list that goes on past a line break, a link whose path reaches neither
 // record directory (#2363). A package's source is searched like a crate's;
 // a link to the history's copy and `docs/history/` stay as they are.
-// `--dry-run` prints the same and writes nothing.
+// `--dry-run` prints the same and writes nothing. After the list it names the
+// commands the change needs (#2850): `nikaia lower-std` for a changed
+// compiler source, the build of the package whose source changed and that
+// keeps a `nikaia.derived`.
 //
 // The fixture is written here, with `~` for the `-` of its citations, and
 // what is shown is written back so: the made-up records 901 and 902 would
@@ -92,6 +95,9 @@ fn main() throws {
 		"// ADR~902 D2 and ADR~901 D5\n    // a rule (ADR~901\n    // D4), and more\n// ADR~901 D3,\n// D4 past the break\n",
 	)
 	put(tree.clone(), "packages/p/src/main.nika", "// ADR~901 D4 in a package\n")
+	put(tree.clone(), "packages/p/nikaia.toml", "[package]\nname = \"p\"\n")
+	put(tree.clone(), "packages/p/nikaia.derived", "[sources]\n")
+	put(tree.clone(), "crates/nikaia-std/src/compiler/x.nika", "// ADR~901 D4 in the compiler\n")
 	put(tree.clone(), "docs/history/adr/README.md", "ADR~901 D3 is archived.\n")
 	put(tree.clone(), "src/main.nika", "// ADR~901 D3 outside the searched files\n")
 	run(base.clone(), nikaia.clone(), ["table.txt", "--root", "tree", "--dry-run"])

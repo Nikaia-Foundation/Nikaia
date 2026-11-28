@@ -1,5 +1,5 @@
 // `members[S](key, value, sep; null:)` builds a struct by the mapping rule
-// (ADR-grammar-typed-read-v1 D3, D5; Part II 10.8): the members in any order, the value
+// (ADR-grammar-typed-read-v2 D3, D5; Part II 10.8): the members in any order, the value
 // rule chosen by the key, a field left out takes its default, else `null` in
 // a `T?`, and a `null:` member goes into a `T?`.
 struct Point { x: i64, y: i64 = 0, label: String?, }

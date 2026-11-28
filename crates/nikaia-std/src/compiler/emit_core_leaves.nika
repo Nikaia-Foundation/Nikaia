@@ -507,7 +507,7 @@ impl EmitState {
     }
 
     /// **A `for` over this file's `@stream` entry, its body the parser's
-    /// `each`** (ADR-grammar-typed-read-v1 D7, #2708, `emit_stmt_for_each`):
+    /// `each`** (ADR-grammar-typed-read-v2 D7, #2708, `emit_stmt_for_each`):
     /// the input is lent for the walk, a temporary living as long as the
     /// `match` it is bound by; the values and options are taken first, as on
     /// the thread, a lent value lent and not copied. The walk's value is
@@ -643,7 +643,7 @@ impl EmitState {
             return
         }
         // **A `@stream` entry hands its items over one at a time**
-        // (ADR-grammar-typed-read-v1 D7, amended 2026-11-08): the engine's reader runs on
+        // (ADR-grammar-typed-read-v2 D7, amended 2026-11-08): the engine's reader runs on
         // a thread of its own over a copy of the input and hands the items,
         // owned, in batches (`emit_stream_batched_start`, #2433); a walk that
         // stops drops the receiver, the next send fails, `each` answers

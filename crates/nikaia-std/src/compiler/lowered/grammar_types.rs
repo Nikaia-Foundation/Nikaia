@@ -327,7 +327,7 @@ pub(crate) fn grammar_types_choose(value: &Expr, arms: &[GrammarArm], span: &Spa
         None => None,
     };
     if given.is_none() {
-        grammar_types_refuse(work, "NK1310", Some(span.clone()), format!("A `match` in a rule's pattern chooses while the program is built, and `{}` isn't known then.", written), String::from("A rule body chooses its pattern by the kind of a type the rule takes (ADR-grammar-typed-read-v1 D2), which is decided while building; a value is only known while the input is read."), String::from("Match on the kind of a type the rule takes, `match T::kind { … }`, or choose while reading with alternatives and a guard, `if(cond)`."));
+        grammar_types_refuse(work, "NK1310", Some(span.clone()), format!("A `match` in a rule's pattern chooses while the program is built, and `{}` isn't known then.", written), String::from("A rule body chooses its pattern by the kind of a type the rule takes (ADR-grammar-typed-read-v2 D2), which is decided while building; a value is only known while the input is read."), String::from("Match on the kind of a type the rule takes, `match T::kind { … }`, or choose while reading with alternatives and a guard, `if(cond)`."));
         return none;
     }
     let ty: Type = match given { Some(__nikaia_value) => __nikaia_value, None => return none };
@@ -353,12 +353,12 @@ pub(crate) fn grammar_types_choose(value: &Expr, arms: &[GrammarArm], span: &Spa
             let why: String = nikaia_std::index::or(reason, || "".into());
             let mut named: String = nikaia_std::block::Text::from(case.to_string());
             if case == "" { named = String::from("else"); }
-            grammar_types_refuse(work, "NK1250", Some(span.clone()), format!("`{}` can't read a `{}`: {}", entry, spelled, why), format!("The arm `{}` of the `match` in `{}` refuses it with `refuse(…)` (ADR-grammar-typed-read-v1 D6){}.", named, rule, reached), String::from("Call it with a type the grammar reads."));
+            grammar_types_refuse(work, "NK1250", Some(span.clone()), format!("`{}` can't read a `{}`: {}", entry, spelled, why), format!("The arm `{}` of the `match` in `{}` refuses it with `refuse(…)` (ADR-grammar-typed-read-v2 D6){}.", named, rule, reached), String::from("Call it with a type the grammar reads."));
             return none;
         }
         return grammar_types_alts(&arm.alts, &inner, rule, generic, owner, words, &mut &mut *intern, work);
     }
-    grammar_types_refuse(work, "NK1250", Some(span.clone()), format!("`{}` can't read a `{}`: no arm of the `match` in `{}` takes `{}`.", entry, spelled, rule, kind), format!("`{}` chooses its pattern by `{}` (ADR-grammar-typed-read-v1 D6){}.", rule, written, reached), format!("Add an arm for `{}` to the `match` in `{}`, or call it with a type an arm takes.", kind, rule));
+    grammar_types_refuse(work, "NK1250", Some(span.clone()), format!("`{}` can't read a `{}`: no arm of the `match` in `{}` takes `{}`.", entry, spelled, rule, kind), format!("`{}` chooses its pattern by `{}` (ADR-grammar-typed-read-v2 D6){}.", rule, written, reached), format!("Add an arm for `{}` to the `match` in `{}`, or call it with a type an arm takes.", kind, rule));
     none
 }
 
@@ -401,7 +401,7 @@ pub(crate) fn grammar_types_members(built: &Type, value: winnow_grammar::Symbol,
     };
     if declared.is_none() {
         let spelled = grammar_types_spelled(words, built);
-        grammar_types_refuse(work, "NK1164", Some(span.clone()), format!("`members[{}]` builds a struct, and `{}` isn't one this file declares.", spelled, spelled), String::from("`members[S]` reads the members of an object into the fields of the struct `S` (ADR-grammar-typed-read-v1 D3); its fields are known only for a struct declared beside the grammar."), String::from("Name a struct declared in the grammar's file."));
+        grammar_types_refuse(work, "NK1164", Some(span.clone()), format!("`members[{}]` builds a struct, and `{}` isn't one this file declares.", spelled, spelled), String::from("`members[S]` reads the members of an object into the fields of the struct `S` (ADR-grammar-typed-read-v2 D3); its fields are known only for a struct declared beside the grammar."), String::from("Name a struct declared in the grammar's file."));
         return out;
     }
     let (params, fields) = match declared { Some(__nikaia_value) => __nikaia_value, None => return out };
@@ -494,7 +494,7 @@ pub(crate) fn grammar_types_pattern(pattern: &Spanned<Pattern>, bound: &collecti
             config2.reserve(config.iter().size_hint().0); for one in config.iter() { config2.push(ConfigArg { name: one.name, value: grammar_types_put_expr(&one.value, bound, words, &mut &mut *intern) }); }
             copy.node = Pattern::Call { name, args: grammar_types_put_exprs(args, bound, words, &mut &mut *intern), config: config2 };
         },
-        Pattern::Choose { .. } => { grammar_types_refuse(work, "NK1310", Some(pattern.span.clone()), String::from("A `match` on a kind stands as a rule's whole body or a whole alternative, not inside a pattern."), String::from("A rule body chooses its pattern by the kind of a type the rule takes (ADR-grammar-typed-read-v1 D2)."), String::from("Give the `match` a rule of its own, and call that rule here.")); },
+        Pattern::Choose { .. } => { grammar_types_refuse(work, "NK1310", Some(pattern.span.clone()), String::from("A `match` on a kind stands as a rule's whole body or a whole alternative, not inside a pattern."), String::from("A rule body chooses its pattern by the kind of a type the rule takes (ADR-grammar-typed-read-v2 D2)."), String::from("Give the `match` a rule of its own, and call that rule here.")); },
         Pattern::Members { ty, key, value, sep, on_null, on_unknown, fields } => {
             let key = nikaia_std::boxed::open(key); let sep = nikaia_std::boxed::open(sep); let on_null = *on_null; let on_unknown = *on_unknown; let value = *value;
             let built = grammar_types_put(ty, bound, words);
@@ -632,7 +632,7 @@ pub(crate) fn grammar_types_written(expr: &Expr, words: &winnow_grammar::Interne
 
 pub(crate) fn grammar_types_named(name: winnow_grammar::Symbol, generics: Vec<Type>) -> Type { Type { name, generics, is_view: false, is_tuple: false, is_nullable: false, code: nikaia_std::block::Boxed::new(None), count: None, is_mut: false, is_slice: false, either: false, lasting: false } }
 
-pub(crate) fn grammar_types_value_refused(callee: &str, span: &Span) -> GrammarTypesRefusal { GrammarTypesRefusal { code: String::from("NK1230"), call: -1, span: span.clone(), message: format!("`{}` takes a type here, not a value.", callee), note: format!("`{}` is a rule that takes types, so the call writes types in its brackets (ADR-grammar-typed-read-v1 D1).", callee), help: format!("Write the type: `{}[i64](…)`, not a value of it.", callee) } }
+pub(crate) fn grammar_types_value_refused(callee: &str, span: &Span) -> GrammarTypesRefusal { GrammarTypesRefusal { code: String::from("NK1230"), call: -1, span: span.clone(), message: format!("`{}` takes a type here, not a value.", callee), note: format!("`{}` is a rule that takes types, so the call writes types in its brackets (ADR-grammar-typed-read-v2 D1).", callee), help: format!("Write the type: `{}[i64](…)`, not a value of it.", callee) } }
 
 pub(crate) fn grammar_types_plain(name: winnow_grammar::Symbol, bound: &collections::BTreeMap<String, Type>, words: &winnow_grammar::InternerContext) -> Option<winnow_grammar::Symbol> {
     let ty = match bound.get(words.resolve(name)) { Some(__nikaia_value) => __nikaia_value, None => return None };

@@ -1,5 +1,5 @@
 // `path::f[T](…)` fills the type parameters in order, as a bare name does
-// (ADR-330 D9, ADR-grammar-typed-read-v1 D11, #1019): a function of another package and
+// (ADR-330 D9, ADR-grammar-typed-read-v2 D11, #1019): a function of another package and
 // one of `std`, whose `T` no value parameter names, so no warning is given.
 
 use compiler_tests

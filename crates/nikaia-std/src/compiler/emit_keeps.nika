@@ -35,6 +35,17 @@ fn emit_keep_expr(keep: ref KeepAt, lent: bool) -> String {
     }
 }
 
+/// **The pool of the loop over a stream at `at`** (ADR-stream-buffers-v1
+/// D3), where the plan has one there.
+fn emit_stream_pool(plan: ref BufferPlan, at: i64) -> i64? {
+    for stream in plan.streams {
+        if stream.at == at {
+            return stream.pool
+        }
+    }
+    return null
+}
+
 /// Whether a keep is the element keep of the statement `at`.
 fn emit_is_element(keep: ref KeepAt, at: i64) -> bool {
     return match keep {
@@ -84,13 +95,37 @@ impl EmitState {
                 element = true
             }
         }
-        if element {
+        // **A loop over a stream binds its keep from each line**
+        // (ADR-stream-buffers-v1 D1): the chunk's, not one of its own.
+        if element && emit_stream_pool(plan, at) == null {
             lines.push(f"let __keep_{at} = std::sync::Arc::new(nikaia_std::tether::Keep::new());")
         }
         if lines.len() == 0 {
             return null
         }
         return lines.join(" ")
+    }
+
+    /// **Whether `name` holds a line of a stream across turns**
+    /// (ADR-stream-buffers-v1 D2, D3): a name a loop over a stream counts,
+    /// which holds each line with a handle on its buffer, `Held` in its type.
+    fn stream_counted(ref self, walk: ref EmitWalk, function: ref String, name: ref String) -> bool {
+        let key = self.keep_plan_key(walk, function) ?? return false
+        let plan = self.keep_plans.get(key) ?? return false
+        for stream in plan.streams {
+            if stream.counted.contains(name) {
+                return true
+            }
+        }
+        return false
+    }
+
+    /// The pool of the loop over a stream at `at`, in the plan of the
+    /// function being written.
+    fn stream_pool(ref self, walk: ref EmitWalk, function: ref String, at: i64) -> i64? {
+        let key = self.keep_plan_key(walk, function) ?? return null
+        let plan = self.keep_plans.get(key) ?? return null
+        return emit_stream_pool(plan, at)
     }
 
     /// The keep argument `i` of a call to `callee` at the statement is lent.
@@ -240,4 +275,17 @@ fn emit_tethered_call(world: ref EmitWorld, call: ref Expr) -> Type? {
         else => {},
     }
     return null
+}
+
+/// **What stands before and after a value held by `keeps`** (ADR-tether-v1
+/// D12, D15, #2842): where the plan names the one buffer it points into, the
+/// view is checked against that buffer's place - `Held::in_place` for plainly
+/// a view of it, where a miss is the compiler's fault, `hold_near` where it
+/// may be a literal; elsewhere it is found again among the keeps.
+fn emit_held_around(keeps: ref String, place: (i64, bool)?) -> (String, String) {
+    let named = place ?? return ("{ use nikaia_std::tether::Hold as _; (", f").hold([{keeps}]) }}")
+    if named.1 {
+        return (f"nikaia_std::tether::Held::in_place(std::sync::Arc::clone(&__keep_{named.0}), __place_{named.0}, ", ")")
+    }
+    return ("{ use nikaia_std::tether::Hold as _; (", f").hold_near([{keeps}], __place_{named.0}) }}")
 }

@@ -1,13 +1,13 @@
 // crates/nikaia-std/src/compiler/tether.nika
 //
-// Which of Part I 6.6's states each view in a signature is in (ADR-283 D2,
+// Which of Part I 6.6's states each view in a signature is in (ADR-tether-v1 D2,
 // D7), and whether a body makes a buffer of its own - the analysis half of
 // the compiler's `contracts::tether`, moved from Rust (ADR-294, #125). What
 // stays Rust is writing the answers into the ledger, the `--tethers` report
 // and the refusal, both of which read the keep plan.
 //
 // **Only Borrowed is built as a representation**, and `keep::infer` says
-// otherwise where a view really leaves (ADR-283 D13): so every position this
+// otherwise where a view really leaves (ADR-tether-v1 D13): so every position this
 // file writes is Borrowed, and it errs **towards Tethered** wherever it
 // cannot decide - a wider representation, never a program that does the
 // wrong thing.
@@ -389,7 +389,7 @@ fn names_u8(ty: ref Ty) -> bool {
 }
 
 // ---------------------------------------------------------------------------
-// `--tethers`: what the analysis solved, per function (ADR-283 D4), moved from
+// `--tethers`: what the analysis solved, per function (ADR-tether-v1 D4), moved from
 // the compiler's `contracts::tether` (ADR-294, #125).
 //
 // *The inverse tool is inspection, not assertion*: it shows what was chosen
@@ -422,7 +422,7 @@ fn lives_in_a_local_keep(keep: ref KeepAt) -> bool {
     }
 }
 
-/// How `--tethers` names an argument made in a call (ADR-283 D24), from the
+/// How `--tethers` names an argument made in a call (ADR-tether-v1 D24), from the
 /// key the keep plan files it under: `e#0` is *the argument made for `e`*.
 fn an_argument(key: ref String) -> String {
     let parts: Vec[ref String] = key.split("#").collect()
@@ -489,7 +489,7 @@ pub fn reuses_report(narrated: ref collections::BTreeSet[(i64, String)], source:
 /// What the analysis solved, in the words a reader asks the question in:
 /// first what a `String` field or result is below (`texts`, ADR-282 D26), then
 /// each function of this file that holds a view, and where each buffer lives
-/// (ADR-283 D13). `here` is this file's own entries, because a report is about
+/// (ADR-tether-v1 D13). `here` is this file's own entries, because a report is about
 /// one file and the ledger is the package's.
 pub fn tethers_report(texts: ref Vec[String], ledger: ref Ledger, here: ref collections::BTreeSet[String], plans: ref Vec[BufferPlan], library: ref Ledger) -> String {
     let mut lines: Vec[String] = []
@@ -505,7 +505,7 @@ pub fn tethers_report(texts: ref Vec[String], ledger: ref Ledger, here: ref coll
             continue
         }
         lines.push(f"{key}:\n")
-        // **What a borrowed result borrows from** (ADR-283 D24): the
+        // **What a borrowed result borrows from** (ADR-tether-v1 D24): the
         // parameters lowered as views, each the caller's argument.
         let mut lent: Vec[String] = []
         if contract.signature != null {
@@ -576,7 +576,7 @@ pub fn tethers_report(texts: ref Vec[String], ledger: ref Ledger, here: ref coll
             }
         }
         for keeper in plan.element_keepers {
-            // ADR-283: a struct of views carries a handle on each buffer it
+            // ADR-tether-v1: a struct of views carries a handle on each buffer it
             // points into, and the report says how many that is.
             if plan.struct_keepers.contains(keeper) {
                 let width = plan.widths.get(keeper) ?? 1
@@ -595,6 +595,27 @@ pub fn tethers_report(texts: ref Vec[String], ledger: ref Ledger, here: ref coll
         lines.push(f"{plan.key} (keeps):\n")
         for line in said {
             lines.push(line.clone())
+        }
+    }
+    // **Each loop over a stream, what it counts and its pool**
+    // (ADR-stream-buffers-v1 D3): the places that hold a view of an item
+    // across turns, and the buffers the pool holds for them, for the one
+    // being read and for the one an unfinished line moves into.
+    for plan in plans {
+        if plan.streams.len() == 0 {
+            continue
+        }
+        lines.push(f"{plan.key} (stream):\n")
+        for one in plan.streams {
+            let mut counts: String = "counts nothing"
+            if one.counted.len() > 0 {
+                let mut named: Vec[String] = []
+                for place in one.counted {
+                    named.push(f"`{place}`")
+                }
+                counts = f"counts {named.join(", ")}"
+            }
+            lines.push(f"    `{one.binding}` over `{one.callee}()` {counts}: a pool of {one.pool} buffers\n")
         }
     }
     // "here" and not "in this program", for the reason `sharing`'s report

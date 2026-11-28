@@ -70,9 +70,9 @@ below, counting owners, copying, or refusing. Which one is the decision.
 | ADR-views-v4 D9 | a change in place of data a view may point into is `NK2305`, at the change | decided, built for fields (step 2) |
 | ADR-views-v4 D9 | handing the data to a **callee** that keeps it is `NK2305` at the hand-over; the copy is the program's; copy-on-write rejected | decided for callees; its reason ("a move into a variable of the same function is not refused: the compiler sees every change of that variable") applies just as well to a local struct |
 | ADR-views-v4 D10 | a struct has one place per view-holding field; an enum one place | decided |
-| ADR-283 D3 | the compiler never inserts a copy | decided; rules out an inserted `.clone()` |
-| ADR-283 D9-D10, D23 | a buffer whose views outlive its scope moves into a keep; a function whose result carries views takes the caller's keep | decided; for a *struct* result holding a view of a local, not built for this shape (fact F7) |
-| ADR-283 D14 | emitted code for held views writes no `unsafe` | decided; rules out option E as it stands |
+| ADR-tether-v1 D3 | the compiler never inserts a copy | decided; rules out an inserted `.clone()` |
+| ADR-tether-v1 D9, D10, D23 | a buffer whose views outlive its scope moves into a keep; a function whose result carries views takes the caller's keep | decided; for a *struct* result holding a view of a local, not built for this shape (fact F7) |
+| ADR-tether-v1 D14 | emitted code for held views writes no `unsafe` | decided; rules out option E as it stands |
 | ADR-282 D13-D16 | a declared `String` position is a view, owned, or `EitherText`, by what flows in; fields, tuples, lists, variant payloads are positions | decided and built (facts F5, F6) |
 | ADR-001 D1 | the toolchain is stable; no `-Z` flag in any build | decided |
 | `docs/history/nightly-cost.md` §3 | `-Zpolonius=next` changed 0 of 30 verdicts at +7.11 % instructions; nightly withdrawn | measured then (older nightly) |
@@ -126,7 +126,7 @@ moved (`NK2105` on a later use of `text`).
   Nikaia; a struct gains a lifetime below; a mixed field pays one branch per
   read (`EitherText`, not measured here); a field changed in place anywhere
   stays owned and the move is refused with `NK1106` (F8); a struct returned
-  past the frame gets `NK2105` until ADR-283 D10 is built for struct results
+  past the frame gets `NK2105` until ADR-tether-v1 D10 is built for struct results
   (F7). Fixes F3 too. Variants, tuples, lists come for free (F5b).
 * Risk: a "spooky" program-wide change: adding `c.input.push_str` in one
   function turns a construction elsewhere into a refusal. The message names
@@ -153,7 +153,7 @@ one count, `c.input` another.
   ADR-views-v4 D9 rejected. Swift's model.
 
 **D. Insert the copy, with a note.** rustc accepts (K1). Forbidden by
-ADR-283 D3 and ADR-282 D7 (no inserted copy). Listed for completeness.
+ADR-tether-v1 D3 and ADR-282 D7 (no inserted copy). Listed for completeness.
 
 **E. Unchecked stable address.** Lower `v` as an unchecked view of the heap
 buffer; moving a `String` does not move its heap bytes. rustc accepts (U1),
@@ -164,7 +164,7 @@ because the borrow is laundered through a raw pointer.
   (small-string) representation: C++'s `std::move` of a short `std::string`
   copies the bytes, and a `string_view` dangles. Whether moving a `String` is
   a retag under Rust's aliasing models: not measured (Miri not run).
-* Violates ADR-283 D14 (no `unsafe` in emitted views). Not recommended.
+* Violates ADR-tether-v1 D14 (no `unsafe` in emitted views). Not recommended.
 
 **F. A self-referential pair** (`ouroboros`, `yoke`, `self_cell` in Rust):
 lower `c` and its dependants into one compiler-written owner+views value.
@@ -292,7 +292,7 @@ is valid under every Rust borrow checker, present or announced. It also closes
 F3. Before or with it, fix F9 (#944, a false `NK2305` on `c.pos` while `v` views
 `c.input`), or the owner's cursor stays refused either way.
 
-Not recommended: D (forbidden), E/F (`unsafe`, ADR-283 D14, representation
+Not recommended: D (forbidden), E/F (`unsafe`, ADR-tether-v1 D14, representation
 risk), C (a count everywhere and copy-on-write, both rejected in ADR-views-v4 D9).
 Polonius: neither wait for it nor depend on it.
 
@@ -307,7 +307,7 @@ Polonius: neither wait for it nor depend on it.
    frame, handed to a keeping callee): the existing refusals (`NK1106`,
    `NK2105`), or one `NK2305` worded as D6 (hand over a copy, or build the
    struct first and view its field)?
-4. Returning such a struct (F1c, F7): stay refused until ADR-283 D10 is built
+4. Returning such a struct (F1c, F7): stay refused until ADR-tether-v1 D10 is built
    for struct results, or build that as part of #942?
 5. Confirm: the lowering does not rely on Polonius or any nightly feature
    (ADR-001 D1), and nothing in #942 waits for Rust's roadmap.

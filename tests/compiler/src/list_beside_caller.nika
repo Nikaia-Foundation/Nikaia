@@ -1,7 +1,7 @@
 /// An element of a list a function of another file of the package handed
 /// back (`src/list_beside.nika`), handed back: the list moves into the
 /// caller's keep and the element is a view of it, as within one file
-/// (#1510, ADR-283 D23).
+/// (#1510, ADR-tether-v1 D23).
 pub fn list_beside_first(a: String) -> String {
 	let xs = list_beside_words(a)
 	return xs[0]

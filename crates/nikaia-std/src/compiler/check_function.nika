@@ -569,7 +569,7 @@ fn check_function_grammar[H: CheckHost](mut state: CheckState, world: ref CheckW
         }
     }
     // The rules a `@stream` entry reaches may hand over its items with
-    // `emit` (ADR-grammar-typed-read-v1 D7, amended 2026-11-18, #2061).
+    // `emit` (ADR-grammar-typed-read-v2 D7, amended 2026-11-18, #2061).
     let streamed = grammar_streamed_rules(world, gram, state.rule_results, rules)
     for refused in grammar_emits_undone(world, gram, streamed) {
         state.findings.push(refused)

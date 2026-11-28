@@ -1,5 +1,5 @@
 //! **A view handed back is handed back silently**
-//! ([ADR-283](../../../docs/specification/adr/adr-283.md) D23-D24, #442): a
+//! ([ADR-tether-v1](../../../docs/specification/adr/adr-tether-v1.md) D23-D24, #442): a
 //! view of what a function owns moves it into the caller's keep, and a view
 //! of a parameter borrows from the caller's argument - an argument made in the
 //! call going into the caller's keep. Each of these reached `rustc` before.

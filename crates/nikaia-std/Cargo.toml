@@ -61,7 +61,7 @@ memchr = "2"
 # message of a pattern that does not parse) and `aho-corasick` (its literal
 # prefilter). No type of it appears in a program.
 regex-automata = "0.4"
-# Views that outlive the scope that read their buffer (ADR-283); the `unsafe`
+# Views that outlive the scope that read their buffer (ADR-tether-v1); the `unsafe`
 # it takes lives there, with its own checks (ADR-218).
 tether = { path = "../unsafe/tether" }
 # A `Bytes` as a pointer, a length and a counted handle on what owns the

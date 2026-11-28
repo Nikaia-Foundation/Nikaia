@@ -623,7 +623,10 @@ pub(crate) fn check_core_method_called<H: CheckHost>(state: &mut CheckState, wor
     if key == "Vec::get" || key == "BTreeMap::get" || key == "HashMap::get" || key == "collections::BTreeMap::get" || key == "collections::HashMap::get" { let gets = state.flow.std_gets.insert(id_of(expr) as i64); }
     if key == "Entry::or_insert" || key == "Entry::or_insert_with" || key == "Entry::or_default" { state.flow.std_entry_views.insert(id_of(expr) as i64); }
     if key == "Entry::or_default" { check_core_method_or_default(state, world, expr, unviewed_type(&value), span); }
-    if key == "Seq::cloned" { walked = check_core_method_cloned(state, expr, &on, walked); }
+    if key == "Seq::cloned" {
+        let lent_walk = state.flow.lent_walks.contains(&(id_of(receiver) as i64));
+        walked = check_core_method_cloned(state, expr, &on, walked, lent_walk);
+    }
     if key == "Vec::get" || key == "Vec::first" || key == "Vec::last" {
         match value {
             Ty::Nullable(ref inner) => {
@@ -747,20 +750,30 @@ pub(crate) fn check_core_method_or_default(state: &mut CheckState, world: &Check
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn check_core_method_cloned(state: &mut CheckState, expr: &Expr, on: &Ty, walked: Ty) -> Ty {
+pub(crate) fn check_core_method_cloned(state: &mut CheckState, expr: &Expr, on: &Ty, walked: Ty, lent_walk: bool) -> Ty {
     let item: Ty = match on {
         Ty::Seq { item, .. } => { let item = nikaia_std::boxed::open(item); item.clone() },
         _ => return walked,
     };
     let lent = match item {
         Ty::Named { view, .. } => view && !copies_as_a_view(&item),
+        Ty::Tuple(_) => lent_walk,
         _ => false,
     };
     if !lent && !item.is_unknown() && !state.facts.copied_walks.contains(&(id_of(expr) as i64)) { state.facts.owned_clones.insert(id_of(expr) as i64); }
     if copies_as_a_view(&item) { state.facts.owned_clones.insert(id_of(expr) as i64); }
     match walked {
-        Ty::Seq { ref item, is_sync, pauses, ref fails, parallel, shape } => { let item = nikaia_std::boxed::open(item); Ty::Seq { item: nikaia_std::block::Boxed::new(unviewed_type(item)), is_sync, pauses, fails: fails.copy_owned(), parallel, shape: shape.clone() } },
+        Ty::Seq { ref item, is_sync, pauses, ref fails, parallel, shape } => { let item = nikaia_std::boxed::open(item); Ty::Seq { item: nikaia_std::block::Boxed::new(check_core_method_cloned_item(item)), is_sync, pauses, fails: fails.copy_owned(), parallel, shape: shape.clone() } },
         _ => walked,
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn check_core_method_cloned_item(item: &Ty) -> Ty {
+    match item {
+        Ty::Tuple(parts) => Ty::Tuple(parts.iter().map(|part| { unviewed_type(part) }).collect::<Vec<_>>()),
+        _ => unviewed_type(item),
     }
 }
 

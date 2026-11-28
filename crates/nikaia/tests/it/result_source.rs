@@ -1,5 +1,5 @@
 //! **A result points into at most one parameter, and the body says which**
-//! ([ADR-283](../../docs/specification/adr/adr-283.md) D25, D26; Part I 6.6;
+//! ([ADR-tether-v1](../../docs/specification/adr/adr-tether-v1.md) D25, D26; Part I 6.6;
 //! #580).
 //!
 //! Three parts. The first is what is accepted now that a function with several
@@ -258,7 +258,7 @@ fn wrap(x: ref String, y: ref String) -> ref String {
     compiled("calls_ledger_is_accepted", source);
 }
 
-/// Parameters written `String` that are only read are lowered as views (ADR-283 D24) and count as sources like any other.
+/// Parameters written `String` that are only read are lowered as views (ADR-tether-v1 D24) and count as sources like any other.
 #[test]
 fn plain_params_is_accepted() {
     let source = r#"fn first_of(a: String, b: String) -> ref String {
@@ -540,7 +540,7 @@ fn trait_decl_is_accepted() {
 /// **OPEN POINT of the review of #580, kept apart so it can be reverted.**
 ///
 /// `fn longest(a: String, b: String) -> ref String` compiled before D25: two
-/// parameters lowered as views (ADR-283 D24) shared one lifetime in the
+/// parameters lowered as views (ADR-tether-v1 D24) shared one lifetime in the
 /// emitter, which is the union tethering D25 rejects, while the same function
 /// written with `ref` was refused. D25 as written refuses both. The owner has
 /// not yet confirmed that a program that compiled is refused; to keep it, delete
@@ -555,7 +555,7 @@ fn trait_decl_is_accepted() {
 /// **OPEN POINT of the review of #580, kept apart so it can be reverted.**
 ///
 /// `fn longest(a: String, b: String) -> ref String` compiled before D25: two
-/// parameters lowered as views (ADR-283 D24) shared one lifetime in the
+/// parameters lowered as views (ADR-tether-v1 D24) shared one lifetime in the
 /// emitter, which is the union tethering D25 rejects, while the same function
 /// written with `ref` was refused. D25 as written refuses both. The owner has
 /// not yet confirmed that a program that compiled is refused; to keep it, delete

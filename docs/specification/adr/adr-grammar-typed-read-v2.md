@@ -1,0 +1,356 @@
+# ADR-grammar-typed-read-v2: A Grammar Entry May Take a Type, and the Compiler Builds a Parser per Type; `members[S]` Fills a Struct by the Compiler's Rules, So a Typed Read Is a Grammar and Not a Library Walk
+
+**Status:** Accepted
+**Date:** November 20, 2026 (the consolidation, #904; the decisions themselves October 30 to November 18, 2026); D7 rewritten November 22, 2026 (owner, #2426); D7 over a stream November 28, 2026 (owner, #2834, ADR-stream-buffers-v1)
+**Answers:** how an official package offers a typed read, `json::read[T](text)`,
+so that it is a parser specialised for `T` built from the package's grammar,
+rather than a library function that walks `T::fields` and needs a way to build
+a struct from field values that the language does not have
+([#604](https://github.com/Nikaia-Foundation/Nikaia/issues/604),
+[#859](https://github.com/Nikaia-Foundation/Nikaia/issues/859),
+[#904](https://github.com/Nikaia-Foundation/Nikaia/issues/904))
+**Supersedes / Related:** [ADR-344](adr-344.md) D3 (`read[T]` as a function
+whose decoder is written while building: the call stays, the decoder becomes a
+grammar), D6a (`parse`/`Value`: stays, as a second entry), §5 ("a typed read
+needs a type, not a grammar": reversed); [ADR-330](adr-330.md) D1-D4 (a type as
+a parameter, `T::kind`, `match` on a kind), D7 (a grammar names no type of the
+program: its reason amended, the rule holds), D9 (`f[T]()` warned with
+`NK1233`); [ADR-grammar-syntax-v1](adr-grammar-syntax-v1.md) D12 (a rule takes values; this adds
+types); [ADR-specialization-1](adr-specialization-1.md) D1, D5, D7 (a copy per
+build-time value, the build's budget, a result type from a `comptime`
+parameter); [ADR-database-v1](adr-database-v1.md) D15-D18 (a row is the struct the block
+names, columns matched by name); [ADR-331](adr-331.md) D5, D6 (field defaults,
+attributes read as members); [ADR-329](adr-329.md) (`meta::Field`);
+[ADR-304](adr-304.md) D6 (a generic original is not emitted);
+[ADR-grammar-input-v1](adr-grammar-input-v1.md) (an entry reads `String` or `Bytes`);
+[ADR-393](adr-393.md) D4 (a feature reaches an entry); [ADR-298](adr-298.md) (no macros)
+
+## 1. Question
+
+ADR-344 D3 makes `json::read[T](text)` a function of the `json` package that
+unrolls `T::fields` while building. Reading the fields of a value is specified;
+**building** a `T` from field values is not (`field.set` is `NK1180`), so the
+function cannot be written. And a decoder written that way is a scanner of its
+own: it gets none of a grammar's cuts, frames, streams, error form or views of
+the input. **May a grammar entry take a type from its caller, so that the
+compiler emits one parser per type and builds the value itself?**
+
+Without an answer, `read[T]` waits for a construction form the language would
+have only for this, and every format package (`json`, `yaml`'s serde layer,
+`toml`, `csv`) writes its typed read as a hand-written walk beside its grammar.
+
+## 2. How others do it
+
+| Language / tool | Its answer | What it costs there | Source |
+| :--- | :--- | :--- | :--- |
+| Rust, serde + serde_json | `#[derive(Deserialize)]` writes a visitor per type; the format drives it; borrowed `&str` where possible | a macro system; the Deserializer/Visitor split keeps the format from seeing the known keys | from memory, not checked |
+| simdjson On-Demand | a structural index, then a cursor the user's code walks; fields tried in declared order first | user-written cursor code; the index is a second pass | from memory, not checked |
+| Go, easyjson | an external generator writes a decoder per struct with a hand-tuned lexer | generated files in the repository, a tool beside the compiler | from memory, not checked |
+| Kotlin serialization | a compiler plugin writes a descriptor and a decoder per class; presence bits per field | descriptors looked up while running; an annotation on every class | from memory, not checked |
+| Zig, `std.json` | `parseFromSlice(T, …)` switches on `@typeInfo(T)` at comptime; options per call; borrowed strings; a policy for duplicate fields | keys compared one by one; arms not checked until used | from memory, not checked |
+
+Zig is closest: the type decides the parser at compile time, with no macro and
+no run-time reflection. What does not transfer is the linear key compare and
+the unchecked arms; what serde and easyjson add is a generated key dispatch.
+
+## 3. Options, weighed
+
+### Option A — a library function and a constructor from fields (ADR-344 D3 as written)
+
+```nika
+pub fn read[T: Struct](text: ref Bytes) -> T throws {
+    let v = parse(text)                                   // a tree first
+    return T::build(|f| from_value(f, v.member(f.name)))  // a construction form still to decide
+}
+```
+
+### Option B — a grammar entry takes a type; the compiler emits a parser per type and builds the struct
+
+```nika
+pub grammar Json {
+    entry rule read[T] -> T = v:Value[T] eof -> { v }
+    rule Value[T] -> T = match T::kind {
+        Struct(_) => Object[T]
+        List(A)   => "[" xs:(Value[A] % ",") "]" -> { xs }
+        Maybe(A)  => "null" -> { null } | Value[A]
+        Text      => Str
+    }
+}
+let c = Json::read[Contact](bytes)
+```
+
+### Option C — do nothing: only `json::parse` into a `Value`, converted by hand
+
+```nika
+let v = json::parse(text) catch { … }
+let name = match v.member("name") { Str(s) => s, _ => … }
+```
+
+### Weighed
+
+| | D1 the special case pays | D2 the compiler works | D3 no cost for the common case | D4 consistent with itself | If it is wrong |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **A** | every format pays for a walk beside its grammar | the package author writes the decoder | a tree and a second pass at every read | a second way to build a struct, used only here | a construction form stays in the language |
+| **B** | a format that has no typed read writes nothing | the compiler emits the parser and builds the value | one pass, no tree, known keys dispatched while building, strings as views | one mechanism for every format; SQL's mapping rule shared | type parameters on rules stay; `members` is one grammar element |
+| **C** | every program pays | the developer writes the conversion | a tree and hand code at every read | consistent, but no typed read at all | programs full of hand conversion |
+
+B wins on all four. The deciding weight is D3: the parser for `Contact` is the
+only code that runs, and no value is built that the program does not keep.
+Its claimed speed is not measured yet; the benchmark is named in §5.
+
+## 4. Decision
+
+### D1 — A rule and an entry may take type parameters, given by the caller in brackets; the grammar is emitted once per list of type arguments.
+
+```nika
+entry rule read[T] -> T = v:Value[T] eof -> { v }
+let c = Json::read[Contact](bytes)
+```
+
+One copy per rule and list of types, shared between calls; the generic
+original is not emitted (ADR-304 D6), and the copies count against the build's
+budget (ADR-specialization-1 D5). A bound may stand on a parameter
+(`[S: Struct]`); a value where a type belongs is `NK1230`. The lowered rules
+take no type parameter (`Value__Contact`), so the engine needs no generics. The
+input is `String` or `Bytes` (ADR-grammar-input-v1); a read of an `asset` in a `comptime`
+works as any build-time call does (Part II 10.2).
+
+### D2 — In a rule body, a `match` on a kind chooses the pattern, and only the arm the type takes is emitted.
+
+Each arm is a pattern with its own actions, checked under the kind its pattern
+names (ADR-330 D4). The match need not name every kind (D6). A `match` in a
+pattern on a value not known while building is refused (`NK1310`).
+
+### D3 — `members[S](key, value, sep; name:, null:, unknown:)` builds an `S: Struct` from named members; the compiler owns the matching and the building.
+
+```nika
+rule Object[S: Struct] -> S =
+    "{" => m:members[S](Key, Value[_], ","; name: wire_name, null: Null, unknown: Skip) "}" -> { m }
+```
+
+`Value[_]` is applied with each field's type. One mapping rule, stated once in
+Part II and shared with ADR-database-v1 D16-D18:
+
+* a missing member takes the field's default, else `null` in a `T?`, else it
+  is an error;
+* a member that matches `null:` goes into a `T?`, into any other field it
+  takes the field's default, else it is an error (ADR-344 D4);
+* a member given twice is an error;
+* an unknown member is an error unless `unknown:` names a rule that skips it.
+
+Refused while building, at the call: two fields with one wire name
+(`NK1311`); a field that `name:` leaves unread, with no default and not a `T?`
+(`NK1312`); a field type no arm covers (D6). While running, a failure is the grammar's
+`ParseError`; the field names and indices on its stack are the path
+(`$.contacts[3].email`, ADR-344 D3). No half-built struct exists in the
+language, and `field.set` stays `NK1180`.
+
+### D4 — A format's attributes are read in its `name:` function, a build-time function over the reflected field.
+
+```nika
+fn wire_name(f: meta::Field) -> String? {
+    if f.attribute(Skip) != null { return null }
+    return f.attribute(Name)?.value ?? f.name
+}
+```
+
+The package writes it once; its grammar and its `write` use it (ADR-331 D6).
+The parameter's type is `meta::Field`, the reflected field's type ADR-329
+names. A parameter of that type is `comptime` by its type, copied per field as
+ADR-specialization-1 D1 copies; `meta::Field` elsewhere is `NK1320`
+(Part II 10.3). Each format reads its own attributes (`@json::Name`,
+`@yaml::Name`).
+
+### D5 — Values follow the input, and the key dispatch is the compiler's.
+
+A string with no escape is a view of the input (Part II 10.6), one with
+escapes is decoded; a number goes straight into the field's type. How keys are
+matched - by length and bytes, a trie, the declared order tried first - is the
+compiler's, as a fixed map's lookup is (Part II 10.2). The skip rule builds
+nothing, so an unknown member allocates nothing.
+
+### D6 — A type the grammar has no arm for is refused at the call, naming the field's path and the rule; `refuse("…")` lets an arm say why.
+
+```nika
+Map(K, V) => match K::kind { Text => MapObj[K, V], _ => refuse("a JSON object's keys are text") }
+```
+
+`NK1250` is widened to this case. A function-typed field and a `Map[i64, V]`
+are refused here.
+
+### D7 — An entry marked `@stream`, whose body repeats an item on a fixed path, hands its items over one at a time.
+
+It lowers to the engine's `#[stream]`. A JSON Lines file is read in parallel by
+`par_fold` over a generic `@frame` rule, `init`, `step` and `merge` handed in as
+rule values (ADR-grammar-syntax-v1 D12). An entry takes `String`, `Bytes` or a byte
+stream (`NK1282` for anything else); over a stream its items view the stream's
+buffers, held as ADR-stream-buffers-v1 says.
+
+* **The call is a sequence.** `for ev in Yaml::events(bytes)` walks the items
+  as the parser produces them, and a `break` stops the parse. The call may also
+  be held, passed on, handed back, stored, given to a task and combined
+  (`zip`, `map`, `take`), as any sequence may.
+* **An item views the input it is parsed from** (ADR-views-v4 D5) and lives as
+  long as the input. A sequence handed back is `from` its input (ADR-views-v4
+  D16); one that must outlive the input takes it with `keep`, or its items are
+  copied with `.clone()`.
+* **The compiler chooses how each walk runs**, and the ledger names the choice
+  per walk and where a copy is made. The rule above holds for every method:
+
+  | walk | method |
+  |---|---|
+  | a `for` over the call, or over a held sequence it alone walks, whose body does not pause | the body is the parser's `each`: no thread |
+  | a held or passed sequence with one consumer the compiler cannot see through; a body that pauses | a thread that borrows the input |
+  | several sequences walked together | a state machine each consumer drives; until it is built, a thread per sequence |
+  | a sequence that outlives the input's loan | its own thread with the input owned; items owned where they leave it |
+  | a walk over a stream | the parse in a thread of its own where the body pauses, otherwise `each`; items view stream buffers, every place holding them counted or refused (ADR-stream-buffers-v1 D2) |
+
+* **A sequence walked twice parses twice**, and the ledger names it; the
+  compiler may instead collect it once where it sees that is cheaper.
+* **A reader reaches both sides.** A Nikaia entry takes a byte stream (standard
+  input, a file read as a stream, a connection) as it takes a `String`. Where a
+  feature reaches the entry (ADR-393 D4), the Rust user reads stdin or a socket
+  through `G::<rule>_reader(r)`, an associated function of the grammar's type
+  beside the forms over a whole input. It takes `impl std::io::Read + Send +
+  'static` and returns an iterator of `Result<Item, ParseError>`, the shape of
+  the Nikaia walk. On both sides the items are the one item type and view the
+  stream's buffers; an item handed to Rust carries a counted handle on its
+  buffer, so it is `'static` with its text not copied (ADR-stream-buffers-v1
+  D7). The engine's own `parse_<rule>_reader`, which returns the fold's count,
+  stays private to the grammar's module.
+* **An item may be emitted.** An item need not be the element the entry's
+  body repeats. A rule reached from a `@stream` entry may hand over an item
+  with an `emit` form in its action; the item is the entry's output, not a
+  value passed between rules, so 10.8 holds. An `emit` is allowed only where
+  the parse cannot go back past it: once the rules that led to it have matched
+  far enough that no alternative around them can still be tried. An `emit` the
+  parse could still undo is refused with a code of its own; the compiler does
+  not buffer items to hide a backtrack. The fixed-path body (`NK1349`) stays
+  the plain form; an entry whose items are all emitted states no repetition of
+  its own. The engine holds an emitted item with a counted handle on its buffer
+  until the attempt that emitted it is taken, so an emitted item views its input
+  on every path.
+
+Why the item views the input: a Nikaia entry reads a `String` or `Bytes`
+held in memory, so a view of it is as good as the in-memory walk's. One item
+type serves both, since D5 keeps view and owned out of the type. Rejected: a
+second, owning item type for the stream (the language already keeps the
+difference out of the type); a single method for every walk, since pushing into
+`each` cannot hold or combine a sequence, and a thread with owned items copies
+each item and pays a channel for the common `for`; a reference-counted slice of
+the input as a new kind of text (a view of a stream buffer is a view, its
+buffer counted per buffer where it must be, ADR-stream-buffers-v1 D5); an owned
+form of the item for the reader (a copy per item on the path that reads the
+most, #2735).
+
+### D8 — Writing stays a function per type.
+
+`json::write[T]` walks the type with `match T::kind` and `T::fields`, builds
+nothing it reads back, and shares `wire_name` with the grammar (ADR-344 D7).
+
+### D9 — SQL keeps `dsl … -> T`; only its mapping rule is the one of D3.
+
+A query's columns are known while building and its rows arrive typed from the
+driver, so there is no text to parse while running. SQL keeps its strict
+settings (no extra columns, no missing fields, ADR-database-v1 D17) and checks them
+while building; JSON uses its own and checks them while running.
+
+### D10 — The `json` package offers `pub grammar Json` with the entries `read[T]` and `parse`, and `json::read` stays, forwarding to it.
+
+`json::read[T](input; comptime schema: …)` is a `pub fn` of one line that runs
+ADR-344 D6's schema check while building and calls `Json::read[T]`: the
+spelling programs write does not change, and it is where `schema:` stands.
+`parse` stays the entry for JSON of unknown shape (ADR-344 D6a). The
+hand-written reader is retired.
+
+### D11 — A type argument is written in brackets, and a call whose type argument fills no value parameter's type is not warned.
+
+```nika
+let c = json::read[Contact](bytes)        // no NK1233: nothing else says what T is
+let n = id[i64](3)                        // still warning[NK1233]: the argument already says T
+let p = parse[Config](text)               // no NK1233: no value argument says T
+```
+
+ADR-330 D9's `NK1233` is narrowed to calls where a value argument's type could
+have said the type. `read(Contact, bytes)`, a type in a value's place, stays
+`NK1230`: a type and a value are told apart by where they stand.
+
+### D12 — A type with a text form of its own is refused as a field, until a record decides how a grammar meets it.
+
+`json::Value` as a field, `time::Instant`, a `@json::Rest` field collecting the
+skipped members: each needs an arm that names an exact type or is guarded by a
+bound, which D2 does not have. Until that is decided such a field is `NK1250`
+at the call, with its path.
+
+### D13 — An enum variant without a payload is written as its name; a variant that carries one is refused for now.
+
+```nika
+enum Mode { Fast, Safe }
+struct Job { mode: Mode }      // {"mode": "Fast"}
+```
+
+The name is the wire name of D4 (an attribute may rename it). A variant with a
+payload is `NK1250` until its form (a tag member, an object of one member) is
+decided.
+
+### D14 — Inside an arm whose pattern names `Map(K, V)` or `List(E)`, `T()` builds the empty collection of the type `T` is.
+
+```nika
+rule Value[T] -> T = match T::kind {
+    Map(K, V) => es:list(Entry[V], ",") -> {
+        let mut m: T = T()     // a HashMap or a BTreeMap: whatever T is
+        for (k, v) in es { m.insert(k.clone(), v.clone()) }
+        m
+    }
+    ...
+}
+```
+
+The arm is checked under the kind its pattern names (D2), so the compiler
+knows there that `T` is a collection with an empty value; each copy lowers
+`T()` to the constructor of its own type. The same holds in a `match T::kind`
+arm of a generic function (ADR-330 D4). Outside such an arm `T()` stays
+`NK1117`: a type parameter has no constructor of its own. Decided by the
+owner, 2026-11-21 ([#2626](https://github.com/Nikaia-Foundation/Nikaia/issues/2626)).
+
+**Rejected.** Explicit generics in a constructor call (`HashMap[K, V]()`):
+the arm must still pick one map type, so one arm cannot serve both. An empty
+map literal typed from the `let`: new syntax for one case.
+
+**Rejected.** A library walk with a constructor from fields (Option A): a
+second way to build a struct, and a scanner outside the grammar. `field.set`:
+needs a half-built struct. A `Value` tree converted afterwards: two passes and
+allocations. A trait any format implements (serde's split): the format cannot
+specialise on the known keys. Descriptors read while running (Go, Kotlin): a
+walk of the type at every read. Every kind match exhaustive: each format would
+carry arms for `Fn` and `Opaque` that only refuse. SQL as a generic entry:
+there is no text to parse while running.
+
+## 5. Consequences
+
+* ADR-344 D3, D6a and §5 say what holds now; its D4, D5 and D8 are JSON's
+  settings of D3. ADR-330 D7's reason gains a sentence: a
+  grammar still names no type of the program, it receives one from its caller,
+  as a generic function in a package does. ADR-database-v1 D16-D18 point to D3's rule.
+* Part II 10.8 holds type parameters on rules, `match` in a pattern,
+  `members`, `refuse`, `@stream` and `Value[_]`; the mapping rule stands in
+  Part II, and generic frames in 10.7; Part III 17.3 and Appendix C.3 follow.
+  `NK1250` is widened, `NK1233` narrowed (D11), and `NK1310`-`NK1312` are
+  codes of their own.
+* The work is #859; the package form also needs a grammar exported by a
+  package (#520, #485). Its speed is shown by a benchmark in `benches/json/`
+  against `serde_json::from_slice` with derive, both release builds with the
+  same settings, the same output byte for byte, counted with callgrind (#604).
+* `yaml`'s serde layer (#928) and `toml` take the same mechanism.
+* Accepted cost: type parameters on rules, a `match` in a pattern and one
+  grammar element the compiler owns. A format's typed read is now as fast or
+  as slow as the compiler's grammar lowering.
+
+## 6. What this does not decide
+
+* **How a grammar meets a type with a text form of its own** (D12): an arm
+  naming an exact type, or one guarded by a bound. A decision round of its own
+  ([#1020](https://github.com/Nikaia-Foundation/Nikaia/issues/1020)).
+* **The JSON form of a variant that carries a payload** (D13).
+* **A reader type in `std`** for a Nikaia caller of a `@stream` entry (D7).
+* **Which method a given walk gets** beyond D7's table: the table states when each is taken, and a method that counts fewer instructions for a row may replace another without a new decision.

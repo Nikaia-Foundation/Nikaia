@@ -38,7 +38,7 @@ fn check_core_method_str_view(ty: ref Ty) -> bool {
 }
 
 /// Whether a type is a plain `String`.
-/// `Bytes`, the language's run of bytes (ADR-283 D19).
+/// `Bytes`, the language's run of bytes (ADR-tether-v1 D19).
 fn check_core_method_bytes(ty: ref Ty) -> bool {
     return match ty {
         Ty::Named { name, args, .. } => name == "Bytes" && args.len() == 0,
@@ -893,7 +893,8 @@ fn check_core_method_called[H: CheckHost](mut state: CheckState, world: ref Chec
         check_core_method_or_default(state, world, expr, unviewed_type(value), span)
     }
     if key == "Seq::cloned" {
-        walked = check_core_method_cloned(state, expr, on, walked)
+        let lent_walk = state.flow.lent_walks.contains(id_of(receiver) as i64)
+        walked = check_core_method_cloned(state, expr, on, walked, lent_walk)
     }
     if key == "Vec::get" || key == "Vec::first" || key == "Vec::last" {
         match value {
@@ -1071,13 +1072,16 @@ fn check_core_method_or_default(mut state: CheckState, world: ref CheckWorld, ex
 /// language below's `cloned`; over elements that are already owned there, it
 /// is nothing (`owned_clones`), and over views of values that copy it is the
 /// `copied` the walk is given anyway.
-fn check_core_method_cloned(mut state: CheckState, expr: ref Expr, on: ref Ty, walked: Ty) -> Ty sync {
+fn check_core_method_cloned(mut state: CheckState, expr: ref Expr, on: ref Ty, walked: Ty, lent_walk: bool) -> Ty sync {
     let item: Ty = match on {
         Ty::Seq { item, .. } => item.clone(),
         else => return walked,
     }
+    // **A tuple walked through a view is lent below** (#1303): its type says
+    // no view, the walk does (`lent_walks`), and it hands `&(i64, i64)`.
     let lent = match item {
         Ty::Named { view, .. } => view && !copies_as_a_view(item),
+        Ty::Tuple(_) => lent_walk,
         else => false,
     }
     if !lent && !item.is_unknown() && !state.facts.copied_walks.contains(id_of(expr) as i64) {
@@ -1087,8 +1091,17 @@ fn check_core_method_cloned(mut state: CheckState, expr: ref Expr, on: ref Ty, w
         state.facts.owned_clones.insert(id_of(expr) as i64)
     }
     return match walked {
-        Ty::Seq { item, is_sync, pauses, fails, parallel, shape } => Ty::Seq { item: unviewed_type(item), is_sync: is_sync, pauses: pauses, fails: fails.clone(), parallel: parallel, shape: shape.clone() },
+        Ty::Seq { item, is_sync, pauses, fails, parallel, shape } => Ty::Seq { item: check_core_method_cloned_item(item), is_sync: is_sync, pauses: pauses, fails: fails.clone(), parallel: parallel, shape: shape.clone() },
         else => walked,
+    }
+}
+
+/// The item `cloned` hands on: the type without `ref`, and a tuple with each
+/// part without it (#1303).
+fn check_core_method_cloned_item(item: ref Ty) -> Ty sync {
+    return match item {
+        Ty::Tuple(parts) => Ty::Tuple(parts.iter().map(fn(part) { unviewed_type(part) }).collect()),
+        else => unviewed_type(item),
     }
 }
 

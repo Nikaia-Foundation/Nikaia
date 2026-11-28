@@ -1,6 +1,6 @@
 // An element of a list a call handed back, a list of text of its own, handed
 // back: the caller owns the list, which moves into its caller's keep, and the
-// element is a view of it (#1481, ADR-283 D23).
+// element is a view of it (#1481, ADR-tether-v1 D23).
 struct Word {
 	name: String,
 	rank: i64,

@@ -224,7 +224,7 @@ is left is 3 and 4, and neither is a performance question.
    the choice and what decided it.
 
    What the analysis is, so a later one is not mistaken for it: **one buffer**,
-   because ADR-283 gives a compilation unit one input lifetime. The join over a
+   because ADR-tether-v1 gives a compilation unit one input lifetime. The join over a
    program's sources is not a coarsening of a per-buffer analysis — it is the
    per-buffer analysis, for the one buffer this representation can express.
    `std` has no untrusted source yet; `http`, `net` and `db` arrive with the
@@ -271,7 +271,7 @@ is left is 3 and 4, and neither is a performance question.
 * Tuples (G10), ordered output over a map (G5), and a rejected parse saying
   where it failed (G11).
 * **G17, a stream that can fail while it is read** —
-  [ADR-025](specification/adr/adr-025.md). It was two problems. The failure half
+  [ADR-loop-failure-v1](specification/adr/adr-loop-failure-v1.md). It was two problems. The failure half
   was answered by a rule the language already had and had never stated
   generally: Part I 6.4 makes a function declare `throws` because a resource's
   cleanup at the *closing* brace can fail, and a `for`'s step at the top of the

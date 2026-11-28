@@ -1,6 +1,6 @@
 // An element of a list the function made, bound by a `let` and handed back,
 // in a field or bare: the `let` carries the list as its source (#1368,
-// ADR-283 D23).
+// ADR-tether-v1 D23).
 struct Word {
 	name: String,
 	rank: i64,

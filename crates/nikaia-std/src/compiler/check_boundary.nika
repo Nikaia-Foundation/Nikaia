@@ -258,7 +258,7 @@ impl CheckState {
     }
 
     /// **An element of a list this body made, handed back as a view**
-    /// (#1368, ADR-283 D23): `return xs[0]`, or `return e` after `let e =
+    /// (#1368, ADR-tether-v1 D23): `return xs[0]`, or `return e` after `let e =
     /// xs[0]`, where the text pass made the result a view. The list goes into
     /// the caller's keep (`untethered_returns` in `buffers.nika`), so the
     /// element is lent, as a place of a `ref` parameter is.

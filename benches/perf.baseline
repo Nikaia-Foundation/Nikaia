@@ -30,7 +30,7 @@ nikaia kernels benches/solver-kernels.nika
 # `packages/logic/src/sv_simplex.nika` is not here: `check --bounds` on it
 # checks the whole `logic` package, 52 s natively (2026-11-23), about 45
 # minutes under callgrind.
-row check.drive compile 127588608252 2 35880934efe5fea1 {nikaia} check --bounds scripts/drive.nika
+row check.drive compile 137939641378 2 5d3da6cc34b87247 {nikaia} check --bounds scripts/drive.nika
 row check.gate compile 5132344282 2 2fde1241626c4a87 {nikaia} check --bounds scripts/gate.nika
 row check.game compile 2944541838 2 fa0874072ae900f2 {nikaia} check --bounds benches/game/game.nika
 #
@@ -41,7 +41,7 @@ row n-body.nikaia run 204915384 1 9f7da97662c75f74 NIKAIA_RUNTIME_CONFIG={work}/
 row n-body.rust run 1048453866 1 9f7da97662c75f74 RAYON_NUM_THREADS=1 {work}/game-target/release/n-body 200000
 row spectral-norm.nikaia run 126304264 1 4f44d8ca1b8c1656 NIKAIA_RUNTIME_CONFIG={work}/spectral-norm/runtime.toml {work}/bin/spectral-norm 300
 row spectral-norm.rust run 79374438 1 4f44d8ca1b8c1656 RAYON_NUM_THREADS=1 {work}/game-target/release/spectral-norm 300
-row fannkuch-redux.nikaia run 684909734 1 bc5c97f77e1a6a67 NIKAIA_RUNTIME_CONFIG={work}/fannkuch-redux/runtime.toml {work}/bin/fannkuch-redux 9
+row fannkuch-redux.nikaia run 619300260 1 8240a83dc671a190 NIKAIA_RUNTIME_CONFIG={work}/fannkuch-redux/runtime.toml {work}/bin/fannkuch-redux 9
 row fannkuch-redux.rust run 114987378 1 8240a83dc671a190 RAYON_NUM_THREADS=1 {work}/game-target/release/fannkuch-redux 9
 row binary-trees.nikaia run 893533370 1 b0af3a8c1c6ccf57 NIKAIA_RUNTIME_CONFIG={work}/binary-trees/runtime.toml {work}/bin/binary-trees 14
 row binary-trees.rust run 284118296 1 b0af3a8c1c6ccf57 RAYON_NUM_THREADS=1 {work}/game-target/release/binary-trees 14

@@ -244,7 +244,7 @@ checked by Nikaia's compiler and written to a ledger you can read, and on today'
 that comes out passes Rust's borrow checker as well, a second opinion on ours. Cases that safe
 Rust does not express directly, such as a slice stored in a struct or a task borrowing from its
 parent, get their own language constructs ([ADR-005](docs/specification/adr/adr-005.md),
-[ADR-283](docs/specification/adr/adr-283.md)).
+[ADR-tether-v1](docs/specification/adr/adr-tether-v1.md)).
 
 #### Which reference count and lock a value gets
 

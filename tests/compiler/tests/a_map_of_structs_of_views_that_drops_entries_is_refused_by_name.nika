@@ -1,0 +1,28 @@
+// A map of structs of views that drops entries in a loop is still refused, by
+// name (NK2304, ADR-tether-v1): a map's reads hand back a value that may be
+// absent, and that is not yet read through the handle. Moved from the Rust test
+// of the same name (#2849).
+use std::fs
+use std::collections
+
+struct Record {
+    name: String,
+}
+
+fn files() -> fs::Root throws {
+    let root = fs::scratch()
+    fs::write("app.conf", root, "# settings\nhost = example.org\nport = 8080\ninclude = extra.conf\n")
+    fs::write("extra.conf", root, "mode = fast\nhost = override.org\n")
+    return root
+}
+
+fn main() throws {
+    let root = files()
+    let mut by_path: collections::HashMap[String, Record] = collections::HashMap()
+    for path in ["app.conf", "extra.conf"] {
+        let text = fs::read_to_string(path, root)
+        by_path.insert(path.clone(), Record { name: text.trim() })
+        if by_path.len() > 1 { by_path.clear() }
+    }
+    println(f"{by_path.len()}")
+}

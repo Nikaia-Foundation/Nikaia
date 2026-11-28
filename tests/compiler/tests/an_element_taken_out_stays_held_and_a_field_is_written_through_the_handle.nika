@@ -1,0 +1,36 @@
+// An element taken out stays held, and a field is written through the handle
+// (ADR-tether-v1 D16, D17): `old` carries its buffer's keep out of the list, a
+// number is stored as it is, and a literal is copied into the keeps. The run of
+// the Rust test of the same name, whose check of the lowered Rust stays there (#2849).
+use std::fs
+
+struct Record {
+    name: String,
+    size: i64,
+}
+
+fn files() -> fs::Root throws {
+    let root = fs::scratch()
+    fs::write("app.conf", root, "# settings\nhost = example.org\nport = 8080\ninclude = extra.conf\n")
+    fs::write("extra.conf", root, "mode = fast\nhost = override.org\n")
+    return root
+}
+
+fn main() throws {
+    let root = files()
+    let mut kept: Vec[Record] = Vec()
+    let mut gone = 0
+    for path in ["app.conf", "extra.conf", "app.conf"] {
+        let text = fs::read_to_string(path, root)
+        kept.push(Record { name: text.trim(), size: text.len() as i64 })
+        if kept.len() > 2 {
+            let old = kept.remove(0)
+            gone = gone + old.size
+            println(old.name.len())
+        }
+    }
+    kept[0].size = 7
+    kept[1].size += 1
+    kept[1].name = "renamed"
+    println(f"{gone} {kept[0].size} {kept[1].size} {kept[1].name}")
+}

@@ -1,5 +1,5 @@
 // A struct literal holding a view of a lent parameter, pushed into a `mut`
-// list parameter, points into the caller's argument (ADR-283 D27, #1548): the
+// list parameter, points into the caller's argument (ADR-tether-v1 D27, #1548): the
 // struct is the element itself, not a field of something that outlives the
 // call, so it shares the lent parameter's lifetime like a plain view does.
 struct Expr { n: i64, name: String }

@@ -688,6 +688,62 @@ pub(crate) fn check_core_call_on_open(state: &CheckState, bound_name: &str) -> i
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
+pub(crate) fn check_core_call_on_listed_texts(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, receiver: &Expr, entry: &str, found: &[Ty]) {
+    let mut given: Ty = Ty::Unknown;
+    if entry == "push" && found.len() == 1 { given = (*unsafe { nikaia_std::proven::read(&found, (0) as usize) }).clone(); } else if entry == "insert" && found.len() == 2 { given = (*unsafe { nikaia_std::proven::read(&found, (1) as usize) }).clone(); } else { return; }
+    let name: String = match check_core_method_receiver_name(world, receiver) { Some(__nikaia_value) => __nikaia_value, None => return };
+    let local = match state.binding(&name) { Some(__nikaia_value) => __nikaia_value, None => return };
+    let texts = match match *nikaia_std::index::get(&state.flow.listed_texts, &local.id) {
+        Some(__nikaia_it) => Some(__nikaia_it.clone()),
+        None => None,
+    } { Some(__nikaia_value) => __nikaia_value, None => return };
+    let element: Ty = match local.ty {
+        Ty::Named { ref args, .. } => if args.len() == 1 { (*unsafe { nikaia_std::proven::read(&args, (0) as usize) }).clone() } else { return; },
+        _ => return,
+    };
+    let text = Ty::Named { name: String::from("String"), args: vec![], view: false };
+    let mut built: Vec<i64> = nikaia_std::block::list(nikaia_std::block::Place::Block);
+    let mut retyped = element.clone();
+    match given {
+        Ty::Tuple(ref gave) => {
+            match element {
+                Ty::Tuple(ref held) => {
+                    if (gave.len() as i64) != held.len() as i64 { return; }
+                    let mut parts: Vec<Ty> = vec![];
+                    let mut p: i64 = 0;
+                    while p < held.len() as i64 {
+                        if check_core_args_plain_name(unsafe { nikaia_std::proven::read(&gave, (p) as usize) }) == "String" && check_core_args_plain_name(unsafe { nikaia_std::proven::read(&held, (p) as usize) }) != "String" {
+                            built.push(p);
+                            parts.push(text.clone());
+                        } else { parts.push((*unsafe { nikaia_std::proven::read(&held, (p) as usize) }).clone()); }
+                        p = unsafe { nikaia_std::proven::add::<i64>(p, 1) };
+                    }
+                    retyped = Ty::Tuple(parts);
+                },
+                _ => { return; },
+            }
+        },
+        _ => {
+            if check_core_args_plain_name(&given) == "String" && check_core_args_plain_name(&element) != "String" {
+                built.push(-1);
+                retyped = text.clone();
+            }
+        },
+    }
+    if built.is_empty() { return; }
+    let mut any = false;
+    for (part, node) in texts.iter() {
+        let part = nikaia_std::num::value(part);let node = nikaia_std::num::value(node);
+        if built.contains(&part) {
+            state.facts.owned_texts.insert(node);
+            any = true;
+        }
+    }
+    if any { check_core_call_on_retyped(state, &name, vec![retyped]); }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
 pub(crate) fn check_core_call_on_pushed(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, receiver: &Expr, entry: &str, args: &[Expr], found: &[Ty], span: &Span) {
     if state.flow.pushed_into.is_none() || state.flow.pushed_receiver != id_of(receiver) as i64 { return; }
     let pushed_name: String = nikaia_std::index::or(match state.flow.pushed_into.as_ref() {
@@ -1206,6 +1262,7 @@ pub(crate) fn check_core_call_on_described<H: CheckHost>(state: &mut CheckState,
     state.pausing_walk = outer_pausing;
     if (entry == "get" || entry == "contains_key" || entry == "remove" || entry == "entry") && args.len() == 1 { check_core_call_on_key_read(state, world, receiver, unsafe { nikaia_std::proven::read(&args, (0) as usize) }, span); }
     check_core_call_on_pushed(state, world, receiver, entry, args, &found, span);
+    check_core_call_on_listed_texts(state, world, receiver, entry, &found);
     expected = check_core_call_on_now_expected(&state, world, receiver, entry, expected);
     let paused_here: Vec<i64> = state.flow.paused_args.copy_owned();
     state.flow.paused_args = outer_paused;

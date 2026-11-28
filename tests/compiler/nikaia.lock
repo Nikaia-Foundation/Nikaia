@@ -8,14 +8,15 @@ version = 1
 toolchain = "rustc 1.97.0 (2d8144b78 2026-07-07)"
 
 [dependencies]
-ahash = ["0.8.12"]
+ahash = ["0.8.15"]
 aho-corasick = ["1.1.5"]
-allocator-api2 = ["0.2.21"]
+allocator-api2 = ["0.2.22"]
 bitflags = ["2.13.2"]
+bumpalo = ["3.20.4"]
 byte-blocks = ["0.1.0"]
 c-boundary = ["0.1.0"]
 c-text = ["0.1.0"]
-cc = ["1.11.3"]
+cc = ["1.12.0"]
 cfg-if = ["1.0.5"]
 checked-text = ["0.1.0"]
 child-usage = ["0.1.0"]
@@ -30,10 +31,10 @@ dashmap = ["6.2.1"]
 either = ["1.19.0"]
 errno = ["0.3.15"]
 file-ring = ["0.1.0"]
-find-msvc-tools = ["0.1.15"]
+find-msvc-tools = ["0.1.16"]
 getrandom = [
     "0.2.17",
-    "0.3.4",
+    "0.4.3",
 ]
 hashbrown = [
     "0.14.5",
@@ -41,6 +42,7 @@ hashbrown = [
 ]
 hermit-abi = ["0.5.3"]
 io-uring = ["0.7.16"]
+js-sys = ["0.3.107"]
 lasso = ["0.7.3"]
 libc = ["0.2.191"]
 linux-raw-sys = ["0.12.1"]
@@ -60,7 +62,7 @@ privileged-start = ["0.1.0"]
 proc-macro2 = ["1.0.107"]
 proven-index = ["0.1.0"]
 quote = ["1.0.47"]
-r-efi = ["5.3.0"]
+r-efi = ["6.0.0"]
 rayon = ["1.12.0"]
 rayon-core = ["1.13.0"]
 redox_syscall = ["0.5.18"]
@@ -73,16 +75,23 @@ rustls = ["0.23.46"]
 rustls-native-certs = ["0.8.5"]
 rustls-pki-types = ["1.16.0"]
 rustls-webpki = ["0.103.17"]
+rustversion = ["1.0.23"]
 schannel = ["0.1.30"]
 scopeguard = ["1.2.0"]
 security-framework = ["3.7.0"]
 security-framework-sys = ["2.17.0"]
+serde = ["1.0.229"]
+serde_core = ["1.0.229"]
+serde_derive = ["1.0.229"]
 shared-bytes = ["0.1.0"]
 shlex = ["2.0.1"]
 simdutf8 = ["0.1.5"]
 smallvec = ["1.16.6"]
 subtle = ["2.6.1"]
-syn = ["2.0.119"]
+syn = [
+    "2.0.119",
+    "3.0.10",
+]
 task-block = ["0.1.0"]
 tether = ["0.1.0"]
 text-key = ["0.1.0"]
@@ -93,7 +102,10 @@ unicode-segmentation = ["1.13.3"]
 untrusted = ["0.9.0"]
 version_check = ["0.9.5"]
 wasi = ["0.11.1+wasi-snapshot-preview1"]
-wasip2 = ["1.0.4+wasi-0.2.12"]
+wasm-bindgen = ["0.2.130"]
+wasm-bindgen-macro = ["0.2.130"]
+wasm-bindgen-macro-support = ["0.2.130"]
+wasm-bindgen-shared = ["0.2.130"]
 windows-link = ["0.2.1"]
 windows-sys = [
     "0.52.0",
@@ -112,10 +124,30 @@ winnow = ["1.0.5"]
 winnow-grammar = ["0.2.0"]
 winnow-grammar-macros = ["0.2.0"]
 winnow-grammar-model = ["0.2.0"]
-wit-bindgen = ["0.57.1"]
-zerocopy = ["0.8.64"]
-zerocopy-derive = ["0.8.64"]
+zerocopy = ["0.8.66"]
+zerocopy-derive = ["0.8.66"]
 zeroize = ["1.9.2"]
 
+[units."src/code_beside.nika"]
+source = "ac7659deab3af9bb1aa1148a477e6901399e9b0523c498cae8f819af5e8dc421"
+
+[units."src/entry_beside.nika"]
+source = "24d519b69f78d5fc11bf0e673a56111ed87089fcc3f9556a0b5c90ab8a08f809"
+
+[units."src/list_beside.nika"]
+source = "8f1d3c067204a0f89424dfcad078c356859c17d177b3c7a7bdb92a8799d9d1d8"
+
 [units."src/main.nika"]
-source = "f84022ee325ccb2d4e1e4b105582d3fda7ec5fd258965d85e54d9413c7509551"
+source = "810abc03acfc351e507d1df450063da803f8e40a770c194054e6b8d0fbf892a8"
+
+[units."src/nest_beside.nika"]
+source = "910250a34f7ed8ecb7cfbfae03802ddcf6dc8c2359680b8ffc957a61cf69c333"
+
+[units."src/slice_beside.nika"]
+source = "ec8b08261082c4703cddcbffe6d5e821e12e67107370239c4c7a540e145970da"
+
+[units."src/tier_beside_keep.nika"]
+source = "7776489795056cd1c87094934399abe6cbb9390b2b9b91cbfabc167f20e6f7a0"
+
+[units."src/trait_of_a_package.nika"]
+source = "6e3504cdd50f1539e088a9a93b22d8874b236a9131808b51f89f8ae229cf6f46"

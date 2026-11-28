@@ -39,7 +39,7 @@ fn bare_reference(pattern: ref Pattern, world: ref CheckWorld) -> String sync {
     }
 }
 
-/// **Whether `iter` calls a `@stream` entry** (ADR-grammar-typed-read-v1 D7,
+/// **Whether `iter` calls a `@stream` entry** (ADR-grammar-typed-read-v2 D7,
 /// #2708): `G::rule(input)` of a grammar the program declares, or another
 /// package's `p::G::rule(input)`, whose contract fails with `ParseError`
 /// alone, takes `input` first and hands back a sequence, as the emitter's
@@ -129,7 +129,7 @@ fn an_offered_number_name(name: ref String) -> bool sync {
     return name == "i32" || name == "i64" || name == "u8" || name == "u32" || name == "u64" || name == "f32" || name == "f64"
 }
 
-/// **An `@stream` entry repeats one item on a fixed path** (ADR-grammar-typed-read-v1
+/// **An `@stream` entry repeats one item on a fixed path** (ADR-grammar-typed-read-v2
 /// D7, `NK1349`): one alternative, no action, and through its sequences and
 /// groups exactly one element that repeats a rule of the grammar whose type is
 /// the entry's (`item*`, `item+`, a counted repeat, `list(item, sep)`). What
@@ -169,7 +169,7 @@ fn grammar_stream_refused(world: ref CheckWorld, rule: ref GrammarRule, results:
 }
 
 fn grammar_stream_refusal(entry: ref String, span: ref Span, why: String, help: String) -> CheckFinding sync {
-    let notes: Vec[String] = ["A streamed entry hands each item to the caller's `for` as the parser produces it (ADR-grammar-typed-read-v1 D7): its body is one repetition of the item's rule, with only what is matched and dropped around it."]
+    let notes: Vec[String] = ["A streamed entry hands each item to the caller's `for` as the parser produces it (ADR-grammar-typed-read-v2 D7): its body is one repetition of the item's rule, with only what is matched and dropped around it."]
     return check_refusal("NK1349", span, f"`{entry}` is `@stream`, so its body has to repeat one item on a fixed path, but {why}.", notes, help)
 }
 
@@ -244,7 +244,7 @@ impl CheckState {
             Pattern::Counted { pat, .. } => self.repeat_type(world, pat.node, Repeat::Star, rules),
             // a label on a literal binds the text matched (Part II 10.8, #1030)
             Pattern::Literal(_) => pattern_text(),
-            // `members[S](..)` builds an `S` (ADR-grammar-typed-read-v1 D3)
+            // `members[S](..)` builds an `S` (ADR-grammar-typed-read-v2 D3)
             Pattern::Members { ty, .. } => if ty.generics.len() == 0 && !ty.is_tuple { pattern_named(world.words.resolve(ty.name), ty.is_nullable) } else { Ty::Unknown },
             else => Ty::Unknown,
         }
@@ -777,7 +777,7 @@ fn grammar_called_rules(world: ref CheckWorld, pattern: ref Pattern, rules: ref 
     }
 }
 
-/// **The rules each `@stream` entry reaches** (ADR-grammar-typed-read-v1 D7, amended
+/// **The rules each `@stream` entry reaches** (ADR-grammar-typed-read-v2 D7, amended
 /// 2026-11-18, #2061), the entry with them: a rule's name and the item type
 /// of the first entry, in the grammar's order, that reaches it.
 fn grammar_streamed_rules(world: ref CheckWorld, gram: ref GrammarDef, results: ref collections::BTreeMap[String, Ty], rules: ref collections::BTreeSet[String]) -> collections::BTreeMap[String, Ty] sync {
@@ -897,7 +897,7 @@ fn grammar_undo_said(world: ref CheckWorld, rule: ref String, what: ref String) 
 }
 
 /// **The calls of `target` in a pattern, and what stands around them**
-/// (ADR-grammar-typed-read-v1 D7, amended 2026-11-18): `failing` says whether the call
+/// (ADR-grammar-typed-read-v2 D7, amended 2026-11-18): `failing` says whether the call
 /// itself fails after the `emit` ran (the rule it is in gave up after it).
 /// A sequence lets a failure out unless a cut stands before the call; a
 /// choice that has an option left, a repetition that may stop short and a
@@ -1047,7 +1047,7 @@ fn grammar_undo_repeated(world: ref CheckWorld, inner: GrammarUndo, rule: ref St
 }
 
 /// **What could undo an `emit` in rule `target`'s action**, from the rules
-/// that call it up to the `@stream` entries (ADR-grammar-typed-read-v1 D7, amended
+/// that call it up to the `@stream` entries (ADR-grammar-typed-read-v2 D7, amended
 /// 2026-11-18): the first choice that is still tried after the call has
 /// run, or `null` where every way up is committed or ends the parse.
 /// `failing` says whether `target` gives up after the `emit`; `seen` holds
@@ -1088,7 +1088,7 @@ fn grammar_undone_from(world: ref CheckWorld, gram: ref GrammarDef, target: ref 
     return null
 }
 
-/// **`NK1370`: an `emit` the parse could still undo** (ADR-grammar-typed-read-v1 D7,
+/// **`NK1370`: an `emit` the parse could still undo** (ADR-grammar-typed-read-v2 D7,
 /// amended 2026-11-18, #2061): one finding per `emit` in the action of a
 /// rule a `@stream` entry reaches, where a choice around the rule can still
 /// be tried after the action ran. An alternative of the rule itself after
@@ -1112,7 +1112,7 @@ fn grammar_emits_undone(world: ref CheckWorld, gram: ref GrammarDef, streamed: r
         let mut seen: collections::BTreeSet[String] = collections::BTreeSet()
         let undone = grammar_undone_from(world, gram, name, false, streamed, seen) ?? continue
         for at in emits {
-            let notes: Vec[String] = [f"The item goes to the caller's walk when the action runs (ADR-grammar-typed-read-v1 D7): if what follows the call of `{name}` fails, the parse goes back and tries {undone}, and the item is already handed over. The compiler does not hold items back to hide that."]
+            let notes: Vec[String] = [f"The item goes to the caller's walk when the action runs (ADR-grammar-typed-read-v2 D7): if what follows the call of `{name}` fails, the parse goes back and tries {undone}, and the item is already handed over. The compiler does not hold items back to hide that."]
             out.push(check_refusal("NK1370", at, f"This `emit` in rule `{name}` could be undone: {undone} can still be tried after it runs.", notes, "Commit before the call: a cut `=>` in front of it, or the choice made before it, so that the parse cannot go back past the `emit`."))
         }
     }
