@@ -605,7 +605,7 @@ fn check_function_grammar[H: CheckHost](mut state: CheckState, world: ref CheckW
             expected = host.type_of(one)
         }
         // **A rule's `String` both kinds flow into is either, per value**
-        // (ADR-282 D14, ADR-grammar-typed-read-v1 D5, #2496): an action's
+        // (ADR-282 D14, ADR-grammar-typed-read-v2 D5, #2496): an action's
         // view goes in as it is and text it decoded as its own, as into a
         // function's result.
         let outer_either = state.flow.expected_either

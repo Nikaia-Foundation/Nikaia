@@ -1,5 +1,5 @@
 // A typed read keeps a string without escapes as a view of the input, and
-// decodes one with escapes into text of its own (ADR-grammar-typed-read-v1
+// decodes one with escapes into text of its own (ADR-grammar-typed-read-v2
 // D5, Part II 10.6, #2496): the value rule's `Text` arm hands back either, so
 // each `String` field of the struct takes either, per value. The action that
 // hands back the view drew NK1104 before (*builds a view of a `String`, but

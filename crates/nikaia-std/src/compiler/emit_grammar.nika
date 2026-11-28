@@ -813,7 +813,7 @@ impl EmitState {
                         }
                     } else {
                         // **A rule's `String` both kinds flow into is
-                        // `EitherText`** (ADR-282 D14, ADR-grammar-typed-read-v1
+                        // `EitherText`** (ADR-282 D14, ADR-grammar-typed-read-v2
                         // D5, #2496): what each action hands back goes in as
                         // the view or the text of its own it is.
                         let either = rule.ret_type?.either ?? false
@@ -1228,7 +1228,7 @@ impl EmitState {
     /// rule read.
     fn member_into[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, host: ref H, ty: ref Type, value: ref String, from_either: bool) -> String sync throws {
         // **A field both kinds flow into takes either, per value** (ADR-282
-        // D14, ADR-grammar-typed-read-v1 D5, #2496): a view of the input
+        // D14, ADR-grammar-typed-read-v2 D5, #2496): a view of the input
         // goes in as it is, text an escape decoded as text of its own.
         if ty.either && emit_text(world, ty.name) == "String" && ty.generics.len() == 0 {
             return f"::nikaia_std::either_text::either({value})"

@@ -1,5 +1,5 @@
 // A grammar entry's input made in the call is kept beside the call (Part II
-// 10.6, ADR-283 D24, #2496): the result views it, so a `Bytes(…)` or an
+// 10.6, ADR-tether-v1 D24, #2496): the result views it, so a `Bytes(…)` or an
 // `f"…"` handed straight to the entry lives as long as the result does. The
 // lowered call borrowed a temporary before, and rustc refused it (NK1343,
 // *temporary value dropped while borrowed*).
