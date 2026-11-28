@@ -137,6 +137,16 @@ A stream fails at run time only for its input: a read that fails (the loop
 (ADR-yaml-1 D8). The pool does not run out (D3), a wait is a full channel's
 (D4), and an item fits a buffer (D6).
 
+### D10 — A stream's signature writes its items as views with no source named.
+
+(supervisor, 2026-11-28, #2870) A free function whose ledger entry says
+`iterates = "stream"` hands out views of its own pool: `io::lines` is
+`-> Seq[ref String] pauses throws`. The item is checked as an item of
+`text.lines()` is, with the stream's pool as its source; assigned to a place
+that holds a `String`, it is a counted keep (D2, D5). `.collect()` stays
+`NK2308`, `.cloned()` is the copy. Outside such an entry, `ref String` with no
+source stays refused. No new syntax: this is D1 applied to the signature.
+
 **Rejected:** a copy on the stream path (#2735's owned form: superseded);
 keeping every buffer a view points into (unbounded); waiting when the pool is
 full (a program that holds views and waits for the next item hangs); a pool

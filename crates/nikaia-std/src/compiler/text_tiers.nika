@@ -3182,7 +3182,11 @@ fn tier_statement(stmt: ref Stmt, at: i64, ask: ref TierAsk, mut walk: TierWalk)
             }
         }
         Stmt::For { bindings, iter, body, .. } => {
-            let kinds = tier_expr(iter, ask, walk)
+            let mut kinds = tier_expr(iter, ask, walk)
+            let streamed = a_stream_read(iter, ask)
+            if streamed {
+                kinds = view_kinds()
+            }
             let from = element_word(iter, ask, walk)
             let mut walked: String? = null
             if bindings.len() == 1 {
@@ -3203,7 +3207,9 @@ fn tier_statement(stmt: ref Stmt, at: i64, ask: ref TierAsk, mut walk: TierWalk)
                     local.from = from?.clone()
                     local.of = walked?.clone()
                     local.inner = walked_list(iter, ask, walk)
-                    local.unkept = (only_own_text(kinds) && !rooted_in_a_parameter(iter, ask, walk)) || views_a_temporary(iter, ask, walk)
+                    // A line of a stream is kept by its buffer's count, not
+                    // copied as a temporary's view is (D10).
+                    local.unkept = !streamed && ((only_own_text(kinds) && !rooted_in_a_parameter(iter, ask, walk)) || views_a_temporary(iter, ask, walk))
                     local.walked = a_walked_place(iter) && (walk.local_walks || rooted_in_a_parameter(iter, ask, walk))
                     local.lent_walk = lent_walked_list(iter, ask, walk)
                 }
@@ -7437,6 +7443,21 @@ fn std_result(callee: ref String, ask: ref TierAsk) -> Kinds {
         return view_kinds()
     }
     return owned_kinds()
+}
+
+/// **A `for` over a stream's call binds views of its pool**
+/// (ADR-stream-buffers-v1 D10): `io::lines() -> Seq[ref String]`, as a `for`
+/// over `lines()` of a text does, so a declared `String` a line is assigned
+/// to holds a view. A method called on the call walks it the general way,
+/// which hands out text of its own (`std_result`).
+fn a_stream_read(iter: ref Expr, ask: ref TierAsk) -> bool {
+    let func = match iter {
+        Expr::Call { func, .. } => func,
+        else => return false,
+    }
+    let callee = tier_callee(func, ask) ?? return false
+    let contract = ask.library.functions[callee] ?? return false
+    return contract.streams
 }
 
 /// Walk every function of the program once against the tiers found so far.
