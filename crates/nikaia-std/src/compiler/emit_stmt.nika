@@ -832,7 +832,9 @@ impl EmitState {
             // first, and every view in it is found again in the keep over a
             // lifetime the `Holding` alone decides.
             let wrapper = self.emit_core_tether_wrapper(world, walk, host.crossings_are_possible(), host.overlaps_user_code(), held ?? return)
-            out.push(f"let {mut_word}{local} = {{ let __packed = ")
+            // **Its type is the wrapper's** (#2840): an empty list has no
+            // element of its own to tell it.
+            out.push(f"let {mut_word}{local} = {{ let __packed: <{wrapper} as nikaia_std::tether::Views>::Of<'_> = ")
             self.emit_expr(world, walk, out, host, value, depth, flow, inner)
             out.push(f"; nikaia_std::tether::Holding::<{wrapper}, 1>::new([std::sync::Arc::clone(&__keep_task)], move |keeps| nikaia_std::tether::Rebase::rebase(__packed, &keeps)) }};")
             return

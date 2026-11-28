@@ -602,7 +602,7 @@ impl EmitState {
             let held = emit_tethered_type(world, ty, value);
             if held.is_none() { return Err(nikaia_std::error::throwing(EmitRefused { message: format!("`{}` is passed to a task and keeps data alive, so it needs its type written out: `let {}: … = …`.", bound, bound), at: Some(at) }, &"emit_stmt_let")); }
             let wrapper = self.emit_core_tether_wrapper(world, walk, host.crossings_are_possible(), host.overlaps_user_code(), &match held { Some(__nikaia_value) => __nikaia_value, None => return Ok(()) });
-            out.push(&format!("let {}{} = {{ let __packed = ", mut_word, local));
+            out.push(&format!("let {}{} = {{ let __packed: <{} as nikaia_std::tether::Views>::Of<'_> = ", mut_word, local, wrapper));
             self.emit_expr(world, walk, out, host, value, depth, flow, &inner)?;
             out.push(&format!("; nikaia_std::tether::Holding::<{}, 1>::new([std::sync::Arc::clone(&__keep_task)], move |keeps| nikaia_std::tether::Rebase::rebase(__packed, &keeps)) }};", wrapper));
             return Ok(());
