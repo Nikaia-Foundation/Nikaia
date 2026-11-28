@@ -1,5 +1,5 @@
 // A struct that carries views, lent for a moment, whose views are pushed into
-// a `mut` list parameter that outlives it (ADR-283 D27, #1548): what the list
+// a `mut` list parameter that outlives it (ADR-tether-v1 D27, #1548): what the list
 // keeps points into what the struct views, not into the struct.
 struct Word { text: String, at: i64 }
 struct Use { text: String, at: i64 }

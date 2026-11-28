@@ -44,7 +44,7 @@ use crate::io::IoError;
 ///
 /// A `Vec[u8]` and not a `Bytes`: this one grows, and what makes a `Bytes` cheap
 /// to hand on is that it does not
-/// ([ADR-283](../../../docs/specification/adr/adr-283.md) D20). A caller reads a
+/// ([ADR-tether-v1](../../../docs/specification/adr/adr-tether-v1.md) D20). A caller reads a
 /// chunk, `take`s it, and asks again.
 #[derive(Debug, Default)]
 pub struct Buffer {

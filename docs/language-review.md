@@ -80,7 +80,7 @@ point 3 is the former `open-decisions.md`'s entry on one text type.
    is one where the ledger says the callee keeps the value, and the diff
    narration of 13.5 already handles a contract that changes. Keep `&` in the
    *type grammar* only where a struct stores a view (that is where the buffer
-   is named, and ADR-283 D1 needs it).
+   is named, and ADR-tether-v1 D1 needs it).
 2. `for x in xs` lends by default. Consuming iteration is spelled
    (`for x in xs.drain()` or `take xs`), because it is the rare case and it is
    the one that removes a name from scope.

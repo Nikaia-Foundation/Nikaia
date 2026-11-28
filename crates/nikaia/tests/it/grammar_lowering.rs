@@ -129,7 +129,7 @@ fn a_frame_becomes_the_backend_attribute() {
 #[test]
 fn a_view_takes_the_input_lifetime_and_the_struct_with_it() {
     let emitted = emit(FIXTURE, Build::default());
-    // ADR-283: `&str` is a view marker. The lifetime is the emitter's, never
+    // ADR-tether-v1: `&str` is a view marker. The lifetime is the emitter's, never
     // the source's - and a struct that holds one is tied to the input too.
     assert!(emitted.contains("rule NAME -> &'a str ="), "{emitted}");
     assert!(
@@ -370,7 +370,7 @@ fn a_tuple_is_a_type_a_value_and_a_field_access() {
 
 /// A tuple in a struct field carries the input lifetime the same way a bare
 /// view does - the analysis walks the parts because they sit where arguments
-/// sit (ADR-283, and `a_view_takes_the_input_lifetime_and_the_struct_with_it`).
+/// sit (ADR-tether-v1, and `a_view_takes_the_input_lifetime_and_the_struct_with_it`).
 #[test]
 fn a_tuple_of_views_ties_its_struct_to_the_input() {
     let source = concat!(
@@ -445,7 +445,7 @@ fn an_enum_lowers_its_three_variant_shapes() {
 }
 
 /// An enum holds views the same way a struct does, so it takes the input
-/// lifetime the same way (ADR-283, and `borrowing_structs`).
+/// lifetime the same way (ADR-tether-v1, and `borrowing_structs`).
 #[test]
 fn an_enum_that_carries_a_view_takes_the_input_lifetime() {
     let source = "enum Token {\n    End,\n    Word(ref String),\n}\n";

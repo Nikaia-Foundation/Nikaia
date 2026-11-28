@@ -264,7 +264,7 @@ impl EmitState {
         for at in 0..walk.wrappers.len() as i64 { if found < 0 && (*unsafe { nikaia_std::proven::read(&walk.wrappers, (at) as usize) }).contains(AsRef::<str>::as_ref(&needle)) { found = at; } }
         if found >= 0 { return format!("__Tethered{}", found); }
         let n = walk.wrappers.len() as i64;
-        let text = format!("/// A value that carries the keep its views point into (ADR-283 D11), as a `Holding` over it.\n#[allow(non_camel_case_types)]\nenum __Tethered{} {{}}\n\nimpl nikaia_std::tether::Views for __Tethered{} {{\n    type Of<'a> = {};\n    fn shorten<'long: 's, 's>(x: &'s {}) -> &'s {} {{\n        x\n    }}\n}}\n", n, n, any, long, shortened);
+        let text = format!("/// A value that carries the keep its views point into (ADR-tether-v1 D11), as a `Holding` over it.\n#[allow(non_camel_case_types)]\nenum __Tethered{} {{}}\n\nimpl nikaia_std::tether::Views for __Tethered{} {{\n    type Of<'a> = {};\n    fn shorten<'long: 's, 's>(x: &'s {}) -> &'s {} {{\n        x\n    }}\n}}\n", n, n, any, long, shortened);
         walk.wrappers.push(text);
         format!("__Tethered{}", n)
     }

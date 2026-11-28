@@ -1,5 +1,5 @@
 // A piece of a lent text pushed into a field of `self` or into a `mut`
-// parameter is a view stored in the caller's place (ADR-283 D27, #1344): the
+// parameter is a view stored in the caller's place (ADR-tether-v1 D27, #1344): the
 // method takes the text at the impl's lifetime, the function at its own, and
 // the part of a cut (`parts.0`) views what the cut views.
 

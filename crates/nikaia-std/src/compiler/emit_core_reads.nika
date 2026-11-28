@@ -727,7 +727,7 @@ impl EmitState {
             out.push(")")
         }
         out.push(")")
-        // **A held struct is read through its handle** (ADR-283 D4): what the
+        // **A held struct is read through its handle** (ADR-tether-v1 D4): what the
         // brackets answer is then the struct, over no longer than the read,
         // exactly as for a list of plain structs.
         if self.reads_through_handle(world, walk, scope.function, base) {

@@ -221,7 +221,7 @@ pub struct TierAsk {
 /// bare names: such a function is published to the files beside
 /// (`tier_beside_calls`), so its items stay `String`, and an element of the
 /// list a caller in another file binds is handed back as a view of it, the
-/// list moving into the caller's keep (ADR-283 D23), as within one file.
+/// list moving into the caller's keep (ADR-tether-v1 D23), as within one file.
 pub fn tier_beside_lists(files: ref Vec[ParsedView]) -> collections::BTreeSet[String] {
     let mut out: collections::BTreeSet[String] = collections::BTreeSet()
     // A method by `.name`, kept where it is the only one of that name and
@@ -3932,7 +3932,7 @@ fn tie_leaves(value: ref Expr, depth: i64, into: String?, back: bool, ask: ref T
         return
     }
     // **A value viewing what the body owns takes the caller's keep**
-    // (ADR-views-v4 D10, ADR-283 D23): a struct or an enum a callee built over a
+    // (ADR-views-v4 D10, ADR-tether-v1 D23): a struct or an enum a callee built over a
     // local's text, handed back, leaves the callee's parameter lent.
     for tie in ties {
         if tie.depth > depth && !(back && tie.depth == 0 && tie.through_text) && !(back && tie.depth > 0 && tie.through_value) {
@@ -4052,7 +4052,7 @@ fn list_place(base: ref Expr, ask: ref TierAsk, mut walk: TierWalk) -> Declaring
     }
 }
 
-/// **A list the body made, declared with its type** (#1275, ADR-283 D23): an
+/// **A list the body made, declared with its type** (#1275, ADR-tether-v1 D23): an
 /// element of it handed back is a view of a local, and the list moves into the
 /// caller's keep (`untethered_returns` in `buffers.nika`), as text does.
 fn made_list_local(name: ref String, walk: ref TierWalk) -> bool {
@@ -4156,7 +4156,7 @@ fn own_text_items_written(value: ref Expr) -> bool {
     return made
 }
 
-/// **An element of a list the body made, read whole** (#1368, ADR-283 D23):
+/// **An element of a list the body made, read whole** (#1368, ADR-tether-v1 D23):
 /// `xs[0]`, or a name a `let` bound to one (`element_of`).
 fn made_element(value: ref Expr, ask: ref TierAsk, mut walk: TierWalk) -> bool {
     return match value {
@@ -4215,7 +4215,7 @@ fn handed_kinds(value: ref Expr, kinds: ref Kinds, ask: ref TierAsk, mut walk: T
     }
     // **An element of a list the body made, handed back as the result** is
     // a view of the list, which moves into the caller's keep (#1368,
-    // ADR-283 D23): `return xs[0]`, a last value, or a name bound to it.
+    // ADR-tether-v1 D23): `return xs[0]`, a last value, or a name bound to it.
     if same_kinds(kinds, owned_kinds()) && result_plain_text(ask, walk) && made_element(value, ask, walk) {
         return view_kinds()
     }
@@ -6447,7 +6447,7 @@ fn tier_struct_field(owner: ref String, field: ref FieldInit, back: bool, ask: r
         }
     }
     // **An element read whole, handed back in a field** of the struct handed
-    // back, is a view of the list (#1275, ADR-282 D13, ADR-283 D23): of a
+    // back, is a view of the list (#1275, ADR-282 D13, ADR-tether-v1 D23): of a
     // `ref` parameter's list, or of a list the body made, which moves into
     // the caller's keep (`untethered_returns` in `buffers.nika`).
     // So is a name a `let` bound to such an element (#1368).

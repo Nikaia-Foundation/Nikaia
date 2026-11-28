@@ -71,7 +71,7 @@
 /// **The payload is owned text and not a view.**
 /// [ADR-023](../../../docs/specification/adr/adr-023.md) D10 says a path that
 /// came from a buffer should travel as a view; that is the tether
-/// ([ADR-283](../../../docs/specification/adr/adr-283.md)), which is not built,
+/// ([ADR-tether-v1](../../../docs/specification/adr/adr-tether-v1.md)), which is not built,
 /// and a lifetime on this type would reach every `std` signature. One
 /// allocation on a path that is already failing is the honest price until then.
 /// What an [`IoError`] from this module was about: a stream has no path, and

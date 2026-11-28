@@ -138,5 +138,65 @@ zerocopy = ["0.8.66"]
 zerocopy-derive = ["0.8.66"]
 zeroize = ["1.9.2"]
 
+[units."src/bits.nika"]
+source = "0d1640af5d5cb47e92cbbbf150edd3228d61769cfc836417c54ec2811381ab12"
+
+[units."src/channels.nika"]
+source = "9fa3d3413b9335b442ffecf30cdd037917ce2b822bfe2f8741ba7594af6f16cf"
+
+[units."src/counts.nika"]
+source = "c67621a35d9dbac08de49dbb1a1459db2f092aa0ded719e5bf46b8322f6c2a7e"
+
+[units."src/dsl_parameters.nika"]
+source = "4be70bd37c1a577a9f5435ad4cd5bd58e2fdc48ef573a2ee5e1675c25ab225f3"
+
+[units."src/errors_lowering.nika"]
+source = "214e410e51f04dd13199aded64fcd4c8e5e9cf449ff60389fb3b4036c33a0a05"
+
+[units."src/fixed_size_array.nika"]
+source = "9bd53410cb84b25d8c8d3da359eac0e8afc170c89c779cbc9979c67f6aa6365e"
+
+[units."src/function_types.nika"]
+source = "aac8bfd2c5844b8f401751b075b47c4cb631cc8609cc90cdd12999e0a04b6e5c"
+
+[units."src/joining.nika"]
+source = "d04b60afec02ac97d6f58b346499aa41a5f9fb689d61f6e6eafbe78ced07502d"
+
+[units."src/kept_functions.nika"]
+source = "430957313f5a64182a0c43cea6e0faad7ac1f493e72140e6bbbad8516bd56733"
+
+[units."src/lowering_costs.nika"]
+source = "150020b638281dd68179ef98221cbc9cefa596489e1d040ccfb833f0b9865e15"
+
 [units."src/main.nika"]
-source = "cf067cc21642911aa4b4f293f9eb4697249a715991b2bf9acab102fd024579db"
+source = "10022aeefa4b28b4294e0f2560a62b8d4bfdcfe6d90e25596628caf7ea937943"
+
+[units."src/mut_bindings.nika"]
+source = "000c43c8efac39687a9685951038456f7bbf6493d3197aec5ada06a5a924bd09"
+
+[units."src/parallel_walks.nika"]
+source = "9f0e14b96abb28d8f451fbd7b22c96cde86605f33fa0cfa6a6b14e715702ab81"
+
+[units."src/reader_shapes.nika"]
+source = "b33ffded05a66f3f1676e7674b939da6e78b4a0825d9f1f50f3017ab5d8a991b"
+
+[units."src/returns.nika"]
+source = "0a59a678d9e628fbe2564701dc7cf0ca2696dab6bee52cf9705cfceca6b4ea28"
+
+[units."src/shape_bounds.nika"]
+source = "7d5a08bf086d8499489872975260e4dffc1706cbdc7765330778a0340ab94f12"
+
+[units."src/stored_views.nika"]
+source = "3edf8008d0660a6f44ff267d33a1276f1e084d79a1e96af9dcedbd9740ac231f"
+
+[units."src/task_scope.nika"]
+source = "46f4edd62aeb926904d57769d2010f2a742e60eda18c9908dcdbfd5f2f8657dc"
+
+[units."src/traits.nika"]
+source = "d2350257778852175020396342110cd30053d4d64c04ad7f5435e5fd4b2143a4"
+
+[units."src/views_handed_back.nika"]
+source = "0d996638e1bd31f75b31179a069163157adea94657f29dd33a0950d5ed5db67e"
+
+[units."src/word_locks.nika"]
+source = "b74998e7ff1aa1cc70cb3a652e50309b1a212eae903b337e4ecd4a938a71c719"

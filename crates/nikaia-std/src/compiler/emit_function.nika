@@ -223,7 +223,7 @@ impl EmitState {
         return !c.sync_claim.is_sync()
     }
 
-    /// **A parameter lowered as a view** (ADR-283 D24): one the body changes,
+    /// **A parameter lowered as a view** (ADR-tether-v1 D24): one the body changes,
     /// or one it only reads. `at` counts the arguments, not the receiver.
     fn emit_fn_lowered_as_a_view(ref self, world: ref EmitWorld, key: ref String, receiver: i64, at: i64, arg: ref FnArg) -> bool {
         if self.carries_a_view(world, arg.ty) {
@@ -285,7 +285,7 @@ impl EmitState {
     }
 
     /// **What a `mut` place keeps is what the parameter's views point into,
-    /// not the parameter** (ADR-283 D27), as for a result (`source_nested`):
+    /// not the parameter** (ADR-tether-v1 D27), as for a result (`source_nested`):
     /// a struct that carries views, whose place holds another type with no
     /// view of a type, `out.push(Event { anchor: n.anchor, .. })`, is written
     /// `n: &Node<'a>` beside `out: &mut Vec<Event<'a>>`, so a caller lends a
@@ -402,7 +402,7 @@ impl EmitState {
                 }
 
                 // **A view of a parameter kept in another parameter's place**
-                // (ADR-283 D27): `v:s` in the ledger's `stores`. Only a place
+                // (ADR-tether-v1 D27): `v:s` in the ledger's `stores`. Only a place
                 // whose type is written with the lifetime.
                 let mut stores: Vec[EmitPair] = []
                 if emit_is_elided(lifetimes) {
@@ -457,7 +457,7 @@ impl EmitState {
                 }
 
                 // **A result points into one parameter, and the signature says
-                // which** (ADR-283 D25).
+                // which** (ADR-tether-v1 D25).
                 let mut result_is_a_view = false
                 match ret_type {
                     ty => {
@@ -945,7 +945,7 @@ impl EmitState {
                             returned = "NikaiaDsl"
                         } else {
                             // **A parameter lowered as a view counts too**
-                            // (ADR-283 D24): a view handed back through it
+                            // (ADR-tether-v1 D24): a view handed back through it
                             // borrows from the caller's argument. A view of
                             // static text (ADR-282 D29) borrows nothing, so
                             // the result is `'static` beside it (#1420).

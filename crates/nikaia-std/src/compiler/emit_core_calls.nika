@@ -1938,7 +1938,7 @@ impl EmitState {
         // The handles of the method the receiver's type resolves to, not of a
         // free function of the same name in another file (#1335).
         let takes = self.takes_a_handle(world, self.facts.method_callees[on_node]?.clone() ?? name.clone())
-        // **Views put into a keeper that drops entries are held** (ADR-283 D12),
+        // **Views put into a keeper that drops entries are held** (ADR-tether-v1 D12),
         // each value with a handle on every buffer it points into - as many as the
         // keeper's widest value needs, so that every element is one type (D15).
         self.emit_call_hold(world, walk, host, receiver, scope, flow)
@@ -1947,6 +1947,7 @@ impl EmitState {
         self.emit_core_args(world, walk, out, host, name, args, takes, depth, flow, scope)
         out.push(through_suffix)
         walk.hold_args = null
+        walk.hold_places = null
         // **And a method that takes a keep is given one** (D2).
         let keeping = keeping_method_key(self.own_contracts, self.own_methods, emit_call_owner(scope.function), emit_call_on_self(world, receiver), name)
         if keeping != null {
@@ -1997,7 +1998,7 @@ impl EmitState {
             out.push(f".collect::<{self.rust_result()}<Vec<_>, _>>()")
         }
         // **What hands back an element of a held list reads it through its
-        // handle** (ADR-283 D17), as the brackets and a `for` do.
+        // handle** (ADR-tether-v1 D17), as the brackets and a `for` do.
         if (name == "iter" || name == "first" || name == "last" || name == "get") && receiver != null {
             let on = receiver ?? return
             if self.reads_through_handle(world, walk, scope.function, on) {
@@ -2129,13 +2130,15 @@ impl EmitState {
     }
 
     /// The buffers whose keeps hold the values put by this method call, by
-    /// argument, into `walk` (ADR-283 D12, D15).
+    /// argument, into `walk` (ADR-tether-v1 D12, D15).
     fn emit_call_hold[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, host: ref H, receiver: ref Expr?, scope: ref EmitScope, flow: EmitFlow) sync {
         walk.hold_args = null
+        walk.hold_places = null
         let on = receiver ?? return
         let root = root_of(world.words, on) ?? return
         let plan = self.keep_plans.get(scope.function) ?? self.keep_plans.get(walk.keep_function) ?? return
         let holds = plan.holds.get((flow.statement, root.clone())) ?? return
+        walk.hold_places = plan.places.get((flow.statement, root.clone()))?.clone()
         // Each argument's buffers, padded to the keeper's widest value.
         let width = plan.widths.get(root) ?? 1
         let mut by_arg: collections::BTreeMap[i64, Vec[i64]] = collections::BTreeMap()
@@ -2150,10 +2153,64 @@ impl EmitState {
         walk.hold_args = by_arg
     }
 
+    /// **A call that changes a binding packed for a task writes it through its
+    /// handle** (ADR-tether-v1 D11, #2839): the arguments first, then a closure
+    /// handed the value and the task's keeps, where each view given is found
+    /// again, or copied into them, before the call keeps it. False where the
+    /// call is no such one.
+    fn emit_core_packed_call[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, node: ref Expr, receiver: ref Expr, args: ref Vec[Expr], depth: i64, flow: EmitFlow, scope: ref EmitScope) -> bool sync throws {
+        let on = node_key(receiver)
+        if walk.held.contains_key(on) || !self.facts.mut_receivers.contains(on) {
+            return false
+        }
+        let symbol = match receiver {
+            Expr::Variable(name, _) => name.clone(),
+            else => return false,
+        }
+        let bound = emit_text(world, symbol)
+        let key = self.keep_plan_key(walk, scope.function) ?? return false
+        let plan = self.keep_plans.get(key) ?? return false
+        if !plan.tethered.contains_key(bound) {
+            return false
+        }
+        out.push("{ ")
+        for i in 0..<args.len() {
+            out.push(f"let __nikaia_given_{i} = ")
+            self.emit_expr(world, walk, out, host, args[i], depth, flow, scope)
+            out.push("; ")
+        }
+        let keeps = if args.len() == 0 { "_" } else { "keeps" }
+        out.push(f"{self.emit_expr_read_name(world, symbol, receiver)}.with_mut(|held, {keeps}| ")
+        walk.held.insert(on, "held")
+        // **Each view given is checked against the buffer the plan names**
+        // (ADR-tether-v1 D15, #2842): one comparison, no search among the
+        // task's buffers - which made a list of views quadratic.
+        let places = plan.places.get((flow.statement, bound.clone()))
+        for i in 0..<args.len() {
+            let named = places?.get(i)
+            let mut given = f"nikaia_std::tether::Rebase::rebase(__nikaia_given_{i}, &keeps)"
+            if named != null {
+                let (buffer, sure) = named ?? (0, false)
+                given = if sure { f"keeps.view_in(0, __place_{buffer}, __nikaia_given_{i})" } else { f"nikaia_std::tether::Rebase::rebase_near(__nikaia_given_{i}, &keeps, __place_{buffer})" }
+            }
+            walk.held.insert(node_key(args[i]), given)
+        }
+        self.emit_expr(world, walk, out, host, node, depth, flow, scope)
+        walk.held.remove(on)
+        for each in args {
+            walk.held.remove(node_key(each))
+        }
+        out.push(") }")
+        return true
+    }
+
     /// The `MethodCall` arm of `expr_as_written` (and the `?.` that is a plain
     /// call, ADR-279 D13): the forms that are not the call itself, then the call.
     fn emit_core_method_arm[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, node: ref Expr, receiver: ref Expr, method: winnow_grammar::Symbol, args: ref Vec[Expr], config: ref Vec[ConfigArg], depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
         let name = emit_text(world, method)
+        if self.emit_core_packed_call(world, walk, out, host, node, receiver, args, depth, flow, scope) {
+            return
+        }
         // **`s.find(needle; from:)` on text is `std`'s search** (ADR-374 D2): the
         // language below's `str::find` takes one argument and answers a `usize`.
         // **`a.compare(b)` and `a.eq(b)` are the standard library's** (ADR-341 D2):

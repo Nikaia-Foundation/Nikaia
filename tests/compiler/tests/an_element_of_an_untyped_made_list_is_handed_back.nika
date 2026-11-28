@@ -1,5 +1,5 @@
 // An element of a list literal of text the function made without a type,
-// handed back: the list takes `Vec[String]` from its items (#1368, ADR-283
+// handed back: the list takes `Vec[String]` from its items (#1368, ADR-tether-v1
 // D23).
 struct Word {
 	name: String,

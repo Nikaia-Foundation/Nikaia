@@ -1,6 +1,6 @@
 // An element of a list the function made, handed back bare: the list
 // moves into the caller's keep and the element is a view of it (#1368,
-// ADR-283 D23).
+// ADR-tether-v1 D23).
 fn bare(a: String) -> String {
 	let xs: Vec[String] = [a + " bare"]
 	return xs[0]

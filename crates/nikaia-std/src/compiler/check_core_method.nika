@@ -38,7 +38,7 @@ fn check_core_method_str_view(ty: ref Ty) -> bool {
 }
 
 /// Whether a type is a plain `String`.
-/// `Bytes`, the language's run of bytes (ADR-283 D19).
+/// `Bytes`, the language's run of bytes (ADR-tether-v1 D19).
 fn check_core_method_bytes(ty: ref Ty) -> bool {
     return match ty {
         Ty::Named { name, args, .. } => name == "Bytes" && args.len() == 0,

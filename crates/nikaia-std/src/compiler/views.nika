@@ -22,7 +22,7 @@
 // is never a destination, because deciding one needs to know which buffer each
 // local views.
 //
-// **A destination that already names the buffer** (ADR-283 D1): where the
+// **A destination that already names the buffer** (ADR-tether-v1 D1): where the
 // destination is a field of the subject, or of a struct built inside an `impl`
 // whose target holds a view, the parameter is written as a view of that buffer
 // rather than refused - `Stored.carried`, which the emitter reads. The refusal
@@ -247,7 +247,7 @@ struct Here {
     // Local `Vec`s that are handed back whole and otherwise only pushed to,
     // measured, indexed or walked (#1000).
     backs: collections::BTreeSet[String],
-    // The `mut` parameters whose type may hold a view: the places of ADR-283
+    // The `mut` parameters whose type may hold a view: the places of ADR-tether-v1
     // D27. A literal pushed into one is stored in the caller's place, which
     // `places_stored_in` follows and the lowering gives the parameter's
     // lifetime, so it is no field destination here. Empty when the result
@@ -267,7 +267,7 @@ enum Root {
 
 /// Every naked view parameter in this unit whose view is stored, in source
 /// order. `own_buffer` says whether a `let`'s value is a buffer of its own
-/// (ADR-283) - the compiler's `tether` answers it.
+/// (ADR-tether-v1) - the compiler's `tether` answers it.
 pub fn views_stored(asked: ref Asked, items: ref Vec[Spanned[Item]], own_buffer: fn(ref Expr) -> bool sync) -> Vec[Stored] {
     return views_stored_in(asked, result_package(asked), items, own_buffer)
 }
@@ -855,7 +855,7 @@ fn walk_block(unit: ref Unit, asked: ref Asked, block: ref Block, tail: bool, ow
         match block.stmts[i].node {
             // **Every name**, because a view carried into a tuple reaches each
             // part of it (ADR-291). **A buffer of its own carries no view of
-            // the parameter** (ADR-283).
+            // the parameter** (ADR-tether-v1).
             Stmt::Let { names, value, .. } => {
                 if mentions(unit, asked, here, value) && !own_buffer(value) {
                     for name in names {
@@ -896,7 +896,7 @@ fn walk_block(unit: ref Unit, asked: ref Asked, block: ref Block, tail: bool, ow
             }
             Stmt::Assign { target, value, .. } => {
                 // **A literal set as an element of a `mut` parameter's place**
-                // (ADR-283 D27, ADR-views-v4 D32, #2425): `out[0] = E { v: s }`
+                // (ADR-tether-v1 D27, ADR-views-v4 D32, #2425): `out[0] = E { v: s }`
                 // points into the caller's argument, as one pushed there does.
                 if a_literal_set_into_a_place(asked, here, target, value) {
                     stores(unit, asked, target, span, own_buffer, here)
@@ -1380,7 +1380,7 @@ fn stores(unit: ref Unit, asked: ref Asked, expr: ref Expr, span: ref Span, own_
                 }
                 return
             }
-            // **A literal pushed into a `mut` parameter's place** (ADR-283
+            // **A literal pushed into a `mut` parameter's place** (ADR-tether-v1
             // D27) points into the caller's argument, as a bare view pushed
             // there does: no field destination, what stands inside it is
             // still asked.
@@ -2056,7 +2056,7 @@ pub fn carrying(stored: ref Vec[Stored]) -> Vec[(u32, winnow_grammar::Symbol)] {
 }
 
 // ===========================================================================
-// ADR-283 D25 and D26 (#580): which parameter a result points into.
+// ADR-tether-v1 D25 and D26 (#580): which parameter a result points into.
 //
 // Every way out of a body (a `return`, the last expression) is followed back to
 // the parameters whose views reach it: through a field, an index, a `let`, a
@@ -2100,7 +2100,7 @@ struct ResultSrcFlow {
     // The type of a local a `let` bound to a struct literal (#1094): what a
     // method called on it is, where no type was written.
     built: collections::BTreeMap[String, Type],
-    // The `mut` parameters whose place a view may be kept in (ADR-283 D27),
+    // The `mut` parameters whose place a view may be kept in (ADR-tether-v1 D27),
     // and what is kept there. Empty outside `places_stored`.
     places: collections::BTreeSet[String],
     stores: collections::BTreeMap[String, collections::BTreeSet[String]],
@@ -2752,7 +2752,7 @@ fn rsrc_block(unit: ref Unit, asked: ref Asked, here: ref Here, known: ref colle
         flow.at = Span { start: block.stmts[i].span.start, end: block.stmts[i].span.end }
         let last = i + 1 == count
         match block.stmts[i].node {
-            // **A buffer of its own carries no view of a parameter** (ADR-283).
+            // **A buffer of its own carries no view of a parameter** (ADR-tether-v1).
             Stmt::Let { names, value, ty, .. } => {
                 let reach = rsrc_eval(unit, asked, here, known, own_buffer, value, flow)
                 for name in names {
@@ -2953,7 +2953,7 @@ fn rsrc_unless(owned: bool, reach: ref collections::BTreeSet[String]) -> collect
     return reach.clone()
 }
 
-// **A view kept in a parameter's place** (ADR-283 D27): `v.push(w)`,
+// **A view kept in a parameter's place** (ADR-tether-v1 D27): `v.push(w)`,
 // `v[i] = w` and `p.f = w`, with `mut v` and `mut p` parameters, keep what
 // `w` reaches in the caller's value.
 fn rsrc_store(asked: ref Asked, place: ref Expr, reach: ref collections::BTreeSet[String], mut flow: ResultSrcFlow) {
@@ -3056,7 +3056,7 @@ fn rsrc_call(unit: ref Unit, asked: ref Asked, here: ref Here, known: ref collec
             }
         }
         // **A callee that keeps an argument in another's place keeps it in
-        // this function's place given there** (ADR-283 D27, #740):
+        // this function's place given there** (ADR-tether-v1 D27, #740):
         // `fill(a, into)` inside `fill2(a, mut into)` keeps `a` in the
         // caller's `into`, as a push would. Its `stores` are the round
         // before's, so a chain settles one call further each round.
@@ -3237,7 +3237,7 @@ fn rsrc_ty_names(ty: ref Ty, mut out: Vec[String]) {
 
 // Whether a parameter is a view the result may point into: the receiver (named
 // by the caller), a written view, a type that holds one, or a plain parameter
-// the body only reads (ADR-283 D24).
+// the body only reads (ADR-tether-v1 D24).
 fn rsrc_a_source(unit: ref Unit, asked: ref Asked, arg: ref FnArg, contract: ref FnContract?, at: i64) -> bool {
     if arg.ty.code != null {
         return false
@@ -3701,7 +3701,7 @@ pub fn result_sources_inferred_in(asked: ref Asked, package: ref ResultPackage, 
     return out
 }
 
-/// What each function keeps in a `mut` parameter's place (ADR-283 D27), by
+/// What each function keeps in a `mut` parameter's place (ADR-tether-v1 D27), by
 /// ledger key: `v:s` where a view of the text parameter `s`, lent, or of a
 /// parameter written as a view, reaches what the body pushes, inserts or
 /// assigns into `v`.
@@ -3757,7 +3757,7 @@ fn places_of(unit: ref Unit, asked: ref Asked, subject: ref Type?, at: ref Span,
                 position = 1
                 // **A changed subject is a place too** (#1344): a piece of a
                 // lent text pushed into `self.items` outlives the call as
-                // one pushed into a `mut` parameter does (ADR-283 D27).
+                // one pushed into a `mut` parameter does (ADR-tether-v1 D27).
                 let taken = receiver ?? return
                 let ty = subject ?? return
                 if taken.is_mut && !taken.is_keep && rsrc_type_holds_view(asked, ty) {

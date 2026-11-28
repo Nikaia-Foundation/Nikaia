@@ -224,7 +224,7 @@ is left is 3 and 4, and neither is a performance question.
    the choice and what decided it.
 
    What the analysis is, so a later one is not mistaken for it: **one buffer**,
-   because ADR-283 gives a compilation unit one input lifetime. The join over a
+   because ADR-tether-v1 gives a compilation unit one input lifetime. The join over a
    program's sources is not a coarsening of a per-buffer analysis — it is the
    per-buffer analysis, for the one buffer this representation can express.
    `std` has no untrusted source yet; `http`, `net` and `db` arrive with the

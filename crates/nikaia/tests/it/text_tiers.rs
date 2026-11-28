@@ -5,7 +5,7 @@
 //! | what flows in | below |
 //! | :--- | :--- |
 //! | text of its own only | `String`, unchanged |
-//! | views (and literals) only | a view, its buffer placed by ADR-283 |
+//! | views (and literals) only | a view, its buffer placed by ADR-tether-v1 |
 //! | both | `EitherText`: each value borrowed or owned where it is put in |
 //!
 //! Not one of these programs writes `ref`, `.clone()` or anything about
@@ -155,7 +155,7 @@ fn a_view_kept_where_a_string_is_declared_is_a_view() {
     let rust = lowered(WALL, Build::default());
     // `Person.name` only ever receives views: it is one, and costs nothing.
     assert!(rust.contains("struct Person<'a>"), "{rust}");
-    // The slice of the file: the buffer lives in the caller's keep (ADR-283).
+    // The slice of the file: the buffer lives in the caller's keep (ADR-tether-v1).
     assert!(
         rust.contains("__keep: &'k nikaia_std::tether::Keep"),
         "{rust}"
@@ -1316,7 +1316,7 @@ fn main() throws {
 }
 
 /// **An argument made in the call lives as long as the struct of views handed
-/// back** ([ADR-283](../../../docs/specification/adr/adr-283.md) D24, #678): a
+/// back** ([ADR-tether-v1](../../../docs/specification/adr/adr-tether-v1.md) D24, #678): a
 /// `let` bound to `tag(f"own{1}")` keeps the text beside the call, as one
 /// bound to a view result does. `rustc` refused it before (E0716).
 #[test]

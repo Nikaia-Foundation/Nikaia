@@ -22,14 +22,14 @@ use shared_bytes::Shared;
 pub use crate::byteset::{Blocks, ByteSet, Few, FindAll, Needle, Scan, Searched, Split, split};
 
 /// A run of bytes that several holders may share
-/// ([ADR-283](../../../docs/specification/adr/adr-283.md) D20, ADR-373 D1):
+/// ([ADR-tether-v1](../../../docs/specification/adr/adr-tether-v1.md) D20, ADR-373 D1):
 /// equal, ordered and hashed by content, whoever owns it.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct Bytes {
     buffer: Shared,
 }
 
-/// Bytes are a buffer a view of text may be cut from (ADR-283 D15).
+/// Bytes are a buffer a view of text may be cut from (ADR-tether-v1 D15).
 impl crate::tether::Viewed for Bytes {
     fn bytes(&self) -> &[u8] {
         self.buffer.as_slice()
@@ -271,7 +271,7 @@ fn word<const N: usize>(bytes: &[u8], at: i64) -> [u8; N] {
 }
 
 /// **A copy of bytes is a `Bytes` of its own** (ADR-320 D11): `clone()` on a
-/// `Bytes` shares its buffer (ADR-283 D20), and on a `&[u8]` - a read-only
+/// `Bytes` shares its buffer (ADR-tether-v1 D20), and on a `&[u8]` - a read-only
 /// `Bytes` parameter, a text's own bytes - copies the run into one.
 pub trait ByteCopy {
     /// A `Bytes` of its own with these bytes.

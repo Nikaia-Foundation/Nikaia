@@ -203,7 +203,7 @@ impl EmitState {
                 }
             }
             // One lifetime for the whole sum, and it is the members' own
-            // (ADR-283 D1).
+            // (ADR-tether-v1 D1).
             let mut decl: String = ""
             let mut params: String = ""
             if borrows {
@@ -407,7 +407,7 @@ impl EmitState {
             // **A narrower sum widens into this one** (Part I 7.1): a call
             // whose callee fails in some of this sum's members, two or more,
             // hands its failure on with `?`, member for member. Neither may
-            // carry a view (one lifetime per sum, ADR-283 D1).
+            // carry a view (one lifetime per sum, ADR-tether-v1 D1).
             if !borrows {
                 for (narrower, small) in self.sums {
                     if narrower.len() >= members.len() || (self.is_std && !self.sums_written.contains(small)) {

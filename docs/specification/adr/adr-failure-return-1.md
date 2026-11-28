@@ -10,7 +10,7 @@ backend
 (answered here), §4 (the literal carry flag; reopened for one backend);
 [ADR-280](adr-280.md) D24, D25 (the one-word tail whose non-zero word this
 uses), §6 (in-value versus out-of-band status; answered here);
-[ADR-283](adr-283.md) (views, the two-word return this cares about);
+[ADR-tether-v1](adr-tether-v1.md) (views, the two-word return this cares about);
 [ADR-004](adr-004.md) (the Rust backend);
 issue [#1235](https://github.com/Nikaia-Foundation/Nikaia/issues/1235) (our own
 optimiser, Cranelift, copy-and-patch);

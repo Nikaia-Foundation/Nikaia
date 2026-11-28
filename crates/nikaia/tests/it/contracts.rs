@@ -554,7 +554,7 @@ fn starting_a_task_is_not_pure_computation() {
 }
 
 /// The borrow contract, in the spec's own spelling: a result that is a view
-/// points into the parameters the body hands back (ADR-283 D25), and the ledger
+/// points into the parameters the body hands back (ADR-tether-v1 D25), and the ledger
 /// writes those and no others.
 #[test]
 fn a_result_that_is_a_view_records_what_it_may_point_into() {
@@ -581,7 +581,7 @@ fn a_type_records_what_ties_it_to_the_input() {
     );
 
     // **`tethered` is the whole of it**, and the column that used to stand beside
-    // it is gone ([ADR-283](../../../docs/specification/adr/adr-283.md) D4):
+    // it is gone ([ADR-tether-v1](../../../docs/specification/adr/adr-tether-v1.md) D4):
     // `borrowed = true` recorded that a struct had written `@borrowed`, shipped
     // across a package boundary, and was read by nothing.
     assert_eq!(l.types["Hit"].tethered, ["path"]);

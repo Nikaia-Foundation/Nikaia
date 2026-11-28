@@ -16,7 +16,7 @@
 //!   and nothing about it changes;
 //! * **only views** (and literals, which are views of text that lives as long
 //!   as the program): it becomes `ref String`, exactly as if the program had
-//!   written that, and [ADR-283](../../../docs/specification/adr/adr-283.md)
+//!   written that, and [ADR-tether-v1](../../../docs/specification/adr/adr-tether-v1.md)
 //!   decides where each buffer lives - in the caller's frame for nothing, with
 //!   a handle only where no frame outlives it;
 //! * **both**: it becomes `ref String` marked [`crate::ast::Type::either`],

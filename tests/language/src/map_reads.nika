@@ -17,7 +17,7 @@ test "an absent key is a value" {
 
 // **A value that does not copy is reached as a view** (D4), which is what lets
 // a map of structs be read without an allocation the program did not write
-// (ADR-283 D3).
+// (ADR-tether-v1 D3).
 struct MapReadsStats { min: i64, max: i64 }
 
 test "a value that does not copy is a view" {

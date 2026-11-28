@@ -8,7 +8,7 @@ are written where, and what the compiler checks about it
 **Supersedes / Related:**
 [ADR-c-boundary-v1](adr-c-boundary-v1.md) D9 (an address C may keep is this record's pointer; D5 and D7 stay the forms to reach for), D3 (what `unsafe` holds), D4 (what is not said is fail-closed), D11 (`T?` over a non-null address is one word);
 [ADR-views-v4](adr-views-v4.md) D9, D11 (a change in place while a view lives, a value lent `mut` for a whole call);
-[ADR-283](adr-283.md) D23 (a buffer moves into the anchor of whatever holds its views);
+[ADR-tether-v1](adr-tether-v1.md) D23 (a buffer moves into the anchor of whatever holds its views);
 [ADR-037](adr-037.md) D7 (what is observable is written, what is not is inferred, safe as the floor);
 [ADR-raw-sinks-1](adr-raw-sinks-1.md) D4, D5 (a dependency's key holds only where the program repeats it);
 [ADR-218](adr-218.md) D1, D2 (every `unsafe` topic of the toolchain is a small Rust crate, checked under Miri);
@@ -129,7 +129,7 @@ place it is refused with `NK1138`, as a change through it would be.
 A move ends it whether the program wrote it (`Cursor { input: text }`, a `keep`
 parameter, a hand-over at a last use) or the compiler inserted it: a buffer
 moved into the anchor of whatever holds its views, at its creation or after its
-last change ([ADR-283](adr-283.md) D23, Part I 6.6). A change ends it where it
+last change ([ADR-tether-v1](adr-tether-v1.md) D23, Part I 6.6). A change ends it where it
 does not go through the pointer: an assignment to the place or a part of it, a
 method that changes it, a `mut` hand-over. So does the place's end. A use of
 the pointer after that is refused with `NK2306`: the message names the place,

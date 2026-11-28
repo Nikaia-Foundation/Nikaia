@@ -741,9 +741,16 @@ impl EmitState {
             let mut keeps: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
             for b in nikaia_std::index::or(buffers, || vec![].into()) { keeps.push(format!("std::sync::Arc::clone(&__keep_{})", b)); }
             let joined = nikaia_std::block::Text::from(keeps.join(", "));
-            out.push("{ use nikaia_std::tether::Hold as _; (");
+            let (before, after) = emit_held_around(&joined, match (match walk.hold_places.as_ref() {
+                Some(__nikaia_it) => __nikaia_it.get(&i),
+                None => None,
+            }) {
+                Some(__nikaia_it) => Some(__nikaia_it.clone()),
+                None => None,
+            });
+            out.push(&before);
             self.emit_expr(world, walk, out, host, arg, depth, inside, scope)?;
-            out.push(&format!(").hold([{}]) }}", joined));
+            out.push(&after);
             return Ok(());
         }
         let kept_arity = nikaia_std::index::or(self.facts.kept_args_run_async.get(&node), || -1);

@@ -175,7 +175,7 @@ impl CheckState {
     /// element is a type the value does not have. What came back was `rustc`'s
     /// *mismatched types*, with *consider using clone here* as the way out —
     /// an instruction to insert exactly the copy
-    /// [ADR-283](../../docs/specification/adr/adr-283.md) D3 says is written
+    /// [ADR-tether-v1](../../docs/specification/adr/adr-tether-v1.md) D3 says is written
     /// and never inserted, about a file nobody wrote
     /// ([Part III C.1](../../docs/specification/30-nikaia-tooling.md)).
     ///

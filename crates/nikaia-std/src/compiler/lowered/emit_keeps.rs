@@ -172,3 +172,9 @@ pub(crate) fn emit_tethered_call(world: &EmitWorld<'_, '_, '_, '_>, call: &Expr)
     None
 }
 
+pub(crate) fn emit_held_around(keeps: &str, place: Option<(i64, bool)>) -> (String, String) {
+    let named = match place { Some(__nikaia_value) => __nikaia_value, None => return (String::from("{ use nikaia_std::tether::Hold as _; ("), format!(").hold([{}]) }}", keeps)) };
+    if named.1 { return (format!("nikaia_std::tether::Held::in_place(std::sync::Arc::clone(&__keep_{}), __place_{}, ", named.0, named.0), String::from(")")); }
+    (String::from("{ use nikaia_std::tether::Hold as _; ("), format!(").hold_near([{}], __place_{}) }}", keeps, named.0))
+}
+

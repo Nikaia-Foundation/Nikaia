@@ -1,8 +1,8 @@
 //! Where a buffer lives once views of it outlive the scope that made it
-//! ([ADR-283](../../../docs/specification/adr/adr-283.md), Part I 6.6).
+//! ([ADR-tether-v1](../../../docs/specification/adr/adr-tether-v1.md), Part I 6.6).
 //!
 //! The crate `tether` (`crates/unsafe/tether`) holds it, with every `unsafe`
 //! it takes and the argument for each ([ADR-218](../../../docs/specification/adr/adr-218.md)).
 //! Generated code reaches it here, under the name it has always had.
 
-pub use ::tether::{Dangling, Held, Hold, Holding, Keep, Keeps, Rebase, Viewed, Views};
+pub use ::tether::{Dangling, Held, Hold, Holding, Keep, Keeps, Place, Rebase, Viewed, Views};

@@ -2835,7 +2835,7 @@ pub fn changed_lines(ledger: &str, committed: &str) -> Vec<String> {
 pub struct Explain {
     pub overlaps: bool,
     pub sharing: bool,
-    /// [ADR-283](../../docs/specification/adr/adr-283.md) D4's inverse tool:
+    /// [ADR-tether-v1](../../docs/specification/adr/adr-tether-v1.md) D4's inverse tool:
     /// inspection rather than assertion.
     pub tethers: bool,
     pub trust: bool,

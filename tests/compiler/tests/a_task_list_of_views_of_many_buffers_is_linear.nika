@@ -1,0 +1,29 @@
+fn make(i: i64) -> String {
+	let mut g = String()
+	for k in 0..<8 {
+		g.push_str(f"w{(i * 8 + k) % 50} ")
+	}
+	return g
+}
+
+fn count(words: Vec[String]) -> i64 {
+	let mut n = 0
+	for w in words {
+		n += w.len() as i64
+	}
+	return n
+}
+
+fn main() throws {
+	let mut words: Vec[String] = []
+	for i in 0..<20000 {
+		let text = make(i)
+		for w in text.split(" ") {
+			if w.len() > 0 {
+				words.push(w)
+			}
+		}
+	}
+	let n = async(detached) fn { count(words) }
+	println(f"{n.join()}")
+}

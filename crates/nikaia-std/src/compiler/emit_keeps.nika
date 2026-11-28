@@ -241,3 +241,16 @@ fn emit_tethered_call(world: ref EmitWorld, call: ref Expr) -> Type? {
     }
     return null
 }
+
+/// **What stands before and after a value held by `keeps`** (ADR-tether-v1
+/// D12, D15, #2842): where the plan names the one buffer it points into, the
+/// view is checked against that buffer's place - `Held::in_place` for plainly
+/// a view of it, where a miss is the compiler's fault, `hold_near` where it
+/// may be a literal; elsewhere it is found again among the keeps.
+fn emit_held_around(keeps: ref String, place: (i64, bool)?) -> (String, String) {
+    let named = place ?? return ("{ use nikaia_std::tether::Hold as _; (", f").hold([{keeps}]) }}")
+    if named.1 {
+        return (f"nikaia_std::tether::Held::in_place(std::sync::Arc::clone(&__keep_{named.0}), __place_{named.0}, ", ")")
+    }
+    return ("{ use nikaia_std::tether::Hold as _; (", f").hold_near([{keeps}], __place_{named.0}) }}")
+}
