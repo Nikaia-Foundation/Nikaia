@@ -491,6 +491,15 @@ fn function_key(mut entry: FnContract, name: ref String, key: ref String, value:
         entry.pieces = value == "true"
     } else if key == "interns" {
         entry.interns = value == "true"
+    } else if key == "iterates" {
+        // On a function, the sequence it hands back is a stream
+        // (ADR-stream-buffers-v1 D1); on a type, `iterates = "throws"` is
+        // ADR-loop-failure-v1 D6's.
+        let said = unquoted(value, n)
+        if said != "stream" {
+            throw Refused::Because(f"line {n}: `iterates` on a fn is `stream` and nothing else, not `{said}` - a sequence that reads no stream says nothing")
+        }
+        entry.streams = true
     } else if key == "consumers" {
         entry.consumers = entries(value, n)
     } else if key == "requires" {

@@ -1,0 +1,33 @@
+// `--tethers` names, per loop over a stream, the places that hold a view of
+// its items across turns and the pool's size: their number, the buffer being
+// read and the one an unfinished line moves into (ADR-stream-buffers-v1 D3).
+// A loop that keeps nothing counts nothing and still reads into two buffers.
+use std::env
+use std::fs
+use std::process
+
+fn toolchain() -> String throws {
+    let exe = env::current_exe()?.display() ?? ""
+    if exe.len() > 0 { return exe }
+    return "target/fast/nikaia"
+}
+
+fn main() throws {
+    let tmp = fs::scratch()
+    let program = "use std::io\n\nfn count() -> i64 throws {\n    let mut n = 0\n    for line in io::lines() {\n        n += line.len()\n    }\n    return n\n}\n\nfn main() throws {\n    let mut before: String = \"\"\n    let mut prev: String = \"\"\n    for line in io::lines() {\n        before = prev\n        prev = line\n    }\n    println(f\"{before} {prev} {count()}\")\n}\n"
+    fs::write("main.nika", tmp, program)
+    let out = process::run(toolchain(), ["lower", "--tethers", "main.nika"]; dir: tmp.path().to_text())
+    let mut on = false
+    for line in out.stdout.lines() {
+        if line.ends_with("(stream):") {
+            on = true
+        } else if !line.starts_with(" ") {
+            on = false
+        }
+        if on {
+            println(line)
+        }
+    }
+    println(f"exit {out.code}")
+    print(out.stderr)
+}

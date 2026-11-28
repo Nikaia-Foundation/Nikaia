@@ -1722,6 +1722,12 @@ pub struct FnContract {
     /// another package hands it its table as `words:`. Written only where it
     /// holds.
     pub interns: bool,
+    /// **The sequence it hands back is a stream** (ADR-stream-buffers-v1
+    /// D1, `iterates = "stream"`): its items view a stream buffer from a
+    /// fixed pool, so a view of one lives one turn of the loop that reads it,
+    /// or in a place counted while building (D2, `NK2308`). Written only
+    /// where it holds.
+    pub streams: bool,
     /// **The consumers a sequence this function produces has of its own**
     /// (ADR-375 D4, Part III's `Seq`): `count`, `nth`, `last` written right
     /// after the call are the producer's, not the general walk.
@@ -1788,6 +1794,7 @@ impl FnContract {
             ends_by_length: false,
             pieces: false,
             interns: false,
+            streams: false,
             consumers: [],
             requires: [],
             ensures: [],
