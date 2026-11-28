@@ -683,6 +683,12 @@ pub struct Thrown {
     /// (ADR-345 D2).
     named: collections::BTreeSet[String],
     pub fatal_calls: collections::BTreeMap[String, collections::BTreeSet[String]],
+    /// **Whether a value-form task's failure is caught** (ADR-async-v6 D6,
+    /// D22, #2829): a part of a tuple, an argument or an operand of a
+    /// `catch`'s guarded expression is waited for before them, where that
+    /// `catch` is not, so it keeps what held outside it; the task the `catch`
+    /// is written directly after is its fallback's.
+    task_caught: bool,
 }
 
 /// What an expression contributes, as the compiler resolved it: a function of
@@ -703,7 +709,7 @@ pub struct Contribution {
 
 /// What a function's body throws itself, and whom in this package it calls.
 fn thrown_by(body: ref Block, names: ref winnow_grammar::InternerContext, holes_of: fn(ref Expr) -> Vec[Expr] sync, contribution_of: fn(ref Expr) -> Contribution sync) -> Thrown {
-    let mut out = Thrown { direct: collections::BTreeSet(), calls: collections::BTreeSet(), passes_on: false, named: collections::BTreeSet(), fatal_calls: collections::BTreeMap() }
+    let mut out = Thrown { direct: collections::BTreeSet(), calls: collections::BTreeSet(), passes_on: false, named: collections::BTreeSet(), fatal_calls: collections::BTreeMap(), task_caught: false }
     thrown_in_block(body, names, holes_of, contribution_of, false, out)
     return out
 }
@@ -712,6 +718,19 @@ fn thrown_by(body: ref Block, names: ref winnow_grammar::InternerContext, holes_
 // it is the handler of a `catch`, which is where `throw error` passes on what
 // the guarded half threw rather than naming something new.
 fn thrown_in_block(block: ref Block, names: ref winnow_grammar::InternerContext, holes_of: fn(ref Expr) -> Vec[Expr] sync, contribution_of: fn(ref Expr) -> Contribution sync, in_a_handler: bool, mut out: Thrown) {
+    // **A diamond's later waiter can be abandoned** (ADR-async-v6 D41): a
+    // read of it throws `task::Abandoned` where the task it waits for can
+    // fail: throws itself, or calls what may.
+    for (_, shared) in diamond_waiters(block, names) {
+        let mut waited = Thrown { direct: collections::BTreeSet(), calls: collections::BTreeSet(), passes_on: false, named: collections::BTreeSet(), fatal_calls: collections::BTreeMap(), task_caught: false }
+        match block.stmts[shared].node {
+            Stmt::Let { value, .. } => thrown_in(value, names, holes_of, contribution_of, in_a_handler, false, waited),
+            else => {},
+        }
+        if waited.direct.len() > 0 || waited.calls.len() > 0 || waited.passes_on {
+            out.direct.insert("task::Abandoned")
+        }
+    }
     for stmt in block.stmts {
         match stmt.node {
             Stmt::Let { value, .. } => thrown_in(value, names, holes_of, contribution_of, in_a_handler, false, out),
@@ -772,7 +791,7 @@ fn thrown_in(expr: ref Expr, names: ref winnow_grammar::InternerContext, holes_o
             }
         }
         Expr::MethodCall { receiver, method, args, config, .. } => {
-            // **`xs.par_iter(within: d)`** (ADR-async-5 D27): the step that
+            // **`xs.par_iter(within: d)`** (ADR-async-v6 D27): the step that
             // ends the walk throws `task::TimedOut` once `d` ran out.
             if !caught && names.resolve(method) == "par_iter" && config.iter().any(fn(setting) { names.resolve(setting.name) == "within" }) {
                 out.direct.insert("task::TimedOut")
@@ -803,16 +822,17 @@ fn thrown_in(expr: ref Expr, names: ref winnow_grammar::InternerContext, holes_o
         // **A task's crash is an error to whoever waits for it** (Part II
         // 12.7, ADR-328 D8): the function that starts it throws
         // `task::Crashed`, as a `task::scope` in it does, where the task can
-        // panic (ADR-async-5 D35); the host's answer for the form says so.
+        // panic (ADR-async-v6 D35); the host's answer for the form says so.
         Expr::Async(inner, _, within, _) => {
-            if !caught {
+            let waited = out.task_caught
+            if !waited {
                 out.direct.extend(contribution_of(expr).errors.clone())
             }
-            thrown_by_a_deadline(within, names, holes_of, contribution_of, in_a_handler, caught, out)
-            thrown_in(inner, names, holes_of, contribution_of, in_a_handler, caught, out)
+            thrown_by_a_deadline(within, names, holes_of, contribution_of, in_a_handler, waited, out)
+            thrown_in(inner, names, holes_of, contribution_of, in_a_handler, waited, out)
         }
         // **A deadline that runs out is the failure `task::TimedOut`**
-        // (ADR-async-5 D16, #986): it arrives where the task's own do, so a
+        // (ADR-async-v6 D16, #986): it arrives where the task's own do, so a
         // fallback stands in for it.
         Expr::AsyncGroup(_, _, within, _, _) => thrown_by_a_deadline(within, names, holes_of, contribution_of, in_a_handler, caught, out),
         Expr::Spawn { within, .. } => thrown_by_a_deadline(within, names, holes_of, contribution_of, in_a_handler, caught, out),
@@ -843,7 +863,13 @@ fn thrown_in(expr: ref Expr, names: ref winnow_grammar::InternerContext, holes_o
             if !caught {
                 out.named = fatal_named(handler, names)
             }
+            let task_outer = out.task_caught
+            out.task_caught = match expr {
+                Expr::Async(_, _, _, _) => into_the_handler,
+                else => caught,
+            }
             thrown_in(expr, names, holes_of, contribution_of, in_a_handler, into_the_handler, out)
+            out.task_caught = task_outer
             out.named = outer
         }
         Expr::If { cond, .. } => thrown_in(cond, names, holes_of, contribution_of, in_a_handler, caught, out),
@@ -1021,7 +1047,7 @@ fn the_caught_error(expr: ref Expr, names: ref winnow_grammar::InternerContext) 
 // Whether a handler passes what it caught on: `throw error` anywhere in it
 // (ADR-280 D10).
 fn passes_on(handler: ref Block, names: ref winnow_grammar::InternerContext, holes_of: fn(ref Expr) -> Vec[Expr] sync, contribution_of: fn(ref Expr) -> Contribution sync) -> bool {
-    let mut seen = Thrown { direct: collections::BTreeSet(), calls: collections::BTreeSet(), passes_on: false, named: collections::BTreeSet(), fatal_calls: collections::BTreeMap() }
+    let mut seen = Thrown { direct: collections::BTreeSet(), calls: collections::BTreeSet(), passes_on: false, named: collections::BTreeSet(), fatal_calls: collections::BTreeMap(), task_caught: false }
     thrown_in_block(handler, names, holes_of, contribution_of, false, seen)
     return seen.passes_on
 }
@@ -1105,7 +1131,7 @@ fn pattern_path(pattern: ref MatchPattern) -> Vec[winnow_grammar::Symbol]? {
     return null
 }
 
-// `within: d` of an `async(…)` form (ADR-async-5 D16): `d` itself, and the
+// `within: d` of an `async(…)` form (ADR-async-v6 D16): `d` itself, and the
 // `task::TimedOut` its running out ends the task with.
 fn thrown_by_a_deadline(within: ref Expr?, names: ref winnow_grammar::InternerContext, holes_of: fn(ref Expr) -> Vec[Expr] sync, contribution_of: fn(ref Expr) -> Contribution sync, in_a_handler: bool, caught: bool, mut out: Thrown) {
     let d = within ?? return

@@ -1,4 +1,4 @@
-// A task with no panic site adds nothing (ADR-async-5 D35, #1355): `two`
+// A task with no panic site adds nothing (ADR-async-v6 D35, #1355): `two`
 // starts two without `throws` and no handler is asked of it.
 
 fn one() -> int { return 1 }

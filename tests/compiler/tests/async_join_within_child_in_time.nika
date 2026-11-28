@@ -1,5 +1,5 @@
 // A `join(within:)` on a `task::ChildHandle` whose task ends in time gives its
-// value (Part I 8.2, ADR-async-5 D17), for a task that pauses and for one
+// value (Part I 8.2, ADR-async-v6 D17), for a task that pauses and for one
 // that never does, with or without `on_timeout:`.
 
 use std::time

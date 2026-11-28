@@ -1,5 +1,5 @@
 // #990: `spawn fn { … }` warns `NK2123`, with the edit to
-// `async(detached) fn { … }` (ADR-async-5 D39); inside a loop's body the
+// `async(detached) fn { … }` (ADR-async-v6 D39); inside a loop's body the
 // warning has no edit, since `async` is refused there (`NK2120`).
 use std::task
 

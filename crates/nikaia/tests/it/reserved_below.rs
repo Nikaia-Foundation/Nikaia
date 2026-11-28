@@ -69,7 +69,7 @@ const RESERVED_BELOW: &[&str] = &[
 /// is a keyword in neither language and needs nothing.
 ///
 /// **`async` joined them at 0.0.1305**
-/// ([ADR-async-5](../../../docs/specification/adr/adr-async-5.md)): the
+/// ([ADR-async-v6](../../../docs/specification/adr/adr-async-v6.md)): the
 /// prefix that starts a task, reserved in both languages now.
 const RESERVED_HERE_TOO: &[&str] = &["trait", "extern", "unsafe", "ref", "async"];
 

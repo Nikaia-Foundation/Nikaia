@@ -289,7 +289,7 @@ impl EmitState {
             out.push("async ")
         }
         // **A `par_iter` element that places in a block runs in its piece's
-        // block** (ADR-async-5 D28, ADR-327 D13): a full block ends that
+        // block** (ADR-async-v6 D28, ADR-327 D13): a full block ends that
         // element alone, its failure `task::OverBudget`.
         let blocked = !pauses && self.facts.blocked_lambdas.contains(node_key(node))
         if blocked {
@@ -1629,7 +1629,7 @@ impl EmitState {
         }
     }
 
-    /// **The fallback of a detached task** (Part I 8.1.2, ADR-async-5 D22):
+    /// **The fallback of a detached task** (Part I 8.1.2, ADR-async-v6 D22):
     /// `async(detached) fn { body } catch { f }` starts the task as
     /// `async(detached) fn { { body } catch { f } }`, so `f` stands in for the
     /// task's value where its failure arrives, the `join`, after the task's
@@ -1666,23 +1666,23 @@ impl EmitState {
         // the body moves is the new handle and the caller's own survives the
         // `spawn`.
         let handles = self.emit_task_handles(task)
-        // **A deferred task** (`async(detached, deferred)`, ADR-async-5 D12):
+        // **A deferred task** (`async(detached, deferred)`, ADR-async-v6 D12):
         // the start below is a closure its handle's `start()` calls, so the
         // setting and the body's channel pick the handle as for `spawn`.
         let deferred = walk.async_deferred
         walk.async_deferred = false
-        // **A deadline** (ADR-async-5 D16, #986) counts from here, outside
+        // **A deadline** (ADR-async-v6 D16, #986) counts from here, outside
         // the future; a fallback inside the task binds its guarded block by
         // it, so `task::TimedOut` reaches the fallback.
         let deadline = walk.async_within.clone()
         walk.async_within = ""
-        // **Its own strategy** (`admission: s`, ADR-async-5 D15, D18): read
+        // **Its own strategy** (`admission: s`, ADR-async-v6 D15, D18): read
         // here, outside the future; the task waits in it, unstarted, until
         // the strategy admits it.
         let admission = walk.async_admission.clone()
         walk.async_admission = ""
         // **A free task polls no gate of the group it starts in**
-        // (ADR-async-5 D13, D37): it runs on past that group, so a pause in
+        // (ADR-async-v6 D13, D37): it runs on past that group, so a pause in
         // its body is a plain `.await`, as in a child task's body.
         let outer_gates = walk.async_gates.clone()
         walk.async_gates = []
@@ -1751,7 +1751,7 @@ impl EmitState {
             out.push("nikaia_std::task::Deferred::new(move || ")
         }
         // **A failure leaves the task with where it was started**
-        // (ADR-async-5 D23, `error::started_paused`).
+        // (ADR-async-v6 D23, `error::started_paused`).
         let mut starter: String = "async move "
         if failing {
             starter = "nikaia_std::error::started_paused(async move "

@@ -169,7 +169,7 @@ impl CheckState {
         }
     }
 
-    /// **What a task of `async e` takes** (async-3 D2, ADR-async-5 D8, #986):
+    /// **What a task of `async e` takes** (async-3 D2, ADR-async-v6 D8, #986):
     /// it borrows a name bound outside its group, which outlives it, and takes
     /// one bound in a block inside the group, which ends before the task
     /// does; a later mention is `NK2105`. Numbers, views and handles are

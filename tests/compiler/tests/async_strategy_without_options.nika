@@ -1,5 +1,5 @@
 // A group that writes neither `limit:` nor `admission:` is under std's
-// strategy too (ADR-async-5 D18, D37, #986): while the main line waits for one
+// strategy too (ADR-async-v6 D18, D37, #986): while the main line waits for one
 // task, the others of the group run, so the short task has ended when the long
 // one is joined.
 use std::time

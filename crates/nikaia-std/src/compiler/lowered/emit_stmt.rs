@@ -662,7 +662,9 @@ impl EmitState {
                 let place_mut = if kept.replaced { "mut " } else { "" };
                 out.push(&format!("let ({}{}, {}__place_{}) = {}", mut_word, local, place_mut, at, nikaia_std::index::or(kept.put.as_deref(), || "")));
             } else { out.push(&format!("let {}{} = {}", mut_word, local, nikaia_std::index::or(kept.put.as_deref(), || ""))); }
+            if self.reads_into_spare(&walk, &scope.function, at) { walk.read_into = Some(format!("__spare_{}", at)); }
             self.emit_expr(world, walk, out, host, value, depth, flow, &inner)?;
+            walk.read_into = None;
             out.push(");");
             return Ok(());
         }

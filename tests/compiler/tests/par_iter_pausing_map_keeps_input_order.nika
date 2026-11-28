@@ -1,5 +1,5 @@
 // #2500: a `par_iter` chain's `map`, `filter` and `for_each` take a lambda
-// that may pause (ADR-async-5 D24); such a chain runs one task per element,
+// that may pause (ADR-async-v6 D24); such a chain runs one task per element,
 // under `limit:`, and its results come back in input order, whatever order
 // the tasks end in (D25, D26). The later elements sleep less, so they end
 // first. Before, the pausing lambda was refused with `NK2209`.

@@ -1,12 +1,12 @@
 // Two statement tasks of an `async { … }` both end before the line after it
-// (ADR-async-5 D9, #988); their values are dropped.
+// (ADR-async-v6 D9, #988); their values are dropped.
 
 fn work(n: i64) -> i64 throws {
 	println(f"task {n}")
 	return n
 }
 
-// Only one task of a group may write to stdout (ADR-async-5 D7, #1227).
+// Only one task of a group may write to stdout (ADR-async-v6 D7, #1227).
 fn quiet(n: i64) -> i64 {
 	return n
 }

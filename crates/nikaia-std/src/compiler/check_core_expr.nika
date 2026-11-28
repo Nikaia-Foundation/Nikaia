@@ -110,21 +110,42 @@ fn check_core_expr[H: CheckHost](mut state: CheckState, world: ref CheckWorld, h
     return ty
 }
 
-/// **`async e`, walked under a guard of its own** (ADR-async-5 D22): whether
+/// **`async e`, walked under a guard of its own** (ADR-async-v6 D22): whether
 /// the task can fail is kept by its node, for `NK1134`'s help where a `catch`
 /// around a mention of its binding has nothing to handle. What the walk found
 /// goes on to the enclosing guard, as it would have walked there; without one
 /// the guard is a probe, which no handler's note reads (`NK2402`).
+///
+/// **A part the `catch` does not enclose** (D6, D22, #2829): a task in a
+/// tuple, an argument or an operand of the guarded expression is waited for
+/// before them, where that `catch` is not; its walk is a probe, a failing
+/// call in it is caught only where it was outside the `catch`, and what it
+/// met goes to the guard outside (`escaped`), not to this one.
 fn check_core_task_walked[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, expr: ref Expr, span: ref Span) -> Ty sync {
+    let past: bool? = state.flow.tasks_past_the_catch.get(id_of(expr) as i64)?.clone()
     let enclosing: CheckGuarded? = state.flow.guarded?.clone()
     let probing = state.flow.task_probe
+    let caught = state.flow.caught
     state.flow.guarded = CheckGuarded::nothing()
-    state.flow.task_probe = enclosing == null || probing
+    state.flow.task_probe = enclosing == null || probing || past != null
+    if past != null {
+        state.flow.caught = past ?? caught
+    }
     let ty = check_core_value_of(state, world, host, expr, span)
     let found: CheckGuarded = state.flow.guarded?.clone() ?? CheckGuarded::nothing()
     state.flow.task_probe = probing
+    state.flow.caught = caught
     if found.fallible {
         state.flow.fallible_tasks.insert(id_of(expr) as i64)
+    }
+    if past != null {
+        state.flow.guarded = enclosing
+        let mut escaped = state.flow.escaped?.clone() ?? CheckGuarded::nothing()
+        escaped.fallible = escaped.fallible || found.fallible
+        escaped.unanswered = escaped.unanswered || found.unanswered
+        escaped.thrown.extend(found.thrown)
+        state.flow.escaped = escaped
+        return ty
     }
     match enclosing {
         outer => {
@@ -356,7 +377,7 @@ fn check_core_value_of[H: CheckHost](mut state: CheckState, world: ref CheckWorl
             check_core_expr(state, world, host, inner, span)
             Ty::Unknown
         },
-        // **`async e`** (ADR-async-5 D6, D10): the value is `e`'s, a lambda's
+        // **`async e`** (ADR-async-v6 D6, D10): the value is `e`'s, a lambda's
         // the lambda's result, since the lambda is run as the task; no jump
         // leaves it (`NK1132`). Its wait point is the block's (`check_async_block`).
         Expr::Async(inner, _, within, admission) => {
@@ -403,6 +424,15 @@ fn check_core_value_of[H: CheckHost](mut state: CheckState, world: ref CheckWorl
             state.flow.loops = loops
             state.flow.barrier = barrier
             check_core_async_crash(state, world, host, inner, span)
+            // **A diamond's later waiter can be abandoned** (ADR-async-v6
+            // D41): where the task it waits for can fail, an earlier waiter
+            // receives the failure and a read of this one throws
+            // `task::Abandoned`.
+            let waits_for = state.facts.async_abandoned.get(id_of(expr) as i64)?.clone() ?? -1
+            if waits_for >= 0 && state.flow.fallible_tasks.contains(waits_for) {
+                let function = state.current?.clone() ?? ""
+                check_core_async_fails(state, span, "task::Abandoned", "This function can fail, because the task started here waits for a pending value another task waits for too.", "Where that value fails, the task that waits for it first receives the failure; this one is cancelled where it waits, and reading it throws `task::Abandoned` (ADR-async-v6 D41).", f"Add `throws` to `{function}`, or catch it where its binding is read: `… catch {{ … }}`.")
+            }
             // **A name of a block that ends before the group does** (async-3
             // D2, #986): the task runs on past that block, so it takes it.
             if state.flow.async_group != null {
@@ -929,7 +959,7 @@ fn check_core_expr_dsl[H: CheckHost](mut state: CheckState, world: ref CheckWorl
     return Ty::Unknown
 }
 
-/// **`within: d` is a `time::Duration`** (ADR-async-5 D16, #986), counted
+/// **`within: d` is a `time::Duration`** (ADR-async-v6 D16, #986), counted
 /// from the form's start; it is read before the task starts.
 fn check_core_async_within[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, within: ref Expr?, span: ref Span) sync {
     let d = within ?? return
@@ -943,10 +973,10 @@ fn check_core_async_within[H: CheckHost](mut state: CheckState, world: ref Check
     }
     state.expect_type(world, found, want, span, "argument", fn(found_text, wanted_text) { f"This deadline is `{found_text}`, but `within:` takes a `{wanted_text}`." })
     let function = state.current?.clone() ?? ""
-    check_core_async_fails(state, span, "task::TimedOut", "This function can fail, because the deadline of `within:` can run out.", "When the deadline runs out, the task is cancelled and ends with `task::TimedOut` (ADR-async-5 D16).", f"Add `throws` to `{function}`, or write a fallback: `async(within: d) … catch {{ … }}`.")
+    check_core_async_fails(state, span, "task::TimedOut", "This function can fail, because the deadline of `within:` can run out.", "When the deadline runs out, the task is cancelled and ends with `task::TimedOut` (ADR-async-v6 D16).", f"Add `throws` to `{function}`, or write a fallback: `async(within: d) … catch {{ … }}`.")
 }
 
-/// **`limit: n` is an `i64`** (ADR-async-5 D15, #986), read before the
+/// **`limit: n` is an `i64`** (ADR-async-v6 D15, #986), read before the
 /// group's first task starts; a value below `1` panics there, naming it.
 fn check_core_async_limit[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, limit: ref Expr?, span: ref Span) sync {
     let n = limit ?? return
@@ -958,7 +988,7 @@ fn check_core_async_limit[H: CheckHost](mut state: CheckState, world: ref CheckW
     state.expect_type(world, found, Ty::Named { name: "i64", args: [], view: false }, span, "argument", fn(found_text, wanted_text) { f"This limit is `{found_text}`, but `limit:` takes an `{wanted_text}`." })
 }
 
-/// **`admission: s` is a `task::Admission`** (ADR-async-5 D18, #986): a
+/// **`admission: s` is a `task::Admission`** (ADR-async-v6 D18, #986): a
 /// value of a type the program or a library implements it for, or std's
 /// `task::Adaptive()`. A type nobody implements it for is `NK1164`; one the
 /// checker could not name is passed on (C.4).
@@ -981,7 +1011,7 @@ fn check_core_async_admission[H: CheckHost](mut state: CheckState, world: ref Ch
     if !state.structs.contains_key(named) && !state.enums.contains_key(named) {
         return
     }
-    state.findings.push(check_refusal("NK1164", span, f"`admission:` needs a `task::Admission` here, but `{named}` isn't one.", ["The strategy decides when a task of the form starts, through its `decide` method (ADR-async-5 D18)."], f"Write `impl task::Admission for {named} {{ … }}`, or pass a type that already has one."))
+    state.findings.push(check_refusal("NK1164", span, f"`admission:` needs a `task::Admission` here, but `{named}` isn't one.", ["The strategy decides when a task of the form starts, through its `decide` method (ADR-async-v6 D18)."], f"Write `impl task::Admission for {named} {{ … }}`, or pass a type that already has one."))
 }
 
 /// Whether `limit:` is the literal `1`: the tasks run one at a time (D15).
@@ -993,7 +1023,7 @@ fn check_core_async_one_at_a_time(limit: ref Expr?) -> bool sync {
     }
 }
 
-/// **A task that can panic fails with `task::Crashed`** (ADR-async-5 D35,
+/// **A task that can panic fails with `task::Crashed`** (ADR-async-v6 D35,
 /// #1355): where its value is waited for, as a written call that can fail
 /// does (`NK2605`). One that cannot adds nothing, so a `catch` that could
 /// only take its crash has nothing to handle (`NK1134`). Its own sites
@@ -1021,19 +1051,19 @@ fn check_core_async_crash[H: CheckHost](mut state: CheckState, world: ref CheckW
     if !panics_of_task(task, world.here.items, world.words, fn(literal) { host.literal_holes(literal) }, facts, world.own, world.library) {
         return
     }
-    check_core_async_fails(state, span, "task::Crashed", "This function can fail, because the task started here can panic.", "A panic in a task ends that task, and whoever waits for it gets `task::Crashed` (ADR-async-5 D35).", f"Add `throws` to `{function}`, or write a fallback: `async e catch {{ … }}`.")
+    check_core_async_fails(state, span, "task::Crashed", "This function can fail, because the task started here can panic.", "A panic in a task ends that task, and whoever waits for it gets `task::Crashed` (ADR-async-v6 D35).", f"Add `throws` to `{function}`, or write a fallback: `async e catch {{ … }}`.")
 }
 
-/// **A deadline can run out, a task can crash** (ADR-async-5 D16, D22,
+/// **A deadline can run out, a task can crash** (ADR-async-v6 D16, D22,
 /// D35): the form fails with `error`, as a written call that can fail does
 /// (`NK2605`), so a `catch` around it or its fallback has it to handle, and a
 /// function that handles it nowhere says `throws`.
-/// **A walk with `within:` can fail where it ends** (ADR-async-5 D27): the
+/// **A walk with `within:` can fail where it ends** (ADR-async-v6 D27): the
 /// step that ends it throws `task::TimedOut` once the deadline ran out, and
 /// that enters the function's throw set as any failing call's does.
 fn check_core_walk_timed_out(mut state: CheckState, span: ref Span) sync {
     let function = state.current?.clone() ?? ""
-    check_core_async_fails(state, span, "task::TimedOut", "This function can fail, because the deadline of `par_iter(within:)` can run out.", "When the deadline runs out, no element starts any more and the step that ends the walk throws `task::TimedOut` (ADR-async-5 D27).", f"Add `throws` to `{function}`, or handle it at the call: `… catch {{ … }}`.")
+    check_core_async_fails(state, span, "task::TimedOut", "This function can fail, because the deadline of `par_iter(within:)` can run out.", "When the deadline runs out, no element starts any more and the step that ends the walk throws `task::TimedOut` (ADR-async-v6 D27).", f"Add `throws` to `{function}`, or handle it at the call: `… catch {{ … }}`.")
 }
 
 fn check_core_async_fails(mut state: CheckState, span: ref Span, error: ref String, message: ref String, note: ref String, help: ref String) sync {

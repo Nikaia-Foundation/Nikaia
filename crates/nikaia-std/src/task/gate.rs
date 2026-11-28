@@ -1,4 +1,4 @@
-//! **How many tasks of one form run at once** ([ADR-async-5](../../../../docs/specification/adr/adr-async-5.md)
+//! **How many tasks of one form run at once** ([ADR-async-v6](../../../../docs/specification/adr/adr-async-v6.md)
 //! D15, D18): the gate of an `async(limit: n, admission: s) { … }`.
 //!
 //! The main line starts the tasks of a group in written order. Where the gate
@@ -79,7 +79,7 @@ impl Admission for Adaptive {
 }
 
 impl Adaptive {
-    /// **`std`'s decision for `load`** (ADR-async-5 D18, ADR-327 D15), as a
+    /// **`std`'s decision for `load`** (ADR-async-v6 D18, ADR-327 D15), as a
     /// task that wants to start asks it; inherent as well, so a program that
     /// calls `.decide` on the strategy reaches it without the trait in scope.
     pub fn decide(&mut self, load: Load) -> Decision {

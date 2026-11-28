@@ -1,4 +1,4 @@
-// Shapes of tasks that wait for a place (ADR-async-5 D37, #986): a task that
+// Shapes of tasks that wait for a place (ADR-async-v6 D37, #986): a task that
 // never pauses queued behind one that does, tasks of one call's arguments, a
 // gated group inside another (under both gates), and statement tasks after a
 // bound one, each started in written order as places free.

@@ -8,6 +8,12 @@ or the specification. A change only to the guide, the notes, the README, the
 website, the tests, the examples or the tooling around them raises nothing and
 has no heading here; `CLAUDE.md` draws the line.
 
+## [0.0.1561] — 2026-11-28
+
+**Builders' changes (#2787, #2829)**
+- task::Abandoned. When the task a diamond waiter waits for fails, reading that waiter throws task::Abandoned, not task::Crashed and not the first task's error again. Its message names the failed task and its error, the error is its cause, and the checker counts it at the read (ADR-async-v6 D41).
+- Async: a catch after a tuple, argument list or operand of async parts is NK1134 (the tasks are waited for before the statement, ADR-async-v6 D6), with a help that names the fallback after each task; such a per-part fallback now builds and runs.
+
 ## [0.0.1560] — 2026-11-28
 
 **ledgers.nika says how long each directory's build took; the shard's growth is the directories #2797 added, and tests/build-time is nearly half of it (#2804)**

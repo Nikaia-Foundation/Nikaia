@@ -1,4 +1,4 @@
-// `async(detached, within: d) fn { … }` (Part I 8.1.2, ADR-async-5 D16,
+// `async(detached, within: d) fn { … }` (Part I 8.1.2, ADR-async-v6 D16,
 // #986): a task still running at its deadline is cancelled at its pause, and
 // its `join` yields `task::TimedOut`; one that ends in time yields its value.
 

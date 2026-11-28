@@ -4,6 +4,6 @@ error[NK1164]: `admission:` needs a `task::Admission` here, but `Plain` isn't on
  12 | 	let a = async(admission: Plain { n: 1 }) f()
     |  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
     |
-    = note: The strategy decides when a task of the form starts, through its `decide` method (ADR-async-5 D18).
+    = note: The strategy decides when a task of the form starts, through its `decide` method (ADR-async-v6 D18).
     = help: Write `impl task::Admission for Plain { … }`, or pass a type that already has one.
 1 type error

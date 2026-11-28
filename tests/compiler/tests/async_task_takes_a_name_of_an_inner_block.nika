@@ -1,7 +1,7 @@
 // A task borrows a name bound outside its group and takes one bound in a
 // block that ends before the group does: the task runs on past that block, so
 // `s` is handed to it where it starts, and `keep(s)` after is a use after the
-// hand-over (async-3 D2, ADR-async-5 D8, #986).
+// hand-over (async-3 D2, ADR-async-v6 D8, #986).
 
 fn make() -> String {
     let mut g = String()

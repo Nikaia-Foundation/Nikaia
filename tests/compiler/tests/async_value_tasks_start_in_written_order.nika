@@ -1,5 +1,5 @@
 // Tasks as arguments, operands and tuple parts start left to right, as written,
-// and the callee or the operator gets plain values (ADR-async-5 D6, #988). The
+// and the callee or the operator gets plain values (ADR-async-v6 D6, #988). The
 // tasks do not print: two tasks beside each other may not both write to stdout
 // (D7, #1227).
 

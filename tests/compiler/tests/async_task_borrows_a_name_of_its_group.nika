@@ -1,6 +1,6 @@
 // A task borrows what lives as long as its group: a name bound outside the
 // group, or in the group's own block; a number from an inner block is copied
-// (async-3 D2, ADR-async-5 D8, #986).
+// (async-3 D2, ADR-async-v6 D8, #986).
 
 fn make() -> String {
     let mut g = String()

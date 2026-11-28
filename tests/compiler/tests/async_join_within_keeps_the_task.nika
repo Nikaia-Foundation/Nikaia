@@ -1,4 +1,4 @@
-// `h.join(within: d)` limits the wait, not the task (ADR-async-5 D17): on
+// `h.join(within: d)` limits the wait, not the task (ADR-async-v6 D17): on
 // time-out it throws `task::TimedOut`, the task keeps running, and the handle
 // stays live, so the handler joins it again and gets the value.
 

@@ -1,5 +1,5 @@
 // A diamond: `b`'s and `c`'s tasks both wait for `a` and read the one value
-// (ADR-async-5 D8, #986), a number and a text alike.
+// (ADR-async-v6 D8, #986), a number and a text alike.
 
 fn load(n: i64) -> i64 {
     return n * 2

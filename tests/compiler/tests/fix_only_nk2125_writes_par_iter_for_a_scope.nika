@@ -1,6 +1,6 @@
 // #990: `nikaia fix --only NK2125` rewrites a `task::scope` whose one `for`
 // starts a task per element as `xs.par_iter().for_each fn(x) { … }`
-// (ADR-async-5 D39).
+// (ADR-async-v6 D39).
 use std::env
 use std::fs
 use std::process

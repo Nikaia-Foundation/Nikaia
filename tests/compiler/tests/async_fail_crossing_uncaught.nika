@@ -1,5 +1,5 @@
 // An uncaught task failure prints, in the long form, where it was raised,
-// where its task was started and where the failure arrived (ADR-async-5 D23,
+// where its task was started and where the failure arrived (ADR-async-v6 D23,
 // Part I 7.1, #2562): for a value task, at the read of its binding, and for a
 // child handle, at its `join`. Each runs as a program of its own, whose
 // failure leaves `main`.

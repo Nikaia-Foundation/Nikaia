@@ -1,5 +1,5 @@
 // `admission:` on a form that starts one task takes a `task::Admission`
-// (ADR-async-5 D15, D18, #986).
+// (ADR-async-v6 D15, D18, #986).
 struct Plain {
 	n: i64,
 }

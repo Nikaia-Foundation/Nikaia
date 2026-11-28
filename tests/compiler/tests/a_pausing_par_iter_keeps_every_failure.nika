@@ -1,5 +1,5 @@
 // **A `par_iter` map whose lambda pauses and can fail keeps every failure**
-// (ADR-async-5 D24-D26, #987 item 4): one task per element, the first
+// (ADR-async-v6 D24-D26, #987 item 4): one task per element, the first
 // failure in input order thrown with the later ones as its `secondary`
 // list, whatever order the tasks end in (the later elements sleep less, so
 // they end first); where none fails the values come back in input order.

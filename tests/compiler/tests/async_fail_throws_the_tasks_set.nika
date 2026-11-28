@@ -1,4 +1,4 @@
-// The `throws` walk (Part I 8.1.2, ADR-async-5 D22, #989): without a
+// The `throws` walk (Part I 8.1.2, ADR-async-v6 D22, #989): without a
 // fallback a function carries its task's whole set, and with one it throws
 // what the fallback throws; neither function here says `throws`.
 struct Bad {}

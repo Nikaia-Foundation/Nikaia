@@ -123,7 +123,7 @@ impl CheckState {
         self.findings.push(check_refusal("NK2107", span, message, [note], help))
     }
 
-    /// `NK2107` for an `async` task (ADR-async-5 D7, #1229): `name`, bound
+    /// `NK2107` for an `async` task (ADR-async-v6 D7, #1229): `name`, bound
     /// outside the task, changed inside it. The task runs beside everything
     /// after its start, so the refusal does not depend on what runs there.
     fn a_task_changes_an_outer_name(ref mut self, name: ref String, span: ref Span) sync {

@@ -1,4 +1,4 @@
-// #2508: a `par_iter` chain's `fold` step may not pause (ADR-async-5 D29),
+// #2508: a `par_iter` chain's `fold` step may not pause (ADR-async-v6 D29),
 // unlike its `map`, `filter` and `for_each` lambdas (D24): the step is
 // refused with `NK2209`, and the help names the chain that does it, a
 // pausing `map` followed by the `fold`.

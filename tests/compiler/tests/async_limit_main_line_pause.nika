@@ -1,5 +1,5 @@
 // Queued tasks start where the main line pauses, not only where it waits
-// for a task (ADR-async-5 D37, #986): under `limit: 1`, while the main line
+// for a task (ADR-async-v6 D37, #986): under `limit: 1`, while the main line
 // sleeps the first task ends and the next ones start.
 use std::time
 

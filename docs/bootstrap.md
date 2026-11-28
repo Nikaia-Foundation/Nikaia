@@ -11,7 +11,7 @@ where they are and point here.
 waits while the compiler catches up with the specification. Two language
 topics are built first: views as the specification now states them (#1213:
 `self`, `mut self`, `keep`, and `ref` leaving the language) and async as
-ADR-async-5 states it (#983). Where the code these topics change is still Rust
+ADR-async-v6 states it (#983). Where the code these topics change is still Rust
 (the parser's grammar block, the runtime of `std`, parts of the compiler), the
 change is made in Rust, and the port picks it up later (#557, #125).
 

@@ -1,4 +1,4 @@
-// `admission:` on a form that starts one task (ADR-async-5 D15, D18, D37,
+// `admission:` on a form that starts one task (ADR-async-v6 D15, D18, D37,
 // #986): the task waits, unstarted, until its strategy admits it, and the
 // main line goes on; its value is waited for where it is read. A strategy
 // that admits at once starts the task where it is written.

@@ -71,7 +71,7 @@ impl CheckState {
         let mut edit: Option<CheckEdit> = None;
         let mut help: String = String::from("Write `async(detached) fn { … }`, the same task; `nikaia fix --only NK2123` makes the edit.");
         if self.flow.loops > 0 { help = String::from("`async(detached)` is refused inside a loop's body (`NK2120`): to run the body for every element beside the others, write `xs.par_iter().for_each fn(x) { … }`."); } else { edit = word_replaced(world, whole, "spawn", "async(detached)"); }
-        let mut warned = check_refusal("NK2123", span, String::from("`spawn` is replaced by `async(detached)`, which starts the same task."), vec![String::from("`spawn fn { … }` is the earlier spelling of `async(detached) fn { … }` (ADR-async-5 D13); it is removed once every use is rewritten.")], Some(help));
+        let mut warned = check_refusal("NK2123", span, String::from("`spawn` is replaced by `async(detached)`, which starts the same task."), vec![String::from("`spawn fn { … }` is the earlier spelling of `async(detached) fn { … }` (ADR-async-v6 D13); it is removed once every use is rewritten.")], Some(help));
         warned.severity = CheckSeverity::Warning;
         warned.edit = edit;
         self.findings.push(warned);
@@ -85,7 +85,7 @@ impl CheckState {
         if !keep { edit = overlap_rewritten(world, whole, block, nothing); }
         let mut help: String = String::from("Write `let (x, y) = (async a(), async b())` for the values, or `async { async a()  async b() }` for branches that give nothing.");
         if edit.is_some() { help = format!("{} `nikaia fix --only NK2124` makes the edit.", help); } else { help = format!("{} A branch of several steps is `async fn {{ … }}`; inside a loop's body, `xs.par_iter()`.", help); }
-        let mut warned = check_refusal("NK2124", span, String::from("`overlap` is replaced by `async`, which starts each branch as a task."), vec![String::from("Each branch of an `overlap` is a task beside the others; `async e` starts one, waited for where its value is first needed, and `async { … }` waits for the tasks it starts at its end (ADR-async-5 D6, D9). The block is removed once every use is rewritten.")], Some(help));
+        let mut warned = check_refusal("NK2124", span, String::from("`overlap` is replaced by `async`, which starts each branch as a task."), vec![String::from("Each branch of an `overlap` is a task beside the others; `async e` starts one, waited for where its value is first needed, and `async { … }` waits for the tasks it starts at its end (ADR-async-v6 D6, D9). The block is removed once every use is rewritten.")], Some(help));
         warned.severity = CheckSeverity::Warning;
         warned.edit = edit;
         self.findings.push(warned);
@@ -101,9 +101,9 @@ impl CheckState {
             _ => { return; },
         }
         let edit = scope_rewritten(world, whole, args);
-        let mut help: String = String::from("For one task per element, write `xs.par_iter().for_each fn(x) { … }`; for tasks whose results are joined, `async(handle) fn { … }` and `.join()` (ADR-async-5 D13).");
+        let mut help: String = String::from("For one task per element, write `xs.par_iter().for_each fn(x) { … }`; for tasks whose results are joined, `async(handle) fn { … }` and `.join()` (ADR-async-v6 D13).");
         if edit.is_some() { help = format!("{} `nikaia fix --only NK2125` makes the edit.", help); }
-        let mut warned = check_refusal("NK2125", span, String::from("`task::scope` is replaced by `par_iter` and `async(handle)`."), vec![String::from("A scope's tasks are written with `async` now: `par_iter` runs a body for every element beside the others, and `async(handle)` starts a task whose result is joined (ADR-async-5 D13, D30). The scope is removed once every use is rewritten.")], Some(help));
+        let mut warned = check_refusal("NK2125", span, String::from("`task::scope` is replaced by `par_iter` and `async(handle)`."), vec![String::from("A scope's tasks are written with `async` now: `par_iter` runs a body for every element beside the others, and `async(handle)` starts a task whose result is joined (ADR-async-v6 D13, D30). The scope is removed once every use is rewritten.")], Some(help));
         warned.severity = CheckSeverity::Warning;
         warned.edit = edit;
         self.findings.push(warned);

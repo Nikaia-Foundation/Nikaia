@@ -1,4 +1,4 @@
-// A task over its budget fails only itself (ADR-327 D13, ADR-async-5 D19): its sibling in
+// A task over its budget fails only itself (ADR-327 D13, ADR-async-v6 D19): its sibling in
 // the group runs on, and the function that started both fails with
 // `task::OverBudget`, which its caller catches. Its strategy gives the task
 // one segment (D15).

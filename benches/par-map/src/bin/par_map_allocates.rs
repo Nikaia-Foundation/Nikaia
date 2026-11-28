@@ -1,4 +1,4 @@
-//! The Rayon twin of `benches/par-map/allocates.nika` (ADR-async-5 D28): the
+//! The Rayon twin of `benches/par-map/allocates.nika` (ADR-async-v6 D28): the
 //! same list, the same chain written as Rayon's `par_iter().map().collect()`,
 //! the same sum printed. Kept in step with the `.nika` by hand.
 use rayon::prelude::*;

@@ -44,6 +44,10 @@ impl EmitState {
         if plan.first == at {
             if plan.frame_keep { lines.push(String::from("let __keep_frame = nikaia_std::tether::Keep::new();")); }
             if plan.task_keep { lines.push(String::from("let __keep_task = std::sync::Arc::new(nikaia_std::tether::Keep::new());")); }
+            lines.reserve(plan.reads.iter().size_hint().0); for read in plan.reads.iter() {
+                let read = nikaia_std::num::value(read);
+                lines.push(format!("let __spare_{} = nikaia_std::tether::Spare::<nikaia_std::block::Text>::new();", read));
+            }
         }
         if plan.local_keeps.contains(&at) { lines.push(format!("let __keep_{} = nikaia_std::tether::Keep::new();", at)); }
         let mut element = false;
@@ -55,7 +59,7 @@ impl EmitState {
             let keep = *keep;
             if emit_is_element(&keep, at) { element = true; }
         }
-        if element && emit_stream_pool(plan, at).is_none() { lines.push(format!("let __keep_{} = std::sync::Arc::new(nikaia_std::tether::Keep::new());", at)); }
+        if element && emit_stream_pool(plan, at).is_none() { if plan.reads.contains(&at) { lines.push(format!("let __keep_{} = std::sync::Arc::new(nikaia_std::tether::Keep::returning(&__spare_{}));", at, at)); } else { lines.push(format!("let __keep_{} = std::sync::Arc::new(nikaia_std::tether::Keep::new());", at)); } }
         if lines.is_empty() { return None; }
         Some(nikaia_std::block::Text::from(lines.join(" ")))
     }
@@ -64,6 +68,11 @@ impl EmitState {
         let plan = match self.keep_plans.get(&key) { Some(__nikaia_value) => __nikaia_value, None => return false };
         for stream in plan.streams.iter() { if nikaia_std::list::contains(&stream.counted, &name) { return true; } }
         false
+    }
+    pub(crate) fn reads_into_spare(&self, walk: &EmitWalk, function: &str, at: i64) -> bool {
+        let key = match self.keep_plan_key(walk, function) { Some(__nikaia_value) => __nikaia_value, None => return false };
+        let plan = match self.keep_plans.get(&key) { Some(__nikaia_value) => __nikaia_value, None => return false };
+        plan.reads.contains(&at)
     }
     pub(crate) fn stream_pool(&self, walk: &EmitWalk, function: &str, at: i64) -> Option<i64> {
         let key = match self.keep_plan_key(walk, function) { Some(__nikaia_value) => __nikaia_value, None => return None };

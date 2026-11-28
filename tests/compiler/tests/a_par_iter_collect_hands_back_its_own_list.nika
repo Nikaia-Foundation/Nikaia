@@ -1,5 +1,5 @@
 // **A `par_iter` walk collected into a list hands back the list it made**
-// (ADR-async-5 D26, D28, #2768): where no element failed, the values come
+// (ADR-async-v6 D26, D28, #2768): where no element failed, the values come
 // back in input order, whatever their size against the failure's (a whole
 // number, a text, a struct holding both, nothing at all), and an empty walk
 // is an empty list; where one failed, the first failure in input order is

@@ -1,5 +1,5 @@
 // `on_timeout: task::OnTimeout::Cancel` cancels the task when the wait runs
-// out (ADR-async-5 D17): it never reaches its last line, and the handle is
+// out (ADR-async-v6 D17): it never reaches its last line, and the handle is
 // used up, so the handler need not take it (`NK2109` is not asked).
 
 use std::time

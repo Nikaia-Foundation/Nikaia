@@ -1,6 +1,6 @@
 // A binding's task whose call pauses starts where it is written, runs to its
 // first pause, and is polled to its end where the main line waits for it
-// (ADR-async-5 D6, D20, #1226); a binding named in another task alone is
+// (ADR-async-v6 D6, D20, #1226); a binding named in another task alone is
 // waited for in that task (D8).
 use std::time
 

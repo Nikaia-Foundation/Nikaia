@@ -1,0 +1,73 @@
+// A read of a diamond's waiter that was cancelled because the task it waits
+// for failed (ADR-async-v6 D41, D8, #2787): `b`'s and `c`'s tasks both wait
+// for `a`; `a` throws, `b`'s fallback receives the error, and `c` is
+// cancelled where it waits. Reading `c` throws `task::Abandoned`, which says
+// `c` did not run to its end because `a` failed and names `a`'s error: not
+// `task::Crashed`, and not `a`'s error again. The same with a pausing `a`,
+// and caught by its type.
+use std::time
+
+struct Bad {}
+
+impl Error for Bad {
+	fn message(ref self) -> String {
+		return "bad"
+	}
+}
+
+fn load(n: i64) -> i64 throws {
+	if n > 5 {
+		throw Bad {}
+	}
+	return n * 2
+}
+
+fn load_slowly(n: i64) -> i64 throws {
+	time::sleep(2.millis())
+	return load(n)
+}
+
+fn f(n: i64) -> i64 {
+	return n + 1
+}
+
+fn g(n: i64) -> i64 throws {
+	return n + 2
+}
+
+fn run(n: i64) throws {
+	let a = async load(n)
+	let b = async f(a) catch {
+		println(f"b's handler: {error}")
+		-1
+	}
+	let c = async g(a)
+	println(f"b is {b}")
+	let cv = c
+	println(f"c is {cv}")
+}
+
+fn run_slowly(n: i64) throws {
+	let a = async load_slowly(n)
+	let b = async f(a) catch {
+		println(f"b's handler: {error}")
+		-1
+	}
+	let c = async g(a)
+	println(f"b is {b}")
+	let cv = c
+	println(f"c is {cv}")
+}
+
+fn main() throws {
+	run(1)
+	run(9) catch {
+		println(f"caught {error}")
+	}
+	run_slowly(9) catch {
+		match error {
+			task::Abandoned => println(f"abandoned: {error}"),
+			else => println(f"something else: {error}"),
+		}
+	}
+}

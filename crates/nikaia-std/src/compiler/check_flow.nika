@@ -192,7 +192,7 @@ pub struct CheckFlow {
     /// `overlap` branch).
     pub barrier: String?,
     /// **The innermost `async { }` around the expression in this function**
-    /// (ADR-async-5 D9), by its node; a lambda starts again with none.
+    /// (ADR-async-v6 D9), by its node; a lambda starts again with none.
     pub async_group: i64?,
     /// The `async { }` whose own block the next `check_core_block` walks.
     pub async_group_block: i64?,
@@ -203,7 +203,7 @@ pub struct CheckFlow {
     /// How many tasks the innermost `async { }` started so far (`NK2111`).
     pub async_started: i64,
     /// **The bindings a bare `let x = async e` holds**, by the binding's id,
-    /// with the `let` written up to its `catch` (ADR-async-5 D22 step 3): a
+    /// with the `let` written up to its `catch` (ADR-async-v6 D22 step 3): a
     /// `catch` around a mention of one does not handle the task's failure,
     /// and `NK1134`'s help writes the fallback where it does.
     pub pending_tasks: collections::BTreeMap[i64, String],
@@ -213,7 +213,16 @@ pub struct CheckFlow {
     /// **The guard is a probe of a task's walk, not a `catch`'s** (D22): no
     /// handler stands there, so `NK2402` says nothing.
     pub task_probe: bool,
-    /// The groups written `limit: 1` with the literal (ADR-async-5 D15): their
+    /// **The value-form tasks a `catch` does not enclose** (ADR-async-v6 D6,
+    /// D22, #2829): the parts of a tuple, the arguments of a call, the
+    /// operands of an operation in the guarded expression, each waited for
+    /// before them, by the `async` node, with whether a failure was caught
+    /// outside that `catch`. Their failures go past it, to the guard outside
+    /// it (`escaped`) or on to the function.
+    pub tasks_past_the_catch: collections::BTreeMap[i64, bool],
+    /// What those tasks' walks met, for the guard outside the `catch`.
+    pub escaped: CheckGuarded?,
+    /// The groups written `limit: 1` with the literal (ADR-async-v6 D15): their
     /// tasks run one at a time and are not checked against each other (D7).
     pub async_one_at_a_time: collections::BTreeSet[i64],
     /// How many `async` forms stand around the expression in this function:
@@ -429,7 +438,7 @@ pub struct CheckFlow {
     /// The `fn` type the place a lambda stands in declares (#497).
     pub lambda_expected: Ty?,
     /// The last value of the lambda walked last (`async fn { … }`'s value,
-    /// ADR-async-5 D10: the lambda is run).
+    /// ADR-async-v6 D10: the lambda is run).
     pub lambda_tail: Ty?,
     /// The `fn` type a lambda bound by the `let` about to be checked is first
     /// handed to (#997), found by the block it stands in.
@@ -604,6 +613,8 @@ impl CheckFlow {
             pending_tasks: collections::BTreeMap(),
             fallible_tasks: collections::BTreeSet(),
             task_probe: false,
+            tasks_past_the_catch: collections::BTreeMap(),
+            escaped: null,
             async_one_at_a_time: collections::BTreeSet(),
             async_depth: 0,
             fallible_methods: collections::BTreeSet(),

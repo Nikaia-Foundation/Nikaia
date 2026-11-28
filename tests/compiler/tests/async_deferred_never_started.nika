@@ -1,5 +1,5 @@
 // A deferred handle neither started nor cancelled on some path is `NK2121`
-// (ADR-async-5 D12, #2512): never at all, only on one branch of an `if`, or
+// (ADR-async-v6 D12, #2512): never at all, only on one branch of an `if`, or
 // past a `return`; a deferred task nothing binds never starts either.
 fn never() throws {
 	let mut h = async(deferred) fn { 1 }

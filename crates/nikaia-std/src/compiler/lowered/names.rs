@@ -148,6 +148,73 @@ pub fn names_in(expr: &Expr, words: &winnow_grammar::InternerContext, out: &mut 
 
 pub fn names_in_block(block: &Block, words: &winnow_grammar::InternerContext, out: &mut collections::BTreeSet<String>) { for stmt in block.stmts.iter() { names_in_statement(&stmt.node, words, out); } }
 
+pub fn diamond_waiters(block: &Block, words: &winnow_grammar::InternerContext) -> collections::BTreeMap<i64, i64> {
+    let mut out: collections::BTreeMap<i64, i64> = collections::BTreeMap::new();
+    let count = block.stmts.len() as i64;
+    let mut at: i64 = 0;
+    while at < count {
+        let shared = nikaia_std::index::or(diamond_bare_binding(&unsafe { nikaia_std::proven::read(&block.stmts, (at) as usize) }.node, words), || "".into());
+        if shared != "" {
+            let mut readers: Vec<i64> = nikaia_std::block::list(nikaia_std::block::Place::Block);
+            let mut main_line = false;
+            let mut later = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
+            while later < count {
+                let mut seen: collections::BTreeSet<String> = collections::BTreeSet::new();
+                names_in_statement(&unsafe { nikaia_std::proven::read(&block.stmts, (later) as usize) }.node, words, &mut seen);
+                if seen.contains(&shared) {
+                    if diamond_starts_a_task(&unsafe { nikaia_std::proven::read(&block.stmts, (later) as usize) }.node) { readers.push(later); } else {
+                        main_line = true;
+                        break;
+                    }
+                }
+                later = unsafe { nikaia_std::proven::add::<i64>(later, 1) };
+            }
+            if !main_line && readers.len() > 1 {
+                let mut index: i64 = 1;
+                while index < readers.len() as i64 {
+                    let reader = *unsafe { nikaia_std::proven::read(&readers, (index) as usize) };
+                    index = unsafe { nikaia_std::proven::add::<i64>(index, 1) };
+                    let waiter = match diamond_bare_binding(&unsafe { nikaia_std::proven::read(&block.stmts, (reader) as usize) }.node, words) { Some(__nikaia_value) => __nikaia_value, None => continue };
+                    let mut named = false;
+                    let mut after = unsafe { nikaia_std::proven::add::<i64>(reader, 1) };
+                    while after < count && !named {
+                        let mut seen: collections::BTreeSet<String> = collections::BTreeSet::new();
+                        names_in_statement(&unsafe { nikaia_std::proven::read(&block.stmts, (after) as usize) }.node, words, &mut seen);
+                        named = seen.contains(&waiter);
+                        after = unsafe { nikaia_std::proven::add::<i64>(after, 1) };
+                    }
+                    if named { out.insert(reader, at); }
+                }
+            }
+        }
+        at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
+    }
+    out
+}
+
+pub(crate) fn diamond_bare_binding(stmt: &Stmt, words: &winnow_grammar::InternerContext) -> Option<String> {
+    match stmt {
+        Stmt::Let { names, value, .. } => match value {
+            Expr::Async(_, _, _, _) if names.len() == 1 => Some(nikaia_std::block::Text::from(words.resolve(*nikaia_std::index::get(&names, 0)).to_string())),
+            _ => None,
+        },
+        _ => None,
+    }
+}
+
+pub(crate) fn diamond_starts_a_task(stmt: &Stmt) -> bool {
+    let value = match stmt {
+        Stmt::Let { value, .. } => value,
+        Stmt::Expr(value) => value,
+        _ => return false,
+    };
+    match value {
+        Expr::Async(_, _, _, _) => true,
+        Expr::TryCatch { expr, .. } => { let expr = nikaia_std::boxed::open(expr); matches!(expr, Expr::Async(_, _, _, _)) },
+        _ => false,
+    }
+}
+
 pub fn names_in_statement(stmt: &Stmt, words: &winnow_grammar::InternerContext, out: &mut collections::BTreeSet<String>) {
     match stmt {
         Stmt::Let { value, .. } => { names_in(value, words, out); },

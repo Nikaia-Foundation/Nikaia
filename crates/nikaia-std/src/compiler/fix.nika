@@ -38,7 +38,7 @@ pub struct FixPlan {
 
 /// One edit planned: the bytes `start` to `end` of the file replaced by
 /// `text`, for the finding `code`; `group` counts the findings, so the
-/// parts of one edit (`CheckEdit.also`, ADR-async-5 D39) share it.
+/// parts of one edit (`CheckEdit.also`, ADR-async-v6 D39) share it.
 struct FixEdit {
     start: i64,
     end: i64,

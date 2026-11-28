@@ -5,4 +5,6 @@
 //! it takes and the argument for each ([ADR-218](../../../docs/specification/adr/adr-218.md)).
 //! Generated code reaches it here, under the name it has always had.
 
-pub use ::tether::{At, Dangling, Held, Hold, Holding, Keep, Keeps, Place, Rebase, Viewed, Views};
+pub use ::tether::{
+    At, Dangling, Held, Hold, Holding, Keep, Keeps, Place, Rebase, Spare, Viewed, Views,
+};

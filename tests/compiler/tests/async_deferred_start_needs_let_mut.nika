@@ -1,4 +1,4 @@
-// ADR-async-5 D12 before #2645: a deferred handle bound without `mut` is
+// ADR-async-v6 D12 before #2645: a deferred handle bound without `mut` is
 // `NK1139` at its `start()`, which changes it (`start(mut self)`, Part III
 // B.2), as for every `mut self` method.
 fn copy_all(src: i64, dst: i64) throws {

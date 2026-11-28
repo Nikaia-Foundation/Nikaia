@@ -4,7 +4,7 @@ error[NK1134]: Nothing here can fail, so the `catch` has nothing to handle.
  19 |     let c = (a + b) catch { 0 }
     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^
     |
-    = note: `let a = async work(7)` starts a task; its failure arrives where the task is waited for, before this whole statement, so no `catch` inside the statement meets it (ADR-async-5 D22).
+    = note: `let a = async work(7)` starts a task; its failure arrives where the task is waited for, before this whole statement, so no `catch` inside the statement meets it (ADR-async-v6 D22).
     = note: Nothing else here is declared with `throws`.
     = help: Handle the task's failure with a fallback after the `async` expression, `let a = async work(7) catch { … }`, and remove this `catch`.
 1 type error

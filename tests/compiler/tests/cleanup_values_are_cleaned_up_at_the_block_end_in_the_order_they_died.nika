@@ -2,7 +2,7 @@
 // the order the values died (the last first), each `drop` right after its
 // cleanup; a failing cleanup is what the block throws, and one failing while
 // the body throws joins the body's failure; `close` runs it at once and
-// leaves nothing for the end; a stop runs only the `drop`s (ADR-async-5,
+// leaves nothing for the end; a stop runs only the `drop`s (ADR-async-v6,
 // Part II 9). Moved from the `nikaia-std` unit tests `cleanup::tests::*`
 // (#2082).
 
