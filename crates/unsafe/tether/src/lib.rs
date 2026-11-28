@@ -430,6 +430,16 @@ impl Keep {
         self.copy(text)
     }
 
+    /// **A copy of `text`, put here**: for a literal the compiler puts beside
+    /// views of this keep (ADR-tether-v1 D15), which no buffer holds and no
+    /// search is run for. Empty text is no copy.
+    pub fn copied(&self, text: &str) -> &str {
+        if text.is_empty() {
+            return "";
+        }
+        self.copy(text)
+    }
+
     /// A copy of `text`, put here.
     fn copy(&self, text: &str) -> &str {
         self.put_viewed(text.to_owned()).as_str()
@@ -640,6 +650,21 @@ impl PartialEq<&str> for Held {
     }
 }
 
+/// **A view compared with a held one, the view on the left**
+/// (ADR-stream-buffers-v1 D2): `line == prev`, where `prev` holds an earlier
+/// line of the stream with a handle on its buffer.
+impl PartialEq<Held> for &str {
+    fn eq(&self, other: &Held) -> bool {
+        *self == other.text()
+    }
+}
+
+impl PartialEq<Held> for str {
+    fn eq(&self, other: &Held) -> bool {
+        self == other.text()
+    }
+}
+
 impl PartialOrd for Held {
     fn partial_cmp(&self, other: &Held) -> Option<std::cmp::Ordering> {
         Some(self.cmp(other))
@@ -729,6 +754,18 @@ impl<'a, const N: usize> Keeps<'a, N> {
     }
 }
 
+/// **Where the compiler says the views of a value lie** (ADR-tether-v1 D15),
+/// one per field of a struct of views: searched for, in the buffer at a place
+/// of one of the keeps (a miss the compiler's fault, as [`Keep::view_in`]), in
+/// it or a literal ([`Keep::view_near`]), or a literal copied into a keep.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum At {
+    Found,
+    In(usize, Place),
+    Near(usize, Place),
+    Copied(usize),
+}
+
 /// **A value whose views are carried into [`Keeps`]**: the same value, each
 /// view in it found again in the keep it points into.
 ///
@@ -751,6 +788,21 @@ pub trait Rebase<'a> {
         let _ = at;
         self.rebase(keeps)
     }
+
+    /// The same, where the compiler says where the views in it lie ([`At`]):
+    /// a view of text is checked as `at` says, a value with views of its own
+    /// kind takes `at` to each; what is not written for it is rebased as
+    /// [`Rebase::rebase_near`] (at a place of the first keep) or
+    /// [`Rebase::rebase`] does.
+    fn rebase_at<const N: usize>(self, keeps: &Keeps<'a, N>, at: At) -> Self::At
+    where
+        Self: Sized,
+    {
+        match at {
+            At::Near(0, place) | At::In(0, place) => self.rebase_near(keeps, place),
+            _ => self.rebase(keeps),
+        }
+    }
 }
 
 impl<'a> Rebase<'a> for &str {
@@ -760,6 +812,15 @@ impl<'a> Rebase<'a> for &str {
     }
     fn rebase_near<const N: usize>(self, keeps: &Keeps<'a, N>, at: Place) -> &'a str {
         keeps.view_near(0, at, self)
+    }
+    #[track_caller]
+    fn rebase_at<const N: usize>(self, keeps: &Keeps<'a, N>, at: At) -> &'a str {
+        match at {
+            At::Found => keeps.view(self),
+            At::In(keep, place) => keeps.view_in(keep, place, self),
+            At::Near(keep, place) => keeps.view_near(keep, place, self),
+            At::Copied(keep) => keeps.get(keep).copied(self),
+        }
     }
 }
 
@@ -771,6 +832,9 @@ impl<'a, T: Rebase<'a>> Rebase<'a> for Option<T> {
     fn rebase_near<const N: usize>(self, keeps: &Keeps<'a, N>, at: Place) -> Option<T::At> {
         self.map(|value| value.rebase_near(keeps, at))
     }
+    fn rebase_at<const N: usize>(self, keeps: &Keeps<'a, N>, at: At) -> Option<T::At> {
+        self.map(|value| value.rebase_at(keeps, at))
+    }
 }
 
 impl<'a, T: Rebase<'a>> Rebase<'a> for Vec<T> {
@@ -781,6 +845,11 @@ impl<'a, T: Rebase<'a>> Rebase<'a> for Vec<T> {
     fn rebase_near<const N: usize>(self, keeps: &Keeps<'a, N>, at: Place) -> Vec<T::At> {
         self.into_iter()
             .map(|value| value.rebase_near(keeps, at))
+            .collect()
+    }
+    fn rebase_at<const N: usize>(self, keeps: &Keeps<'a, N>, at: At) -> Vec<T::At> {
+        self.into_iter()
+            .map(|value| value.rebase_at(keeps, at))
             .collect()
     }
 }

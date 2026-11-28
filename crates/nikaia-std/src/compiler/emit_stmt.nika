@@ -132,10 +132,13 @@ struct EmitStmtKept {
     /// Its place in the keep is bound beside it, as `__place_<at>`
     /// (ADR-tether-v1 D15, #2842).
     placed: bool,
+    /// It is put into the keep again, and its place bound again beside it
+    /// (#2848), so the place is `mut`.
+    replaced: bool,
 }
 
 fn emit_stmt_kept_none() -> EmitStmtKept {
-    return EmitStmtKept { put: null, packed: false, holding: null, placed: false }
+    return EmitStmtKept { put: null, packed: false, holding: null, placed: false, replaced: false }
 }
 
 /// The operator of an assignment: `+` for `+=`, nothing for `=`.
@@ -651,7 +654,7 @@ impl EmitState {
         if plan.element_keepers.contains(bound) {
             holding = plan.widths.get(bound) ?? 1
         }
-        return EmitStmtKept { put: put, packed: packed, holding: holding, placed: placed }
+        return EmitStmtKept { put: put, packed: packed, holding: holding, placed: placed, replaced: emit_stmt_replaced(plan, at) }
     }
 
     /// **The keeps a value bound or assigned whole to `bound` at `at` is held
@@ -703,6 +706,14 @@ impl EmitState {
             let local = self.emit_stmt_local(late.name)
             walk.kept_names.insert(late.name.clone(), at)
             let mut_word = if late.reassigned { "mut " } else { "" }
+            // **Its place comes along where a view of it is checked against
+            // it** (ADR-tether-v1 D15, #2848), bound where it is put.
+            if plan.placed.contains(at) && !plan.opaque_puts.contains(at) {
+                let place_mut = if emit_stmt_replaced(plan, at) { "mut " } else { "" }
+                let put_at = put.replace(".put_viewed(", ".put_viewed_at(")
+                written = f"{written} let ({mut_word}{local}, {place_mut}__place_{at}) = {put_at}{local});"
+                continue
+            }
             written = f"{written} let {mut_word}{local} = {put}{local});"
         }
         return written
@@ -739,6 +750,14 @@ impl EmitState {
             },
             else => false,
         }
+    }
+
+    /// **The buffer whose place an assignment that puts it again binds
+    /// again** (ADR-tether-v1 D15, #2848): its `let`, where the plan names it.
+    fn emit_stmt_reput_place(ref self, walk: ref EmitWalk, function: ref String, at: i64) -> i64? {
+        let key = self.keep_plan_key(walk, function) ?? return null
+        let plan = self.keep_plans.get(key) ?? return null
+        return plan.reput_places.get(at)?.clone()
     }
 
     fn emit_stmt_reput(ref self, walk: ref EmitWalk, function: ref String, at: i64) -> String? {
@@ -837,8 +856,29 @@ impl EmitState {
         let inner = scope.clone() with { bound: bound.clone() }
         let kept = self.emit_stmt_kept(walk, scope.function, at, bound)
         walk.holding = kept.holding
-        let annotation = self.emit_stmt_annotation(world, walk, host, ty, at, count, kept.put != null || kept.packed)
+        let mut annotation = self.emit_stmt_annotation(world, walk, host, ty, at, count, kept.put != null || kept.packed)
         walk.holding = null
+        // **A name a loop over a stream counts holds each line with a handle
+        // on its buffer** (ADR-stream-buffers-v1 D2, D3): `Held`, whatever
+        // its first value; a literal takes no keep (ADR-tether-v1 D15).
+        let streamed = names.len() == 1 && ty != null && self.stream_counted(walk, scope.function, bound)
+        if streamed {
+            annotation = ": nikaia_std::tether::Held"
+            let local = self.emit_stmt_local(bound)
+            match value {
+                Expr::LitStr { text, .. } => {
+                    out.push(f"let {mut_word}{local}{annotation} = nikaia_std::tether::Held::literal(\"{text}\");")
+                    return
+                },
+                else => {},
+            }
+            if self.emit_stmt_held_keeps(walk, scope.function, at, bound) == null {
+                out.push(f"let {mut_word}{local}{annotation} = {{ use nikaia_std::tether::Hold as _; (")
+                self.emit_expr(world, walk, out, host, value, depth, flow, inner)
+                out.push(").hold([std::sync::Arc::new(nikaia_std::tether::Keep::new())]) };")
+                return
+            }
+        }
         let local = self.emit_stmt_local(bound)
         if kept.packed {
             let held = emit_tethered_type(world, ty, value)
@@ -859,7 +899,8 @@ impl EmitState {
         if kept.put != null {
             walk.kept_names.insert(bound.clone(), at)
             if kept.placed {
-                out.push(f"let ({mut_word}{local}, __place_{at}) = {kept.put ?? ""}")
+                let place_mut = if kept.replaced { "mut " } else { "" }
+                out.push(f"let ({mut_word}{local}, {place_mut}__place_{at}) = {kept.put ?? ""}")
             } else {
                 out.push(f"let {mut_word}{local} = {kept.put ?? ""}")
             }
@@ -872,20 +913,22 @@ impl EmitState {
         // not.
         let held_keeps = self.emit_stmt_held_keeps(walk, scope.function, at, bound)
         if held_keeps != null {
-            let (mut before, mut after) = emit_held_around(held_keeps ?? "", self.emit_stmt_held_place(walk, scope.function, at, bound))
             // **A literal takes no keep** (ADR-tether-v1 D8, D15, #2842): it is
             // `'static` already, held with no handle and no copy.
             let literal = match value {
                 Expr::LitStr { .. } => annotation == "" || annotation == ": nikaia_std::tether::Held",
                 else => false,
             }
+            out.push(f"let {mut_word}{local}{annotation} = ")
             if literal {
-                before = "nikaia_std::tether::Held::literal("
-                after = ")"
+                out.push("nikaia_std::tether::Held::literal(")
+                self.emit_expr(world, walk, out, host, value, depth, flow, inner)
+                out.push(");")
+                return
             }
-            out.push(f"let {mut_word}{local}{annotation} = {before}")
-            self.emit_expr(world, walk, out, host, value, depth, flow, inner)
-            out.push(f"{after};")
+            let no_buffers: Vec[i64] = []
+            self.emit_held_value(world, walk, out, host, value, held_keeps ?? "", no_buffers, self.emit_stmt_held_place(walk, scope.function, at, bound), scope.function, depth, flow, inner)
+            out.push(";")
             return
         }
         // **The annotation is no longer the constructor** (ADR-281 D2).
@@ -1021,7 +1064,21 @@ impl EmitState {
                 out.push("let ")
             }
         }
+        // **A buffer put again binds its place again** (ADR-tether-v1 D15,
+        // #2848): `(text, __place_N) = keep.put_viewed_at(..)`. Where it
+        // cannot, the place stays the old buffer's and a view of the new one
+        // is copied, which the plan allows for a buffer assigned again.
+        let mut reput_place: i64? = null
+        if op == null && rebound == null && !self.facts.view_list_assigns.contains(at) && (self.emit_stmt_reput(walk, scope.function, at) ?? "").contains(".put_viewed(") {
+            reput_place = self.emit_stmt_reput_place(walk, scope.function, at)
+        }
+        if reput_place != null {
+            out.push("(")
+        }
         self.emit_expr(world, walk, out, host, target, depth, flow.place(), scope)
+        if reput_place != null {
+            out.push(f", __place_{reput_place ?? 0})")
+        }
         if op == null {
             out.push(" = ")
         } else {
@@ -1040,7 +1097,11 @@ impl EmitState {
         let reput = self.emit_stmt_reput(walk, scope.function, at)
         let reputted = reput != null
         if reputted {
-            out.push(reput ?? "")
+            if reput_place != null {
+                out.push((reput ?? "").replace(".put_viewed(", ".put_viewed_at("))
+            } else {
+                out.push(reput ?? "")
+            }
         }
         out.push(before)
         // **A view of the place being assigned is copied first** (#563):
@@ -1100,10 +1161,8 @@ impl EmitState {
                 Expr::Variable(assigned, _) => self.emit_stmt_held_place(walk, scope.function, at, emit_text(world, assigned)),
                 else => null,
             }
-            let (before, after) = emit_held_around(held_keeps ?? "", place)
-            out.push(before)
-            self.emit_expr(world, walk, out, host, value, depth, flow, scope)
-            out.push(after)
+            let no_buffers: Vec[i64] = []
+            self.emit_held_value(world, walk, out, host, value, held_keeps ?? "", no_buffers, place, scope.function, depth, flow, scope)
         } else if !own_view {
             self.emit_expr(world, walk, out, host, value, depth, flow, scope)
             // **A handle assigned is duplicated** where its name is read
@@ -1485,6 +1544,20 @@ impl EmitState {
             } else if lent_item != "" {
                 unwrap = f"let {bound} = &{plain};"
             }
+            // **A loop over a stream reads into a pool and its line is a
+            // view** (ADR-stream-buffers-v1 D1, D3): the pool's size is the
+            // plan's count, and the chunk's keep and place are bound beside
+            // the line for the names that hold it across turns.
+            let pool = self.stream_pool(walk, scope.function, at)
+            let mut stepped = "next"
+            let mut opened = ""
+            if pool != null {
+                stepped = "next_line"
+                opened = f".in_pool({pool ?? 2})"
+                let step = if self.facts.fallible_loops.contains(at) { "__nikaia_line?" } else { "__nikaia_line" }
+                unwrap = f"let ({bound}, __keep_{at}, __place_{at}) = {step}.parts();"
+            }
+            let stepped_bound = if pool != null { "__nikaia_line" } else { bound.clone() }
             let pad = "    ".repeat(depth)
             let inner = "    ".repeat(depth + 1)
             out.push("{\n")
@@ -1492,11 +1565,11 @@ impl EmitState {
             out.push("let mut __nikaia_sequence = ")
             self.emit_expr(world, walk, out, host, iter, depth + 1, flow, scope)
             // A produced sequence is walked by value (ADR-105 D2).
-            out.push(";\n")
+            out.push(f"{opened};\n")
             out.push(inner)
             // **Each step is a pause of the main line** (ADR-async-5 D37):
             // under a gate, the waiting tasks start meanwhile.
-            out.push(f"{allowed}while let Some({bound}) = __nikaia_sequence.next(){emit_async_pause(walk)} ")
+            out.push(f"{allowed}while let Some({stepped_bound}) = __nikaia_sequence.{stepped}(){emit_async_pause(walk)} ")
             self.emit_stmt_block_opening_with(world, walk, out, host, body, depth + 1, flow.inside_a_loop(), scope, EmitTail::Statement, emit_counted_turn(host.counts_steps(), unwrap))
             out.push("\n")
             out.push(pad)
@@ -1966,4 +2039,15 @@ fn emit_stmt_finish_rests(mut walk: EmitWalk, rests: i64, pad: ref String) -> St
         finished = f"{pad}{wait};\n{finished}"
     }
     return finished
+}
+
+/// Whether the buffer `let` at `at` is put into its keep again with its place
+/// bound again (#2848).
+fn emit_stmt_replaced(plan: ref BufferPlan, at: i64) -> bool {
+    for (_, buffer) in plan.reput_places {
+        if buffer == at {
+            return true
+        }
+    }
+    return false
 }

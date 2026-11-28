@@ -203,20 +203,38 @@ impl EmitState {
     }
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn emit_held_struct(&self, world: &EmitWorld<'_, '_, '_, '_>, ty: &str, a: &str, any: &str, long: &str, short: &str, fields: &[FieldDef]) -> String {
-        let mut parts: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
+        #[allow(unused_mut)] let mut parts: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
+        #[allow(unused_mut)] let mut near: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block); #[allow(unused_mut, clippy::redundant_locals)] let mut parts = parts;
+        let mut at: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block); #[allow(unused_mut, clippy::redundant_locals)] let mut parts = parts; #[allow(unused_mut, clippy::redundant_locals)] let mut near = near;
+        let mut k = 0;
         for field in fields.iter() {
             let field_name = escaped_name(world.words.resolve(field.name));
-            if holds_view(&field.ty) || self.names_borrowing(world, &field.ty) { parts.push(format!("{}: nikaia_std::tether::Rebase::rebase(self.{}, keeps)", field_name, field_name)); } else { parts.push(format!("{}: self.{}", field_name, field_name)); }
+            if holds_view(&field.ty) || self.names_borrowing(world, &field.ty) {
+                parts.push(format!("{}: nikaia_std::tether::Rebase::rebase(self.{}, keeps)", field_name, field_name));
+                near.push(format!("{}: nikaia_std::tether::Rebase::rebase_near(self.{}, keeps, at)", field_name, field_name));
+                at.push(format!("{}: nikaia_std::tether::Rebase::rebase_at(self.{}, keeps, at[{}])", field_name, field_name, k));
+            } else {
+                parts.push(format!("{}: self.{}", field_name, field_name));
+                near.push(format!("{}: self.{}", field_name, field_name));
+                at.push(format!("{}: self.{}", field_name, field_name));
+            }
+            k += 1;
         }
         let rebased = nikaia_std::block::Text::from(parts.join(", "));
+        let rebased_near = nikaia_std::block::Text::from(near.join(", "));
+        let rebased_at = nikaia_std::block::Text::from(at.join(", "));
         let mut text: String = format!("\n/// `{}` held one handle per buffer (ADR-tether-v1).\n", ty);
         text = format!("{}#[allow(non_camel_case_types)]\nenum __Views_{} {{}}\n\n", text, ty);
         text = format!("{}impl nikaia_std::tether::Views for __Views_{} {{\n    type Of<'a> = {}<{}>;\n", text, ty, ty, a);
         text = format!("{}    fn shorten<'long: 's, 's>(x: &'s {}<{}>) -> &'s {}<{}> {{\n        x\n    }}\n}}\n\n", text, ty, long, ty, short);
         text = format!("{}impl<'a> nikaia_std::tether::Rebase<'a> for {}<{}> {{\n    type At = {}<{}>;\n", text, ty, any, ty, a);
-        text = format!("{}    fn rebase<const N: usize>(self, keeps: &nikaia_std::tether::Keeps<'a, N>) -> {}<{}> {{\n        {} {{ {} }}\n    }}\n}}\n\n", text, ty, a, ty, rebased);
+        text = format!("{}    fn rebase<const N: usize>(self, keeps: &nikaia_std::tether::Keeps<'a, N>) -> {}<{}> {{\n        {} {{ {} }}\n    }}\n", text, ty, a, ty, rebased);
+        text = format!("{}    fn rebase_near<const N: usize>(self, keeps: &nikaia_std::tether::Keeps<'a, N>, at: nikaia_std::tether::Place) -> {}<{}> {{\n        {} {{ {} }}\n    }}\n}}\n\n", text, ty, a, ty, rebased_near);
         text = format!("{}impl<const N: usize> nikaia_std::tether::Hold<N> for {}<{}> {{\n    type Held = nikaia_std::tether::Holding<__Views_{}, N>;\n", text, ty, any, ty);
-        text = format!("{}    fn hold(self, keeps: [std::sync::Arc<nikaia_std::tether::Keep>; N]) -> Self::Held {{\n        nikaia_std::tether::Holding::new(keeps, move |keeps| nikaia_std::tether::Rebase::rebase(self, &keeps))\n    }}\n}}\n", text);
+        text = format!("{}    fn hold(self, keeps: [std::sync::Arc<nikaia_std::tether::Keep>; N]) -> Self::Held {{\n        nikaia_std::tether::Holding::new(keeps, move |keeps| nikaia_std::tether::Rebase::rebase(self, &keeps))\n    }}\n", text);
+        text = format!("{}    fn hold_near(self, keeps: [std::sync::Arc<nikaia_std::tether::Keep>; N], at: nikaia_std::tether::Place) -> Self::Held {{\n        nikaia_std::tether::Holding::new(keeps, move |keeps| nikaia_std::tether::Rebase::rebase_near(self, &keeps, at))\n    }}\n}}\n\n", text);
+        text = format!("{}impl {}<{}> {{\n    #[allow(dead_code)]\n    fn __rebase_at<'a, const N: usize>(self, keeps: &nikaia_std::tether::Keeps<'a, N>, at: [nikaia_std::tether::At; {}]) -> {}<{}> {{\n        {} {{ {} }}\n    }}\n\n", text, ty, any, k, ty, a, ty, rebased_at);
+        text = format!("{}    #[allow(dead_code)]\n    fn __hold_at<const N: usize>(self, keeps: [std::sync::Arc<nikaia_std::tether::Keep>; N], at: [nikaia_std::tether::At; {}]) -> nikaia_std::tether::Holding<__Views_{}, N> {{\n        nikaia_std::tether::Holding::new(keeps, move |keeps| self.__rebase_at(&keeps, at))\n    }}\n}}\n", text, k, ty);
         text
     }
 }

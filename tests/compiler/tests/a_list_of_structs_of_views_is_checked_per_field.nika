@@ -1,0 +1,40 @@
+// A list of structs of views a task takes with it, each field a view of
+// another buffer: every field is checked against its own buffer, not searched
+// for among the task's 20 000 (ADR-tether-v1 D14, D15, #2848).
+struct Pair {
+	key: String,
+	line: String,
+	at: i64,
+}
+
+fn make(i: i64) -> String {
+	let mut g = String()
+	for k in 0..<8 {
+		g.push_str(f"w{(i * 8 + k) % 50} ")
+	}
+	return g
+}
+
+fn count(pairs: Vec[Pair]) -> i64 {
+	let mut n = 0
+	for p in pairs {
+		n += p.key.len() as i64 + p.line.len() as i64 + p.at
+	}
+	return n
+}
+
+fn main() throws {
+	let mut pairs: Vec[Pair] = []
+	for i in 0..<10000 {
+		let text = make(i)
+		let tail = make(i + 7)
+		let line = tail.trim()
+		for w in text.split(" ") {
+			if w.len() > 0 {
+				pairs.push(Pair { key: w, line, at: i % 3 })
+			}
+		}
+	}
+	let n = async(detached) fn { count(pairs) }
+	println(f"{n.join()}")
+}

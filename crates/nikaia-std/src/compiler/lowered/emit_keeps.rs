@@ -19,6 +19,11 @@ pub(crate) fn emit_keep_expr(keep: &KeepAt, lent: bool) -> String {
     }
 }
 
+pub(crate) fn emit_stream_pool(plan: &BufferPlan, at: i64) -> Option<i64> {
+    for stream in plan.streams.iter() { if stream.at == at { return Some(stream.pool); } }
+    None
+}
+
 pub(crate) fn emit_is_element(keep: &KeepAt, at: i64) -> bool {
     match keep {
         KeepAt::Element(held) => { let held = *held; held == at },
@@ -50,9 +55,20 @@ impl EmitState {
             let keep = *keep;
             if emit_is_element(&keep, at) { element = true; }
         }
-        if element { lines.push(format!("let __keep_{} = std::sync::Arc::new(nikaia_std::tether::Keep::new());", at)); }
+        if element && emit_stream_pool(plan, at).is_none() { lines.push(format!("let __keep_{} = std::sync::Arc::new(nikaia_std::tether::Keep::new());", at)); }
         if lines.is_empty() { return None; }
         Some(nikaia_std::block::Text::from(lines.join(" ")))
+    }
+    pub(crate) fn stream_counted(&self, walk: &EmitWalk, function: &str, name: &str) -> bool {
+        let key = match self.keep_plan_key(walk, function) { Some(__nikaia_value) => __nikaia_value, None => return false };
+        let plan = match self.keep_plans.get(&key) { Some(__nikaia_value) => __nikaia_value, None => return false };
+        for stream in plan.streams.iter() { if nikaia_std::list::contains(&stream.counted, &name) { return true; } }
+        false
+    }
+    pub(crate) fn stream_pool(&self, walk: &EmitWalk, function: &str, at: i64) -> Option<i64> {
+        let key = match self.keep_plan_key(walk, function) { Some(__nikaia_value) => __nikaia_value, None => return None };
+        let plan = match self.keep_plans.get(&key) { Some(__nikaia_value) => __nikaia_value, None => return None };
+        emit_stream_pool(plan, at)
     }
     pub(crate) fn argument_keep(&self, walk: &EmitWalk, function: &str, statement: i64, callee: &str, i: i64) -> Option<String> {
         let key = match self.keep_plan_key(walk, function) { Some(__nikaia_value) => __nikaia_value, None => return None };
@@ -176,5 +192,163 @@ pub(crate) fn emit_held_around(keeps: &str, place: Option<(i64, bool)>) -> (Stri
     let named = match place { Some(__nikaia_value) => __nikaia_value, None => return (String::from("{ use nikaia_std::tether::Hold as _; ("), format!(").hold([{}]) }}", keeps)) };
     if named.1 { return (format!("nikaia_std::tether::Held::in_place(std::sync::Arc::clone(&__keep_{}), __place_{}, ", named.0, named.0), String::from(")")); }
     (String::from("{ use nikaia_std::tether::Hold as _; ("), format!(").hold_near([{}], __place_{}) }}", keeps, named.0))
+}
+
+pub(crate) fn emit_held_arms_fit(value: &Expr) -> bool {
+    match value {
+        Expr::If { then_branch, else_branch, .. } => {
+            let other = match else_branch { Some(__nikaia_value) => __nikaia_value, None => return false };
+            emit_held_arm_fits(then_branch) && emit_held_arm_fits(other)
+        },
+        _ => false,
+    }
+}
+
+pub(crate) fn emit_held_arm_fits(block: &Block) -> bool {
+    if block.stmts.len() != 1 { return false; }
+    let tail = match ending_of(block) { Some(__nikaia_value) => __nikaia_value, None => return false };
+    match tail {
+        Expr::If { .. } => emit_held_arms_fit(&tail),
+        _ => true,
+    }
+}
+
+impl EmitState {
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn emit_held_value<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, value: &Expr, keeps: &str, buffers: &[i64], place: Option<(i64, bool)>, function: &str, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
+        let key = nikaia_std::index::or(self.keep_plan_key(&walk, function), || "".into());
+        let plan = self.keep_plans.get(&key);
+        let parts: collections::BTreeSet<i64> = nikaia_std::index::or(match plan.as_ref().map(|__nikaia_it| &__nikaia_it.plain_parts) {
+            Some(__nikaia_it) => Some(__nikaia_it.copy_owned()),
+            None => None,
+        }, || collections::BTreeSet::new().into());
+        let fields: Option<collections::BTreeMap<String, (i64, bool)>> = match (match plan.as_ref().map(|__nikaia_it| &__nikaia_it.field_places) {
+            Some(__nikaia_it) => __nikaia_it.get(&node_key(value)),
+            None => None,
+        }) {
+            Some(__nikaia_it) => Some(__nikaia_it.clone()),
+            None => None,
+        };
+        let at = self.emit_held_fields(world, value, fields, place, buffers, false);
+        if at.is_some() {
+            out.push("(");
+            self.emit_expr(world, walk, out, host, value, depth, flow, scope)?;
+            out.push(&format!(").__hold_at([{}], {})", keeps, nikaia_std::index::or(at.as_deref(), || "")));
+            return Ok(());
+        }
+        let named = nikaia_std::index::or(place, || (-1, false.into()));
+        if named.0 >= 0 && !named.1 && emit_held_arms_fit(value) && self.emit_held_arms_plain(world, walk, host, value, &parts, depth, flow, scope)? {
+            self.emit_held_arm(world, walk, out, host, value, keeps, named.0, &parts, depth, flow, scope)?;
+            return Ok(());
+        }
+        let (before, after) = emit_held_around(keeps, place);
+        out.push(&before);
+        self.emit_expr(world, walk, out, host, value, depth, flow, scope)?;
+        out.push(&after);
+        Ok(())
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn emit_held_arms_plain<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, host: &H, value: &Expr, parts: &collections::BTreeSet<i64>, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<bool, nikaia_std::error::Thrown<EmitRefused>> {
+        Ok(match value {
+            Expr::If { then_branch, else_branch, .. } => {
+                let other = match else_branch { Some(__nikaia_value) => __nikaia_value, None => return Ok(false) };
+                let first = match ending_of(then_branch) { Some(__nikaia_value) => __nikaia_value, None => return Ok(false) };
+                let second = match ending_of(other) { Some(__nikaia_value) => __nikaia_value, None => return Ok(false) };
+                return Ok(self.emit_held_arms_plain(world, walk, host, &first, parts, depth, flow, scope)? && self.emit_held_arms_plain(world, walk, host, &second, parts, depth, flow, scope)?);
+            },
+            Expr::LitStr { .. } => {
+                let mut written = EmitOut::empty();
+                self.emit_expr(world, walk, &mut written, host, value, depth, flow, scope)?;
+                return Ok(written.buf.starts_with("\"") && written.buf.ends_with("\""));
+            },
+            _ => {
+                if !parts.contains(&node_key(value)) { return Ok(false); }
+                let mut written = EmitOut::empty();
+                self.emit_expr(world, walk, &mut written, host, value, depth, flow, scope)?;
+                return Ok(!written.buf.starts_with("Some("));
+            },
+        })
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn emit_held_arm<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, value: &Expr, keeps: &str, buffer: i64, parts: &collections::BTreeSet<i64>, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
+        match value {
+            Expr::If { cond, then_branch, else_branch, .. } => {
+                let cond = nikaia_std::boxed::open(cond);
+                let other = match else_branch { Some(__nikaia_value) => __nikaia_value, None => return Ok(()) };
+                let first = match ending_of(then_branch) { Some(__nikaia_value) => __nikaia_value, None => return Ok(()) };
+                let second = match ending_of(other) { Some(__nikaia_value) => __nikaia_value, None => return Ok(()) };
+                out.push("if ");
+                self.emit_expr(world, walk, out, host, cond, depth, flow, scope)?;
+                out.push(" { ");
+                self.emit_held_arm(world, walk, out, host, &first, keeps, buffer, parts, depth, flow, scope)?;
+                out.push(" } else { ");
+                self.emit_held_arm(world, walk, out, host, &second, keeps, buffer, parts, depth, flow, scope)?;
+                out.push(" }");
+            },
+            Expr::LitStr { .. } => {
+                out.push("nikaia_std::tether::Held::literal(");
+                self.emit_expr(world, walk, out, host, value, depth, flow, scope)?;
+                out.push(")");
+            },
+            _ => {
+                let (before, after) = emit_held_around(keeps, Some((buffer, parts.contains(&node_key(value)))));
+                out.push(&before);
+                self.emit_expr(world, walk, out, host, value, depth, flow, scope)?;
+                out.push(&after);
+            },
+        }
+        Ok(())
+    }
+    pub(crate) fn emit_held_fields(&self, world: &EmitWorld<'_, '_, '_, '_>, value: &Expr, named: Option<collections::BTreeMap<String, (i64, bool)>>, place: Option<(i64, bool)>, buffers: &[i64], packed: bool) -> Option<String> {
+        let name = match value {
+            Expr::StructLit { name, .. } => { let name = *name; nikaia_std::block::Text::from(emit_text(world, name).to_string()) },
+            _ => return None,
+        };
+        if named.is_none() && place.is_none() { return None; }
+        let by_field = nikaia_std::index::or(named, || collections::BTreeMap::new().into());
+        let mut declared: Option<Vec<FieldDef>> = None;
+        for item in world.items.iter() {
+            match &item.node {
+                Item::Struct { name: own, generics, fields, .. } => {
+                    let own = *own;
+                    if world.words.resolve(own) == name && generics.is_empty() && self.borrowing.contains(&name) { declared = Some(fields.copy_owned()); }
+                },
+                _ => { },
+            }
+        }
+        let fields = match declared { Some(__nikaia_value) => __nikaia_value, None => return None };
+        if self.cleaned_types.contains(&name) { return None; }
+        let mut at: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
+        for field in fields.iter() {
+            if !holds_view(&field.ty) && !self.names_borrowing(world, &field.ty) {
+                at.push(String::from("nikaia_std::tether::At::Found"));
+                continue;
+            }
+            let mut named_here: Option<(i64, bool)> = match by_field.get(world.words.resolve(field.name)) {
+                Some(__nikaia_it) => Some(__nikaia_it.clone()),
+                None => None,
+            };
+            if named_here.is_none() && place.is_some() {
+                let whole = nikaia_std::index::or(place, || (-1, false.into()));
+                named_here = Some((whole.0, false));
+            }
+            let (buffer, sure) = nikaia_std::index::or(named_here, || (-2, false.into()));
+            if buffer == -1 {
+                at.push(String::from("nikaia_std::tether::At::Copied(0)"));
+                continue;
+            }
+            let mut keep: i64 = -1;
+            if packed { keep = 0; } else { for k in 0..buffers.len() as i64 { if keep < 0 && *unsafe { nikaia_std::proven::read(&buffers, (k) as usize) } == buffer { keep = k; } } }
+            if buffer < 0 || keep < 0 { at.push(String::from("nikaia_std::tether::At::Found")); } else if sure { at.push(format!("nikaia_std::tether::At::In({}, __place_{})", keep, buffer)); } else { at.push(format!("nikaia_std::tether::At::Near({}, __place_{})", keep, buffer)); }
+        }
+        let joined = nikaia_std::block::Text::from(at.join(", "));
+        Some(format!("[{}]", joined))
+    }
 }
 

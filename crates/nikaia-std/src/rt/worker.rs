@@ -73,6 +73,17 @@ pub(super) enum Op {
         want: usize,
         reply: Sender<io::Result<Vec<u8>>>,
     },
+    /// **The next chunk of standard input, read into a buffer the caller
+    /// hands over and given back with it** (ADR-stream-buffers-v1 D1, D5):
+    /// `io::lines()`' pool reuses its buffers, so the read appends to `into`
+    /// and the reply carries the buffer and the bytes read, a failure
+    /// included. The reply is a bounded channel the caller keeps for the
+    /// whole loop, so a step allocates nothing.
+    StdinInto {
+        into: Vec<u8>,
+        want: usize,
+        reply: std::sync::mpsc::SyncSender<(Vec<u8>, io::Result<usize>)>,
+    },
     /// Stop after everything already queued. What shutdown sends (ADR-297 D6).
     Stop,
 }
@@ -296,6 +307,20 @@ fn perform(op: Op) {
                 bytes
             });
             let _ = reply.send(read);
+        }
+        Op::StdinInto {
+            mut into,
+            want,
+            reply,
+        } => {
+            use std::io::Read;
+
+            // One read, as `StdinChunk`'s, after what the buffer already holds.
+            let from = into.len();
+            into.resize(from + want, 0);
+            let read = std::io::stdin().lock().read(&mut into[from..]);
+            into.truncate(from + *read.as_ref().unwrap_or(&0));
+            let _ = reply.send((into, read));
         }
         Op::Stop => {}
     }

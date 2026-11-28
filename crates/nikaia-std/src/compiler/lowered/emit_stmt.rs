@@ -93,9 +93,10 @@ pub(crate) struct EmitStmtKept {
     pub(crate) packed: bool,
     pub(crate) holding: Option<i64>,
     pub(crate) placed: bool,
+    pub(crate) replaced: bool,
 }
 
-pub(crate) fn emit_stmt_kept_none() -> EmitStmtKept { EmitStmtKept { put: None, packed: false, holding: None, placed: false } }
+pub(crate) fn emit_stmt_kept_none() -> EmitStmtKept { EmitStmtKept { put: None, packed: false, holding: None, placed: false, replaced: false } }
 
 pub(crate) fn emit_stmt_op_text(op: Option<&BinaryOp>) -> String {
     let given = match op { Some(__nikaia_value) => __nikaia_value, None => return String::from("") };
@@ -469,7 +470,7 @@ impl EmitState {
         let packed = nikaia_std::index::or(plan.tethered.get(bound), || -1) == at;
         let mut holding: Option<i64> = None;
         if plan.element_keepers.contains(bound) { holding = Some(nikaia_std::index::or(plan.widths.get(bound), || 1)); }
-        EmitStmtKept { put, packed, holding, placed }
+        EmitStmtKept { put, packed, holding, placed, replaced: emit_stmt_replaced(plan, at) }
     }
     pub(crate) fn emit_stmt_held_place(&self, walk: &EmitWalk, function: &str, at: i64, bound: &str) -> Option<(i64, bool)> {
         let key = match self.keep_plan_key(walk, function) { Some(__nikaia_value) => __nikaia_value, None => return None };
@@ -514,6 +515,12 @@ impl EmitState {
             let local = self.emit_stmt_local(&late.name);
             walk.kept_names.insert(nikaia_std::block::Text::from(late.name.to_string()), at);
             let mut_word = if late.reassigned { "mut " } else { "" };
+            if plan.placed.contains(&at) && !plan.opaque_puts.contains(&at) {
+                let place_mut = if emit_stmt_replaced(plan, at) { "mut " } else { "" };
+                let put_at = nikaia_std::block::Text::from(put.replace(".put_viewed(", ".put_viewed_at("));
+                written = format!("{} let ({}{}, {}__place_{}) = {}{});", written, mut_word, local, place_mut, at, put_at, local);
+                continue;
+            }
             written = format!("{} let {}{} = {}{});", written, mut_word, local, put, local);
         }
         written
@@ -545,6 +552,14 @@ impl EmitState {
             },
             _ => false,
         })
+    }
+    pub(crate) fn emit_stmt_reput_place(&self, walk: &EmitWalk, function: &str, at: i64) -> Option<i64> {
+        let key = match self.keep_plan_key(walk, function) { Some(__nikaia_value) => __nikaia_value, None => return None };
+        let plan = match self.keep_plans.get(&key) { Some(__nikaia_value) => __nikaia_value, None => return None };
+        match plan.reput_places.get(&at) {
+            Some(__nikaia_it) => Some(__nikaia_it.clone()),
+            None => None,
+        }
     }
     pub(crate) fn emit_stmt_reput(&self, walk: &EmitWalk, function: &str, at: i64) -> Option<String> {
         let key = match self.keep_plan_key(walk, function) { Some(__nikaia_value) => __nikaia_value, None => return None };
@@ -611,8 +626,26 @@ impl EmitState {
         let inner = EmitScope { bound: nikaia_std::block::Text::from(bound.to_string()), ..scope.clone() };
         let kept = self.emit_stmt_kept(&walk, &scope.function, at, &bound);
         walk.holding = kept.holding;
-        let annotation = self.emit_stmt_annotation(world, walk, host, ty, at, &count, kept.put.is_some() || kept.packed);
+        let mut annotation = self.emit_stmt_annotation(world, walk, host, ty, at, &count, kept.put.is_some() || kept.packed);
         walk.holding = None;
+        let streamed = names.len() == 1 && ty.is_some() && self.stream_counted(&walk, &scope.function, &bound);
+        if streamed {
+            annotation = String::from(": nikaia_std::tether::Held");
+            let local = self.emit_stmt_local(&bound);
+            match value {
+                Expr::LitStr { text, .. } => {
+                    out.push(&format!("let {}{}{} = nikaia_std::tether::Held::literal(\"{}\");", mut_word, local, annotation, text));
+                    return Ok(());
+                },
+                _ => { },
+            }
+            if self.emit_stmt_held_keeps(&walk, &scope.function, at, &bound).is_none() {
+                out.push(&format!("let {}{}{} = {{ use nikaia_std::tether::Hold as _; (", mut_word, local, annotation));
+                self.emit_expr(world, walk, out, host, value, depth, flow, &inner)?;
+                out.push(").hold([std::sync::Arc::new(nikaia_std::tether::Keep::new())]) };");
+                return Ok(());
+            }
+        }
         let local = self.emit_stmt_local(&bound);
         if kept.packed {
             let held = emit_tethered_type(world, ty, value);
@@ -625,25 +658,30 @@ impl EmitState {
         }
         if kept.put.is_some() {
             walk.kept_names.insert(nikaia_std::block::Text::from(bound.to_string()), at);
-            if kept.placed { out.push(&format!("let ({}{}, __place_{}) = {}", mut_word, local, at, nikaia_std::index::or(kept.put.as_deref(), || ""))); } else { out.push(&format!("let {}{} = {}", mut_word, local, nikaia_std::index::or(kept.put.as_deref(), || ""))); }
+            if kept.placed {
+                let place_mut = if kept.replaced { "mut " } else { "" };
+                out.push(&format!("let ({}{}, {}__place_{}) = {}", mut_word, local, place_mut, at, nikaia_std::index::or(kept.put.as_deref(), || "")));
+            } else { out.push(&format!("let {}{} = {}", mut_word, local, nikaia_std::index::or(kept.put.as_deref(), || ""))); }
             self.emit_expr(world, walk, out, host, value, depth, flow, &inner)?;
             out.push(");");
             return Ok(());
         }
         let held_keeps = self.emit_stmt_held_keeps(&walk, &scope.function, at, &bound);
         if held_keeps.is_some() {
-            #[allow(unused_mut)] let (mut before, mut after) = emit_held_around(nikaia_std::index::or(held_keeps.as_deref(), || ""), self.emit_stmt_held_place(&walk, &scope.function, at, &bound));
             let literal = match value {
                 Expr::LitStr { .. } => annotation == "" || annotation == ": nikaia_std::tether::Held",
                 _ => false,
             };
+            out.push(&format!("let {}{}{} = ", mut_word, local, annotation));
             if literal {
-                before = String::from("nikaia_std::tether::Held::literal(");
-                after = String::from(")");
+                out.push("nikaia_std::tether::Held::literal(");
+                self.emit_expr(world, walk, out, host, value, depth, flow, &inner)?;
+                out.push(");");
+                return Ok(());
             }
-            out.push(&format!("let {}{}{} = {}", mut_word, local, annotation, before));
-            self.emit_expr(world, walk, out, host, value, depth, flow, &inner)?;
-            out.push(&format!("{};", after));
+            let no_buffers: Vec<i64> = vec![];
+            self.emit_held_value(world, walk, out, host, value, nikaia_std::index::or(held_keeps.as_deref(), || ""), &no_buffers, self.emit_stmt_held_place(&walk, &scope.function, at, &bound), &scope.function, depth, flow, &inner)?;
+            out.push(";");
             return Ok(());
         }
         let (before, after) = emit_around(self.facts.nullable_sites.get(&at))?;
@@ -742,13 +780,17 @@ impl EmitState {
         }
         let rebound = host.given_up_rebound(at);
         if rebound.is_some() { if nikaia_std::index::or(rebound, || false) { out.push("let mut "); } else { out.push("let "); } }
+        let mut reput_place: Option<i64> = None;
+        if op.is_none() && rebound.is_none() && !self.facts.view_list_assigns.contains(&at) && nikaia_std::index::or(self.emit_stmt_reput(&walk, &scope.function, at), || "".into()).contains(".put_viewed(") { reput_place = self.emit_stmt_reput_place(&walk, &scope.function, at); }
+        if reput_place.is_some() { out.push("("); }
         self.emit_expr(world, walk, out, host, target, depth, flow.place(), scope)?;
+        if reput_place.is_some() { out.push(&format!(", __place_{})", nikaia_std::index::or(reput_place, || 0))); }
         if op.is_none() { out.push(" = "); } else { out.push(&format!(" {} ", emit_stmt_op_text(std::convert::identity(op)))); }
         let bound_first = op.is_none() && self.facts.view_list_assigns.contains(&at);
         if bound_first { out.push("{ let __nikaia_value = "); }
         let reput = self.emit_stmt_reput(&walk, &scope.function, at);
         let reputted = reput.is_some();
-        if reputted { out.push(nikaia_std::index::or(reput.as_deref(), || "")); }
+        if reputted { if reput_place.is_some() { out.push(&nikaia_std::block::Text::from(nikaia_std::index::or(reput.as_deref(), || "").replace(".put_viewed(", ".put_viewed_at("))); } else { out.push(nikaia_std::index::or(reput.as_deref(), || "")); } }
         out.push(&before);
         let mut own_view = false;
         if op.is_none() {
@@ -794,10 +836,8 @@ impl EmitState {
                 Expr::Variable(assigned, _) => { let assigned = *assigned; self.emit_stmt_held_place(&walk, &scope.function, at, &emit_text(world, assigned)) },
                 _ => None,
             };
-            let (before, after) = emit_held_around(nikaia_std::index::or(held_keeps.as_deref(), || ""), place);
-            out.push(&before);
-            self.emit_expr(world, walk, out, host, value, depth, flow, scope)?;
-            out.push(&after);
+            let no_buffers: Vec<i64> = vec![];
+            self.emit_held_value(world, walk, out, host, value, nikaia_std::index::or(held_keeps.as_deref(), || ""), &no_buffers, place, &scope.function, depth, flow, scope)?;
         } else if !own_view {
             self.emit_expr(world, walk, out, host, value, depth, flow, scope)?;
             if op.is_none() && self.facts.stored_handles.contains(&node_key(value)) { out.push(".clone()"); }
@@ -1080,15 +1120,25 @@ impl EmitState {
             let mut unwrap: Option<String> = None;
             let lent_item = if self.facts.lent_stream_loops.contains(&at) { "&" } else { "" };
             if self.facts.fallible_loops.contains(&at) { unwrap = Some(format!("let {} = {}{}?;", bound, lent_item, plain)); } else if lent_item != "" { unwrap = Some(format!("let {} = &{};", bound, plain)); }
+            let pool = self.stream_pool(&walk, &scope.function, at);
+            let mut stepped = "next";
+            let mut opened = String::from("");
+            if pool.is_some() {
+                stepped = "next_line";
+                opened = format!(".in_pool({})", nikaia_std::index::or(pool, || 2));
+                let step = if self.facts.fallible_loops.contains(&at) { "__nikaia_line?" } else { "__nikaia_line" };
+                unwrap = Some(format!("let ({}, __keep_{}, __place_{}) = {}.parts();", bound, at, at, step));
+            }
+            let stepped_bound = if pool.is_some() { String::from("__nikaia_line") } else { nikaia_std::block::Text::from(bound.to_string()) };
             let pad = nikaia_std::block::Text::from("    ".repeat(nikaia_std::count::of(depth)));
             let inner = nikaia_std::block::Text::from("    ".repeat(nikaia_std::count::of(depth + 1)));
             out.push("{\n");
             out.push(&inner);
             out.push("let mut __nikaia_sequence = ");
             self.emit_expr(world, walk, out, host, iter, depth + 1, flow, scope)?;
-            out.push(";\n");
+            out.push(&format!("{};\n", opened));
             out.push(&inner);
-            out.push(&format!("{}while let Some({}) = __nikaia_sequence.next(){} ", allowed, bound, emit_async_pause(&walk)));
+            out.push(&format!("{}while let Some({}) = __nikaia_sequence.{}(){} ", allowed, stepped_bound, stepped, emit_async_pause(&walk)));
             self.emit_stmt_block_opening_with(world, walk, out, host, body, depth + 1, flow.inside_a_loop(), scope, &EmitTail::Statement, emit_counted_turn(host.counts_steps(), unwrap))?;
             out.push("\n");
             out.push(&pad);
@@ -1394,5 +1444,13 @@ pub(crate) fn emit_stmt_finish_rests(walk: &mut EmitWalk, rests: i64, pad: &str)
         finished = format!("{}{};\n{}", pad, wait, finished);
     }
     finished
+}
+
+pub(crate) fn emit_stmt_replaced(plan: &BufferPlan, at: i64) -> bool {
+    for (_, buffer) in plan.reput_places.iter() {
+        let buffer = nikaia_std::num::value(buffer);
+        if buffer == at { return true; }
+    }
+    false
 }
 
