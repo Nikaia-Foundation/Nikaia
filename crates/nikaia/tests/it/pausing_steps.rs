@@ -111,11 +111,11 @@ fn a_for_over_a_pausing_sequence_awaits_each_step() {
          }",
     );
     assert!(
-        rust.contains("let mut __nikaia_sequence = io::lines().await;"),
+        rust.contains("let mut __nikaia_sequence = io::lines().await.in_pool(2);"),
         "{rust}"
     );
     assert!(
-        rust.contains("while let Some(line) = __nikaia_sequence.next().await"),
+        rust.contains("while let Some(__nikaia_line) = __nikaia_sequence.next_line().await"),
         "{rust}"
     );
     // The `for` is gone, not wrapped: two loops would be two walks of one

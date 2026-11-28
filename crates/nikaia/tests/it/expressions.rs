@@ -314,13 +314,13 @@ fn a_loop_whose_step_can_fail_unwraps_the_step() {
     // `std` entry since that record's §6 step 3 - and the one on the **step**
     // is ADR-172 D1. Two different claims, and the lowering shows both.
     assert!(
-        rust.contains("let mut __nikaia_sequence = io::lines().await;"),
+        rust.contains("let mut __nikaia_sequence = io::lines().await.in_pool(2);"),
         "the sequence is not bound:\n{rust}"
     );
     assert!(
         rust.contains(
-            "while let Some(line) = __nikaia_sequence.next().await {\n            \
-             let line = line?;"
+            "while let Some(__nikaia_line) = __nikaia_sequence.next_line().await {\n            \
+             let (line, __keep_62, __place_62) = __nikaia_line?.parts();"
         ),
         "the step is not awaited and unwrapped:\n{rust}"
     );
