@@ -1,4 +1,4 @@
-// Two failures nobody reads, at the group's normal end (ADR-async-5 D21,
+// Two failures nobody reads, at the group's normal end (ADR-async-v6 D21,
 // Part I 8.1.2, #2561): the first in written order is thrown, and the second
 // travels as its `secondary`; the task that succeeds between them adds
 // nothing, and the group's own statements run on before its end.

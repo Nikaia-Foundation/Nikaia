@@ -209,7 +209,7 @@ fn function_text(name: ref String, contract: ref FnContract) -> String {
     if contract.at_once.len() > 0 {
         out.push_str(f"at_once = [{quoted_all(contract.at_once)}]\n")
     }
-    // **How each `par_iter` call runs** (ADR-async-5 D32): what the next
+    // **How each `par_iter` call runs** (ADR-async-v6 D32): what the next
     // build warns against (`NK2119`) where a call that ran in pieces pauses.
     if contract.par_iter.len() > 0 {
         out.push_str(f"par_iter = [{quoted_all(contract.par_iter)}]\n")
@@ -231,7 +231,7 @@ fn function_text(name: ref String, contract: ref FnContract) -> String {
         Lock::Holds => out.push_str("locks = true\n"),
         Lock::Undecided => out.push_str("locks = \"?\"\n"),
     }
-    // **Whether it can panic** (ADR-async-5 D35): absent is `"?"`, said
+    // **Whether it can panic** (ADR-async-v6 D35): absent is `"?"`, said
     // only where the inference answered.
     match contract.panics {
         Panics::No => out.push_str("panics = false\n"),

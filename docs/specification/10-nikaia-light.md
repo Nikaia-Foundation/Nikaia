@@ -231,7 +231,7 @@ waits and takes the first to finish (Part II, 12.4).
 
 **`async` is reserved for its construct**: the prefix that starts a task (8.1.2).
 
-**`spawn` stays reserved until the move to `async(detached)` is built** (8.2): `spawn fn { … }` is still accepted and means `async(detached) fn { … }`, and the commit that removes the form releases the word ([ADR-async-5](adr/adr-async-5.md) D13).
+**`spawn` stays reserved until the move to `async(detached)` is built** (8.2): `spawn fn { … }` is still accepted and means `async(detached) fn { … }`, and the commit that removes the form releases the word ([ADR-async-v6](adr/adr-async-v6.md) D13).
 
 **`test` is reserved for its construct**: a `test "name" { … }` block of the
 package it stands in (Part III 14.1).
@@ -4006,7 +4006,7 @@ innermost block that holds the `async` form. **`async` starts only tasks whose
 number stands in the source**: an `async` form inside a loop's body is refused
 (`NK2120`), and the help writes `xs.par_iter().for_each fn(x) { … }`. A free
 task, `async(detached)`, is not counted: its group is the process (8.2), so it
-may stand in a loop's body ([ADR-async-5](adr/adr-async-5.md) D42). A
+may stand in a loop's body ([ADR-async-v6](adr/adr-async-v6.md) D42). A
 lambda's body is a function of its own (5.3), so a lambda written in a loop may
 hold one. What was bound inside the group, in a block that ends before the
 group does, the task takes with it as a free task does (8.3). A `break`,
@@ -4121,7 +4121,7 @@ and cancels none.
 task whose body has no panic site, and calls nothing that can panic, adds no
 failure, so nothing is asked of the code around it; one that can panic makes
 the form throw `task::Crashed`, which is caught or declared with `throws` as
-any failure is ([ADR-async-5](adr/adr-async-5.md) D35). A crash that the
+any failure is ([ADR-async-v6](adr/adr-async-v6.md) D35). A crash that the
 task's own fallback takes is handled there and cancels no sibling (D36). A task whose memory block is full ends with
 `task::OverBudget` (Part II, Chapter 12) and fails only itself.
 
@@ -4150,7 +4150,7 @@ async(detached) fn { println("I am running in the background!") }
 ```
 
 `spawn fn { … }`, the form this replaces, is still accepted and means the same
-until every program is moved; then `spawn` is released ([ADR-async-5](adr/adr-async-5.md) D13).
+until every program is moved; then `spawn` is released ([ADR-async-v6](adr/adr-async-v6.md) D13).
 
 A free task does not end the program. An error that arrives in a task ends the task, `process::Exit` (7.1) included, and every such error has a receiver ([ADR-346](adr/adr-346.md)):
 

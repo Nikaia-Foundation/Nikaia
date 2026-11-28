@@ -1,7 +1,8 @@
-# ADR-async-5: Every Task Is Started by `async` in a Group It Does Not Outlive; `async e` Is Waited For Where Its Value Is First Needed, a Handle Is Asked For by an Option, and Fan-Out Over a Collection Is the `par_iter` Chain
+# ADR-async-v6: Every Task Is Started by `async` in a Group It Does Not Outlive; `async e` Is Waited For Where Its Value Is First Needed, a Handle Is Asked For by an Option, and Fan-Out Over a Collection Is the `par_iter` Chain
 
 **Status:** Accepted
-**Date:** October 30, 2026 (owner's decisions on [#983](https://github.com/Nikaia-Foundation/Nikaia/issues/983))
+**Date:** November 28, 2026 (D42 added, supervisor, 2026-11-23, #990; the consolidation, #904, by ADR-decision-records-v2 D4); the other decisions October 30, 2026 (owner's decisions on [#983](https://github.com/Nikaia-Foundation/Nikaia/issues/983))
+**History:** the records this one replaces are archived in [`docs/history/adr`](../../history/adr/README.md); D1-D41 keep their numbers; read them only for how the decision was reached
 **Answers:** what a program writes to run work beside the code that follows it - one value, a task it may wait for, cancel or let go, work over every element of a collection - without coloring functions and without `await`; and what rules every such task follows, whatever form started it
 **Supersedes / Related:**
 [ADR-292](adr-292.md) D2-D4, D9, D15, D16 and §6 (changed: the joining form is `async`, D5-D9; D1, D5, D6, D8, D10-D14 and D17-D20 stand and are read for `async`);
@@ -816,7 +817,7 @@ goes on. "At most `n` in flight" counts the tasks that run, not the ones
 waiting for their children, and no nesting of forms can block on its own
 places.
 
-### D39 - The forms async-5 replaces are warned with an edit before they go (owner, 2026-11-23, #990).
+### D39 - The forms this record replaces are warned with an edit before they go (owner, 2026-11-23, #990).
 
 Before the move removes `spawn`, `overlap` and `task::scope` (#991), the
 checker warns at each use, and the warning carries the edit that rewrites it

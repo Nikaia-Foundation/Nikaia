@@ -120,7 +120,7 @@ impl CheckState {
             help = "Pass it as a plain argument, without a name."
         }
         if name == "workers" && names.contains("limit") {
-            help = "`workers:` is now `limit:` (ADR-async-5 D27)."
+            help = "`workers:` is now `limit:` (ADR-async-v6 D27)."
         }
         self.findings.push(check_refusal("NK1109", span, f"`{key}` has no option called `{name}`.", [note], help))
     }

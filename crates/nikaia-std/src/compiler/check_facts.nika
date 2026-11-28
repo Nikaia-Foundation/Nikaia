@@ -82,7 +82,7 @@ pub struct FactClaim {
     pub assumed: bool,
 }
 
-/// **Where a task of `async e` is waited for** (ADR-async-5 D6), for the
+/// **Where a task of `async e` is waited for** (ADR-async-v6 D6), for the
 /// lowering onto tasks (#986): before a call or an operation (its node), before
 /// a statement of the binding's block (its span's start), or at its group's end.
 /// `Handle` is an `async(handle)`'s task (D11): waited for where its handle is
@@ -388,10 +388,10 @@ pub struct CheckFacts {
     pub optional_fallbacks: collections::BTreeSet[i64],
     pub flat_reads: collections::BTreeSet[i64],
     /// **Where each `async e` task is waited for**, by the `async` node
-    /// (ADR-async-5 D6, D9): what the lowering joins it at.
+    /// (ADR-async-v6 D6, D9): what the lowering joins it at.
     pub async_waits: collections::BTreeMap[i64, CheckAsyncWait],
     /// **The `async e` bindings only other tasks name, two or more of them**
-    /// (ADR-async-5 D8, a diamond, #986), by the `async` node: they read the
+    /// (ADR-async-v6 D8, a diamond, #986), by the `async` node: they read the
     /// one value, so the lowering keeps it for all (`task::Read`). One that
     /// moves it leaves the other's mention refused (`NK2105`).
     pub async_shared: collections::BTreeSet[i64],
@@ -546,7 +546,7 @@ pub struct CheckFacts {
     pub kept_results: collections::BTreeMap[i64, String],
     pub kept_hulls: collections::BTreeMap[i64, Vec[String]],
     pub kept_owned: collections::BTreeMap[i64, Vec[String]],
-    /// **The names a task of `async e` takes** (ADR-async-5 D2, #2653), by
+    /// **The names a task of `async e` takes** (ADR-async-v6 D2, #2653), by
     /// the `async` node: those bound in a block inside its group, numbers and
     /// views among them, which the lowering moves into the task, since its
     /// rest may outlive their block under a gate.
@@ -579,13 +579,13 @@ pub struct CheckFacts {
     /// (#2742), for a `catch` around the walk to open.
     pub failing_item_receivers: collections::BTreeMap[i64, Vec[String]],
     /// **A step that ends a `par_iter` walk whose elements or lambda can
-    /// fail** (ADR-async-5 D26, #2681), by its receiver's node: every element
+    /// fail** (ADR-async-v6 D26, #2681), by its receiver's node: every element
     /// runs, the first failure in input order is the call's and the others its
     /// `secondary` list (`par::kept_failures`), where a sequence stops at the
     /// first.
     pub kept_failure_ends: collections::BTreeSet[i64],
     /// **A `par_iter` lambda that never pauses and places an allocation in
-    /// a block** (ADR-async-5 D28, ADR-327 D13), by its node: each element
+    /// a block** (ADR-async-v6 D28, ADR-327 D13), by its node: each element
     /// runs with a task's budget in its piece's block, and a full block ends
     /// that element alone with `task::OverBudget`, kept among the call's
     /// failures (`par::in_block`).
@@ -907,7 +907,7 @@ pub struct CheckFacts {
     /// `fold_merged` below, which a list's `iter()` at `no` has as well as a
     /// walk on every core, beside the language below's own two-argument `fold`.
     pub par_folds: collections::BTreeSet[i64],
-    /// **The steps that end a walk with `within:`** (ADR-async-5 D27), by
+    /// **The steps that end a walk with `within:`** (ADR-async-v6 D27), by
     /// their receiver's node: the lowering writes `par::ended(…)` around
     /// each, which throws `task::TimedOut`.
     pub timed_ends: collections::BTreeSet[i64],

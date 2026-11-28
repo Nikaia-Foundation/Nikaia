@@ -65,7 +65,7 @@ impl CheckState {
         if guarded.fallible || guarded.unanswered { return; }
         match task {
             Some(written) => {
-                self.findings.push(check_refusal("NK1134", span, String::from("Nothing here can fail, so the `catch` has nothing to handle."), vec![format!("`{}` starts a task; its failure arrives where the task is waited for, before this whole statement, so no `catch` inside the statement meets it (ADR-async-5 D22).", written), String::from("Nothing else here is declared with `throws`.")], Some(format!("Handle the task's failure with a fallback after the `async` expression, `{} catch {{ … }}`, and remove this `catch`.", written))));
+                self.findings.push(check_refusal("NK1134", span, String::from("Nothing here can fail, so the `catch` has nothing to handle."), vec![format!("`{}` starts a task; its failure arrives where the task is waited for, before this whole statement, so no `catch` inside the statement meets it (ADR-async-v6 D22).", written), String::from("Nothing else here is declared with `throws`.")], Some(format!("Handle the task's failure with a fallback after the `async` expression, `{} catch {{ … }}`, and remove this `catch`.", written))));
                 return;
             },
             None => { },

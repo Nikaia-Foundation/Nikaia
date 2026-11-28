@@ -1,4 +1,4 @@
-// ADR-async-5 D12's example in its old form (#2645): the `else` path cancels
+// ADR-async-v6 D12's example in its old form (#2645): the `else` path cancels
 // the deferred handle, which takes it (`cancel(self)`, Part III B.2), so the
 // `join()` after the `if` uses a handle already taken: `NK2105` (Part III),
 // not rustc's use of a moved value.

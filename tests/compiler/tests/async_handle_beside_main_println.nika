@@ -1,5 +1,5 @@
 // A child handle runs beside the main-line statements after it until it is
-// joined (ADR-async-5 D11, Part I 8.1.2): a `println` there meets the task's
+// joined (ADR-async-v6 D11, Part I 8.1.2): a `println` there meets the task's
 // on stdout, NK2104, as the bare `async fn { … }` does (#2643).
 fn main() throws {
 	let h = async(handle) fn { println("x") }

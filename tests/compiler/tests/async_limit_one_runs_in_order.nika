@@ -1,4 +1,4 @@
-// `limit: 1` written as the literal (ADR-async-5 D15, D7, #986): the tasks run
+// `limit: 1` written as the literal (ADR-async-v6 D15, D7, #986): the tasks run
 // one at a time, in written order, so two that print are not checked against
 // each other (without the limit they are NK2104).
 use std::time

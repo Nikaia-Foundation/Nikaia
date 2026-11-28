@@ -1,5 +1,5 @@
 // A `catch` inside a task is the task's own and runs first, at once, when
-// the task fails (Part I 8.1.2, ADR-async-5 D22 step 1, #989): the first
+// the task fails (Part I 8.1.2, ADR-async-v6 D22 step 1, #989): the first
 // task's own catch takes the failure and its fallback does not run; the
 // second fails past its own catch, so its fallback stands in.
 struct Bad {}

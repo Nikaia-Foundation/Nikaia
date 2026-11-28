@@ -1,6 +1,6 @@
 # What a `par_iter` chain costs against Rayon
 
-[ADR-async-5](../../docs/specification/adr/adr-async-5.md) D28 accepts the
+[ADR-async-v6](../../docs/specification/adr/adr-async-v6.md) D28 accepts the
 lowering of a `par_iter` chain only with measured rows:
 `par_iter().map(…).collect()` over 10^6 elements counted against Rayon, once
 with a lambda that can throw and once with one that allocates (#988 item 11,

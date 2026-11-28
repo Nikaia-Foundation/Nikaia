@@ -1,12 +1,12 @@
-//! **The group runtime** ([ADR-async-5](../../../../docs/specification/adr/adr-async-5.md)
-//! D1, D3, D9, D11-D14, D20, D21).
+//! **The group runtime** ([ADR-async-v6](../../../../docs/specification/adr/adr-async-v6.md)
+//! D1, D3, D9, D11, D12, D13, D14, D20, D21).
 //!
 //! Every task is started in a group and ends before the group does (D1). A
 //! group counts its tasks in start order, which is the written order, hands
 //! each task's end to its receiver (D3), and keeps every failure nobody read
 //! until its own end, where the first in start order is thrown and the others
 //! join it, in that order (D21). `task::scope` and its three siblings in
-//! `task.rs` are groups of this kind; the forms of async-5 (`async { }`,
+//! `task.rs` are groups of this kind; the forms of async-v6 (`async { }`,
 //! `async(handle)`, `async(deferred)`) are lowered onto the same runtime by
 //! #988, through the entry points below.
 //!
@@ -76,7 +76,7 @@ impl<E: From<Crashed>> Group<E> {
         if crash.cancelled {
             return;
         }
-        // A full block fails only its own task (ADR-async-5 D19).
+        // A full block fails only its own task (ADR-async-v6 D19).
         self.crashed |= !crash.over_budget();
         self.failed.push((at, E::from(crash)));
     }
@@ -138,7 +138,7 @@ pub trait Receiver<E> {
     fn place(&self) -> Option<usize>;
     /// A task panicked: the tasks not yet started are cancelled (ADR-328
     /// D8). The crash itself is the task's end, read where it arrives like
-    /// any failure (ADR-async-5 D22, D35); only one nobody reads is the
+    /// any failure (ADR-async-v6 D22, D35); only one nobody reads is the
     /// group's at its end ([`Receiver::unread_crash`]).
     fn crashed(&self, at: usize);
     /// A crash nobody read, kept until the group's end (D21).
@@ -159,7 +159,7 @@ struct Slot<T, E> {
     /// pause.
     cancel: bool,
     /// Its place in start order, for a task that waited for a place
-    /// (ADR-async-5 D37) and so took it after its handle was made.
+    /// (ADR-async-v6 D37) and so took it after its handle was made.
     at: Option<usize>,
 }
 
@@ -207,7 +207,7 @@ fn run_now<T, E>(
     };
     let mut outcome = None;
     // **The task's own block** (ADR-327 D5): its lists live there, and a
-    // full one ends it alone (ADR-async-5 D19).
+    // full one ends it alone (ADR-async-v6 D19).
     let block = crate::block::for_a_task();
     let entered = crate::block::enter(&block);
     let caught = caught(|| outcome = Some(body()));
@@ -215,7 +215,7 @@ fn run_now<T, E>(
     let end = match caught {
         Err(crash) if crash.cancelled => Ended::Cancelled,
         Err(crash) => {
-            // A full block fails only its own task (ADR-async-5 D19).
+            // A full block fails only its own task (ADR-async-v6 D19).
             if !crash.over_budget() {
                 group.crashed(at);
             }
@@ -357,7 +357,7 @@ async fn held_task<'g, T: 'g, E: 'g, F>(
     let end = match outcome {
         Err(crash) if crash.cancelled => Ended::Cancelled,
         Err(crash) => {
-            // A full block fails only its own task (ADR-async-5 D19).
+            // A full block fails only its own task (ADR-async-v6 D19).
             if !crash.over_budget() {
                 group.crashed(at);
             }
@@ -370,7 +370,7 @@ async fn held_task<'g, T: 'g, E: 'g, F>(
     settle(group, &slot, at, end);
 }
 
-/// **A pausing task that waited for a place** (ADR-async-5 D37): it takes
+/// **A pausing task that waited for a place** (ADR-async-v6 D37): it takes
 /// its place in start order where its gate starts it, which is still the
 /// written order, since its gate starts the waiting ones first in first out;
 /// a crash before that cancelled it.
@@ -420,7 +420,7 @@ pub struct ChildHandle<'g, T, E> {
     is_deferred: bool,
     /// Joined or cancelled: its end is nobody else's.
     claimed: std::cell::Cell<bool>,
-    /// **The rest of a pausing task of `async e`** (ADR-async-5 D6, D20,
+    /// **The rest of a pausing task of `async e`** (ADR-async-v6 D6, D20,
     /// #1226), after its first pause: polled where the checker waits, its
     /// `join`. Dropped unjoined, the task is cancelled at that pause.
     held: std::rc::Rc<Rested<'g>>,
@@ -443,7 +443,7 @@ pub trait Polled {
 }
 
 /// **The rest of a bound pausing task of `async e`** (Part I 8.2,
-/// ADR-async-5 D11, #987): declared by the emitted code just before the
+/// ADR-async-v6 D11, #987): declared by the emitted code just before the
 /// handle's `let`, so it may borrow what the task borrows. `join` polls it
 /// through the handle; [`Rest::finish`], at the end of the block, waits for a
 /// rest whose handle was dropped live (its failure then reaches the group as
@@ -453,7 +453,7 @@ pub struct Rest<'b> {
 }
 
 /// **Where the rest of a pausing task lives** after its first pause: shared
-/// with the gates of `limit:` and `admission:` around it (ADR-async-5 D15,
+/// with the gates of `limit:` and `admission:` around it (ADR-async-v6 D15,
 /// D18), which poll it while a sibling waits for a place.
 pub(super) struct Rested<'b> {
     task: std::cell::RefCell<Option<Paused<'b>>>,
@@ -609,7 +609,7 @@ impl<'g, T: 'g, E: 'g> ChildHandle<'g, T, E> {
         handle
     }
 
-    /// **A handle to a pausing task of `async e`** (ADR-async-5 D6, D20,
+    /// **A handle to a pausing task of `async e`** (ADR-async-v6 D6, D20,
     /// #1226): the task starts here, in written order, and runs to its first
     /// pause; the handle holds the rest, which its `join` polls. A crash
     /// before it cancelled it.
@@ -635,7 +635,7 @@ impl<'g, T: 'g, E: 'g> ChildHandle<'g, T, E> {
     }
 
     /// **A handle to a pausing task of `async e` that waits for a place**
-    /// (ADR-async-5 D37): unstarted, it is queued in its own cell, and the
+    /// (ADR-async-v6 D37): unstarted, it is queued in its own cell, and the
     /// main line goes on; its gate starts it when a place frees.
     pub(super) fn held_queued<F>(group: &'g dyn Receiver<E>, body: impl FnOnce() -> F + 'g) -> Self
     where
@@ -832,7 +832,7 @@ impl<T, E: From<Crashed>> ChildHandle<'_, T, E> {
         }
     }
 
-    /// **`h.join(within: d, on_timeout: o)`** (ADR-async-5 D17): the task's
+    /// **`h.join(within: d, on_timeout: o)`** (ADR-async-v6 D17): the task's
     /// value, its failure or [`Crashed`] as `join` gives them, or
     /// [`TimedOut`] once `span` ran out. **It lends the handle**: with
     /// [`OnTimeout::Keep`] the task runs on and the handle stays live, joined
@@ -899,7 +899,7 @@ impl<T, E: From<Crashed>> ChildHandle<'_, T, E> {
     }
 }
 
-/// **A pending binding several tasks read** (ADR-async-5 D8, #986): `let b =
+/// **A pending binding several tasks read** (ADR-async-v6 D8, #986): `let b =
 /// async f(a)` and `let c = async g(a)` both wait for `a` and read the one
 /// value. The first to wait joins `a`'s task and keeps its value here; every
 /// other reads it. Where `a` failed, the first receives the error and every
@@ -997,7 +997,7 @@ impl<'g, T: 'g, E: From<Crashed> + 'g> Read<'g, T, E> {
 pub(crate) struct WaitCancelled;
 
 /// A waiter of a pending value whose failure an earlier mention received: it
-/// cannot go on, and is cancelled where it waits (ADR-async-5 D8).
+/// cannot go on, and is cancelled where it waits (ADR-async-v6 D8).
 fn cancelled_waiter<T>() -> T {
     std::panic::resume_unwind(Box::new(WaitCancelled))
 }

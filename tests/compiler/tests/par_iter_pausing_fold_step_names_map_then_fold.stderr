@@ -4,6 +4,6 @@ error[NK2209]: `slow` can pause, but this runs on several cores at once.
  14 |     let sum = xs.par_iter().fold(fn() { 0 }, fn(acc, x) { acc + slow(x) }, fn(a, b) { a + b })
     |                                                           ^^^^^^^^^^^^^
     |
-    = note: Only the lambda of a `par_iter()` chain's `map`, `filter` or `for_each` may pause, and runs one task per element; this one runs on every core at once, and a core that waits holds up its share of the work, so it must never pause (ADR-async-5 D29).
+    = note: Only the lambda of a `par_iter()` chain's `map`, `filter` or `for_each` may pause, and runs one task per element; this one runs on every core at once, and a core that waits holds up its share of the work, so it must never pause (ADR-async-v6 D29).
     = help: Call `slow` in a `map` before this step, whose lambda may pause: `xs.par_iter().map(…).fold(…)`. Or call it before the walk and pass the values in.
 1 call that can pause where nothing may

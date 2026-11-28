@@ -196,7 +196,7 @@ impl EmitState {
             // **The keeps a statement needs are declared before it** (ADR-tether-v1),
             // and before the `Ok(` a tail is wrapped in.
             self.write_keep_prelude(walk, out, key, stmt.span.start as i64, depth + 1)
-            // The bindings of `async e` this statement waits for (ADR-async-5 D6).
+            // The bindings of `async e` this statement waits for (ADR-async-v6 D6).
             self.emit_async_joins(walk, out, stmt.span.start as i64, inner_pad)
             // **The cells of rests this body declared** (Part I 8.2, #987) are
             // finished after its tail value, before it is handed back.

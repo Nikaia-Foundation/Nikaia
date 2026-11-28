@@ -1,6 +1,6 @@
 // A detached task nobody joins runs its fallback in the task itself when it
 // fails, instead of the error going only to standard error (Part I 8.1.2,
-// ADR-async-5 D13, D22 step 3, #989): unbound, and bound then detached.
+// ADR-async-v6 D13, D22 step 3, #989): unbound, and bound then detached.
 use std::time
 
 struct Bad {}

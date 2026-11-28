@@ -1,4 +1,4 @@
-// A statement task queues for its place like any task (ADR-async-5 D9, D37,
+// A statement task queues for its place like any task (ADR-async-v6 D9, D37,
 // #986): under `limit: 1` it does not stop the main line, which goes on to
 // its `println` before the statement task runs.
 use std::time

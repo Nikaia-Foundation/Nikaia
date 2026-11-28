@@ -727,7 +727,7 @@ pub(crate) fn check_core_async_within<H: CheckHost>(state: &mut CheckState, worl
         Some(__nikaia_it) => Some(__nikaia_it.clone()),
         None => None,
     }, || "".into());
-    check_core_async_fails(state, span, "task::TimedOut", "This function can fail, because the deadline of `within:` can run out.", "When the deadline runs out, the task is cancelled and ends with `task::TimedOut` (ADR-async-5 D16).", &format!("Add `throws` to `{}`, or write a fallback: `async(within: d) … catch {{ … }}`.", function));
+    check_core_async_fails(state, span, "task::TimedOut", "This function can fail, because the deadline of `within:` can run out.", "When the deadline runs out, the task is cancelled and ends with `task::TimedOut` (ADR-async-v6 D16).", &format!("Add `throws` to `{}`, or write a fallback: `async(within: d) … catch {{ … }}`.", function));
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -755,7 +755,7 @@ pub(crate) fn check_core_async_admission<H: CheckHost>(state: &mut CheckState, w
         if types.contains(&named) { return; }
     }
     if !state.structs.contains_key(&named) && !state.enums.contains_key(&named) { return; }
-    state.findings.push(check_refusal("NK1164", span, format!("`admission:` needs a `task::Admission` here, but `{}` isn't one.", named), vec![String::from("The strategy decides when a task of the form starts, through its `decide` method (ADR-async-5 D18).")], Some(format!("Write `impl task::Admission for {} {{ … }}`, or pass a type that already has one.", named))));
+    state.findings.push(check_refusal("NK1164", span, format!("`admission:` needs a `task::Admission` here, but `{}` isn't one.", named), vec![String::from("The strategy decides when a task of the form starts, through its `decide` method (ADR-async-v6 D18).")], Some(format!("Write `impl task::Admission for {} {{ … }}`, or pass a type that already has one.", named))));
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -776,7 +776,7 @@ pub(crate) fn check_core_async_crash<H: CheckHost>(state: &mut CheckState, world
     }, || "".into());
     if places_of_task(task, world.here.items, world.words, &mut |literal| { host.literal_holes(literal) }, &facts, world.own, world.library) { check_core_async_fails(state, span, "task::OverBudget", "This function can fail, because the task started here can run over its memory budget.", "A task builds its lists and texts in its own block; when the block is full, whoever waits for the task gets `task::OverBudget` (ADR-327 D13).", &format!("Add `throws` to `{}`, or write a fallback: `async e catch {{ … }}`.", function)); }
     if !panics_of_task(task, world.here.items, world.words, &mut |literal| { host.literal_holes(literal) }, &facts, world.own, world.library) { return; }
-    check_core_async_fails(state, span, "task::Crashed", "This function can fail, because the task started here can panic.", "A panic in a task ends that task, and whoever waits for it gets `task::Crashed` (ADR-async-5 D35).", &format!("Add `throws` to `{}`, or write a fallback: `async e catch {{ … }}`.", function));
+    check_core_async_fails(state, span, "task::Crashed", "This function can fail, because the task started here can panic.", "A panic in a task ends that task, and whoever waits for it gets `task::Crashed` (ADR-async-v6 D35).", &format!("Add `throws` to `{}`, or write a fallback: `async e catch {{ … }}`.", function));
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -786,7 +786,7 @@ pub(crate) fn check_core_walk_timed_out(state: &mut CheckState, span: &Span) {
         Some(__nikaia_it) => Some(__nikaia_it.clone()),
         None => None,
     }, || "".into());
-    check_core_async_fails(state, span, "task::TimedOut", "This function can fail, because the deadline of `par_iter(within:)` can run out.", "When the deadline runs out, no element starts any more and the step that ends the walk throws `task::TimedOut` (ADR-async-5 D27).", &format!("Add `throws` to `{}`, or handle it at the call: `… catch {{ … }}`.", function));
+    check_core_async_fails(state, span, "task::TimedOut", "This function can fail, because the deadline of `par_iter(within:)` can run out.", "When the deadline runs out, no element starts any more and the step that ends the walk throws `task::TimedOut` (ADR-async-v6 D27).", &format!("Add `throws` to `{}`, or handle it at the call: `… catch {{ … }}`.", function));
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before

@@ -55,7 +55,7 @@ impl CheckState {
         };
         let mut help: String = String::from("Use one of the options it has.");
         if near.is_some() { help = format!("Did you mean `{}`?", nikaia_std::index::or(near.as_deref(), || "")); } else if names.is_empty() { help = String::from("Pass it as a plain argument, without a name."); }
-        if name == "workers" && nikaia_std::list::contains(&names, &"limit") { help = String::from("`workers:` is now `limit:` (ADR-async-5 D27)."); }
+        if name == "workers" && nikaia_std::list::contains(&names, &"limit") { help = String::from("`workers:` is now `limit:` (ADR-async-v6 D27)."); }
         self.findings.push(check_refusal("NK1109", span, format!("`{}` has no option called `{}`.", key, name), vec![note], Some(help)));
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before

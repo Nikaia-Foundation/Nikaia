@@ -96,7 +96,7 @@ impl CheckState {
         self.findings.push(check_refusal("NK1132", span, f"`{word}` {does}, but this isn't inside a loop.", ["It only works inside a `while` or a `for`."], "To leave the function instead, write `return`."))
     }
 
-    /// **`NK2120`: an `async` form inside a loop's body** (ADR-async-5 D30).
+    /// **`NK2120`: an `async` form inside a loop's body** (ADR-async-v6 D30).
     /// `async` starts only tasks whose number stands in the source; a lambda
     /// is a function of its own, so one written in a loop may hold the form
     /// (the count starts again at zero there, `enter_boundary`). `spawn` is
@@ -106,7 +106,7 @@ impl CheckState {
     }
 
     /// **`NK2123` (warning): `spawn fn { … }`**, the earlier spelling of
-    /// `async(detached) fn { … }` (ADR-async-5 D13, D39). The edit writes
+    /// `async(detached) fn { … }` (ADR-async-v6 D13, D39). The edit writes
     /// the new word before the lambda; inside a loop's body, where the
     /// `async` form is refused (`NK2120`, D30), there is no edit.
     fn a_spawn_replaced(ref mut self, world: ref CheckWorld, whole: ref Expr, span: ref Span) sync {
@@ -117,13 +117,13 @@ impl CheckState {
         } else {
             edit = word_replaced(world, whole, "spawn", "async(detached)")
         }
-        let mut warned = check_refusal("NK2123", span, "`spawn` is replaced by `async(detached)`, which starts the same task.", ["`spawn fn { … }` is the earlier spelling of `async(detached) fn { … }` (ADR-async-5 D13); it is removed once every use is rewritten."], help)
+        let mut warned = check_refusal("NK2123", span, "`spawn` is replaced by `async(detached)`, which starts the same task.", ["`spawn fn { … }` is the earlier spelling of `async(detached) fn { … }` (ADR-async-v6 D13); it is removed once every use is rewritten."], help)
         warned.severity = CheckSeverity::Warning
         warned.edit = edit
         self.findings.push(warned)
     }
 
-    /// **`NK2124` (warning): an `overlap` block** (ADR-async-5 D39). Where
+    /// **`NK2124` (warning): an `overlap` block** (ADR-async-v6 D39). Where
     /// each of two or more branches is one expression and no branch changes
     /// a name the others see, the edit writes `(async a(), async b())` (D6),
     /// or, where every branch gives nothing, `async { async a()  async b() }`
@@ -146,13 +146,13 @@ impl CheckState {
         } else {
             help = f"{help} A branch of several steps is `async fn {{ … }}`; inside a loop's body, `xs.par_iter()`."
         }
-        let mut warned = check_refusal("NK2124", span, "`overlap` is replaced by `async`, which starts each branch as a task.", ["Each branch of an `overlap` is a task beside the others; `async e` starts one, waited for where its value is first needed, and `async { … }` waits for the tasks it starts at its end (ADR-async-5 D6, D9). The block is removed once every use is rewritten."], help)
+        let mut warned = check_refusal("NK2124", span, "`overlap` is replaced by `async`, which starts each branch as a task.", ["Each branch of an `overlap` is a task beside the others; `async e` starts one, waited for where its value is first needed, and `async { … }` waits for the tasks it starts at its end (ADR-async-v6 D6, D9). The block is removed once every use is rewritten."], help)
         warned.severity = CheckSeverity::Warning
         warned.edit = edit
         self.findings.push(warned)
     }
 
-    /// **`NK2125` (warning): a `task::scope`** (ADR-async-5 D39). Where its
+    /// **`NK2125` (warning): a `task::scope`** (ADR-async-v6 D39). Where its
     /// body is one `for` that starts one task per element and waits for none,
     /// and the task neither prints nor writes anything the others see, the
     /// edit writes `xs.par_iter().for_each fn(x) { … }`; any other scope is a
@@ -168,34 +168,34 @@ impl CheckState {
             else => return,
         }
         let edit = scope_rewritten(world, whole, args)
-        let mut help: String = "For one task per element, write `xs.par_iter().for_each fn(x) { … }`; for tasks whose results are joined, `async(handle) fn { … }` and `.join()` (ADR-async-5 D13)."
+        let mut help: String = "For one task per element, write `xs.par_iter().for_each fn(x) { … }`; for tasks whose results are joined, `async(handle) fn { … }` and `.join()` (ADR-async-v6 D13)."
         if edit != null {
             help = f"{help} `nikaia fix --only NK2125` makes the edit."
         }
-        let mut warned = check_refusal("NK2125", span, "`task::scope` is replaced by `par_iter` and `async(handle)`.", ["A scope's tasks are written with `async` now: `par_iter` runs a body for every element beside the others, and `async(handle)` starts a task whose result is joined (ADR-async-5 D13, D30). The scope is removed once every use is rewritten."], help)
+        let mut warned = check_refusal("NK2125", span, "`task::scope` is replaced by `par_iter` and `async(handle)`.", ["A scope's tasks are written with `async` now: `par_iter` runs a body for every element beside the others, and `async(handle)` starts a task whose result is joined (ADR-async-v6 D13, D30). The scope is removed once every use is rewritten."], help)
         warned.severity = CheckSeverity::Warning
         warned.edit = edit
         self.findings.push(warned)
     }
 
-    /// **`NK2110`: a task with nothing beside it** (ADR-async-5 D7): nothing
+    /// **`NK2110`: a task with nothing beside it** (ADR-async-v6 D7): nothing
     /// runs between its start and its wait point; `why` says which shape.
     fn a_task_with_nothing_beside_it(ref mut self, span: ref Span, why: String) sync {
         self.findings.push(check_refusal("NK2110", span, f"This `async` starts a task with nothing beside it: {why}.", ["A task runs beside the code between its start and its wait point; here that is nothing, so it would only be waited for."], "Remove the word `async`: the expression runs on the main line with the same value."))
     }
 
-    /// **`NK2111`: an `async { … }` that starts no task** (ADR-async-5 D9).
+    /// **`NK2111`: an `async { … }` that starts no task** (ADR-async-v6 D9).
     fn a_group_with_no_task(ref mut self, span: ref Span) sync {
         self.findings.push(check_refusal("NK2111", span, "This `async { … }` starts no task, so it waits for nothing.", ["Its statements run in order, as any block's; only an `async` inside it starts a task its end waits for."], "Remove the word `async`. For one task of several steps, write `async fn { … }`."))
     }
 
     /// **`NK2122`: a child handle that leaves its group** (Part I 8.1.2,
-    /// ADR-async-5 D11): it borrows from the group, which waits for it.
+    /// ADR-async-v6 D11): it borrows from the group, which waits for it.
     fn a_child_handle_leaving_its_group(ref mut self, span: ref Span, why: ref String) sync {
         self.findings.push(check_refusal("NK2122", span, f"A child handle (`async(handle)`) leaves its group here: {why}.", ["A child task is bound to the group it starts in: it may borrow from it, and the group waits for it at its end, so its handle cannot outlive the group."], "Write `async(detached) fn { … }` for a task whose handle outlives its group."))
     }
 
-    /// **`NK1132`: a `return` that would leave an `async` form** (ADR-async-5
+    /// **`NK1132`: a `return` that would leave an `async` form** (ADR-async-v6
     /// D10): a task is a boundary no jump leaves.
     fn a_return_out_of_an_async_form(ref mut self, span: ref Span) sync {
         self.findings.push(check_refusal("NK1132", span, "`return` leaves the function, but it stands inside an `async` form.", ["A task is a boundary no jump leaves, and an `async { … }` waits for its tasks at its end."], "For a task of several steps that can end early, write `async fn { … }`: `return` in it ends the task with its value."))
@@ -329,7 +329,7 @@ impl CheckState {
 }
 
 // **An edit that writes `text` for the keyword `word`** a node starts with
-// (ADR-async-5 D39): `spawn` before `fn { … }`, whose own span the parser does
+// (ADR-async-v6 D39): `spawn` before `fn { … }`, whose own span the parser does
 // not keep, so the word is where the node's span starts.
 fn word_replaced(world: ref CheckWorld, whole: ref Expr, word: ref String, text: ref String) -> CheckEdit? sync {
     let at = world.here.spans.get(id_of(whole)) ?? return null
@@ -340,7 +340,7 @@ fn word_replaced(world: ref CheckWorld, whole: ref Expr, word: ref String, text:
     return CheckEdit { span: Span { start: at.start, end: end }, text: text.clone(), also: [] }
 }
 
-// **The edit `NK2124` suggests** (ADR-async-5 D39): `overlap { a()  b() }`
+// **The edit `NK2124` suggests** (ADR-async-v6 D39): `overlap { a()  b() }`
 // written `(async a(), async b())`, or, where every branch gives nothing
 // (`nothing`), `async` for the word and `async ` before each branch. Only
 // where there are two branches or more, each one expression that is not a
@@ -394,7 +394,7 @@ fn overlap_rewritten(world: ref CheckWorld, whole: ref Expr, block: ref Block, n
     return CheckEdit { span: Span { start: at.start, end: first.start }, text: "(async ", also: also }
 }
 
-// **The edit `NK2125` suggests** (ADR-async-5 D39): `task::scope fn(s) {
+// **The edit `NK2125` suggests** (ADR-async-v6 D39): `task::scope fn(s) {
 // for x in xs { s.spawn fn { … } } }` written `xs.par_iter().for_each fn(x)
 // { … }`. Only where the loop walks a name with one binding, its body is that
 // one `s.spawn` and the task's steps are expressions that neither print nor

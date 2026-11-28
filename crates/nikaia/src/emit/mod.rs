@@ -1080,7 +1080,7 @@ pub fn branch_starts_first<'p>(
 }
 
 /// **Every task an `async` form starts**, for `--overlaps`
-/// ([ADR-async-5](../../../docs/specification/adr/adr-async-5.md) D32): the
+/// ([ADR-async-v6](../../../docs/specification/adr/adr-async-v6.md) D32): the
 /// report is `tools/order.nika`'s; what it reads is the check's record of each
 /// task's wait point and group, and whether a task pauses, both the emitter's
 /// (ADR-292b), so it is handed an emitter built as `branch_starts_first`'s.
@@ -1108,7 +1108,7 @@ pub fn task_report(
         &emitter.s.facts.async_waits,
         &mut |task: &Expr| emitter.s.task_pauses(&emitter.world, task),
     );
-    // Every `par_iter` call and the execution chosen for it (ADR-async-5
+    // Every `par_iter` call and the execution chosen for it (ADR-async-v6
     // D25, D32): the lambdas the checker handed to a `fan_*` entry.
     let fanned = &emitter.s.facts.pausing_lambdas;
     tasks

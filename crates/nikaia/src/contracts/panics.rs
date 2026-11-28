@@ -1,4 +1,4 @@
-//! Whether a function can panic (ADR-async-5 D35, #1355).
+//! Whether a function can panic (ADR-async-v6 D35, #1355).
 //!
 //! **The walk, the graph and the fixpoint are Nikaia** (`tools/panics.nika`).
 //! What stays here is handing in each unit with what its check and the bounds

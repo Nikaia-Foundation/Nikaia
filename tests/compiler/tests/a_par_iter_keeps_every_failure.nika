@@ -1,4 +1,4 @@
-// **A `par_iter` walk whose lambda fails keeps every failure** (ADR-async-5
+// **A `par_iter` walk whose lambda fails keeps every failure** (ADR-async-v6
 // D26, Part II 12.6, #2681): every element runs, the first failure in input
 // order is thrown where the call returns, and the later ones are its
 // `secondary` list, in input order, at both settings of `user_parallelism`:

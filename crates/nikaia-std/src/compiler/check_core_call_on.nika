@@ -29,7 +29,7 @@ fn check_core_call_on_base(name: ref String) -> String {
 }
 
 /// Whether a type is a task's handle, a `TaskHandle` or a
-/// `task::ChildHandle` (ADR-async-5 D17).
+/// `task::ChildHandle` (ADR-async-v6 D17).
 fn check_core_call_on_task_handle(ty: ref Ty) -> bool {
     return match ty {
         Ty::Named { name, .. } => name == "TaskHandle" || name == CHILD_HANDLE,
@@ -814,7 +814,7 @@ fn check_core_call_on_failed_through(mut state: CheckState, args: ref Vec[Expr],
     let kind = if key == "Seq::map" { 1 } else if key == "Seq::filter" { 2 } else if key == "Seq::for_each" { 3 } else { 4 }
     state.facts.failing_through_calls.insert(node, kind)
     // **A `par_iter` walk's `for_each` runs every element and keeps every
-    // failure** (ADR-async-5 D26, #2681), where a sequence's stops at the first.
+    // failure** (ADR-async-v6 D26, #2681), where a sequence's stops at the first.
     if kind == 3 && shape_parallel(on) {
         state.facts.kept_failure_ends.insert(node)
     }
@@ -1403,7 +1403,7 @@ fn check_core_call_on_described[H: CheckHost](mut state: CheckState, world: ref 
     state.method_options(world, method, contract, node)
     let fails = !known_text && (contract.fails_with.len() > 0 || state.walks_a_failing_sequence(on, contract))
     // **The step that ends a walk with a deadline throws `task::TimedOut`**
-    // (ADR-async-5 D27): the lowering writes it around the step.
+    // (ADR-async-v6 D27): the lowering writes it around the step.
     let timed_end = walks && shape_timed(on) && !check_core_call_on_hands_back_a_sequence(contract)
     if timed_end {
         state.facts.timed_ends.insert(node)
@@ -1434,7 +1434,7 @@ fn check_core_call_on_described[H: CheckHost](mut state: CheckState, world: ref 
     // (#2736): the lowering is told which calls stand on one.
     if shape_failing_items(on) {
         state.facts.failing_item_receivers.insert(node, sequence_failures(on))
-        // **A `par_iter` walk keeps every failure** (ADR-async-5 D26, #2681).
+        // **A `par_iter` walk keeps every failure** (ADR-async-v6 D26, #2681).
         if shape_parallel(on) {
             state.facts.kept_failure_ends.insert(node)
         }
@@ -1488,7 +1488,7 @@ fn check_core_call_on_described[H: CheckHost](mut state: CheckState, world: ref 
         state.in_parallel = state.in_parallel ?? depth
         state.scoped_task = false
         // **`map`, `filter` and `for_each` take a lambda that may pause**
-        // (ADR-async-5 D24); `fold`'s never does (D29).
+        // (ADR-async-v6 D24); `fold`'s never does (D29).
         state.pausing_walk = key == "Seq::map" || key == "Seq::filter" || key == "Seq::for_each"
     }
     // **A task of `task::scope` runs beside the others** (Part II 12.7): the
@@ -1624,7 +1624,7 @@ fn check_core_call_on_described[H: CheckHost](mut state: CheckState, world: ref 
         let mut seen: CheckGuarded = state.flow.guarded?.clone() ?? CheckGuarded::nothing()
         // **A `par_iter` lambda that never pauses and places an allocation
         // in a block runs each element as a task for its memory**
-        // (ADR-async-5 D28, ADR-327 D13): a full block ends that element
+        // (ADR-async-v6 D28, ADR-327 D13): a full block ends that element
         // alone, with `task::OverBudget`, kept among the call's failures.
         if parallel && (key == "Seq::map" || key == "Seq::filter" || key == "Seq::for_each") && args.len() == 1 && !a_paused_chain(key, on) && !state.flow.paused_args.contains(id_of(args[0]) as i64) && check_core_call_on_places(state, world, host, args[0]) {
             state.facts.blocked_lambdas.insert(id_of(args[0]) as i64)
@@ -1641,7 +1641,7 @@ fn check_core_call_on_described[H: CheckHost](mut state: CheckState, world: ref 
         check_core_call_std_code_args(state, world, callee, key, args, parallel, span)
     }
     // **A lambda of a `par_iter` walk meets its own other runs**
-    // (ADR-async-5 D26): `map`, `filter` and `for_each`, and `fold`'s
+    // (ADR-async-v6 D26): `map`, `filter` and `for_each`, and `fold`'s
     // `step` and `merge` (Part II 12.6).
     if parallel && (entry == "map" || entry == "filter" || entry == "for_each") && args.len() == 1 {
         check_walks_a_lambda_against_itself(state, world, on, args[0], span)

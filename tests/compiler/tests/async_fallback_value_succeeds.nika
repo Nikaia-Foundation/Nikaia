@@ -1,4 +1,4 @@
-// The fallback of a value form (Part I 8.1.2, ADR-async-5 D22, #986): the
+// The fallback of a value form (Part I 8.1.2, ADR-async-v6 D22, #986): the
 // task succeeds, so its value stands and the fallback does not run; the
 // handler reads the error it would get.
 

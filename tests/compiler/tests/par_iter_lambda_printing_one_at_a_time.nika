@@ -1,5 +1,5 @@
 // `par_iter(limit: 1)`, the literal, runs the elements one at a time, so a
-// lambda that prints does not meet its own other runs (ADR-async-5 D15, D26,
+// lambda that prints does not meet its own other runs (ADR-async-v6 D15, D26,
 // #2508). A lock changed through `update` is how a parallel lambda combines,
 // and is no meeting either (ADR-235 D2).
 fn main() throws {

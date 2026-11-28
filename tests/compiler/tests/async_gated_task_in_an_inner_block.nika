@@ -2,7 +2,7 @@
 // inside the group while one bound before that block is still open. Its cell
 // lives in the group's own block, which the gate polls to the group's end,
 // and it takes the names of the inner block, a number among them; a name of
-// the group's block or from outside it is borrowed (ADR-async-5 D2, D37,
+// the group's block or from outside it is borrowed (ADR-async-v6 D2, D37,
 // #2653).
 
 use std::time

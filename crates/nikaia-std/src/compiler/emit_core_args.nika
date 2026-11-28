@@ -1027,7 +1027,7 @@ impl EmitState {
             out.push(f"|mut __nk_acc, __nk_x| {{ nikaia_std::par::in_place(&mut __nk_acc, {second}, ")
         }
         // **A read of a value tasks share, standing alone as the argument**
-        // (ADR-async-5 D8, #986): `*` is enough there, its brackets would be
+        // (ADR-async-v6 D8, #986): `*` is enough there, its brackets would be
         // `unused_parens`.
         let shared = emit_arg_a_shared_read(world, walk, arg)
         if shared != "" && out.buf.len() == arg_start && in_place == 0 && !future {
@@ -1517,7 +1517,7 @@ fn emit_async_line(gates: ref Vec[i64]) -> String {
 }
 
 /// **What a gated task takes from a block inside its group goes into it**
-/// (ADR-async-5 D2, #2653): its gate polls its rest to the group's end, past
+/// (ADR-async-v6 D2, #2653): its gate polls its rest to the group's end, past
 /// that block, so the task holds those names itself. A `Cell` around them is
 /// taken whole by its `into_inner`, which carries a number in by value too,
 /// where the closure would borrow it. The opening before the closure, the
@@ -1584,7 +1584,7 @@ fn emit_async_occupy(gates: ref Vec[i64]) -> String {
     return out
 }
 
-/// **The group of `async e` as a name** (ADR-async-5 D9): `__group_N` for an
+/// **The group of `async e` as a name** (ADR-async-v6 D9): `__group_N` for an
 /// `async { }`'s node, `__group_nN` for a block's.
 fn emit_async_group_name(group: i64) -> String {
     if group < 0 {
@@ -1619,7 +1619,7 @@ fn emit_arg_a_shared_read(world: ref EmitWorld, walk: ref EmitWalk, arg: ref Exp
     }
 }
 
-/// **A read of a pending value inside a `catch`'s guarded half** (ADR-async-5
+/// **A read of a pending value inside a `catch`'s guarded half** (ADR-async-v6
 /// D8, D22, #988): `let c = async g(a) catch { … }` in a task's body leaves
 /// the guarded labelled block with `a`'s failure, as a failing call does,
 /// instead of its `?` leaving the task past the fallback. `read` is the join
@@ -1647,7 +1647,7 @@ fn emit_pending_read_caught(read: ref String, breaks_to: i64) -> String {
 }
 
 /// **Whether a `catch`'s guarded half names a pending value whose read can
-/// fail** (ADR-async-5 D8, #988): a binding of `async e` only tasks name,
+/// fail** (ADR-async-v6 D8, #988): a binding of `async e` only tasks name,
 /// read in this task's body; its failure is the `catch`'s, so the guarded half
 /// is a labelled block it leaves (`emit_pending_read_caught`).
 fn emit_catch_reads_a_pending(world: ref EmitWorld, walk: ref EmitWalk, guarded: ref Expr) -> bool {
@@ -1710,7 +1710,7 @@ fn emit_async_joined_paused(handle: ref String, channel: ref String, fallback: b
     return f"{arrived}?"
 }
 
-/// **A site of a crossing** (ADR-async-5 D23) as the emitted Rust names it:
+/// **A site of a crossing** (ADR-async-v6 D23) as the emitted Rust names it:
 /// the function's own name, written as the raise site is.
 fn emit_async_site(scope: ref EmitScope) -> String {
     return f"&{rust_string(scope.origin)}"
@@ -1998,7 +1998,7 @@ impl EmitState {
     /// **The channel a group's tasks fail in** (ADR-328 D8, #1360): the
     /// function's own where it holds a task's crash. Where it does not, no
     /// task can panic, or each one that can reads its crash in a fallback
-    /// (ADR-async-5 D35, #1355): `throws` is inferred, and it holds
+    /// (ADR-async-v6 D35, #1355): `throws` is inferred, and it holds
     /// `task::Crashed` wherever a crash could leave. The tasks then fail in
     /// `task::OrCrash` of the function's channel, their own failures in it and
     /// a crash raised again, and the function's own failures leave through the
@@ -2036,7 +2036,7 @@ impl EmitState {
         return true
     }
 
-    /// **`async e`, one task of a group** (ADR-async-5 D6, D9, D20, #988): it
+    /// **`async e`, one task of a group** (ADR-async-v6 D6, D9, D20, #988): it
     /// starts where it is written, in the group's runtime (`task::group`); a
     /// task that never pauses runs there to its end (at both settings for now),
     /// and its handle holds the end until the wait point. `kind` is `join`
@@ -2044,7 +2044,7 @@ impl EmitState {
     /// binding's, waited for later) or `spawn` (a statement, its value dropped).
     fn emit_async_task[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, task: ref Expr, id: i64, kind: ref String, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
         let group = self.emit_async_group_of(id)
-        // **A deferred task** (`async(deferred)`, ADR-async-5 D12): its
+        // **A deferred task** (`async(deferred)`, ADR-async-v6 D12): its
         // handle is made here, and its `start()` starts it.
         let deferred = walk.async_deferred
         walk.async_deferred = false
@@ -2325,7 +2325,7 @@ impl EmitState {
         }
     }
 
-    /// **`limit: n` and `admission: s` of a group** (ADR-async-5 D15, D18,
+    /// **`limit: n` and `admission: s` of a group** (ADR-async-v6 D15, D18,
     /// #986), read where the group starts, before its function: `n` below
     /// `1` panics there, naming the option; without `admission:` std's
     /// strategy decides, also for a group that writes neither, where its
@@ -2358,7 +2358,7 @@ impl EmitState {
         return text.buf
     }
 
-    /// **`within: d` as the deadline it starts** (ADR-async-5 D16, #986):
+    /// **`within: d` as the deadline it starts** (ADR-async-v6 D16, #986):
     /// `task::Deadline::after(d)`, counted from where it is written; `""`
     /// for a form without one.
     fn emit_async_deadline[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, host: ref H, within: ref Expr?, depth: i64, flow: EmitFlow, scope: ref EmitScope) -> String sync throws {

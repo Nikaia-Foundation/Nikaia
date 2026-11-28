@@ -1,4 +1,4 @@
-// A walk with `within:` handed to `zip` (ADR-async-5 D27, #1423): the step
+// A walk with `within:` handed to `zip` (ADR-async-v6 D27, #1423): the step
 // that ends the zipped walk throws `task::TimedOut`, so a function that
 // neither handles it nor says `throws` is refused.
 use std::time

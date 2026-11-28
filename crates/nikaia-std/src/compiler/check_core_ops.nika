@@ -1490,7 +1490,7 @@ fn check_core_ops_task[H: CheckHost](mut state: CheckState, world: ref CheckWorl
     state.a_task_takes_no_arguments(world, params, span)
     // **What the task takes with it** (`NK2101`), read off the body before it
     // is walked. No parameter of a task is ever `mut`. A child task takes
-    // nothing: it borrows, and its group outlives it (ADR-async-5 D11).
+    // nothing: it borrows, and its group outlives it (ADR-async-v6 D11).
     if !child {
         let closure = Expr::Closure { params: params.clone(), mutable: [], body: body.clone(), id: fresh_id() }
         let who = if detached { "a detached task" } else { "a background task" }
@@ -1518,7 +1518,7 @@ fn check_core_ops_task[H: CheckHost](mut state: CheckState, world: ref CheckWorl
     return Ty::Named { name: "TaskHandle", args: [value], view: false }
 }
 
-/// The type of an `async(handle)`'s value (Part I 8.1.2, ADR-async-5 D11).
+/// The type of an `async(handle)`'s value (Part I 8.1.2, ADR-async-v6 D11).
 pub comptime CHILD_HANDLE: ref String = "task::ChildHandle"
 
 /// Whether the type is a child task's handle, which cannot leave its group
@@ -1531,7 +1531,7 @@ fn a_child_handle(ty: ref Ty) -> bool {
 }
 
 /// **`spawn`** hands back a `TaskHandle` of what the task's body comes to;
-/// `detached` where it is written `async(detached)` (ADR-async-5 D13); a
+/// `detached` where it is written `async(detached)` (ADR-async-v6 D13); a
 /// `task::ChildHandle` where it is written `async(handle)` (`child`, D11).
 fn check_core_ops_spawn[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, spawned: ref Expr, detached: bool, child: bool, span: ref Span) -> Ty sync {
     // **Before** the body is walked, so that the task's own `let`s are not

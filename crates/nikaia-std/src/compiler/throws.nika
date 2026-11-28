@@ -772,7 +772,7 @@ fn thrown_in(expr: ref Expr, names: ref winnow_grammar::InternerContext, holes_o
             }
         }
         Expr::MethodCall { receiver, method, args, config, .. } => {
-            // **`xs.par_iter(within: d)`** (ADR-async-5 D27): the step that
+            // **`xs.par_iter(within: d)`** (ADR-async-v6 D27): the step that
             // ends the walk throws `task::TimedOut` once `d` ran out.
             if !caught && names.resolve(method) == "par_iter" && config.iter().any(fn(setting) { names.resolve(setting.name) == "within" }) {
                 out.direct.insert("task::TimedOut")
@@ -803,7 +803,7 @@ fn thrown_in(expr: ref Expr, names: ref winnow_grammar::InternerContext, holes_o
         // **A task's crash is an error to whoever waits for it** (Part II
         // 12.7, ADR-328 D8): the function that starts it throws
         // `task::Crashed`, as a `task::scope` in it does, where the task can
-        // panic (ADR-async-5 D35); the host's answer for the form says so.
+        // panic (ADR-async-v6 D35); the host's answer for the form says so.
         Expr::Async(inner, _, within, _) => {
             if !caught {
                 out.direct.extend(contribution_of(expr).errors.clone())
@@ -812,7 +812,7 @@ fn thrown_in(expr: ref Expr, names: ref winnow_grammar::InternerContext, holes_o
             thrown_in(inner, names, holes_of, contribution_of, in_a_handler, caught, out)
         }
         // **A deadline that runs out is the failure `task::TimedOut`**
-        // (ADR-async-5 D16, #986): it arrives where the task's own do, so a
+        // (ADR-async-v6 D16, #986): it arrives where the task's own do, so a
         // fallback stands in for it.
         Expr::AsyncGroup(_, _, within, _, _) => thrown_by_a_deadline(within, names, holes_of, contribution_of, in_a_handler, caught, out),
         Expr::Spawn { within, .. } => thrown_by_a_deadline(within, names, holes_of, contribution_of, in_a_handler, caught, out),
@@ -1105,7 +1105,7 @@ fn pattern_path(pattern: ref MatchPattern) -> Vec[winnow_grammar::Symbol]? {
     return null
 }
 
-// `within: d` of an `async(…)` form (ADR-async-5 D16): `d` itself, and the
+// `within: d` of an `async(…)` form (ADR-async-v6 D16): `d` itself, and the
 // `task::TimedOut` its running out ends the task with.
 fn thrown_by_a_deadline(within: ref Expr?, names: ref winnow_grammar::InternerContext, holes_of: fn(ref Expr) -> Vec[Expr] sync, contribution_of: fn(ref Expr) -> Contribution sync, in_a_handler: bool, caught: bool, mut out: Thrown) {
     let d = within ?? return

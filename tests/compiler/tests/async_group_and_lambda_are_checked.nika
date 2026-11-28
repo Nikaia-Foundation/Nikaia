@@ -1,5 +1,5 @@
 // `async { … }`, a group, with an `async e` statement in it, and
-// `async fn { … }`, whose value is the lambda's result (ADR-async-5 D9, D10,
+// `async fn { … }`, whose value is the lambda's result (ADR-async-v6 D9, D10,
 // #986): both run on the group runtime (#988).
 
 fn work(n: i64) throws {

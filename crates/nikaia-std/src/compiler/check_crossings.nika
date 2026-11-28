@@ -22,7 +22,7 @@ pub enum CheckCrossingsPath {
     /// The path goes on to the next statement.
     Falls,
     /// A `join(within:)` timed out and the path left with the handle still
-    /// live (ADR-async-5 D17).
+    /// live (ADR-async-v6 D17).
     Live,
 }
 
@@ -75,7 +75,7 @@ fn check_crossings_path(world: ref CheckWorld, name: ref String, stmts: ref Vec[
         let flow = check_crossings_step(world, name, stmts[at].node, in_loop)
         // **A path that takes the handle and then leaves** goes on nowhere,
         // as one that left with it: `h.cancel()` then `return` in one branch
-        // and `h.start()` in the other (ADR-async-5 D12) join as the one
+        // and `h.start()` in the other (ADR-async-v6 D12) join as the one
         // that goes on.
         if flow == CheckCrossingsPath::Taken && check_crossings_leaves_after(stmts, at + 1, in_loop) {
             return CheckCrossingsPath::Gone
@@ -110,7 +110,7 @@ fn check_crossings_leaves_after(stmts: ref Vec[Spanned[Stmt]], from: i64, in_loo
 }
 
 /// **`name.join(within: d)` that keeps the task on time-out**
-/// ([ADR-async-5](../../../docs/specification/adr/adr-async-5.md) D17): a
+/// ([ADR-async-v6](../../../docs/specification/adr/adr-async-v6.md) D17): a
 /// `join` with `within:` and without `on_timeout: task::OnTimeout::Cancel`
 /// written, called on `name` itself.
 fn check_crossings_keeping_join(world: ref CheckWorld, name: ref String, expr: ref Expr) -> bool {
@@ -158,7 +158,7 @@ fn check_crossings_names_cancel(world: ref CheckWorld, value: ref Expr) -> bool 
 }
 
 /// **The path where a keeping `join(within:)` threw `task::TimedOut`**
-/// (ADR-async-5 D17, `NK2109`): the success path takes the handle, the
+/// (ADR-async-v6 D17, `NK2109`): the success path takes the handle, the
 /// time-out path leaves it live, so the handler of a `catch` directly around
 /// the join must take it on every path out; with no such `catch` the error
 /// leaves the scope with the handle. Null where `expr` is no such join.
@@ -359,7 +359,7 @@ fn check_crossings_expr_path(world: ref CheckWorld, name: ref String, expr: ref 
             }
         }
         // `h.start()` of a deferred handle starts the task and keeps the
-        // handle (ADR-async-5 D12): it takes nothing.
+        // handle (ADR-async-v6 D12): it takes nothing.
         Expr::MethodCall { receiver, method, args, .. } if args.len() == 0 && f"{world.words.resolve(method)}" == "start" && check_crossings_is_name(world, name, receiver) => return CheckCrossingsPath::Falls,
         else => return check_crossings_mentioned(world, name, expr),
     }
@@ -418,7 +418,7 @@ fn check_crossings_spawned(world: ref CheckWorld, handles: ref collections::BTre
             }
             match value {
                 // A child handle (`async(handle)`) is not asked: its group
-                // waits for it (Part III `NK2109`, ADR-async-5 D11).
+                // waits for it (Part III `NK2109`, ADR-async-v6 D11).
                 Expr::Spawn { child, .. } if child => return null,
                 Expr::Spawn { .. } => {}
                 else => {
@@ -653,7 +653,7 @@ fn check_crossings_entry(state: ref CheckState, key: ref String, chained: bool) 
 }
 
 /// The counterpart in `nikaia_std::seq` that runs a `par_iter` step's
-/// pausing lambda as one task per element (ADR-async-5 D25), where `key` is
+/// pausing lambda as one task per element (ADR-async-v6 D25), where `key` is
 /// one of the three steps whose lambda may pause (D24).
 fn check_crossings_fanned(key: ref String) -> String? sync {
     if key == "Seq::map" {
@@ -679,7 +679,7 @@ fn check_crossings_a_lambda_that_pauses_at_an_entry(mut state: CheckState, key: 
     }
     let chained = a_paused_chain(key, on)
     // **A `par_iter` chain's `map`, `filter` and `for_each` with a lambda
-    // that pauses run one task per element** (ADR-async-5 D24, D25), and the
+    // that pauses run one task per element** (ADR-async-v6 D24, D25), and the
     // results come back in input order (D26). A step after one that already
     // pauses is a step of that sequence; any other lambda of a `Par[T]` may
     // not pause at all, and `NK2209` has said so.
@@ -783,7 +783,7 @@ fn check_crossings_arguments[H: CheckHost](mut state: CheckState, world: ref Che
 }
 
 /// **Where the paths after a `let h = async(deferred) …` may hold the
-/// handle** (`NK2121`, ADR-async-5 D12): not started yet, started (or
+/// handle** (`NK2121`, ADR-async-v6 D12): not started yet, started (or
 /// cancelled) once, started a second time. A path that hands the handle on
 /// holds none of these, and is no longer asked.
 struct CheckDeferredPaths {
@@ -1039,7 +1039,7 @@ fn check_deferred_task(expr: ref Expr) -> bool {
 
 /// Whether `expr` is a task that starts at once and hands back a handle
 /// (`async(handle)`, `async(detached)`, `spawn`, none `deferred`): its
-/// handle's `start()` is `NK2121` (ADR-async-5 D12).
+/// handle's `start()` is `NK2121` (ADR-async-v6 D12).
 fn check_started_task(expr: ref Expr) -> bool {
     return match expr {
         Expr::Spawn { deferred, .. } => !deferred,
@@ -1069,7 +1069,7 @@ fn check_started_options(expr: ref Expr) -> String {
 }
 
 /// **`NK2121`: a deferred handle is started, or cancelled, once on every
-/// path** (ADR-async-5 D12). For each `let h = async(deferred) …` of the
+/// path** (ADR-async-v6 D12). For each `let h = async(deferred) …` of the
 /// block, the paths through the statements after it: one that leaves the
 /// scope, or ends the block, with the task neither started nor cancelled is
 /// refused at the `let`, and a second `start()` on a path at that `start()`.

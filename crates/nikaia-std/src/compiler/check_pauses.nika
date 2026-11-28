@@ -74,9 +74,9 @@ impl CheckState {
         // for as long as the wait takes. **A pausing task of `task::scope` is
         // polled by the scope itself** (ADR-328 D10), so it is not refused here,
         // **nor is a `par_iter` chain's `map`, `filter` or `for_each`**, which
-        // runs one task per element when its lambda pauses (ADR-async-5 D24).
+        // runs one task per element when its lambda pauses (ADR-async-v6 D24).
         if self.in_parallel != null && !self.scoped_task && !self.pausing_walk {
-            let mut parallel: Vec[String] = ["Only the lambda of a `par_iter()` chain's `map`, `filter` or `for_each` may pause, and runs one task per element; this one runs on every core at once, and a core that waits holds up its share of the work, so it must never pause (ADR-async-5 D29)."]
+            let mut parallel: Vec[String] = ["Only the lambda of a `par_iter()` chain's `map`, `filter` or `for_each` may pause, and runs one task per element; this one runs on every core at once, and a core that waits holds up its share of the work, so it must never pause (ADR-async-v6 D29)."]
             if pause.unpromised != null {
                 parallel.push(why.clone())
             }

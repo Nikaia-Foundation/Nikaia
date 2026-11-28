@@ -1,5 +1,5 @@
 // A grammar's `par_fold` takes `limit:` where it took `workers:`
-// (ADR-async-5 D27).
+// (ADR-async-v6 D27).
 use std::par
 
 grammar Sum {

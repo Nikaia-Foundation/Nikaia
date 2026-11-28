@@ -1,5 +1,5 @@
 // #990: `nikaia fix --only NK2123` writes `async(detached)` for `spawn`
-// (ADR-async-5 D39), the same task under its new word.
+// (ADR-async-v6 D39), the same task under its new word.
 use std::env
 use std::fs
 use std::process

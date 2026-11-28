@@ -329,7 +329,7 @@ pub struct EmitWalk {
     /// ADR-grammar-typed-read-v1 D11), `::<T>`, written after the callee's name by the
     /// call being written; `""` for none.
     pub path_types: String,
-    /// **The groups of `async e` open where the walk is** (ADR-async-5 D9,
+    /// **The groups of `async e` open where the walk is** (ADR-async-v6 D9,
     /// #988): an `async { }`'s node, or `-1 -` the first statement's start of
     /// the function's body.
     pub async_groups: Vec[i64],
@@ -371,15 +371,15 @@ pub struct EmitWalk {
     /// **The task started now has a fallback** (Part I 8.1.2, D22): its body
     /// fails in the box, handed whole to the `catch` that waits for it.
     pub async_fallback: bool,
-    /// **The deadline of the task started now** (ADR-async-5 D16, #986):
+    /// **The deadline of the task started now** (ADR-async-v6 D16, #986):
     /// `task::Deadline::after(d)` as written, `""` for none.
     pub async_within: String,
     /// **The strategy of the task started now** (`admission: s` on a form
-    /// that starts one task, ADR-async-5 D15, D18): its value as written,
+    /// that starts one task, ADR-async-v6 D15, D18): its value as written,
     /// `""` for none.
     pub async_admission: String,
     /// **The task started now is deferred** (`async(deferred)`,
-    /// ADR-async-5 D12): its handle starts it at `start()`.
+    /// ADR-async-v6 D12): its handle starts it at `start()`.
     pub async_deferred: bool,
     /// **The deadline the next guarded block of a fallback is bound by**
     /// (D16, D22): the name of the task's deadline, so `task::TimedOut`
@@ -388,7 +388,7 @@ pub struct EmitWalk {
     /// **The groups of `async e` with a deadline** (D16): their tasks are
     /// bound by `__group_N_deadline`.
     pub async_deadlines: Vec[i64],
-    /// The groups around with a gate, `limit:` or `admission:` (ADR-async-5
+    /// The groups around with a gate, `limit:` or `admission:` (ADR-async-v6
     /// D15, D18, #986), outer first: every task waits for a place in each.
     pub async_gates: Vec[i64],
     /// **The slots the statement being written asked for** (#1256), declared

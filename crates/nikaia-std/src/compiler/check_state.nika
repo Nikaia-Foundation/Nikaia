@@ -577,7 +577,7 @@ pub struct CheckFinding {
 /// by `text`; an empty `text` deletes them. `also` holds the further parts
 /// of the same edit, made with it or not at all: the checker keeps no text
 /// of the source, so an edit that keeps a branch and rewrites what stands
-/// around it is several parts (ADR-async-5 D39).
+/// around it is several parts (ADR-async-v6 D39).
 pub struct CheckEdit {
     pub span: Span,
     pub text: String,
@@ -935,7 +935,7 @@ pub struct CheckState {
     /// rather than a `par_iter()` walk: the same rules, said of a task.
     pub scoped_task: bool,
     /// **The parallel context is a `par_iter` chain's `map`, `filter` or
-    /// `for_each`**, whose lambda may pause (ADR-async-5 D24): `NK2209` is
+    /// `for_each`**, whose lambda may pause (ADR-async-v6 D24): `NK2209` is
     /// not asked there, and a pausing lambda runs one task per element.
     pub pausing_walk: bool,
     /// Whether what is being walked stands inside one.

@@ -1,5 +1,5 @@
 // The failure of a live child handle dropped unjoined arrives at its group's
-// end as an unread one (Part I 8.1.2 and 8.2, ADR-async-5 D11, #987): the
+// end as an unread one (Part I 8.1.2 and 8.2, ADR-async-v6 D11, #987): the
 // `join(within:)` times out, `run` goes on to its `return`, and the group
 // raises the rest's failure there, so the value is never handed back.
 use std::time

@@ -1288,7 +1288,7 @@ impl EmitState {
             witness = emit_call_option_named(world, config, "after")
         }
         // **`join(within: d)` is `join_within(d, on_timeout)`** (ADR-346 D4,
-        // ADR-async-5 D17).
+        // ADR-async-v6 D17).
         let mut limit: Vec[Expr] = []
         if name == "join" && args.len() == 0 {
             limit = emit_call_option_named(world, config, "within")
@@ -1662,7 +1662,7 @@ impl EmitState {
         if name == "par_iter" && args.len() == 0 && emit_candidates(self.own_contracts, "par_iter").len() == 0 {
             let piece = emit_call_option_named(world, config, "piece")
             // **`limit:`, `within:` and `admission:` go with the walk to the
-            // step that ends it** (ADR-async-5 D15, D27).
+            // step that ends it** (ADR-async-v6 D15, D27).
             let limit = emit_call_option_named(world, config, "limit")
             let within = emit_call_option_named(world, config, "within")
             let admission = emit_call_option_named(world, config, "admission")
@@ -1783,13 +1783,13 @@ impl EmitState {
         // **A lambda that pauses, handed to a `std` entry** (ADR-233 D1, D2): the
         // entry's counterpart in `nikaia_std::seq`, which takes the `async`
         // closure the lambda is written as.
-        // **The step that ends a walk with `within:`** (ADR-async-5 D27):
+        // **The step that ends a walk with `within:`** (ADR-async-v6 D27):
         // `par::ended` turns a deadline that ran out into `task::TimedOut`.
         let timed = self.facts.timed_ends.contains(on_node)
         if timed {
             out.push("nikaia_std::par::ended(")
         }
-        // **A `par_iter` walk keeps every failure** (ADR-async-5 D26, #2681):
+        // **A `par_iter` walk keeps every failure** (ADR-async-v6 D26, #2681):
         // its `collect` gathers each element as a value or a failure, and its
         // `for_each` each `()` or failure, and `par::kept_failures` throws the
         // first in input order with the others as its `secondary` list.
@@ -1809,7 +1809,7 @@ impl EmitState {
             out.push("nikaia_std::par::kept_failures::<(), _, _>(")
         }
         // **A handle's `join` is where its task's failure arrives**
-        // (ADR-async-5 D23): `error::arrived` records it, on the failure's
+        // (ADR-async-v6 D23): `error::arrived` records it, on the failure's
         // path alone.
         let joined_key = self.facts.method_callees[on_node] ?? ""
         let arriving = (joined_key.starts_with("TaskHandle::join") || joined_key.starts_with("task::ChildHandle::join")) && self.method_can_fail(on_node)
@@ -1975,7 +1975,7 @@ impl EmitState {
             self.emit_expr(world, walk, out, host, deadline[0], depth, flow, scope)
         } else if limit.len() > 0 {
             self.emit_expr(world, walk, out, host, limit[0], depth, flow, scope)
-            // **What a time-out does with the task** (ADR-async-5 D17):
+            // **What a time-out does with the task** (ADR-async-v6 D17):
             // `task::OnTimeout::Keep` unless the call says otherwise.
             let on_timeout = emit_call_option_named(world, config, "on_timeout")
             out.push(", ")

@@ -1,5 +1,5 @@
 // A task that cannot panic but throws fails in the channel of the function
-// that starts it (ADR-async-5 D35, #1355): `run` and `grouped` throw `Bad`
+// that starts it (ADR-async-v6 D35, #1355): `run` and `grouped` throw `Bad`
 // alone, no `task::Crashed`, and the failure of a task that pauses reaches
 // their callers through it, from `async e` and from `async { }`.
 use std::time

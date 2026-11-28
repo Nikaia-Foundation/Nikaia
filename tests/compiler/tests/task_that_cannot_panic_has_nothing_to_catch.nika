@@ -1,5 +1,5 @@
 // A `catch` that could only take the crash of a task that cannot panic has
-// nothing to handle (ADR-async-5 D35, #1355): `NK1134`.
+// nothing to handle (ADR-async-v6 D35, #1355): `NK1134`.
 
 fn one() -> int { return 1 }
 

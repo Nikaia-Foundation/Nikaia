@@ -49,11 +49,11 @@ pub struct Trivia {
     /// a `for`'s take it (section 6, #1133).
     mut_name: Option<usize>,
     /// Where an `async` stood before a `let`, a loop or a function's
-    /// declaration, and which word followed it (`NK2115`, ADR-async-5 D5):
+    /// declaration, and which word followed it (`NK2115`, ADR-async-v6 D5):
     /// the first one is refused.
     misplaced_async: Option<(usize, &'static str)>,
     /// Where a `limit:` stood on a form that starts one task (`NK2112`,
-    /// ADR-async-5 D15): the first one is refused.
+    /// ADR-async-v6 D15): the first one is refused.
     one_task_limit: Option<usize>,
 }
 
@@ -687,7 +687,7 @@ pub fn fits(length: usize) -> Result<()> {
 
 /// Where a parse of `input` stops, or `None` where it goes through.
 /// **The options of a form that starts one task**, as `async_task_option`
-/// reads them (ADR-async-5 D15, D16, D18): `[within, admission]`, a later
+/// reads them (ADR-async-v6 D15, D16, D18): `[within, admission]`, a later
 /// one of the same name winning.
 fn async_task_options(
     head: Vec<(usize, ast::Expr)>,
@@ -793,14 +793,14 @@ pub fn parse_unrefined(input: &str) -> Result<Parsed> {
     }
 
     // **`async` before a `let`, a loop or a function's declaration**
-    // (`NK2115`, ADR-async-5 D5).
+    // (`NK2115`, ADR-async-v6 D5).
     if let Some((at, word)) = stream.state.user_state.misplaced_async {
         let finding =
             nikaia_std::compiler::parse_findings::parse_findings_misplaced_async(at as i64, word);
         return Err(refuse_parsing(finding, input));
     }
 
-    // **`limit:` on a form that starts one task** (`NK2112`, ADR-async-5 D15).
+    // **`limit:` on a form that starts one task** (`NK2112`, ADR-async-v6 D15).
     if let Some(at) = stream.state.user_state.one_task_limit {
         let finding =
             nikaia_std::compiler::parse_findings::parse_findings_one_task_limit(at as i64);
@@ -1241,7 +1241,7 @@ grammar! {
             d:doc_here a:attribute* f:fn_item -> { Spanned::attributed(f, Span::from(_span), d, a) }
 
         // **`async` before a function's declaration is read and refused**
-        // (`NK2115`, ADR-async-5 D5): whether a function pauses is inferred.
+        // (`NK2115`, ADR-async-v6 D5): whether a function pauses is inferred.
         // `parse_unrefined` says the refusal once the parse is through, so a
         // reader gets the reason and not a parse error at the word.
         rule async_before_fn -> () @=
@@ -4057,8 +4057,8 @@ grammar! {
           | tail:call_args_tail* ","? -> { Err(tail) }
 
         // **Part I 8.1.2: `async`, the prefix that starts a task**
-        // ([ADR-async-5](../../../../docs/specification/adr/adr-async-5.md)
-        // D5-D15, D22). `async(detached) fn { … }` is `spawn fn { … }` (D13),
+        // ([ADR-async-v6](../../../../docs/specification/adr/adr-async-v6.md)
+        // D5, D6, D7, D8, D9, D10, D11, D12, D13, D14, D15, D22). `async(detached) fn { … }` is `spawn fn { … }` (D13),
         // so it parses into `Expr::Spawn`, and a lambda that names an argument
         // meets `NK2103` there. `async e` (`async fn { … }` its lambda form,
         // and the statement `expr_stmt` reads) is `Expr::Async`, `async { … }`
@@ -4163,7 +4163,7 @@ grammar! {
         rule async_built_options = ((OPT_DETACHED | OPT_HANDLE | async_task_option_read) ",")* -> { () }
         rule async_task_option_read = async_task_option -> { () }
 
-        // **The options of a form that starts one task** (ADR-async-5 D15,
+        // **The options of a form that starts one task** (ADR-async-v6 D15,
         // D16, D18): `within: d` (0) and `admission: s` (1), in any order,
         // before or after `detached` / `handle`, in the one list of options;
         // a later one of the same name wins.
@@ -4173,7 +4173,7 @@ grammar! {
         rule async_task_head -> (usize, Expr) = o:async_task_option "," -> { o }
         rule async_task_tail -> (usize, Expr) = "," o:async_task_option -> { o }
 
-        // **The options of `async { … }`** (ADR-async-5 D15, D16, D18), in any
+        // **The options of `async { … }`** (ADR-async-v6 D15, D16, D18), in any
         // order: `within:` (0), `limit:` (1), `admission:` (2); a later one of
         // the same name wins.
         rule async_group_option -> (usize, Expr) =
@@ -4605,7 +4605,7 @@ grammar! {
           | KW_MUT -> { 0 }
           | KW_NULL -> { 0 }
           // **`overlap` left this list**
-          // ([ADR-async-5](../../../../docs/specification/adr/adr-async-5.md)):
+          // ([ADR-async-v6](../../../../docs/specification/adr/adr-async-v6.md)):
           // `async { … }` is the group now. Its construct still parses, keyword
           // first in `primary_expr_bare`, until #991 removes it; as a name it is
           // free.
@@ -4669,7 +4669,7 @@ grammar! {
           // `.nika` files is `test`.
           | KW_TEST -> { 0 }
           // **`async`, the prefix that starts a task**
-          // ([ADR-async-5](../../../../docs/specification/adr/adr-async-5.md)):
+          // ([ADR-async-v6](../../../../docs/specification/adr/adr-async-v6.md)):
           // Part I's list has it since 0.0.1305. No `.nika` in the tree writes
           // it as a name; it appears only inside strings the lowering emits.
           | KW_ASYNC -> { 0 }

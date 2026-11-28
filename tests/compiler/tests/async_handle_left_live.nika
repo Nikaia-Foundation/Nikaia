@@ -1,5 +1,5 @@
 // A child handle left live is waited for at its group's end (Part I 8.1.2,
-// ADR-async-5 D11, #986): one nothing names, one only a branch not taken
+// ADR-async-v6 D11, #986): one nothing names, one only a branch not taken
 // names, and one that pauses all run to their end before `main` ends.
 use std::time
 

@@ -1,4 +1,4 @@
-// Tasks of one group that only read the same values run together (ADR-async-5 D7, #1227).
+// Tasks of one group that only read the same values run together (ADR-async-v6 D7, #1227).
 
 fn size(names: ref Vec[String], total: i64) -> i64 {
 	return names.len() as i64 + total

@@ -598,7 +598,7 @@ pub mod prelude {
     // ([ADR-269](../../../docs/specification/adr/adr-269.md) D2): the emitter
     // writes `.shown()` on each, and a method needs its trait in scope.
     pub use crate::abort::{ShownByDebug as _, ShownByNothing as _};
-    // **A pause of a gated group's main line** (ADR-async-5 D37): the
+    // **A pause of a gated group's main line** (ADR-async-v6 D37): the
     // emitter writes `.on_line(&line)` on the future it awaits.
     pub use crate::bytes::Bytes;
     pub use crate::task::OnLine as _;

@@ -1,5 +1,5 @@
 // `async(handle) fn { … }` starts a child task of its group and gives its
-// `task::ChildHandle` (Part I 8.1.2, ADR-async-5 D11, #986): `join()` waits
+// `task::ChildHandle` (Part I 8.1.2, ADR-async-v6 D11, #986): `join()` waits
 // for the task and gives its value; one that pauses is polled there.
 use std::time
 

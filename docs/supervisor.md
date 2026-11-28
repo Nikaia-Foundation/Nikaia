@@ -647,7 +647,7 @@ own driver run:
   a wrong verdict as a `solver` defect, each with the file from the run's
   `z3-findings` artifact, and `fuzz N SEED` where the fuzzer found it.
 * **Async lane, `docs/briefs/async/`** (owner, 2026-11-21): the issues
-  labelled `async`: the build of ADR-async-5 (the umbrella "async: one
+  labelled `async`: the build of ADR-async-v6 (the umbrella "async: one
   concept, task" (#983) is closed; its steps are the lane). They run in the
   order of their dependencies; the session sets a `blocked` step to `ready`
   once what it waits for is closed.

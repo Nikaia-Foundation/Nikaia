@@ -52,7 +52,7 @@ fn main() throws {
 <span class="d-gutter"> 9 |</span>     let price = async(within: 100.millis()) lookup()
 <span class="d-gutter">   |</span>     <span class="d-error">^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^</span>
 <span class="d-gutter">   |</span>
-<span class="d-gutter">   =</span> <span class="d-note">note:</span> When the deadline runs out, the task is cancelled and ends with `task::TimedOut` (ADR-async-5 D16).
+<span class="d-gutter">   =</span> <span class="d-note">note:</span> When the deadline runs out, the task is cancelled and ends with `task::TimedOut` (ADR-async-v6 D16).
 <span class="d-gutter">   =</span> <span class="d-help">help:</span> Add `throws` to `render`, or write a fallback: `async(within: d) … catch { … }`.</code></pre>
 <p>With a fallback, the page is rendered with the price the program already has:</p>
 <pre><code class="language-nika">use std::time
@@ -78,7 +78,7 @@ the page with the cached price</code></pre>
       </div>
     <div class="safe-reading">
       <h2>Go deeper</h2>
-      <ul><li><a href="{{ "/docs/specification/10-nikaia-light.html" | relative_url }}">Specification, Part I 8.1.2: running work beside the code after it</a></li><li><a href="{{ "/docs/specification/adr/adr-async-5.html" | relative_url }}">ADR-async-5: tasks and async (D15-D17)</a></li><li><a href="https://github.com/Nikaia-Foundation/Nikaia/issues/986">Issue #986: limit and the rest of the async forms</a></li></ul>
+      <ul><li><a href="{{ "/docs/specification/10-nikaia-light.html" | relative_url }}">Specification, Part I 8.1.2: running work beside the code after it</a></li><li><a href="{{ "/docs/specification/adr/adr-async-v6.html" | relative_url }}">ADR-async-v6: tasks and async (D15-D17)</a></li><li><a href="https://github.com/Nikaia-Foundation/Nikaia/issues/986">Issue #986: limit and the rest of the async forms</a></li></ul>
     </div>
     <p class="safe-others">More under Safe, secure, reliable: <a href="{{ "/safe/unhandled-errors.html" | relative_url }}">Errors that go unhandled</a><a href="{{ "/safe/outside-data.html" | relative_url }}">Data from outside</a><a href="{{ "/safe/broken-promises.html" | relative_url }}">Calls that break a function's contract</a><a href="{{ "/safe/conflicting-actions.html" | relative_url }}">Two tasks changing the same value</a><a href="{{ "/safe/stuck-tasks.html" | relative_url }}">Tasks that get stuck</a><a href="{{ "/safe/memory.html" | relative_url }}">A memory budget for every task</a></p>
   </div>

@@ -1,6 +1,6 @@
 // A `par_iter` lambda runs once for every element, beside its other runs, so
 // one that prints is refused against itself as two tasks are: `NK2104`
-// (ADR-async-5 D26, #2508).
+// (ADR-async-v6 D26, #2508).
 fn main() throws {
 	let xs: Vec[i64] = [1, 2, 3]
 	xs.par_iter().for_each(fn(x) { println(f"{x}") catch {} })

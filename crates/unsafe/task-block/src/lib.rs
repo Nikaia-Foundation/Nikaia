@@ -390,7 +390,7 @@ const MEMORY: std::alloc::Layout = match std::alloc::Layout::from_size_align(BLO
 /// only refuses. Cold: a task that fits its block never comes here. It unwinds
 /// as a panic does, so the cleanups run, but past the panic hook: the task did
 /// not crash, it ran out of its budget, and whoever waits for it is told so
-/// with `task::OverBudget` (ADR-327 D13, ADR-async-5 D19).
+/// with `task::OverBudget` (ADR-327 D13, ADR-async-v6 D19).
 #[cold]
 #[inline(never)]
 pub fn full() -> ! {

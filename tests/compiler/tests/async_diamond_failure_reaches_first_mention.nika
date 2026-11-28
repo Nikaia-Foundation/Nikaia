@@ -1,4 +1,4 @@
-// A diamond whose pending value fails (ADR-async-5 D8, *A failure*, #988):
+// A diamond whose pending value fails (ADR-async-v6 D8, *A failure*, #988):
 // `b`'s and `c`'s tasks both wait for `a`; where `a` throws, its error is
 // received by the first mention in written order, `b`'s, whose fallback runs,
 // and `c`'s task, which cannot go on, is cancelled at its wait: `g` never

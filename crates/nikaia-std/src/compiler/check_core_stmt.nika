@@ -2516,7 +2516,7 @@ fn check_core_stmt_for[H: CheckHost](mut state: CheckState, world: ref CheckWorl
     state.fallible_step(world, over, width, span)
     // A fallible walk bound to several names is `NK2701` already.
     let stepped_fallibly = state.findings.len() > before
-    // **A `for` over a walk with `within:` ends it** (ADR-async-5 D27): the
+    // **A `for` over a walk with `within:` ends it** (ADR-async-v6 D27): the
     // walk is listed first, and throws `task::TimedOut` there.
     if shape_timed(over) {
         state.facts.timed_loops.insert(span.start as i64)
@@ -2978,7 +2978,7 @@ fn check_core_stmt[H: CheckHost](mut state: CheckState, world: ref CheckWorld, h
 }
 
 /// **A binding that holds a task's value**, `let x = async e` with no
-/// fallback and a task that can fail (ADR-async-5 D22): kept by its id, with the `let` as written, for
+/// fallback and a task that can fail (ADR-async-v6 D22): kept by its id, with the `let` as written, for
 /// `NK1134`'s help where a `catch` around a mention of it handles nothing.
 fn check_core_stmt_a_pending_task(mut state: CheckState, world: ref CheckWorld, names: ref Vec[winnow_grammar::Symbol], value: ref Expr) sync {
     if names.len() != 1 {
@@ -4256,7 +4256,7 @@ fn check_async_group_ended(state: ref CheckState, block: ref Block) -> i64? sync
     return -1 - block.stmts[0].span.start as i64
 }
 
-/// **The wait points of the tasks one block starts** (ADR-async-5 D6, D7,
+/// **The wait points of the tasks one block starts** (ADR-async-v6 D6, D7,
 /// D9), into `facts.async_waits` by the `async` node, and `NK2110` where a
 /// task's window is empty. The group is the `async { }` this block is the body
 /// of, else the innermost one around it in the function, else the block

@@ -1,4 +1,4 @@
-// An `async` form inside a loop's body is refused (ADR-async-5 D30,
+// An `async` form inside a loop's body is refused (ADR-async-v6 D30,
 // `NK2120`), in a nested block of it too. A lambda is a function of its own,
 // so one written in a loop may hold the form; and `spawn` is not asked.
 

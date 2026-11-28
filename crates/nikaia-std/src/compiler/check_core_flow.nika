@@ -1956,7 +1956,7 @@ fn check_core_flow_try_catch[H: CheckHost](mut state: CheckState, world: ref Che
     let guarded: CheckGuarded = held ?? CheckGuarded::nothing()
     state.a_fatal_error_passes(world, guarded, handler, span)
     let caught = check_core_flow_caught_type(guarded)
-    // **A pending binding named in it** (ADR-async-5 D22): its task's
+    // **A pending binding named in it** (ADR-async-v6 D22): its task's
     // failure arrives before the statement, where this `catch` is not.
     let mut named: collections::BTreeSet[String] = collections::BTreeSet()
     names_in(guarded_expr, world.words, named)
@@ -2008,7 +2008,7 @@ fn check_core_flow_try_catch[H: CheckHost](mut state: CheckState, world: ref Che
         return check_core_stmt_unit()
     }
     let value = literal ?? handled
-    // **The fallback of a detached task** (Part I 8.1.2, ADR-async-5 D22):
+    // **The fallback of a detached task** (Part I 8.1.2, ADR-async-v6 D22):
     // `async(detached) fn { … } catch { f }` gives the handle, and `f`
     // stands in for the task's value, so it is of the `T` of
     // `TaskHandle[T]`.
