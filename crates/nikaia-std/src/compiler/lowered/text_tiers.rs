@@ -2173,7 +2173,9 @@ pub(crate) fn tier_statement(stmt: &Stmt, at: i64, ask: &TierAsk<'_, '_, '_, '_,
             if op.is_some() { changed_in_place(target, tier_written(target, ask), ask, walk); }
         },
         Stmt::For { bindings, iter, body, .. } => {
-            let kinds = tier_expr(iter, ask, walk);
+            let mut kinds = tier_expr(iter, ask, walk);
+            let streamed = a_stream_read(iter, ask);
+            if streamed { kinds = view_kinds(); }
             let from = element_word(iter, ask, walk);
             let mut walked: Option<String> = None;
             if bindings.len() == 1 { walked = walked_struct(iter, ask, walk); }
@@ -2194,7 +2196,7 @@ pub(crate) fn tier_statement(stmt: &Stmt, at: i64, ask: &TierAsk<'_, '_, '_, '_,
                         None => None,
                     };
                     local.inner = walked_list(iter, ask, walk);
-                    local.unkept = only_own_text(&kinds) && !rooted_in_a_parameter(iter, ask, walk) || views_a_temporary(iter, ask, walk);
+                    local.unkept = !streamed && (only_own_text(&kinds) && !rooted_in_a_parameter(iter, ask, walk) || views_a_temporary(iter, ask, walk));
                     local.walked = a_walked_place(iter) && (walk.local_walks || rooted_in_a_parameter(iter, ask, walk));
                     local.lent_walk = lent_walked_list(iter, ask, walk);
                 }
@@ -5217,6 +5219,16 @@ pub(crate) fn std_result(callee: &str, ask: &TierAsk<'_, '_, '_, '_, '_, '_, '_>
     let result = match signature.result.as_ref() { Some(__nikaia_value) => __nikaia_value, None => return owned_kinds() };
     if result.text() == "ref String" { return view_kinds(); }
     owned_kinds()
+}
+
+pub(crate) fn a_stream_read(iter: &Expr, ask: &TierAsk<'_, '_, '_, '_, '_, '_, '_>) -> bool {
+    let func = match iter {
+        Expr::Call { func, .. } => { let func = nikaia_std::boxed::open(func); func },
+        _ => return false,
+    };
+    let callee = match tier_callee(func, ask) { Some(__nikaia_value) => __nikaia_value, None => return false };
+    let contract = match *nikaia_std::index::get(&ask.library.functions, &callee) { Some(__nikaia_value) => __nikaia_value, None => return false };
+    contract.streams
 }
 
 pub(crate) fn tier_units(program: &Program) -> Vec<(i64, i64)> {

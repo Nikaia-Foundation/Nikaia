@@ -2370,12 +2370,29 @@ fn check_core_stmt_assign[H: CheckHost](mut state: CheckState, world: ref CheckW
         }
         // **A view of a value that copies is copied out** (ADR-387 D1,
         // ADR-294 D9.1, #2509), as at a `let` that names the type.
-        if !state.a_view_copied_out(world, assigned, into, value) {
+        if !state.a_view_copied_out(world, assigned, into, value) && !check_core_stmt_a_stream_line_kept(state, world, target, value, into) {
             state.expect_type(world, assigned, into, span, "assign", fn(was, wanted) { f"You're assigning `{was}` to something that holds `{wanted}`." })
         }
         state.findings_moved(span, at, pushed, waiting)
     }
     return check_core_stmt_unit()
+}
+
+/// **A stream's item assigned to a name that holds a `String` is a counted
+/// keep** (ADR-stream-buffers-v1 D2, D5, D10): the name holds the view, and
+/// the buffer plan counts it in the loop's pool. Anything else that keeps one
+/// is the plan's `NK2308`.
+fn check_core_stmt_a_stream_line_kept(state: ref CheckState, world: ref CheckWorld, target: ref Expr, value: ref Expr, into: ref Ty) -> bool sync {
+    match target {
+        Expr::Variable(_, _) => {},
+        else => return false,
+    }
+    let name = match value {
+        Expr::Variable(name, _) => world.words.resolve(name).clone(),
+        else => return false,
+    }
+    let local = state.binding(name) ?? return false
+    return state.flow.stream_lines.contains(local.id) && into == a_string_type()
 }
 
 /// **`while`** (Part I 3.3).
@@ -2673,6 +2690,8 @@ fn check_core_stmt_for[H: CheckHost](mut state: CheckState, world: ref CheckWorl
             state.a_for_mut_over_a_place(world, iter, over, span)
         }
     }
+    // **A stream's items are views of its pool** (ADR-stream-buffers-v1 D10).
+    let streams = check_core_a_stream_call(world, iter)
     let mut frame: Vec[CheckLocal] = []
     let mut at = 0
     for b in bindings {
@@ -2721,6 +2740,9 @@ fn check_core_stmt_for[H: CheckHost](mut state: CheckState, world: ref CheckWorl
             bound = view_of_type(element)
         }
         let id = state.a_new_binding()
+        if streams {
+            state.flow.stream_lines.insert(id)
+        }
         // **A text handed by a walk that lends is a view of it** (#688's rule,
         // for a `for`): `xs.iter()` hands `&String` below, so a comparison
         // reads it as `str`.
