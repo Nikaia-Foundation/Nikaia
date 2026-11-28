@@ -372,7 +372,12 @@ pub mod runtime {
 /// (`p.starts_with(f"{a}[")`) is checked in place in a one-arm `match` that
 /// keeps a formatted hole's temporary alive, which a `let` would drop
 /// (`bounds_walk.nika`'s `bounding_in_elements`, #2405).
+///
+/// **And `if_same_then_else`**: the two `else if` arms of `views.nika`'s
+/// source scan push the same name for different conditions, each with its
+/// own comment (#2478).
 #[allow(
+    clippy::if_same_then_else,
     clippy::match_single_binding,
     clippy::blocks_in_conditions,
     clippy::get_first,
