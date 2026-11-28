@@ -1,4 +1,5 @@
 crates/a/src/lib.rs: 3
+crates/nikaia-std/src/compiler/x.nika: 1
 docs/notes.md: 7
 docs/specification/adr/adr~903.md: 3
 packages/p/src/main.nika: 1
@@ -7,6 +8,8 @@ docs/notes.md:6: ADR~901 D3, D5: the decisions land in different records (moved-
 docs/notes.md:7: ADR~901 §2: a § citation
 docs/notes.md:8: ADR~901 D9: D9 is not in the table
 docs/notes.md:10: [ADR~901](adr~901.md) D3: a link whose path resolves to `docs`, not to docs/specification/adr/
+then run: nikaia lower-std
+then run: cd tree/packages/p && nikaia build
 exit 0
 --- docs/notes.md
 One: ADR~901 D3.
@@ -20,6 +23,7 @@ Unknown: ADR~901 D9.
 History: [ADR~901](../docs/history/adr/adr~901.md) D3.
 Astray: [ADR~901](adr~901.md) D3.
 crates/a/src/lib.rs: 3
+crates/nikaia-std/src/compiler/x.nika: 1
 docs/notes.md: 7
 docs/specification/adr/adr~903.md: 3
 packages/p/src/main.nika: 1
@@ -28,6 +32,8 @@ docs/notes.md:6: ADR~901 D3, D5: the decisions land in different records (moved-
 docs/notes.md:7: ADR~901 §2: a § citation
 docs/notes.md:8: ADR~901 D9: D9 is not in the table
 docs/notes.md:10: [ADR~901](adr~901.md) D3: a link whose path resolves to `docs`, not to docs/specification/adr/
+then run: nikaia lower-std
+then run: cd tree/packages/p && nikaia build
 exit 0
 --- docs/notes.md
 One: ADR~moved-v1 D1.
