@@ -383,6 +383,22 @@ throws = ["io::IoError"]
 provenance = "untrusted"
 signature = "(path: ref fs::Path, root: ref fs::Root; trusted: bool = false) -> String"
 
+# The whole of a file, as text, read into `into` (#2859): its text is
+# replaced, and the buffer grows only where the file needs more room, so a loop
+# that reads a file per turn into the text it is done with allocates once. The
+# lowering hands `fs::read_to_string` the buffer whose last view died; written
+# out, it is that call with the buffer named. It fails as `fs::read_to_string`
+# does, and what it hands back is **untrusted** unless the call says
+# `trusted: true` (ADR-365). It **keeps** `into`, which it hands back filled.
+[fn."fs::read_to_string_into"]
+pub = true
+panics = false
+keeps = ["into"]
+touches = ["file(path) read"]
+throws = ["io::IoError"]
+provenance = "untrusted"
+signature = "(path: ref fs::Path, root: ref fs::Root, into: String; trusted: bool = false) -> String"
+
 # Every file under a directory, as names relative to it, in sorted order.
 # Directories are not listed, and each is visited once.
 #

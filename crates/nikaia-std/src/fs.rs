@@ -734,6 +734,23 @@ pub async fn read_to_string(
     text_named(bytes, || asked.display().to_string()).map(crate::block::Text::from)
 }
 
+/// **A whole file, as text, read into `into`** (#2859): the buffer a loop
+/// freed, emptied and filled again, so that a read per turn allocates once.
+/// What `read_to_string` does otherwise, and fails as it does; the lowering
+/// hands it the buffer whose last view died, and a program may too.
+pub async fn read_to_string_into(
+    path: impl AsRef<FilePath>,
+    root: &Root,
+    into: crate::block::Text,
+) -> Result<crate::block::Text, crate::io::IoError> {
+    let asked = path.as_ref();
+    let resolved = resolve(asked, root)?;
+    let bytes = crate::rt::io::reading_into(&resolved, String::from(into).into_bytes())
+        .await
+        .map_err(|e| crate::io::IoError::of(e, asked))?;
+    text_named(bytes, || asked.display().to_string()).map(crate::block::Text::from)
+}
+
 /// Bytes as text, or the failure `read_to_string` reports for bytes that are
 /// not, with the name asked for only when the bytes are not text.
 fn text_named(bytes: Vec<u8>, what: impl FnOnce() -> String) -> Result<String, crate::io::IoError> {
