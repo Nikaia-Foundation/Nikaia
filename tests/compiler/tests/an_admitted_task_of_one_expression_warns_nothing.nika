@@ -14,6 +14,6 @@ fn work() -> i64 {
 
 fn main() throws {
 	let t = async(detached, admission: Tight {}) fn { work() }
-	let got = t.join() catch { 0 }
+	let got = t.join()
 	println(f"got {got}")
 }

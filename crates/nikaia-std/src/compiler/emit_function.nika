@@ -1312,7 +1312,22 @@ impl EmitState {
                             if pausing != "" {
                                 walk.async_gates = [group]
                             }
-                            self.emit_function_body(world, walk, inner, host, body, depth, throws_, returns_value, awaited, key, channel, host.counts_steps(), host.skip_free_at_exit())
+                            // **The group carries its handles' sets to their
+                            // joins** (ADR-async-v6 D40): where a task fails
+                            // with more than the function does, the body
+                            // fails in the sum of both, and the group's end
+                            // hands on the function's own.
+                            let widened = self.group_widened(world, key)
+                            let mut narrowing: (String, String) = ("", "")
+                            let mut group_channel: String = channel.clone()
+                            let mut group_ret: String = ret.clone()
+                            if widened.len() == 1 || self.sums.get(widened) != null {
+                                group_channel = self.channel_of(world, widened, true, "", "", false)
+                                narrowing = self.group_narrowing(world, key, widened, channel)
+                                group_ret = f" -> {self.rust_result()}<{returned}, {group_channel}>"
+                            }
+                            let group_throws = throws_ || narrowing.0 != ""
+                            self.emit_function_body(world, walk, inner, host, body, depth, group_throws, returns_value, awaited, key, group_channel, host.counts_steps(), host.skip_free_at_exit())
                             walk.async_gates = outer_gates
                             walk.async_groups = outer_groups
                             walk.async_pausing = outer_pausing
@@ -1327,8 +1342,8 @@ impl EmitState {
                             // or each reads its own crash, so the tasks fail
                             // in `task::OrCrash` of it and the function's
                             // failures leave through the group's value.
-                            let grouped = throws_ && self.emit_async_tasks_channel(channel) == channel
-                            let raised = throws_ && !grouped
+                            let grouped = group_throws && self.emit_async_tasks_channel(group_channel) == group_channel
+                            let raised = group_throws && !grouped
                             // **A failure of a task nobody read arrives at
                             // the group's end** (ADR-async-v6 D23): the
                             // function's own name, as its raise sites are.
@@ -1345,11 +1360,11 @@ impl EmitState {
                                 // body is a future over the group, polled
                                 // where the function is awaited.
                                 if grouped {
-                                    out.push(f"{{ let {name} = &nikaia_std::task::Scope::new(); {arriving}nikaia_std::task::group_paused::<_, {channel}>({name}, (async ||{ret} ")
+                                    out.push(f"{{ let {name} = &nikaia_std::task::Scope::new(); {narrowing.0}{arriving}nikaia_std::task::group_paused::<_, {group_channel}>({name}, (async ||{group_ret} ")
                                 } else if raised {
-                                    out.push(f"{{ let {name} = &nikaia_std::task::Scope::new(); {arriving}nikaia_std::task::group_paused_raised({name}, (async ||{ret} ")
+                                    out.push(f"{{ let {name} = &nikaia_std::task::Scope::new(); {narrowing.0}{arriving}nikaia_std::task::group_paused_raised({name}, (async ||{group_ret} ")
                                 } else {
-                                    out.push(f"{{ let {name} = &nikaia_std::task::Scope::new(); nikaia_std::task::group_paused_plain({name}, (async ||{ret} ")
+                                    out.push(f"{{ let {name} = &nikaia_std::task::Scope::new(); nikaia_std::task::group_paused_plain({name}, (async ||{group_ret} ")
                                 }
                                 // The gate and its tasks' line are made inside
                                 // the group's function, before its body, so
@@ -1357,17 +1372,17 @@ impl EmitState {
                                 // borrow.
                                 out.push(f"{{ let {name}_gate = nikaia_std::task::Gate::new(usize::MAX, nikaia_std::task::admitted(nikaia_std::task::Adaptive())); let {name}_waiting = nikaia_std::task::Waiting::new(&{name}_gate); ")
                                 out.append(inner)
-                                out.push(f" }})()).await{arrived} }}")
+                                out.push(f" }})()).await{arrived}{narrowing.1} }}")
                             } else {
                                 if grouped {
-                                    out.push(f"{{ {arriving}nikaia_std::task::group::<_, {channel}>(|{name}|{ret} ")
+                                    out.push(f"{{ {narrowing.0}{arriving}nikaia_std::task::group::<_, {group_channel}>(|{name}|{group_ret} ")
                                 } else if raised {
-                                    out.push(f"{{ {arriving}nikaia_std::task::group_raised(|{name}|{ret} ")
+                                    out.push(f"{{ {narrowing.0}{arriving}nikaia_std::task::group_raised(|{name}|{group_ret} ")
                                 } else {
-                                    out.push(f"{{ nikaia_std::task::group_plain(|{name}|{ret} ")
+                                    out.push(f"{{ nikaia_std::task::group_plain(|{name}|{group_ret} ")
                                 }
                                 out.append(inner)
-                                out.push(f"){arrived} }}")
+                                out.push(f"){arrived}{narrowing.1} }}")
                             }
                         }
                     },

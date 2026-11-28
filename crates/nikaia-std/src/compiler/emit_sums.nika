@@ -137,6 +137,81 @@ impl EmitState {
         }
     }
 
+    /// **What the group of function `key` carries to its joins** (ADR-async-v6
+    /// D40): its own set and what each handle's task fails with where it
+    /// runs, where that holds more than its own; empty where it holds
+    /// nothing more, or a member no name says, or one with a view.
+    fn group_widened(ref self, world: ref EmitWorld, key: ref String) -> Vec[String] {
+        let tasks = self.facts.task_sets.get(key) ?? return []
+        let contract = self.own_contracts.functions.get(key) ?? return []
+        let mut all: collections::BTreeSet[String] = collections::BTreeSet()
+        for member in contract.fails_with {
+            all.insert(member.clone())
+        }
+        let mut more = false
+        for (_, set) in tasks {
+            for member in set {
+                if member == "task::Crashed" || all.contains(member) {
+                    continue
+                }
+                if member == "?" || self.name_of_error(world, member) == 0 || self.borrows_named(world, member) {
+                    return []
+                }
+                all.insert(member.clone())
+                more = true
+            }
+        }
+        if !more {
+            return []
+        }
+        let mut out: Vec[String] = []
+        for member in all {
+            if self.name_of_error(world, member) == 0 || self.borrows_named(world, member) {
+                return []
+            }
+            out.push(member.clone())
+        }
+        return out
+    }
+
+    /// **The sums a function's group carries to its joins** (ADR-async-v6
+    /// D40), where they are two or more that no function's set is; in the
+    /// files `lambda_sums` writes its own in.
+    fn group_sums(ref self, world: ref EmitWorld, mut sums: collections::BTreeMap[Vec[String], String]) {
+        for (key, _) in self.facts.task_sets {
+            let widened = self.group_widened(world, key)
+            if widened.len() >= 2 && !sums.contains_key(widened) {
+                sums.insert(widened.clone(), sum_name(widened))
+            }
+        }
+    }
+
+    /// **The group's failure, handed on in the function's own channel**
+    /// (ADR-async-v6 D40): `widened`'s members the function fails with go on,
+    /// any other is a task's failure no join read, raised as a crash (#2808).
+    /// What goes before the group and after it; the function's `channel`,
+    /// `""` for one that fails with nothing.
+    fn group_narrowing(ref self, world: ref EmitWorld, key: ref String, widened: ref Vec[String], channel: ref String) -> (String, String) {
+        let contract = self.own_contracts.functions.get(key) ?? return ("", "")
+        if contract.fails_with.is_empty() {
+            return ("match ", " { Ok(value) => value, Err(error) => panic!(\"{error}\") }")
+        }
+        let wide = self.sums.get(widened) ?? return ("", "")
+        let root = self.sum_root()
+        let mut arms: String = ""
+        for member in widened {
+            let variant = sum_variant(member)
+            if !contract.fails_with.contains(member) {
+                arms = f"{arms}{root}{wide}::{variant}(error) => panic!(\"{{error}}\"), "
+            } else if contract.fails_with.len() == 1 {
+                arms = f"{arms}{root}{wide}::{variant}(error) => error, "
+            } else {
+                arms = f"{arms}{root}{wide}::{variant}(error) => {channel}::{variant}(error), "
+            }
+        }
+        return ("(", f").map_err(|error| match error {{ {arms}}})")
+    }
+
     /// **The sums the functions this file declares fail with**, by name: in
     /// `std` and the tools the ledger holds the files beside it too (#1347).
     fn sums_used_here(ref self, world: ref EmitWorld) -> collections::BTreeSet[String] {

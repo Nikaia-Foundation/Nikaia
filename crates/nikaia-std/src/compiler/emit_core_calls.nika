@@ -1812,9 +1812,23 @@ impl EmitState {
         // (ADR-async-v6 D23): `error::arrived` records it, on the failure's
         // path alone.
         let joined_key = self.facts.method_callees[on_node] ?? ""
-        let arriving = (joined_key.starts_with("TaskHandle::join") || joined_key.starts_with("task::ChildHandle::join")) && self.method_can_fail(on_node)
+        let a_join = joined_key.starts_with("TaskHandle::join") || joined_key.starts_with("task::ChildHandle::join")
+        let arriving = a_join && self.method_can_fail(on_node)
+        // **A join whose set is empty is its task's value** (ADR-async-v6
+        // D35, D40): the fallback took the task's set, and no crash can
+        // reach it, so nothing fails there to hand on.
+        let unfailing = a_join && !arriving
+        // Where the group's tasks fail in `task::OrCrash` of its channel
+        // (D35), a crash a join hands on with `?` is raised again there, as
+        // `emit_async_joined`'s is.
+        let uncrashing = arriving && flow.can_throw && !flow.caught && emit_async_or_crash(self.emit_async_tasks_channel(scope.channel))
+        if uncrashing {
+            out.push("nikaia_std::task::uncrashed(")
+        }
         if arriving {
             out.push("nikaia_std::error::arrived(")
+        } else if unfailing {
+            out.push("nikaia_std::task::unfailing(")
         }
         let (kind, entry) = emit_call_pausing_entry(self.facts, args)
         let mut through_prefix: String = ""
@@ -2051,6 +2065,11 @@ impl EmitState {
         }
         if arriving {
             out.push(f", &{rust_string(scope.origin)})")
+            if uncrashing {
+                out.push(")")
+            }
+        } else if unfailing {
+            out.push(")")
         }
         if timed {
             if length {

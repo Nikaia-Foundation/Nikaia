@@ -222,6 +222,10 @@ pub struct CheckFlow {
     pub tasks_past_the_catch: collections::BTreeMap[i64, bool],
     /// What those tasks' walks met, for the guard outside the `catch`.
     pub escaped: CheckGuarded?,
+    /// **Inside a task whose handle holds its failure** (ADR-async-v6 D40),
+    /// or its fallback: `caught` is set there, but no `catch` encloses a
+    /// `join` met in it.
+    pub task_held: bool,
     /// The groups written `limit: 1` with the literal (ADR-async-v6 D15): their
     /// tasks run one at a time and are not checked against each other (D7).
     pub async_one_at_a_time: collections::BTreeSet[i64],
@@ -615,6 +619,7 @@ impl CheckFlow {
             task_probe: false,
             tasks_past_the_catch: collections::BTreeMap(),
             escaped: null,
+            task_held: false,
             async_one_at_a_time: collections::BTreeSet(),
             async_depth: 0,
             fallible_methods: collections::BTreeSet(),

@@ -1,0 +1,27 @@
+// A join whose set is empty is unwrapped (ADR-async-v6 D35, D40, #2799):
+// the fallback takes the task's whole set, so `h.join()` throws nothing
+// and `run` needs no `throws`.
+struct Bad {}
+
+impl Error for Bad {
+	fn message(ref self) -> String {
+		return "bad"
+	}
+}
+
+fn fails(n: i64) -> i64 throws {
+	if n > 1 {
+		throw Bad {}
+	}
+	return n
+}
+
+fn run() -> i64 {
+	let h = async(handle) fn { fails(2) } catch { 0 }
+	let b = 1
+	return h.join() + b
+}
+
+fn main() throws {
+	println(run())
+}

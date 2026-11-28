@@ -1997,6 +1997,16 @@ fn check_core_flow_fallbacks_written(state: ref CheckState, world: ref CheckWorl
 /// **`expr catch { … }`** (Part I 7.1): the guarded expression needs no
 /// `throws` (`NK2605`), the handler binds `error`, and the value is the
 /// guarded one's type where the handler agrees (0.0.230).
+/// **The set a task's fallback takes** (ADR-async-v6 D22, D40): where the
+/// guarded half is a task started with a handle, what that handle carries;
+/// `null` elsewhere.
+fn check_core_flow_fallback_set(guarded: ref Expr, answers: ref Ty) -> collections::BTreeSet[String]? {
+    return match guarded {
+        Expr::Spawn { written_async, .. } => if written_async { handle_set(answers, false) } else { null },
+        else => null,
+    }
+}
+
 fn check_core_flow_try_catch[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, whole: ref Expr, guarded_expr: ref Expr, handler: ref Block, span: ref Span) -> Ty sync {
     let outer = state.flow.caught
     state.flow.caught = true
@@ -2022,12 +2032,16 @@ fn check_core_flow_try_catch[H: CheckHost](mut state: CheckState, world: ref Che
     }
     let escaped_outer: CheckGuarded? = state.flow.escaped?.clone()
     state.flow.escaped = null
+    // A `join` in it is under this `catch` (ADR-async-v6 D40).
+    let task_held = state.flow.task_held
+    state.flow.task_held = false
     let answers = check_core_expr(state, world, host, guarded_expr, span)
+    state.flow.task_held = task_held
     state.flow.task_probe = probing
     for task in past {
         state.flow.tasks_past_the_catch.remove(task)
     }
-    let held: CheckGuarded? = state.flow.guarded?.clone()
+    let mut held: CheckGuarded? = state.flow.guarded?.clone()
     state.flow.guarded = enclosing
     // What they met is the guard's outside this `catch`, as if walked there.
     let escaped: CheckGuarded? = state.flow.escaped?.clone()
@@ -2046,6 +2060,13 @@ fn check_core_flow_try_catch[H: CheckHost](mut state: CheckState, world: ref Che
             }
         },
         null => {},
+    }
+    // **A task's fallback takes what its handle holds** (ADR-async-v6 D22,
+    // D40): the task's set, which its walk kept from the start site.
+    let task_set: collections::BTreeSet[String]? = check_core_flow_fallback_set(guarded_expr, answers)
+    if task_set != null {
+        let set: collections::BTreeSet[String] = task_set?.clone() ?? collections::BTreeSet()
+        held = CheckGuarded { fallible: set.len() > 0, unanswered: set.contains("?"), thrown: set }
     }
     // **A nested `catch` fails the enclosing one only by what passes it**
     // (Part I 7.1, ADR-308, #1641): its handler is walked under the
@@ -2106,7 +2127,17 @@ fn check_core_flow_try_catch[H: CheckHost](mut state: CheckState, world: ref Che
     if dropped {
         check_core_stmt_body_discarded(state, handler)
     }
+    // **The fallback runs in the join, or in the task** (ADR-async-v6 D40):
+    // what it throws is the handle's to hand on, not the start site's.
+    let fallback_held: CheckHeldTask? = if task_set != null { check_core_expr_hold_a_task(state) } else { null }
     let handled = check_core_block(state, world, host, handler)
+    let mut fallback_set: collections::BTreeSet[String] = collections::BTreeSet()
+    match fallback_held {
+        saved => {
+            fallback_set = check_core_expr_task_held(state, saved)
+        },
+        null => {},
+    }
     let literal = check_core_flow_handler_text(state, world, answers, handler)
     let leaves = state.block_exits(world, handler)
     state.a_branch_that_leaves(from, leaves, span)
@@ -2127,11 +2158,14 @@ fn check_core_flow_try_catch[H: CheckHost](mut state: CheckState, world: ref Che
             if written_async {
                 match answers {
                     Ty::Named { name, args, .. } => {
-                        if (name == "TaskHandle" || name == CHILD_HANDLE) && args.len() == 1 {
+                        if a_handle_name(name) && args.len() >= 1 {
                             if !state.block_leaves(world, handler) && !args[0].is_unknown() && value.text() != "()" && !value.fits(args[0]) {
                                 state.expect_type(world, value.owned(), args[0], span, "catch", fn(found, wanted) { f"This fallback hands back `{found}`, but the task's value is `{wanted}`." })
                             }
-                            return answers
+                            // A fallback narrows the set a `join` throws to
+                            // its own (D40).
+                            check_core_expr_task_runs_with(state, id_of(guarded_expr) as i64, fallback_set)
+                            return handle_carrying(name, args[0], task_set ?? collections::BTreeSet(), fallback_set)
                         }
                     },
                     else => {},

@@ -97,7 +97,10 @@ pub fn emit_contracts_state__unchecked<H: EmitContractsHost, P: EmitHolesHost>(h
     state.kept_calls = holes.kept_calls;
     let world = EmitWorld { words, aliases: nikaia_std::index::get(&units, 0).aliases, items, library };
     let mut sums = state.error_sums(&world);
-    if units.len() <= 2 || emit_contracts_declares_main(words, items) { state.lambda_sums(&world, &mut sums); }
+    if units.len() <= 2 || emit_contracts_declares_main(words, items) {
+        state.lambda_sums(&world, &mut sums);
+        state.group_sums(&world, &mut sums);
+    }
     state.sums = sums;
     state.sums_written = emit_sums_written(&state.sums, units, &state.sums_used_here(&world));
     let coalesced = vc_coalesced(&state.facts);

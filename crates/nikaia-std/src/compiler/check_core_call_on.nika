@@ -1306,9 +1306,45 @@ fn check_core_call_on_member(mut state: CheckState, world: ref CheckWorld, key: 
 /// **A method call the ledger describes**: reached, asked whether it changes,
 /// takes, walks, fails or pauses, its arguments walked against the
 /// signature the receiver binds, and typed.
+/// **What a handle's `join` throws** (ADR-async-v6 D22, D40): under a `catch`
+/// the task's whole set, which that `catch` takes before the fallback; else
+/// what the fallback leaves of it; `task::TimedOut` with `within:` (D17).
+/// `null` for any other call, and for a handle whose type is written.
+fn check_core_call_on_joined_set(state: ref CheckState, on: ref Ty, key: ref String) -> collections::BTreeSet[String]? {
+    if !key.starts_with("TaskHandle::join") && !key.starts_with("task::ChildHandle::join") {
+        return null
+    }
+    let under_a_catch = state.flow.caught && !state.flow.task_held
+    let mut set: collections::BTreeSet[String] = handle_set(on, !under_a_catch) ?? return null
+    if key.contains("(within") {
+        set.insert("task::TimedOut")
+    }
+    return set
+}
+
+/// **A handle's `join` reached** (ADR-async-v6 D40): its contract's set does
+/// not count, as a `catch` that keeps everything would have it; the set its
+/// handle carries does, outside a `catch` that keeps it.
+fn check_core_call_on_joined(mut state: CheckState, key: ref String, set: ref collections::BTreeSet[String]) sync {
+    let swallowed: collections::BTreeSet[String]? = state.flow.swallowed?.clone()
+    state.flow.swallowed = collections::BTreeSet()
+    check_core_call_on_reached(state, key.clone())
+    state.flow.swallowed = swallowed
+    if state.flow.swallowed != null || state.current == null {
+        return
+    }
+    let current: String = state.current?.clone() ?? ""
+    let mut calls: CheckMethodCalls = state.methods.remove(current) ?? CheckMethodCalls::empty()
+    calls.joined.extend(set.clone())
+    state.methods.insert(current, calls)
+}
+
 fn check_core_call_on_described[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H, on: ref Ty, receiver: ref Expr, method: winnow_grammar::Symbol, args: ref Vec[Expr], entry: ref String, key: ref String, contract: ref FnContract, span: ref Span) -> Ty sync {
     let node = id_of(receiver) as i64
     state.facts.method_callees.insert(node, key.clone())
+    // **A handle's `join` throws the set its type carries** (ADR-async-v6
+    // D40), not its contract's; `null` for any other call.
+    let joined_set: collections::BTreeSet[String]? = check_core_call_on_joined_set(state, on, key)
     // **`to_text` on a name made from text cannot fail** (ADR-319 D5).
     let mut known_text = false
     if key == "fs::Path::to_text" {
@@ -1318,6 +1354,8 @@ fn check_core_call_on_described[H: CheckHost](mut state: CheckState, world: ref 
     if known_text {
         state.facts.path_methods.insert(node, true)
         check_core_call_on_reached(state, "fs::Path::text_of")
+    } else if joined_set != null {
+        check_core_call_on_joined(state, key, joined_set?.clone() ?? collections::BTreeSet())
     } else {
         check_core_call_on_reached(state, key.clone())
     }
@@ -1401,7 +1439,8 @@ fn check_core_call_on_described[H: CheckHost](mut state: CheckState, world: ref 
     }
     // ADR-023 D8: the failure leaves at the call.
     state.method_options(world, method, contract, node)
-    let fails = !known_text && (contract.fails_with.len() > 0 || state.walks_a_failing_sequence(on, contract))
+    let declared_fails = if joined_set != null { (joined_set?.clone() ?? collections::BTreeSet()).len() > 0 } else { contract.fails_with.len() > 0 }
+    let fails = !known_text && (declared_fails || state.walks_a_failing_sequence(on, contract))
     // **The step that ends a walk with a deadline throws `task::TimedOut`**
     // (ADR-async-v6 D27): the lowering writes it around the step.
     let timed_end = walks && shape_timed(on) && !check_core_call_on_hands_back_a_sequence(contract)
@@ -1456,7 +1495,13 @@ fn check_core_call_on_described[H: CheckHost](mut state: CheckState, world: ref 
     }
     state.a_call_that_may_pause(written, pauses, contract.sync_claim.is_unpromised() && !walks_a_pausing_step, span)
     state.a_pausing_call_in_an_action(written, contract, span)
-    if !known_text {
+    if joined_set != null {
+        let mut thrown: Vec[String] = []
+        for error in joined_set?.clone() ?? collections::BTreeSet() {
+            thrown.push(error.clone())
+        }
+        state.may_fail_here(world, host, key, contract.clone() with { fails_with: thrown }, span)
+    } else if !known_text {
         state.may_fail_here(world, host, key, contract, span)
     }
     // What the receiver's own type tells the signature (ADR-288), and a

@@ -1100,9 +1100,11 @@ impl EmitState {
             kind = "FailingTask";
             if host.overlaps_user_code() && scope.channel == "std::boxed::Box<dyn std::error::Error>" { kind = "BoxedTask"; }
         }
+        let raised = kind == "FailingTask" && !self.emit_channel_holds_a_crash(&scope.channel);
+        let task_channel = if raised { format!("nikaia_std::task::OrCrash<{}>", scope.channel) } else { nikaia_std::block::Text::from(scope.channel.to_string()) };
         if deferred { out.push("nikaia_std::task::Deferred::new(move || "); }
         let mut starter: &'static str = "async move ";
-        if failing { starter = "nikaia_std::error::started_paused(async move "; }
+        if raised { starter = "async move { nikaia_std::error::started_paused(async move "; } else if failing { starter = "nikaia_std::error::started_paused(async move "; }
         if host.overlaps_user_code() { out.push(&format!("nikaia_std::task::{}::start_on_pool_pinned(move || {}", kind, starter)); } else { out.push(&format!("nikaia_std::task::{}::start({}", kind, starter)); }
         if failing {
             out.push(&format!("{{ {}let __nikaia_task = ", first));
@@ -1112,7 +1114,8 @@ impl EmitState {
                 out.push(&format!("; Ok::<_, {}>(__nikaia_value) }}).await?", scope.channel));
             } else { out.append(&inner); }
             out.push(&format!("; Ok::<_, {}>(__nikaia_task) }}, &{})", scope.channel, rust_string(&scope.origin)));
-            out.push(&format!(", |e: &{}| {{ #[allow(unused_imports)] use nikaia_std::task::{{ProbeEnding as _, ProbePlain as _}}; (&&nikaia_std::task::Probe(e)).report() }})", scope.channel));
+            if raised { out.push(".await.map_err(nikaia_std::task::OrCrash::Failed) }"); }
+            out.push(&format!(", |e: &{}| {{ #[allow(unused_imports)] use nikaia_std::task::{{ProbeEnding as _, ProbePlain as _}}; (&&nikaia_std::task::Probe(e)).report() }})", task_channel));
         } else {
             let inside = EmitFlow { statement: flow.statement, ..EmitFlow::plain() };
             let inside_scope = EmitScope::plain();

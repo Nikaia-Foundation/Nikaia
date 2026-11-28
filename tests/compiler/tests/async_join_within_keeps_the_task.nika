@@ -15,7 +15,7 @@ fn main() throws {
 		match error {
 			task::TimedOut => {
 				println("timed out, the task runs on")
-				h.join() catch { -1 }
+				h.join()
 			},
 			else => -1,
 		}

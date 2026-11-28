@@ -63,6 +63,46 @@ impl EmitState {
             if all_named { sums.insert(thrown.copy_owned(), sum_name(thrown)); }
         }
     }
+    pub(crate) fn group_widened(&self, world: &EmitWorld<'_, '_, '_, '_>, key: &str) -> Vec<String> {
+        let tasks = match self.facts.task_sets.get(key) { Some(__nikaia_value) => __nikaia_value, None => return vec![] };
+        let contract = match self.own_contracts.functions.get(key) { Some(__nikaia_value) => __nikaia_value, None => return vec![] };
+        let mut all: collections::BTreeSet<String> = collections::BTreeSet::new();
+        for member in contract.fails_with.iter() { all.insert(nikaia_std::block::Text::from(member.to_string())); }
+        let mut more = false;
+        for (_, set) in tasks.iter() {
+            for member in set.iter() {
+                if member == "task::Crashed" || all.contains(member) { continue; }
+                if member == "?" || self.name_of_error(world, member) == 0 || self.borrows_named(world, member) { return vec![]; }
+                all.insert(nikaia_std::block::Text::from(member.to_string()));
+                more = true;
+            }
+        }
+        if !more { return vec![]; }
+        let mut out: Vec<String> = vec![];
+        out.reserve(all.iter().size_hint().0); for member in all.iter() {
+            if self.name_of_error(world, member) == 0 || self.borrows_named(world, member) { return vec![]; }
+            out.push(nikaia_std::block::Text::from(member.to_string()));
+        }
+        out
+    }
+    pub(crate) fn group_sums(&self, world: &EmitWorld<'_, '_, '_, '_>, sums: &mut collections::BTreeMap<Vec<String>, String>) {
+        for (key, _) in self.facts.task_sets.iter() {
+            let widened = self.group_widened(world, key);
+            if widened.len() >= 2 && !sums.contains_key(&widened) { sums.insert(widened.copy_owned(), sum_name(&widened)); }
+        }
+    }
+    pub(crate) fn group_narrowing(&self, world: &EmitWorld<'_, '_, '_, '_>, key: &str, widened: &[String], channel: &str) -> (String, String) {
+        let contract = match self.own_contracts.functions.get(key) { Some(__nikaia_value) => __nikaia_value, None => return (String::from(""), String::from("")) };
+        if contract.fails_with.is_empty() { return (String::from("match "), String::from(" { Ok(value) => value, Err(error) => panic!(\"{error}\") }")); }
+        let wide = match self.sums.get(widened) { Some(__nikaia_value) => __nikaia_value, None => return (String::from(""), String::from("")) };
+        let root = self.sum_root();
+        let mut arms: String = String::from("");
+        for member in widened.iter() {
+            let variant = sum_variant(member);
+            if !nikaia_std::list::contains(&contract.fails_with, &member) { arms = format!("{}{}{}::{}(error) => panic!(\"{{error}}\"), ", arms, root, wide, variant); } else if contract.fails_with.len() == 1 { arms = format!("{}{}{}::{}(error) => error, ", arms, root, wide, variant); } else { arms = format!("{}{}{}::{}(error) => {}::{}(error), ", arms, root, wide, variant, channel, variant); }
+        }
+        (String::from("("), format!(").map_err(|error| match error {{ {}}})", arms))
+    }
     pub(crate) fn sums_used_here(&self, world: &EmitWorld<'_, '_, '_, '_>) -> collections::BTreeSet<String> {
         let mut out: collections::BTreeSet<String> = collections::BTreeSet::new();
         for key in sums_declared_here(world) {

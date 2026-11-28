@@ -20,15 +20,18 @@ pub struct ThrowsGraph {
     pub calls: collections::BTreeMap<String, collections::BTreeSet<String>>,
     pub fatal_calls: collections::BTreeMap<String, collections::BTreeMap<String, collections::BTreeSet<String>>>,
     pub fatal: collections::BTreeSet<String>,
+    pub joined: collections::BTreeMap<String, collections::BTreeSet<String>>,
 }
 
 pub fn throws_graph(own: &Ledger, library: &Ledger, resolved: &collections::BTreeMap<String, CheckMethodCalls>) -> ThrowsGraph {
     let mut methods: collections::BTreeMap<String, MethodsCalled> = collections::BTreeMap::new();
+    let mut joined: collections::BTreeMap<String, collections::BTreeSet<String>> = collections::BTreeMap::new();
     for (key, calls) in resolved.iter() {
         let called = MethodsCalled { resolved: calls.resolved.copy_owned(), unseen: calls.unresolved || calls.code_fails, fields: calls.fields_called.copy_owned(), swallowed: calls.swallowed.copy_owned() };
         methods.insert(nikaia_std::block::Text::from(key.to_string()), called);
+        if !calls.joined.is_empty() { joined.insert(nikaia_std::block::Text::from(key.to_string()), calls.joined.copy_owned()); }
     }
-    ThrowsGraph { methods, direct: collections::BTreeMap::new(), calls: collections::BTreeMap::new(), fatal_calls: collections::BTreeMap::new(), fatal: fatal_types(own, library) }
+    ThrowsGraph { methods, direct: collections::BTreeMap::new(), calls: collections::BTreeMap::new(), fatal_calls: collections::BTreeMap::new(), fatal: fatal_types(own, library), joined }
 }
 
 pub(crate) fn fatal_types(own: &Ledger, library: &Ledger) -> collections::BTreeSet<String> {
@@ -103,6 +106,10 @@ pub fn unit_throws(program: &Program, names: &winnow_grammar::InternerContext, h
 
 pub(crate) fn with_methods(key: &str, thrown: &Thrown, own: &Ledger, library: &Ledger, graph: &mut ThrowsGraph) {
     let mut named = thrown.direct.copy_owned();
+    named.extend(nikaia_std::index::or(match *nikaia_std::index::get(&graph.joined, key) {
+        Some(__nikaia_it) => Some(__nikaia_it.clone()),
+        None => None,
+    }, || collections::BTreeSet::new().into()));
     let mut called: collections::BTreeSet<String> = collections::BTreeSet::new();
     let fields: collections::BTreeSet<String> = nikaia_std::index::or(match (*nikaia_std::index::get(&graph.methods, key)).as_ref().map(|__nikaia_it| &__nikaia_it.fields) {
         Some(__nikaia_it) => Some(__nikaia_it.copy_owned()),
@@ -564,7 +571,7 @@ pub(crate) fn thrown_in(expr: &Expr, names: &winnow_grammar::InternerContext, ho
             thrown_in(inner, names, &mut &mut *holes_of, &mut &mut *contribution_of, in_a_handler, waited, out);
         },
         Expr::AsyncGroup(_, _, within, _, _) => { let within = nikaia_std::boxed::open(within); thrown_by_a_deadline((within).as_ref(), names, &mut &mut *holes_of, &mut &mut *contribution_of, in_a_handler, caught, out); },
-        Expr::Spawn { within, .. } => { let within = nikaia_std::boxed::open(within); thrown_by_a_deadline((within).as_ref(), names, &mut &mut *holes_of, &mut &mut *contribution_of, in_a_handler, caught, out); },
+        Expr::Spawn { .. } => { },
         Expr::Throw(inner, _) => { let inner = nikaia_std::boxed::open(inner); thrown_in(inner, names, &mut &mut *holes_of, &mut &mut *contribution_of, in_a_handler, caught, out); },
         Expr::Cast { expr, .. } => { let expr = nikaia_std::boxed::open(expr); thrown_in(expr, names, &mut &mut *holes_of, &mut &mut *contribution_of, in_a_handler, caught, out); },
         Expr::Field { base, .. } => { let base = nikaia_std::boxed::open(base); thrown_in(base, names, &mut &mut *holes_of, &mut &mut *contribution_of, in_a_handler, caught, out); },
@@ -635,7 +642,7 @@ pub(crate) fn thrown_in_blocks(expr: &Expr, names: &winnow_grammar::InternerCont
         Expr::Unsafe(block, _) => { thrown_in_block(block, names, &mut &mut *holes_of, &mut &mut *contribution_of, in_a_handler, out); },
         Expr::Overlap(block, _) => { thrown_in_block(block, names, &mut &mut *holes_of, &mut &mut *contribution_of, in_a_handler, out); },
         Expr::Closure { body, .. } => { thrown_in_block(body, names, &mut &mut *holes_of, &mut &mut *contribution_of, in_a_handler, out); },
-        Expr::Spawn { body, .. } => { let body = nikaia_std::boxed::open(body); thrown_in_blocks(body, names, &mut &mut *holes_of, &mut &mut *contribution_of, in_a_handler, out); },
+        Expr::Spawn { .. } => { },
         Expr::Call { func, args, config, .. } => {
             let func = nikaia_std::boxed::open(func);
             thrown_in_blocks(func, names, &mut &mut *holes_of, &mut &mut *contribution_of, in_a_handler, out);
@@ -661,7 +668,11 @@ pub(crate) fn thrown_in_blocks(expr: &Expr, names: &winnow_grammar::InternerCont
         Expr::TryCatch { expr, handler, .. } => {
             let expr = nikaia_std::boxed::open(expr);
             thrown_in_blocks(expr, names, &mut &mut *holes_of, &mut &mut *contribution_of, in_a_handler, out);
-            thrown_in_block(handler, names, &mut &mut *holes_of, &mut &mut *contribution_of, true, out);
+            let fallback_of_a_task = match expr {
+                Expr::Spawn { written_async, .. } => { let written_async = *written_async; written_async },
+                _ => false,
+            };
+            if !fallback_of_a_task { thrown_in_block(handler, names, &mut &mut *holes_of, &mut &mut *contribution_of, true, out); }
         },
         Expr::Match { arms, .. } => { for arm in arms.iter() { thrown_in_blocks(&arm.body, names, &mut &mut *holes_of, &mut &mut *contribution_of, in_a_handler, out); } },
         Expr::Select(arms, _) => { for arm in arms.iter() { thrown_in_block(&arm.body, names, &mut &mut *holes_of, &mut &mut *contribution_of, in_a_handler, out); } },

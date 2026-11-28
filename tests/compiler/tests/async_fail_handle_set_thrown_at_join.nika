@@ -1,0 +1,25 @@
+// A join outside a `catch` throws the set its handle carries (ADR-async-v6
+// D40, #2799): `run` fails with the task's `Bad`.
+struct Bad {}
+
+impl Error for Bad {
+	fn message(ref self) -> String {
+		return "bad"
+	}
+}
+
+fn fails(n: i64) -> i64 throws {
+	if n > 1 {
+		throw Bad {}
+	}
+	return n
+}
+
+fn run() -> i64 throws {
+	let h = async(handle) fn { fails(2) }
+	return h.join()
+}
+
+fn main() throws {
+	println(run() catch { -1 })
+}

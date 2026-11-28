@@ -2342,6 +2342,24 @@ impl<E: crate::error::Joined> crate::error::Joined for OrCrash<E> {
     }
 }
 
+/// A detached task's own failure ends `main` as it would in the starter's
+/// channel (ADR-345 D1, D4); a crash carries no code.
+impl<E: crate::process::Ending> crate::process::Ending for OrCrash<E> {
+    fn exit_code(&self) -> Option<i32> {
+        match self {
+            OrCrash::Failed(error) => error.exit_code(),
+            OrCrash::Crashed(_) => None,
+        }
+    }
+
+    fn fatal_code(&self) -> Option<i32> {
+        match self {
+            OrCrash::Failed(error) => error.fatal_code(),
+            OrCrash::Crashed(_) => None,
+        }
+    }
+}
+
 impl<E> OrCrash<E> {
     /// The failure in the function's channel, or the crash raised again.
     pub fn failed(self) -> E {
@@ -2423,8 +2441,9 @@ pub fn fallen<T, E: Into<Box<dyn std::error::Error>>>(
 }
 
 /// A task's end where only a crash can fail it: its value, or the crash
-/// raised again in the main line.
-pub fn unfailing<T>(joined: Result<T, Crashed>) -> T {
+/// raised again in the main line. A join whose set is empty (ADR-async-v6
+/// D35, D40) reads its handle's channel so, whatever that channel is.
+pub fn unfailing<T, E: std::fmt::Display>(joined: Result<T, E>) -> T {
     match joined {
         Ok(value) => value,
         Err(crash) => panic!("{crash}"),

@@ -1006,12 +1006,41 @@ pub(crate) fn check_core_call_on_member(state: &mut CheckState, world: &CheckWor
     } else if map && (entry == "get" || entry == "contains_key" || entry == "remove" || entry == "entry") { check_core_call_on_member_one(state, world, key, bound, args, found, 0, "K", span); }
 }
 
+pub(crate) fn check_core_call_on_joined_set(state: &CheckState, on: &Ty, key: &str) -> Option<collections::BTreeSet<String>> {
+    if !key.starts_with("TaskHandle::join") && !key.starts_with("task::ChildHandle::join") { return None; }
+    let under_a_catch = state.flow.caught && !state.flow.task_held;
+    let mut set: collections::BTreeSet<String> = match handle_set(on, !under_a_catch) { Some(__nikaia_value) => __nikaia_value, None => return None };
+    if key.contains("(within") { set.insert(String::from("task::TimedOut")); }
+    Some(set)
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn check_core_call_on_joined(state: &mut CheckState, key: &str, set: &collections::BTreeSet<String>) {
+    let swallowed: Option<collections::BTreeSet<String>> = match state.flow.swallowed.as_ref() {
+        Some(__nikaia_it) => Some(__nikaia_it.clone()),
+        None => None,
+    };
+    state.flow.swallowed = Some(collections::BTreeSet::new());
+    check_core_call_on_reached(state, Some(&nikaia_std::block::Text::from(key.to_string())));
+    state.flow.swallowed = swallowed;
+    if state.flow.swallowed.is_some() || state.current.is_none() { return; }
+    let current: String = nikaia_std::index::or(match state.current.as_ref() {
+        Some(__nikaia_it) => Some(__nikaia_it.clone()),
+        None => None,
+    }, || "".into());
+    let mut calls: CheckMethodCalls = nikaia_std::index::or(state.methods.remove(&current), || CheckMethodCalls::empty());
+    calls.joined.extend(set.iter().cloned());
+    state.methods.insert(current, calls);
+}
+
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn check_core_call_on_described<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, host: &H, on: &Ty, receiver: &Expr, method: winnow_grammar::Symbol, args: &[Expr], entry: &str, key: &str, contract: &FnContract, span: &Span) -> Ty {
     let node = id_of(receiver) as i64;
     state.facts.method_callees.insert(node, nikaia_std::block::Text::from(key.to_string()));
+    let joined_set: Option<collections::BTreeSet<String>> = check_core_call_on_joined_set(&state, on, key);
     let mut known_text = false;
     if key == "fs::Path::to_text" {
         known_text = state.flow.receiver_from_text;
@@ -1020,6 +1049,11 @@ pub(crate) fn check_core_call_on_described<H: CheckHost>(state: &mut CheckState,
     if known_text {
         state.facts.path_methods.insert(node, true);
         check_core_call_on_reached(state, Some("fs::Path::text_of"));
+    } else if joined_set.is_some() {
+        check_core_call_on_joined(state, key, &nikaia_std::index::or(match joined_set.as_ref() {
+            Some(__nikaia_it) => Some(__nikaia_it.clone()),
+            None => None,
+        }, || collections::BTreeSet::new().into()));
     } else { check_core_call_on_reached(state, Some(&nikaia_std::block::Text::from(key.to_string()))); }
     state.flow.last_resolved = Some(nikaia_std::block::Text::from(key.to_string()));
     check_core_call_rust_owner(state, world, key, contract, args, span);
@@ -1081,7 +1115,13 @@ pub(crate) fn check_core_call_on_described<H: CheckHost>(state: &mut CheckState,
     }
     if key == "Par::fold" { state.facts.par_folds.insert(node); }
     state.method_options(world, method, contract, node);
-    let fails = !known_text && (!contract.fails_with.is_empty() || state.walks_a_failing_sequence(on, contract));
+    let declared_fails = if joined_set.is_some() {
+        !nikaia_std::index::or(match joined_set.as_ref() {
+            Some(__nikaia_it) => Some(__nikaia_it.clone()),
+            None => None,
+        }, || collections::BTreeSet::new().into()).is_empty()
+    } else { !contract.fails_with.is_empty() };
+    let fails = !known_text && (declared_fails || state.walks_a_failing_sequence(on, contract));
     let timed_end = walks && shape_timed(on) && !check_core_call_on_hands_back_a_sequence(contract);
     if timed_end {
         state.facts.timed_ends.insert(node);
@@ -1116,7 +1156,14 @@ pub(crate) fn check_core_call_on_described<H: CheckHost>(state: &mut CheckState,
     if !sync_close { state.a_pausing_method_in_a_sync_body(key, contract, span); }
     state.a_call_that_may_pause(&written, pauses, contract.sync_claim.is_unpromised() && !walks_a_pausing_step, span);
     state.a_pausing_call_in_an_action(&written, contract, span);
-    if !known_text { state.may_fail_here(world, host, key, contract, span); }
+    if joined_set.is_some() {
+        let mut thrown: Vec<String> = vec![];
+        for error in nikaia_std::index::or(match joined_set.as_ref() {
+            Some(__nikaia_it) => Some(__nikaia_it.clone()),
+            None => None,
+        }, || collections::BTreeSet::new().into()) { thrown.push(nikaia_std::block::Text::from(error.to_string())); }
+        state.may_fail_here(world, host, key, &FnContract { fails_with: thrown, ..contract.clone() }, span);
+    } else if !known_text { state.may_fail_here(world, host, key, contract, span); }
     let mut bound = receiver_bindings(contract, on);
     for (name, ty) in state.arguments_of(on) { bound.entry(String::from(name)).or_insert(ty); }
     let patterns = expected_arguments(contract);

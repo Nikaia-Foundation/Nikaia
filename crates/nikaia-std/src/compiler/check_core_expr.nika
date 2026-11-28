@@ -110,6 +110,66 @@ fn check_core_expr[H: CheckHost](mut state: CheckState, world: ref CheckWorld, h
     return ty
 }
 
+/// **What a task's handle holds, and the walk around it set aside**
+/// (ADR-async-v6 D40): the enclosing guard, `catch`, kept failures and lambda,
+/// which the task's failures do not reach.
+struct CheckHeldTask {
+    guarded: CheckGuarded?,
+    caught: bool,
+    swallowed: collections::BTreeSet[String]?,
+    handed: CheckHanded?,
+    probing: bool,
+    held: bool,
+}
+
+/// **Walk a task as its handle holds it** (ADR-async-v6 D40): under a guard of
+/// its own, as a `catch` that keeps what it caught, with no lambda it fails;
+/// the guard is a probe, which no handler's note reads (`NK2402`).
+fn check_core_expr_hold_a_task(mut state: CheckState) -> CheckHeldTask sync {
+    let saved = CheckHeldTask { guarded: state.flow.guarded?.clone(), caught: state.flow.caught, swallowed: state.flow.swallowed?.clone(), handed: state.handed_over?.clone(), probing: state.flow.task_probe, held: state.flow.task_held }
+    state.flow.guarded = CheckGuarded::nothing()
+    state.flow.caught = true
+    state.flow.swallowed = collections::BTreeSet()
+    state.handed_over = null
+    state.flow.task_probe = true
+    state.flow.task_held = true
+    return saved
+}
+
+/// The set the held walk met (`?` for what it could not name), the walk
+/// around it given back.
+fn check_core_expr_task_held(mut state: CheckState, saved: CheckHeldTask) -> collections::BTreeSet[String] sync {
+    let found: CheckGuarded = state.flow.guarded?.clone() ?? CheckGuarded::nothing()
+    state.flow.guarded = saved.guarded
+    state.flow.caught = saved.caught
+    state.flow.swallowed = saved.swallowed
+    state.handed_over = saved.handed
+    state.flow.task_probe = saved.probing
+    state.flow.task_held = saved.held
+    let mut raw = found.thrown.clone()
+    if found.unanswered {
+        raw.insert("?")
+    }
+    return raw
+}
+
+/// **Keep what a handle's task fails with where it runs** (ADR-async-v6
+/// D40): its set, or its fallback's, which the function's group carries to
+/// the join.
+fn check_core_expr_task_runs_with(mut state: CheckState, task: i64, set: ref collections::BTreeSet[String]) sync {
+    let function = state.current?.clone() ?? return
+    state.facts.task_sets.entry(function).or_insert(collections::BTreeMap()).insert(task, set.clone())
+}
+
+/// A handle that carries `raw` (ADR-async-v6 D40); with no fallback yet, its
+/// `join` throws all of it.
+fn check_core_expr_carrying(ty: ref Ty, raw: ref collections::BTreeSet[String]) -> Ty {
+    return match ty {
+        Ty::Named { name, args, .. } => if a_handle_name(name) && args.len() >= 1 { handle_carrying(name, args[0], raw, raw) } else { ty.clone() },
+        else => ty.clone(),
+    }
+}
+
 /// **`async e`, walked under a guard of its own** (ADR-async-v6 D22): whether
 /// the task can fail is kept by its node, for `NK1134`'s help where a `catch`
 /// around a mention of its binding has nothing to handle. What the walk found
@@ -550,7 +610,6 @@ fn check_core_value_of[H: CheckHost](mut state: CheckState, world: ref CheckWorl
             check_core_flow_try_catch(state, world, host, expr, guarded, handler, span)
         },
         Expr::Spawn { body, written_async, child, within, admission, .. } => {
-            check_core_async_within(state, world, host, within, span)
             check_core_async_admission(state, world, host, admission, span)
             if written_async && state.flow.loops > 0 {
                 state.an_async_inside_a_loop(span)
@@ -565,7 +624,20 @@ fn check_core_value_of[H: CheckHost](mut state: CheckState, world: ref CheckWorl
                 // it with the lock held (`NK2203`).
                 state.an_async_inside_a_door(span)
             }
-            check_core_ops_spawn(state, world, host, body, written_async, child, span)
+            // **The start site counts nothing of the task's set** (ADR-async-v6
+            // D40): the body, its deadline, its crash and its budget are walked
+            // under a guard of their own, held as a task's handle holds its
+            // failure, and what they throw goes into the handle's type.
+            let held = check_core_expr_hold_a_task(state)
+            check_core_async_within(state, world, host, within, span)
+            let ty = check_core_ops_spawn(state, world, host, body, written_async, child, span)
+            check_core_async_crash(state, world, host, body, span)
+            let raw = check_core_expr_task_held(state, held)
+            let carrying = check_core_expr_carrying(ty, raw)
+            if handle_set(carrying, false) != null {
+                check_core_expr_task_runs_with(state, id_of(expr) as i64, raw)
+            }
+            carrying
         },
         Expr::Dsl { target, package, context, content, .. } => check_core_expr_dsl(state, world, host, expr, target, package, context, content, span),
         // An `asm` block: what it produces is the business of the emitter

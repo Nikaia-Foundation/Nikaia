@@ -1499,6 +1499,13 @@ pub(crate) fn check_core_flow_fallbacks_written(state: &CheckState, world: &Chec
     for child in child_exprs_of(expr) { check_core_flow_fallbacks_written(state, world, child, past, out); }
 }
 
+pub(crate) fn check_core_flow_fallback_set(guarded: &Expr, answers: &Ty) -> Option<collections::BTreeSet<String>> {
+    match guarded {
+        Expr::Spawn { written_async, .. } => { let written_async = *written_async; if written_async { handle_set(answers, false) } else { None } },
+        _ => None,
+    }
+}
+
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 pub(crate) fn check_core_flow_try_catch<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, host: &H, whole: &Expr, guarded_expr: &Expr, handler: &Block, span: &Span) -> Ty {
@@ -1528,13 +1535,16 @@ pub(crate) fn check_core_flow_try_catch<H: CheckHost>(state: &mut CheckState, wo
         None => None,
     };
     state.flow.escaped = None;
+    let task_held = state.flow.task_held;
+    state.flow.task_held = false;
     let answers = check_core_expr(state, world, host, guarded_expr, span);
+    state.flow.task_held = task_held;
     state.flow.task_probe = probing;
     for task in past.iter() {
         let task = nikaia_std::num::value(task);
         state.flow.tasks_past_the_catch.remove(&task);
     }
-    let held: Option<CheckGuarded> = match state.flow.guarded.as_ref() {
+    let mut held: Option<CheckGuarded> = match state.flow.guarded.as_ref() {
         Some(__nikaia_it) => Some(__nikaia_it.clone()),
         None => None,
     };
@@ -1561,6 +1571,14 @@ pub(crate) fn check_core_flow_try_catch<H: CheckHost>(state: &mut CheckState, wo
             }
         },
         None => { },
+    }
+    let task_set: Option<collections::BTreeSet<String>> = check_core_flow_fallback_set(guarded_expr, &answers);
+    if task_set.is_some() {
+        let set: collections::BTreeSet<String> = nikaia_std::index::or(match task_set.as_ref() {
+            Some(__nikaia_it) => Some(__nikaia_it.clone()),
+            None => None,
+        }, || collections::BTreeSet::new().into());
+        held = Some(CheckGuarded { fallible: !set.is_empty(), unanswered: set.contains("?"), thrown: set });
     }
     if state.flow.guarded.is_some() && check_core_flow_may_pass((held).as_ref()) { check_core_flow_no_answer(state); }
     state.flow.caught = outer;
@@ -1603,7 +1621,13 @@ pub(crate) fn check_core_flow_try_catch<H: CheckHost>(state: &mut CheckState, wo
     let from = state.taken_so_far();
     let dropped = state.discarded.contains(&(id_of(whole) as i64));
     if dropped { check_core_stmt_body_discarded(state, handler); }
+    let fallback_held: Option<CheckHeldTask> = if task_set.is_some() { Some(check_core_expr_hold_a_task(state)) } else { None };
     let handled = check_core_block(state, world, host, handler);
+    let mut fallback_set: collections::BTreeSet<String> = collections::BTreeSet::new();
+    match fallback_held {
+        Some(saved) => { fallback_set = check_core_expr_task_held(state, saved); },
+        None => { },
+    }
     let literal = check_core_flow_handler_text(state, world, &answers, handler);
     let leaves = state.block_exits(world, handler);
     state.a_branch_that_leaves(from, leaves, span);
@@ -1621,9 +1645,10 @@ pub(crate) fn check_core_flow_try_catch<H: CheckHost>(state: &mut CheckState, wo
             if written_async {
                 match answers {
                     Ty::Named { ref name, ref args, .. } => {
-                        if (name == "TaskHandle" || name == CHILD_HANDLE) && args.len() == 1 {
+                        if a_handle_name(name) && !args.is_empty() {
                             if !state.block_leaves(world, handler) && !(*unsafe { nikaia_std::proven::read(&args, (0) as usize) }).is_unknown() && value.text() != "()" && !value.fits(unsafe { nikaia_std::proven::read(&args, (0) as usize) }) { state.expect_type(world, &value.owned(), unsafe { nikaia_std::proven::read(&args, (0) as usize) }, span, "catch", &mut |found, wanted| { format!("This fallback hands back `{}`, but the task's value is `{}`.", found, wanted) }); }
-                            return answers;
+                            check_core_expr_task_runs_with(state, id_of(guarded_expr) as i64, &fallback_set);
+                            return handle_carrying(name, unsafe { nikaia_std::proven::read(&args, (0) as usize) }, &nikaia_std::index::or(task_set, || collections::BTreeSet::new().into()), &fallback_set);
                         }
                     },
                     _ => { },

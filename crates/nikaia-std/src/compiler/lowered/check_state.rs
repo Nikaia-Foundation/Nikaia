@@ -359,10 +359,11 @@ pub struct CheckMethodCalls {
     pub fields_called: collections::BTreeSet<String>,
     pub in_a_task: CheckCallsInATask,
     pub swallowed: collections::BTreeMap<String, collections::BTreeSet<String>>,
+    pub joined: collections::BTreeSet<String>,
 }
 
 impl CheckMethodCalls {
-    pub fn empty() -> CheckMethodCalls { CheckMethodCalls { resolved: collections::BTreeSet::new(), unresolved: false, unanswered: 0, code_pauses: false, code_fails: false, fields_called: collections::BTreeSet::new(), in_a_task: CheckCallsInATask { resolved: collections::BTreeSet::new(), unresolved: false }, swallowed: collections::BTreeMap::new() } }
+    pub fn empty() -> CheckMethodCalls { CheckMethodCalls { resolved: collections::BTreeSet::new(), unresolved: false, unanswered: 0, code_pauses: false, code_fails: false, fields_called: collections::BTreeSet::new(), in_a_task: CheckCallsInATask { resolved: collections::BTreeSet::new(), unresolved: false }, swallowed: collections::BTreeMap::new(), joined: collections::BTreeSet::new() } }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]

@@ -390,6 +390,11 @@ pub struct CheckFacts {
     /// **Where each `async e` task is waited for**, by the `async` node
     /// (ADR-async-v6 D6, D9): what the lowering joins it at.
     pub async_waits: collections::BTreeMap[i64, CheckAsyncWait],
+    /// **What each handle's task can fail with where it runs**, by its
+    /// function and its `async` node (ADR-async-v6 D40): the task's set, or
+    /// its fallback's where it has one. The function's group carries it to
+    /// the join, where the function's own set may not.
+    pub task_sets: collections::BTreeMap[String, collections::BTreeMap[i64, collections::BTreeSet[String]]],
     /// **The `async e` bindings only other tasks name, two or more of them**
     /// (ADR-async-v6 D8, a diamond, #986), by the `async` node: they read the
     /// one value, so the lowering keeps it for all (`task::Read`). One that
@@ -1073,6 +1078,7 @@ impl CheckFacts {
             optional_fallbacks: collections::BTreeSet(),
             flat_reads: collections::BTreeSet(),
             async_waits: collections::BTreeMap(),
+            task_sets: collections::BTreeMap(),
             async_shared: collections::BTreeSet(),
             async_abandoned: collections::BTreeMap(),
             copied_reads: collections::BTreeSet(),

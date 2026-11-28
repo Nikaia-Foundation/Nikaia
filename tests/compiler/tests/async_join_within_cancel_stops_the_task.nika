@@ -23,7 +23,7 @@ fn main() throws {
 	let quick = async(detached) fn { 5 }
 	let w = quick.join(within: 2.seconds(), on_timeout: task::OnTimeout::Keep) catch {
 		match error {
-			task::TimedOut => quick.join() catch { -1 },
+			task::TimedOut => quick.join(),
 			else => -1,
 		}
 	}

@@ -1,0 +1,27 @@
+// A handle carries its task's error set to its join (ADR-async-v6 D40,
+// #2799): the start site counts none of it, so `run` throws nothing, and
+// the `catch` at the join takes the task's failure.
+struct Bad {}
+
+impl Error for Bad {
+	fn message(ref self) -> String {
+		return "bad"
+	}
+}
+
+fn fails(n: i64) -> i64 throws {
+	if n > 1 {
+		throw Bad {}
+	}
+	return n
+}
+
+fn run() -> i64 {
+	let h = async(handle) fn { fails(2) }
+	let b = 1
+	return (h.join() catch { 9 }) + b
+}
+
+fn main() throws {
+	println(run())
+}

@@ -82,6 +82,73 @@ pub(crate) fn check_core_expr<H: CheckHost>(state: &mut CheckState, world: &Chec
     ty
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub(crate) struct CheckHeldTask {
+    pub(crate) guarded: Option<CheckGuarded>,
+    pub(crate) caught: bool,
+    pub(crate) swallowed: Option<collections::BTreeSet<String>>,
+    pub(crate) handed: Option<CheckHanded>,
+    pub(crate) probing: bool,
+    pub(crate) held: bool,
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn check_core_expr_hold_a_task(state: &mut CheckState) -> CheckHeldTask {
+    let saved = CheckHeldTask { guarded: match state.flow.guarded.as_ref() {
+        Some(__nikaia_it) => Some(__nikaia_it.clone()),
+        None => None,
+    }, caught: state.flow.caught, swallowed: match state.flow.swallowed.as_ref() {
+        Some(__nikaia_it) => Some(__nikaia_it.clone()),
+        None => None,
+    }, handed: match state.handed_over.as_ref() {
+        Some(__nikaia_it) => Some(__nikaia_it.clone()),
+        None => None,
+    }, probing: state.flow.task_probe, held: state.flow.task_held };
+    state.flow.guarded = Some(CheckGuarded::nothing());
+    state.flow.caught = true;
+    state.flow.swallowed = Some(collections::BTreeSet::new());
+    state.handed_over = None;
+    state.flow.task_probe = true;
+    state.flow.task_held = true;
+    saved
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn check_core_expr_task_held(state: &mut CheckState, saved: CheckHeldTask) -> collections::BTreeSet<String> {
+    let found: CheckGuarded = nikaia_std::index::or(match state.flow.guarded.as_ref() {
+        Some(__nikaia_it) => Some(__nikaia_it.clone()),
+        None => None,
+    }, || CheckGuarded::nothing());
+    state.flow.guarded = saved.guarded;
+    state.flow.caught = saved.caught;
+    state.flow.swallowed = saved.swallowed;
+    state.handed_over = saved.handed;
+    state.flow.task_probe = saved.probing;
+    state.flow.task_held = saved.held;
+    let mut raw = found.thrown.copy_owned();
+    if found.unanswered { raw.insert(String::from("?")); }
+    raw
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn check_core_expr_task_runs_with(state: &mut CheckState, task: i64, set: &collections::BTreeSet<String>) {
+    let function = match match state.current.as_ref() {
+        Some(__nikaia_it) => Some(__nikaia_it.clone()),
+        None => None,
+    } { Some(__nikaia_value) => __nikaia_value, None => return };
+    state.facts.task_sets.entry(String::from(function)).or_insert(collections::BTreeMap::new()).insert(task, set.copy_owned());
+}
+
+pub(crate) fn check_core_expr_carrying(ty: &Ty, raw: &collections::BTreeSet<String>) -> Ty {
+    match ty {
+        Ty::Named { name, args, .. } => if a_handle_name(name) && !args.is_empty() { handle_carrying(name, unsafe { nikaia_std::proven::read(&args, (0) as usize) }, raw, raw) } else { ty.clone() },
+        _ => ty.clone(),
+    }
+}
+
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 pub(crate) fn check_core_task_walked<H: CheckHost>(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, host: &H, expr: &Expr, span: &Span) -> Ty {
@@ -452,7 +519,6 @@ pub(crate) fn check_core_value_of<H: CheckHost>(state: &mut CheckState, world: &
         },
         Expr::Spawn { body, written_async, child, within, admission, .. } => {
             let body = nikaia_std::boxed::open(body); let within = nikaia_std::boxed::open(within); let admission = nikaia_std::boxed::open(admission); let child = *child; let written_async = *written_async;
-            check_core_async_within(state, world, host, (within).as_ref(), span);
             check_core_async_admission(state, world, host, (admission).as_ref(), span);
             if written_async && state.flow.loops > 0 { state.an_async_inside_a_loop(span); }
             if !written_async && !child { state.a_spawn_replaced(world, expr, span); }
@@ -461,7 +527,14 @@ pub(crate) fn check_core_value_of<H: CheckHost>(state: &mut CheckState, world: &
                 state.flow.starts_async = true;
                 state.an_async_inside_a_door(span);
             }
-            check_core_ops_spawn(state, world, host, body, written_async, child, span)
+            let held = check_core_expr_hold_a_task(state);
+            check_core_async_within(state, world, host, (within).as_ref(), span);
+            let ty = check_core_ops_spawn(state, world, host, body, written_async, child, span);
+            check_core_async_crash(state, world, host, body, span);
+            let raw = check_core_expr_task_held(state, held);
+            let carrying = check_core_expr_carrying(&ty, &raw);
+            if handle_set(&carrying, false).is_some() { check_core_expr_task_runs_with(state, id_of(expr) as i64, &raw); }
+            carrying
         },
         Expr::Dsl { target, package, context, content, .. } => { let context = *context; let package = *package; let target = *target; check_core_expr_dsl(state, world, host, expr, target, package, context, content, span) },
         Expr::Asm { .. } => {

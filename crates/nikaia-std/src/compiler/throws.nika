@@ -54,6 +54,9 @@ pub struct ThrowsGraph {
     /// The fatal error types (ADR-345 D1), for a library's method a `catch`
     /// keeps.
     pub fatal: collections::BTreeSet[String],
+    /// **What the handles a function joins throw** (ADR-async-v6 D40), per
+    /// function: the sets their types carry, met outside a `catch`.
+    pub joined: collections::BTreeMap[String, collections::BTreeSet[String]],
 }
 
 /// **The graph before any unit is walked**: the type checker's method calls
@@ -61,11 +64,15 @@ pub struct ThrowsGraph {
 /// (ADR-345 D1).
 pub fn throws_graph(own: ref Ledger, library: ref Ledger, resolved: ref collections::BTreeMap[String, CheckMethodCalls]) -> ThrowsGraph {
     let mut methods: collections::BTreeMap[String, MethodsCalled] = collections::BTreeMap()
+    let mut joined: collections::BTreeMap[String, collections::BTreeSet[String]] = collections::BTreeMap()
     for (key, calls) in resolved {
         let called = MethodsCalled { resolved: calls.resolved.clone(), unseen: calls.unresolved || calls.code_fails, fields: calls.fields_called.clone(), swallowed: calls.swallowed.clone() }
         methods.insert(key.clone(), called)
+        if calls.joined.len() > 0 {
+            joined.insert(key.clone(), calls.joined.clone())
+        }
     }
-    return ThrowsGraph { methods: methods, direct: collections::BTreeMap(), calls: collections::BTreeMap(), fatal_calls: collections::BTreeMap(), fatal: fatal_types(own, library) }
+    return ThrowsGraph { methods: methods, direct: collections::BTreeMap(), calls: collections::BTreeMap(), fatal_calls: collections::BTreeMap(), fatal: fatal_types(own, library), joined: joined }
 }
 
 /// **The fatal error types** (ADR-345 D1): every type an `impl Fatal` names,
@@ -149,6 +156,7 @@ pub fn unit_throws(program: ref Program, names: ref winnow_grammar::InternerCont
 // after all is `?`, as an unresolved one is.
 fn with_methods(key: ref String, thrown: ref Thrown, own: ref Ledger, library: ref Ledger, mut graph: ThrowsGraph) {
     let mut named = thrown.direct.clone()
+    named.extend(graph.joined[key]?.clone() ?? collections::BTreeSet())
     let mut called: collections::BTreeSet[String] = collections::BTreeSet()
     // **A call by a name is the place of that name** (ADR-351 D1, D4): a
     // parameter or a name of code the checker saw called, `?` where not.
@@ -835,7 +843,9 @@ fn thrown_in(expr: ref Expr, names: ref winnow_grammar::InternerContext, holes_o
         // (ADR-async-v6 D16, #986): it arrives where the task's own do, so a
         // fallback stands in for it.
         Expr::AsyncGroup(_, _, within, _, _) => thrown_by_a_deadline(within, names, holes_of, contribution_of, in_a_handler, caught, out),
-        Expr::Spawn { within, .. } => thrown_by_a_deadline(within, names, holes_of, contribution_of, in_a_handler, caught, out),
+        // **A task's deadline is its handle's** (ADR-async-v6 D40): it fails
+        // the task, whose set the handle carries to its `join`.
+        Expr::Spawn { .. } => {}
         Expr::Throw(inner, _) => thrown_in(inner, names, holes_of, contribution_of, in_a_handler, caught, out),
         Expr::Cast { expr, .. } => thrown_in(expr, names, holes_of, contribution_of, in_a_handler, caught, out),
         Expr::Field { base, .. } => thrown_in(base, names, holes_of, contribution_of, in_a_handler, caught, out),
@@ -923,9 +933,9 @@ fn thrown_in_blocks(expr: ref Expr, names: ref winnow_grammar::InternerContext, 
         Expr::Unsafe(block, _) => thrown_in_block(block, names, holes_of, contribution_of, in_a_handler, out),
         Expr::Overlap(block, _) => thrown_in_block(block, names, holes_of, contribution_of, in_a_handler, out),
         Expr::Closure { body, .. } => thrown_in_block(body, names, holes_of, contribution_of, in_a_handler, out),
-        // ADR-346 D5: a task's errors reach whoever joins it; the starter is
-        // where its handle is joined or handed on.
-        Expr::Spawn { body, .. } => thrown_in_blocks(body, names, holes_of, contribution_of, in_a_handler, out),
+        // ADR-346 D5, ADR-async-v6 D40: a task's errors reach whoever joins
+        // it, through its handle's set; the start site counts none of them.
+        Expr::Spawn { .. } => {}
         Expr::Call { func, args, config, .. } => {
             thrown_in_blocks(func, names, holes_of, contribution_of, in_a_handler, out)
             for arg in args {
@@ -959,7 +969,15 @@ fn thrown_in_blocks(expr: ref Expr, names: ref winnow_grammar::InternerContext, 
         }
         Expr::TryCatch { expr, handler, .. } => {
             thrown_in_blocks(expr, names, holes_of, contribution_of, in_a_handler, out)
-            thrown_in_block(handler, names, holes_of, contribution_of, true, out)
+            // **A task's fallback is its handle's** (ADR-async-v6 D40): what it
+            // throws reaches the `join`, not the start site.
+            let fallback_of_a_task = match expr {
+                Expr::Spawn { written_async, .. } => written_async,
+                else => false,
+            }
+            if !fallback_of_a_task {
+                thrown_in_block(handler, names, holes_of, contribution_of, true, out)
+            }
         }
         Expr::Match { arms, .. } => {
             for arm in arms {

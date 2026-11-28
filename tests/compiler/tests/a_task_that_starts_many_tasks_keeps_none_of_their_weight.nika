@@ -15,10 +15,7 @@ fn small(i: i64) -> i64 {
 
 fn one(i: i64) -> i64 throws {
 	let c = async(detached) fn { small(i) }
-	return c.join() catch {
-		println(f"child failed: {error}")
-		0
-	}
+	return c.join()
 }
 
 fn spawner(n: i64) -> i64 throws {
@@ -31,9 +28,6 @@ fn spawner(n: i64) -> i64 throws {
 
 fn main() throws {
 	let j = async(detached, admission: Tight {}) fn { spawner(20000) }
-	let got = j.join() catch {
-		println(f"spawner failed: {error}")
-		0
-	}
+	let got = j.join()
 	println(f"got {got}")
 }

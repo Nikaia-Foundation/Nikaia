@@ -234,6 +234,7 @@ pub fn emit_contracts_state[H: EmitContractsHost, P: EmitHolesHost](host: ref H,
     // declares `main`, the entry, which writes the sums at the crate root.
     if units.len() <= 2 || emit_contracts_declares_main(words, items) {
         state.lambda_sums(world, sums)
+        state.group_sums(world, sums)
     }
     state.sums = sums
     state.sums_written = emit_sums_written(state.sums, units, state.sums_used_here(world))

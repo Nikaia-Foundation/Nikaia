@@ -1222,8 +1222,12 @@ impl EmitState {
             out.push(if declared_into { "nikaia_std::par::kept_failures(" } else if kept_paused { "nikaia_std::par::kept_failures::<Vec<_>, _, _>(" } else { "nikaia_std::par::kept_failures_listed(" });
         } else if kept_each { out.push("nikaia_std::par::kept_failures::<(), _, _>("); }
         let joined_key = nikaia_std::index::or(*nikaia_std::index::get(&self.facts.method_callees, &on_node), || "");
-        let arriving = (joined_key.starts_with("TaskHandle::join") || joined_key.starts_with("task::ChildHandle::join")) && self.method_can_fail(on_node);
-        if arriving { out.push("nikaia_std::error::arrived("); }
+        let a_join = joined_key.starts_with("TaskHandle::join") || joined_key.starts_with("task::ChildHandle::join");
+        let arriving = a_join && self.method_can_fail(on_node);
+        let unfailing = a_join && !arriving;
+        let uncrashing = arriving && flow.can_throw && !flow.caught && emit_async_or_crash(&self.emit_async_tasks_channel(&scope.channel));
+        if uncrashing { out.push("nikaia_std::task::uncrashed("); }
+        if arriving { out.push("nikaia_std::error::arrived("); } else if unfailing { out.push("nikaia_std::task::unfailing("); }
         let (kind, entry) = emit_call_pausing_entry(&self.facts, args);
         let mut through_prefix: &'static str = "";
         let mut through_suffix: &'static str = "";
@@ -1344,7 +1348,10 @@ impl EmitState {
             out.push(&emit_async_pause(&walk));
         }
         if kept_each { out.push(".collect::<Vec<_>>())"); } else if kept_collect { out.push(")"); }
-        if arriving { out.push(&format!(", &{})", rust_string(&scope.origin))); }
+        if arriving {
+            out.push(&format!(", &{})", rust_string(&scope.origin)));
+            if uncrashing { out.push(")"); }
+        } else if unfailing { out.push(")"); }
         if timed {
             if length { out.push(" as i64"); }
             out.push(")");
@@ -1707,8 +1714,8 @@ pub(crate) fn emit_tuple_part_copy(i: i64, word: &str) -> String {
 }
 
 pub(crate) fn emit_tuple_part_copies(parts: &[String]) -> String {
-    let copies: Vec<String> = parts.iter().enumerate().map(|(at, item)| (at as i64, item)).map(|__nikaia_tuple129951| {
-        let (i, word) = __nikaia_tuple129951;
+    let copies: Vec<String> = parts.iter().enumerate().map(|(at, item)| (at as i64, item)).map(|__nikaia_tuple130848| {
+        let (i, word) = __nikaia_tuple130848;
         emit_tuple_part_copy(i, word)
     }).collect::<Vec<_>>();
     if copies.len() == 1 { return format!("({},)", *unsafe { nikaia_std::proven::read(&copies, (0) as usize) }); }

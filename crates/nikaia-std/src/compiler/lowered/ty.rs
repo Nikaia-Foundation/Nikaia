@@ -175,8 +175,63 @@ pub(crate) fn code(params: &[Ty], result: Option<&Ty>, is_sync: bool, can_throw:
 pub(crate) fn named_text(name: &str, args: &[Ty], view: bool) -> String {
     let mut out: String = if view { String::from("ref ") } else { String::from("") };
     if view && name == TEXT_VIEW { out.push_str(TEXT); } else { out.push_str(name); }
+    if a_handle_name(name) && args.len() == 3 {
+        out.push_str(&format!("[{}]", (*unsafe { nikaia_std::proven::read(&args, (0) as usize) }).text()));
+        let raw = handle_marker_set(unsafe { nikaia_std::proven::read(&args, (1) as usize) });
+        if !raw.is_empty() {
+            let mut names: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
+            names.reserve(raw.iter().size_hint().0); for error in raw.iter() { names.push(nikaia_std::block::Text::from(error.to_string())); }
+            out.push_str(&format!(" throws {}", nikaia_std::block::Text::from(names.join(", "))));
+        }
+        return out;
+    }
     if !args.is_empty() { out.push_str(&format!("[{}]", listed(args))); }
     out
+}
+
+pub const HANDLE_SET: &str = "throws";
+
+pub fn a_handle_name(name: &str) -> bool { name == "TaskHandle" || name == "task::ChildHandle" }
+
+pub fn handle_carrying(name: &str, value: &Ty, raw: &collections::BTreeSet<String>, joined: &collections::BTreeSet<String>) -> Ty { Ty::Named { name: nikaia_std::block::Text::from(name.to_string()), args: vec![value.clone(), handle_set_marker(raw), handle_set_marker(joined)], view: false } }
+
+pub(crate) fn handle_set_marker(set: &collections::BTreeSet<String>) -> Ty {
+    let mut members: Vec<Ty> = vec![];
+    members.reserve(set.iter().size_hint().0); for error in set.iter() { members.push(Ty::Named { name: nikaia_std::block::Text::from(error.to_string()), args: vec![], view: false }); }
+    Ty::Named { name: nikaia_std::block::Text::from(HANDLE_SET.to_string()), args: members, view: false }
+}
+
+pub fn handle_set(ty: &Ty, joined: bool) -> Option<collections::BTreeSet<String>> {
+    match ty {
+        Ty::Named { name, args, .. } => if a_handle_name(name) && args.len() == 3 { Some(handle_marker_set(if joined { unsafe { nikaia_std::proven::read(&args, (2) as usize) } } else { unsafe { nikaia_std::proven::read(&args, (1) as usize) } })) } else { None },
+        _ => None,
+    }
+}
+
+pub(crate) fn handle_marker_set(marker: &Ty) -> collections::BTreeSet<String> {
+    let mut out: collections::BTreeSet<String> = collections::BTreeSet::new();
+    match marker {
+        Ty::Named { args, .. } => { for member in args.iter() { out.insert(member.text()); } },
+        _ => { },
+    }
+    out
+}
+
+pub(crate) fn set_within(inner: &collections::BTreeSet<String>, outer: &collections::BTreeSet<String>) -> bool {
+    for member in inner.iter() { if !outer.contains(member) { return false; } }
+    true
+}
+
+pub(crate) fn handle_args_fit(found: &[Ty], wanted: &[Ty]) -> bool {
+    if found.is_empty() || wanted.is_empty() || !(*unsafe { nikaia_std::proven::read(&found, (0) as usize) }).fits(unsafe { nikaia_std::proven::read(&wanted, (0) as usize) }) { return false; }
+    if found.len() != 3 { return true; }
+    let raw = handle_marker_set(unsafe { nikaia_std::proven::read(&found, (1) as usize) });
+    if wanted.len() != 3 {
+        let mut written: collections::BTreeSet<String> = collections::BTreeSet::new();
+        written.insert(String::from("task::Crashed"));
+        return set_within(&raw, &written);
+    }
+    set_within(&raw, &handle_marker_set(unsafe { nikaia_std::proven::read(&wanted, (1) as usize) })) && set_within(&handle_marker_set(unsafe { nikaia_std::proven::read(&found, (2) as usize) }), &handle_marker_set(unsafe { nikaia_std::proven::read(&wanted, (2) as usize) }))
 }
 
 pub(crate) fn sequence(item: &str, is_sync: bool, pauses: bool, can_throw: bool, parallel: bool, shape: &Shape) -> String {
@@ -217,6 +272,10 @@ pub(crate) fn shown_listed(parts: &[Ty]) -> String {
 
 pub(crate) fn shown_named(name: &str, args: &[Ty]) -> String {
     let mut out: String = if name == TEXT_VIEW { nikaia_std::block::Text::from(TEXT.to_string()) } else { nikaia_std::block::Text::from(name.to_string()) };
+    if a_handle_name(name) && args.len() == 3 {
+        out.push_str(&format!("[{}]", ty_shown(unsafe { nikaia_std::proven::read(&args, (0) as usize) })));
+        return out;
+    }
     if !args.is_empty() { out.push_str(&format!("[{}]", shown_listed(args))); }
     out
 }
@@ -1372,7 +1431,7 @@ pub(crate) fn nullable_fits(found: &Ty, wanted: &Ty) -> bool {
 
 pub(crate) fn named_fits(found: &Ty, wanted: &str, wanted_args: &[Ty], wanted_view: bool) -> bool {
     match found {
-        Ty::Named { name, args, view } => { let view = *view; name == wanted && view == wanted_view && all_fit(args, wanted_args) },
+        Ty::Named { name, args, view } => { let view = *view; name == wanted && view == wanted_view && if a_handle_name(name) { handle_args_fit(args, wanted_args) } else { all_fit(args, wanted_args) } },
         _ => false,
     }
 }
@@ -1432,7 +1491,7 @@ pub(crate) fn bind_named(pattern_name: &str, pattern_args: &[Ty], actual: &Ty, o
 pub(crate) fn bind_arguments(pattern_name: &str, pattern_args: &[Ty], name: &str, args: &[Ty], out: &mut collections::BTreeMap<String, Ty>) {
     if name != pattern_name { return; }
     if (args.len() as i64) != pattern_args.len() as i64 {
-        if name == "Array" && !args.is_empty() && !pattern_args.is_empty() { bind(unsafe { nikaia_std::proven::read(&pattern_args, (0) as usize) }, unsafe { nikaia_std::proven::read(&args, (0) as usize) }, out); }
+        if (name == "Array" || a_handle_name(name)) && !args.is_empty() && !pattern_args.is_empty() { bind(unsafe { nikaia_std::proven::read(&pattern_args, (0) as usize) }, unsafe { nikaia_std::proven::read(&args, (0) as usize) }, out); }
         return;
     }
     for at in 0..args.len() as i64 { bind(unsafe { nikaia_std::proven::read(&pattern_args, (at) as usize) }, unsafe { nikaia_std::proven::read(&args, (at) as usize) }, out); }

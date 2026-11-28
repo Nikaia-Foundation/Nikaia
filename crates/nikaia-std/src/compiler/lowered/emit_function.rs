@@ -541,7 +541,7 @@ impl EmitState {
                 if shared { declared.insert(0, String::from("'r")); }
                 if !either_first.is_empty() { declared.insert(0, String::from("'e")); }
                 walk.either_prelude = either_first.copy_owned();
-                let mut returned: String = String::from(""); #[allow(unused_mut, clippy::redundant_locals)] let mut params = params; #[allow(unused_mut, clippy::redundant_locals)] let mut declared = declared;
+                let mut returned: String = String::from(""); #[allow(unused_mut, clippy::redundant_locals)] let mut params = params; #[allow(clippy::redundant_locals)] let named = named; #[allow(unused_mut, clippy::redundant_locals)] let mut declared = declared;
                 match ret_type {
                     Some(ty) => {
                         if emit_text(world, ty.name) == "Self::dsl" {
@@ -783,7 +783,17 @@ impl EmitState {
                             let outer_gates = walk.async_gates.copy_owned();
                             walk.async_gates = vec![];
                             if pausing != "" { walk.async_gates = vec![group]; }
-                            self.emit_function_body(world, walk, &mut inner, host, body, depth, throws_, returns_value, &awaited, &key, &channel, host.counts_steps(), host.skip_free_at_exit())?;
+                            let widened = self.group_widened(world, &key);
+                            let mut narrowing: (String, String) = (String::from(""), String::from("")); #[allow(clippy::redundant_locals)] let widened = widened;
+                            let mut group_channel: String = nikaia_std::block::Text::from(channel.to_string()); #[allow(clippy::redundant_locals)] let widened = widened;
+                            let mut group_ret: String = nikaia_std::block::Text::from(ret.to_string()); #[allow(clippy::redundant_locals)] let widened = widened;
+                            if widened.len() == 1 || self.sums.get(&widened).is_some() {
+                                group_channel = self.channel_of(world, &widened, true, "", "", false);
+                                narrowing = self.group_narrowing(world, &key, &widened, &channel);
+                                group_ret = format!(" -> {}<{}, {}>", self.rust_result(), returned, group_channel);
+                            }
+                            let group_throws = throws_ || narrowing.0 != "";
+                            self.emit_function_body(world, walk, &mut inner, host, body, depth, group_throws, returns_value, &awaited, &key, &group_channel, host.counts_steps(), host.skip_free_at_exit())?;
                             walk.async_gates = outer_gates;
                             walk.async_groups = outer_groups;
                             walk.async_pausing = outer_pausing;
@@ -791,8 +801,8 @@ impl EmitState {
                             walk.async_handles.clear();
                             if pausing == "" && inner.buf.contains(".await") { return Err(nikaia_std::error::throwing(EmitRefused { message: String::from("The compiler can't translate `async e` yet in a function that pauses (#988)."), at: Some(i64::from(nikaia_std::index::get(&body.stmts, 0).span.start)) }, &"emit_function")); }
                             let name = emit_async_group_name(group);
-                            let grouped = throws_ && self.emit_async_tasks_channel(&channel) == channel;
-                            let raised = throws_ && !grouped;
+                            let grouped = group_throws && self.emit_async_tasks_channel(&group_channel) == group_channel;
+                            let raised = group_throws && !grouped;
                             let named = nikaia_std::index::or(key.rsplit("::").next(), || "");
                             let site = format!("&{}", rust_string(named));
                             let mut arriving: &'static str = "";
@@ -802,14 +812,14 @@ impl EmitState {
                                 arrived = format!(", {})", site);
                             }
                             if pausing != "" {
-                                if grouped { out.push(&format!("{{ let {} = &nikaia_std::task::Scope::new(); {}nikaia_std::task::group_paused::<_, {}>({}, (async ||{} ", name, arriving, channel, name, ret)); } else if raised { out.push(&format!("{{ let {} = &nikaia_std::task::Scope::new(); {}nikaia_std::task::group_paused_raised({}, (async ||{} ", name, arriving, name, ret)); } else { out.push(&format!("{{ let {} = &nikaia_std::task::Scope::new(); nikaia_std::task::group_paused_plain({}, (async ||{} ", name, name, ret)); }
+                                if grouped { out.push(&format!("{{ let {} = &nikaia_std::task::Scope::new(); {}{}nikaia_std::task::group_paused::<_, {}>({}, (async ||{} ", name, narrowing.0, arriving, group_channel, name, group_ret)); } else if raised { out.push(&format!("{{ let {} = &nikaia_std::task::Scope::new(); {}{}nikaia_std::task::group_paused_raised({}, (async ||{} ", name, narrowing.0, arriving, name, group_ret)); } else { out.push(&format!("{{ let {} = &nikaia_std::task::Scope::new(); nikaia_std::task::group_paused_plain({}, (async ||{} ", name, name, group_ret)); }
                                 out.push(&format!("{{ let {}_gate = nikaia_std::task::Gate::new(usize::MAX, nikaia_std::task::admitted(nikaia_std::task::Adaptive())); let {}_waiting = nikaia_std::task::Waiting::new(&{}_gate); ", name, name, name));
                                 out.append(&inner);
-                                out.push(&format!(" }})()).await{} }}", arrived));
+                                out.push(&format!(" }})()).await{}{} }}", arrived, narrowing.1));
                             } else {
-                                if grouped { out.push(&format!("{{ {}nikaia_std::task::group::<_, {}>(|{}|{} ", arriving, channel, name, ret)); } else if raised { out.push(&format!("{{ {}nikaia_std::task::group_raised(|{}|{} ", arriving, name, ret)); } else { out.push(&format!("{{ nikaia_std::task::group_plain(|{}|{} ", name, ret)); }
+                                if grouped { out.push(&format!("{{ {}{}nikaia_std::task::group::<_, {}>(|{}|{} ", narrowing.0, arriving, group_channel, name, group_ret)); } else if raised { out.push(&format!("{{ {}{}nikaia_std::task::group_raised(|{}|{} ", narrowing.0, arriving, name, group_ret)); } else { out.push(&format!("{{ nikaia_std::task::group_plain(|{}|{} ", name, group_ret)); }
                                 out.append(&inner);
-                                out.push(&format!("){} }}", arrived));
+                                out.push(&format!("){}{} }}", arrived, narrowing.1));
                             }
                         }
                     },

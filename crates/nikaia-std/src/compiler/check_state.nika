@@ -679,11 +679,14 @@ pub struct CheckMethodCalls {
     /// caught** (#725), with the fatal types its handler names: what they
     /// throw reaches the function only where it is fatal and not named.
     pub swallowed: collections::BTreeMap[String, collections::BTreeSet[String]],
+    /// **What the handles it joins outside a `catch` throw** (ADR-async-v6
+    /// D40): the sets their types carry, which the `join`'s contract does not.
+    pub joined: collections::BTreeSet[String],
 }
 
 impl CheckMethodCalls {
     pub fn empty() -> CheckMethodCalls {
-        return CheckMethodCalls { resolved: collections::BTreeSet(), unresolved: false, unanswered: 0, code_pauses: false, code_fails: false, fields_called: collections::BTreeSet(), in_a_task: CheckCallsInATask { resolved: collections::BTreeSet(), unresolved: false }, swallowed: collections::BTreeMap() }
+        return CheckMethodCalls { resolved: collections::BTreeSet(), unresolved: false, unanswered: 0, code_pauses: false, code_fails: false, fields_called: collections::BTreeSet(), in_a_task: CheckCallsInATask { resolved: collections::BTreeSet(), unresolved: false }, swallowed: collections::BTreeMap(), joined: collections::BTreeSet() }
     }
 }
 
