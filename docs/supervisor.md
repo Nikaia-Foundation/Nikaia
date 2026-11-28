@@ -577,6 +577,16 @@ commit; red, it writes `qa-input.txt` and starts QA
 (`docs/qa-task.md`), at most two rounds, then `ESCALATE`. CI stays the
 final gate for what other sessions push meanwhile.
 
+* **A time limit is raised only by the owner's decision** (owner,
+  2026-11-28). A test, a job or a step that runs past its limit is made
+  cheaper, or its cause filed; nobody raises `NIKAIA_TEST_TIME_LIMIT`, a
+  workflow's `timeout-minutes`, `project_tests_time_limit` or any other limit
+  to make it pass - not a builder, not QA, not the supervisor. A raise that
+  seems needed goes to the owner as a `decision` issue with its measurement.
+  The supervisor checks every QA commit for such a change before it pushes
+  it (7786ce8c raised the compiler shards to 900 s for `pre_push_generated`
+  and was reverted; the test is #2901).
+
 ## Lanes
 
 The score in [`priorities.md`](priorities.md) decides; every brief names its

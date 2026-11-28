@@ -23,6 +23,9 @@ you too where this file says nothing else.
   expected `.stdout`/`.stderr` to match wrong output. An expected file is
   changed only when the change was meant to alter that output, and the brief
   says so.
+* **Never raise a time limit** (owner, 2026-11-28; `docs/supervisor.md`,
+  *Driver, suite and QA*): a test or step past its limit is made cheaper, or
+  `Result: blocked` with its measurement and `Needs: owner decision`.
 * **A raw-sink warning (NK1308) is fixed by proof, never by `trusted:`**
   (owner, 2026-11-20, ADR-397): check the name where it arrives with
   `path::is_below`, open it under `fs::Root::Dir(".")` or a root joined to
