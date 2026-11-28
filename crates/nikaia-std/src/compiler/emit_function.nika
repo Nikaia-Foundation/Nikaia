@@ -637,14 +637,12 @@ impl EmitState {
                         null => {},
                     }
                 }
-                // **No parameter at all**: the literal outlives everything. A
-                // struct that may hold views counts as a written view does
-                // (#2836): `E { value: "" }` beside two `ref` parameters.
+                // **No parameter at all**: the literal outlives everything.
                 let mut nothing_borrowed = false
                 if emit_is_elided(lifetimes) && plain_signature && !has_kept && has_borrows && named.is_empty() {
                     match ret_type {
                         ty => {
-                            if holds_view(ty) || self.carries_a_view(world, ty) {
+                            if holds_view(ty) {
                                 let mut any_view = receiver != null || lowered_views > 0
                                 for each in args {
                                     if self.carries_a_view(world, each.ty) {
