@@ -239,7 +239,11 @@ pub(crate) fn plan_of(item: &Item, target: Option<String>, ask: &BufferAsk<'_, '
     }, carries, false, ask, &mut *holes_of, &mut *unaliased) { Some(__nikaia_value) => __nikaia_value, None => return None };
     let mut plan = decide(key, body, &walk, ask);
     if !walk.stream_loops.is_empty() {
-        let streamed = match walked(item, target, carries, true, ask, &mut *holes_of, &mut *unaliased) { Some(__nikaia_value) => __nikaia_value, None => return Some(plan) };
+        let any_result = match item {
+            Item::Fn { ret_type, .. } => ret_type.is_some(),
+            _ => false,
+        };
+        let streamed = match walked(item, target, carries || any_result, true, ask, &mut *holes_of, &mut *unaliased) { Some(__nikaia_value) => __nikaia_value, None => return Some(plan) };
         stream_plan(&streamed, &mut plan);
     }
     match item {

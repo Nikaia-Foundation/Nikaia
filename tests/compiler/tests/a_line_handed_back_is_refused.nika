@@ -1,0 +1,43 @@
+// A line of `io::lines()` handed out of the function, bare or in a value the
+// function returns, outlives the loop that reads the stream, so it is
+// `NK2308` with the `.clone()` help (ADR-stream-buffers-v1 D2). A copy
+// handed back is allowed.
+use std::io
+
+struct Found {
+    text: String,
+    at: i64,
+}
+
+fn first_long() -> String throws {
+    for line in io::lines() {
+        if line.len() > 3 {
+            return line
+        }
+    }
+    return ""
+}
+
+fn first_found() -> Found? throws {
+    let mut at = 0
+    for line in io::lines() {
+        if line.starts_with("#") {
+            return Found { text: line, at: at }
+        }
+        at += 1
+    }
+    return null
+}
+
+fn first_copy() -> String throws {
+    for line in io::lines() {
+        return line.clone()
+    }
+    return ""
+}
+
+fn main() throws {
+    println(first_long())
+    println(first_found()?.text ?? "")
+    println(first_copy())
+}

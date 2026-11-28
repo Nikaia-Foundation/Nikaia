@@ -344,7 +344,15 @@ fn plan_of(item: ref Item, target: String?, ask: ref BufferAsk, holes_of: fn(ref
     // followed (ADR-stream-buffers-v1 D2), and only that walk answers where
     // they live: the plan's keeps stay the first walk's.
     if walk.stream_loops.len() > 0 {
-        let streamed = walked(item, target, carries, true, ask, holes_of, unaliased) ?? return plan
+        // **A line handed out of the function is kept past the loop**, so
+        // that walk follows every result there is, not only one written as
+        // a view: a copy (`.clone()`) or a value of its own carries no
+        // origin of the stream, so only a view of an item is noted.
+        let any_result = match item {
+            Item::Fn { ret_type, .. } => ret_type != null,
+            else => false,
+        }
+        let streamed = walked(item, target, carries || any_result, true, ask, holes_of, unaliased) ?? return plan
         stream_plan(streamed, plan)
     }
     match item {
