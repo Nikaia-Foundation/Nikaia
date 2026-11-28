@@ -1,0 +1,28 @@
+error[NK2202]: `made` is `sync`, but the cleanup of `Res`, `Res::cleanup`, can pause.
+   --> tests/a_pausing_cleanup_of_a_value_lent_to_a_call_in_a_sync_function_is_nk2202.nika:30:5
+    |
+ 30 |     take(Res { name: "b" })
+    |     ^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: A `sync` function promises never to pause or do I/O.
+    = note: `Res` is cleaned up where it dies in `made`, and `Res::cleanup` doesn't say `sync`.
+    = help: Remove `sync` from `made`, write `sync` after the signature of `Res::cleanup` if it never pauses, or create `Res` outside `made` and pass it in.
+error[NK2202]: `called` is `sync`, but the cleanup of `Res`, `Res::cleanup`, can pause.
+   --> tests/a_pausing_cleanup_of_a_value_lent_to_a_call_in_a_sync_function_is_nk2202.nika:34:5
+    |
+ 34 |     take(res())
+    |     ^^^^^^^^^^^
+    |
+    = note: A `sync` function promises never to pause or do I/O.
+    = note: `Res` is cleaned up where it dies in `called`, and `Res::cleanup` doesn't say `sync`.
+    = help: Remove `sync` from `called`, write `sync` after the signature of `Res::cleanup` if it never pauses, or create `Res` outside `called` and pass it in.
+error[NK2202]: `viewed` is `sync`, but the cleanup of `Res`, `Res::cleanup`, can pause.
+   --> tests/a_pausing_cleanup_of_a_value_lent_to_a_call_in_a_sync_function_is_nk2202.nika:38:5
+    |
+ 38 |     look(Res { name: "c" })
+    |     ^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: A `sync` function promises never to pause or do I/O.
+    = note: `Res` is cleaned up where it dies in `viewed`, and `Res::cleanup` doesn't say `sync`.
+    = help: Remove `sync` from `viewed`, write `sync` after the signature of `Res::cleanup` if it never pauses, or create `Res` outside `viewed` and pass it in.
+3 calls a `sync` function may not make

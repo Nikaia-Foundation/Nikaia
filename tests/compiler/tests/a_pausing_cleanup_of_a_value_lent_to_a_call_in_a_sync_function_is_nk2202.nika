@@ -1,0 +1,45 @@
+// #2589: a value whose cleanup may pause, made in an argument of a `sync`
+// function's call that the callee only lends (`take` never keeps `r`), dies
+// in the caller where the call's statement ends, and its settle pauses:
+// `NK2202` in the caller (ADR-297 D3), as for an unused value
+// (`a_pausing_cleanup_of_an_unused_value_in_a_sync_function_is_nk2202`).
+use std::fs
+
+struct Res {
+    name: String,
+}
+
+impl Cleanup for Res {
+    fn cleanup(ref mut self) throws {
+        fs::write(f"nk2589-{self.name}", fs::scratch(), "x")
+    }
+}
+
+fn res() -> Res sync {
+    Res { name: "a" }
+}
+
+fn take(r: Res) sync throws {
+}
+
+fn look(r: ref Res) sync throws {
+    let _n = r.name.len()
+}
+
+fn made() sync throws {
+    take(Res { name: "b" })
+}
+
+fn called() sync throws {
+    take(res())
+}
+
+fn viewed() sync throws {
+    look(Res { name: "c" })
+}
+
+fn main() throws {
+    made()
+    called()
+    viewed()
+}

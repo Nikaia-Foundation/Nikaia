@@ -270,6 +270,10 @@ pub(crate) fn check_core_args_other<H: CheckHost>(state: &mut CheckState, world:
         if at < expected.len() as i64 && !wants_fn && !(*unsafe { nikaia_std::proven::read(&expected, (at) as usize) }).is_unknown() && !check_core_args_changes(callee, at) { check_core_a_lent_place_passed(state, world, host, arg, !check_core_args_runs(callee, at), span); }
     }
     state.flow.lending_let = !wants_fn;
+    if lends && check_core_expr_makes_a_value(check_peeled(arg)) {
+        state.discarded.insert(id_of(arg) as i64);
+        state.discarded.insert(id_of(check_peeled(arg)) as i64);
+    }
     let found = check_core_expr(state, world, host, arg, span);
     if a_child_handle(&found) { state.a_child_handle_leaving_its_group(span, "it is handed to a call, which may keep it past its group"); }
     state.flow.lending_let = false;
