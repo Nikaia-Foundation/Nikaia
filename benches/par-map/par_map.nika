@@ -1,4 +1,4 @@
-// ADR-async-5 D28's count: `par_iter().map(…).collect()` over 10^6 elements,
+// ADR-async-v6 D28's count: `par_iter().map(…).collect()` over 10^6 elements,
 // a Nikaia program against its Rayon twin.
 //
 // D28 accepts the lowering of a `par_iter` chain only with these rows: the

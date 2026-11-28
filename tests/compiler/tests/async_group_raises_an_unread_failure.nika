@@ -1,5 +1,5 @@
 // A statement task's failure nobody reads is raised at its group's end
-// (ADR-async-5 D21, #988): the group's own statements run on after it, and
+// (ADR-async-v6 D21, #988): the group's own statements run on after it, and
 // the line after the group does not. `run` throws two kinds of error, so its
 // channel carries a task's crash too.
 

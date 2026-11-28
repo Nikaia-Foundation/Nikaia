@@ -1,4 +1,4 @@
-// The function's body is the group of the `async e` in it (ADR-async-5 D9,
+// The function's body is the group of the `async e` in it (ADR-async-v6 D9,
 // #988): an early `return` leaves only after its task has ended.
 
 fn work(n: i64) -> i64 throws {

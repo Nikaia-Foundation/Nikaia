@@ -1,4 +1,4 @@
-// ADR-async-5 D1, D3, D9 (#987): a group waits for every task it started, so
+// ADR-async-v6 D1, D3, D9 (#987): a group waits for every task it started, so
 // each task's result is there, in start order, once the group has ended.
 use std::task
 

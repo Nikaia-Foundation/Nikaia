@@ -1,0 +1,27 @@
+// A `catch` after a tuple of `async` parts has nothing to handle (`NK1134`,
+// ADR-async-v6 D6, D22, #2829): each part is waited for before the tuple,
+// where no `catch` of the statement is, so its failure goes past it; the
+// help writes the fallback after each part.
+enum LoadError {
+    Broken(String),
+}
+
+impl Error for LoadError {
+    fn message(self) -> String {
+        match self {
+            LoadError::Broken(w) => { return f"{w} is broken" }
+        }
+    }
+}
+
+fn joining_load(keep which: String) -> String throws {
+    if which == "b" {
+        throw LoadError::Broken(which)
+    }
+    return which
+}
+
+fn main() throws {
+    let pair = (async joining_load("a"), async joining_load("b")) catch { ("x", "y") }
+    println(pair.0)
+}

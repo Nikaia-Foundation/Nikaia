@@ -20,6 +20,6 @@ warning[NK2123]: `spawn` is replaced by `async(detached)`, which starts the same
  21 | 		spawn fn { println("spawned") }.join()
     |   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
     |
-    = note: `spawn fn { … }` is the earlier spelling of `async(detached) fn { … }` (ADR-async-5 D13); it is removed once every use is rewritten.
+    = note: `spawn fn { … }` is the earlier spelling of `async(detached) fn { … }` (ADR-async-v6 D13); it is removed once every use is rewritten.
     = help: `async(detached)` is refused inside a loop's body (`NK2120`): to run the body for every element beside the others, write `xs.par_iter().for_each fn(x) { … }`.
 

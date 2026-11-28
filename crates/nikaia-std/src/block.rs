@@ -104,7 +104,7 @@ pub fn for_a_task() -> Block {
     Block::with_budget(bytes(PROGRAM.load(Ordering::Relaxed)))
 }
 
-/// **A `par_iter` piece's block** (ADR-async-5 D28): the program's budget,
+/// **A `par_iter` piece's block** (ADR-async-v6 D28): the program's budget,
 /// which each element that runs in it has as a task does. Unlike
 /// [`for_a_task`], it leaves the budget a decision granted the next task to
 /// that task.

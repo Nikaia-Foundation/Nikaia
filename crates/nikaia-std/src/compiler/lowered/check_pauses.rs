@@ -46,7 +46,7 @@ impl CheckState {
         }
         self.note_a_pause();
         if self.in_parallel.is_some() && !self.scoped_task && !self.pausing_walk {
-            let mut parallel: Vec<String> = vec![String::from("Only the lambda of a `par_iter()` chain's `map`, `filter` or `for_each` may pause, and runs one task per element; this one runs on every core at once, and a core that waits holds up its share of the work, so it must never pause (ADR-async-5 D29).")];
+            let mut parallel: Vec<String> = vec![String::from("Only the lambda of a `par_iter()` chain's `map`, `filter` or `for_each` may pause, and runs one task per element; this one runs on every core at once, and a core that waits holds up its share of the work, so it must never pause (ADR-async-v6 D29).")];
             if pause.unpromised.is_some() { parallel.push(nikaia_std::block::Text::from(why.to_string())); }
             self.findings.push(check_refusal("NK2209", span, format!("{} {}, but this runs on several cores at once.", capitalised(&pause.what), pauses), parallel, Some(nikaia_std::block::Text::from(pause.before_walk.to_string()))));
         }

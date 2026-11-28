@@ -1,5 +1,5 @@
 // A `Shared` handed to a struct literal written in an `async` form's
-// `admission:` (ADR-async-5 D18, #987) lands in the struct's field, so its
+// `admission:` (ADR-async-v6 D18, #987) lands in the struct's field, so its
 // handle is the field's: at `user-parallelism = yes` the binding crosses as
 // the field does, in the group form and in the one-task form.
 use std::task

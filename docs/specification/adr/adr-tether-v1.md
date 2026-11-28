@@ -198,7 +198,10 @@ Where a local declared outside a loop keeps views of buffers read inside it and
 removes entries inside that loop (D18), each buffer gets a keep of its own and
 each view kept is a `Held`: the view and a handle on its buffer. A buffer is
 freed when its last view leaves. A view is compared and hashed by **content**,
-never by `(buffer, range)`, so a key cut from two buffers is one key.
+never by `(buffer, range)`, so a key cut from two buffers is one key. An
+overwrite drops the entry it replaces: `xs[i] = v` on a list and `insert` on a
+map whose key may be present remove an entry as `remove` does (supervisor
+decision, 2026-11-28, #2858).
 
 ### D13 — Views are followed by origin, and the analysis errs towards a keep.
 

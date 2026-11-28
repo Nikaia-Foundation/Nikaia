@@ -106,21 +106,32 @@ impl EmitState {
             }
             out.push("}\n");
             let mut over = false;
+            let mut abandoned = false;
             let mut crash_member = false;
             for member in members.iter() {
                 if member == "task::OverBudget" { over = true; }
+                if member == "task::Abandoned" { abandoned = true; }
                 if member == "task::Crashed" { crash_member = true; }
             }
-            if over {
-                let budget = self.sum_member_value(world, "task::OverBudget", "nikaia_std::task::OverBudget");
+            let parted = over || abandoned;
+            if parted {
                 let crash = self.sum_member_value(world, "task::Crashed", "error");
                 let rest = if crash_member { format!("{}::{}({})", name, sum_variant("task::Crashed"), crash) } else { String::from("std::panic::resume_unwind(std::boxed::Box::new(error.to_string()))") };
-                out.push(&format!("impl{} From<nikaia_std::task::Crashed> for {}{} {{\n    fn from(error: nikaia_std::task::Crashed) -> {}{} {{\n        if error.over_budget() {{\n            return {}::{}({});\n        }}\n        {}\n    }}\n}}\n", decl, name, params, name, params, name, sum_variant("task::OverBudget"), budget, rest));
+                let mut taken = String::from("");
+                if over {
+                    let budget = self.sum_member_value(world, "task::OverBudget", "nikaia_std::task::OverBudget");
+                    taken = format!("{}        if error.over_budget() {{\n            return {}::{}({});\n        }}\n", taken, name, sum_variant("task::OverBudget"), budget);
+                }
+                if abandoned {
+                    let why = self.sum_member_value(world, "task::Abandoned", "why.clone()");
+                    taken = format!("{}        if let Some(why) = error.abandoned_by() {{\n            return {}::{}({});\n        }}\n", taken, name, sum_variant("task::Abandoned"), why);
+                }
+                out.push(&format!("impl{} From<nikaia_std::task::Crashed> for {}{} {{\n    fn from(error: nikaia_std::task::Crashed) -> {}{} {{\n{}        {}\n    }}\n}}\n", decl, name, params, name, params, taken, rest));
             }
             for member in members.iter() {
                 let variant = sum_variant(member);
                 let held = self.sum_member_held(world, member, &params);
-                if over && member == "task::Crashed" { continue; }
+                if parted && member == "task::Crashed" { continue; }
                 out.push(&format!("impl{} From<{}> for {}{} {{\n    fn from(error: {}) -> {}{} {{ {}::{}(error) }}\n}}\n", decl, held, name, params, held, name, params, name, variant));
                 if self.name_of_error(world, member) == 2 {
                     let bare = library_error_path(member, self.is_std);

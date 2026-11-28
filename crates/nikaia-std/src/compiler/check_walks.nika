@@ -69,7 +69,7 @@ fn check_walks_shared(changed_by: ref Vec[collections::BTreeSet[String]], mentio
     return null
 }
 
-/// **One task of an `async` group** (ADR-async-5 D7), for the conflicts
+/// **One task of an `async` group** (ADR-async-v6 D7), for the conflicts
 /// between the tasks of the group: where it stands, the position it runs
 /// until (where it is waited for), and the operations it performs, `null`
 /// where it cannot be accounted for (it is then not refused, Part III C.4).
@@ -112,7 +112,7 @@ fn check_walks_tasks_in(state: ref CheckState, block: ref Block, group: i64, mut
     }
 }
 
-/// **Where a child task runs beside the main line** (ADR-async-5 D11,
+/// **Where a child task runs beside the main line** (ADR-async-v6 D11,
 /// D12): from where it starts - an `async(handle)` where it stands, an
 /// `async(deferred)` at its `h.start()` - until the first later statement of
 /// its block that names the handle (its `join()` or `cancel()`), or its
@@ -341,7 +341,7 @@ fn check_walks_door_on(state: ref CheckState, value: ref Expr, receiver: ref Exp
     return CheckWalksDoor::Door(Operation { binds: null, mentions: mentions, reaches: reaches, callee: f"{lock}::{door}" })
 }
 
-/// **A `par_iter` lambda meets its own other runs** (ADR-async-5 D26, Part
+/// **A `par_iter` lambda meets its own other runs** (ADR-async-v6 D26, Part
 /// II 12.6): it runs once per element, beside its runs for the others, so
 /// what it reaches is asked of itself as two tasks are (`NK2104`), at the
 /// lambda. A lock is left out: a `SharedMut` changed through `update` is the
@@ -545,7 +545,7 @@ impl CheckState {
         }
     }
 
-    /// **The tasks of one `async` group meet on nothing** (ADR-async-5 D7):
+    /// **The tasks of one `async` group meet on nothing** (ADR-async-v6 D7):
     /// two that run at the same time - the later one starts before the
     /// earlier one is waited for - may not share a resource one of them
     /// writes (`NK2104`); a name a task changes is `NK2107` on its own. One

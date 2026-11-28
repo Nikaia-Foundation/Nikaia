@@ -1,4 +1,4 @@
-// A task handle's `join()` takes it (Part III `NK2105`, ADR-async-5 D12,
+// A task handle's `join()` takes it (Part III `NK2105`, ADR-async-v6 D12,
 // #2645): a second `join()` of a child handle, or of a detached task's
 // handle, uses a handle already taken, and is `NK2105`, not rustc's use of
 // a moved value.

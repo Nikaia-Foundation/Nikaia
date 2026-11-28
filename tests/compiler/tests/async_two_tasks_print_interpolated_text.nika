@@ -1,5 +1,5 @@
 // Two tasks of one group print text with holes and a name each reads: both
-// write standard output, so they meet, `NK2104` (ADR-async-5 D7). The touch
+// write standard output, so they meet, `NK2104` (ADR-async-v6 D7). The touch
 // set reads an `f"…"`'s holes as code (ADR-309), and a name a task reads is
 // no reason to leave it unaccounted, since the task is no closure carried
 // anywhere else (#2508).

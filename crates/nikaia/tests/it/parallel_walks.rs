@@ -72,7 +72,7 @@ fn a_parallel_walk_means_the_same_at_both_settings() {
 }
 
 /// **D2: a fold's lambda may not pause** - `NK2209`, Part II 12.6's demand
-/// in the code Part III gives it, kept for `fold` by ADR-async-5 D29 (a
+/// in the code Part III gives it, kept for `fold` by ADR-async-v6 D29 (a
 /// `map`'s lambda may pause since D24, and runs one task per element).
 #[test]
 fn a_pause_in_a_parallel_lambda_is_refused() {

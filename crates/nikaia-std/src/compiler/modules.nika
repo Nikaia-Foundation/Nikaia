@@ -198,7 +198,7 @@ fn pause_path(chain: ref Vec[String]) -> String {
 
 /// **ADR-288 D32's warning for one function**, said whatever the committed
 /// ledger holds: `lost_sync_against` keeps it where that ledger says the
-/// function could not pause. **A `par_iter` call's** (ADR-async-5 D32,
+/// function could not pause. **A `par_iter` call's** (ADR-async-v6 D32,
 /// `NK2119`) is keyed `FUNCTION#par_iter N`, and kept where that ledger says
 /// the call ran in pieces: one list, so the build cache stores both alike.
 pub struct SyncLost {
@@ -271,7 +271,7 @@ fn par_site_mark() -> String sync {
     return "#par_iter "
 }
 
-/// **ADR-async-5 D32's warning** (`NK2119`) for every `par_iter` call of the
+/// **ADR-async-v6 D32's warning** (`NK2119`) for every `par_iter` call of the
 /// program's own that runs one task per element, at the statement of the
 /// lambda that makes it pause, with the calls that lead there: said whatever
 /// the committed ledger holds, `lost_sync_against` keeps it where that ledger
@@ -303,7 +303,7 @@ pub fn lost_pieces_all(sites: ref Vec[ParSite], pauses: ref collections::BTreeMa
     return out
 }
 
-/// **The ledger's `par_iter` column** (ADR-async-5 D32): each function's
+/// **The ledger's `par_iter` column** (ADR-async-v6 D32): each function's
 /// calls, `"pieces"` or `"tasks"`, in their order.
 fn par_iter_column(mut ledger: Ledger, sites: ref Vec[ParSite]) {
     for site in sites {

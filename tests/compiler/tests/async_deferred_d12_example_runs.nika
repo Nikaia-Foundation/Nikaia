@@ -1,4 +1,4 @@
-// ADR-async-5 D12's example as the ADR writes it (#2645): a deferred handle
+// ADR-async-v6 D12's example as the ADR writes it (#2645): a deferred handle
 // is bound with `let mut`, since `start(mut self)` changes it (Part III B.2);
 // one path starts and joins it, the other cancels it, which takes it.
 struct Disk {

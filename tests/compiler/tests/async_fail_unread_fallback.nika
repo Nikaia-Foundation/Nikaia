@@ -1,5 +1,5 @@
 // A task nobody reads that has a fallback raises nothing at its group's end
-// (ADR-async-5 D21, D22, #2561): the fallback runs for its failure instead,
+// (ADR-async-v6 D21, D22, #2561): the fallback runs for its failure instead,
 // for a statement task, a binding nothing names and a child handle never
 // joined alike, and the group ends with its value. A deadline binds the task
 // inside its fallback, which stands in for `task::TimedOut` too (D16).

@@ -1,4 +1,4 @@
-// `async(handle) fn { … } catch { f }` (Part I 8.1.2, ADR-async-5 D11, D22,
+// `async(handle) fn { … } catch { f }` (Part I 8.1.2, ADR-async-v6 D11, D22,
 // #986): the fallback stands in for the value of a child task that fails, so
 // `join()` gives it; a task that does not fail gives its own value.
 struct Bad {}

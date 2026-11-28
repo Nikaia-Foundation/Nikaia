@@ -283,7 +283,7 @@ impl EmitState {
             walk.async_keeps = keeps
             rendered.record(block.stmts[0].span, st)
             // A statement task's cell is waited for at the block's end
-            // (ADR-async-5 D37), which only the long form writes.
+            // (ADR-async-v6 D37), which only the long form writes.
             if !rendered.buf.contains("\n") && walk.async_rests.len() == rests {
                 out.push("{ ")
                 out.append(rendered)
@@ -373,7 +373,7 @@ impl EmitState {
             out.record(block.stmts[i].span, st)
             // **The value of a block that waits for cells at its end** is
             // taken before the waits; the cells the last statement asked for
-            // (a statement task's, ADR-async-5 D37) are declared outside it.
+            // (a statement task's, ADR-async-v6 D37) are declared outside it.
             let ending = i == last && walk.async_rests.len() > rests
             if ending && here.is_value() {
                 let mut at = st
@@ -1197,7 +1197,17 @@ impl EmitState {
         let (before, after) = emit_around(self.facts.nullable_sites.get(at))
         out.push("{ let __nikaia_stored = ")
         out.push(before)
-        self.emit_expr(world, walk, out, host, value, depth, flow, scope)
+        // **A view overwriting an element of a container that holds its views
+        // is held** (ADR-tether-v1 D12, #2858): by the keeps of the buffers it
+        // points into, as `push` holds one.
+        let root = emit_read_root(world, base) ?? ""
+        let held_keeps = if root == "" { null } else { self.emit_stmt_held_keeps(walk, scope.function, at, root) }
+        if held_keeps != null {
+            let no_buffers: Vec[i64] = []
+            self.emit_held_value(world, walk, out, host, value, held_keeps ?? "", no_buffers, self.emit_stmt_held_place(walk, scope.function, at, root), scope.function, depth, flow, scope)
+        } else {
+            self.emit_expr(world, walk, out, host, value, depth, flow, scope)
+        }
         // A handle stored is duplicated where it is read again (#1212).
         if self.facts.stored_handles.contains(node_key(value)) {
             out.push(".clone()")
@@ -1567,7 +1577,7 @@ impl EmitState {
             // A produced sequence is walked by value (ADR-105 D2).
             out.push(f"{opened};\n")
             out.push(inner)
-            // **Each step is a pause of the main line** (ADR-async-5 D37):
+            // **Each step is a pause of the main line** (ADR-async-v6 D37):
             // under a gate, the waiting tasks start meanwhile.
             out.push(f"{allowed}while let Some({stepped_bound}) = __nikaia_sequence.{stepped}(){emit_async_pause(walk)} ")
             self.emit_stmt_block_opening_with(world, walk, out, host, body, depth + 1, flow.inside_a_loop(), scope, EmitTail::Statement, emit_counted_turn(host.counts_steps(), unwrap))
@@ -1591,7 +1601,7 @@ impl EmitState {
             }
         }
         out.push(f"{allowed}for {bound} in ")
-        // **A `for` over a walk with `within:` lists it first** (ADR-async-5
+        // **A `for` over a walk with `within:` lists it first** (ADR-async-v6
         // D27), and throws `task::TimedOut` there where its deadline ran out.
         let timed = self.facts.timed_loops.contains(at)
         if timed {
@@ -1960,7 +1970,7 @@ impl EmitState {
         }
         // `if x { … };` is legal and noisy; a block-shaped statement ends where
         // its brace does. `async { … }` is not one: it is written as the call
-        // of `task::group` (ADR-async-5 D9), which a `;` ends.
+        // of `task::group` (ADR-async-v6 D9), which a `;` ends.
         let block_shaped = match expr {
             Expr::If { .. } => true,
             Expr::Block(_, _) => true,
@@ -2029,7 +2039,7 @@ fn emit_stmt_declare_slots(mut walk: EmitWalk, mut out: EmitOut, mark: i64, slot
 /// **The end of a block that declared cells of rests** (Part I 8.2, #987):
 /// each still running is waited for here, in the order they started; the
 /// cells leave the walk. Under a gate the group's tasks run meanwhile, and
-/// those still waiting for a place start as places free (ADR-async-5 D37).
+/// those still waiting for a place start as places free (ADR-async-v6 D37).
 fn emit_stmt_finish_rests(mut walk: EmitWalk, rests: i64, pad: ref String) -> String {
     let mut finished = ""
     let line = emit_async_line(walk.async_gates)

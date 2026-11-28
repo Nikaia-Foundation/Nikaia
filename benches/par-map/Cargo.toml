@@ -4,7 +4,7 @@ version = "0.0.0"
 edition = "2021"
 publish = false
 
-# The Rayon side of ADR-async-5 D28's count: `par_map.nika` builds these at
+# The Rayon side of ADR-async-v6 D28's count: `par_map.nika` builds these at
 # the workspace's `release` profile (opt-level 3, no LTO) and counts them
 # against the `.nika` programs beside this file. See README.md.
 [dependencies]

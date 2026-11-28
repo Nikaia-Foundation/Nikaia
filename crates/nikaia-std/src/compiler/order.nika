@@ -242,7 +242,7 @@ pub fn accounted(stmt: ref Stmt, words: ref winnow_grammar::InternerContext, wal
 }
 
 /// [`accounted`] for a statement that **runs beside** another, a task or a
-/// statement in a task's window (ADR-async-5 D7, #1354): a failure nobody
+/// statement in a task's window (ADR-async-v6 D7, #1354): a failure nobody
 /// catches leaves the function, but what runs beside it has run by then
 /// already, so it is no reason to leave the statement unaccounted for.
 fn accounted_beside(stmt: ref Stmt, words: ref winnow_grammar::InternerContext, walking: ref Walking) -> Accounted {
@@ -311,7 +311,7 @@ fn accounted_value(binds: String?, value: ref Expr, names: ref winnow_grammar::I
 // a `par_iter` lambda's run) is not carried into a closure of its own, so a
 // value read from somewhere else (a name, a field, a `??`'s fallback, all of
 // whose calls the walk did read) leaves nothing unaccounted there; a node the
-// walk stopped at still does (ADR-async-5 D7, D26).
+// walk stopped at still does (ADR-async-v6 D7, D26).
 fn accounted_reduced(binds: String?, mentions: collections::BTreeSet[String], reduced: ref Reduced, guarded: i64, beside: bool, walking: ref Walking) -> Accounted {
     if reduced.calls.len() == 0 && !reduced.performs {
         // Nothing here reaches the world at all.
@@ -831,7 +831,7 @@ fn padded_right(text: ref String, width: i64) -> String {
     return out
 }
 
-/// **Every task an `async` form starts, by function** (ADR-async-5 D32): for
+/// **Every task an `async` form starts, by function** (ADR-async-v6 D32): for
 /// each, in written order, its window (the first and the last line of what
 /// runs beside it), where it is waited for, its group's end, and whether it
 /// is started first (ADR-292 D6, D20: a task that may pause is started before
@@ -912,7 +912,7 @@ fn tasks_of_function(key: ref String, body: ref Block, lines: ref Vec[ref String
 // report says them.
 fn task_fields(id: i64, site: ref TaskSite, line: i64, lines: ref Vec[ref String], walk: ref TaskWalk, waits: ref collections::BTreeMap[i64, CheckAsyncWait]) -> (String, String, String) {
     if site.detached {
-        return (f"from line {line}, past its group", "where its handle is joined, if it is", "none: it may outlive its group (ADR-async-5 D13)")
+        return (f"from line {line}, past its group", "where its handle is joined, if it is", "none: it may outlive its group (ADR-async-v6 D13)")
     }
     let wait = waits.get(id) ?? return (f"from line {line}", "not recorded by the checker", "not recorded by the checker")
     let group_end = task_last_line(lines, walk.groups.get(wait.group) ?? site.end)
@@ -1029,7 +1029,7 @@ fn tasks_in_block(block: ref Block, mut walk: TaskWalk, pauses: fn(ref Expr) -> 
 }
 
 /// **Every `par_iter` call and the execution chosen for it**, for
-/// `--overlaps` (ADR-async-5 D25, D32): one task per element where a `map`,
+/// `--overlaps` (ADR-async-v6 D25, D32): one task per element where a `map`,
 /// `filter` or `for_each` of the walk has a lambda that pauses, named by the
 /// call in it that pauses; in pieces on the cores where none does. `fanned`
 /// answers, by a lambda's node, whether the checker handed it to the
@@ -1053,8 +1053,8 @@ pub fn par_report(items: ref Vec[Spanned[Item]], names: ref winnow_grammar::Inte
             let written = lines[line - 1].trim()
             out.push_str(ref f"    par_iter {site.number}, line {line}: `{written}`\n")
             let runs = match site.pausing {
-                null => "in pieces on the cores: no lambda of it pauses (ADR-async-5 D25)",
-                pause => f"one task per element: a lambda of it pauses at its call of `{pause?.callee ?? ""}` (ADR-async-5 D25)",
+                null => "in pieces on the cores: no lambda of it pauses (ADR-async-v6 D25)",
+                pause => f"one task per element: a lambda of it pauses at its call of `{pause?.callee ?? ""}` (ADR-async-v6 D25)",
             }
             out.push_str(ref f"        runs        {runs}\n")
         }
@@ -1064,7 +1064,7 @@ pub fn par_report(items: ref Vec[Spanned[Item]], names: ref winnow_grammar::Inte
 }
 
 /// **One `par_iter` call of a function and the execution chosen for it**
-/// (ADR-async-5 D25, D32): what `--overlaps` reports, what the ledger's
+/// (ADR-async-v6 D25, D32): what `--overlaps` reports, what the ledger's
 /// `par_iter` column records, and what `NK2119` compares against it.
 pub struct ParSite {
     /// The function it stands in, by the ledger's key.
@@ -1109,7 +1109,7 @@ pub fn par_sites(items: ref Vec[Spanned[Item]], names: ref winnow_grammar::Inter
     return out
 }
 
-/// **The `par_iter` sites of a checked unit** (ADR-async-5 D32): a lambda
+/// **The `par_iter` sites of a checked unit** (ADR-async-v6 D32): a lambda
 /// is fanned where the check handed it to a `fan_*` entry, and a call pauses
 /// as the emitter decides it - a free call by the key it resolves to in
 /// `own` or `library`, a method call by what the check said of it.

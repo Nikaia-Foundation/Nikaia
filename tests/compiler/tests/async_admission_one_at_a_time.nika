@@ -1,4 +1,4 @@
-// `admission:` on `async { … }` (ADR-async-5 D18, #986): a strategy of the
+// `admission:` on `async { … }` (ADR-async-v6 D18, #986): a strategy of the
 // program's own that lets a task start only where none runs, so of three tasks
 // that pause never more than one runs at once.
 use std::time

@@ -1,5 +1,5 @@
 // `on_timeout: task::OnTimeout::Cancel` on a `task::ChildHandle` cancels the
-// task when the wait runs out (Part I 8.2, ADR-async-5 D17): it never reaches
+// task when the wait runs out (Part I 8.2, ADR-async-v6 D17): it never reaches
 // its last line, and the handle is used up. A join with
 // `task::OnTimeout::Keep` that does not time out gives the value.
 

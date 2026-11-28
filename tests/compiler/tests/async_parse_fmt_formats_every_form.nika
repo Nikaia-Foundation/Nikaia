@@ -1,4 +1,4 @@
-// `nikaia fmt` formats every `async` form the parser takes (ADR-async-5,
+// `nikaia fmt` formats every `async` form the parser takes (ADR-async-v6,
 // #984): `async(detached) fn { … }` on one line, over several, as a
 // statement, with a call after it and with an argument the checker refuses
 // (`NK2103`); and formatting twice changes nothing. The forms the parser

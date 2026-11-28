@@ -1,4 +1,4 @@
-// ADR-async-5 D21 (#987): two failures nobody reads are both kept until the
+// ADR-async-v6 D21 (#987): two failures nobody reads are both kept until the
 // group's end, and the first in start order is the one thrown there, whichever
 // task ended first; the second joins it (a program does not read the joined
 // ones, Part I 7.1: an uncaught failure shows them under the first). Every

@@ -908,6 +908,22 @@ fn walked_statement(stmt: ref Stmt, span: ref Span, ask: ref BufferAsk, holes_of
                     walk.wholes.insert((at, root.clone()), bound?.at ?? 0)
                 }
             }
+            // **An element overwritten drops the one it replaces** (ADR-tether-v1
+            // D12, supervisor decision on #2858): `xs[i] = w` and `m[k] = w` are
+            // a removal and a put, as `m.insert(k, w)` is.
+            let overwritten = op == null && match target {
+                Expr::Index { .. } => true,
+                else => false,
+            }
+            if overwritten {
+                shed(root, walk)
+                put_into(root, 0, origins, put_shape(value, origins, ask, walk), walk)
+                note_parts(root, 0, value, ask, holes_of, unaliased, walk)
+                let named = struct_of(value, ask, walk)
+                if named != null {
+                    walk.struct_puts.insert(root.clone(), named ?? "")
+                }
+            }
             // **A buffer handed over whole is a move**, the rule a `return`
             // and a `let` already have: `inner = args` takes the buffer along,
             // so `inner` is the buffer now and no view of it is left behind.
@@ -968,8 +984,10 @@ fn walked_statement(stmt: ref Stmt, span: ref Span, ask: ref BufferAsk, holes_of
             }
             // **A word of a split buffer is plainly a view of it** (#2842).
             let plain = !mutable && bindings.len() == 1 && plain_pieces(iter, ask, walk)
+            // It is text too, so `name.clone()` of it is a copy that views
+            // nothing (#2858).
             for name in bindings {
-                bind_local(ask.names.resolve(name).clone(), a_local(at, walk.path, origins.clone(), null, false, a_stream), walk)
+                bind_local(ask.names.resolve(name).clone(), a_local(at, walk.path, origins.clone(), null, false, a_stream || plain), walk)
                 if plain {
                     walk.plain.insert((at, ask.names.resolve(name).clone()))
                 }
@@ -1018,6 +1036,21 @@ fn walked_statement(stmt: ref Stmt, span: ref Span, ask: ref BufferAsk, holes_of
         }
         else => {}
     }
+}
+
+// **An `insert` on a map drops the entry it replaces** (ADR-tether-v1 D12,
+// supervisor decision on #2858): the key may be present. A list's `insert`
+// shifts its entries and drops none; a receiver whose type is not written is
+// taken as a map, which costs a count per view, never a buffer kept too long.
+fn overwrites_by_key(receiver: ref Expr, method: ref String, args: ref Vec[Expr], ask: ref BufferAsk, walk: ref BufferWalk) -> bool {
+    if method != "insert" || args.len() != 2 {
+        return false
+    }
+    let root = root_of(ask.names, receiver) ?? return false
+    let local = local_of(root, walk) ?? return true
+    let ty = local.ty ?? return true
+    let container = last_segment(ask.names.resolve(ty.name))
+    return container != "Vec" && container != "List" && container != "VecDeque" && container != "Deque"
 }
 
 fn shed(root: ref String, mut walk: BufferWalk) {
@@ -2435,7 +2468,7 @@ fn method_origins(call: ref Expr, ask: ref BufferAsk, holes_of: fn(ref Expr) -> 
         Expr::SafeMethod { receiver, method, args, .. } => (receiver, ask.names.resolve(method).clone(), args),
         else => return collections::BTreeSet(),
     }
-    if drops_entries(method) {
+    if drops_entries(method) || overwrites_by_key(receiver, method, args, ask, walk) {
         let root = root_of(ask.names, receiver)
         if root != null {
             shed(root ?? "", walk)

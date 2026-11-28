@@ -1,4 +1,4 @@
-// `async(detached)` takes a lambda (ADR-async-5 D13).
+// `async(detached)` takes a lambda (ADR-async-v6 D13).
 
 fn work() -> i64 {
 	return 1

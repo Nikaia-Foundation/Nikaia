@@ -4,7 +4,7 @@ warning[NK2124]: `overlap` is replaced by `async`, which starts each branch as a
  3 |     let p = overlap {
    |     ^^^^^^^^^^^^^^^^^
    |
-   = note: Each branch of an `overlap` is a task beside the others; `async e` starts one, waited for where its value is first needed, and `async { … }` waits for the tasks it starts at its end (ADR-async-5 D6, D9). The block is removed once every use is rewritten.
+   = note: Each branch of an `overlap` is a task beside the others; `async e` starts one, waited for where its value is first needed, and `async { … }` waits for the tasks it starts at its end (ADR-async-v6 D6, D9). The block is removed once every use is rewritten.
    = help: Write `let (x, y) = (async a(), async b())` for the values, or `async { async a()  async b() }` for branches that give nothing. A branch of several steps is `async fn { … }`; inside a loop's body, `xs.par_iter()`.
 error[NK2104]: These two branches can't run at the same time.
   --> tests/overlap_two_branches_change_one_binding.nika:5:9

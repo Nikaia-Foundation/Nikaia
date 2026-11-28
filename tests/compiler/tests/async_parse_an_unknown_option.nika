@@ -1,4 +1,4 @@
-// An `async` option is one of the six ADR-async-5 D11-D15 name.
+// An `async` option is one of the six ADR-async-v6 D11-D15 name.
 
 fn main() throws {
 	let h = async(eager) fn { 1 }

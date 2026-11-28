@@ -390,7 +390,7 @@ impl EmitState {
             Expr::LitNull(_) => out.push("None"),
             Expr::Variable(name, _) => {
                 // A binding of `async e` only other tasks name is waited for in
-                // the task that names it (ADR-async-5 D8); the map holds the
+                // the task that names it (ADR-async-v6 D8); the map holds the
                 // join itself.
                 let handle = walk.async_handles.get(emit_text(world, name))
                 if handle != null {
@@ -617,7 +617,7 @@ impl EmitState {
                 walk.async_deferred = deferred
                 self.emit_core_spawn(world, walk, out, host, body, depth, flow, scope)
             },
-            // Part I 8.1.2 (ADR-async-5 D6, D9, #988): a task of its group,
+            // Part I 8.1.2 (ADR-async-v6 D6, D9, #988): a task of its group,
             // waited for where the checker recorded; and the group.
             Expr::Async(task, id, within, admission) => {
                 let kind = self.emit_async_kind(id.get())

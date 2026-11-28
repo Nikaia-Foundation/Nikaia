@@ -1,4 +1,4 @@
-// `async` before a `let` is refused (ADR-async-5 D5, `NK2115`): `async` is a
+// `async` before a `let` is refused (ADR-async-v6 D5, `NK2115`): `async` is a
 // prefix of an expression and stands on the right of the `=`.
 
 fn main() throws {

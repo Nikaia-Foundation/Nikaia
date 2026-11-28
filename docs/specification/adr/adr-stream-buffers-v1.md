@@ -13,7 +13,7 @@ may not be kept without a bound), D15 there (a held view is checked against the
 buffer the plan names); [ADR-grammar-typed-read-v2](adr-grammar-typed-read-v2.md)
 D7 (a `@stream` entry over a stream); [ADR-loop-failure-v1](adr-loop-failure-v1.md)
 D4 (`io::lines()` yields views); [ADR-149](adr-149.md) (a channel is only
-bounded, `send` pauses); [ADR-async-5](adr-async-5.md) D2 (what a task takes);
+bounded, `send` pauses); [ADR-async-v6](adr-async-v6.md) D2 (what a task takes);
 [ADR-037](adr-037.md) D3 (a count per build); [ADR-views-v4](adr-views-v4.md)
 D5 (a view is inferred, never written)
 
@@ -102,7 +102,7 @@ receiver slows the reading; memory stays the pool.
 
 A count is taken as Perceus takes one: no count for a borrow, a dup and its drop
 cancelled where both are seen, the drop at the last use, a freed buffer reused
-for the next read, atomic only where a view crosses a task (ADR-async-5 D2).
+for the next read, atomic only where a view crosses a task (ADR-async-v6 D2).
 A buffer points to nothing, so no count can form a cycle.
 
 ### D6 — An item is never larger than a buffer: a longer text is handed over in parts.

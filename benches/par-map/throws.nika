@@ -1,4 +1,4 @@
-// ADR-async-5 D28's first row: `par_iter().map(…).collect()` over 10^6
+// ADR-async-v6 D28's first row: `par_iter().map(…).collect()` over 10^6
 // elements with a lambda that can throw. No element fails, so the output pins
 // every value and both sides return the whole list; what is counted is the
 // cost of a chain whose lambda may fail: each element's result carried as a

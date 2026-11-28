@@ -141,7 +141,7 @@ fn emit_is_kept(lifetimes: EmitLifetimes) -> bool {
 /// The signature line: visibility, `async`, name, declared parameters, the
 /// parameters and the result.
 impl EmitState {
-    /// **The group a function's body is** (ADR-async-5 D9): the checker's `-1 -`
+    /// **The group a function's body is** (ADR-async-v6 D9): the checker's `-1 -`
     /// its first statement's start, where a task of `async e` in it has no
     /// `async { }` nearer; `0` where none has.
     fn emit_async_body_group(ref self, body: ref Block) -> i64 sync {
@@ -1295,14 +1295,14 @@ impl EmitState {
                             self.emit_function_body(world, walk, out, host, body, depth, throws_, returns_value, awaited, key, channel, host.counts_steps(), host.skip_free_at_exit())
                             walk.async_pausing = outer_pausing
                         } else {
-                            // **The body is the group of its `async e`** (ADR-async-5
+                            // **The body is the group of its `async e`** (ADR-async-v6
                             // D9, D21, #988): it runs as `task::group`'s function,
                             // so a `return` or a failure leaves only after every
                             // task it started has ended.
                             let mut inner = EmitOut::empty()
                             let outer_groups = walk.async_groups.clone()
                             walk.async_groups = [group]
-                            // **Its gate** (ADR-async-5 D18, D37): std's
+                            // **Its gate** (ADR-async-v6 D18, D37): std's
                             // strategy decides when each task starts, where
                             // the function pauses; one that never pauses
                             // runs each task to its end where it starts, so
@@ -1323,14 +1323,14 @@ impl EmitState {
                             }
                             let name = emit_async_group_name(group)
                             // **A channel that cannot carry a crash** (ADR-328
-                            // D8, #1360, ADR-async-5 D35): no task can panic,
+                            // D8, #1360, ADR-async-v6 D35): no task can panic,
                             // or each reads its own crash, so the tasks fail
                             // in `task::OrCrash` of it and the function's
                             // failures leave through the group's value.
                             let grouped = throws_ && self.emit_async_tasks_channel(channel) == channel
                             let raised = throws_ && !grouped
                             // **A failure of a task nobody read arrives at
-                            // the group's end** (ADR-async-5 D23): the
+                            // the group's end** (ADR-async-v6 D23): the
                             // function's own name, as its raise sites are.
                             let named = key.rsplit("::").next() ?? ""
                             let site = f"&{rust_string(named)}"

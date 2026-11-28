@@ -1,5 +1,5 @@
 // `let x = async e` is waited for just before the first statement of its
-// block that names `x`, nested in an `if` too (ADR-async-5 D6, #986): the
+// block that names `x`, nested in an `if` too (ADR-async-v6 D6, #986): the
 // task is joined before the `if` (#988).
 
 fn load(n: i64) -> i64 {

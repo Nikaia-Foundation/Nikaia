@@ -169,7 +169,7 @@ fn check_core_method_witness(world: ref CheckWorld, method: ref String, config: 
 }
 
 /// Where `join`'s `on_timeout:` stands among the options, or -1: only beside
-/// a `within:` (ADR-async-5 D17).
+/// a `within:` (ADR-async-v6 D17).
 fn check_core_method_on_timeout(world: ref CheckWorld, method: ref String, config: ref Vec[ConfigArg], witness: i64) -> i64 sync {
     if method != "join" || witness < 0 {
         return -1
@@ -367,7 +367,7 @@ fn check_core_method_run(on: ref Ty) -> Ty? {
 }
 
 /// Whether the type is a task's handle, a `TaskHandle` or a
-/// `task::ChildHandle`: both take `join(within:, on_timeout:)` (ADR-async-5
+/// `task::ChildHandle`: both take `join(within:, on_timeout:)` (ADR-async-v6
 /// D17).
 fn check_core_method_task_handle(ty: ref Ty) -> bool {
     return match ty {
@@ -1194,7 +1194,7 @@ fn check_core_method[H: CheckHost](mut state: CheckState, world: ref CheckWorld,
     return found
 }
 
-/// **`xs.par_iter(within: d)` is a walk with a deadline** (ADR-async-5
+/// **`xs.par_iter(within: d)` is a walk with a deadline** (ADR-async-v6
 /// D27): what it hands back carries it, through `map`, `filter` and the rest,
 /// to the step that ends the walk, which throws `task::TimedOut`. So does
 /// `limit: 1`, the literal (D15): its elements run one at a time.
@@ -1262,7 +1262,7 @@ fn check_core_method_walked[H: CheckHost](mut state: CheckState, world: ref Chec
     // `join(within: d)` is `TaskHandle::join(within)` the same way (ADR-346
     // D4).
     let witness = check_core_method_witness(world, name, config)
-    // **`on_timeout:` goes with the witness of `join`** (ADR-async-5 D17):
+    // **`on_timeout:` goes with the witness of `join`** (ADR-async-v6 D17):
     // typed as `join(within, on_timeout)`'s argument once the receiver is a
     // `TaskHandle`, walked as any option otherwise.
     let on_timeout = check_core_method_on_timeout(world, name, config, witness)
@@ -1517,7 +1517,7 @@ fn check_core_method_walked[H: CheckHost](mut state: CheckState, world: ref Chec
 }
 
 /// **A task handle's `join()`, `cancel()` and `detach()` take it** (Part III
-/// `NK2105`, ADR-async-5 D12, #2645): the receiver of a method that takes
+/// `NK2105`, ADR-async-v6 D12, #2645): the receiver of a method that takes
 /// `self` is handed over, so a later use of the name is `NK2105`, not rustc's
 /// use of a moved value. A `join(within:)` is left out: in the handler of its
 /// `task::TimedOut` the handle is still live (Part I 8.2).

@@ -1,5 +1,5 @@
 // #2500: `check --overlaps` names, per `par_iter` call, the execution the
-// compiler chose (ADR-async-5 D25, D32): in pieces on the cores where no
+// compiler chose (ADR-async-v6 D25, D32): in pieces on the cores where no
 // lambda of it pauses, one task per element where one does, with the call
 // that makes it pause.
 use std::env

@@ -1,5 +1,5 @@
 // `let x = async e` starts its task where it is written and waits for it just
-// before the first statement that names `x` (ADR-async-5 D6, #988): the
+// before the first statement that names `x` (ADR-async-v6 D6, #988): the
 // window's statement runs first, and `x` is a plain value there.
 
 fn load(n: i64) -> i64 {

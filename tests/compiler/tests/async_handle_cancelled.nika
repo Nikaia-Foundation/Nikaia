@@ -1,4 +1,4 @@
-// `cancel()` on a child handle (Part I 8.1.2, ADR-async-5 D11, #986): a task
+// `cancel()` on a child handle (Part I 8.1.2, ADR-async-v6 D11, #986): a task
 // that pauses stops at its pause, and its group does not wait for its rest.
 use std::time
 

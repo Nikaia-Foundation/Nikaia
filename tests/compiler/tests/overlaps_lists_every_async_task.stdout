@@ -33,6 +33,6 @@ main: 7 tasks an `async` form starts, 3 of them started first
     task 7, line 27: `let f = async(detached) fn { double(10) }`
         window      from line 27, past its group
         waited for  where its handle is joined, if it is
-        group ends  none: it may outlive its group (ADR-async-5 D13)
+        group ends  none: it may outlive its group (ADR-async-v6 D13)
         starts      after the tasks before it that pause: it never pauses (ADR-292 D6)
 Checked main.nika

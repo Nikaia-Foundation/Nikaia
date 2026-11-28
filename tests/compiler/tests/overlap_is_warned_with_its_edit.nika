@@ -1,4 +1,4 @@
-// #990: `overlap` warns `NK2124` (ADR-async-5 D39): bound, the edit writes a
+// #990: `overlap` warns `NK2124` (ADR-async-v6 D39): bound, the edit writes a
 // tuple of `async`; branches that change a name the others see get none.
 fn work(n: i64) -> i64 sync {
     return n * 2

@@ -1,4 +1,4 @@
-// #990: `nikaia fix --only NK2124` rewrites `overlap` (ADR-async-5 D39): a
+// #990: `nikaia fix --only NK2124` rewrites `overlap` (ADR-async-v6 D39): a
 // bound block becomes a tuple of `async`, a statement block whose branches
 // give nothing becomes `async { async a()  async b() }`.
 use std::env

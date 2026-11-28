@@ -687,7 +687,6 @@ pub(crate) fn project_tests_batch_least() -> i64 { 8 }
 pub(crate) fn project_tests_batch_carrier() -> &'static str { "grammar Carrier {\n    rule n -> ref Bytes = s:bytes(until(\";\")) -> { s }\n    entry rule top -> i64 = x:n \";\" -> { x.len() }\n}\n\nfn main() throws {\n    let r = Carrier::top(\"abc;\") catch { -1 }\n    println(f\"{r}\")\n}\n" }
 
 pub async fn project_tests_batches<H: ProjectTestsProgramHost>(host: &H, programs: &[ProgramTest], root: &std::path::Path, setting: &str, own: &std::path::Path) -> Result<collections::BTreeMap<String, ProjectTestsBatched>, std::boxed::Box<dyn std::error::Error>> {
-    let __keep_frame = nikaia_std::tether::Keep::new();
     let mut found: collections::BTreeMap<String, ProjectTestsBatched> = collections::BTreeMap::new();
     if env::var("NIKAIA_TEST_NO_BATCH").is_some() { return Ok(found); }
     let wanted: Vec<ProgramTest> = programs.iter().map(|program| { program.clone() }).collect::<Vec<_>>();
@@ -756,10 +755,10 @@ pub async fn project_tests_batches<H: ProjectTestsProgramHost>(host: &H, program
                 }
             },
             Some(ref binary) => {
-                let included = __keep_frame.put(match fs::read_to_string(&nikaia_std::fs::path::join(&(dir), std::path::Path::new(&("batch.included"))), &fs::Root::Anywhere).await {
+                let included = match fs::read_to_string(&nikaia_std::fs::path::join(&(dir), std::path::Path::new(&("batch.included"))), &fs::Root::Anywhere).await {
                     Ok(value) => value,
                     Err(_error) => { String::from("") },
-                });
+                };
                 for name in included.lines() {
                     let entry = nikaia_std::fs::path::join(&(nikaia_std::fs::path::join(&(nikaia_std::fs::path::join(&(nikaia_std::fs::path::join(&(dir), std::path::Path::new(&("programs")))), std::path::Path::new(&(name)))), std::path::Path::new(&("src")))), std::path::Path::new(&("main.nika")));
                     found.insert(nikaia_std::block::Text::from(name.to_string()), ProjectTestsBatched { binary: nikaia_std::fs::path::clone(&(binary)), entry });

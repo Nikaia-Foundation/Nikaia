@@ -1,5 +1,5 @@
 // `async(deferred) fn { … }` and `async(detached, deferred) fn { … }`
-// (ADR-async-5 D12, D13, #2512): the task runs only from the handle's
+// (ADR-async-v6 D12, D13, #2512): the task runs only from the handle's
 // `start()`, then is joined as any task; the handle is `let mut`, since
 // `start()` changes it. A deferred task with a fallback (D22), and one that
 // pauses, start the same way; one cancelled on its path never runs.

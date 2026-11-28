@@ -583,32 +583,32 @@ pub enum Expr {
     },
 
     // Part I 8.2: `spawn fn { … }`, and `async(detached) fn { … }`, which
-    // is the same task (ADR-async-5 D13).
+    // is the same task (ADR-async-v6 D13).
     Spawn {
         body: Expr, // the task's lambda
         // Written `async(detached) fn { … }`: the checker refuses it inside a
-        // loop's body (`NK2120`, ADR-async-5 D30), and `spawn` it does not.
+        // loop's body (`NK2120`, ADR-async-v6 D30), and `spawn` it does not.
         written_async: bool,
         // Written `async(handle) fn { … }`: a child task bound to its group,
-        // whose value is a `task::ChildHandle` (Part I 8.1.2, ADR-async-5
+        // whose value is a `task::ChildHandle` (Part I 8.1.2, ADR-async-v6
         // D11): it takes nothing, may borrow, and its group waits for it.
         child: bool,
-        // Written with `deferred` (ADR-async-5 D12): the task starts only at
+        // Written with `deferred` (ADR-async-v6 D12): the task starts only at
         // the handle's `start()`, a `task::ChildHandle` beside `child`, a
         // `TaskHandle` beside `detached`; one not started, or started twice,
         // on a path is `NK2121`.
         deferred: bool,
-        // `within: d` in its options: the task's deadline (ADR-async-5 D16).
+        // `within: d` in its options: the task's deadline (ADR-async-v6 D16).
         within: Expr?,
         // `admission: s` in its options: the strategy that admits the task
-        // (ADR-async-5 D15, D18); it waits unstarted until admitted (D37).
+        // (ADR-async-v6 D15, D18); it waits unstarted until admitted (D37).
         admission: Expr?,
         id: node_id::NodeId,
     },
 
     /// Part I 8.1.2: `async e` - **a task that evaluates `e`, started at once
     /// and waited for where its value is first needed**
-    /// ([ADR-async-5](../../../docs/specification/adr/adr-async-5.md) D6),
+    /// ([ADR-async-v6](../../../docs/specification/adr/adr-async-v6.md) D6),
     /// whether it stands as a value or as a statement (D9). `async fn { … }`
     /// holds the lambda, which is run as the task, not bound (D10). Where the
     /// task is waited for the checker records by this node's id
@@ -619,7 +619,7 @@ pub enum Expr {
     /// admitted, and the main line goes on (D37).
     Async(Expr, node_id::NodeId, Expr?, Expr?),
 
-    /// Part I 8.1.2: `async { … }`, **the group** (ADR-async-5 D9): its
+    /// Part I 8.1.2: `async { … }`, **the group** (ADR-async-v6 D9): its
     /// statements run on the main line, and the tasks started in it are waited
     /// for at its end. Its value is its last expression's.
     /// The third field is `d` of `async(within: d) { … }` (D16): its tasks

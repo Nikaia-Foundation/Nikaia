@@ -1,4 +1,4 @@
-// A group left by a `throw` (ADR-async-5 D21, Part I 8.1.2, #2561): it waits
+// A group left by a `throw` (ADR-async-v6 D21, Part I 8.1.2, #2561): it waits
 // for its tasks, the thrown error leads, because its handlers are written for
 // it, and the failures nobody read are its `secondary`, in written order.
 

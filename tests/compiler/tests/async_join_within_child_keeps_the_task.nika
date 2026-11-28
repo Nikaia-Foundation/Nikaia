@@ -1,5 +1,5 @@
 // `h.join(within: d)` on a `task::ChildHandle` limits the wait, not the task
-// (Part I 8.2, ADR-async-5 D17): on time-out it throws `task::TimedOut`, the
+// (Part I 8.2, ADR-async-v6 D17): on time-out it throws `task::TimedOut`, the
 // task keeps running, and the handle stays live, so the handler joins it
 // again and gets the value.
 

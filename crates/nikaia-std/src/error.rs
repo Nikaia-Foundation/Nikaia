@@ -84,12 +84,12 @@ struct Cold<S> {
     /// first one's has no place in `secondary`, which holds the first one's
     /// own type, and is kept here in the box rather than dropped.
     others: Vec<Box<dyn JoinedLater>>,
-    /// **Where it crossed a task's boundary** (ADR-async-5 D23): one pair per
+    /// **Where it crossed a task's boundary** (ADR-async-v6 D23): one pair per
     /// crossing, the innermost first.
     crossings: Vec<Crossing>,
 }
 
-/// **One crossing of a task's boundary** (ADR-async-5 D23, Part I 7.1): where
+/// **One crossing of a task's boundary** (ADR-async-v6 D23, Part I 7.1): where
 /// the task was started (the `async` form), and where its failure arrived
 /// (the wait point, the `join` of a handle, or the group's end), both as text
 /// the compiler wrote; and, where `NIKAIA_TRACE` asked for one, the trace of
@@ -194,7 +194,7 @@ impl<S> Tail<S> {
     }
 
     /// **The failure leaves the task it was raised in, or passed through**
-    /// (ADR-async-5 D23): a crossing started at `site`, whose arrival is not
+    /// (ADR-async-v6 D23): a crossing started at `site`, whose arrival is not
     /// known yet. On the failure's path alone, so the box it needs is paid
     /// only there.
     fn start(&mut self, site: Origin) {
@@ -566,7 +566,7 @@ fn full_form_with<E: fmt::Display>(
     out
 }
 
-/// **Where the error crossed a task's boundary** (ADR-async-5 D23, Part I
+/// **Where the error crossed a task's boundary** (ADR-async-v6 D23, Part I
 /// 7.1): a `started` and an `arrived` line per crossing, under the `raised`
 /// one, the innermost first.
 fn crossed_lines(out: &mut String, crossings: &[Crossing]) {
@@ -581,7 +581,7 @@ fn crossed_lines(out: &mut String, crossings: &[Crossing]) {
 /// **The trace, or the note that there is none.** Under `NIKAIA_TRACE` an
 /// error that crossed a task's boundary shows the task's trace, then per
 /// crossing a line `── started at <site> ──` and the trace of the code that
-/// waited for it (ADR-async-5 D23).
+/// waited for it (ADR-async-v6 D23).
 fn trace_part(
     out: &mut String,
     trace: Option<&Backtrace>,
@@ -736,7 +736,7 @@ pub trait JoinedLater: Send + Sync {
     /// The long form, without the note about a missing trace, its texts
     /// escaped where it is printed uncaught (ADR-398 D3).
     fn long_form_in(&self, escape: bool) -> String;
-    /// Its crossings not arrived yet arrived at `site` (ADR-async-5 D23).
+    /// Its crossings not arrived yet arrived at `site` (ADR-async-v6 D23).
     fn arrive_at(&mut self, site: Origin);
 }
 
@@ -751,7 +751,7 @@ impl<W: fmt::Display + Send + Sync> JoinedLater for Thrown<W> {
 }
 
 /// **An error that crosses a task's boundary records where**
-/// ([ADR-async-5](../../../docs/specification/adr/adr-async-5.md) D23, Part I
+/// ([ADR-async-v6](../../../docs/specification/adr/adr-async-v6.md) D23, Part I
 /// 7.1): where the task was started, as the failure leaves it, and where the
 /// failure arrived, as the code that waited for it receives it. One trait so
 /// that the emitter's two calls, [`started`] and [`arrived`], need to know
@@ -835,6 +835,15 @@ impl Crossed for Box<dyn Error> {
     }
 
     fn arrived_at(&mut self, site: Origin) {
+        // A read of a waiter cancelled because what it waited for failed
+        // arrives as that failure, `task::Abandoned` (ADR-async-v6 D41).
+        let why = self
+            .downcast_ref::<crate::task::Crashed>()
+            .and_then(crate::task::Crashed::abandoned_by)
+            .cloned();
+        if let Some(why) = why {
+            *self = Box::new(why);
+        }
         if let Some(raised) = self.downcast_mut::<Raised>() {
             raised.tail.arrive(site);
             for later in raised.tail.secondary_mut() {
@@ -899,7 +908,8 @@ impl Full for Box<dyn Error> {
 /// `Error`, so the language below cannot be told that an `impl<E: Error>` would
 /// not overlap the one above. One line per library error type that can be a
 /// channel: the library's own and the runtime's task
-/// ends (`task::OverBudget`, `task::TimedOut`, `task::Crashed`, #2780).
+/// ends (`task::OverBudget`, `task::TimedOut`, `task::Crashed`, #2780;
+/// `task::Abandoned`, ADR-async-v6 D41).
 impl Full for crate::io::IoError {
     fn full(&self) -> crate::block::Text {
         long_head(&self.to_string(), BELOW_SITE)
@@ -937,6 +947,12 @@ impl Full for crate::task::OverBudget {
 }
 
 impl Full for crate::task::TimedOut {
+    fn full(&self) -> crate::block::Text {
+        long_head(&self.to_string(), BELOW_SITE)
+    }
+}
+
+impl Full for crate::task::Abandoned {
     fn full(&self) -> crate::block::Text {
         long_head(&self.to_string(), BELOW_SITE)
     }
@@ -1020,6 +1036,10 @@ pub fn holds<E: Error + 'static>(error: &(dyn Error + 'static)) -> bool {
             Some(crate::task::Late::TimedOut(e)) => (e as &dyn Error).is::<E>(),
             None => false,
         }
+        || error
+            .downcast_ref::<crate::task::Crashed>()
+            .and_then(crate::task::Crashed::abandoned_by)
+            .is_some_and(|why| (why as &dyn Error).is::<E>())
         || read_failed_holds::<E>(error)
         || error
             .downcast_ref::<crate::supervisor::Handed>()

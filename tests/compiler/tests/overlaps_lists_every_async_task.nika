@@ -1,5 +1,5 @@
 // #2497: `check --overlaps` lists every task an `async` form starts
-// (ADR-async-5 D32): its window (first and last line), where it is waited
+// (ADR-async-v6 D32): its window (first and last line), where it is waited
 // for, its group's end, and whether it is started first (ADR-292 D6). Two
 // bindings, an operand, an `async { }` group of two statements, a child
 // handle and a detached task.

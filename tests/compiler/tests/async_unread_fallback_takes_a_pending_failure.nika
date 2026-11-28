@@ -1,5 +1,5 @@
 // A task whose callee cannot fail, but which names a pending value that can
-// (ADR-async-5 D8, D22, #988): `let c = async f(a) catch { … }`, its binding
+// (ADR-async-v6 D8, D22, #988): `let c = async f(a) catch { … }`, its binding
 // read by nothing, takes `a`'s failure in its own fallback, inside the task.
 // It compiled to Rust that did not build (the `catch` lowered as if `f`
 // threw). The same with a pausing `a`.
