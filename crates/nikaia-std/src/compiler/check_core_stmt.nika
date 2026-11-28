@@ -4268,6 +4268,20 @@ fn check_async_block(mut state: CheckState, world: ref CheckWorld, block: ref Bl
     if count == 0 {
         return
     }
+    // A diamond's later waiters, whose read can throw `task::Abandoned`
+    // (ADR-async-v6 D41).
+    for (waiter, shared) in diamond_waiters(block, world.words) {
+        let waits_for = match block.stmts[shared].node {
+            Stmt::Let { value, .. } => id_of(value) as i64,
+            else => continue,
+        }
+        match block.stmts[waiter].node {
+            Stmt::Let { value, .. } => {
+                state.facts.async_abandoned.insert(id_of(value) as i64, waits_for)
+            },
+            else => {},
+        }
+    }
     let mut group = -1 - block.stmts[0].span.start as i64
     let mut ends_group = true
     if own != null {

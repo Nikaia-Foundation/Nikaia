@@ -481,6 +481,14 @@ pub(crate) fn thrown_by(body: &Block, names: &winnow_grammar::InternerContext, h
 }
 
 pub(crate) fn thrown_in_block(block: &Block, names: &winnow_grammar::InternerContext, holes_of: &mut dyn FnMut(&Expr) -> Vec<Expr>, contribution_of: &mut dyn FnMut(&Expr) -> Contribution, in_a_handler: bool, out: &mut Thrown) {
+    for (_, shared) in diamond_waiters(block, names) {
+        let mut waited = Thrown { direct: collections::BTreeSet::new(), calls: collections::BTreeSet::new(), passes_on: false, named: collections::BTreeSet::new(), fatal_calls: collections::BTreeMap::new() };
+        match &nikaia_std::index::get(&block.stmts, nikaia_std::index::at(shared)).node {
+            Stmt::Let { value, .. } => { thrown_in(value, names, &mut &mut *holes_of, &mut &mut *contribution_of, in_a_handler, false, &mut waited); },
+            _ => { },
+        }
+        if !waited.direct.is_empty() || !waited.calls.is_empty() || waited.passes_on { out.direct.insert(String::from("task::Abandoned")); }
+    }
     for stmt in block.stmts.iter() {
         match &stmt.node {
             Stmt::Let { value, .. } => { thrown_in(value, names, &mut &mut *holes_of, &mut &mut *contribution_of, in_a_handler, false, out); },

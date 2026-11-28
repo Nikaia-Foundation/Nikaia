@@ -6396,6 +6396,15 @@ pub = true
 crosses = true
 compares = true
 
+# **What a read of a waiter throws that was cancelled because a task it waits
+# for failed** (ADR-async-v6 D41, D8): `let c = async g(a)`; `a` failed and an
+# earlier mention received the failure, so `c` did not run to its end. Its
+# message names `c`, `a` and `a`'s error, which is its cause.
+[type."task::Abandoned"]
+pub = true
+crosses = true
+compares = true
+
 # **What a task that panicked hands its joiner**
 # ([ADR-328](../../docs/specification/adr/adr-328.md) D8): what the panic said,
 # and where, as `src/main.nika:4` - empty where no line of the program is known.
@@ -6404,6 +6413,24 @@ pub = true
 crosses = true
 compares = true
 fields = ["pub message: String", "pub site: String"]
+
+# What went wrong, in words: `Error`'s `message` (Part I 7.1), what the
+# failure prints as.
+[fn."task::Abandoned::message"]
+pub = true
+panics = false
+sync = true
+touches = []
+signature = "(self: ref task::Abandoned) -> String"
+
+# Everything about the failure, for an operator: `Error`'s `full` (Part I
+# 7.1). It came from the runtime, not a `throw` of the program, and says so.
+[fn."task::Abandoned::full"]
+pub = true
+panics = false
+sync = true
+touches = []
+signature = "(self: ref task::Abandoned) -> String"
 
 # What went wrong, in words: `Error`'s `message` (Part I 7.1), what the
 # failure prints as.

@@ -835,6 +835,15 @@ impl Crossed for Box<dyn Error> {
     }
 
     fn arrived_at(&mut self, site: Origin) {
+        // A read of a waiter cancelled because what it waited for failed
+        // arrives as that failure, `task::Abandoned` (ADR-async-v6 D41).
+        let why = self
+            .downcast_ref::<crate::task::Crashed>()
+            .and_then(crate::task::Crashed::abandoned_by)
+            .cloned();
+        if let Some(why) = why {
+            *self = Box::new(why);
+        }
         if let Some(raised) = self.downcast_mut::<Raised>() {
             raised.tail.arrive(site);
             for later in raised.tail.secondary_mut() {
@@ -899,7 +908,8 @@ impl Full for Box<dyn Error> {
 /// `Error`, so the language below cannot be told that an `impl<E: Error>` would
 /// not overlap the one above. One line per library error type that can be a
 /// channel: the library's own and the runtime's task
-/// ends (`task::OverBudget`, `task::TimedOut`, `task::Crashed`, #2780).
+/// ends (`task::OverBudget`, `task::TimedOut`, `task::Crashed`, #2780;
+/// `task::Abandoned`, ADR-async-v6 D41).
 impl Full for crate::io::IoError {
     fn full(&self) -> crate::block::Text {
         long_head(&self.to_string(), BELOW_SITE)
@@ -937,6 +947,12 @@ impl Full for crate::task::OverBudget {
 }
 
 impl Full for crate::task::TimedOut {
+    fn full(&self) -> crate::block::Text {
+        long_head(&self.to_string(), BELOW_SITE)
+    }
+}
+
+impl Full for crate::task::Abandoned {
     fn full(&self) -> crate::block::Text {
         long_head(&self.to_string(), BELOW_SITE)
     }
@@ -1020,6 +1036,10 @@ pub fn holds<E: Error + 'static>(error: &(dyn Error + 'static)) -> bool {
             Some(crate::task::Late::TimedOut(e)) => (e as &dyn Error).is::<E>(),
             None => false,
         }
+        || error
+            .downcast_ref::<crate::task::Crashed>()
+            .and_then(crate::task::Crashed::abandoned_by)
+            .is_some_and(|why| (why as &dyn Error).is::<E>())
         || read_failed_holds::<E>(error)
         || error
             .downcast_ref::<crate::supervisor::Handed>()

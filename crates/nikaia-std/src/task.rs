@@ -237,6 +237,11 @@ pub struct Crashed {
     /// D8), so it was cancelled. Not a failure (D22): no group records it,
     /// no fallback takes it.
     pub(crate) cancelled: bool,
+    /// **Why the waiter was cancelled** (ADR-async-v6 D41): the pending value
+    /// it waited for failed. On a cancelled waiter's crash, what its unwind
+    /// carried; on the crash its reader receives, what that reader throws as
+    /// [`Abandoned`].
+    pub(crate) abandoned: Option<Box<Abandoned>>,
 }
 
 impl Crashed {
@@ -244,27 +249,64 @@ impl Crashed {
     /// full block, which unwound past the hook and has no site.
     pub(crate) fn of(payload: Box<dyn std::any::Any + Send>) -> Crashed {
         let site = SITE.with(|held| std::mem::take(&mut *held.borrow_mut()));
-        if payload.is::<group::WaitCancelled>() {
-            return Crashed {
-                message: "the task was cancelled: a pending value it waited for failed, and an earlier mention received the failure".to_string(),
-                site: String::new(),
-                over_budget: false,
-                cancelled: true,
-            };
-        }
+        let payload = match payload.downcast::<group::WaitCancelled>() {
+            Ok(waited) => {
+                return Crashed {
+                    message: "the task was cancelled: a pending value it waited for failed, and an earlier mention received the failure".to_string(),
+                    site: String::new(),
+                    over_budget: false,
+                    cancelled: true,
+                    abandoned: Some(waited.0),
+                };
+            }
+            Err(payload) => payload,
+        };
         match payload.is::<task_block::OverBudget>() {
             true => Crashed {
                 message: OverBudget.to_string(),
                 site: String::new(),
                 over_budget: true,
                 cancelled: false,
+                abandoned: None,
             },
             false => Crashed {
                 message: panic_message(payload.as_ref()),
                 site,
                 over_budget: false,
                 cancelled: false,
+                abandoned: None,
             },
+        }
+    }
+
+    /// **What the reader of a waiter that was cancelled is handed**
+    /// (ADR-async-v6 D41): no crash, the failure of what it waited for, which
+    /// a channel naming `task::Abandoned` takes as that.
+    pub(crate) fn abandoned(why: Box<Abandoned>) -> Crashed {
+        Crashed {
+            message: why.to_string(),
+            site: String::new(),
+            over_budget: false,
+            cancelled: false,
+            abandoned: Some(why),
+        }
+    }
+
+    /// **A cancelled waiter's crash, unwound again** where a fallback's body
+    /// caught it (ADR-async-v6 D8, D36): it is no failure of that body.
+    pub(crate) fn wait_again(self) -> ! {
+        let why = self
+            .abandoned
+            .unwrap_or_else(|| Box::new(Abandoned::unknown()));
+        std::panic::resume_unwind(Box::new(group::WaitCancelled(why)))
+    }
+
+    /// **The failure a reader of this crash throws instead** (ADR-async-v6
+    /// D41): the waiter did not crash, what it waited for failed.
+    pub fn abandoned_by(&self) -> Option<&Abandoned> {
+        match self.cancelled {
+            true => None,
+            false => self.abandoned.as_deref(),
         }
     }
 
@@ -275,6 +317,7 @@ impl Crashed {
             site: String::new(),
             over_budget: false,
             cancelled: false,
+            abandoned: None,
         }
     }
 
@@ -324,7 +367,10 @@ impl From<Crashed> for OverBudget {
 pub fn handed(error: Box<dyn std::error::Error>) -> Box<dyn std::error::Error> {
     match error.downcast::<Crashed>() {
         Ok(crash) if crash.over_budget => Box::new(OverBudget),
-        Ok(crash) => crash,
+        Ok(crash) => match crash.abandoned_by() {
+            Some(why) => Box::new(why.clone()),
+            None => crash,
+        },
         Err(error) => error,
     }
 }
@@ -337,6 +383,9 @@ impl From<Crashed> for crate::error::Thrown<OverBudget> {
 
 impl std::fmt::Display for Crashed {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        if let Some(why) = self.abandoned_by() {
+            return why.fmt(f);
+        }
         match self.site.is_empty() {
             true => write!(f, "the task crashed: {}", self.message),
             false => write!(f, "the task crashed at {}: {}", self.site, self.message),
@@ -665,6 +714,107 @@ impl TimedOut {
     /// program.
     pub fn message(&self) -> crate::block::Text {
         crate::block::Text::from(self.to_string())
+    }
+}
+
+/// **What a read of a waiter throws that was cancelled because a task it
+/// waits for failed** ([ADR-async-v6](../../../docs/specification/adr/adr-async-v6.md)
+/// D41, D8): `let c = async g(a)` waits for `a`; `a` failed and an earlier
+/// mention received that failure, so `c` did not run to its end. It is no
+/// crash of `c`, and not `a`'s error again: it names `a`'s error, and carries
+/// it as its cause ([`std::error::Error::source`]).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Abandoned {
+    /// The waiter's binding, `c`; empty where the lowering named none.
+    pub(crate) waiter: String,
+    /// The binding it waited for, `a`; empty where the lowering named none.
+    pub(crate) waits_for: String,
+    /// What `a`'s failure said.
+    pub(crate) cause: AbandonedCause,
+}
+
+/// **The failure an [`Abandoned`] waiter waited for**, as its words: the error
+/// itself went to the earlier mention (one error, one receiver, ADR-346 D1).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AbandonedCause(pub(crate) String);
+
+impl std::fmt::Display for AbandonedCause {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.0)
+    }
+}
+
+impl std::error::Error for AbandonedCause {}
+
+impl Abandoned {
+    /// Why a waiter was cancelled: `waits_for` failed, saying `cause`.
+    pub(crate) fn of(waits_for: &str, cause: String) -> Abandoned {
+        Abandoned {
+            waiter: String::new(),
+            waits_for: waits_for.to_string(),
+            cause: AbandonedCause(cause),
+        }
+    }
+
+    /// A waiter cancelled where nothing recorded what it waited for.
+    pub(crate) fn unknown() -> Abandoned {
+        Abandoned::of("", "the failure went to an earlier mention".to_string())
+    }
+
+    /// The same, naming the waiter whose read throws it.
+    pub(crate) fn of_waiter(mut self, waiter: &str) -> Abandoned {
+        if self.waiter.is_empty() {
+            self.waiter = waiter.to_string();
+        }
+        self
+    }
+
+    /// What went wrong, in words: `Error`'s `message` (Part I 7.1), which is
+    /// what the failure prints as. A block's text (#490), the `String` of a
+    /// program.
+    pub fn message(&self) -> crate::block::Text {
+        crate::block::Text::from(self.to_string())
+    }
+}
+
+impl std::fmt::Display for Abandoned {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self.waiter.is_empty() {
+            true => f.write_str("the task did not run to its end")?,
+            false => write!(f, "`{}` did not run to its end", self.waiter)?,
+        }
+        match self.waits_for.is_empty() {
+            true => f.write_str(" because a task it waits for failed")?,
+            false => write!(
+                f,
+                " because `{}`, a task it waits for, failed",
+                self.waits_for
+            )?,
+        }
+        write!(f, ": {}", self.cause)
+    }
+}
+
+impl From<Crashed> for Abandoned {
+    /// Only a crash that carries why reaches a channel of this alone.
+    fn from(crash: Crashed) -> Abandoned {
+        match crash.abandoned_by() {
+            Some(why) => why.clone(),
+            None => std::panic::resume_unwind(Box::new(crash.message)),
+        }
+    }
+}
+
+/// The same, for a channel that holds it in its envelope (ADR-280 D13).
+impl From<Crashed> for crate::error::Thrown<Abandoned> {
+    fn from(crash: Crashed) -> crate::error::Thrown<Abandoned> {
+        crate::error::Thrown::from(Abandoned::from(crash))
+    }
+}
+
+impl std::error::Error for Abandoned {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        Some(&self.cause)
     }
 }
 
@@ -1458,6 +1608,13 @@ impl Crosses for Box<dyn std::error::Error> {
 #[derive(Debug)]
 pub struct Boxed(pub Box<dyn std::error::Error>);
 
+/// What the box says: what its error says.
+impl std::fmt::Display for Boxed {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.0.fmt(f)
+    }
+}
+
 impl From<Crashed> for Boxed {
     fn from(crash: Crashed) -> Boxed {
         Boxed(Box::new(crash))
@@ -1550,6 +1707,12 @@ impl crate::error::Crossed for Late {
 }
 
 impl crate::error::Crossed for TimedOut {
+    fn started_at(&mut self, _site: crate::error::Origin) {}
+    fn arrived_at(&mut self, _site: crate::error::Origin) {}
+}
+
+/// Nor has a waiter's abandoned read (ADR-async-v6 D41): no `throw` raised it.
+impl crate::error::Crossed for Abandoned {
     fn started_at(&mut self, _site: crate::error::Origin) {}
     fn arrived_at(&mut self, _site: crate::error::Origin) {}
 }
@@ -2065,6 +2228,16 @@ pub enum OrCrash<E> {
     Crashed(Crashed),
 }
 
+/// What the failure or the crash says.
+impl<E: std::fmt::Display> std::fmt::Display for OrCrash<E> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            OrCrash::Failed(error) => error.fmt(f),
+            OrCrash::Crashed(crash) => crash.fmt(f),
+        }
+    }
+}
+
 impl<E> From<Crashed> for OrCrash<E> {
     fn from(crash: Crashed) -> Self {
         OrCrash::Crashed(crash)
@@ -2148,7 +2321,7 @@ pub fn fell<T>(
 ) -> Result<T, Box<dyn std::error::Error>> {
     let mut ended = None;
     match caught(|| ended = Some(body())) {
-        Err(crash) if crash.cancelled => std::panic::resume_unwind(Box::new(group::WaitCancelled)),
+        Err(crash) if crash.cancelled => crash.wait_again(),
         Err(crash) => Err(Box::new(crash)),
         Ok(()) => ended.expect("a body that did not panic ended"),
     }
@@ -2160,7 +2333,7 @@ where
     F: std::future::Future<Output = Result<T, Box<dyn std::error::Error>>>,
 {
     match caught_paused(body).await {
-        Err(crash) if crash.cancelled => std::panic::resume_unwind(Box::new(group::WaitCancelled)),
+        Err(crash) if crash.cancelled => crash.wait_again(),
         Err(crash) => Err(Box::new(crash)),
         Ok(ended) => ended,
     }

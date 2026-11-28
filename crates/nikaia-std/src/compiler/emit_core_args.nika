@@ -2021,12 +2021,16 @@ impl EmitState {
         if channel.starts_with("nikaia_std::error::Thrown<") {
             return channel.ends_with("task::Crashed>") || channel.ends_with("task::OverBudget>")
         }
+        // A waiter's abandoned read (ADR-async-v6 D41) arrives as a crash too.
+        if channel == "nikaia_std::task::Abandoned" {
+            return true
+        }
         let root = self.sum_root()
         for (members, name) in self.sums {
             let full = f"{root}{name}"
             if channel == full || channel.starts_with(f"{full}<") {
                 for member in members {
-                    if member == "task::Crashed" || member == "task::OverBudget" {
+                    if member == "task::Crashed" || member == "task::OverBudget" || member == "task::Abandoned" {
                         return true
                     }
                 }
@@ -2623,6 +2627,12 @@ impl EmitState {
             }
             inside.push(alone)
             out.append(started)
+            // **The handle carries its binding's name** (ADR-async-v6 D41):
+            // where a diamond's waiter is cancelled, its read throws
+            // `task::Abandoned`, which names it and what it waited for.
+            if named != "" && (shared || self.facts.async_abandoned.contains_key(each.1)) {
+                out.push(f".named(\"{named}\")")
+            }
             if shared {
                 out.push(")")
             }

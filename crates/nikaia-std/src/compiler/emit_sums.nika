@@ -225,28 +225,43 @@ impl EmitState {
             }
             out.push("}\n")
             // **A full block arrives as a crash marked over budget** (ADR-327
-            // D13): a sum holding `task::OverBudget` takes it apart, and one
-            // without `task::Crashed` hands any other crash on unwinding.
+            // D13), and **a waiter's abandoned read as a crash that carries
+            // why** (ADR-async-v6 D41): a sum holding `task::OverBudget` or
+            // `task::Abandoned` takes it apart, and one without
+            // `task::Crashed` hands any other crash on unwinding.
             let mut over = false
+            let mut abandoned = false
             let mut crash_member = false
             for member in members {
                 if member == "task::OverBudget" {
                     over = true
                 }
+                if member == "task::Abandoned" {
+                    abandoned = true
+                }
                 if member == "task::Crashed" {
                     crash_member = true
                 }
             }
-            if over {
-                let budget = self.sum_member_value(world, "task::OverBudget", "nikaia_std::task::OverBudget")
+            let parted = over || abandoned
+            if parted {
                 let crash = self.sum_member_value(world, "task::Crashed", "error")
                 let rest = if crash_member { f"{name}::{sum_variant("task::Crashed")}({crash})" } else { "std::panic::resume_unwind(std::boxed::Box::new(error.to_string()))" }
-                out.push(f"impl{decl} From<nikaia_std::task::Crashed> for {name}{params} {{\n    fn from(error: nikaia_std::task::Crashed) -> {name}{params} {{\n        if error.over_budget() {{\n            return {name}::{sum_variant("task::OverBudget")}({budget});\n        }}\n        {rest}\n    }}\n}}\n")
+                let mut taken = ""
+                if over {
+                    let budget = self.sum_member_value(world, "task::OverBudget", "nikaia_std::task::OverBudget")
+                    taken = f"{taken}        if error.over_budget() {{\n            return {name}::{sum_variant("task::OverBudget")}({budget});\n        }}\n"
+                }
+                if abandoned {
+                    let why = self.sum_member_value(world, "task::Abandoned", "why.clone()")
+                    taken = f"{taken}        if let Some(why) = error.abandoned_by() {{\n            return {name}::{sum_variant("task::Abandoned")}({why});\n        }}\n"
+                }
+                out.push(f"impl{decl} From<nikaia_std::task::Crashed> for {name}{params} {{\n    fn from(error: nikaia_std::task::Crashed) -> {name}{params} {{\n{taken}        {rest}\n    }}\n}}\n")
             }
             for member in members {
                 let variant = sum_variant(member)
                 let held = self.sum_member_held(world, member, params)
-                if over && member == "task::Crashed" {
+                if parted && member == "task::Crashed" {
                     continue
                 }
                 out.push(f"impl{decl} From<{held}> for {name}{params} {{\n    fn from(error: {held}) -> {name}{params} {{ {name}::{variant}(error) }}\n}}\n")

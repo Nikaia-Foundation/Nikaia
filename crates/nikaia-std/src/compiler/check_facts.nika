@@ -395,6 +395,12 @@ pub struct CheckFacts {
     /// one value, so the lowering keeps it for all (`task::Read`). One that
     /// moves it leaves the other's mention refused (`NK2105`).
     pub async_shared: collections::BTreeSet[i64],
+    /// **The later readers of such a binding, whose own binding is read**
+    /// (ADR-async-v6 D41), by their `async` node, each with the shared task's
+    /// `async` node: where that task fails, the first reader receives it and
+    /// these are cancelled where they wait, so a read of one throws
+    /// `task::Abandoned` (`names::diamond_waiters`).
+    pub async_abandoned: collections::BTreeMap[i64, i64],
     /// **`m.get(k)` on a map**, by the call: an `Option<&T>` below already,
     /// so a nullable view it is lent to opens nothing.
     pub map_gets: collections::BTreeSet[i64],
@@ -1068,6 +1074,7 @@ impl CheckFacts {
             flat_reads: collections::BTreeSet(),
             async_waits: collections::BTreeMap(),
             async_shared: collections::BTreeSet(),
+            async_abandoned: collections::BTreeMap(),
             copied_reads: collections::BTreeSet(),
             text_in_lists: collections::BTreeSet(),
             owned_patterns: collections::BTreeSet(),

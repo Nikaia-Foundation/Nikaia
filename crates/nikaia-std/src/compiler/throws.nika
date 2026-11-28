@@ -712,6 +712,19 @@ fn thrown_by(body: ref Block, names: ref winnow_grammar::InternerContext, holes_
 // it is the handler of a `catch`, which is where `throw error` passes on what
 // the guarded half threw rather than naming something new.
 fn thrown_in_block(block: ref Block, names: ref winnow_grammar::InternerContext, holes_of: fn(ref Expr) -> Vec[Expr] sync, contribution_of: fn(ref Expr) -> Contribution sync, in_a_handler: bool, mut out: Thrown) {
+    // **A diamond's later waiter can be abandoned** (ADR-async-v6 D41): a
+    // read of it throws `task::Abandoned` where the task it waits for can
+    // fail: throws itself, or calls what may.
+    for (_, shared) in diamond_waiters(block, names) {
+        let mut waited = Thrown { direct: collections::BTreeSet(), calls: collections::BTreeSet(), passes_on: false, named: collections::BTreeSet(), fatal_calls: collections::BTreeMap() }
+        match block.stmts[shared].node {
+            Stmt::Let { value, .. } => thrown_in(value, names, holes_of, contribution_of, in_a_handler, false, waited),
+            else => {},
+        }
+        if waited.direct.len() > 0 || waited.calls.len() > 0 || waited.passes_on {
+            out.direct.insert("task::Abandoned")
+        }
+    }
     for stmt in block.stmts {
         match stmt.node {
             Stmt::Let { value, .. } => thrown_in(value, names, holes_of, contribution_of, in_a_handler, false, out),

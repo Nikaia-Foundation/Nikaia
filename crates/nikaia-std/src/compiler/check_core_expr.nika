@@ -403,6 +403,15 @@ fn check_core_value_of[H: CheckHost](mut state: CheckState, world: ref CheckWorl
             state.flow.loops = loops
             state.flow.barrier = barrier
             check_core_async_crash(state, world, host, inner, span)
+            // **A diamond's later waiter can be abandoned** (ADR-async-v6
+            // D41): where the task it waits for can fail, an earlier waiter
+            // receives the failure and a read of this one throws
+            // `task::Abandoned`.
+            let waits_for = state.facts.async_abandoned.get(id_of(expr) as i64)?.clone() ?? -1
+            if waits_for >= 0 && state.flow.fallible_tasks.contains(waits_for) {
+                let function = state.current?.clone() ?? ""
+                check_core_async_fails(state, span, "task::Abandoned", "This function can fail, because the task started here waits for a pending value another task waits for too.", "Where that value fails, the task that waits for it first receives the failure; this one is cancelled where it waits, and reading it throws `task::Abandoned` (ADR-async-v6 D41).", f"Add `throws` to `{function}`, or catch it where its binding is read: `… catch {{ … }}`.")
+            }
             // **A name of a block that ends before the group does** (async-3
             // D2, #986): the task runs on past that block, so it takes it.
             if state.flow.async_group != null {

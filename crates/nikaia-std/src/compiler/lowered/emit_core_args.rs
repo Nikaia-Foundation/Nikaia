@@ -1267,11 +1267,12 @@ impl EmitState {
     pub(crate) fn emit_channel_holds_a_crash(&self, channel: &str) -> bool {
         if channel == "nikaia_std::task::Crashed" || channel == "nikaia_std::task::OverBudget" || channel == "std::boxed::Box<dyn std::error::Error>" || channel == "nikaia_std::task::Boxed" { return true; }
         if channel.starts_with("nikaia_std::error::Thrown<") { return channel.ends_with("task::Crashed>") || channel.ends_with("task::OverBudget>"); }
+        if channel == "nikaia_std::task::Abandoned" { return true; }
         let root = self.sum_root();
         for (members, name) in self.sums.iter() {
             let full = format!("{}{}", root, name);
             if channel == full || ::core::convert::identity(match (AsRef::<str>::as_ref(&(channel)), AsRef::<str>::as_ref(&(full)), ) { (__nikaia_t, __nikaia_f0, ) => __nikaia_t.strip_prefix(__nikaia_f0).and_then(|__nikaia_r| __nikaia_r.strip_prefix("<")).is_some() }) {
-                for member in members.iter() { if member == "task::Crashed" || member == "task::OverBudget" { return true; } }
+                for member in members.iter() { if member == "task::Crashed" || member == "task::OverBudget" || member == "task::Abandoned" { return true; } }
                 return false;
             }
         }
@@ -1648,6 +1649,7 @@ impl EmitState {
             if shared { alone = format!("(*{})", alone); }
             inside.push(alone);
             out.append(&started);
+            if named != "" && (shared || self.facts.async_abandoned.contains_key(&each.1)) { out.push(&format!(".named(\"{}\")", named)); }
             if shared { out.push(")"); }
             out.push(";");
             walk.async_joining.insert(each.1, nikaia_std::block::Text::from(joined.to_string()));

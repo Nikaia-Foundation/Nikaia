@@ -15,7 +15,7 @@
 //! handle was dropped neither joined nor cancelled (D11), hands its failure to
 //! the group as an unread one.
 
-use super::{Crashed, OnTimeout, Outcome, TimedOut, caught, locked};
+use super::{Abandoned, Crashed, OnTimeout, Outcome, TimedOut, caught, locked};
 
 /// **How a task of a group ended** (D3): with a value, a failure, a crash, a
 /// cancellation its handle asked for (D14), or a full memory block.
@@ -31,6 +31,10 @@ pub enum Ended<T, E> {
     /// The task was cancelled through its handle, or never ran because a task
     /// before it crashed. Not a failure (D22): it runs no fallback.
     Cancelled,
+    /// **The task waited for a pending value whose failure an earlier mention
+    /// received** (ADR-async-v6 D8), so it was cancelled where it waited. Not
+    /// a failure of its own (D22); a read of it throws [`Abandoned`] (D41).
+    Abandoned(Box<Abandoned>),
     /// **Reserved**: a full memory block ends as a [`Crashed`] that says so
     /// (`Crashed::over_budget`, ADR-327 D13), which a channel naming
     /// `task::OverBudget` takes as that, and which cancels no other task.
@@ -213,7 +217,11 @@ fn run_now<T, E>(
     let caught = caught(|| outcome = Some(body()));
     drop(entered);
     let end = match caught {
-        Err(crash) if crash.cancelled => Ended::Cancelled,
+        Err(crash) if crash.cancelled => Ended::Abandoned(
+            crash
+                .abandoned
+                .unwrap_or_else(|| Box::new(Abandoned::unknown())),
+        ),
         Err(crash) => {
             // A full block fails only its own task (ADR-async-v6 D19).
             if !crash.over_budget() {
@@ -355,7 +363,11 @@ async fn held_task<'g, T: 'g, E: 'g, F>(
     .await;
     drop(running);
     let end = match outcome {
-        Err(crash) if crash.cancelled => Ended::Cancelled,
+        Err(crash) if crash.cancelled => Ended::Abandoned(
+            crash
+                .abandoned
+                .unwrap_or_else(|| Box::new(Abandoned::unknown())),
+        ),
         Err(crash) => {
             // A full block fails only its own task (ADR-async-v6 D19).
             if !crash.over_budget() {
@@ -429,6 +441,10 @@ pub struct ChildHandle<'g, T, E> {
     /// [`Rest`] the emitted code declares before it and finishes at the end of
     /// that block, so a handle dropped live is waited for there.
     kept: Option<&'g dyn Polled>,
+    /// **The binding it starts**, `c` of `let c = async g(a)`: what an
+    /// [`Abandoned`] read of it names (ADR-async-v6 D41). Empty where the
+    /// lowering named none.
+    name: &'static str,
 }
 
 /// What a [`ChildHandle`] does with the [`Rest`] cell of its task.
@@ -575,7 +591,15 @@ impl<'g, T: 'g, E: 'g> ChildHandle<'g, T, E> {
             claimed: std::cell::Cell::new(false),
             held: Rested::empty(),
             kept: None,
+            name: "",
         }
+    }
+
+    /// **The handle of `let c = async …`, named `c`** (ADR-async-v6 D41): a
+    /// read of it that throws [`Abandoned`] names it.
+    pub fn named(mut self, name: &'static str) -> Self {
+        self.name = name;
+        self
     }
 
     /// **A handle to a bound pausing task of `async e`** (Part I 8.2, #987):
@@ -811,7 +835,7 @@ impl<T, E: From<Crashed>> ChildHandle<'_, T, E> {
             "a deferred task was joined before its start()"
         );
         let end = std::future::poll_fn(|cx| self.poll_end(cx)).await;
-        joined_end(end)
+        joined_end(end, self.name)
     }
 
     /// One poll of the task's end, where it is waited for: a pausing task of
@@ -877,7 +901,7 @@ impl<T, E: From<Crashed>> ChildHandle<'_, T, E> {
         match end {
             Some(end) => {
                 self.claimed.set(true);
-                joined_end(end).map_err(Into::into)
+                joined_end(end, self.name).map_err(Into::into)
             }
             None => {
                 // The task runs on: the handle keeps what is left of it.
@@ -895,7 +919,10 @@ impl<T, E: From<Crashed>> ChildHandle<'_, T, E> {
     pub fn join_now(self) -> Result<T, E> {
         self.claimed.set(true);
         let end = locked(&self.slot).ended.take();
-        joined_end(end.expect("a task that pauses was joined where the main line cannot wait"))
+        joined_end(
+            end.expect("a task that pauses was joined where the main line cannot wait"),
+            self.name,
+        )
     }
 }
 
@@ -918,15 +945,24 @@ pub struct Read<'g, T, E> {
     failed: std::cell::Cell<bool>,
     /// The tasks waiting for a pausing one besides the one polling it.
     waiting: std::cell::RefCell<Vec<std::task::Waker>>,
+    /// **Why every later waiter is cancelled**, once the first received the
+    /// failure (ADR-async-v6 D41): the binding's name and what its failure
+    /// said, which a read of such a waiter throws as [`Abandoned`].
+    why: std::cell::RefCell<Option<Abandoned>>,
+    /// The binding, `a`; empty where the lowering named none.
+    name: &'static str,
 }
 
-impl<'g, T: 'g, E: From<Crashed> + 'g> Read<'g, T, E> {
+impl<'g, T: 'g, E: From<Crashed> + std::fmt::Display + 'g> Read<'g, T, E> {
     pub fn new(handle: ChildHandle<'g, T, E>) -> Self {
+        let name = handle.name;
         Read {
             handle: std::cell::RefCell::new(Some(handle)),
             value: std::cell::OnceCell::new(),
             failed: std::cell::Cell::new(false),
             waiting: std::cell::RefCell::new(Vec::new()),
+            why: std::cell::RefCell::new(None),
+            name,
         }
     }
 
@@ -938,7 +974,7 @@ impl<'g, T: 'g, E: From<Crashed> + 'g> Read<'g, T, E> {
         let handle = self.handle.borrow_mut().take();
         match handle {
             Some(handle) => self.kept(handle.join_now()),
-            None => cancelled_waiter(),
+            None => self.cancelled_waiter(),
         }
     }
 
@@ -961,7 +997,7 @@ impl<'g, T: 'g, E: From<Crashed> + 'g> Read<'g, T, E> {
                     for waker in self.waiting.borrow_mut().drain(..) {
                         waker.wake();
                     }
-                    std::task::Poll::Ready(self.kept(joined_end(end)))
+                    std::task::Poll::Ready(self.kept(joined_end(end, self.name)))
                 }
                 std::task::Poll::Pending => {
                     self.waiting.borrow_mut().push(cx.waker().clone());
@@ -979,6 +1015,7 @@ impl<'g, T: 'g, E: From<Crashed> + 'g> Read<'g, T, E> {
             Ok(value) => Ok(self.value.get_or_init(|| value)),
             Err(error) => {
                 self.failed.set(true);
+                *self.why.borrow_mut() = Some(Abandoned::of(self.name, error.to_string()));
                 Err(error)
             }
         }
@@ -987,27 +1024,32 @@ impl<'g, T: 'g, E: From<Crashed> + 'g> Read<'g, T, E> {
     fn read(&self) -> Result<&T, E> {
         match self.value.get() {
             Some(value) => Ok(value),
-            None => cancelled_waiter(),
+            None => self.cancelled_waiter(),
         }
+    }
+
+    /// A waiter of a pending value whose failure an earlier mention received:
+    /// it cannot go on, and is cancelled where it waits (ADR-async-v6 D8),
+    /// carrying why (D41).
+    fn cancelled_waiter<V>(&self) -> V {
+        let why = self.why.borrow().clone().unwrap_or_else(Abandoned::unknown);
+        std::panic::resume_unwind(Box::new(WaitCancelled(Box::new(why))))
     }
 }
 
 /// **The payload a cancelled waiter unwinds with** (D8): its task's runner
-/// ends it as [`Ended::Cancelled`]; `resume_unwind` runs no panic hook.
-pub(crate) struct WaitCancelled;
+/// ends it as [`Ended::Abandoned`], with why (D41); `resume_unwind` runs no
+/// panic hook.
+pub(crate) struct WaitCancelled(pub(crate) Box<Abandoned>);
 
-/// A waiter of a pending value whose failure an earlier mention received: it
-/// cannot go on, and is cancelled where it waits (ADR-async-v6 D8).
-fn cancelled_waiter<T>() -> T {
-    std::panic::resume_unwind(Box::new(WaitCancelled))
-}
-
-/// What `join` hands back for a task's end.
-fn joined_end<T, E: From<Crashed>>(end: Ended<T, E>) -> Result<T, E> {
+/// What `join` hands back for a task's end; `name` is the joined binding's,
+/// which an [`Abandoned`] read names.
+fn joined_end<T, E: From<Crashed>>(end: Ended<T, E>, name: &str) -> Result<T, E> {
     match end {
         Ended::Value(value) => Ok(value),
         Ended::Failed(error) => Err(error),
         Ended::Crashed(crash) => Err(E::from(crash)),
+        Ended::Abandoned(why) => Err(E::from(Crashed::abandoned(Box::new(why.of_waiter(name))))),
         Ended::Cancelled | Ended::OverBudget => Err(E::from(Crashed::said(
             "a task before it in its group crashed, which cancelled it",
         ))),

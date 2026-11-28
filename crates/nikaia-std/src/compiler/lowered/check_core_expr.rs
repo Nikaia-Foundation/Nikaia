@@ -333,6 +333,17 @@ pub(crate) fn check_core_value_of<H: CheckHost>(state: &mut CheckState, world: &
             state.flow.loops = loops;
             state.flow.barrier = barrier;
             check_core_async_crash(state, world, host, inner, span);
+            let waits_for = nikaia_std::index::or(match state.facts.async_abandoned.get(&(id_of(expr) as i64)) {
+                Some(__nikaia_it) => Some(__nikaia_it.clone()),
+                None => None,
+            }, || -1);
+            if waits_for >= 0 && state.flow.fallible_tasks.contains(&waits_for) {
+                let function = nikaia_std::index::or(match state.current.as_ref() {
+                    Some(__nikaia_it) => Some(__nikaia_it.clone()),
+                    None => None,
+                }, || "".into());
+                check_core_async_fails(state, span, "task::Abandoned", "This function can fail, because the task started here waits for a pending value another task waits for too.", "Where that value fails, the task that waits for it first receives the failure; this one is cancelled where it waits, and reading it throws `task::Abandoned` (ADR-async-v6 D41).", &format!("Add `throws` to `{}`, or catch it where its binding is read: `… catch {{ … }}`.", function));
+            }
             if state.flow.async_group.is_some() { state.a_task_takes_inner_names(world, inner, id_of(expr) as i64, span); }
             let mut at = changed_from;
             while at < state.changed.len() as i64 {

@@ -3107,7 +3107,17 @@ pub(crate) fn check_async_block(state: &mut CheckState, world: &CheckWorld<'_, '
     state.flow.async_group_block = None;
     let count = block.stmts.len() as i64;
     if count == 0 { return; }
-    let mut group = unsafe { nikaia_std::proven::sub::<i64>(-1, nikaia_std::proven::read(&block.stmts, (0) as usize).span.start as i64) };
+    for (waiter, shared) in diamond_waiters(block, world.words) {
+        let waits_for = match &nikaia_std::index::get(&block.stmts, nikaia_std::index::at(shared)).node {
+            Stmt::Let { value, .. } => id_of(value) as i64,
+            _ => continue,
+        };
+        match &nikaia_std::index::get(&block.stmts, nikaia_std::index::at(waiter)).node {
+            Stmt::Let { value, .. } => { state.facts.async_abandoned.insert(id_of(value) as i64, waits_for); },
+            _ => { },
+        }
+    }
+    let mut group = unsafe { nikaia_std::proven::sub::<i64>(-1, nikaia_std::index::get(&block.stmts, 0).span.start as i64) };
     let mut ends_group = true;
     if own.is_some() { group = nikaia_std::index::or(own, || group); } else if state.flow.async_group.is_some() {
         group = nikaia_std::index::or(state.flow.async_group, || group);
@@ -3121,7 +3131,7 @@ pub(crate) fn check_async_block(state: &mut CheckState, world: &CheckWorld<'_, '
             let wait = nikaia_std::num::value(wait);
             if wait > at { beside = unsafe { nikaia_std::proven::add::<i64>(beside, 1) }; }
         }
-        let last = ends_group && at == unsafe { nikaia_std::proven::sub::<i64>(count, 1) };
+        let last = ends_group && at == count - 1;
         match &stmt.node {
             Stmt::Let { names, value, .. } => {
                 match value {

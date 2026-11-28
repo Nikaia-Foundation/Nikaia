@@ -1,0 +1,8 @@
+b is 3
+c is 4
+b's handler: bad
+b is -1
+caught `c` did not run to its end because `a`, a task it waits for, failed: bad
+b's handler: bad
+b is -1
+abandoned: `c` did not run to its end because `a`, a task it waits for, failed: bad
