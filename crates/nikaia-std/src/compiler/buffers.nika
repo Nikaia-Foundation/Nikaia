@@ -110,6 +110,11 @@ pub struct BufferPlan {
     /// **Each loop over a stream, the places it counts and its pool's size**
     /// (ADR-stream-buffers-v1 D2, D3), in the order the loops stand.
     pub streams: Vec[StreamLoop],
+    /// **The buffers read from a file into a keep of their own per turn**
+    /// (#2859), by their `let`: each turn's keep hands its buffer to a spare
+    /// when the last view of it dies, and the next turn's read reads into it
+    /// (Perceus's reuse, ADR-stream-buffers-v1 D5).
+    pub reads: collections::BTreeSet[i64],
 }
 
 /// **A loop over a stream** (ADR-stream-buffers-v1 D1-D3): the name it binds,
@@ -283,6 +288,9 @@ struct BufferWalk {
     /// D2, supervisor decision 2 on #2851): a `.collect()` of the stream's
     /// items, by the call that reads it and the statement.
     stream_gathers: Vec[(String, Span)],
+    /// The `let`s whose buffer is a whole file read (`fs::read_to_string`),
+    /// which a buffer freed before can be read into (#2859).
+    reads: collections::BTreeSet[i64],
 }
 
 // Where a local is changed last: the statement of its `let`'s own block that
@@ -569,7 +577,7 @@ fn walked(item: ref Item, target: String?, carries: bool, streams: bool, ask: re
         Item::Fn { receiver, args, body, .. } => (receiver, args, body),
         else => return null,
     }
-    let mut walk = BufferWalk { target: target, locals: collections::BTreeMap(), frames: [], path: [], sources: collections::BTreeMap(), escapes: [], sheds: collections::BTreeMap(), puts_into: collections::BTreeMap(), struct_puts: collections::BTreeMap(), taken: collections::BTreeMap(), reassigned: collections::BTreeMap(), handed: collections::BTreeMap(), captured: collections::BTreeMap(), statement: 0, result_carries: carries, last_seen: collections::BTreeMap(), holders: collections::BTreeMap(), hoisted: collections::BTreeMap(), mutated: collections::BTreeMap(), value_tail: -1, wholes: collections::BTreeMap(), plain: collections::BTreeSet(), field_puts: collections::BTreeMap(), streams: streams, stream_loops: [], stream_how: "", stream_span: Span { start: 0, end: 0 }, stream_keeps: [], stream_gathers: [] }
+    let mut walk = BufferWalk { target: target, locals: collections::BTreeMap(), frames: [], path: [], sources: collections::BTreeMap(), escapes: [], sheds: collections::BTreeMap(), puts_into: collections::BTreeMap(), struct_puts: collections::BTreeMap(), taken: collections::BTreeMap(), reassigned: collections::BTreeMap(), handed: collections::BTreeMap(), captured: collections::BTreeMap(), statement: 0, result_carries: carries, last_seen: collections::BTreeMap(), holders: collections::BTreeMap(), hoisted: collections::BTreeMap(), mutated: collections::BTreeMap(), value_tail: -1, wholes: collections::BTreeMap(), plain: collections::BTreeSet(), field_puts: collections::BTreeMap(), streams: streams, stream_loops: [], stream_how: "", stream_span: Span { start: 0, end: 0 }, stream_keeps: [], stream_gathers: [], reads: collections::BTreeSet() }
     open_scope(walk)
     for arg in args {
         let parameter = Local { at: 0, path: [], origins: collections::BTreeSet(), ty: arg.ty.clone(), parameter: true, keeps: arg.mutable && ask.context.carries(ask.names, arg.ty), buffer: false, text: false, number: false, parts: [] }
@@ -1059,6 +1067,20 @@ fn shed(root: ref String, mut walk: BufferWalk) {
     walk.sheds.insert(root.clone(), paths)
 }
 
+/// **Whether `value` reads a whole file as text** (#2859): a call of
+/// `fs::read_to_string`, which `fs::read_to_string_into` can read into a buffer
+/// freed before.
+fn reads_a_file(value: ref Expr, ask: ref BufferAsk, unaliased: fn(ref String) -> String sync) -> bool {
+    match value {
+        Expr::Try(inner, _) => return reads_a_file(inner, ask, unaliased),
+        Expr::Call { func, .. } => {
+            let named = written_callee(ask.names, func, unaliased) ?? return false
+            return (named == "fs::read_to_string" || named == "std::fs::read_to_string") && !ask.own.functions.contains_key(named)
+        },
+        else => return false,
+    }
+}
+
 // A `let`: what it makes - a buffer of its own, a second name for one, or
 // views of what its value points into - and an element taken out of a keeper,
 // which stays what it was in there (ADR-tether-v1 D16).
@@ -1101,6 +1123,9 @@ fn let_statement(stmt: ref Stmt, span: ref Span, ask: ref BufferAsk, holes_of: f
             // `let draft = count(parse(text))` the text `count` makes points
             // into nothing, but `parse` still needs a keep for this statement.
             origins_of(value, ask, holes_of, unaliased, walk)
+            if reads_a_file(value, ask, unaliased) {
+                walk.reads.insert(at)
+            }
             let no_callee: String = ""
             let id = (at, no_callee.clone())
             if !walk.sources.contains_key(id) {
@@ -2962,7 +2987,7 @@ fn decide(key: String, body: ref Block, walk: ref BufferWalk, ask: ref BufferAsk
     if body.stmts.len() > 0 {
         first = body.stmts[0].span.start as i64
     }
-    let mut plan = BufferPlan { key: key, first: first, takes_keep: false, frame_keep: false, task_keep: false, local_keeps: collections::BTreeSet(), puts: collections::BTreeMap(), calls: collections::BTreeMap(), tethered: collections::BTreeMap(), element_keepers: collections::BTreeSet(), struct_keepers: collections::BTreeSet(), widths: collections::BTreeMap(), keeper_structs: collections::BTreeMap(), held_locals: collections::BTreeSet(), holds: collections::BTreeMap(), escapes: [], refusals: [], reputs: collections::BTreeMap(), opaque_puts: collections::BTreeSet(), late_puts: collections::BTreeMap(), places: collections::BTreeMap(), placed: collections::BTreeSet(), plain_parts: collections::BTreeSet(), field_places: collections::BTreeMap(), reput_places: collections::BTreeMap(), streams: [] }
+    let mut plan = BufferPlan { key: key, first: first, takes_keep: false, frame_keep: false, task_keep: false, local_keeps: collections::BTreeSet(), puts: collections::BTreeMap(), calls: collections::BTreeMap(), tethered: collections::BTreeMap(), element_keepers: collections::BTreeSet(), struct_keepers: collections::BTreeSet(), widths: collections::BTreeMap(), keeper_structs: collections::BTreeMap(), held_locals: collections::BTreeSet(), holds: collections::BTreeMap(), escapes: [], refusals: [], reputs: collections::BTreeMap(), opaque_puts: collections::BTreeSet(), late_puts: collections::BTreeMap(), places: collections::BTreeMap(), placed: collections::BTreeSet(), plain_parts: collections::BTreeSet(), field_places: collections::BTreeMap(), reput_places: collections::BTreeMap(), streams: [], reads: collections::BTreeSet() }
     for (id, found) in walk.sources {
         decide_source(id.clone(), found.source, found.path, walk, plan)
     }
@@ -3096,6 +3121,10 @@ fn decide_source(id: (i64, String), source: ref Source, path: ref Vec[(i64, bool
     } else if shedding.len() > 0 {
         keep = KeepAt::Element(source_at(source))
         held_one_per_buffer(id.clone(), source, shedding, walk, plan)
+        // **Its buffer is the next turn's read's** (#2859), where it is one.
+        if walk.reads.contains(source_at(source)) {
+            plan.reads.insert(source_at(source))
+        }
     } else if outer.len() > 0 {
         plan.frame_keep = true
     } else {

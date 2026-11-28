@@ -950,6 +950,12 @@ pub mod io {
     /// costs no call; a FIFO's descriptor is dropped here, and the runtime
     /// opens the path again where waiting is allowed.
     fn read_here(path: &Path) -> Option<Result<Vec<u8>>> {
+        read_here_into(path, Vec::new())
+    }
+
+    /// [`read_here`], into `bytes`: emptied, grown where the file needs more
+    /// room than it has, and handed back filled (#2859).
+    fn read_here_into(path: &Path, mut bytes: Vec<u8>) -> Option<Result<Vec<u8>>> {
         use std::io::Read;
 
         let mut options = std::fs::OpenOptions::new();
@@ -967,7 +973,8 @@ pub mod io {
         };
         // One byte past the size, as the ring asks for: the read that finds the
         // end costs a turn rather than a reallocation (ADR-263 D3).
-        let mut bytes = Vec::with_capacity(size + 1);
+        bytes.clear();
+        bytes.reserve_exact(size + 1);
         Some(file.read_to_end(&mut bytes).map(|_| bytes))
     }
 
@@ -1043,6 +1050,19 @@ pub mod io {
                 "the runtime has already been drained",
             )))),
         }
+    }
+
+    /// [`begin_read`], into `bytes` where the file is read on this thread
+    /// (#2859): a buffer a loop freed is read into again. Elsewhere `bytes`
+    /// is dropped and the read is [`begin_read`]'s.
+    pub fn begin_read_into(path: &Path, bytes: Vec<u8>) -> InFlight {
+        off_the_io_thread();
+        if idle(handle())
+            && let Some(done) = read_here_into(path, bytes)
+        {
+            return InFlight::Done(Some(done));
+        }
+        begin_read(path)
     }
 
     /// Start writing `bytes` to `path`, and hand back the operation.
@@ -1177,6 +1197,13 @@ pub mod io {
     pub fn reading(path: &Path) -> Reading {
         Reading {
             operation: begin_read(path),
+        }
+    }
+
+    /// Read `path` whole into `bytes`, as a future ([`begin_read_into`]).
+    pub fn reading_into(path: &Path, bytes: Vec<u8>) -> Reading {
+        Reading {
+            operation: begin_read_into(path, bytes),
         }
     }
 

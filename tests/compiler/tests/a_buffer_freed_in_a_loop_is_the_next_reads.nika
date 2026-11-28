@@ -1,0 +1,43 @@
+// A buffer whose last view died in a loop is the next read's buffer (#2859,
+// Perceus's reuse): each turn reads a file into a keep of its own, a view of
+// its first word goes into a 64-entry list overwritten by index, and the
+// overwrite frees the buffer that view pointed into (ADR-tether-v1 D12). The
+// lowering reads the next file into that buffer, `fs::read_to_string_into`,
+// instead of a new one; a program may call it by name too.
+use std::fs
+
+fn body(n: i64) -> String {
+	let mut g = String()
+	g.push_str(f"w{n} ")
+	for _k in 0..<64 {
+		g.push_str("abcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefghijk ")
+	}
+	return g
+}
+
+fn main() throws {
+	let root = fs::scratch()
+	for n in 0..<50 {
+		fs::write(f"f{n}.txt", root, body(n))
+	}
+	let mut recent: Vec[String] = []
+	let mut total = 0
+	for i in 0..<4000 {
+		let text = fs::read_to_string(f"f{i % 50}.txt", root)
+		for w in text.split(" ") {
+			if w.len() > 0 {
+				if recent.len() < 64 {
+					recent.push(w)
+				} else {
+					total += recent[(i % 64)].len() as i64
+					recent[(i % 64)] = w
+				}
+				break
+			}
+		}
+	}
+	println(f"{recent.len()} {total} {recent[0]} {recent[63]}")
+	let first = fs::read_to_string_into("f1.txt", root, String())
+	let again = fs::read_to_string_into("f20.txt", root, first)
+	println(f"{again.len()} {again.starts_with("w20 ")}")
+}

@@ -1742,6 +1742,10 @@ impl EmitState {
         // The types `path::f[T](…)` wrote, for this call alone.
         let path_types = walk.path_types.clone()
         walk.path_types = ""
+        // **A file read into its loop's spare** (#2859), for this call alone:
+        // a call written inside its arguments reads into a new buffer.
+        let read_into = emit_call_read_into(world, func, walk.read_into)
+        walk.read_into = null
         if self.emit_call_special(world, walk, out, host, func, args, config, depth, flow, scope) {
             return
         }
@@ -1753,7 +1757,11 @@ impl EmitState {
         if self.opens_a_paused_scope(world, func, args) && self.emit_call_paused_scope(world, walk, out, host, args, depth, flow, scope) {
             return
         }
-        self.emit_expr(world, walk, out, host, func, depth, flow, scope)
+        if read_into != null {
+            out.push("nikaia_std::fs::read_to_string_into")
+        } else {
+            self.emit_expr(world, walk, out, host, func, depth, flow, scope)
+        }
         // **What runs a kept function in a task of its own** - `net::serve`'s
         // handler (ADR-326 D1), a supervisor's children (ADR-328) - has a twin
         // where tasks run on threads, whose functions cross one: the pool's, as
@@ -1862,6 +1870,11 @@ impl EmitState {
             walk.boxed_scope = boxed
         } else {
             self.emit_core_args(world, walk, out, host, callee, args, takes, depth, flow, scope)
+        }
+        // **The buffer it reads into, after the path and the root**, as
+        // `fs::read_to_string_into` declares it (#2859).
+        if read_into != null {
+            out.push(f", {read_into ?? ""}.take()")
         }
         match func {
             Expr::Variable(name, _) => self.emit_core_dsl_parameters(world, walk, out, host, emit_text(world, name), args.len(), config, depth, flow, scope),
@@ -3279,5 +3292,18 @@ impl EmitState {
             return true
         }
         return false
+    }
+}
+
+/// **The spare a call reads into** (#2859): `spare`, where the call is
+/// `fs::read_to_string`, which the keep plan reads into its loop's spare.
+fn emit_call_read_into(world: ref EmitWorld, func: ref Expr, spare: ref String?) -> String? {
+    let named = spare ?? return null
+    return match func {
+        Expr::Path(segments, _) => {
+            let callee = unaliased_in(world.aliases, emit_arg_joined(world, segments))
+            if callee == "fs::read_to_string" || callee == "std::fs::read_to_string" { named.clone() } else { null }
+        },
+        else => null,
     }
 }

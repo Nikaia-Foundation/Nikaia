@@ -904,7 +904,12 @@ impl EmitState {
             } else {
                 out.push(f"let {mut_word}{local} = {kept.put ?? ""}")
             }
+            // **A file read per turn reads into its loop's spare** (#2859).
+            if self.reads_into_spare(walk, scope.function, at) {
+                walk.read_into = f"__spare_{at}"
+            }
             self.emit_expr(world, walk, out, host, value, depth, flow, inner)
+            walk.read_into = null
             out.push(");")
             return
         }
