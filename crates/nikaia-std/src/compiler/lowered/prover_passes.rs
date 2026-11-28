@@ -23,7 +23,7 @@ pub fn prover_passes(walk: &mut ProverWalk, program: &Program, words: &winnow_gr
         if key.contains("::") && !signature.takes_a_receiver() && theirs.contains(key) { walk.state.std_properties.insert(nikaia_std::block::Text::from(key.to_string())); }
     }
     let readers = prover_readers(program, words);
-    walk.state.value_readers = prover_value_readers(&readers, own, library);
+    walk.state.value_readers = prover_value_readers(program, words, &readers, own, library);
     walk.state.readers = prover_length_keepers(program, &readers, words);
     let bound = unsafe { nikaia_std::proven::add::<i64>(program.items.len() as i64, 2) };
     let mut preconditions: collections::BTreeMap<String, Precondition> = collections::BTreeMap::new();

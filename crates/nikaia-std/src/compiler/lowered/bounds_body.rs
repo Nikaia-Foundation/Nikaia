@@ -332,12 +332,13 @@ pub(crate) fn tally_here(expr: &Expr, ask: &Ask, deferred: bool, words: &winnow_
                 let receiver = nikaia_std::boxed::open(receiver); let method = *method;
                 if deferred { add_variable(receiver, words, &mut tally.names); }
                 let on = nikaia_std::index::or(variable_text(receiver, words), || "".into());
-                if deferred || on == "" || !readers.contains(&format!("{}.{}", on, words.resolve(method))) { add_variables(args, words, &mut tally.names); }
+                let name = words.resolve(method);
+                if deferred || !readers.contains(&format!(".{}", name)) && (on == "" || !readers.contains(&format!("{}.{}", on, name))) { add_variables(args, words, &mut tally.names); }
             },
-            Expr::SafeMethod { receiver, args, .. } => {
-                let receiver = nikaia_std::boxed::open(receiver);
+            Expr::SafeMethod { receiver, method, args, .. } => {
+                let receiver = nikaia_std::boxed::open(receiver); let method = *method;
                 if deferred { add_variable(receiver, words, &mut tally.names); }
-                add_variables(args, words, &mut tally.names);
+                if deferred || !readers.contains(&format!(".{}", words.resolve(method))) { add_variables(args, words, &mut tally.names); }
             },
             Expr::Call { func, args, .. } => {
                 let func = nikaia_std::boxed::open(func);

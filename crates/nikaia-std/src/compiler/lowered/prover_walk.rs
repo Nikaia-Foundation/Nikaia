@@ -4315,10 +4315,45 @@ pub(crate) fn prover_assigns_inside(walk: &mut ProverWalk, block: &Block, name: 
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn prover_value_readers(readers: &collections::BTreeSet<String>, own: &Ledger, library: &Ledger) -> collections::BTreeSet<String> {
+pub(crate) fn prover_value_readers(program: &Program, words: &winnow_grammar::InternerContext, readers: &collections::BTreeSet<String>, own: &Ledger, library: &Ledger) -> collections::BTreeSet<String> {
     let mut all = readers.copy_owned();
-    for (key, contract) in library.functions.iter() { if prover_reads_only(contract) { all.insert(nikaia_std::block::Text::from(key.to_string())); } }
-    for (key, contract) in own.functions.iter() { if prover_reads_only(contract) { all.insert(nikaia_std::block::Text::from(key.to_string())); } }
+    let mut methods: collections::BTreeMap<&str, bool> = collections::BTreeMap::new();
+    for ledger in [library, own] {
+        for (key, contract) in ledger.functions.iter() {
+            if prover_reads_only(contract) { all.insert(nikaia_std::block::Text::from(key.to_string())); }
+            let name = match key.split("::").last() { Some(__nikaia_value) => __nikaia_value, None => continue };
+            if name == key { continue; }
+            let reads = match &contract.signature {
+                None => false,
+                Some(sig) => sig.mutable.iter().all(|arg| { AsRef::<str>::as_ref(&(arg)) == AsRef::<str>::as_ref(&("self")) }),
+            };
+            let before = nikaia_std::index::or(methods.get(nikaia_std::index::as_text(&name)), || true);
+            methods.insert(name, before && reads);
+        }
+    }
+    for item in program.items.iter() {
+        match &item.node {
+            Item::Impl { methods: own_methods, .. } => {
+                for method in own_methods.iter() {
+                    match &method.node {
+                        Item::Fn { name, args, .. } => {
+                            let name = *name;
+                            let named = words.resolve(match name { Some(__nikaia_value) => __nikaia_value, None => continue });
+                            let reads = args.iter().all(|arg| { !arg.mutable });
+                            let before = nikaia_std::index::or(methods.get(nikaia_std::index::as_text(&named)), || true);
+                            methods.insert(named, before && reads);
+                        },
+                        _ => { },
+                    }
+                }
+            },
+            _ => { },
+        }
+    }
+    for (name, reads) in methods.iter() {
+        let reads = nikaia_std::num::value(reads);let name = *name;
+        if reads { all.insert(format!(".{}", name)); }
+    }
     all
 }
 

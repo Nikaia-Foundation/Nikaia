@@ -482,15 +482,18 @@ fn tally_here(expr: ref Expr, ask: ref Ask, deferred: bool, words: ref winnow_gr
                     add_variable(receiver, words, tally.names)
                 }
                 let on = variable_text(receiver, words) ?? ""
-                if deferred || on == "" || !readers.contains(f"{on}.{words.resolve(method)}") {
+                let name = words.resolve(method)
+                if deferred || !readers.contains(f".{name}") && (on == "" || !readers.contains(f"{on}.{name}")) {
                     add_variables(args, words, tally.names)
                 }
             },
-            Expr::SafeMethod { receiver, args, .. } => {
+            Expr::SafeMethod { receiver, method, args, .. } => {
                 if deferred {
                     add_variable(receiver, words, tally.names)
                 }
-                add_variables(args, words, tally.names)
+                if deferred || !readers.contains(f".{words.resolve(method)}") {
+                    add_variables(args, words, tally.names)
+                }
             },
             Expr::Call { func, args, .. } => {
                 if deferred || !readers.contains(body_callee_text(func, words) ?? "") {
