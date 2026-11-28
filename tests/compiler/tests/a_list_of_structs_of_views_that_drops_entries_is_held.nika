@@ -1,0 +1,43 @@
+// Records of the lines of files read in a loop, kept in a list pruned as it
+// goes, read back by index, by a `for` and through a method: the program NK2304
+// refused until ADR-tether-v1 (D12, D14). The run of the Rust test of the same
+// name, whose check of the lowered Rust stays there (#2849).
+use std::fs
+
+struct Record {
+    name: String,
+    size: i64,
+}
+
+impl Record {
+    fn describe(self) -> String {
+        return f"{self.name}:{self.size}"
+    }
+}
+
+fn files() -> fs::Root throws {
+    let root = fs::scratch()
+    fs::write("app.conf", root, "# settings\nhost = example.org\nport = 8080\ninclude = extra.conf\n")
+    fs::write("extra.conf", root, "mode = fast\nhost = override.org\n")
+    return root
+}
+
+fn main() throws {
+    let root = files()
+    let mut kept: Vec[Record] = Vec()
+    let mut round = 0
+    while round < 200 {
+        for path in ["app.conf", "extra.conf"] {
+            let text = fs::read_to_string(path, root)
+            for line in text.lines() {
+                let name = line.trim()
+                kept.push(Record { name: name, size: line.len() as i64 })
+            }
+            while kept.len() > 3 { kept.remove(0) }
+        }
+        round = round + 1
+    }
+    for r in kept { println(r.describe()) }
+    println(f"{kept.len()} {kept[0].name} {kept[2].describe()}")
+    println(kept.last()?.name ?? "-")
+}

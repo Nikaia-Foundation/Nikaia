@@ -1,0 +1,22 @@
+// Owned text handed to a field whole is moved there (#686): `l.from = key`
+// inside a loop keeps no view of `key`. The run of
+// `tether_keep::owned_text_assigned_to_a_field_is_moved_not_kept`, whose check
+// of the lowered Rust stays there (#2849).
+struct L {
+    from: String?,
+}
+
+fn word(n: i64) -> String {
+    return f"w{n}"
+}
+
+fn main() throws {
+    let mut l = L { from: null }
+    for i in 0..<2 {
+        if i == 1 {
+            let key: String? = word(i)
+            l.from = key
+        }
+    }
+    println(l.from ?? "-")
+}

@@ -1,0 +1,32 @@
+// The loader with nothing written above it: where a buffer lives is not a thing
+// a program is asked to say (ADR-tether-v1 D5). Moved from `tether_keep::no_word` (#2849).
+use std::fs
+
+struct Setting {
+    key: String,
+    value: String,
+}
+
+fn load(path: String, root: fs::Root) -> Vec[Setting] throws {
+    let text = fs::read_to_string(path, root)
+    let mut settings: Vec[Setting] = []
+    for line in text.lines() {
+        let parts: Vec[String] = line.split("=").collect()
+        if parts.len() == 2 {
+            settings.push(Setting { key: parts[0].trim(), value: parts[1].trim() })
+        }
+    }
+    return settings
+}
+
+fn files() -> fs::Root throws {
+    let root = fs::scratch()
+    fs::write("app.conf", root, "# settings\nhost = example.org\nport = 8080\ninclude = extra.conf\n")
+    fs::write("extra.conf", root, "mode = fast\nhost = override.org\n")
+    return root
+}
+
+fn main() throws {
+    let root = files()
+    println(f"{load("app.conf", root).len()}")
+}

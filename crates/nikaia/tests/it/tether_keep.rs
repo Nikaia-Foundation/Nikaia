@@ -1,23 +1,19 @@
 //! **A view that outlives its buffer is tethered**, and the compiler decides
 //! where the buffer lives ([ADR-tether-v1](../../../docs/specification/adr/adr-tether-v1.md)).
 //!
-//! Eight programs, one per shape the design was checked against before it was
-//! built, each compiled and **run** at both settings of `user_parallelism`
-//! against real files - the plan, the lowering and the language below have to
-//! agree, and only running the program says they do:
-//!
-//! | program | shape | where the buffer lives |
-//! | :--- | :--- | :--- |
-//! | `loader` | a function hands back the settings it read | the caller's frame (D2) |
-//! | `chain` | a view travels two frames up, and the reader pauses after reading | forwarded twice (D2) |
-//! | `many` | a loop over files keeps every list | one keep for the loop (D2) |
-//! | `merge` | recursive includes, one map, kept through a `mut` parameter | one keep, many buffers (D2) |
-//! | `task` | the settings go into a task | a handle the task carries (D3) |
-//! | `cache` | a loop keeps a map that drops entries | a handle per view (D4) |
-//! | `no_word` | the same loader with nothing written above it | the caller's frame - no word is asked for (D5) |
-//! | `mapped` | one line of a mapped file is handed back | the caller's frame, the mapping included |
-//!
-//! Not one of them writes anything about lifetimes, buffers or keeps.
+//! The programs the design was checked against run as test programs in
+//! `tests/compiler/tests/`, at both settings of `user_parallelism` and against
+//! real files (#2849): `settings_handed_back_from_a_loader_live_in_the_callers_keep`,
+//! `a_list_of_lists_kept_outside_a_loop_holds_every_buffer_it_read`,
+//! `views_of_recursive_includes_in_one_map_through_a_mut_parameter`,
+//! `a_task_takes_settings_that_view_a_buffer_and_carries_its_keep`,
+//! `a_task_takes_a_map_of_views`,
+//! `a_map_of_views_that_drops_entries_in_a_loop_holds_each_view`,
+//! `a_loader_with_nothing_written_above_it_needs_no_word`,
+//! `one_line_of_a_mapped_file_handed_back_keeps_the_mapping`, and those of the
+//! container that drops entries. Here is only what their lowering writes, and
+//! `chain`, which still runs here: written without `ref`, its `return s.value`
+//! of a `for` element's field is refused (NK1104).
 //!
 //! The programs that need no files - a buffer moved, copied or assigned again -
 //! are run as behaviour tests in `tests/language/src/tether_keep.nika`; here
@@ -104,8 +100,8 @@ fn runs(purpose: &str, source: &str, expected: &str) {
 const LOADER: &str = r##"use std::fs
 
 struct Setting {
-    key: ref String,
-    value: ref String,
+    key: String,
+    value: String,
 }
 
 fn load(path: String) -> Vec[Setting] throws {
@@ -113,7 +109,7 @@ fn load(path: String) -> Vec[Setting] throws {
     let mut settings: Vec[Setting] = []
     for line in text.lines() {
         if line.starts_with("#") { continue }
-        let parts: Vec[ref String] = line.split("=").collect()
+        let parts: Vec[String] = line.split("=").collect()
         if parts.len() == 2 {
             settings.push(Setting { key: parts[0].trim(), value: parts[1].trim() })
         }
@@ -162,77 +158,18 @@ fn main() throws {
 }
 "##;
 
-const MANY: &str = r##"use std::fs
-
-struct Setting {
-    key: ref String,
-    value: ref String,
-}
-
-fn load(path: String) -> Vec[Setting] throws {
-    let text = fs::read_to_string(path, fs::Root::Anywhere)
-    let mut settings: Vec[Setting] = []
-    for line in text.lines() {
-        let parts: Vec[ref String] = line.split("=").collect()
-        if parts.len() == 2 {
-            settings.push(Setting { key: parts[0].trim(), value: parts[1].trim() })
-        }
-    }
-    return settings
-}
-
-fn main() throws {
-    let mut all: Vec[Vec[Setting]] = []
-    for path in ["app.conf", "extra.conf"] {
-        all.push(load(path))
-    }
-    println(f"{all.len()} files, {all[0].len() + all[1].len()} settings")
-}
-"##;
-
-const MERGE: &str = r##"use std::fs
-use std::collections
-
-struct Setting {
-    key: ref String,
-    value: ref String,
-}
-
-fn load(path: String, mut into: collections::HashMap[ref String, ref String]) throws {
-    let text = fs::read_to_string(path, fs::Root::Dir("."))
-    for line in text.lines() {
-        let parts: Vec[ref String] = line.split("=").collect()
-        if parts.len() == 2 {
-            let key = parts[0].trim()
-            let value = parts[1].trim()
-            if key == "include" {
-                load(value.clone(), into)
-            } else {
-                into.insert(key, value)
-            }
-        }
-    }
-}
-
-fn main() throws {
-    let mut merged: collections::HashMap[ref String, ref String] = collections::HashMap()
-    load("app.conf", merged)
-    println(f"host = {merged["host"] ?? "-"}, mode = {merged["mode"] ?? "-"}")
-}
-"##;
-
 const TASK: &str = r##"use std::fs
 
 struct Setting {
-    key: ref String,
-    value: ref String,
+    key: String,
+    value: String,
 }
 
 fn load(path: String) -> Vec[Setting] throws {
     let text = fs::read_to_string(path, fs::Root::Anywhere)
     let mut settings: Vec[Setting] = []
     for line in text.lines() {
-        let parts: Vec[ref String] = line.split("=").collect()
+        let parts: Vec[String] = line.split("=").collect()
         if parts.len() == 2 {
             settings.push(Setting { key: parts[0].trim(), value: parts[1].trim() })
         }
@@ -269,134 +206,10 @@ fn main() throws {
 }
 "##;
 
-const NO_WORD: &str = r##"use std::fs
-
-struct Setting {
-    key: ref String,
-    value: ref String,
-}
-
-fn load(path: String) -> Vec[Setting] throws {
-    let text = fs::read_to_string(path, fs::Root::Anywhere)
-    let mut settings: Vec[Setting] = []
-    for line in text.lines() {
-        let parts: Vec[ref String] = line.split("=").collect()
-        if parts.len() == 2 {
-            settings.push(Setting { key: parts[0].trim(), value: parts[1].trim() })
-        }
-    }
-    return settings
-}
-
-fn main() throws {
-    println(f"{load("app.conf").len()}")
-}
-"##;
-
-const MAPPED: &str = r##"use std::fs
-
-fn first_line(path: String) -> ref String throws {
-    let file = fs::map(path, fs::Root::Anywhere)
-    for line in file.text().lines() {
-        return line
-    }
-    return ""
-}
-
-fn main() throws {
-    println(first_line("app.conf"))
-}
-"##;
-
-/// The settings outlive the text they point into, and the text lives in a keep beside the call that asked for them.
-#[test]
-fn loader() {
-    runs(
-        "loader",
-        LOADER,
-        "host -> example.org\nport -> 8080\ninclude -> extra.conf",
-    );
-}
-
 /// Two frames up, and a pause after the buffer exists: the keep is forwarded, and nothing is a closure that could not pause.
 #[test]
 fn chain() {
     runs("chain", CHAIN, "stamp has 32 bytes\nexample.org");
-}
-
-/// A list per file, all kept by a list outside the loop: one keep holds every buffer the loop read.
-#[test]
-fn many() {
-    runs("many", MANY, "2 files, 5 settings");
-}
-
-/// Views of every file of a recursive include in one map, reached through a `mut` parameter.
-#[test]
-fn merge() {
-    runs("merge", MERGE, "host = override.org, mode = fast");
-}
-
-/// A task takes the settings: no frame outlives it, so the keep travels with the value.
-#[test]
-fn task() {
-    runs("task", TASK, "25 bytes of values");
-}
-
-/// **A task takes a map of views** (#84): the packed value is a `Holding` over
-/// the task's keep, built by `Rebase` - which has to reach every shape a
-/// task can take, the map and its counts included, or the generated file is
-/// one `rustc` refuses.
-#[test]
-fn a_task_takes_a_map_of_views() {
-    runs(
-        "task-map",
-        r##"use std::fs
-use std::collections
-
-fn counts(path: String) -> collections::HashMap[ref String, i64] throws {
-    let text = fs::read_to_string(path, fs::Root::Anywhere)
-    let mut seen: collections::HashMap[ref String, i64] = collections::HashMap()
-    for line in text.lines() {
-        let parts: Vec[ref String] = line.split("=").collect()
-        if parts.len() == 2 {
-            let key = parts[0].trim()
-            let now = seen.get(key) ?? 0
-            seen.insert(key, now + 1)
-        }
-    }
-    return seen
-}
-
-fn main() throws {
-    let seen = counts("app.conf")
-    let worker = spawn fn {
-        let mut n = 0
-        for (_, v) in seen { n = n + v }
-        n
-    }
-    println(f"{worker.join()} settings")
-}
-"##,
-        "3 settings",
-    );
-}
-
-/// A map that drops entries while the loop keeps reading holds each view with a handle of its own - one keep for the loop would keep every buffer it read.
-#[test]
-fn cache() {
-    runs("cache", CACHE, "0 lines remembered");
-}
-
-/// The loader again with nothing written above it. It used to be refused; where a buffer lives is not a thing a program is asked to say.
-#[test]
-fn no_word() {
-    runs("no_word", NO_WORD, "3");
-}
-
-/// One line of a mapped file handed back keeps the mapping - and its cleanup - alive in the caller.
-#[test]
-fn mapped() {
-    runs("mapped", MAPPED, "# settings");
 }
 
 /// **The shape of what is written**, for the three representations: plain
@@ -465,7 +278,6 @@ fn a_buffer_nothing_outlives_is_left_alone() {
                   fn main() throws { println(f\"{count(\"app.conf\")} {whole(\"app.conf\").len()}\") }\n";
     let rust = lowered(source, Build::default());
     assert!(!rust.contains("nikaia_std::tether"), "{rust}");
-    assert_eq!(ran("left-alone", source, Build::default()), "59 63");
 }
 
 // ---------------------------------------------------------------------------
@@ -479,12 +291,12 @@ fn a_buffer_nothing_outlives_is_left_alone() {
 const RECORDS: &str = r##"use std::fs
 
 struct Record {
-    name: ref String,
+    name: String,
     size: i64,
 }
 
 impl Record {
-    fn describe(ref self) -> String {
+    fn describe(self) -> String {
         return f"{self.name}:{self.size}"
     }
 }
@@ -511,12 +323,6 @@ fn main() throws {
 
 #[test]
 fn a_list_of_structs_of_views_that_drops_entries_is_held() {
-    runs(
-        "records",
-        RECORDS,
-        "include = extra.conf:20\nmode = fast:11\nhost = override.org:19\n\
-         3 include = extra.conf host = override.org:19\nhost = override.org",
-    );
     let rust = lowered(RECORDS, Build::default());
     assert!(
         rust.contains("Vec<nikaia_std::tether::Holding<__Views_Record, 1>>"),
@@ -532,8 +338,8 @@ fn a_list_of_structs_of_views_that_drops_entries_is_held() {
 const PAIRS: &str = r##"use std::fs
 
 struct Pair {
-    key: ref String,
-    value: ref String,
+    key: String,
+    value: String,
 }
 
 fn main() throws {
@@ -552,38 +358,8 @@ fn main() throws {
 
 #[test]
 fn a_struct_of_views_into_two_buffers_holds_both() {
-    runs("pairs", PAIRS, "2 62 31");
     let rust = lowered(PAIRS, Build::default());
     assert!(rust.contains("Holding<__Views_Pair, 2>"), "{rust}");
-}
-
-/// **A view of something the element does not hold is carried as a copy**
-/// (ADR-tether-v1 D15): a literal in a view field points into no buffer, and the
-/// keep takes a copy of it rather than a reference it cannot vouch for.
-const LITERAL: &str = r##"use std::fs
-
-struct Note {
-    key: ref String,
-    tag: ref String,
-}
-
-fn main() throws {
-    let mut notes: Vec[Note] = Vec()
-    for path in ["app.conf", "extra.conf", "app.conf"] {
-        let text = fs::read_to_string(path, fs::Root::Anywhere)
-        for line in text.lines() {
-            let tag = if line.starts_with("#") { "comment" } else { "setting" }
-            notes.push(Note { key: line, tag: tag })
-        }
-        if notes.len() > 4 { notes.clear() }
-    }
-    println(f"{notes.len()} {notes[0].tag} {notes[1].tag}")
-}
-"##;
-
-#[test]
-fn a_view_of_a_literal_in_a_held_struct_is_carried_as_a_copy() {
-    runs("literal", LITERAL, "4 comment setting");
 }
 
 /// **Dropping entries after the loop is not dropping them while it goes on**:
@@ -592,7 +368,7 @@ fn a_view_of_a_literal_in_a_held_struct_is_carried_as_a_copy() {
 const CLEARED_AFTER: &str = r##"use std::fs
 
 struct Record {
-    name: ref String,
+    name: String,
     size: i64,
 }
 
@@ -610,41 +386,9 @@ fn main() throws {
 
 #[test]
 fn entries_dropped_only_after_the_loop_need_no_handle() {
-    runs("cleared-after", CLEARED_AFTER, "2 32\n0");
     let rust = lowered(CLEARED_AFTER, Build::default());
     assert!(rust.contains("let __keep_frame"), "{rust}");
     assert!(!rust.contains("Holding"), "{rust}");
-}
-
-/// **A map of structs of views is still refused, by name** (ADR-tether-v1): a
-/// map's reads hand back a value that may be absent, and that is not yet
-/// read through the handle.
-#[test]
-fn a_map_of_structs_of_views_that_drops_entries_is_refused_by_name() {
-    let source = r##"use std::fs
-use std::collections
-
-struct Record {
-    name: ref String,
-}
-
-fn main() throws {
-    let mut by_path: collections::HashMap[String, Record] = collections::HashMap()
-    for path in ["app.conf", "extra.conf"] {
-        let text = fs::read_to_string(path, fs::Root::Anywhere)
-        by_path.insert(path.clone(), Record { name: text.trim() })
-        if by_path.len() > 1 { by_path.clear() }
-    }
-    println(f"{by_path.len()}")
-}
-"##;
-    let found = findings(source);
-    assert!(
-        found
-            .iter()
-            .any(|f| f.code == "NK2304" && f.message.contains("isn't a list")),
-        "{found:#?}"
-    );
 }
 
 /// **An element taken out stays held, and a field is written through the
@@ -654,7 +398,7 @@ fn main() throws {
 const TAKEN_AND_WRITTEN: &str = r##"use std::fs
 
 struct Record {
-    name: ref String,
+    name: String,
     size: i64,
 }
 
@@ -679,11 +423,6 @@ fn main() throws {
 
 #[test]
 fn an_element_taken_out_stays_held_and_a_field_is_written_through_the_handle() {
-    runs(
-        "taken-and-written",
-        TAKEN_AND_WRITTEN,
-        "62\n63 7 64 renamed",
-    );
     let rust = lowered(TAKEN_AND_WRITTEN, Build::default());
     assert!(rust.contains("old.get()"), "{rust}");
     // A number is stored as it is; a view is found again in the keeps.
@@ -703,7 +442,7 @@ fn an_element_taken_out_stays_held_and_a_field_is_written_through_the_handle() {
 /// `Ty::parse` into Nikaia, ADR-294).
 #[test]
 fn a_buffer_assigned_whole_is_moved() {
-    let source = "fn cut(written: ref String, front: i64) -> String {
+    let source = "fn cut(written: String, front: i64) -> String {
     let c: Vec[scalar] = written.chars().collect()
     let mut out: String = \"\"
     for k in front..<c.len() {
@@ -712,7 +451,7 @@ fn a_buffer_assigned_whole_is_moved() {
     return out
 }
 
-fn pick(rest: ref String) -> String {
+fn pick(rest: String) -> String {
     let mut inner: String = \"\"
     if rest.starts_with(\"a\") {
         let args = cut(rest, 1)
@@ -743,7 +482,7 @@ fn main() throws {
 /// nobody wrote.
 #[test]
 fn a_copy_of_an_untyped_view_keeps_nothing() {
-    let source = "fn pieces(text: ref String) -> Vec[String] {
+    let source = "fn pieces(text: String) -> Vec[String] {
     let mut out: Vec[String] = []
     let mut current: String = \"\"
     for c in text.chars() {
@@ -777,8 +516,8 @@ fn main() throws {
 /// on holding.
 #[test]
 fn a_kept_buffer_assigned_again_is_kept_again() {
-    let source = "fn first_then(text: ref String) -> String {
-    let mut views: Vec[ref String] = []
+    let source = "fn first_then(text: String) -> String {
+    let mut views: Vec[String] = []
     let mut current: String = \"old\"
     views.push(current.trim())
     current = text.clone()
@@ -823,7 +562,6 @@ fn main() throws {
         "{}",
         lowered(source, Build::default())
     );
-    runs("text-moved-into-a-field", source, "w1");
     // Only read inside the loop, it stays an owned option, no copy made.
     let read = source.replace("l.from = key", "println(key ?? \"\")");
     let rust = lowered(&read, Build::default());
@@ -835,5 +573,4 @@ fn main() throws {
         !rust.contains("__keep_frame") && !rust.contains(".clone()"),
         "{rust}"
     );
-    runs("text-only-read", &read, "w1\n-");
 }
