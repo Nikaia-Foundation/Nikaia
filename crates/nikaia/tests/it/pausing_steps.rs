@@ -100,7 +100,9 @@ fn a_pausing_step_does_not_fit_where_nothing_said_it_would() {
 }
 
 /// **The loop gives its thread up**, which is the whole of D1 in one line of
-/// emitted Rust: the sequence is bound once and stepped with a `.next().await`.
+/// emitted Rust: the sequence is bound once and stepped with an awaited read
+/// (`next_line().await` for `io::lines()`, which reads into a pool of buffers,
+/// ADR-stream-buffers-v1 D1).
 #[test]
 fn a_for_over_a_pausing_sequence_awaits_each_step() {
     let rust = rust(
@@ -111,11 +113,11 @@ fn a_for_over_a_pausing_sequence_awaits_each_step() {
          }",
     );
     assert!(
-        rust.contains("let mut __nikaia_sequence = io::lines().await;"),
+        rust.contains("let mut __nikaia_sequence = io::lines().await.in_pool(2);"),
         "{rust}"
     );
     assert!(
-        rust.contains("while let Some(line) = __nikaia_sequence.next().await"),
+        rust.contains("while let Some(__nikaia_line) = __nikaia_sequence.next_line().await"),
         "{rust}"
     );
     // The `for` is gone, not wrapped: two loops would be two walks of one
