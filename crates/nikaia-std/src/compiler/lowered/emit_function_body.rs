@@ -99,7 +99,7 @@ impl EmitState {
             return Ok(());
         }
         let pad = nikaia_std::block::Text::from("    ".repeat(nikaia_std::count::of(depth)));
-        let inner_pad = nikaia_std::block::Text::from("    ".repeat(nikaia_std::count::of(depth + 1))); #[allow(unused_mut, clippy::redundant_locals)] let mut first = first;
+        let inner_pad = nikaia_std::block::Text::from("    ".repeat(nikaia_std::count::of(depth + 1)));
         out.push("{\n");
         for line in first.iter() { out.push(&format!("{}{}\n", inner_pad, line)); }
         let last = if count == 0 { 0 } else { unsafe { nikaia_std::proven::sub::<i64>(count, 1) } };

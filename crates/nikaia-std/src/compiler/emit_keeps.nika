@@ -289,3 +289,190 @@ fn emit_held_around(keeps: ref String, place: (i64, bool)?) -> (String, String) 
     }
     return ("{ use nikaia_std::tether::Hold as _; (", f").hold_near([{keeps}], __place_{named.0}) }}")
 }
+
+/// **Whether a held value is an `if` the emitter checks arm by arm**
+/// (ADR-tether-v1 D15, #2848): each arm one expression, with an `else`,
+/// ending in a literal or a value.
+fn emit_held_arms_fit(value: ref Expr) -> bool {
+    return match value {
+        Expr::If { then_branch, else_branch, .. } => {
+            let other = else_branch ?? return false
+            emit_held_arm_fits(then_branch) && emit_held_arm_fits(other)
+        }
+        else => false,
+    }
+}
+
+fn emit_held_arm_fits(block: ref Block) -> bool {
+    if block.stmts.len() != 1 {
+        return false
+    }
+    let tail = ending_of(block) ?? return false
+    return match tail {
+        Expr::If { .. } => emit_held_arms_fit(tail),
+        else => true,
+    }
+}
+
+impl EmitState {
+    /// **A value held by `keeps`, checked against the buffer the plan names**
+    /// (ADR-tether-v1 D12, D14, D15, #2842, #2848): plainly a view of it,
+    /// `Held::in_place`; an `if` whose arms are a plain view or a literal,
+    /// each arm on its own - the view checked, a miss the compiler's fault,
+    /// the literal held with no keep; a struct literal, each field against its
+    /// own buffer (`__hold_at`); else `hold_near`, or found again among the
+    /// keeps where the plan names no buffer. `buffers` are the keeps' buffers
+    /// in their order, empty where they are not known.
+    fn emit_held_value[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, value: ref Expr, keeps: ref String, buffers: ref Vec[i64], place: (i64, bool)?, function: ref String, depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
+        let key = self.keep_plan_key(walk, function) ?? ""
+        let plan = self.keep_plans.get(key)
+        let parts: collections::BTreeSet[i64] = plan?.plain_parts?.clone() ?? collections::BTreeSet()
+        let fields: collections::BTreeMap[String, (i64, bool)]? = plan?.field_places?.get(node_key(value))?.clone()
+        let at = self.emit_held_fields(world, value, fields, place, buffers, false)
+        if at != null {
+            // A struct of views is written bare, so its `__hold_at` is
+            // reached (no `Cleaned` around it: `emit_held_fields`).
+            out.push("(")
+            self.emit_expr(world, walk, out, host, value, depth, flow, scope)
+            out.push(f").__hold_at([{keeps}], {at ?? ""})")
+            return
+        }
+        let named = place ?? (-1, false)
+        if named.0 >= 0 && !named.1 && emit_held_arms_fit(value) && self.emit_held_arms_plain(world, walk, host, value, parts, depth, flow, scope) {
+            self.emit_held_arm(world, walk, out, host, value, keeps, named.0, parts, depth, flow, scope)
+            return
+        }
+        let (before, after) = emit_held_around(keeps, place)
+        out.push(before)
+        self.emit_expr(world, walk, out, host, value, depth, flow, scope)
+        out.push(after)
+    }
+
+    /// **Whether every arm of a held `if` is a literal or a plain view**
+    /// (#2848), each written as it stands - a literal as static text, a view
+    /// with nothing around it (no `Some(..)` of a nullable place): only then
+    /// is each arm held on its own, the literal with no keep.
+    fn emit_held_arms_plain[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, host: ref H, value: ref Expr, parts: ref collections::BTreeSet[i64], depth: i64, flow: EmitFlow, scope: ref EmitScope) -> bool sync throws {
+        match value {
+            Expr::If { then_branch, else_branch, .. } => {
+                let other = else_branch ?? return false
+                let first = ending_of(then_branch) ?? return false
+                let second = ending_of(other) ?? return false
+                return self.emit_held_arms_plain(world, walk, host, first, parts, depth, flow, scope) && self.emit_held_arms_plain(world, walk, host, second, parts, depth, flow, scope)
+            }
+            Expr::LitStr { .. } => {
+                let mut written = EmitOut::empty()
+                self.emit_expr(world, walk, written, host, value, depth, flow, scope)
+                return written.buf.starts_with("\"") && written.buf.ends_with("\"")
+            }
+            else => {
+                if !parts.contains(node_key(value)) {
+                    return false
+                }
+                let mut written = EmitOut::empty()
+                self.emit_expr(world, walk, written, host, value, depth, flow, scope)
+                return !written.buf.starts_with("Some(")
+            }
+        }
+    }
+
+    /// One arm of a held `if` (#2848): a literal held with no keep, a plain
+    /// view checked against the buffer at `buffer`, anything else `hold_near`.
+    fn emit_held_arm[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, value: ref Expr, keeps: ref String, buffer: i64, parts: ref collections::BTreeSet[i64], depth: i64, flow: EmitFlow, scope: ref EmitScope) sync throws {
+        match value {
+            Expr::If { cond, then_branch, else_branch, .. } => {
+                let other = else_branch ?? return
+                let first = ending_of(then_branch) ?? return
+                let second = ending_of(other) ?? return
+                out.push("if ")
+                self.emit_expr(world, walk, out, host, cond, depth, flow, scope)
+                out.push(" { ")
+                self.emit_held_arm(world, walk, out, host, first, keeps, buffer, parts, depth, flow, scope)
+                out.push(" } else { ")
+                self.emit_held_arm(world, walk, out, host, second, keeps, buffer, parts, depth, flow, scope)
+                out.push(" }")
+            }
+            Expr::LitStr { .. } => {
+                out.push("nikaia_std::tether::Held::literal(")
+                self.emit_expr(world, walk, out, host, value, depth, flow, scope)
+                out.push(")")
+            }
+            else => {
+                let (before, after) = emit_held_around(keeps, (buffer, parts.contains(node_key(value))))
+                out.push(before)
+                self.emit_expr(world, walk, out, host, value, depth, flow, scope)
+                out.push(after)
+            }
+        }
+    }
+
+    /// **Where each field of a struct literal held or packed is checked**
+    /// (ADR-tether-v1 D14, D15, #2848): `[At; fields]` in the order the struct
+    /// declares them, for its `__hold_at` / `__rebase_at` - a view field at
+    /// the place of its own buffer, `In` where it is plainly a view of it,
+    /// `Near` where it may be a literal, `Copied` for a literal; a field the
+    /// plan names no buffer for at the value's one buffer, else `Found`. The
+    /// keep is the buffer's among `buffers`, or the task's (`packed`). Null
+    /// where it is no struct literal of views or the plan names nothing.
+    fn emit_held_fields(ref self, world: ref EmitWorld, value: ref Expr, named: collections::BTreeMap[String, (i64, bool)]?, place: (i64, bool)?, buffers: ref Vec[i64], packed: bool) -> String? {
+        let name = match value {
+            Expr::StructLit { name, .. } => emit_text(world, name).clone(),
+            else => return null,
+        }
+        if named == null && place == null {
+            return null
+        }
+        let by_field = named ?? collections::BTreeMap()
+        let mut declared: Vec[FieldDef]? = null
+        for item in world.items {
+            match item.node {
+                Item::Struct { name: own, generics, fields, .. } => {
+                    if world.words.resolve(own) == name && generics.len() == 0 && self.borrowing.contains(name) {
+                        declared = fields.clone()
+                    }
+                },
+                else => {},
+            }
+        }
+        let fields = declared ?? return null
+        if self.cleaned_types.contains(name) {
+            return null
+        }
+        let mut at: Vec[String] = []
+        for field in fields {
+            if !holds_view(field.ty) && !self.names_borrowing(world, field.ty) {
+                at.push("nikaia_std::tether::At::Found")
+                continue
+            }
+            let mut named_here: (i64, bool)? = by_field.get(world.words.resolve(field.name))?.clone()
+            if named_here == null && place != null {
+                let whole = place ?? (-1, false)
+                named_here = (whole.0, false)
+            }
+            let (buffer, sure) = named_here ?? (-2, false)
+            if buffer == -1 {
+                at.push("nikaia_std::tether::At::Copied(0)")
+                continue
+            }
+            let mut keep = -1
+            if packed {
+                keep = 0
+            } else {
+                for k in 0..<buffers.len() {
+                    if keep < 0 && buffers[k] == buffer {
+                        keep = k
+                    }
+                }
+            }
+            if buffer < 0 || keep < 0 {
+                at.push("nikaia_std::tether::At::Found")
+            } else if sure {
+                at.push(f"nikaia_std::tether::At::In({keep}, __place_{buffer})")
+            } else {
+                at.push(f"nikaia_std::tether::At::Near({keep}, __place_{buffer})")
+            }
+        }
+        let joined = at.join(", ")
+        return f"[{joined}]"
+    }
+}

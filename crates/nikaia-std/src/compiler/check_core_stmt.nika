@@ -2368,7 +2368,11 @@ fn check_core_stmt_assign[H: CheckHost](mut state: CheckState, world: ref CheckW
         if found.is_unknown() && state.number_shaped(world, value) && state.no_integer_is(world, into) {
             assigned = Ty::Named { name: "i64", args: [], view: false }
         }
-        state.expect_type(world, assigned, into, span, "assign", fn(was, wanted) { f"You're assigning `{was}` to something that holds `{wanted}`." })
+        // **A view of a value that copies is copied out** (ADR-387 D1,
+        // ADR-294 D9.1, #2509), as at a `let` that names the type.
+        if !state.a_view_copied_out(world, assigned, into, value) {
+            state.expect_type(world, assigned, into, span, "assign", fn(was, wanted) { f"You're assigning `{was}` to something that holds `{wanted}`." })
+        }
         state.findings_moved(span, at, pushed, waiting)
     }
     return check_core_stmt_unit()
@@ -3032,6 +3036,46 @@ fn check_core_stmt_body_discarded(mut state: CheckState, body: ref Block) sync {
     }
 }
 
+/// **The tail of a body that hands back nothing is not used** (#2588): a
+/// value made there, through its blocks and the arms of its `if` and `match`,
+/// dies where it is made. Only those values are marked, not the `if` or
+/// `match` itself, whose arms must still agree (NK1245).
+fn check_core_stmt_tail_unused(mut state: CheckState, body: ref Block) sync {
+    let count = body.stmts.len() as i64
+    if count == 0 {
+        return
+    }
+    match body.stmts[count - 1].node {
+        Stmt::Expr(value) => check_core_stmt_value_unused(state, value),
+        else => {},
+    }
+}
+
+/// A value of an unused tail: what it makes is dropped (#2588).
+fn check_core_stmt_value_unused(mut state: CheckState, value: ref Expr) sync {
+    match check_peeled(value) {
+        Expr::Block(block, _) => check_core_stmt_tail_unused(state, block),
+        Expr::If { then_branch, else_branch, .. } => {
+            check_core_stmt_tail_unused(state, then_branch)
+            if else_branch != null {
+                let otherwise: ref Block = else_branch ?? then_branch
+                check_core_stmt_tail_unused(state, otherwise)
+            }
+        },
+        Expr::Match { arms, .. } => {
+            for arm in arms {
+                check_core_stmt_value_unused(state, arm.body)
+            }
+        },
+        else => {
+            if check_core_expr_makes_a_value(value) {
+                state.discarded.insert(id_of(value) as i64)
+                state.discarded.insert(id_of(check_peeled(value)) as i64)
+            }
+        },
+    }
+}
+
 /// **Walk a block and hand back the type of its tail.**
 /// **A lambda bound by `let` without a type takes it from its first use**
 /// (#997), as an empty list takes its element type from its first (ADR-135
@@ -3293,8 +3337,20 @@ fn check_core_view_list_rebound(mut state: CheckState, world: ref CheckWorld, bl
         return
     }
     let mut together: collections::BTreeSet[String] = collections::BTreeSet()
+    let own_text = !check_core_a_list_of_views(state, name)
     let mut later = at + 1
     while later <= last {
+        // A `for` that walks a list of own text puts nothing into it: what
+        // it reads together with the list views the list's text (ADR-views-v4
+        // D5, #2478), so the list must outlive it, not be bound after it.
+        let walks = match block.stmts[later].node {
+            Stmt::For { iter, .. } => own_text && check_core_is_the_name(world, iter, name),
+            else => false,
+        }
+        if walks {
+            later += 1
+            continue
+        }
         let mut read: collections::BTreeSet[String] = collections::BTreeSet()
         names_in_statement(block.stmts[later].node, world.words, read)
         if read.contains(name) {

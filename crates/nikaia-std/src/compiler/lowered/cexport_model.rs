@@ -519,7 +519,7 @@ pub(crate) fn cx_handed(words: &winnow_grammar::InternerContext, plains: &[CxPla
 }
 
 pub(crate) fn cx_parameter_names(params: &[String]) -> Vec<String> {
-    #[allow(unused_mut)] let mut names: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
+    let mut names: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     names.reserve(params.iter().size_hint().0); for list in params.iter() {
         let mut depth = 0;
         let mut current: String = String::from("");
@@ -534,7 +534,7 @@ pub(crate) fn cx_parameter_names(params: &[String]) -> Vec<String> {
         }
         names.push(nikaia_std::block::Text::from(current.trim().to_string()));
     }
-    let mut out: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut names = names;
+    let mut out: Vec<String> = vec![];
     out.reserve(names.iter().size_hint().0); for param in names.iter() {
         let pieces: Vec<&str> = param.split(':').collect::<Vec<_>>();
         out.push(nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&pieces, (0) as usize) }).trim().to_string()));

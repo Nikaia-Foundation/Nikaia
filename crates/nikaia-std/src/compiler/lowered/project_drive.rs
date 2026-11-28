@@ -1493,8 +1493,8 @@ pub(crate) fn project_drive_rustc_outputs(args: &[String], toolchain: &str) -> O
     }
     if out_dir == "" || name == "" || kinds.is_empty() || types.is_empty() { return None; }
     if target == "" { target = match project_drive_rustc_host(toolchain) { Some(__nikaia_value) => __nikaia_value, None => return None }.into_either(); }
-    let made = format!("{}{}", name, extra); #[allow(unused_mut, clippy::redundant_locals)] let mut kinds = kinds; #[allow(unused_mut, clippy::redundant_locals)] let mut types = types;
-    let mut outputs: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut kinds = kinds; #[allow(unused_mut, clippy::redundant_locals)] let mut types = types;
+    let made = format!("{}{}", name, extra); #[allow(unused_mut, clippy::redundant_locals)] let mut types = types;
+    let mut outputs: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut types = types;
     for kind in kinds.iter() {
         if kind == "dep-info" { outputs.push(format!("{}.d", made)); } else if kind == "metadata" { outputs.push(format!("lib{}.rmeta", made)); } else if kind == "link" {
             for crate_type in types.iter() {

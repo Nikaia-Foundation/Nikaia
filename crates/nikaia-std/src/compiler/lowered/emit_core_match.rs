@@ -606,8 +606,8 @@ impl EmitState {
             home.push(at);
         }
         if catch_all == 0 { for at in 0..members.len() as i64 { if !home.contains(&at) { return Err(nikaia_std::error::throwing(EmitRefused { message: format!("This `match error` doesn't handle `{}`: add an arm for it, or `else => …` for everything else.", *unsafe { nikaia_std::proven::read(&members, (at) as usize) }), at: Some(flow.statement) }, &"emit_core_match_over_a_sum")); } } }
-        let pad = nikaia_std::block::Text::from("    ".repeat(nikaia_std::count::of(depth + 1))); #[allow(clippy::redundant_locals)] let members = members;
-        let inner = nikaia_std::block::Text::from("    ".repeat(nikaia_std::count::of(depth + 2))); #[allow(clippy::redundant_locals)] let members = members;
+        let pad = nikaia_std::block::Text::from("    ".repeat(nikaia_std::count::of(depth + 1)));
+        let inner = nikaia_std::block::Text::from("    ".repeat(nikaia_std::count::of(depth + 2)));
         let close = nikaia_std::block::Text::from("    ".repeat(nikaia_std::count::of(depth)));
         out.push("match error {\n");
         let mut m: i64 = 0;

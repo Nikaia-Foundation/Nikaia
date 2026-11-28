@@ -148,12 +148,12 @@ pub fn lg_horn_write(arena: &mut TermArena, problem: &LgLoop) -> String {
     read.extend(problem.state.iter().cloned());
     let mut primed_names: collections::BTreeSet<String> = collections::BTreeSet::new();
     for name in problem.state.iter() { primed_names.insert(lg_primed(name)); }
-    #[allow(unused_mut)] let mut head: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
+    let mut head: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     for name in read.iter() { if !primed_names.contains(name) { head.push(nikaia_std::block::Text::from(name.to_string())); } }
-    #[allow(unused_mut)] let mut sorts: Vec<&'static str> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut head = head;
-    #[allow(unused_mut)] let mut bound: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut head = head; #[allow(unused_mut, clippy::redundant_locals)] let mut sorts = sorts;
-    #[allow(unused_mut)] let mut at_head: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block); #[allow(unused_mut, clippy::redundant_locals)] let mut head = head; #[allow(unused_mut, clippy::redundant_locals)] let mut sorts = sorts; #[allow(unused_mut, clippy::redundant_locals)] let mut bound = bound;
-    let mut after: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block); #[allow(unused_mut, clippy::redundant_locals)] let mut head = head; #[allow(unused_mut, clippy::redundant_locals)] let mut sorts = sorts; #[allow(unused_mut, clippy::redundant_locals)] let mut bound = bound; #[allow(unused_mut, clippy::redundant_locals)] let mut at_head = at_head;
+    #[allow(unused_mut)] let mut sorts: Vec<&'static str> = vec![];
+    #[allow(unused_mut)] let mut bound: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut sorts = sorts;
+    #[allow(unused_mut)] let mut at_head: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block); #[allow(unused_mut, clippy::redundant_locals)] let mut sorts = sorts; #[allow(unused_mut, clippy::redundant_locals)] let mut bound = bound;
+    let mut after: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block); #[allow(unused_mut, clippy::redundant_locals)] let mut sorts = sorts; #[allow(unused_mut, clippy::redundant_locals)] let mut bound = bound; #[allow(unused_mut, clippy::redundant_locals)] let mut at_head = at_head;
     for name in head.iter() {
         sorts.push("Int");
         bound.push(format!("({} Int)", lg_symbol(name)));

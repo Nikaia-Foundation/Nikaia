@@ -1556,11 +1556,11 @@ pub(crate) fn prover_changes_followed(scope: &ProverScope, assigns: &collections
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 pub(crate) fn prover_join_arms(walk: &mut ProverWalk, scope: &mut ProverScope, sides: &[ProverArm], span: &Span) {
-    #[allow(unused_mut)] let mut changed: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
+    let mut changed: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     for side in sides.iter() { for n in side.assigns.iter() { if scope.mutables.contains(n) && !nikaia_std::list::contains(&changed, &n) { changed.push(nikaia_std::block::Text::from(n.to_string())); } } }
     if changed.is_empty() { return; }
-    #[allow(unused_mut)] let mut followed: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block); #[allow(unused_mut, clippy::redundant_locals)] let mut changed = changed;
-    let mut dropped: collections::BTreeSet<String> = collections::BTreeSet::new(); #[allow(unused_mut, clippy::redundant_locals)] let mut changed = changed; #[allow(unused_mut, clippy::redundant_locals)] let mut followed = followed;
+    #[allow(unused_mut)] let mut followed: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
+    let mut dropped: collections::BTreeSet<String> = collections::BTreeSet::new(); #[allow(unused_mut, clippy::redundant_locals)] let mut followed = followed;
     for n in changed.iter() {
         let mut on_all = true;
         for side in sides.iter() { if !side.leaves && !side.scope.ints.contains(n) { on_all = false; } }
@@ -1571,7 +1571,7 @@ pub(crate) fn prover_join_arms(walk: &mut ProverWalk, scope: &mut ProverScope, s
     before.extend(scope.history.iter().cloned());
     let outer = scope.ints.copy_owned();
     for n in dropped.iter() { scope.rebind(&walk.arena, n); }
-    let mut earlier: collections::BTreeMap<String, String> = collections::BTreeMap::new(); #[allow(unused_mut, clippy::redundant_locals)] let mut followed = followed;
+    let mut earlier: collections::BTreeMap<String, String> = collections::BTreeMap::new();
     for n in followed.iter() {
         let old = format!("{}#{}", n, span.start);
         scope.renamed(&mut walk.arena, n, &old);

@@ -526,7 +526,7 @@ pub(crate) fn loop_flagged(arena: &mut logic::TermArena, record: &LoopRecord) ->
     let mut found: Vec<(i64, String)> = vec![];
     let start = record.start;
     let state = record.problem.state.copy_owned();
-    let mut directions: collections::BTreeMap<String, Form> = collections::BTreeMap::new(); #[allow(clippy::redundant_locals)] let state = state;
+    let mut directions: collections::BTreeMap<String, Form> = collections::BTreeMap::new();
     for (name, deltas) in record.steps.iter() {
         if deltas.is_empty() { continue; }
         let mut vars: collections::BTreeMap<String, i64> = collections::BTreeMap::new();

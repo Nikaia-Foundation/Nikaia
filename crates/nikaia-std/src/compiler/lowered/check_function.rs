@@ -909,6 +909,7 @@ pub(crate) fn check_function_fn<H: CheckHost>(state: &mut CheckState, world: &Ch
     state.flow.mixed_text = check_function_mixed_text(&world.here, body, &state.flow.grown_text);
     let outer_lone = state.flow.lone_texts.copy_owned();
     state.flow.lone_texts = lone_texts_of(world.here.words, body);
+    if expected.is_none() { check_core_stmt_tail_unused(state, body); }
     let tail = check_core_block(state, world, host, body);
     state.flow.grown_text = outer_grown;
     state.flow.kept_names = outer_kept;

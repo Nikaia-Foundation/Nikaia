@@ -48,9 +48,9 @@ impl CheckState {
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
     pub(crate) fn a_constant_built_from_itself(&mut self, bound: &str, ring: &[String], span: &Span) {
-        #[allow(unused_mut)] let mut sorted: Vec<String> = ring.copy_owned();
+        let mut sorted: Vec<String> = ring.copy_owned();
         sorted.sort();
-        let mut unique: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut sorted = sorted;
+        let mut unique: Vec<String> = vec![];
         for name in sorted.iter() { if unique.is_empty() || *unsafe { nikaia_std::proven::read(&unique, (nikaia_std::proven::sub::<i64>(unique.len() as i64, 1)) as usize) } != *name { unique.push(nikaia_std::block::Text::from(name.to_string())); } }
         if self.said_rings.contains(&unique) { return; }
         self.said_rings.insert(unique);

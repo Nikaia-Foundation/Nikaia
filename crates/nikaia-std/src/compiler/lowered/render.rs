@@ -252,7 +252,7 @@ pub(crate) fn rustc_refused(message: &Relayed, at: &str, path: &str, source: &st
         let shown = Shown { warning: false, code: String::from("NK1343"), message: String::from("internal compiler error"), notes, help: Some(help), span: message.span.clone(), labels: vec![Marked { span: message.span.clone(), word: nikaia_std::block::Text::from(message.word.to_string()), text: String::from(""), main: true }], edit: None };
         return rendered(&shown, path, source);
     }
-    let mut out = format!("error[NK1343]: internal compiler error\n  --> {} (no Nikaia source maps to this)\n", at); #[allow(unused_mut, clippy::redundant_locals)] let mut notes = notes;
+    let mut out = format!("error[NK1343]: internal compiler error\n  --> {} (no Nikaia source maps to this)\n", at);
     for note in notes.iter() { out.push_str(&format!("   = note: {}\n", note)); }
     out.push_str(&format!("   = help: {}\n", help));
     out

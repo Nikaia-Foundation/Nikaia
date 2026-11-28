@@ -1,0 +1,38 @@
+// A `b` bound by a pattern over a `ref` value is a view of a `B?`, and
+// `b ?? a` with a view `a` after it is a view of either one: nothing is
+// copied, and a `B` that does not copy needs no copy (found in #2588's run,
+// where `else_branch ?? then_branch` over a matched `Expr::If` was NK1343).
+struct B {
+    n: i64,
+    s: String,
+}
+
+enum E {
+    Two { a: B, b: B? },
+    No,
+}
+
+fn count(b: ref B) -> i64 {
+    b.n + b.s.len() as i64
+}
+
+fn pick(e: ref E) -> i64 {
+    match e {
+        E::Two { a, b } => {
+            if b != null {
+                let o: ref B = b ?? a
+                return count(o)
+            }
+            return count(a)
+        },
+        else => 0,
+    }
+}
+
+fn main() throws {
+    let both = E::Two { a: B { n: 1, s: "x" }, b: B { n: 2, s: "yy" } }
+    let one = E::Two { a: B { n: 5, s: "z" }, b: null }
+    println(pick(both))
+    println(pick(one))
+    println(pick(E::No))
+}

@@ -3500,6 +3500,20 @@ fn rsrc_text_or_none(asked: ref Asked, ty: ref Type) -> bool {
     return ty.code == null && ty.generics.len() == 0 && asked.names.resolve(ty.name) == "String"
 }
 
+// A list, written plain, whose elements hold text: `Vec[String]`, `Vec[N]`
+// with `N` a struct that holds some (#2478).
+fn rsrc_text_list(unit: ref Unit, asked: ref Asked, ty: ref Type) -> bool {
+    if ty.code != null || ty.is_view || ty.is_nullable || ty.generics.len() != 1 {
+        return false
+    }
+    let name = asked.names.resolve(ty.name)
+    if name != "Vec" && name != "List" && name != "Array" {
+        return false
+    }
+    let element = ty.generics[0]
+    return rsrc_plain_text(asked, element) || (!element.is_view && element.generics.len() == 0 && !rsrc_textless(unit, asked, element, []) && unit.fields.contains_key(asked.names.resolve(element.name)))
+}
+
 fn rsrc_plain_text(asked: ref Asked, ty: ref Type) -> bool {
     return ty.code == null && !ty.is_nullable && ty.generics.len() == 0 && asked.names.resolve(ty.name) == "String"
 }
@@ -3769,6 +3783,11 @@ fn places_of(unit: ref Unit, asked: ref Asked, subject: ref Type?, at: ref Span,
                 if arg.mutable && arg.ty.code == null && !rsrc_scalar(asked, arg.ty) && rsrc_type_holds_view(asked, arg.ty) {
                     places.insert(named.clone())
                 } else if !arg.mutable && arg.ty.code == null && (rsrc_plain_text(asked, arg.ty) || arg.ty.is_view) && (arg.ty.is_view || rsrc_lent(asked, own_contract, position)) {
+                    sources.push(named.clone())
+                } else if !arg.mutable && rsrc_text_list(unit, asked, arg.ty) && rsrc_lent(asked, own_contract, position) {
+                    // **A lent list of text, or of structs that hold it** (ADR-views-v4
+                    // D32, #2478): a part of an element a `for` walks of it, pushed
+                    // into the place, points into the caller's list.
                     sources.push(named.clone())
                 }
                 position += 1

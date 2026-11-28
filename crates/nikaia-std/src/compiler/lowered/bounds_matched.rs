@@ -200,7 +200,7 @@ pub(crate) fn bm_required(ledgers: &[&Ledger], read: &mut impl FnMut(&str, &coll
             if contract.requires.is_empty() || seen.contains(key) { continue; }
             seen.insert(nikaia_std::block::Text::from(key.to_string()));
             let signature = match contract.signature.as_ref() { Some(__nikaia_value) => __nikaia_value, None => continue };
-            #[allow(unused_mut)] let mut params: Vec<String> = vec![];
+            let mut params: Vec<String> = vec![];
             let mut chars: Vec<bool> = vec![];
             for (name, ty) in signature.params.iter() {
                 if name != "self" {
@@ -208,7 +208,7 @@ pub(crate) fn bm_required(ledgers: &[&Ledger], read: &mut impl FnMut(&str, &coll
                     chars.push(bm_char(ty));
                 }
             }
-            let mut names: collections::BTreeSet<String> = collections::BTreeSet::new(); #[allow(unused_mut, clippy::redundant_locals)] let mut params = params;
+            let mut names: collections::BTreeSet<String> = collections::BTreeSet::new();
             for name in params.iter() {
                 names.insert(nikaia_std::block::Text::from(name.to_string()));
                 names.insert(length_of(name));

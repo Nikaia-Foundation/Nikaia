@@ -289,7 +289,7 @@ impl CxNode {
         let mut argc: i64 = takes;
         if argc < 1 { argc = 1; }
         let function = cx_node_function(symbol); #[allow(unused_mut, clippy::redundant_locals)] let mut locals = locals; #[allow(unused_mut, clippy::redundant_locals)] let mut steps = steps; #[allow(unused_mut, clippy::redundant_locals)] let mut calls = calls;
-        let mut text = format!("/* `{}` */\nstatic napi_value {}(napi_env env, napi_callback_info info) {{\n    size_t argc = {};\n    napi_value argv[{}];\n    napi_value self = NULL;\n    napi_value result = NULL;\n    nk_kept *kept = NULL;\n    int status = 0;\n", written, function, argc, argc); #[allow(unused_mut, clippy::redundant_locals)] let mut locals = locals; #[allow(unused_mut, clippy::redundant_locals)] let mut steps = steps; #[allow(unused_mut, clippy::redundant_locals)] let mut body = body;
+        let mut text = format!("/* `{}` */\nstatic napi_value {}(napi_env env, napi_callback_info info) {{\n    size_t argc = {};\n    napi_value argv[{}];\n    napi_value self = NULL;\n    napi_value result = NULL;\n    nk_kept *kept = NULL;\n    int status = 0;\n", written, function, argc, argc);
         for local in locals.iter() { { use ::core::fmt::Write as _; let _ = text.write_fmt(format_args!("    {}\n", local)); }; }
         text.push_str("    if (napi_get_cb_info(env, info, &argc, argv, &self, NULL) != napi_ok) goto done;\n");
         if takes > 0 { { use ::core::fmt::Write as _; let _ = text.write_fmt(format_args!("    if (argc < {}) {{\n        napi_throw_type_error(env, NULL, \"`{}` takes {} arguments\");\n        goto done;\n    }}\n", takes, written, takes)); }; }

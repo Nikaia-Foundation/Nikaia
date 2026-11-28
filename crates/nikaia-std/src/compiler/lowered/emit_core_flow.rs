@@ -905,7 +905,7 @@ impl EmitState {
     pub(crate) fn fatal_passing(&self, world: &EmitWorld<'_, '_, '_, '_>, guarded: &Expr, handler: &Block) -> Vec<String> {
         let mut out: Vec<String> = vec![];
         let name = match call_callee_name(world.words, world.aliases, guarded) { Some(__nikaia_value) => __nikaia_value, None => return out };
-        #[allow(unused_mut)] let mut arriving: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
+        let mut arriving: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         let own = self.own_contracts.functions.get(&name);
         if own.is_some() {
             let contract = match own { Some(__nikaia_value) => __nikaia_value, None => return out };
@@ -914,7 +914,7 @@ impl EmitState {
             let theirs = match world.library.functions.get(&name) { Some(__nikaia_value) => __nikaia_value, None => return out };
             arriving = theirs.fails_with.copy_owned();
         }
-        let named = fatal_named(handler, world.words); #[allow(unused_mut, clippy::redundant_locals)] let mut arriving = arriving;
+        let named = fatal_named(handler, world.words);
         for error in arriving.iter() {
             if named.contains(error) { continue; }
             if emit_is_fatal(&self.own_contracts, error) || emit_is_fatal(world.library, error) { out.push(nikaia_std::block::Text::from(error.to_string())); }
