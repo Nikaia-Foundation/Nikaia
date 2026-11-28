@@ -3134,7 +3134,7 @@ pub mod bounds_walk {
 }
 pub mod buffers {
     #[allow(unused_imports)]
-    pub use super::{Escape, Source, KeepAt, BufferPlan, LatePut, BufferAsk, buffer_plans};
+    pub use super::{Escape, Source, KeepAt, BufferPlan, StreamLoop, LatePut, BufferAsk, buffer_plans};
 }
 pub mod build_eval {
     #[allow(unused_imports)]
@@ -3977,4 +3977,4 @@ pub fn nikaia_run_tests(filters: &[std::string::String], list: bool, more: std::
 /// **The digest of this lowered set** (#1610): every file `lower-std` wrote
 /// beside this index, and the index above this line. Compiled into the same
 /// crate as the code it names, it is the compiler's identity for its caches.
-pub const LOWERED_DIGEST: &str = "86bba27b7177bc98f2ce83cf0cb14c0981ba49addfa769f41bc239867886e706";
+pub const LOWERED_DIGEST: &str = "e68bf646c2c02e8644c9aaf63d7ddfce0f670cb9ec186a6cf29f0cbe2127b1ac";

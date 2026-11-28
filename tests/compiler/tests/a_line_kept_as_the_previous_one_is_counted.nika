@@ -1,0 +1,20 @@
+// A line kept in a fixed number of names across turns (`prev = line`, and
+// `before = prev`) is counted, not refused (ADR-stream-buffers-v1 D2's second
+// row); a copy kept in a list (`.clone()`) and a line used in the body and
+// dropped are no keep of the stream's buffer at all.
+use std::io
+
+fn main() throws {
+    let mut before: String = ""
+    let mut prev: String = ""
+    let mut copies: Vec[String] = []
+    for line in io::lines() {
+        if line == prev {
+            println(f"again: {line}")
+        }
+        copies.push(line.clone())
+        before = prev
+        prev = line
+    }
+    println(f"last: {prev}, before it: {before}, {copies.len()} lines")
+}

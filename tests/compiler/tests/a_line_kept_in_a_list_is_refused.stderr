@@ -1,0 +1,9 @@
+error[NK2308]: `kept` keeps `line`, a view of a buffer `io::lines()` reads into, and grows with every turn of the loop.
+   --> tests/a_line_kept_in_a_list_is_refused.nika:10:9
+    |
+ 10 |         kept.push(line)
+    |         ^^^^^^^^^^^^^^^
+    |
+    = note: A stream reads into a fixed pool of buffers, sized by the places that hold a view of its items from one turn to the next; a place that grows, or one the loop cannot see the end of, would need a new buffer every turn.
+    = help: Keep a copy with `line.clone()`, keep only what is needed and process the rest in the loop's body, or hand the items to a task over a bounded channel.
+1 view of a stream kept in a place that grows
