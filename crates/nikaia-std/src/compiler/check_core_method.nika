@@ -1191,21 +1191,58 @@ fn check_core_method[H: CheckHost](mut state: CheckState, world: ref CheckWorld,
             state.facts.fused_maps.insert(id_of(expr) as i64)
         }
     }
+    check_core_method_stream_kept(state, world, receiver, name, found, span)
     return found
 }
 
-/// **A stream's items are views of its pool in a `for` over the call**
-/// (ADR-stream-buffers-v1 D10): its signature writes them `ref String`. A
-/// method called on the call walks it the general way, which hands each item
-/// over as text of its own (`map`, `filter`, `nth`, `.cloned()` nothing), so
-/// the receiver is typed with owned items there.
-fn check_core_method_stream_walked(world: ref CheckWorld, receiver: ref Expr, on: Ty) -> Ty sync {
-    if !check_core_a_stream_call(world, receiver) {
+/// **A line of a stream handed on by `map` or `fold` outlives its turn**
+/// (ADR-stream-buffers-v1 D2): the lambda sees each line in its buffer for
+/// one call, and what it hands back is the walk's own, so a view of the line
+/// there is kept past the turn that read it, which `NK2308` refuses.
+fn check_core_method_stream_kept(mut state: CheckState, world: ref CheckWorld, receiver: ref Expr, method: ref String, found: ref Ty, span: ref Span) sync {
+    if (method != "map" && method != "fold") || !check_core_a_stream_walk(world, receiver) {
+        return
+    }
+    let kept = match found {
+        Ty::Seq { item, .. } => item.is_a_view(),
+        else => found.is_a_view(),
+    }
+    if kept {
+        state.findings.push(check_refusal("NK2308", span, f"The lambda of `{method}` hands back a view of a line of the stream, which lives in a buffer of the stream's pool only for the call that sees it.", ["A stream reads into a fixed pool of buffers, and a step over it sees each line for one turn; what the step hands on is kept past that turn."], "Hand back text of its own (`.clone()` of the line), or copy each line first with `.cloned()`."))
+    }
+}
+
+/// **A stream's items are views of its pool** (ADR-stream-buffers-v1 D1,
+/// D10): its signature writes them `ref String`, and a `for` over the call
+/// and the steps the runtime walks as views (`map`, `filter`, `take`,
+/// `skip`, `step_by`, `count`, `join`, `fold`, `any`, `all`, `.cloned()`)
+/// see each line in the buffer it was read into, for one turn. A method
+/// that keeps a line past its turn (`nth`, `zip`, `then`, ...) walks the
+/// stream the general way, which hands each line over as text of its own,
+/// so the receiver is typed with owned items there.
+fn check_core_method_stream_walked(world: ref CheckWorld, receiver: ref Expr, method: ref String, on: Ty) -> Ty sync {
+    if !check_core_a_stream_walk(world, receiver) || check_core_a_view_step(method) {
         return on
     }
     return match on {
         Ty::Seq { item, is_sync, pauses, fails, parallel, shape } => Ty::Seq { item: unviewed_type(item), is_sync: is_sync, pauses: pauses, fails: fails.clone(), parallel: parallel, shape: shape.clone() },
         else => on,
+    }
+}
+
+/// Whether a method on a stream's lines walks them as views of its pool
+/// (ADR-stream-buffers-v1 D1): `nikaia_std::io::Views`.
+fn check_core_a_view_step(method: ref String) -> bool sync {
+    return ["map", "filter", "take", "skip", "step_by", "count", "join", "fold", "any", "all", "cloned"].contains(method)
+}
+
+/// Whether `expr` still yields a stream's lines as views of its pool
+/// (ADR-stream-buffers-v1 D1): the stream's call, or a step that hands them
+/// on as they are (`filter`, `take`, `skip`, `step_by`).
+fn check_core_a_stream_walk(world: ref CheckWorld, expr: ref Expr) -> bool sync {
+    return match expr {
+        Expr::MethodCall { receiver, method, .. } => ["filter", "take", "skip", "step_by"].contains(world.words.resolve(method)) && check_core_a_stream_walk(world, receiver),
+        else => check_core_a_stream_call(world, expr),
     }
 }
 
@@ -1348,7 +1385,7 @@ fn check_core_method_walked[H: CheckHost](mut state: CheckState, world: ref Chec
         state.flow.empty_lists.insert(empty_map, held.clone())
     }
     on = check_core_method_literal(state, receiver, on)
-    on = check_core_method_stream_walked(world, receiver, on)
+    on = check_core_method_stream_walked(world, receiver, name, on)
     state.open_receiver_placed(world, receiver, on, span)
     // **`x?.m(…)`** (Part I 3.5, ADR-279 D13).
     if safe {

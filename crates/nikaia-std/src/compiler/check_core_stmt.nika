@@ -2690,8 +2690,9 @@ fn check_core_stmt_for[H: CheckHost](mut state: CheckState, world: ref CheckWorl
             state.a_for_mut_over_a_place(world, iter, over, span)
         }
     }
-    // **A stream's items are views of its pool** (ADR-stream-buffers-v1 D10).
-    let streams = check_core_a_stream_call(world, iter)
+    // **A stream's items are views of its pool** (ADR-stream-buffers-v1 D10),
+    // through `filter`, `take`, `skip` and `step_by` too.
+    let streams = check_core_a_stream_walk(world, iter)
     let mut frame: Vec[CheckLocal] = []
     let mut at = 0
     for b in bindings {

@@ -509,6 +509,19 @@ fn stream_callee(iter: ref Expr, ask: ref BufferAsk, unaliased: fn(ref String) -
     return named
 }
 
+// The call a `for` reads a stream's lines from as views of its pool
+// (ADR-stream-buffers-v1 D1): the call itself, or a step the runtime walks
+// as views that hands them on as they are (`nikaia_std::io::Views`).
+fn stream_walked(iter: ref Expr, ask: ref BufferAsk, unaliased: fn(ref String) -> String sync) -> String? {
+    return match iter {
+        Expr::MethodCall { receiver, method, .. } => match ["filter", "take", "skip", "step_by"].contains(ask.names.resolve(method)) {
+            true => stream_walked(receiver, ask, unaliased),
+            false => null,
+        },
+        else => stream_callee(iter, ask, unaliased),
+    }
+}
+
 // **A `.collect()` of a stream's lines** keeps every one of them at once
 // (ADR-stream-buffers-v1 D2's last row, supervisor decision 2 on #2851):
 // noted once per statement, where what is gathered is still the lines.
@@ -967,7 +980,7 @@ fn walked_statement(stmt: ref Stmt, span: ref Span, ask: ref BufferAsk, holes_of
             // is text, so a `.clone()` of it is a copy, and in the walk that
             // follows streams it views a buffer of its own, filed under the
             // loop, which `escape` notes wherever it is kept past the turn.
-            let streamed = if bindings.len() == 1 { stream_callee(iter, ask, unaliased) } else { null }
+            let streamed = if bindings.len() == 1 { stream_walked(iter, ask, unaliased) } else { null }
             let a_stream = streamed != null
             if a_stream {
                 let binding = ask.names.resolve(bindings[0]).clone()

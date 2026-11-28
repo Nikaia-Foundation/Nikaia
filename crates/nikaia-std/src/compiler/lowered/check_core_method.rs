@@ -827,16 +827,41 @@ pub(crate) fn check_core_method<H: CheckHost>(state: &mut CheckState, world: &Ch
         let frame: CheckStoredCode = nikaia_std::index::or(state.stored_frames.pop(), || CheckStoredCode::empty());
         if listed && state.a_lambda_touching_nothing(world, host, &frame, nikaia_std::index::get(&args, 0)) { state.facts.fused_maps.insert(id_of(expr) as i64); }
     }
+    check_core_method_stream_kept(state, world, receiver, &name, &found, span);
     found
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn check_core_method_stream_walked(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, receiver: &Expr, on: Ty) -> Ty {
-    if !check_core_a_stream_call(world, receiver) { return on; }
+pub(crate) fn check_core_method_stream_kept(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, receiver: &Expr, method: &str, found: &Ty, span: &Span) {
+    if method != "map" && method != "fold" || !check_core_a_stream_walk(world, receiver) { return; }
+    let kept = match found {
+        Ty::Seq { item, .. } => { let item = nikaia_std::boxed::open(item); item.is_a_view() },
+        _ => found.is_a_view(),
+    };
+    if kept { state.findings.push(check_refusal("NK2308", span, format!("The lambda of `{}` hands back a view of a line of the stream, which lives in a buffer of the stream's pool only for the call that sees it.", method), vec![String::from("A stream reads into a fixed pool of buffers, and a step over it sees each line for one turn; what the step hands on is kept past that turn.")], Some(String::from("Hand back text of its own (`.clone()` of the line), or copy each line first with `.cloned()`.")))); }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn check_core_method_stream_walked(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, receiver: &Expr, method: &str, on: Ty) -> Ty {
+    if !check_core_a_stream_walk(world, receiver) || check_core_a_view_step(method) { return on; }
     match on {
         Ty::Seq { ref item, is_sync, pauses, ref fails, parallel, shape } => { let item = nikaia_std::boxed::open(item); Ty::Seq { item: nikaia_std::block::Boxed::new(unviewed_type(item)), is_sync, pauses, fails: fails.copy_owned(), parallel, shape: shape.clone() } },
         _ => on,
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn check_core_a_view_step(method: &str) -> bool { nikaia_std::list::contains(&vec!["map", "filter", "take", "skip", "step_by", "count", "join", "fold", "any", "all", "cloned"], &method) }
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn check_core_a_stream_walk(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, expr: &Expr) -> bool {
+    match expr {
+        Expr::MethodCall { receiver, method, .. } => { let receiver = nikaia_std::boxed::open(receiver); let method = *method; nikaia_std::list::contains(&vec!["filter", "take", "skip", "step_by"], &world.words.resolve(method)) && check_core_a_stream_walk(world, receiver) },
+        _ => check_core_a_stream_call(world, expr),
     }
 }
 
@@ -957,7 +982,7 @@ pub(crate) fn check_core_method_walked<H: CheckHost>(state: &mut CheckState, wor
     let mut on: Ty = check_core_expr(state, world, host, receiver, span);
     for held in empty_entry.iter() { state.flow.empty_lists.insert(empty_map, held.clone()); }
     on = check_core_method_literal(state, receiver, on);
-    on = check_core_method_stream_walked(world, receiver, on);
+    on = check_core_method_stream_walked(world, receiver, &name, on);
     state.open_receiver_placed(world, receiver, &on, span);
     if safe {
         let mut unknown = false;

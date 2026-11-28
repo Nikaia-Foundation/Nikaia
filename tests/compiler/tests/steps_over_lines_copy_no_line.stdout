@@ -1,0 +1,5 @@
+map: 1000 lines, a few requests
+filter: 183 long lines, a few requests
+filter then map: 89 long lines, a few requests
+cloned: 200 copies, at least one request per line: true
+any: true, the rest: 8196 bytes, a few requests

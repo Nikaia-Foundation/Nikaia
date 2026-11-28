@@ -465,6 +465,9 @@ struct Pool {
     /// More chunks are held than the compiler counted, under `nikaia test`:
     /// the next line stops the run at its loop (D9, ADR-tether-v1 D15).
     over: bool,
+    /// The bytes of the line handed out last, in the current chunk, which
+    /// [`Lines::again`] hands out once more.
+    last: (usize, usize),
     /// The reply channel of every read of this loop, kept so a read allocates
     /// none.
     reply: std::sync::mpsc::SyncSender<(Vec<u8>, std::io::Result<usize>)>,
@@ -587,6 +590,7 @@ impl Lines {
             at: 0,
             ended,
             over: false,
+            last: (0, 0),
             reply,
             answer,
         };
@@ -619,6 +623,7 @@ impl Lines {
         } else {
             None
         };
+        pool.last = (from, to);
         let chunk = &pool.chunks[pool.current];
         match std::str::from_utf8(&chunk.bytes[from..to]) {
             Ok(text) => Some(Ok(Line {
@@ -669,11 +674,13 @@ impl Lines {
     /// sequence whose step pauses
     /// ([ADR-172](../../../docs/specification/adr/adr-172.md) D5).
     ///
-    /// **The eager walks**: what `collect`, `count`, `nth` and `join` hand back
-    /// is a value, so each is a loop around [`Lines::next`] and nothing more.
-    /// The lazy ones hand back another sequence whose step pauses and can
-    /// fail, `nikaia_std::seq::Failing`
-    /// ([ADR-234](../../../docs/specification/adr/adr-234.md)).
+    /// **The eager walks**: what `collect` and `nth` hand back is a value of
+    /// its own, so each is a loop around [`Lines::next`] and nothing more;
+    /// `count`, `join`, `fold`, `any` and `all` walk the lines as views of a
+    /// pool ([`Views`]). The lazy ones hand back another sequence whose step
+    /// pauses and can fail, `nikaia_std::seq::Failing`
+    /// ([ADR-234](../../../docs/specification/adr/adr-234.md)), or a
+    /// [`Views`].
     ///
     /// **The first failure ends the walk.** A `collect` that swallowed one
     /// would turn a truncated stream into a shorter list, which is the bug
@@ -688,17 +695,10 @@ impl Lines {
         Ok(out)
     }
 
-    /// How many lines the sequence produces — `Seq::count`.
-    ///
-    /// It walks the whole of it to answer, which is what separates this from a
-    /// list's `len()`, and it holds one line at a time while it does.
-    pub async fn count(mut self) -> Result<i64, IoError> {
-        let mut n = 0_i64;
-        while let Some(line) = self.next().await {
-            line?;
-            n += 1;
-        }
-        Ok(n)
+    /// How many lines the sequence produces — `Seq::count`, each line a view
+    /// of the pool and none copied (ADR-stream-buffers-v1 D1, [`Views`]).
+    pub async fn count(self) -> Result<i64, IoError> {
+        Views::of(self).count().await
     }
 
     /// The line at a position, or nothing where the stream is shorter than that
@@ -719,69 +719,87 @@ impl Lines {
     }
 
     /// Every line written one after another with this text between them —
-    /// `Seq::join`.
-    pub async fn join(mut self, separator: &str) -> Result<crate::block::Text, IoError> {
-        let mut out = crate::block::Text::new();
-        let mut first = true;
-        while let Some(line) = self.next().await {
-            if !first {
-                out.push_str(separator);
-            }
-            out.push_str(&line?);
-            first = false;
-        }
-        Ok(out)
+    /// `Seq::join`, each line a view of the pool ([`Views`]).
+    pub async fn join(self, separator: &str) -> Result<crate::block::Text, IoError> {
+        Views::of(self).join(separator).await
     }
 
     /// Each line through a lambda — `Seq::map`, lazy: nothing is read until
     /// something walks the result
-    /// ([ADR-234](../../../docs/specification/adr/adr-234.md) D1). A failure
-    /// passes through to that walk, which is where the program's `?` is.
-    pub fn map<U, F: FnMut(crate::block::Text) -> U>(
-        self,
-        f: F,
-    ) -> crate::seq::Failing<crate::seq::OkMap<Self, F>> {
-        crate::seq::Failing(self).map(f)
+    /// ([ADR-234](../../../docs/specification/adr/adr-234.md) D1). The lambda
+    /// sees each line as a view of the pool (ADR-stream-buffers-v1 D1,
+    /// [`Views`]). A failure passes through to that walk, which is where the
+    /// program's `?` is.
+    pub fn map<U, F: FnMut(&str) -> U>(self, f: F) -> crate::seq::Failing<ViewMap<Every, F>> {
+        Views::of(self).map(f)
     }
 
-    /// Only the lines a lambda says yes to — `Seq::filter`, lazy.
-    pub fn filter<F: FnMut(&crate::block::Text) -> bool>(
-        self,
-        f: F,
-    ) -> crate::seq::Failing<crate::seq::OkFilter<Self, F>> {
-        crate::seq::Failing(self).filter(f)
+    /// Only the lines a lambda says yes to — `Seq::filter`, lazy, each a
+    /// view of the pool ([`Views`]).
+    pub fn filter<F: FnMut(&&str) -> bool>(self, f: F) -> Views<ViewFilter<Every, F>> {
+        Views::of(self).filter(f)
+    }
+
+    /// A copy of each line — `Seq::cloned`, the copy the program asks for
+    /// (ADR-stream-buffers-v1 D10): the general walk, which hands each line
+    /// over as text of its own.
+    pub fn cloned(self) -> crate::seq::Failing<Lines> {
+        crate::seq::Failing(self)
+    }
+
+    /// The lines folded into one value — `Seq::fold`, each a view of the
+    /// pool ([`Views`]).
+    pub async fn fold<A, F: FnMut(A, &str) -> A>(self, init: A, f: F) -> Result<A, IoError> {
+        Views::of(self).fold(init, f).await
+    }
+
+    /// Whether a lambda says yes to some line — `Seq::any`, stopping at the
+    /// first ([`Views`]).
+    pub async fn any<F: FnMut(&str) -> bool>(self, f: F) -> Result<bool, IoError> {
+        Views::of(self).any(f).await
+    }
+
+    /// Whether a lambda says yes to every line — `Seq::all`, stopping at the
+    /// first no ([`Views`]).
+    pub async fn all<F: FnMut(&str) -> bool>(self, f: F) -> Result<bool, IoError> {
+        Views::of(self).all(f).await
     }
 
     /// Each line through a lambda that pauses
-    /// ([ADR-233](../../../docs/specification/adr/adr-233.md) D1).
-    pub fn then<U, F: AsyncFnMut(crate::block::Text) -> U>(
+    /// ([ADR-233](../../../docs/specification/adr/adr-233.md) D1), which
+    /// `map` is lowered to there: the lambda sees the line in its buffer,
+    /// which only the walk reads, so it stays there across the pause
+    /// ([`Views`]).
+    pub fn then<U, F: AsyncFnMut(&str) -> U>(
         self,
         f: F,
-    ) -> crate::seq::Failing<crate::seq::OkThen<Self, F>> {
-        crate::seq::Failing(self).then(f)
+    ) -> crate::seq::Failing<ViewThen<Every, F>> {
+        Views::of(self).then(f)
     }
 
-    /// Only the lines a lambda that pauses says yes to.
-    pub fn then_filter<F: AsyncFnMut(&crate::block::Text) -> bool>(
+    /// Only the lines a lambda that pauses says yes to, each a view
+    /// ([`Views`]).
+    pub fn then_filter<F: AsyncFnMut(&&str) -> bool>(
         self,
         f: F,
-    ) -> crate::seq::Failing<crate::seq::OkThenFilter<Self, F>> {
-        crate::seq::Failing(self).then_filter(f)
+    ) -> Views<ViewThenFilter<Every, F>> {
+        Views::of(self).then_filter(f)
     }
 
-    /// The first `n` lines — `Seq::take`, lazy.
-    pub fn take(self, n: usize) -> crate::seq::Failing<crate::seq::Take<Self>> {
-        crate::seq::Failing(self).take(n)
+    /// The first `n` lines — `Seq::take`, lazy, each a view ([`Views`]).
+    pub fn take(self, n: usize) -> Views<ViewTake<Every>> {
+        Views::of(self).take(n)
     }
 
-    /// Everything after the first `n` lines — `Seq::skip`, lazy.
-    pub fn skip(self, n: usize) -> crate::seq::Failing<crate::seq::Skip<Self>> {
-        crate::seq::Failing(self).skip(n)
+    /// Everything after the first `n` lines — `Seq::skip`, lazy ([`Views`]).
+    pub fn skip(self, n: usize) -> Views<ViewSkip<Every>> {
+        Views::of(self).skip(n)
     }
 
-    /// The first line, and then every `step`-th after it — `Seq::step_by`.
-    pub fn step_by(self, step: usize) -> crate::seq::Failing<crate::seq::StepBy<Self>> {
-        crate::seq::Failing(self).step_by(step)
+    /// The first line, and then every `step`-th after it — `Seq::step_by`
+    /// ([`Views`]).
+    pub fn step_by(self, step: usize) -> Views<ViewStepBy<Every>> {
+        Views::of(self).step_by(step)
     }
 
     /// Pairs, one line and one item of `other` — `Seq::zip`, lazy.
@@ -790,6 +808,447 @@ impl Lines {
         other: J,
     ) -> crate::seq::Failing<crate::seq::OkZip<Self, J::IntoIter>> {
         crate::seq::Failing(self).zip(other)
+    }
+
+    /// The line [`Lines::next_line`] handed out last, once more, as a view:
+    /// what a walk that decided on it hands on ([`Views::next_line`]).
+    fn again(&self, over: Option<usize>) -> Option<Line<'_>> {
+        let pool = self.pool.as_ref()?;
+        let chunk = &pool.chunks[pool.current];
+        let (from, to) = pool.last;
+        let text = std::str::from_utf8(&chunk.bytes[from..to]).ok()?;
+        Some(Line {
+            text,
+            keep: &chunk.keep,
+            place: chunk.place,
+            over,
+        })
+    }
+}
+
+/// **A walk over the lines as views of the pool** (ADR-stream-buffers-v1 D1,
+/// D10): what `filter`, `take`, `skip` and `step_by` on `io::lines()` hand
+/// back, and what `map`, `count`, `join`, `fold`, `any` and `all` walk. Each
+/// line is cut out of a buffer of [`Lines::in_pool`] and seen by the steps
+/// and the lambda for one turn, so no line is copied; `.cloned()` is the copy
+/// a program asks for. The steps are `S`, which say of each line whether it
+/// goes on and whether the walk is over before the next read.
+pub struct Views<S> {
+    lines: Lines,
+    steps: S,
+}
+
+/// **What the steps of a [`Views`] do with each line**: whether it goes on,
+/// and whether the walk is over before another line is read, so `take(1)`
+/// waits for no second line. A step may pause (`then_filter`): the line
+/// stays in its buffer meanwhile, since only the walk reads the pool.
+pub trait ViewStep {
+    /// Whether `line` goes on through the walk.
+    fn pass(&mut self, line: &str) -> impl Future<Output = bool>;
+    /// **Whether a line that failed goes on** to the walk's end, which hands
+    /// it back: a step that counts lines counts it as one, as the general
+    /// walk's `skip`, `take` and `step_by` count a failed step, and `filter`
+    /// hands it on (ADR-234 D1).
+    fn fail(&mut self) -> bool;
+    /// Whether no further line can go on.
+    fn over(&self) -> bool;
+}
+
+/// Every line goes on: the walk before any step.
+pub struct Every;
+
+impl ViewStep for Every {
+    async fn pass(&mut self, _line: &str) -> bool {
+        true
+    }
+    fn fail(&mut self) -> bool {
+        true
+    }
+    fn over(&self) -> bool {
+        false
+    }
+}
+
+/// The lines a lambda says yes to — `filter`.
+pub struct ViewFilter<S, F> {
+    steps: S,
+    f: F,
+}
+
+impl<S: ViewStep, F: FnMut(&&str) -> bool> ViewStep for ViewFilter<S, F> {
+    async fn pass(&mut self, line: &str) -> bool {
+        self.steps.pass(line).await && (self.f)(&line)
+    }
+    fn fail(&mut self) -> bool {
+        self.steps.fail()
+    }
+    fn over(&self) -> bool {
+        self.steps.over()
+    }
+}
+
+/// The lines a lambda that pauses says yes to — `then_filter`, which `filter`
+/// is lowered to where its lambda pauses (ADR-233 D1).
+pub struct ViewThenFilter<S, F> {
+    steps: S,
+    f: F,
+}
+
+impl<S: ViewStep, F: AsyncFnMut(&&str) -> bool> ViewStep for ViewThenFilter<S, F> {
+    async fn pass(&mut self, line: &str) -> bool {
+        self.steps.pass(line).await && (self.f)(&line).await
+    }
+    fn fail(&mut self) -> bool {
+        self.steps.fail()
+    }
+    fn over(&self) -> bool {
+        self.steps.over()
+    }
+}
+
+/// The first `left` lines — `take`.
+pub struct ViewTake<S> {
+    steps: S,
+    left: usize,
+}
+
+impl<S> ViewTake<S> {
+    fn counted(&mut self) -> bool {
+        if self.left == 0 {
+            return false;
+        }
+        self.left -= 1;
+        true
+    }
+}
+
+impl<S: ViewStep> ViewStep for ViewTake<S> {
+    async fn pass(&mut self, line: &str) -> bool {
+        self.left > 0 && self.steps.pass(line).await && self.counted()
+    }
+    fn fail(&mut self) -> bool {
+        self.left > 0 && self.steps.fail() && self.counted()
+    }
+    fn over(&self) -> bool {
+        self.left == 0 || self.steps.over()
+    }
+}
+
+/// Everything after the first `left` lines — `skip`.
+pub struct ViewSkip<S> {
+    steps: S,
+    left: usize,
+}
+
+impl<S> ViewSkip<S> {
+    fn counted(&mut self) -> bool {
+        if self.left > 0 {
+            self.left -= 1;
+            return false;
+        }
+        true
+    }
+}
+
+impl<S: ViewStep> ViewStep for ViewSkip<S> {
+    async fn pass(&mut self, line: &str) -> bool {
+        self.steps.pass(line).await && self.counted()
+    }
+    fn fail(&mut self) -> bool {
+        self.steps.fail() && self.counted()
+    }
+    fn over(&self) -> bool {
+        self.steps.over()
+    }
+}
+
+/// The first line and every `step`-th after it — `step_by`.
+pub struct ViewStepBy<S> {
+    steps: S,
+    step: usize,
+    seen: usize,
+}
+
+impl<S> ViewStepBy<S> {
+    fn counted(&mut self) -> bool {
+        let yes = self.seen.is_multiple_of(self.step);
+        self.seen += 1;
+        yes
+    }
+}
+
+impl<S: ViewStep> ViewStep for ViewStepBy<S> {
+    async fn pass(&mut self, line: &str) -> bool {
+        self.steps.pass(line).await && self.counted()
+    }
+    fn fail(&mut self) -> bool {
+        self.steps.fail() && self.counted()
+    }
+    fn over(&self) -> bool {
+        self.steps.over()
+    }
+}
+
+impl Views<Every> {
+    /// The lines of `lines`, read into a pool of the least size: no line is
+    /// held past the turn that sees it.
+    fn of(lines: Lines) -> Views<Every> {
+        Views {
+            lines: lines.in_pool(2),
+            steps: Every,
+        }
+    }
+}
+
+impl<S: ViewStep> Views<S> {
+    /// **The next line that goes on, seen by `f`**, whose result is what the
+    /// turn hands back: the line is a view of the pool for that call alone.
+    async fn walk<U>(&mut self, f: &mut impl FnMut(&str) -> U) -> Option<Result<U, IoError>> {
+        loop {
+            if self.steps.over() {
+                return None;
+            }
+            let (text, _, _) = match self.lines.next_line().await? {
+                Ok(line) => line.parts(),
+                Err(e) if self.steps.fail() => return Some(Err(e)),
+                Err(_) => continue,
+            };
+            if self.steps.pass(text).await {
+                return Some(Ok(f(text)));
+            }
+        }
+    }
+
+    /// The pool a `for` over the walk reads into, sized by the compiler's
+    /// count for that loop (ADR-stream-buffers-v1 D3), as [`Lines::in_pool`].
+    pub fn in_pool(mut self, size: i64) -> Views<S> {
+        if let Some(pool) = self.lines.pool.as_mut() {
+            pool.size = usize::try_from(size).unwrap_or(2).max(2);
+        }
+        self
+    }
+
+    /// **The next line that goes on, as a view** of the chunk it was cut
+    /// from: what a `for` over the walk steps with, as
+    /// [`Lines::next_line`].
+    pub async fn next_line(&mut self) -> Option<Result<Line<'_>, IoError>> {
+        loop {
+            if self.steps.over() {
+                return None;
+            }
+            let (passed, over) = match self.lines.next_line().await? {
+                Ok(line) => (self.steps.pass(line.text).await, line.over),
+                Err(e) if self.steps.fail() => return Some(Err(e)),
+                Err(_) => continue,
+            };
+            if passed {
+                return self.lines.again(over).map(Ok);
+            }
+            if let Some(size) = over {
+                over_the_pool(size);
+            }
+        }
+    }
+
+    /// Each line that goes on through a lambda — `Seq::map`.
+    pub fn map<U, F: FnMut(&str) -> U>(self, f: F) -> crate::seq::Failing<ViewMap<S, F>> {
+        crate::seq::Failing(ViewMap { views: self, f })
+    }
+
+    /// Only the lines a lambda says yes to — `Seq::filter`.
+    pub fn filter<F: FnMut(&&str) -> bool>(self, f: F) -> Views<ViewFilter<S, F>> {
+        Views {
+            lines: self.lines,
+            steps: ViewFilter {
+                steps: self.steps,
+                f,
+            },
+        }
+    }
+
+    /// The first `n` lines — `Seq::take`.
+    pub fn take(self, n: usize) -> Views<ViewTake<S>> {
+        Views {
+            lines: self.lines,
+            steps: ViewTake {
+                steps: self.steps,
+                left: n,
+            },
+        }
+    }
+
+    /// Everything after the first `n` lines — `Seq::skip`.
+    pub fn skip(self, n: usize) -> Views<ViewSkip<S>> {
+        Views {
+            lines: self.lines,
+            steps: ViewSkip {
+                steps: self.steps,
+                left: n,
+            },
+        }
+    }
+
+    /// The first line and then every `step`-th after it — `Seq::step_by`; a
+    /// step of `0` is `1`.
+    pub fn step_by(self, step: usize) -> Views<ViewStepBy<S>> {
+        Views {
+            lines: self.lines,
+            steps: ViewStepBy {
+                steps: self.steps,
+                step: step.max(1),
+                seen: 0,
+            },
+        }
+    }
+
+    /// A copy of each line that goes on — `Seq::cloned`, the copy the
+    /// program asks for (ADR-stream-buffers-v1 D10).
+    #[allow(clippy::type_complexity)]
+    pub fn cloned(self) -> crate::seq::Failing<ViewMap<S, fn(&str) -> crate::block::Text>> {
+        self.map(copied as fn(&str) -> crate::block::Text)
+    }
+
+    /// How many lines go on — `Seq::count`.
+    pub async fn count(mut self) -> Result<i64, IoError> {
+        let mut n = 0_i64;
+        while let Some(seen) = self.walk(&mut |_| ()).await {
+            seen?;
+            n += 1;
+        }
+        Ok(n)
+    }
+
+    /// Every line that goes on, with `separator` between them —
+    /// `Seq::join`: the lines are copied into the one text it hands back.
+    pub async fn join(mut self, separator: &str) -> Result<crate::block::Text, IoError> {
+        let mut out = crate::block::Text::new();
+        let mut first = true;
+        let mut put = |line: &str| {
+            if !first {
+                out.push_str(separator);
+            }
+            out.push_str(line);
+            first = false;
+        };
+        while let Some(seen) = self.walk(&mut put).await {
+            seen?;
+        }
+        Ok(out)
+    }
+
+    /// The lines that go on folded into one value — `Seq::fold`.
+    pub async fn fold<A, F: FnMut(A, &str) -> A>(
+        mut self,
+        init: A,
+        mut f: F,
+    ) -> Result<A, IoError> {
+        let mut acc = init;
+        loop {
+            if self.steps.over() {
+                return Ok(acc);
+            }
+            let (text, _, _) = match self.lines.next_line().await {
+                None => return Ok(acc),
+                Some(Ok(line)) => line.parts(),
+                Some(Err(e)) if self.steps.fail() => return Err(e),
+                Some(Err(_)) => continue,
+            };
+            if self.steps.pass(text).await {
+                acc = f(acc, text);
+            }
+        }
+    }
+
+    /// Whether a lambda says yes to some line that goes on — `Seq::any`.
+    pub async fn any<F: FnMut(&str) -> bool>(mut self, mut f: F) -> Result<bool, IoError> {
+        while let Some(yes) = self.walk(&mut f).await {
+            if yes? {
+                return Ok(true);
+            }
+        }
+        Ok(false)
+    }
+
+    /// Whether a lambda says yes to every line that goes on — `Seq::all`.
+    pub async fn all<F: FnMut(&str) -> bool>(mut self, mut f: F) -> Result<bool, IoError> {
+        while let Some(yes) = self.walk(&mut f).await {
+            if !yes? {
+                return Ok(false);
+            }
+        }
+        Ok(true)
+    }
+
+    /// The line at a position among those that go on, copied, or nothing —
+    /// `Seq::nth`.
+    pub async fn nth(mut self, at: i64) -> Result<Option<crate::block::Text>, IoError> {
+        let mut seen = 0_i64;
+        let mut found = None;
+        while let Some(step) = self
+            .walk(&mut |line: &str| {
+                if seen == at {
+                    found = Some(crate::block::Text::from(line));
+                }
+                seen += 1;
+            })
+            .await
+        {
+            step?;
+            if found.is_some() || at < 0 {
+                break;
+            }
+        }
+        Ok(found)
+    }
+
+    /// Pairs, a copy of each line that goes on and one item of `other` —
+    /// `Seq::zip` (a pair is kept past its turn).
+    #[allow(clippy::type_complexity)]
+    pub fn zip<J: IntoIterator>(
+        self,
+        other: J,
+    ) -> crate::seq::Failing<
+        crate::seq::OkZip<ViewMap<S, fn(&str) -> crate::block::Text>, J::IntoIter>,
+    > {
+        self.cloned().zip(other)
+    }
+
+    /// Each line that goes on through a lambda that pauses — `Seq::map`
+    /// where its lambda pauses (ADR-233 D1): the line stays in its buffer
+    /// across the pause, since only the walk reads the pool.
+    pub fn then<U, F: AsyncFnMut(&str) -> U>(self, f: F) -> crate::seq::Failing<ViewThen<S, F>> {
+        crate::seq::Failing(ViewThen { views: self, f })
+    }
+
+    /// Only the lines a lambda that pauses says yes to — `Seq::filter` where
+    /// its lambda pauses.
+    pub fn then_filter<F: AsyncFnMut(&&str) -> bool>(self, f: F) -> Views<ViewThenFilter<S, F>> {
+        Views {
+            lines: self.lines,
+            steps: ViewThenFilter {
+                steps: self.steps,
+                f,
+            },
+        }
+    }
+}
+
+/// A line copied into text of its own: the step of `.cloned()`.
+fn copied(line: &str) -> crate::block::Text {
+    crate::block::Text::from(line)
+}
+
+/// **Each line of a [`Views`] through a lambda** that sees it as a view: the
+/// step hands on what the lambda makes, which is the walk's own.
+pub struct ViewMap<S, F> {
+    views: Views<S>,
+    f: F,
+}
+
+impl<S: ViewStep, U, F: FnMut(&str) -> U> crate::seq::Step for ViewMap<S, F> {
+    type Item = Result<U, IoError>;
+    async fn step(&mut self) -> Option<Result<U, IoError>> {
+        self.views.walk(&mut self.f).await
     }
 }
 
@@ -990,5 +1449,31 @@ impl crate::seq::Step for Lines {
     type Item = Result<crate::block::Text, IoError>;
     async fn step(&mut self) -> Option<Result<crate::block::Text, IoError>> {
         self.next().await
+    }
+}
+
+/// **Each line of a [`Views`] through a lambda that pauses**, which sees it
+/// as a view: the line stays in its buffer across the pause.
+pub struct ViewThen<S, F> {
+    views: Views<S>,
+    f: F,
+}
+
+impl<S: ViewStep, U, F: AsyncFnMut(&str) -> U> crate::seq::Step for ViewThen<S, F> {
+    type Item = Result<U, IoError>;
+    async fn step(&mut self) -> Option<Result<U, IoError>> {
+        loop {
+            if self.views.steps.over() {
+                return None;
+            }
+            let (text, _, _) = match self.views.lines.next_line().await? {
+                Ok(line) => line.parts(),
+                Err(e) if self.views.steps.fail() => return Some(Err(e)),
+                Err(_) => continue,
+            };
+            if self.views.steps.pass(text).await {
+                return Some(Ok((self.f)(text).await));
+            }
+        }
     }
 }

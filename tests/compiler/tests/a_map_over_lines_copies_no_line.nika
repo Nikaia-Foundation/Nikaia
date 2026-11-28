@@ -1,0 +1,19 @@
+// The lambda of `map` over `io::lines()` sees each line as a view of the
+// stream's pool of buffers (ADR-stream-buffers-v1 D1, D10), as a `for` over
+// it does: no line is copied, so the walk asks for no memory per line, only
+// for its pool and the list of lengths it builds. The input is longer than
+// one buffer of 64 KiB, so the walk refills its pool.
+use std::io
+use std::mem
+
+fn main() throws {
+    let start = mem::allocations()
+    let lengths = io::lines().map(fn(l) { l.len() }).collect()
+    let requests = mem::allocations() - start
+    let mut bytes = 0
+    for n in lengths {
+        bytes += n
+    }
+    println(f"{lengths.len()} lines, {bytes} bytes")
+    println(f"requests per hundred lines: {requests * 100 / lengths.len()}")
+}

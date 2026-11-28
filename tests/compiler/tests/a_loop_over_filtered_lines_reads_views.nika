@@ -1,0 +1,24 @@
+// A `for` over a step of `io::lines()` that hands the lines on as they are
+// (`filter`, `skip`, `take`) reads into the stream's pool of buffers as a
+// `for` over the call does (ADR-stream-buffers-v1 D1, D3, D10): each line is
+// a view, and the line kept as the previous one is held by its buffer. The
+// input is longer than one buffer of 64 KiB.
+use std::io
+use std::mem
+
+fn main() throws {
+    let mut lines = 0
+    let mut repeated = 0
+    let mut prev: String = ""
+    let start = mem::allocations()
+    for line in io::lines().skip(6).filter(fn(l) { l.len() > 20 }) {
+        lines += 1
+        if line == prev {
+            repeated += 1
+        }
+        prev = line
+    }
+    let after = mem::allocations()
+    println(f"{lines} long lines, {repeated} repeated, last: {prev.len()} bytes")
+    println(f"fewer requests than one per hundred lines: {(after - start) * 100 < lines}")
+}

@@ -3183,7 +3183,7 @@ fn tier_statement(stmt: ref Stmt, at: i64, ask: ref TierAsk, mut walk: TierWalk)
         }
         Stmt::For { bindings, iter, body, .. } => {
             let mut kinds = tier_expr(iter, ask, walk)
-            let streamed = a_stream_read(iter, ask)
+            let streamed = a_stream_walk(iter, ask)
             if streamed {
                 kinds = view_kinds()
             }
@@ -6996,7 +6996,14 @@ fn method_kinds(receiver: ref Expr, method: ref String, args: ref Vec[Expr], ask
         tie_stored(receiver, arg, ask, walk)
     }
     walk.read_here = true
-    let received = tier_expr(receiver, ask, walk)
+    let mut received = tier_expr(receiver, ask, walk)
+    // **A step the runtime walks as views sees each line of a stream in
+    // its pool** (ADR-stream-buffers-v1 D1, D10): the lambda's parameter is
+    // a view, as an item of `text.lines()` is. Any other method walks the
+    // stream the general way, which hands out text of its own.
+    if a_stream_walk(receiver, ask) {
+        received = if a_view_step(method) { view_kinds() } else { owned_kinds() }
+    }
     if changes_its_text(method) {
         changed_in_place(receiver, f"{tier_written(receiver, ask)}.{method}(..)", ask, walk)
     }
@@ -7448,8 +7455,24 @@ fn std_result(callee: ref String, ask: ref TierAsk) -> Kinds {
 /// **A `for` over a stream's call binds views of its pool**
 /// (ADR-stream-buffers-v1 D10): `io::lines() -> Seq[ref String]`, as a `for`
 /// over `lines()` of a text does, so a declared `String` a line is assigned
-/// to holds a view. A method called on the call walks it the general way,
-/// which hands out text of its own (`std_result`).
+/// to holds a view. So do the steps the runtime walks as views
+/// (`a_view_step`); a method that keeps a line past its turn walks the
+/// stream the general way, which hands out text of its own (`std_result`).
+fn a_stream_walk(iter: ref Expr, ask: ref TierAsk) -> bool {
+    return match iter {
+        Expr::MethodCall { receiver, method, .. } => ["filter", "take", "skip", "step_by"].contains(ask.names.resolve(method)) && a_stream_walk(receiver, ask),
+        else => a_stream_read(iter, ask),
+    }
+}
+
+/// Whether a method on a stream's lines walks them as views of its pool
+/// (ADR-stream-buffers-v1 D1): `nikaia_std::io::Views`.
+fn a_view_step(method: ref String) -> bool {
+    return ["map", "filter", "take", "skip", "step_by", "count", "join", "fold", "any", "all", "cloned"].contains(method)
+}
+
+/// Whether `iter` calls a function whose ledger entry says `iterates =
+/// "stream"`.
 fn a_stream_read(iter: ref Expr, ask: ref TierAsk) -> bool {
     let func = match iter {
         Expr::Call { func, .. } => func,
