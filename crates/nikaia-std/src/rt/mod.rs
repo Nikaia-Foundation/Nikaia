@@ -1437,6 +1437,62 @@ pub mod io {
         }
     }
 
+    /// **The next chunk of standard input, read into `into`**, as something
+    /// that can be awaited (ADR-stream-buffers-v1 D1, D5): [`stdin_chunk`]
+    /// with the buffer the caller reuses and a reply channel it keeps, so a
+    /// read allocates neither. The answer is the buffer, grown by what came,
+    /// and how many bytes that was; zero is the end of the stream.
+    pub fn stdin_into<'a>(
+        into: Vec<u8>,
+        want: usize,
+        reply: &std::sync::mpsc::SyncSender<(Vec<u8>, Result<usize>)>,
+        answer: &'a std::sync::mpsc::Receiver<(Vec<u8>, Result<usize>)>,
+    ) -> Answered<'a> {
+        off_the_io_thread();
+        let runtime = handle();
+        let queued = runtime.workers.send(worker::Op::StdinInto {
+            into,
+            want,
+            reply: reply.clone(),
+        });
+        Answered {
+            answer: queued.then_some(answer),
+        }
+    }
+
+    /// What [`stdin_into`] hands back: a reply on a channel the caller keeps.
+    pub struct Answered<'a> {
+        /// The channel, or nothing where the runtime was already drained.
+        answer: Option<&'a std::sync::mpsc::Receiver<(Vec<u8>, Result<usize>)>>,
+    }
+
+    impl std::future::Future for Answered<'_> {
+        type Output = (Vec<u8>, Result<usize>);
+
+        fn poll(
+            self: std::pin::Pin<&mut Self>,
+            context: &mut std::task::Context<'_>,
+        ) -> std::task::Poll<Self::Output> {
+            use std::task::Poll;
+
+            let _ = context;
+            let Some(answer) = self.answer else {
+                return Poll::Ready((
+                    Vec::new(),
+                    Err(Error::other("the runtime has already been drained")),
+                ));
+            };
+            match answer.try_recv() {
+                Ok(done) => Poll::Ready(done),
+                Err(std::sync::mpsc::TryRecvError::Empty) => Poll::Pending,
+                Err(std::sync::mpsc::TryRecvError::Disconnected) => Poll::Ready((
+                    Vec::new(),
+                    Err(Error::other("the runtime's I/O worker went away")),
+                )),
+            }
+        }
+    }
+
     /// What [`waiting`] hands back.
     ///
     /// **A registration and not a worker's reply since 0.0.165**

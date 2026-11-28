@@ -19,6 +19,11 @@ pub(crate) fn emit_keep_expr(keep: &KeepAt, lent: bool) -> String {
     }
 }
 
+pub(crate) fn emit_stream_pool(plan: &BufferPlan, at: i64) -> Option<i64> {
+    for stream in plan.streams.iter() { if stream.at == at { return Some(stream.pool); } }
+    None
+}
+
 pub(crate) fn emit_is_element(keep: &KeepAt, at: i64) -> bool {
     match keep {
         KeepAt::Element(held) => { let held = *held; held == at },
@@ -50,9 +55,20 @@ impl EmitState {
             let keep = *keep;
             if emit_is_element(&keep, at) { element = true; }
         }
-        if element { lines.push(format!("let __keep_{} = std::sync::Arc::new(nikaia_std::tether::Keep::new());", at)); }
+        if element && emit_stream_pool(plan, at).is_none() { lines.push(format!("let __keep_{} = std::sync::Arc::new(nikaia_std::tether::Keep::new());", at)); }
         if lines.is_empty() { return None; }
         Some(nikaia_std::block::Text::from(lines.join(" ")))
+    }
+    pub(crate) fn stream_counted(&self, walk: &EmitWalk, function: &str, name: &str) -> bool {
+        let key = match self.keep_plan_key(walk, function) { Some(__nikaia_value) => __nikaia_value, None => return false };
+        let plan = match self.keep_plans.get(&key) { Some(__nikaia_value) => __nikaia_value, None => return false };
+        for stream in plan.streams.iter() { if nikaia_std::list::contains(&stream.counted, &name) { return true; } }
+        false
+    }
+    pub(crate) fn stream_pool(&self, walk: &EmitWalk, function: &str, at: i64) -> Option<i64> {
+        let key = match self.keep_plan_key(walk, function) { Some(__nikaia_value) => __nikaia_value, None => return None };
+        let plan = match self.keep_plans.get(&key) { Some(__nikaia_value) => __nikaia_value, None => return None };
+        emit_stream_pool(plan, at)
     }
     pub(crate) fn argument_keep(&self, walk: &EmitWalk, function: &str, statement: i64, callee: &str, i: i64) -> Option<String> {
         let key = match self.keep_plan_key(walk, function) { Some(__nikaia_value) => __nikaia_value, None => return None };

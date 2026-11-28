@@ -611,8 +611,26 @@ impl EmitState {
         let inner = EmitScope { bound: nikaia_std::block::Text::from(bound.to_string()), ..scope.clone() };
         let kept = self.emit_stmt_kept(&walk, &scope.function, at, &bound);
         walk.holding = kept.holding;
-        let annotation = self.emit_stmt_annotation(world, walk, host, ty, at, &count, kept.put.is_some() || kept.packed);
+        let mut annotation = self.emit_stmt_annotation(world, walk, host, ty, at, &count, kept.put.is_some() || kept.packed);
         walk.holding = None;
+        let streamed = names.len() == 1 && ty.is_some() && self.stream_counted(&walk, &scope.function, &bound);
+        if streamed {
+            annotation = String::from(": nikaia_std::tether::Held");
+            let local = self.emit_stmt_local(&bound);
+            match value {
+                Expr::LitStr { text, .. } => {
+                    out.push(&format!("let {}{}{} = nikaia_std::tether::Held::literal(\"{}\");", mut_word, local, annotation, text));
+                    return Ok(());
+                },
+                _ => { },
+            }
+            if self.emit_stmt_held_keeps(&walk, &scope.function, at, &bound).is_none() {
+                out.push(&format!("let {}{}{} = {{ use nikaia_std::tether::Hold as _; (", mut_word, local, annotation));
+                self.emit_expr(world, walk, out, host, value, depth, flow, &inner)?;
+                out.push(").hold([std::sync::Arc::new(nikaia_std::tether::Keep::new())]) };");
+                return Ok(());
+            }
+        }
         let local = self.emit_stmt_local(&bound);
         if kept.packed {
             let held = emit_tethered_type(world, ty, value);
@@ -1080,15 +1098,25 @@ impl EmitState {
             let mut unwrap: Option<String> = None;
             let lent_item = if self.facts.lent_stream_loops.contains(&at) { "&" } else { "" };
             if self.facts.fallible_loops.contains(&at) { unwrap = Some(format!("let {} = {}{}?;", bound, lent_item, plain)); } else if lent_item != "" { unwrap = Some(format!("let {} = &{};", bound, plain)); }
+            let pool = self.stream_pool(&walk, &scope.function, at);
+            let mut stepped = "next";
+            let mut opened = String::from("");
+            if pool.is_some() {
+                stepped = "next_line";
+                opened = format!(".in_pool({})", nikaia_std::index::or(pool, || 2));
+                let step = if self.facts.fallible_loops.contains(&at) { "__nikaia_line?" } else { "__nikaia_line" };
+                unwrap = Some(format!("let ({}, __keep_{}, __place_{}) = {}.parts();", bound, at, at, step));
+            }
+            let stepped_bound = if pool.is_some() { String::from("__nikaia_line") } else { nikaia_std::block::Text::from(bound.to_string()) };
             let pad = nikaia_std::block::Text::from("    ".repeat(nikaia_std::count::of(depth)));
             let inner = nikaia_std::block::Text::from("    ".repeat(nikaia_std::count::of(depth + 1)));
             out.push("{\n");
             out.push(&inner);
             out.push("let mut __nikaia_sequence = ");
             self.emit_expr(world, walk, out, host, iter, depth + 1, flow, scope)?;
-            out.push(";\n");
+            out.push(&format!("{};\n", opened));
             out.push(&inner);
-            out.push(&format!("{}while let Some({}) = __nikaia_sequence.next(){} ", allowed, bound, emit_async_pause(&walk)));
+            out.push(&format!("{}while let Some({}) = __nikaia_sequence.{}(){} ", allowed, stepped_bound, stepped, emit_async_pause(&walk)));
             self.emit_stmt_block_opening_with(world, walk, out, host, body, depth + 1, flow.inside_a_loop(), scope, &EmitTail::Statement, emit_counted_turn(host.counts_steps(), unwrap))?;
             out.push("\n");
             out.push(&pad);

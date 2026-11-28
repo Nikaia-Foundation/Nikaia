@@ -640,6 +640,21 @@ impl PartialEq<&str> for Held {
     }
 }
 
+/// **A view compared with a held one, the view on the left**
+/// (ADR-stream-buffers-v1 D2): `line == prev`, where `prev` holds an earlier
+/// line of the stream with a handle on its buffer.
+impl PartialEq<Held> for &str {
+    fn eq(&self, other: &Held) -> bool {
+        *self == other.text()
+    }
+}
+
+impl PartialEq<Held> for str {
+    fn eq(&self, other: &Held) -> bool {
+        self == other.text()
+    }
+}
+
 impl PartialOrd for Held {
     fn partial_cmp(&self, other: &Held) -> Option<std::cmp::Ordering> {
         Some(self.cmp(other))

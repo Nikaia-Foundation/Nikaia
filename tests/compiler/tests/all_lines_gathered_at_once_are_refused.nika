@@ -1,0 +1,14 @@
+// Gathering every line of `io::lines()` at once keeps a view of the stream's
+// pool for each, and their number grows with the input: `NK2308`, for the
+// lines as they come and after a step that hands them on (`filter`)
+// (ADR-stream-buffers-v1 D2, supervisor decision 2 on #2851). Copies
+// (`.cloned()`) and values of their own (`map`) are gathered as before.
+use std::io
+
+fn main() throws {
+    let all: Vec[String] = io::lines().collect()
+    let long: Vec[String] = io::lines().filter(fn(l) { l.len() > 3 }).collect()
+    let copies: Vec[String] = io::lines().cloned().collect()
+    let lengths: Vec[i64] = io::lines().map(fn(l) { l.len() }).collect()
+    println(f"{all.len()} {long.len()} {copies.len()} {lengths.len()}")
+}
