@@ -76,7 +76,7 @@ pub(crate) fn check_core_expr<H: CheckHost>(state: &mut CheckState, world: &Chec
         state.flow.map_read_sites.insert(id_of(expr) as i64);
         if ty.is_a_view() { state.flow.view_reads.insert(id_of(expr) as i64); }
     }
-    if check_core_expr_makes_a_value(expr) { check_crossings_a_value_with_a_cleanup_made(state, world, &ty); }
+    if check_core_expr_makes_a_value(expr) { check_crossings_a_value_with_a_cleanup_made(state, world, expr, &ty, span); }
     state.a_member_of_an_unknown_lambda_parameter(world, expr, span);
     if ty.is_unknown() && !said_inside { state.a_value_of_no_known_type(world, expr, span); }
     ty

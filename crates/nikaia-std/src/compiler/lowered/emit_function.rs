@@ -834,7 +834,7 @@ impl EmitState {
 pub(crate) fn emit_split_lifetimes(state: &EmitState, world: &EmitWorld<'_, '_, '_, '_>, ty: &Type, returns: &str, sources: &[String]) -> Option<EmitSplit> {
     if !ty.generics.is_empty() || ty.is_view || returns.is_empty() { return None; }
     let slots = match state.view_slots.get(&emit_text(world, ty.name)) { Some(__nikaia_value) => __nikaia_value, None => return None };
-    let mut of_field: collections::BTreeMap<String, Vec<String>> = collections::BTreeMap::new(); #[allow(clippy::redundant_locals)] let slots = slots;
+    let mut of_field: collections::BTreeMap<String, Vec<String>> = collections::BTreeMap::new();
     for entry in returns.split("),") {
         let colon = match nikaia_std::text::find_first(&entry, &":") { Some(__nikaia_value) => __nikaia_value, None => return None };
         let path = entry.before(colon.start).trim();
@@ -868,7 +868,7 @@ pub(crate) fn emit_split_lifetimes(state: &EmitState, world: &EmitWorld<'_, '_, 
             next = unsafe { nikaia_std::proven::add::<i64>(next, 1) };
         }
     }
-    let mut named: collections::BTreeMap<i64, String> = collections::BTreeMap::new(); #[allow(clippy::redundant_locals)] let slots = slots;
+    let mut named: collections::BTreeMap<i64, String> = collections::BTreeMap::new();
     let mut own: Vec<EmitPair> = vec![];
     at = 0;
     own.reserve(sources.iter().size_hint().0); for param in sources.iter() {
@@ -882,7 +882,7 @@ pub(crate) fn emit_split_lifetimes(state: &EmitState, world: &EmitWorld<'_, '_, 
         own.push(EmitPair { first: nikaia_std::block::Text::from(param.to_string()), second: nikaia_std::block::Text::from(nikaia_std::index::or(named.get(&root), || "").to_string()) });
         at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
     }
-    let mut fields: Vec<String> = vec![]; #[allow(clippy::redundant_locals)] let slots = slots;
+    let mut fields: Vec<String> = vec![];
     fields.reserve(slots.iter().size_hint().0); for slot in slots.iter() {
         let params = match of_field.get(slot) { Some(__nikaia_value) => __nikaia_value, None => return None };
         let root = emit_split_root(&group, emit_split_index(sources, nikaia_std::index::get(&params, 0)));

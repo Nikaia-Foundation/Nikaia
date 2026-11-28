@@ -2193,6 +2193,15 @@ impl EmitState {
                 let (buffer, sure) = named ?? (0, false)
                 given = if sure { f"keeps.view_in(0, __place_{buffer}, __nikaia_given_{i})" } else { f"nikaia_std::tether::Rebase::rebase_near(__nikaia_given_{i}, &keeps, __place_{buffer})" }
             }
+            // **A struct literal, each field against its own buffer** (D14,
+            // D15, #2848).
+            let none: Vec[i64] = []
+            let fields: collections::BTreeMap[String, (i64, bool)]? = plan.field_places.get(node_key(args[i]))?.clone()
+            let whole: (i64, bool)? = places?.get(i)?.clone()
+            let at = self.emit_held_fields(world, args[i], fields, whole, none, true)
+            if at != null {
+                given = f"__nikaia_given_{i}.__rebase_at(&keeps, {at ?? ""})"
+            }
             walk.held.insert(node_key(args[i]), given)
         }
         self.emit_expr(world, walk, out, host, node, depth, flow, scope)

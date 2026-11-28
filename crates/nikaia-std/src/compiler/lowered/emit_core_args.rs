@@ -738,19 +738,21 @@ impl EmitState {
         let node = node_key(arg);
         let buffers = walk.buffers_held_at(i);
         if buffers.is_some() {
+            let held_buffers: Vec<i64> = nikaia_std::index::or(buffers, || vec![].into());
             let mut keeps: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
-            for b in nikaia_std::index::or(buffers, || vec![].into()) { keeps.push(format!("std::sync::Arc::clone(&__keep_{})", b)); }
+            keeps.reserve(held_buffers.iter().size_hint().0); for b in held_buffers.iter() {
+                let b = nikaia_std::num::value(b);
+                keeps.push(format!("std::sync::Arc::clone(&__keep_{})", b));
+            }
             let joined = nikaia_std::block::Text::from(keeps.join(", "));
-            let (before, after) = emit_held_around(&joined, match (match walk.hold_places.as_ref() {
+            let place: Option<(i64, bool)> = match (match walk.hold_places.as_ref() {
                 Some(__nikaia_it) => __nikaia_it.get(&i),
                 None => None,
             }) {
                 Some(__nikaia_it) => Some(__nikaia_it.clone()),
                 None => None,
-            });
-            out.push(&before);
-            self.emit_expr(world, walk, out, host, arg, depth, inside, scope)?;
-            out.push(&after);
+            };
+            self.emit_held_value(world, walk, out, host, arg, &joined, &held_buffers, place, &scope.function, depth, inside, scope)?;
             return Ok(());
         }
         let kept_arity = nikaia_std::index::or(self.facts.kept_args_run_async.get(&node), || -1);

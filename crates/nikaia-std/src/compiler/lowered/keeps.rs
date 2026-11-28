@@ -568,7 +568,7 @@ pub(crate) fn keep_argument(arg: &Expr, callee: Option<&str>, at: i64, interner:
 pub(crate) fn keep_option(setting: &ConfigArg, callee: Option<&str>, interner: &winnow_grammar::InternerContext, context: &KeepsBody<'_, '_>, own: &Ledger, library: &Ledger, walk: &mut KeepsWalk) {
     let names = keeps_handed(&setting.value, interner, context, own, library, &walk);
     if names.is_empty() { return; }
-    let known = nikaia_std::block::Text::from(nikaia_std::index::or(callee, || "").to_string()); #[allow(clippy::redundant_locals)] let names = names;
+    let known = nikaia_std::block::Text::from(nikaia_std::index::or(callee, || "").to_string());
     let mut at: Option<i64> = None;
     if own.functions.contains_key(&known) { at = option_at(match *nikaia_std::index::get(&own.functions, &known) { Some(__nikaia_value) => __nikaia_value, None => return }, interner.resolve(setting.name)); } else if library.functions.contains_key(&known) { at = option_at(match *nikaia_std::index::get(&library.functions, &known) { Some(__nikaia_value) => __nikaia_value, None => return }, interner.resolve(setting.name)); }
     for parameter in names.iter() { if at.is_none() { walk.uses.kept.insert(nikaia_std::block::Text::from(parameter.to_string())); } else { walk.uses.passed.push(Passed { parameter: nikaia_std::block::Text::from(parameter.to_string()), callee: nikaia_std::block::Text::from(known.to_string()), at: nikaia_std::index::or(at, || 0) }); } }

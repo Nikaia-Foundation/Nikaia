@@ -220,16 +220,28 @@ fn a_part_handed_over_is_gone() {
 }
 
 /// **`NK2106`: a part of something lent is not given away** - a `ref`
-/// parameter and a `for` over a list alike.
+/// parameter. A part of a `for` element pushed into a list is a view of it
+/// instead (ADR-views-v4 D5, D32, #2478), so that shape is not refused.
 #[test]
 fn a_part_of_a_loan_is_not_handed_over() {
-    for source in [
+    let found = findings(
         "struct P {\n    name: String,\n}\n\n\
          fn f(p: ref P) {\n\
          \x20   let mut xs: Vec[String] = []\n\
          \x20   xs.push(p.name)\n\
          }\n\
          fn main() {}\n",
+    );
+    assert_eq!(codes_of(&found), ["NK2106"], "{found:#?}");
+    assert!(
+        found[0]
+            .help
+            .as_deref()
+            .is_some_and(|h| h.contains("p.name.clone()")),
+        "{:?}",
+        found[0].help
+    );
+    let walked = findings(
         "struct P {\n    name: String,\n}\n\n\
          fn f(ps: Vec[P]) {\n\
          \x20   let mut xs: Vec[String] = []\n\
@@ -238,18 +250,8 @@ fn a_part_of_a_loan_is_not_handed_over() {
          \x20   }\n\
          }\n\
          fn main() {}\n",
-    ] {
-        let found = findings(source);
-        assert_eq!(codes_of(&found), ["NK2106"], "{found:#?}");
-        assert!(
-            found[0]
-                .help
-                .as_deref()
-                .is_some_and(|h| h.contains("p.name.clone()")),
-            "{:?}",
-            found[0].help
-        );
-    }
+    );
+    assert_eq!(codes_of(&walked), [] as [&str; 0], "{walked:#?}");
 }
 
 /// **The part is named once**: an argument of a `std` call is walked more than

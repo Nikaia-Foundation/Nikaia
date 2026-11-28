@@ -132,6 +132,10 @@ pub struct CheckFlow {
     /// parameters (#1696).
     pub option_written: Vec[String],
     pub call_written: String,
+    /// **The types the receiver binds a method's arguments to**, by
+    /// position: a list whose element the text tiers made a view takes the
+    /// view without a hand-over (ADR-views-v4 D5, #2478).
+    pub call_expected: Vec[Ty],
     /// **The options a method call names after its `;`** (#1446), by its
     /// receiver's node, until the call resolves: each one's name, type,
     /// address, whether it is a text literal, whether an integer literal
@@ -583,6 +587,7 @@ impl CheckFlow {
             option_integers: Vec(),
             option_written: Vec(),
             call_written: "",
+            call_expected: [],
             method_passed: collections::BTreeMap(),
             method_moved: collections::BTreeMap(),
             unrolling: null,

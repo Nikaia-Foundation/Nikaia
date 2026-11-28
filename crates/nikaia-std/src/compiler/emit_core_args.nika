@@ -1176,16 +1176,15 @@ impl EmitState {
         // which one is the language below's to pick by the value's type.
         let buffers = walk.buffers_held_at(i)
         if buffers != null {
+            let held_buffers: Vec[i64] = buffers ?? []
             let mut keeps: Vec[String] = []
-            for b in (buffers ?? []) {
+            for b in held_buffers {
                 keeps.push(f"std::sync::Arc::clone(&__keep_{b})")
             }
             let joined = keeps.join(", ")
             // Checked against the buffer the plan names, where it names one (D15).
-            let (before, after) = emit_held_around(joined, walk.hold_places?.get(i)?.clone())
-            out.push(before)
-            self.emit_expr(world, walk, out, host, arg, depth, inside, scope)
-            out.push(after)
+            let place: (i64, bool)? = walk.hold_places?.get(i)?.clone()
+            self.emit_held_value(world, walk, out, host, arg, joined, held_buffers, place, scope.function, depth, inside, scope)
             return
         }
         // A kept value handed to a parameter that only runs it: the closure it

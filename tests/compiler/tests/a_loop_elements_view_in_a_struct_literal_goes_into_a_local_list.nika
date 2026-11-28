@@ -1,0 +1,27 @@
+// A struct literal holding a `for` element's view, pushed into a local
+// list or nested in another literal before the push, stores the view
+// (ADR-views-v4 D5): no NK1106. Pins #2479's two shapes.
+struct E { v: String }
+struct F { v: String }
+struct H { item: F }
+
+fn make(text: String) -> String {
+    let mut g = String()
+    g.push_str(text)
+    return g
+}
+
+fn main() throws {
+    let words = [make("abc"), make("def")]
+    let mut out: Vec[E] = []
+    for w in words {
+        out.push(E { v: w })
+    }
+    println(out[1].v)
+    let mut nested: Vec[H] = []
+    for w in words {
+        let h = H { item: F { v: w } }
+        nested.push(h)
+    }
+    println(nested[0].item.v)
+}

@@ -887,7 +887,7 @@ pub(crate) fn rules_names_lists(body: &Block, owner: &str, of_impl: &str, held: 
     if fields.is_empty() && asked.is_empty() { return false; }
     let mut lists: collections::BTreeMap<String, Vec<String>> = collections::BTreeMap::new(); #[allow(unused_mut, clippy::redundant_locals)] let mut fields = fields;
     lists.insert(nikaia_std::block::Text::from(owner.to_string()), fields.copy_owned());
-    let mut built: collections::BTreeMap<String, Vec<String>> = collections::BTreeMap::new(); #[allow(unused_mut, clippy::redundant_locals)] let mut fields = fields; #[allow(unused_mut, clippy::redundant_locals)] let mut asked = asked;
+    let mut built: collections::BTreeMap<String, Vec<String>> = collections::BTreeMap::new(); #[allow(unused_mut, clippy::redundant_locals)] let mut asked = asked;
     let mut dropped: collections::BTreeSet<String> = collections::BTreeSet::new();
     rules_built_block(body, of_impl, &lists, &collections::BTreeMap::new(), &mut built, &mut dropped, words);
     for given in nikaia_std::index::or(match built.get(&format!("{}#lit", owner)) {

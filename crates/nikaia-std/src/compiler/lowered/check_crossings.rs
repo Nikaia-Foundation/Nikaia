@@ -321,9 +321,12 @@ pub(crate) fn check_crossings_settle(state: &mut CheckState, fails: bool, pauses
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn check_crossings_a_value_with_a_cleanup_made(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, ty: &Ty) {
+pub(crate) fn check_crossings_a_value_with_a_cleanup_made(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, expr: &Expr, ty: &Ty, span: &Span) {
     let held = match state.cleanup_of(world, ty) { Some(__nikaia_value) => __nikaia_value, None => return };
     check_crossings_settle(state, held.fails, held.pauses);
+    if !held.pauses || !state.discarded.contains(&(id_of(expr) as i64)) { return; }
+    state.a_cleanup_that_may_pause(&held.owner, span);
+    state.a_pausing_cleanup_in_a_sync_body(&held.owner, &held.owner, span, false);
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before

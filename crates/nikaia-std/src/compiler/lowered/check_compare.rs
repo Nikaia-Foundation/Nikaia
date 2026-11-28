@@ -288,7 +288,7 @@ pub struct CompareDeclared {
 }
 
 pub(crate) fn compare_declared(asking: &CheckComparable<'_, '_, '_, '_, '_, '_, '_>, here: &ParsedView<'_, '_, '_, '_, '_, '_, '_>) -> CompareDeclared {
-    #[allow(unused_mut)] let mut declared: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
+    let mut declared: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     for item in here.items.iter() {
         match &item.node {
             Item::Struct { name, .. } => { let name = *name; declared.push(here.text(name)); },
@@ -297,7 +297,7 @@ pub(crate) fn compare_declared(asking: &CheckComparable<'_, '_, '_, '_, '_, '_, 
         }
     }
     #[allow(unused_mut)] let mut found = CompareDeclared { compares: vec![], totally: vec![], hashes: vec![], uncloned: vec![] };
-    let unbound: collections::BTreeMap<String, Vec<String>> = collections::BTreeMap::new(); #[allow(unused_mut, clippy::redundant_locals)] let mut declared = declared; #[allow(unused_mut, clippy::redundant_locals)] let mut found = found;
+    let unbound: collections::BTreeMap<String, Vec<String>> = collections::BTreeMap::new(); #[allow(unused_mut, clippy::redundant_locals)] let mut found = found;
     for name in declared.iter() {
         if !asking.clones(&Ty::Named { name: nikaia_std::block::Text::from(name.to_string()), args: vec![], view: false }, &unbound) { found.uncloned.push(nikaia_std::block::Text::from(name.to_string())); }
         if asking.implements("Eq", name) { continue; }

@@ -469,10 +469,19 @@ fn check_crossings_settle(mut state: CheckState, fails: bool, pauses: bool) sync
     check_core_call_on_reached(state, key)
 }
 
-/// A value with a cleanup, made by a call or a literal (ADR-297 D2).
-fn check_crossings_a_value_with_a_cleanup_made(mut state: CheckState, world: ref CheckWorld, ty: ref Ty) sync {
+/// A value with a cleanup, made by a call or a literal (ADR-297 D2). **One
+/// whose value is not used dies where it is made** (ADR-297 D3, #2588): a
+/// cleanup that may pause is refused there in a `sync` function and under a
+/// lock, as a `let`'s is. One handed on (returned, bound, passed) dies
+/// elsewhere.
+fn check_crossings_a_value_with_a_cleanup_made(mut state: CheckState, world: ref CheckWorld, expr: ref Expr, ty: ref Ty, span: ref Span) sync {
     let held = state.cleanup_of(world, ty) ?? return
     check_crossings_settle(state, held.fails, held.pauses)
+    if !held.pauses || !state.discarded.contains(id_of(expr) as i64) {
+        return
+    }
+    state.a_cleanup_that_may_pause(held.owner, span)
+    state.a_pausing_cleanup_in_a_sync_body(held.owner, held.owner, span, false)
 }
 
 /// **A value with a cleanup dies in this function**, a `let`'s or a kept

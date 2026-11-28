@@ -1,0 +1,29 @@
+// A view or a literal kept in a list that drops entries: the arm that is a
+// view of the buffer is checked against that buffer, a miss the compiler's
+// fault under `nikaia test`, and the literal is held with no keep
+// (ADR-tether-v1 D15, #2848).
+fn make(i: i64) -> String {
+	let mut g = String()
+	for k in 0..<8 {
+		g.push_str(f"w{(i * 8 + k) % 50} ")
+	}
+	return g
+}
+
+fn main() throws {
+	let mut recent: Vec[String] = []
+	let mut total = 0
+	for i in 0..<2000 {
+		let text = make(i)
+		for w in text.split(" ") {
+			if w.len() > 0 {
+				recent.push(if i % 2 == 0 { w } else { "x" })
+			}
+		}
+		while recent.len() > 64 {
+			let old = recent.remove(0)
+			total += old.len() as i64
+		}
+	}
+	println(f"{recent.len()} {total} {recent[0]} {recent[63]}")
+}

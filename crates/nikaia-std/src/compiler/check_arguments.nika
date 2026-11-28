@@ -547,9 +547,27 @@ fn check_arguments[H: CheckHost](mut state: CheckState, world: ref CheckWorld, h
         // **What the callee keeps, it is given** (ADR-293 D29): no `&` is
         // written for this position, so a name here moves. **Not across the C
         // boundary** (ADR-c-boundary-v1 D5).
-        if kept && !want.is_a_view() && !signature.mutable.contains(name) && !state.foreign_names.contains(written) && given_here != null {
+        // **Nor text read out of a field into a list of views** (ADR-views-v4
+        // D5, #2478): the text tiers made the receiver's element a view of a
+        // walked part, which the list keeps as `lent_fields` lets a field
+        // keep one (D37).
+        let read_field = match given_here {
+            null => false,
+            given => match given {
+                Expr::Field { .. } => found_here == string_ty(),
+                else => false,
+            },
+        }
+        let bound_view = read_field && at < state.flow.call_expected.len() && state.flow.call_expected[at].is_a_view()
+        if kept && !bound_view && !want.is_a_view() && !signature.mutable.contains(name) && !state.foreign_names.contains(written) && given_here != null {
             let value = given_here ?? continue
             state.hands_over(world, value, found_here, f"passed to `{written}`, which keeps it", span)
+        }
+        // The view is the compiler's `&` (ADR-094 D1): `es.push(n.raw)`
+        // lowers `es.push(&n.raw)`.
+        if kept && bound_view {
+            let value = given_here ?? continue
+            state.facts.lent_args.insert(id_of(value) as i64)
         }
         // **A handle handed on by value is moved at its last use** (ADR-312
         // D2, #1502); the lowering duplicates it everywhere else.

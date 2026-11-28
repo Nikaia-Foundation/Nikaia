@@ -1459,7 +1459,7 @@ pub(crate) fn check_core_flow_tasks_beside(expr: &Expr, top: bool, out: &mut col
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 pub(crate) fn check_core_flow_fallbacks_per_task(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, guarded: &Expr, past: &collections::BTreeSet<i64>) -> Option<String> {
-    #[allow(unused_mut)] let mut tasks: Vec<String> = vec![];
+    let mut tasks: Vec<String> = vec![];
     check_core_flow_fallbacks_written(state, world, guarded, past, &mut tasks);
     if tasks.is_empty() { return None; }
     match guarded {
@@ -1474,7 +1474,7 @@ pub(crate) fn check_core_flow_fallbacks_per_task(state: &CheckState, world: &Che
         },
         _ => { },
     }
-    let mut quoted: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block); #[allow(unused_mut, clippy::redundant_locals)] let mut tasks = tasks;
+    let mut quoted: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     quoted.reserve(tasks.iter().size_hint().0); for task in tasks.iter() { quoted.push(format!("`{}`", task)); }
     Some(nikaia_std::block::Text::from(quoted.join(", ")))
 }

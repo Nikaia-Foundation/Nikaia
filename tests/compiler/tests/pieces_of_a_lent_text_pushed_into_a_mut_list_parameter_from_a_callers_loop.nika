@@ -1,0 +1,41 @@
+// Pieces of a lent text pushed into a `mut` list parameter from a caller's
+// loop over owned texts (#2480, ADR-views-v4 D32): `out` holds views of the
+// elements of `words`, declared before it, so `words` lives as long as `out`.
+// Once rustc said `words` does not live long enough (the list was bound again
+// after `out`, #490's rebind). Both a list of text and a list of structs.
+struct E {
+	v: String,
+}
+
+fn put(s: String, mut out: Vec[String]) {
+	for w in s.split(" ") {
+		out.push(w)
+	}
+}
+
+fn put_e(s: String, mut out: Vec[E]) {
+	for w in s.split(" ") {
+		out.push(E { v: w })
+	}
+}
+
+fn make(text: String) -> String {
+	let mut g = String()
+	g.push_str(text)
+	return g
+}
+
+fn main() throws {
+	let words = [make("abc x"), make("def y")]
+	let mut out: Vec[String] = []
+	for w in words {
+		put(w, out)
+	}
+	println(f"{out.len()} {out[1]} {out[2]}")
+	let more = [make("ghi z"), make("jkl w")]
+	let mut es: Vec[E] = []
+	for w in more {
+		put_e(w, es)
+	}
+	println(f"{es.len()} {es[0].v} {es[3].v}")
+}

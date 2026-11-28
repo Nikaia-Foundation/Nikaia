@@ -255,7 +255,7 @@ impl CxPython {
             if !after.is_empty() { async_lines.push(format!("    {}", *unsafe { nikaia_std::proven::read(&after, (0) as usize) })); } else { async_lines.push(String::from("    return None")); }
             async_lines.push(format!("return _start(_lib.{}_async, [{}], finish, done)", symbol, nikaia_std::block::Text::from(handed_args.join(", "))));
         }
-        #[allow(unused_mut)] let mut lines: Vec<String> = before.copy_owned(); #[allow(unused_mut, clippy::redundant_locals)] let mut def_params = def_params; #[allow(unused_mut, clippy::redundant_locals)] let mut keep = keep; #[allow(unused_mut, clippy::redundant_locals)] let mut raising = raising; #[allow(unused_mut, clippy::redundant_locals)] let mut after = after;
+        #[allow(unused_mut)] let mut lines: Vec<String> = before.copy_owned(); #[allow(unused_mut, clippy::redundant_locals)] let mut def_params = def_params; #[allow(unused_mut, clippy::redundant_locals)] let mut raising = raising; #[allow(unused_mut, clippy::redundant_locals)] let mut after = after;
         if raising.is_empty() { lines.push(nikaia_std::block::Text::from(body_call.to_string())); } else {
             lines.push(String::from("try:"));
             lines.push(format!("    {}", body_call));

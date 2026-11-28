@@ -1681,7 +1681,7 @@ pub(crate) fn check_core_stmt_assign<H: CheckHost>(state: &mut CheckState, world
         }
         let mut assigned: Ty = found.clone();
         if found.is_unknown() && state.number_shaped(world, value) && state.no_integer_is(world, &into) { assigned = Ty::Named { name: String::from("i64"), args: vec![], view: false }; }
-        state.expect_type(world, &assigned, &into, span, "assign", &mut |was, wanted| { format!("You're assigning `{}` to something that holds `{}`.", was, wanted) });
+        if !state.a_view_copied_out(world, &assigned, &into, Some(value)) { state.expect_type(world, &assigned, &into, span, "assign", &mut |was, wanted| { format!("You're assigning `{}` to something that holds `{}`.", was, wanted) }); }
         state.findings_moved(span, &at, pushed, &waiting);
     }
     check_core_stmt_unit()
@@ -2153,6 +2153,39 @@ pub(crate) fn check_core_stmt_body_discarded(state: &mut CheckState, body: &Bloc
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
+pub(crate) fn check_core_stmt_tail_unused(state: &mut CheckState, body: &Block) {
+    let count = body.stmts.len() as i64;
+    if count == 0 { return; }
+    match &unsafe { nikaia_std::proven::read(&body.stmts, (nikaia_std::proven::sub::<i64>(count, 1)) as usize) }.node {
+        Stmt::Expr(value) => { check_core_stmt_value_unused(state, value); },
+        _ => { },
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn check_core_stmt_value_unused(state: &mut CheckState, value: &Expr) {
+    match check_peeled(value) {
+        Expr::Block(block, _) => { check_core_stmt_tail_unused(state, block); },
+        Expr::If { then_branch, else_branch, .. } => {
+            check_core_stmt_tail_unused(state, then_branch);
+            if else_branch.is_some() {
+                let otherwise: &Block = nikaia_std::index::or(else_branch, || then_branch.into());
+                check_core_stmt_tail_unused(state, otherwise);
+            }
+        },
+        Expr::Match { arms, .. } => { for arm in arms.iter() { check_core_stmt_value_unused(state, &arm.body); } },
+        _ => {
+            if check_core_expr_makes_a_value(value) {
+                state.discarded.insert(id_of(value) as i64);
+                state.discarded.insert(id_of(check_peeled(value)) as i64);
+            }
+        },
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
 pub(crate) fn check_core_stmt_lambda_by_use<H: CheckHost>(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, host: &H, stmt: &Stmt, block: &Block, at: i64) -> Option<Ty> {
     let name: String = match stmt {
         Stmt::Let { names, ty, value, .. } => {
@@ -2345,10 +2378,19 @@ pub(crate) fn check_core_view_lists_end(state: &mut CheckState, world: &CheckWor
 pub(crate) fn check_core_view_list_rebound(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, block: &Block, name: &str, at: i64, last: i64, start: i64, viewed_ty: &str) {
     if viewed_ty == "" { return; }
     let mut together: collections::BTreeSet<String> = collections::BTreeSet::new();
+    let own_text = !check_core_a_list_of_views(&state, name);
     let mut later = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
     while later <= last {
+        let walks = match &nikaia_std::index::get(&block.stmts, nikaia_std::index::at(later)).node {
+            Stmt::For { iter, .. } => own_text && check_core_is_the_name(world, iter, name),
+            _ => false,
+        };
+        if walks {
+            later = unsafe { nikaia_std::proven::add::<i64>(later, 1) };
+            continue;
+        }
         let mut read: collections::BTreeSet<String> = collections::BTreeSet::new();
-        names_in_statement(&nikaia_std::index::get(&block.stmts, nikaia_std::index::at(later)).node, world.words, &mut read);
+        names_in_statement(&unsafe { nikaia_std::proven::read(&block.stmts, (later) as usize) }.node, world.words, &mut read);
         if read.contains(name) { for one in read.iter() { together.insert(nikaia_std::block::Text::from(one.to_string())); } }
         later = unsafe { nikaia_std::proven::add::<i64>(later, 1) };
     }

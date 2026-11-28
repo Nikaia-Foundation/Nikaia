@@ -774,9 +774,9 @@ pub(crate) fn mp_lines(held: &MpHeld<'_, '_>, structs: &collections::BTreeMap<St
     let mut out: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut b = b;
     out.reserve(classes.iter().size_hint().0); for (class, found) in classes.iter() {
         let class = nikaia_std::num::value(class);
-        #[allow(unused_mut)] let mut labels = found.copy_owned();
+        let mut labels = found.copy_owned();
         labels.sort();
-        #[allow(unused_mut)] let mut distinct: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block); #[allow(unused_mut, clippy::redundant_locals)] let mut labels = labels;
+        #[allow(unused_mut)] let mut distinct: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
         for l in labels.iter() { if distinct.is_empty() || *unsafe { nikaia_std::proven::read(&distinct, (nikaia_std::proven::sub::<i64>(distinct.len() as i64, 1)) as usize) } != *l { distinct.push(nikaia_std::block::Text::from(l.to_string())); } }
         let mut said: String = String::from("keyed"); #[allow(unused_mut, clippy::redundant_locals)] let mut distinct = distinct;
         let entry = match *nikaia_std::index::get(&how, &class) {

@@ -1,0 +1,53 @@
+// #2588: a value whose cleanup may pause, made in a `sync` function and not
+// used, dies where it is made, and its settle pauses: `NK2202`, as for a
+// `let` (ADR-297 D3, `a_pausing_cleanup_in_a_sync_function_is_nk2202`).
+// The tail of a body that hands back nothing (`tail`, `tail_call`, the arm
+// of `in_an_arm`) and a statement (`statement`) are not used. A value handed
+// back (`handed_back`, `returned`) dies elsewhere and is no refusal.
+use std::fs
+
+struct Res {
+    name: String,
+}
+
+impl Cleanup for Res {
+    fn cleanup(ref mut self) throws {
+        fs::write(f"nk2588-{self.name}", fs::scratch(), "x")
+    }
+}
+
+fn res() -> Res sync {
+    Res { name: "a" }
+}
+
+fn returned() -> Res sync {
+    return Res { name: "b" }
+}
+
+fn tail() sync throws {
+    Res { name: "c" }
+}
+
+fn tail_call() sync throws {
+    res()
+}
+
+fn statement() sync throws {
+    Res { name: "d" }
+    let _x = 1
+}
+
+fn in_an_arm(made: bool) sync throws {
+    if made {
+        Res { name: "e" }
+    }
+}
+
+fn main() throws {
+    let _a = res()
+    let _b = returned()
+    tail()
+    tail_call()
+    statement()
+    in_an_arm(true)
+}

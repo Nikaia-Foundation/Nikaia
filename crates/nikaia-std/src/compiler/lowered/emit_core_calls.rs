@@ -1447,6 +1447,20 @@ impl EmitState {
                 let (buffer, sure) = nikaia_std::index::or(named, || (0, false.into()));
                 given = if sure { format!("keeps.view_in(0, __place_{}, __nikaia_given_{})", buffer, i) } else { format!("nikaia_std::tether::Rebase::rebase_near(__nikaia_given_{}, &keeps, __place_{})", i, buffer) };
             }
+            let none: Vec<i64> = vec![];
+            let fields: Option<collections::BTreeMap<String, (i64, bool)>> = match plan.field_places.get(&node_key(unsafe { nikaia_std::proven::read(&args, (i) as usize) })) {
+                Some(__nikaia_it) => Some(__nikaia_it.clone()),
+                None => None,
+            };
+            let whole: Option<(i64, bool)> = match (match places {
+                Some(__nikaia_it) => __nikaia_it.get(&i),
+                None => None,
+            }) {
+                Some(__nikaia_it) => Some(__nikaia_it.clone()),
+                None => None,
+            };
+            let at = self.emit_held_fields(world, unsafe { nikaia_std::proven::read(&args, (i) as usize) }, fields, whole, &none, true);
+            if at.is_some() { given = format!("__nikaia_given_{}.__rebase_at(&keeps, {})", i, nikaia_std::index::or(at.as_deref(), || "")); }
             walk.held.insert(node_key(unsafe { nikaia_std::proven::read(&args, (i) as usize) }), given);
         }
         self.emit_expr(world, walk, out, host, node, depth, flow, scope)?;
@@ -1693,8 +1707,8 @@ pub(crate) fn emit_tuple_part_copy(i: i64, word: &str) -> String {
 }
 
 pub(crate) fn emit_tuple_part_copies(parts: &[String]) -> String {
-    let copies: Vec<String> = parts.iter().enumerate().map(|(at, item)| (at as i64, item)).map(|__nikaia_tuple129422| {
-        let (i, word) = __nikaia_tuple129422;
+    let copies: Vec<String> = parts.iter().enumerate().map(|(at, item)| (at as i64, item)).map(|__nikaia_tuple129951| {
+        let (i, word) = __nikaia_tuple129951;
         emit_tuple_part_copy(i, word)
     }).collect::<Vec<_>>();
     if copies.len() == 1 { return format!("({},)", *unsafe { nikaia_std::proven::read(&copies, (0) as usize) }); }

@@ -413,7 +413,7 @@ pub(crate) fn lg_hulled(arena: &mut TermArena, proof: &mut LgProof, clause: &LgC
         }
         if !complete { continue; }
         if (lemmas.len() as i64) != clause.parts.len() as i64 { continue; }
-        let mut premises: Vec<String> = nikaia_std::block::List::from_array_in([nikaia_std::block::Text::from(clause.step.to_string())], nikaia_std::block::Place::Block); #[allow(unused_mut, clippy::redundant_locals)] let mut lemmas = lemmas; #[allow(unused_mut, clippy::redundant_locals)] let mut lits = lits;
+        let mut premises: Vec<String> = nikaia_std::block::List::from_array_in([nikaia_std::block::Text::from(clause.step.to_string())], nikaia_std::block::Place::Block); #[allow(unused_mut, clippy::redundant_locals)] let mut lits = lits;
         premises.reserve(lemmas.iter().size_hint().0); for lemma in lemmas.iter() { premises.push(nikaia_std::block::Text::from(lemma.to_string())); }
         let step = proof.step(&format!("(cl{}) :rule resolution :premises ({})", lg_spaced(&lits), nikaia_std::block::Text::from(premises.join(" "))));
         if lits.len() == 1 && *unsafe { nikaia_std::proven::read(&lits, (0) as usize) } == lg_term(&arena, hull) { out.push(LgClause { step, parts: vec![LgPart { id: hull, positive: true }] }); }
@@ -457,7 +457,7 @@ pub(crate) fn lg_below(search: &mut LgSearch, depth: i64, chosen: &mut Vec<LgPar
         for lit in (*unsafe { nikaia_std::proven::read(&all_lits, (at) as usize) }).iter() { if *lit != pivot && !lg_has(&lits, lit) { lits.push(nikaia_std::block::Text::from(lit.to_string())); } }
         at = unsafe { nikaia_std::proven::add::<i64>(at, 1) };
     }
-    let mut premises: Vec<String> = nikaia_std::block::List::from_array_in([nikaia_std::block::Text::from(clause.step.to_string())], nikaia_std::block::Place::Block); #[allow(unused_mut, clippy::redundant_locals)] let mut steps = steps; #[allow(unused_mut, clippy::redundant_locals)] let mut lits = lits;
+    let mut premises: Vec<String> = nikaia_std::block::List::from_array_in([nikaia_std::block::Text::from(clause.step.to_string())], nikaia_std::block::Place::Block); #[allow(unused_mut, clippy::redundant_locals)] let mut lits = lits;
     premises.reserve(steps.iter().size_hint().0); for one in steps.iter() { premises.push(nikaia_std::block::Text::from(one.to_string())); }
     let step = search.proof.step(&format!("(cl{}) :rule resolution :premises ({})", lg_spaced(&lits), nikaia_std::block::Text::from(premises.join(" "))));
     Some(LgBelow { step, lits })

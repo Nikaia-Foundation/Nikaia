@@ -298,9 +298,9 @@ pub fn sysroot_named_key(names: &SysrootNames, name: &str, text: &str, only_test
 }
 
 pub async fn sysroot_committed(dir: &std::path::Path) -> Vec<(String, String)> {
-    #[allow(unused_mut)] let mut names: Vec<String> = nikaia_std::block::List::from_array_in([nikaia_std::block::Text::from(SYSROOT_COMPILER_PACKAGE.to_string())], nikaia_std::block::Place::Block);
+    let mut names: Vec<String> = nikaia_std::block::List::from_array_in([nikaia_std::block::Text::from(SYSROOT_COMPILER_PACKAGE.to_string())], nikaia_std::block::Place::Block);
     names.extend(sysroot_stale(dir, &vec![]));
-    let mut files: Vec<(String, String)> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut names = names;
+    let mut files: Vec<(String, String)> = vec![];
     files.reserve(names.iter().size_hint().0); for name in names.iter() {
         let text = match fs::read_to_string(&nikaia_std::fs::path::join(&(dir), std::path::Path::new(&(name))), &fs::Root::Anywhere).await {
             Ok(value) => value,

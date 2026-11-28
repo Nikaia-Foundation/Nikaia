@@ -480,13 +480,13 @@ impl EmitState {
                     out.push(&format!("          {}", separator));
                     self.emit_pattern(world, walk, out, host, &alt.pattern)?;
                     out.push("\n            -> ");
-                    #[allow(unused_mut)] let mut as_bytes: Vec<String> = vec![];
+                    let mut as_bytes: Vec<String> = vec![];
                     if !bytes { emit_bytes_bindings(world, &alt.pattern.node, &mut as_bytes); }
                     #[allow(unused_mut)] let mut as_spans: Vec<String> = vec![];
                     #[allow(unused_mut)] let mut spanned: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut as_spans = as_spans;
                     emit_span_bindings(world, &walk, &alt.pattern.node, &mut as_spans, &mut spanned, false);
-                    let mut prelude = String::from(""); #[allow(unused_mut, clippy::redundant_locals)] let mut as_bytes = as_bytes; #[allow(unused_mut, clippy::redundant_locals)] let mut as_spans = as_spans; #[allow(unused_mut, clippy::redundant_locals)] let mut spanned = spanned;
-                    #[allow(unused_mut)] let mut as_texts: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut as_bytes = as_bytes; #[allow(unused_mut, clippy::redundant_locals)] let mut as_spans = as_spans;
+                    let mut prelude = String::from(""); #[allow(unused_mut, clippy::redundant_locals)] let mut as_spans = as_spans; #[allow(unused_mut, clippy::redundant_locals)] let mut spanned = spanned;
+                    #[allow(unused_mut)] let mut as_texts: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut as_spans = as_spans;
                     #[allow(unused_mut)] let mut covered: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut as_texts = as_texts;
                     emit_text_bindings(world, &walk, &alt.pattern, &mut as_texts, &mut covered);
                     for name in as_bytes.iter() { if !nikaia_std::list::contains(&as_texts, &name) { prelude = format!("{}let {} = {}.as_bytes(); ", prelude, name, name); } }
