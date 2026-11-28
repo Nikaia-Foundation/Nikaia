@@ -1,0 +1,37 @@
+error[NK2202]: `tail` is `sync`, but the cleanup of `Res`, `Res::cleanup`, can pause.
+   --> tests/a_pausing_cleanup_of_an_unused_value_in_a_sync_function_is_nk2202.nika:28:5
+    |
+ 28 |     Res { name: "c" }
+    |     ^^^^^^^^^^^^^^^^^
+    |
+    = note: A `sync` function promises never to pause or do I/O.
+    = note: `Res` is cleaned up where it dies in `tail`, and `Res::cleanup` doesn't say `sync`.
+    = help: Remove `sync` from `tail`, write `sync` after the signature of `Res::cleanup` if it never pauses, or create `Res` outside `tail` and pass it in.
+error[NK2202]: `tail_call` is `sync`, but the cleanup of `Res`, `Res::cleanup`, can pause.
+   --> tests/a_pausing_cleanup_of_an_unused_value_in_a_sync_function_is_nk2202.nika:32:5
+    |
+ 32 |     res()
+    |     ^^^^^
+    |
+    = note: A `sync` function promises never to pause or do I/O.
+    = note: `Res` is cleaned up where it dies in `tail_call`, and `Res::cleanup` doesn't say `sync`.
+    = help: Remove `sync` from `tail_call`, write `sync` after the signature of `Res::cleanup` if it never pauses, or create `Res` outside `tail_call` and pass it in.
+error[NK2202]: `statement` is `sync`, but the cleanup of `Res`, `Res::cleanup`, can pause.
+   --> tests/a_pausing_cleanup_of_an_unused_value_in_a_sync_function_is_nk2202.nika:36:5
+    |
+ 36 |     Res { name: "d" }
+    |     ^^^^^^^^^^^^^^^^^
+    |
+    = note: A `sync` function promises never to pause or do I/O.
+    = note: `Res` is cleaned up where it dies in `statement`, and `Res::cleanup` doesn't say `sync`.
+    = help: Remove `sync` from `statement`, write `sync` after the signature of `Res::cleanup` if it never pauses, or create `Res` outside `statement` and pass it in.
+error[NK2202]: `in_an_arm` is `sync`, but the cleanup of `Res`, `Res::cleanup`, can pause.
+   --> tests/a_pausing_cleanup_of_an_unused_value_in_a_sync_function_is_nk2202.nika:42:9
+    |
+ 42 |         Res { name: "e" }
+    |         ^^^^^^^^^^^^^^^^^
+    |
+    = note: A `sync` function promises never to pause or do I/O.
+    = note: `Res` is cleaned up where it dies in `in_an_arm`, and `Res::cleanup` doesn't say `sync`.
+    = help: Remove `sync` from `in_an_arm`, write `sync` after the signature of `Res::cleanup` if it never pauses, or create `Res` outside `in_an_arm` and pass it in.
+4 calls a `sync` function may not make
