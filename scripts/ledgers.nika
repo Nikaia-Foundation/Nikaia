@@ -19,6 +19,9 @@
 //
 // * `examples/foreign-runtime/{crossing,smuggled}`: they must not build, and
 //   who refuses them is the finding (their README).
+// * `examples/fortunes`: it uses `postgres` and a handler without a request,
+//   which the compiler cannot type yet (NK1245, #105); it is checked by hand
+//   until that is built, and joins the sweep then.
 // * `benches/yaml/*`: `bench.nika` builds each program from a copy with its
 //   own manifest, never in place, and the checked-in package has no
 //   `src/main.nika`.
@@ -104,7 +107,7 @@ fn ledgers_dirs(tmp: String) -> Vec[String] throws {
 		"sh",
 		[
 			"-c",
-			f"cd '{tmp}' && ls -d examples/*/nikaia.toml examples/foreign-runtime/serve/nikaia.toml packages/*/nikaia.toml packages/logic/rod/nikaia.toml tests/page-examples/nikaia.toml tests/language/nikaia.toml tests/build-time/nikaia.toml tests/compiler/nikaia.toml 2>/dev/null | xargs -n1 dirname | sort -u",
+			f"cd '{tmp}' && ls -d examples/*/nikaia.toml examples/foreign-runtime/serve/nikaia.toml packages/*/nikaia.toml packages/logic/rod/nikaia.toml tests/page-examples/nikaia.toml tests/language/nikaia.toml tests/build-time/nikaia.toml tests/compiler/nikaia.toml 2>/dev/null | grep -v '^examples/fortunes/' | xargs -n1 dirname | sort -u",
 		],
 	).stdout
 	let mut dirs: Vec[String] = []
