@@ -2255,7 +2255,7 @@ pub(crate) fn decide_source(id: &(i64, String), source: &Source, path: &[(i64, b
     } else if leaves {
         keep = KeepAt::Param;
         plan.takes_keep = true;
-    } else if !shedding.is_empty() {
+    } else if !shedding.is_empty() && (shedding.len() as i64) == outer.len() as i64 {
         keep = KeepAt::Element(source_at(source));
         held_one_per_buffer(&id.clone(), source, &shedding, walk, plan);
         if walk.reads.contains(&source_at(source)) { plan.reads.insert(source_at(source)); }

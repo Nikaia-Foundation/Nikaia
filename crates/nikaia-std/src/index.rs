@@ -785,6 +785,16 @@ impl<'a> Or<&'a str> for Option<&'a String> {
     }
 }
 
+/// **A map of held text views, read, with a literal after `??`**
+/// (ADR-tether-v1 D12): a map or list of views that drops entries holds each
+/// view as a `Held`, which reads as text, so what it and the literal can both
+/// be is a view of text, as a map's `String` is (ADR-293 D28).
+impl<'a> Or<&'a str> for Option<&'a crate::tether::Held> {
+    fn or(self, fallback: impl FnOnce() -> &'a str) -> &'a str {
+        self.map(|held| &**held).unwrap_or_else(fallback)
+    }
+}
+
 /// **A list's optional text, read, with a literal after `??`** (#342,
 /// ADR-279 D12): the list keeps its `String`, so the read is lent -
 /// `get(&ys, 1)` - and what it and the literal can both be is a view of text,

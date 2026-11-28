@@ -3114,6 +3114,9 @@ fn decide_source(id: (i64, String), source: ref Source, path: ref Vec[(i64, bool
     // **A keeper that drops entries across a loop** (D4): the buffer is read
     // inside a loop the keeper is declared outside of, and the entries are
     // dropped inside that same loop - while it goes on reading.
+    // **Every keeper of it drops** (D4): one that only grows (`v.push(a)` beside
+    // `m.insert(a, b)`) holds its views past the turn, so the buffer is the
+    // frame's, as where no keeper sheds (QA of #2858).
     let mut shedding: Vec[String] = []
     for keeper in outer {
         if sheds_across(keeper, path, walk) {
@@ -3131,7 +3134,7 @@ fn decide_source(id: (i64, String), source: ref Source, path: ref Vec[(i64, bool
     } else if leaves {
         keep = KeepAt::Param
         plan.takes_keep = true
-    } else if shedding.len() > 0 {
+    } else if shedding.len() > 0 && shedding.len() == outer.len() {
         keep = KeepAt::Element(source_at(source))
         held_one_per_buffer(id.clone(), source, shedding, walk, plan)
         // **Its buffer is the next turn's read's** (#2859), where it is one.
