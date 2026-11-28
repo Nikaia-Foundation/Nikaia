@@ -751,6 +751,16 @@ impl<T: Copy> Or<T> for &Option<T> {
     }
 }
 
+/// **A view of an optional value that does not copy, with a view after
+/// `??`** (#2588): a `b` bound by a pattern over a `ref` value is
+/// `&Option<B>`, and `let o: ref B = b ?? a` answers the view either side is.
+/// Apart from the impl above: that one answers a `T`, this one a `&T`.
+impl<'a, T> Or<&'a T> for &'a Option<T> {
+    fn or(self, fallback: impl FnOnce() -> &'a T) -> &'a T {
+        self.as_ref().unwrap_or_else(fallback)
+    }
+}
+
 /// **A list view, with an empty list after `??`** (#812): `x?.items ?? []`
 /// answers the slice, and `&[][..]` is as static as a text literal.
 impl<'a, T> Or<&'a [T]> for Option<&'a Vec<T>> {
