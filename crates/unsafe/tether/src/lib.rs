@@ -22,7 +22,9 @@
 #![deny(unsafe_op_in_unsafe_fn)]
 
 use std::any::Any;
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::cell::UnsafeCell;
+use std::mem::MaybeUninit;
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, OnceLock};
 
 /// **A value whose references may outlive what they point into, as far as the
@@ -85,7 +87,7 @@ impl<T: Clone> Clone for Dangling<T> {
 /// through `&self` at once; nothing is ever moved or removed, so a slot once
 /// set may be read for as long as the `Keep` is borrowed.
 pub struct Keep {
-    first: OnceLock<Entry>,
+    first: Slot,
     rest: OnceLock<Box<Rest>>,
     /// How many places have been handed out.
     taken: AtomicUsize,
@@ -94,7 +96,88 @@ pub struct Keep {
 /// The places after the first: chunk `k` holds places `2^k .. 2^(k+1)`,
 /// allocated when the first of them is taken.
 struct Rest {
-    chunks: [OnceLock<Box<[OnceLock<Entry>]>>; usize::BITS as usize],
+    chunks: [OnceLock<Box<[Slot]>>; usize::BITS as usize],
+}
+
+/// **One place of a [`Keep`]**: written once, by the one put that claimed it,
+/// then read by anyone. The buffer's bytes are read once it is in the slot and
+/// kept beside it, so that a view is checked against them with no call
+/// through the buffer's type (ADR-tether-v1 D15, #2843). A hand-made
+/// `OnceLock`: the place is claimed by one atomic step, so no two puts ever
+/// race for a slot, and setting it is one store, not a `Once`.
+struct Slot {
+    ready: AtomicBool,
+    entry: UnsafeCell<MaybeUninit<Entry>>,
+    /// The buffer's bytes, written with `entry`, before `ready`.
+    start: UnsafeCell<*const u8>,
+    len: UnsafeCell<usize>,
+}
+
+// SAFETY: `entry` holds an `Entry`, which is `Send + Sync`, and `start` and
+// `len` describe bytes that entry owns; every field is written once, by the
+// put that claimed the slot, before `ready` is set with `Release`, and read
+// only after `ready` is seen with `Acquire`.
+unsafe impl Sync for Slot {}
+// SAFETY: as above; a `Slot` owns its `Entry`, which is `Send`.
+unsafe impl Send for Slot {}
+
+impl Slot {
+    fn new() -> Slot {
+        Slot {
+            ready: AtomicBool::new(false),
+            entry: UnsafeCell::new(MaybeUninit::uninit()),
+            start: UnsafeCell::new(std::ptr::null()),
+            len: UnsafeCell::new(0),
+        }
+    }
+
+    /// The buffer's bytes, once it is there.
+    #[inline]
+    fn bytes(&self) -> Option<&[u8]> {
+        if !self.ready.load(Ordering::Acquire) {
+            return None;
+        }
+        // SAFETY: `start` and `len` were read off the buffer in its slot,
+        // before `ready`; the bytes are the buffer's, which stays where it is
+        // and is never written until the slot is dropped, after every borrow
+        // of it.
+        Some(unsafe { std::slice::from_raw_parts(*self.start.get(), *self.len.get()) })
+    }
+
+    /// Write the buffer in, and hand it back: not yet visible.
+    ///
+    /// # Safety
+    ///
+    /// Called once per slot, by the put that claimed it, and followed by
+    /// [`Slot::publish`].
+    unsafe fn write(&self, entry: Entry) -> &Entry {
+        // SAFETY: as the caller promises, no one else writes or reads it yet.
+        unsafe { (*self.entry.get()).write(entry) }
+    }
+
+    /// Make the buffer visible, with its bytes.
+    ///
+    /// # Safety
+    ///
+    /// After [`Slot::write`], by the same put; `bytes` are the bytes of the
+    /// buffer in this slot.
+    unsafe fn publish(&self, bytes: &[u8]) {
+        // SAFETY: as the caller promises, no one reads them before `ready`.
+        unsafe {
+            *self.start.get() = bytes.as_ptr();
+            *self.len.get() = bytes.len();
+        }
+        self.ready.store(true, Ordering::Release);
+    }
+}
+
+impl Drop for Slot {
+    fn drop(&mut self) {
+        if *self.ready.get_mut() {
+            // SAFETY: written, and dropped once, here.
+            unsafe { self.entry.get_mut().assume_init_drop() }
+        }
+    }
 }
 
 /// **Where a buffer lives in its [`Keep`]**: handed out when it is put there,
@@ -109,38 +192,71 @@ fn chunk_of(at: usize) -> (usize, usize) {
     (k, at - (1 << k))
 }
 
-/// One buffer.
+/// One buffer, and where its views point.
 ///
-/// An `Arc` and not a `Box`: moving a `Box` asserts it is the only way to its
-/// contents, which would invalidate every view already handed out - moving the
-/// `Arc` touches nothing it points at.
+/// **A buffer of up to four words lives in the slot itself** (ADR-tether-v1
+/// D12, #2843): owned text is a pointer, a length and a capacity, and its
+/// views point into its heap buffer, which stays where it is while the slot
+/// holds it - nothing writes to it, the slot being reached only through
+/// `&Keep`, and the slot itself never moves while the `Keep` is borrowed. So a
+/// keep of one text takes one allocation, the keep's, besides the text's own.
+/// A larger buffer is put behind an `Arc`, not a `Box`: moving a `Box` asserts
+/// it is the only way to its contents, which would invalidate every view
+/// already handed out - moving the `Arc` touches nothing it points at.
 enum Entry {
+    Inline(Inline),
     Opaque(#[allow(dead_code)] Arc<dyn Any + Send + Sync>),
     /// Put in with [`Keep::put_viewed`]: one [`Keep::find`] can find a view in.
-    Viewed(Arc<dyn Viewed>),
+    Viewed(#[allow(dead_code)] Arc<dyn Viewed>),
 }
 
-impl Entry {
-    /// `text`, where it lies in this buffer: the same bytes, borrowed from it.
-    fn within<'a>(&'a self, text: &str) -> Option<&'a str> {
-        match self {
-            Entry::Viewed(buffer) => within(buffer.bytes(), text),
-            Entry::Opaque(_) => None,
-        }
+/// What fits in a slot: owned text, `String` or Nikaia's placed text, which
+/// carries the place it was allocated in beside its `Vec`.
+type Words = [usize; 4];
+
+/// **A buffer stored in the slot**, its type forgotten but for how to read
+/// its bytes and how to drop it.
+struct Inline {
+    value: MaybeUninit<Words>,
+    drop: unsafe fn(*mut Words),
+}
+
+/// Whether a `B` fits in a slot ([`Inline`]).
+const fn fits<B>() -> bool {
+    std::mem::size_of::<B>() <= std::mem::size_of::<Words>()
+        && std::mem::align_of::<B>() <= std::mem::align_of::<Words>()
+}
+
+/// Drop the `B` an [`Inline`] holds.
+///
+/// # Safety
+///
+/// `at` holds a `B`, written by `Keep::put_viewed_at`, dropped once.
+unsafe fn drop_inline<B>(at: *mut Words) {
+    // SAFETY: as the caller promises.
+    unsafe { at.cast::<B>().drop_in_place() }
+}
+
+impl Drop for Inline {
+    fn drop(&mut self) {
+        // SAFETY: `value` holds the `B` that `drop` was made for, written in
+        // `put_viewed_at`, and an `Inline` is dropped once.
+        unsafe { (self.drop)(self.value.as_mut_ptr()) }
     }
 }
 
 impl Keep {
     pub fn new() -> Keep {
         Keep {
-            first: OnceLock::new(),
+            first: Slot::new(),
             rest: OnceLock::new(),
             taken: AtomicUsize::new(0),
         }
     }
 
     /// The slot of place `at`, where it has been made.
-    fn slot(&self, at: usize) -> Option<&OnceLock<Entry>> {
+    #[inline]
+    fn slot(&self, at: usize) -> Option<&Slot> {
         if at == 0 {
             return Some(&self.first);
         }
@@ -148,12 +264,15 @@ impl Keep {
         self.rest.get()?.chunks[k].get()?.get(i)
     }
 
-    /// The buffer at `at`, once it is there.
-    fn entry(&self, at: Place) -> Option<&Entry> {
-        self.slot(at.0)?.get()
+    /// The bytes of the buffer at `at`, once it is there.
+    #[inline]
+    fn bytes(&self, at: Place) -> Option<&[u8]> {
+        self.slot(at.0)?.bytes()
     }
 
-    fn keep(&self, entry: Entry) -> Place {
+    /// Claim a place and write `entry` into it, not yet visible: the caller
+    /// publishes it ([`Slot::publish`]) with its bytes.
+    fn keep(&self, entry: Entry) -> (&Slot, &Entry, Place) {
         let at = self.taken.fetch_add(1, Ordering::Relaxed);
         let slot = if at == 0 {
             &self.first
@@ -164,12 +283,12 @@ impl Keep {
                     chunks: std::array::from_fn(|_| OnceLock::new()),
                 })
             });
-            &rest.chunks[k].get_or_init(|| (0..1usize << k).map(|_| OnceLock::new()).collect())[i]
+            &rest.chunks[k].get_or_init(|| (0..1usize << k).map(|_| Slot::new()).collect())[i]
         };
-        if slot.set(entry).is_err() {
-            unreachable!("a place is handed out once");
-        }
-        Place(at)
+        // SAFETY: place `at` was claimed by the `fetch_add` above, by this
+        // put alone, and every caller publishes it.
+        let kept = unsafe { slot.write(entry) };
+        (slot, kept, Place(at))
     }
 
     /// Move a buffer in, and hand back the place it now lives, for as long as
@@ -182,7 +301,9 @@ impl Keep {
     pub fn put_at<B: Any + Send + Sync>(&self, buffer: B) -> (&B, Place) {
         let shared: Arc<B> = Arc::new(buffer);
         let at: *const B = Arc::as_ptr(&shared);
-        let place = self.keep(Entry::Opaque(shared));
+        let (slot, _, place) = self.keep(Entry::Opaque(shared));
+        // SAFETY: just written, with no bytes a view could point into.
+        unsafe { slot.publish(&[]) };
         // SAFETY: the `Arc` was just stored and is never removed or handed out
         // until `self` is dropped, so the buffer it points at stays alive and
         // in place; nothing writes to it. So the reference is valid for as
@@ -199,11 +320,35 @@ impl Keep {
     /// [`Keep::put_viewed`], and the buffer's [`Place`] in this `Keep`, which
     /// [`Keep::view_in`] checks a view against.
     pub fn put_viewed_at<B: Viewed>(&self, buffer: B) -> (&B, Place) {
+        if fits::<B>() {
+            // **In the slot**, with no allocation of its own.
+            let mut value = MaybeUninit::<Words>::uninit();
+            // SAFETY: `B` fits in `Words`, in size and alignment (`fits`).
+            unsafe { value.as_mut_ptr().cast::<B>().write(buffer) };
+            let (slot, kept, place) = self.keep(Entry::Inline(Inline {
+                value,
+                drop: drop_inline::<B>,
+            }));
+            let Entry::Inline(inline) = kept else {
+                unreachable!("the slot holds what was put there");
+            };
+            // SAFETY: the `B` written above, moved with its `Inline` into the
+            // slot, where it now stays until the `Keep` is dropped; read
+            // through a shared borrow of the slot, which is never written
+            // again, for as long as `self` is borrowed.
+            let kept_buffer: &B = unsafe { &*inline.value.as_ptr().cast::<B>() };
+            // SAFETY: just written; these are its bytes, read where it lives.
+            unsafe { slot.publish(kept_buffer.bytes()) };
+            return (kept_buffer, place);
+        }
         let shared: Arc<B> = Arc::new(buffer);
         let at: *const B = Arc::as_ptr(&shared);
-        let place = self.keep(Entry::Viewed(shared));
         // SAFETY: as in `put_at`.
-        (unsafe { &*at }, place)
+        let kept_buffer: &B = unsafe { &*at };
+        let (slot, _, place) = self.keep(Entry::Viewed(shared));
+        // SAFETY: just written; these are its bytes, behind its `Arc`.
+        unsafe { slot.publish(kept_buffer.bytes()) };
+        (kept_buffer, place)
     }
 
     /// The same text, as a view of a buffer this `Keep` holds - or `None`
@@ -219,7 +364,7 @@ impl Keep {
             return Some("");
         }
         let taken = self.taken.load(Ordering::Acquire);
-        (0..taken).find_map(|at| self.slot(at)?.get()?.within(text))
+        (0..taken).find_map(|at| within(self.slot(at)?.bytes()?, text))
     }
 
     /// The same text, as a view of this `Keep`: found in the buffer it points
@@ -241,22 +386,41 @@ impl Keep {
     /// `NIKAIA_TEST_DIR` for every test it runs) panics at the caller's line
     /// instead, so the tests find a wrong plan rather than a copy hiding it.
     #[track_caller]
+    #[inline]
     pub fn view_in(&self, at: Place, text: &str) -> &str {
-        self.checked(at, text, under_test())
+        if let Some(found) = self.bytes(at).and_then(|bytes| within(bytes, text)) {
+            return found;
+        }
+        self.missed(at, text, under_test())
     }
 
     /// [`Keep::view_in`], for a view the plan names this buffer for although
     /// it may be a literal there (`if c { w } else { "none" }`): where it is
     /// not in the buffer it is copied, in a test as in a program.
+    #[inline]
     pub fn view_near(&self, at: Place, text: &str) -> &str {
-        self.checked(at, text, false)
-    }
-
-    #[track_caller]
-    fn checked(&self, at: Place, text: &str, strict: bool) -> &str {
-        if let Some(found) = self.entry(at).and_then(|entry| entry.within(text)) {
+        if let Some(found) = self.bytes(at).and_then(|bytes| within(bytes, text)) {
             return found;
         }
+        self.missed(at, text, false)
+    }
+
+    /// [`Keep::view_in`] with the choice a run makes on a miss given.
+    #[track_caller]
+    #[cfg(test)]
+    fn checked(&self, at: Place, text: &str, strict: bool) -> &str {
+        if let Some(found) = self.bytes(at).and_then(|bytes| within(bytes, text)) {
+            return found;
+        }
+        self.missed(at, text, strict)
+    }
+
+    /// A view not in the buffer at `at`: empty, a copy, or - `strict` - the
+    /// compiler's fault.
+    #[track_caller]
+    #[cold]
+    fn missed(&self, at: Place, text: &str, strict: bool) -> &str {
+        let _ = at;
         if text.is_empty() {
             return "";
         }
@@ -376,20 +540,29 @@ impl Held {
     /// # Panics
     ///
     /// Where `keeps` is empty.
-    pub fn new(keeps: &[Arc<Keep>], text: &str) -> Held {
-        let (keep, view) = keeps
+    ///
+    /// **The handle given is moved in, not cloned** (ADR-tether-v1 D12,
+    /// #2843): one count step when the caller made it, one when this is dropped.
+    pub fn new<const N: usize>(keeps: [Arc<Keep>; N], text: &str) -> Held {
+        let found = keeps
             .iter()
-            .find_map(|keep| keep.find(text).map(|view| (keep, view)))
-            .unwrap_or_else(|| {
+            .enumerate()
+            .find_map(|(at, keep)| keep.find(text).map(|view| (at, view)));
+        let (at, view) = match found {
+            Some(found) => found,
+            None => {
                 let keep = keeps.first().expect("a held view needs a keep");
-                (keep, keep.view(text))
-            });
+                (0, keep.view(text))
+            }
+        };
+        // SAFETY: `view` points into `keeps[at]` - `find` and `view` hand back
+        // nothing else - which is moved in beside it below and keeps the
+        // buffer alive and in place as long as this value: moving an `Arc`
+        // moves nothing it points at.
+        let view = unsafe { std::mem::transmute::<&str, &'static str>(view) };
         Held {
-            // SAFETY: `view` points into `keep` - `find` and `view` hand back
-            // nothing else - and the clone stored beside it keeps `keep`, and
-            // so the buffer, alive and in place as long as this value.
-            text: Dangling::new(unsafe { std::mem::transmute::<&str, &'static str>(view) }),
-            _keep: Some(Arc::clone(keep)),
+            text: Dangling::new(view),
+            _keep: keeps.into_iter().nth(at),
         }
     }
 
@@ -775,7 +948,7 @@ pub trait Hold<const N: usize> {
 impl<const N: usize> Hold<N> for &str {
     type Held = Held;
     fn hold(self, keeps: [Arc<Keep>; N]) -> Held {
-        Held::new(&keeps, self)
+        Held::new(keeps, self)
     }
     fn hold_near(self, keeps: [Arc<Keep>; N], at: Place) -> Held {
         match keeps.into_iter().next() {
@@ -993,7 +1166,7 @@ mod tests {
         }
         let keep = Arc::new(Keep::new());
         let text = keep.put_viewed("one two".to_string());
-        let held = Held::new(&[Arc::clone(&keep)], &text[..3]);
+        let held = Held::new([Arc::clone(&keep)], &text[..3]);
         drop(keep);
         assert_eq!(consume_held(held), 3);
         let keep = Arc::new(Keep::new());
@@ -1247,14 +1420,10 @@ mod tests {
                     let mut seen = Vec::new();
                     for n in 0..50 {
                         let (text, at) = keep.put_viewed_at(format!("{t}-{n}"));
-                        seen.push((at, text.len()));
+                        seen.push((at, text.as_str()));
                     }
-                    for (at, len) in seen {
-                        let whole = keep.entry(at).and_then(|e| match e {
-                            Entry::Viewed(b) => Some(b.bytes().len()),
-                            Entry::Opaque(_) => None,
-                        });
-                        assert_eq!(whole, Some(len));
+                    for (at, text) in seen {
+                        assert_eq!(keep.view_in(at, text).as_ptr(), text.as_ptr());
                     }
                 })
             })
