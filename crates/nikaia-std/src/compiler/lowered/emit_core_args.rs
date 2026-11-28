@@ -666,7 +666,7 @@ impl EmitState {
             out.push(&format!("|mut __nk_acc, __nk_x| {{ nikaia_std::par::in_place(&mut __nk_acc, {}, ", second));
         }
         let shared = emit_arg_a_shared_read(world, &walk, arg);
-        if shared != "" && (out.buf.len() as i64) == arg_start && in_place == 0 && !future { out.push(&emit_pending_read_caught(&shared, inside.breaks_to)); } else if future { self.emit_arg_future(world, walk, out, host, arg, i, depth, &inside, scope)?; } else { self.emit_arg_value(world, walk, out, host, arg, i, depth, inside, scope)?; }
+        if shared != "" && (out.buf.len() as i64) == arg_start && in_place == 0 && !future && !self.facts.lent_reads.contains(&node) { out.push(&emit_pending_read_caught(&shared, inside.breaks_to)); } else if future { self.emit_arg_future(world, walk, out, host, arg, i, depth, &inside, scope)?; } else { self.emit_arg_value(world, walk, out, host, arg, i, depth, inside, scope)?; }
         if in_place > 0 { out.push("); __nk_acc }"); }
         if pointer == 1 { out.push(".as_ptr()"); } else if pointer == 2 { out.push(".as_mut_ptr()"); }
         if pointer == 6 { out.push(".lent()"); }
@@ -1666,7 +1666,10 @@ impl EmitState {
                 joined = emit_async_joined_paused(&handle, &channel, falls_back, &emit_async_line(&walk.async_gates), &emit_async_site(scope));
                 alone = emit_async_joined_paused(&handle, &channel, falls_back, "", &emit_async_site(scope));
             }
-            if shared { alone = format!("(*{})", alone); }
+            if shared {
+                alone = format!("(*{})", alone);
+                if self.facts.async_shared_copies.contains(&each.1) { joined = format!("*{}", joined); }
+            }
             inside.push(alone);
             out.append(&started);
             if named != "" && (shared || self.facts.async_abandoned.contains_key(&each.1)) { out.push(&format!(".named(\"{}\")", named)); }
@@ -1684,6 +1687,7 @@ impl EmitState {
         let mut kept = EmitOut::empty();
         self.emit_stmt_written(world, walk, &mut kept, host, node, span, depth, &tail, here, scope)?;
         walk.async_joining.clear();
+        if named != "" && self.facts.async_shared.contains(&unsafe { nikaia_std::proven::read(&tasks, (0) as usize) }.1) { walk.async_handles.insert(nikaia_std::block::Text::from(named.to_string()), nikaia_std::block::Text::from((*unsafe { nikaia_std::proven::read(&inside, (0) as usize) }).to_string())); }
         walk.async_pending.push((nikaia_std::block::Text::from(kept.buf.to_string()), named, waits));
         Ok(true)
     }
@@ -1691,7 +1695,12 @@ impl EmitState {
     // this was written - see `contracts::sync`.
     pub(crate) fn emit_async_joins(&self, walk: &mut EmitWalk, out: &mut EmitOut, start: i64, pad: &str) {
         let mut rest: Vec<(String, String, i64)> = vec![];
-        for each in walk.async_pending.iter() { if each.2 == start { out.push(&format!("{}\n{}", each.0, pad)); } else { rest.push(each.clone()); } }
+        for each in walk.async_pending.iter() {
+            if each.2 == start {
+                out.push(&format!("{}\n{}", each.0, pad));
+                walk.async_handles.remove(&each.1);
+            } else { rest.push(each.clone()); }
+        }
         walk.async_pending = rest;
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before

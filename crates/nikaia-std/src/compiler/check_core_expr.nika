@@ -449,7 +449,7 @@ fn check_core_value_of[H: CheckHost](mut state: CheckState, world: ref CheckWorl
                 }
                 at += 1
             }
-            if run {
+            let value = if run {
                 // A last value of no known type was asked where it stands in
                 // the body (an open number stands back there), so not again.
                 let tail = state.flow.lambda_tail?.clone() ?? Ty::Unknown
@@ -460,6 +460,17 @@ fn check_core_value_of[H: CheckHost](mut state: CheckState, world: ref CheckWorl
             } else {
                 ty
             }
+            // **A lone task reader keeps a value it may lend on** (D8, #2596):
+            // one that copies plainly it takes out as it is.
+            if state.facts.async_lone.contains(id_of(expr) as i64) && !copies_plainly(value) {
+                state.facts.async_shared.insert(id_of(expr) as i64)
+            }
+            // **Both read** (D8, #2595): the main line's wait copies a value
+            // that copies plainly out of the one kept for every reader.
+            if state.facts.async_shared.contains(id_of(expr) as i64) && copies_plainly(value) {
+                state.facts.async_shared_copies.insert(id_of(expr) as i64)
+            }
+            value
         },
         // **`async { … }`, the group** (D9): its value is its block's, and it
         // starts at least one task (`NK2111`).

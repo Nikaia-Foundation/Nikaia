@@ -1028,9 +1028,10 @@ impl EmitState {
         }
         // **A read of a value tasks share, standing alone as the argument**
         // (ADR-async-v6 D8, #986): `*` is enough there, its brackets would be
-        // `unused_parens`.
+        // `unused_parens`. A read lent to the parameter is not alone: it is
+        // `&(*…)`, a view of the one kept value (#2596).
         let shared = emit_arg_a_shared_read(world, walk, arg)
-        if shared != "" && out.buf.len() == arg_start && in_place == 0 && !future {
+        if shared != "" && out.buf.len() == arg_start && in_place == 0 && !future && !self.facts.lent_reads.contains(node) {
             out.push(emit_pending_read_caught(shared, inside.breaks_to))
         } else if future {
             self.emit_arg_future(world, walk, out, host, arg, i, depth, inside, scope)
@@ -2653,6 +2654,12 @@ impl EmitState {
             }
             if shared {
                 alone = f"(*{alone})"
+                // **Both read** (D8, #2595): the main line's wait reads the
+                // one kept value too, copying out a value that copies
+                // plainly and viewing any other where it is kept.
+                if self.facts.async_shared_copies.contains(each.1) {
+                    joined = f"*{joined}"
+                }
             }
             inside.push(alone)
             out.append(started)
@@ -2683,6 +2690,12 @@ impl EmitState {
         let mut kept = EmitOut::empty()
         self.emit_stmt_written(world, walk, kept, host, node, span, depth, tail, here, scope)
         walk.async_joining.clear()
+        // **Both read** (D8, #2595): a task that starts before the main line's
+        // wait reads the kept value, as a diamond's tasks do, until that wait
+        // binds the name (`emit_async_joins`).
+        if named != "" && self.facts.async_shared.contains(tasks[0].1) {
+            walk.async_handles.insert(named.clone(), inside[0].clone())
+        }
         walk.async_pending.push((kept.buf.clone(), named, waits))
         return true
     }
@@ -2694,6 +2707,8 @@ impl EmitState {
         for each in walk.async_pending {
             if each.2 == start {
                 out.push(f"{each.0}\n{pad}")
+                // From here on the name is the main line's own binding.
+                walk.async_handles.remove(each.1)
             } else {
                 rest.push(each.clone())
             }

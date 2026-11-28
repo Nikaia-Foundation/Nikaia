@@ -373,14 +373,17 @@ pub(crate) fn check_core_value_of<H: CheckHost>(state: &mut CheckState, world: &
                 }
                 at += 1;
             }
-            if run {
+            let value = if run {
                 let tail = nikaia_std::index::or(match state.flow.lambda_tail.as_ref() {
                     Some(__nikaia_it) => Some(__nikaia_it.clone()),
                     None => None,
                 }, || Ty::Unknown);
                 if tail.is_unknown() { state.flow.unknown_said += 1; }
                 tail
-            } else { ty }
+            } else { ty };
+            if state.facts.async_lone.contains(&(id_of(expr) as i64)) && !copies_plainly(&value) { state.facts.async_shared.insert(id_of(expr) as i64); }
+            if state.facts.async_shared.contains(&(id_of(expr) as i64)) && copies_plainly(&value) { state.facts.async_shared_copies.insert(id_of(expr) as i64); }
+            value
         },
         Expr::AsyncGroup(block, _, within, limit, admission) => {
             let within = nikaia_std::boxed::open(within); let limit = nikaia_std::boxed::open(limit); let admission = nikaia_std::boxed::open(admission);

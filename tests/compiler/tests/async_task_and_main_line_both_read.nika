@@ -1,0 +1,57 @@
+// A pending value a task reads before the main line names it is read by both
+// (ADR-async-v6 D8, *Both read*, #2595): the task waits for it in itself, the
+// main line where it first names it, and both read the one value, which lives
+// in `a`'s block. A number the main line copies out, text and a declared type
+// it reads where the value is kept, and a diamond's tasks with it.
+
+struct Box {
+	s: String,
+}
+
+fn load(n: i64) -> i64 {
+	return n * 2
+}
+
+fn f(n: i64) -> i64 {
+	return n + 1
+}
+
+fn text() -> String {
+	let mut g = String()
+	g.push_str("hi")
+	return g
+}
+
+fn size(s: String) -> i64 {
+	return s.len() as i64
+}
+
+fn boxed() -> Box {
+	return Box { s: text() }
+}
+
+fn width(b: Box) -> i64 {
+	return b.s.len() as i64
+}
+
+fn main() throws {
+	let a = async load(1)
+	let b = async f(a)
+	println(f"{a}")
+	println(f"{b}")
+	let n = async load(2)
+	let m = async f(n)
+	let k = n + 10
+	println(f"{k} {m}")
+	let t = async text()
+	let l = async size(t)
+	println(f"{t}")
+	println(f"{l}")
+	let x = async boxed()
+	let w = async width(x)
+	println(f"{width(x)} {w}")
+	let p = async load(3)
+	let q = async f(p)
+	let r = async f(p)
+	println(f"{p} {q} {r}")
+}

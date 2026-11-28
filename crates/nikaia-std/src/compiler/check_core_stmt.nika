@@ -4508,10 +4508,15 @@ fn check_async_binding(mut state: CheckState, world: ref CheckWorld, block: ref 
         }
         index += 1
     }
+    // **The one value every reader reads** (D8): kept where two tasks read
+    // it, or a task and the main line after it (*Both read*, #2595); a lone
+    // task's is decided by its type (`async_lone`, #2596).
+    if readers > 1 || (readers > 0 && named < count) {
+        state.facts.async_shared.insert(id_of(task) as i64)
+    } else if readers == 1 {
+        state.facts.async_lone.insert(id_of(task) as i64)
+    }
     if named == count {
-        if readers > 1 {
-            state.facts.async_shared.insert(id_of(task) as i64)
-        }
         state.facts.async_waits.insert(id_of(task) as i64, CheckAsyncWait { at: CheckAsyncWaitAt::GroupEnd, group: group })
         if last && others == 0 {
             state.a_task_with_nothing_beside_it(span, "nothing names its binding, and it is the last statement of its group, which waits for it at once")

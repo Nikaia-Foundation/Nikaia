@@ -391,10 +391,20 @@ pub struct CheckFacts {
     /// (ADR-async-v6 D6, D9): what the lowering joins it at.
     pub async_waits: collections::BTreeMap[i64, CheckAsyncWait],
     /// **The `async e` bindings only other tasks name, two or more of them**
-    /// (ADR-async-v6 D8, a diamond, #986), by the `async` node: they read the
-    /// one value, so the lowering keeps it for all (`task::Read`). One that
-    /// moves it leaves the other's mention refused (`NK2105`).
+    /// (ADR-async-v6 D8, a diamond, #986), or a task and then the main line
+    /// (*Both read*, #2595), or one task alone that may lend it on
+    /// (#2596), by the `async` node: they read the one value, so
+    /// the lowering keeps it for all (`task::Read`). One that moves it leaves
+    /// the other's mention refused (`NK2105`).
     pub async_shared: collections::BTreeSet[i64],
+    /// **Such a binding whose value copies plainly** (a number, `bool`,
+    /// `char`), by the `async` node: the main line's wait copies it out of
+    /// the kept value; any other it views there (#2595).
+    pub async_shared_copies: collections::BTreeSet[i64],
+    /// **The `async e` bindings one task alone names**, by the `async` node:
+    /// kept as `async_shared` where the value does not copy plainly, since
+    /// that task may lend it on past its read (ADR-async-v6 D8, #2596).
+    pub async_lone: collections::BTreeSet[i64],
     /// **The later readers of such a binding, whose own binding is read**
     /// (ADR-async-v6 D41), by their `async` node, each with the shared task's
     /// `async` node: where that task fails, the first reader receives it and
@@ -1074,6 +1084,8 @@ impl CheckFacts {
             flat_reads: collections::BTreeSet(),
             async_waits: collections::BTreeMap(),
             async_shared: collections::BTreeSet(),
+            async_shared_copies: collections::BTreeSet(),
+            async_lone: collections::BTreeSet(),
             async_abandoned: collections::BTreeMap(),
             copied_reads: collections::BTreeSet(),
             text_in_lists: collections::BTreeSet(),

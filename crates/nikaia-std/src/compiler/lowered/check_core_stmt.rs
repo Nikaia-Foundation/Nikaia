@@ -3305,8 +3305,8 @@ pub(crate) fn check_async_binding(state: &mut CheckState, world: &CheckWorld<'_,
         }
         index = unsafe { nikaia_std::proven::add::<i64>(index, 1) };
     }
+    if readers > 1 || readers > 0 && named < count { state.facts.async_shared.insert(id_of(task) as i64); } else if readers == 1 { state.facts.async_lone.insert(id_of(task) as i64); }
     if named == count {
-        if readers > 1 { state.facts.async_shared.insert(id_of(task) as i64); }
         state.facts.async_waits.insert(id_of(task) as i64, CheckAsyncWait { at: CheckAsyncWaitAt::GroupEnd, group });
         if last && others == 0 { state.a_task_with_nothing_beside_it(span, "nothing names its binding, and it is the last statement of its group, which waits for it at once"); }
         return count;
