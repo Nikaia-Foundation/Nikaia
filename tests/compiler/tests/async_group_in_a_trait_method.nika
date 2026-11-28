@@ -1,0 +1,38 @@
+// A trait method whose body holds a group builds and runs at both
+// settings: at `yes` its head asks no `Send` (#2830, ADR-async-v6 D20).
+enum Failed { Missing }
+
+impl Error for Failed {
+    fn message(ref self) -> String {
+        return "missing"
+    }
+}
+
+fn load(name: String) -> String throws {
+    if name == "" {
+        throw Failed::Missing
+    }
+    return name + "!"
+}
+
+fn both() -> String throws {
+    let (a, b) = (async load("a"), async load("b"))
+    return f"{a}{b}"
+}
+
+trait Listed {
+    fn listed(ref self) -> String throws
+}
+
+struct Disk {}
+
+impl Listed for Disk {
+    fn listed(ref self) -> String throws {
+        return both()
+    }
+}
+
+fn main() throws {
+    let x = Disk {}.listed() catch { "caught" }
+    println(x)
+}

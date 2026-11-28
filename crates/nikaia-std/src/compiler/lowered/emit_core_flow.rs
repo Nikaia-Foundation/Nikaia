@@ -1103,7 +1103,7 @@ impl EmitState {
         if deferred { out.push("nikaia_std::task::Deferred::new(move || "); }
         let mut starter: &'static str = "async move ";
         if failing { starter = "nikaia_std::error::started_paused(async move "; }
-        if host.overlaps_user_code() { out.push(&format!("nikaia_std::task::{}::start_on_pool({}", kind, starter)); } else { out.push(&format!("nikaia_std::task::{}::start({}", kind, starter)); }
+        if host.overlaps_user_code() { out.push(&format!("nikaia_std::task::{}::start_on_pool_pinned(move || {}", kind, starter)); } else { out.push(&format!("nikaia_std::task::{}::start({}", kind, starter)); }
         if failing {
             out.push(&format!("{{ {}let __nikaia_task = ", first));
             if bound_outside {

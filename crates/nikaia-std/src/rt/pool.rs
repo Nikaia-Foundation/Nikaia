@@ -27,13 +27,33 @@
 use std::collections::{BTreeMap, VecDeque};
 use std::future::Future;
 use std::pin::Pin;
-use std::sync::atomic::{AtomicBool, AtomicU8, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU8, AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Arc, Condvar, Mutex};
 use std::task::{Context, Waker};
 
 /// A task the pool owns. `Send`, which is the whole of what `yes` asks of a
 /// task that `no` does not.
 type Task = Pin<Box<dyn Future<Output = ()> + Send>>;
+
+/// **A pinned task before its first poll** (#2830): what builds its future,
+/// on the worker that will poll it to its end. The future need not be `Send`,
+/// since it never leaves that worker; this closure is what crosses.
+type Make = Box<dyn FnOnce() -> Pin<Box<dyn Future<Output = ()>>> + Send>;
+
+/// A pinned task's future, which never leaves its worker.
+type Local = Pin<Box<dyn Future<Output = ()>>>;
+
+/// No worker: a pinned task not yet claimed, and the pilot's seat empty.
+const NOWHERE: usize = usize::MAX;
+
+std::thread_local! {
+    /// Which worker of the pool this thread is, [`NOWHERE`] off the pool.
+    static WORKER: std::cell::Cell<usize> = const { std::cell::Cell::new(NOWHERE) };
+    /// **The pinned tasks this worker polls** (#2830), by cell id: kept
+    /// here, on the thread, because a future that is not `Send` may not be
+    /// in the cell another thread can reach.
+    static PINNED: std::cell::RefCell<BTreeMap<u64, Local>> = const { std::cell::RefCell::new(BTreeMap::new()) };
+}
 
 /// Where a task is, as one atomic.
 ///
@@ -59,11 +79,26 @@ struct Cell {
     state: AtomicU8,
     future: Mutex<Option<Task>>,
     pool: std::sync::Weak<Pool>,
+    /// **A task that runs on one worker to its end** (#2830, ADR-async-v6
+    /// D20 at `yes`): its future is not `Send`, so `future` stays empty, the
+    /// first worker to take it builds the future from `make` and keeps it in
+    /// [`PINNED`], and every later wake queues it on that worker alone.
+    pinned: bool,
+    make: Mutex<Option<Make>>,
+    /// The worker a pinned task is on, [`NOWHERE`] before its first poll.
+    home: AtomicUsize,
 }
 
 impl Cell {
     /// Say this task is ready, from any thread.
     fn wake(self: &Arc<Self>) {
+        self.wake_from(true);
+    }
+
+    /// The same; `woken` is a wake somebody's waker gave rather than a
+    /// rearm's, and only such a wake reaches a pilot in the kernel's wait
+    /// (see [`Pool::push_from`]).
+    fn wake_from(self: &Arc<Self>, woken: bool) {
         loop {
             match self.state.load(Ordering::Acquire) {
                 IDLE => {
@@ -73,7 +108,7 @@ impl Cell {
                         .is_ok()
                     {
                         if let Some(pool) = self.pool.upgrade() {
-                            pool.push(self.clone());
+                            pool.push_from(self.clone(), woken);
                         }
                         return;
                     }
@@ -136,6 +171,10 @@ pub struct Pool {
     live: Mutex<BTreeMap<u64, Arc<Cell>>>,
     /// The ones that say they are ready now.
     ready: Mutex<VecDeque<Arc<Cell>>>,
+    /// **Each worker's own ready pinned tasks** (#2830), by worker number.
+    homes: Vec<Mutex<VecDeque<Arc<Cell>>>>,
+    /// The worker in the pilot's seat, [`NOWHERE`] when nobody is.
+    pilot_at: AtomicUsize,
     /// Rung on every push, when a task finishes, and when the pilot comes back.
     bell: Condvar,
     next: AtomicU64,
@@ -176,6 +215,8 @@ impl Pool {
         let pool = Arc::new(Pool {
             live: Mutex::new(BTreeMap::new()),
             ready: Mutex::new(VecDeque::new()),
+            homes: (0..threads).map(|_| Mutex::new(VecDeque::new())).collect(),
+            pilot_at: AtomicUsize::new(NOWHERE),
             bell: Condvar::new(),
             next: AtomicU64::new(0),
             piloting: AtomicBool::new(false),
@@ -193,7 +234,7 @@ impl Pool {
             // the work by the time anything closes this.
             let started = std::thread::Builder::new()
                 .name(format!("nikaia-task-{n}"))
-                .spawn(move || mine.work());
+                .spawn(move || mine.work(n));
             if started.is_err() {
                 // A machine that will not give us a thread is a machine this
                 // program runs on with fewer of them. Refusing to start would
@@ -213,6 +254,36 @@ impl Pool {
             state: AtomicU8::new(QUEUED),
             future: Mutex::new(Some(Box::pin(future))),
             pool: Arc::downgrade(self),
+            pinned: false,
+            make: Mutex::new(None),
+            home: AtomicUsize::new(NOWHERE),
+        });
+        self.live
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .insert(id, cell.clone());
+        self.push(cell);
+    }
+
+    /// **Start a task that runs on one worker to its end** (#2830): `make`
+    /// builds its future on the first worker free to take it, and that worker
+    /// alone polls it from then on. A group's runtime is a one-thread thing by
+    /// design (ADR-async-v6 D20, ADR-328 D10), so a future that holds one is
+    /// not `Send`; this is how such a task runs at `yes` without making it so.
+    pub fn start_on_pool_pinned<F: Future<Output = ()> + 'static>(
+        self: &Arc<Pool>,
+        make: impl FnOnce() -> F + Send + 'static,
+    ) {
+        let id = self.next.fetch_add(1, Ordering::AcqRel);
+        let make: Make = Box::new(move || Box::pin(make()) as Local);
+        let cell = Arc::new(Cell {
+            id,
+            state: AtomicU8::new(QUEUED),
+            future: Mutex::new(None),
+            pool: Arc::downgrade(self),
+            pinned: true,
+            make: Mutex::new(Some(make)),
+            home: AtomicUsize::new(NOWHERE),
         });
         self.live
             .lock()
@@ -251,21 +322,74 @@ impl Pool {
     }
 
     fn push(&self, cell: Arc<Cell>) {
-        self.ready
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .push_back(cell);
-        self.bell.notify_one();
+        self.push_from(cell, false);
+    }
+
+    /// Queue a ready task: an unpinned one, or a pinned one before its first
+    /// poll, where any worker takes it; a pinned one on its worker's own queue.
+    ///
+    /// **A pinned task whose worker is the pilot** is a wake the bell cannot
+    /// carry, since the pilot is in the kernel's wait; so a wake from a waker
+    /// on another thread rings the ring. A rearm does not: every rearm would
+    /// otherwise ring the ring whose completion is the next rearm, and two
+    /// workers would wake each other for ever (#693).
+    fn push_from(&self, cell: Arc<Cell>, woken: bool) {
+        let home = if cell.pinned {
+            cell.home.load(Ordering::Acquire)
+        } else {
+            NOWHERE
+        };
+        if home == NOWHERE {
+            self.ready
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .push_back(cell);
+            self.bell.notify_one();
+            return;
+        }
+        if let Some(queue) = self.homes.get(home) {
+            queue
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .push_back(cell);
+        }
+        // Every waiter, since the one this is for is one of them; under the
+        // shared lock, which `wait` holds while it looks at its own queue.
+        drop(self.ready.lock().unwrap_or_else(|e| e.into_inner()));
+        self.bell.notify_all();
+        // **Seen by the pilot or seeing it** (with the fence in `idle`): the
+        // pilot takes its seat, then looks at its own queue; this pushes,
+        // then looks at the seat.
+        std::sync::atomic::fence(Ordering::SeqCst);
+        if woken && self.pilot_at.load(Ordering::SeqCst) == home && WORKER.with(|w| w.get()) != home
+        {
+            crate::rt::ring_the_bell();
+        }
+    }
+
+    /// Whether this worker's own pinned queue holds a ready task.
+    fn mine_ready(&self) -> bool {
+        let me = WORKER.with(|w| w.get());
+        self.homes
+            .get(me)
+            .is_some_and(|q| !q.lock().unwrap_or_else(|e| e.into_inner()).is_empty())
     }
 
     /// One worker's whole life.
-    fn work(self: Arc<Pool>) {
+    fn work(self: Arc<Pool>, me: usize) {
+        WORKER.with(|w| w.set(me));
         loop {
-            let next = self
-                .ready
-                .lock()
-                .unwrap_or_else(|e| e.into_inner())
-                .pop_front();
+            // **Its own pinned tasks first**: nobody else may poll them.
+            let mine = self
+                .homes
+                .get(me)
+                .and_then(|q| q.lock().unwrap_or_else(|e| e.into_inner()).pop_front());
+            let next = mine.or_else(|| {
+                self.ready
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner())
+                    .pop_front()
+            });
             if let Some(cell) = next {
                 self.run(cell);
                 continue;
@@ -277,8 +401,68 @@ impl Pool {
         }
     }
 
+    /// Poll one pinned task once, on its worker, which this is (#2830).
+    fn run_pinned(&self, cell: Arc<Cell>) {
+        cell.state.store(RUNNING, Ordering::Release);
+        let me = WORKER.with(|w| w.get());
+        let taken = if cell.home.load(Ordering::Acquire) == NOWHERE {
+            // **Its first poll: this worker is its worker from now on.** The
+            // `make` is taken once, so a second pop of the same cell finds
+            // nothing.
+            let make = cell.make.lock().unwrap_or_else(|e| e.into_inner()).take();
+            make.map(|make| {
+                cell.home.store(me, Ordering::Release);
+                make()
+            })
+        } else {
+            PINNED.with(|pinned| pinned.borrow_mut().remove(&cell.id))
+        };
+        let Some(mut future) = taken else {
+            return;
+        };
+        let waker = waker_for(cell.clone());
+        let mut context = Context::from_waker(&waker);
+        if future.as_mut().poll(&mut context).is_ready() {
+            let _ = crate::rt::timer::taken();
+            self.live
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .remove(&cell.id);
+            // Dropped here, on its worker, and before the joiner is told.
+            drop(future);
+            self.bell.notify_all();
+            crate::rt::ring_the_bell();
+            return;
+        }
+        PINNED.with(|pinned| pinned.borrow_mut().insert(cell.id, future));
+        self.settle(cell);
+    }
+
+    /// After a poll that left the task pending: hand its time to the pool,
+    /// and put it back if a wake arrived while it ran.
+    fn settle(&self, cell: Arc<Cell>) {
+        if let Some(when) = crate::rt::timer::taken() {
+            let mut timer = self.timer.lock().unwrap_or_else(|e| e.into_inner());
+            if timer.is_none_or(|already| when < already) {
+                *timer = Some(when);
+            }
+        }
+        if cell
+            .state
+            .compare_exchange(RUNNING, IDLE, Ordering::AcqRel, Ordering::Acquire)
+            .is_err()
+        {
+            cell.state.store(QUEUED, Ordering::Release);
+            self.push(cell);
+        }
+    }
+
     /// Poll one task once.
     fn run(&self, cell: Arc<Cell>) {
+        if cell.pinned {
+            self.run_pinned(cell);
+            return;
+        }
         cell.state.store(RUNNING, Ordering::Release);
         // **Taken out of the cell for the poll**, which is what makes it
         // impossible for two workers to poll one future: the cell is empty
@@ -305,23 +489,10 @@ impl Pool {
             return;
         }
         *cell.future.lock().unwrap_or_else(|e| e.into_inner()) = Some(future);
-        if let Some(when) = crate::rt::timer::taken() {
-            let mut timer = self.timer.lock().unwrap_or_else(|e| e.into_inner());
-            if timer.is_none_or(|already| when < already) {
-                *timer = Some(when);
-            }
-        }
         // Back to idle, unless a wake arrived while it was running — in which
         // case this worker is the one that has to put it back, because the
         // waker saw `RUNNING` and declined to.
-        if cell
-            .state
-            .compare_exchange(RUNNING, IDLE, Ordering::AcqRel, Ordering::Acquire)
-            .is_err()
-        {
-            cell.state.store(QUEUED, Ordering::Release);
-            self.push(cell);
-        }
+        self.settle(cell);
     }
 
     /// Nothing was ready. Wait for something, in the one way that is allowed.
@@ -354,6 +525,11 @@ impl Pool {
             .piloting
             .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
             .is_ok();
+        if piloting {
+            self.pilot_at
+                .store(WORKER.with(|w| w.get()), Ordering::SeqCst);
+            std::sync::atomic::fence(Ordering::SeqCst);
+        }
         if !piloting {
             // A wait that times out returns to the loop and tries the pilot's
             // seat again, which is how a non-pilot takes over within a slice.
@@ -374,7 +550,8 @@ impl Pool {
             .ready
             .lock()
             .unwrap_or_else(|e| e.into_inner())
-            .is_empty();
+            .is_empty()
+            && !self.mine_ready();
         let closing = self.closing.load(Ordering::Acquire);
         let mut moved = false;
         let mut left = None;
@@ -403,6 +580,7 @@ impl Pool {
                 left = slice.checked_sub(parked.elapsed());
             }
         }
+        self.pilot_at.store(NOWHERE, Ordering::SeqCst);
         self.piloting.store(false, Ordering::Release);
         if moved || closing {
             self.rang.fetch_add(1, Ordering::Relaxed);
@@ -418,8 +596,11 @@ impl Pool {
     /// Wait on the pool's own bell for at most `limit`, unless there is
     /// already something to do.
     fn wait(&self, limit: std::time::Duration) {
+        // **Its own queue is looked at under the shared lock**, which a pinned
+        // push takes before it rings: so the push is seen here, or its bell
+        // finds this thread waiting.
         let ready = self.ready.lock().unwrap_or_else(|e| e.into_inner());
-        if !ready.is_empty() || self.closing.load(Ordering::Acquire) {
+        if !ready.is_empty() || self.closing.load(Ordering::Acquire) || self.mine_ready() {
             return;
         }
         let _ = self
@@ -475,7 +656,7 @@ impl Pool {
             .cloned()
             .collect();
         for cell in live {
-            cell.wake();
+            cell.wake_from(false);
         }
     }
 }

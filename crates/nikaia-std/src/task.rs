@@ -606,6 +606,31 @@ impl<T: Send + 'static> TaskHandle<T> {
         TaskHandle { slot, asked }
     }
 
+    /// **The same, on one worker of the pool to its end** (#2830): `make`
+    /// builds the body there, so the body need not be `Send` - a body that
+    /// holds a group is not, since a group stays on its thread (ADR-async-v6
+    /// D20, ADR-328 D10). What the emitter writes for every task at `yes`;
+    /// the bookkeeping is built here, outside every block, as in
+    /// [`start_on_pool`](TaskHandle::start_on_pool).
+    pub fn start_on_pool_pinned<F: std::future::Future<Output = T> + 'static>(
+        make: impl FnOnce() -> F + Send + 'static,
+    ) -> TaskHandle<T> {
+        let _outside = crate::block::outside();
+        let slot = crate::rt::exec::Slot::empty();
+        let asked = Cancelled::nobody_asked();
+        let (held, told) = (slot.clone(), asked.clone());
+        let queues = crate::cleanup::SendQueues::default();
+        let block = crate::block::for_a_task();
+        crate::rt::exec::start_on_pool_pinned(move || Cancellable {
+            body: Some(Box::pin(make())),
+            slot: held,
+            asked: told,
+            queues,
+            block,
+        });
+        TaskHandle { slot, asked }
+    }
+
     /// The task's value, once it has one. **A suspension point**, not a wait.
     /// A task that panicked has none, and this throws [`Crashed`] (ADR-328 D8).
     pub async fn join(self) -> Result<T, Crashed> {
@@ -660,6 +685,28 @@ impl<T: Send + 'static, E: Send + 'static> FailingTask<T, E> {
         FailingTask {
             handle: TaskHandle::start_on_pool(async move {
                 let outcome = body.await;
+                if let Err(error) = &outcome {
+                    told.failed(report(error));
+                }
+                outcome
+            }),
+            watch,
+        }
+    }
+}
+
+impl<T: Send + 'static, E: Send + 'static> FailingTask<T, E> {
+    /// The same, on one worker of the pool to its end, as
+    /// [`TaskHandle::start_on_pool_pinned`] (#2830).
+    pub fn start_on_pool_pinned<F: std::future::Future<Output = Result<T, E>> + 'static>(
+        make: impl FnOnce() -> F + Send + 'static,
+        report: fn(&E) -> Report,
+    ) -> Self {
+        let watch = Watch::armed();
+        let told = watch.clone_state();
+        FailingTask {
+            handle: TaskHandle::start_on_pool_pinned(move || async move {
+                let outcome = make().await;
                 if let Err(error) = &outcome {
                     told.failed(report(error));
                 }
@@ -1120,6 +1167,31 @@ impl<T: Send + 'static> BoxedTask<T> {
         BoxedTask {
             handle: TaskHandle::start_on_pool(async move {
                 let outcome = body.await.map_err(Carried::from_box);
+                if let Err(carried) = &outcome {
+                    told.failed(Report {
+                        text: carried.message.clone(),
+                        code: carried.fatal,
+                    });
+                }
+                outcome
+            }),
+            watch,
+        }
+    }
+
+    /// The same, on one worker of the pool to its end, as
+    /// [`TaskHandle::start_on_pool_pinned`] (#2830).
+    pub fn start_on_pool_pinned<
+        F: std::future::Future<Output = Result<T, Box<dyn std::error::Error>>> + 'static,
+    >(
+        make: impl FnOnce() -> F + Send + 'static,
+        _report: fn(&Box<dyn std::error::Error>) -> Report,
+    ) -> Self {
+        let watch = Watch::armed();
+        let told = watch.clone_state();
+        BoxedTask {
+            handle: TaskHandle::start_on_pool_pinned(move || async move {
+                let outcome = make().await.map_err(Carried::from_box);
                 if let Err(carried) = &outcome {
                     told.failed(Report {
                         text: carried.message.clone(),

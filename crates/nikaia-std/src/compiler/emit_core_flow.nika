@@ -1756,8 +1756,11 @@ impl EmitState {
         if failing {
             starter = "nikaia_std::error::started_paused(async move "
         }
+        // **At `yes` the task runs on one worker of the pool to its end**
+        // (#2830): `move ||` builds its body there, so the body need not be
+        // `Send`, which a body holding a group is not (ADR-async-v6 D20).
         if host.overlaps_user_code() {
-            out.push(f"nikaia_std::task::{kind}::start_on_pool({starter}")
+            out.push(f"nikaia_std::task::{kind}::start_on_pool_pinned(move || {starter}")
         } else {
             out.push(f"nikaia_std::task::{kind}::start({starter}")
         }

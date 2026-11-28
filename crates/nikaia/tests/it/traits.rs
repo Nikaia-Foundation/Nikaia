@@ -575,18 +575,17 @@ fn main() throws {
 /// **`+ Send` follows the executor, not the type**
 /// ([ADR-288](../../../docs/specification/adr/adr-288.md) D26).
 ///
-/// At `user_parallelism = yes` a task crosses threads and a spawn needs a
-/// `Send` future; at `no` nothing crosses, the counts are plain
+/// At `no` nothing crosses, the counts are plain
 /// ([ADR-037](../../../docs/specification/adr/adr-037.md) D7) and a `Send`
-/// demand would refuse them. It is a requirement of the executor this program
-/// is built for — not a claim about a type, which is `contracts::send`'s and is
-/// the same at both settings.
+/// demand would refuse them; at `yes` a task runs on one worker of the pool to
+/// its end and asks no `Send` of its body either (#2830), which a body holding
+/// a group could not give (ADR-async-v6 D20). So neither setting writes it.
 #[test]
 fn the_send_bound_follows_the_setting() {
     use nikaia::emit::{Build, UserParallelism, emit_program};
 
     let parsed = parse_to_ast(SUMMARIZE).expect("the source parses");
-    for (setting, expected) in [(UserParallelism::Yes, true), (UserParallelism::No, false)] {
+    for (setting, expected) in [(UserParallelism::Yes, false), (UserParallelism::No, false)] {
         let rust = emit_program(
             &parsed,
             Build {

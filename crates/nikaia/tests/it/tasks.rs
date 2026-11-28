@@ -391,10 +391,11 @@ fn a_task_that_never_finishes_is_abandoned_at_the_deadline() {
 /// ([ADR-055](../../../docs/specification/adr/adr-055.md) §6 step 1,
 /// [ADR-037](../../../docs/specification/adr/adr-037.md) D2).
 ///
-/// One Nikaia line and two lowerings. At `user_parallelism = yes` a task may be
-/// polled on a thread that did not start it, so its future has to be `Send` (§2
-/// D6) and the pool's starter is what asks for that; at `no` it may not, so it
-/// does not — and asking there would refuse a task holding the plain count
+/// One Nikaia line and two lowerings. At `user_parallelism = yes` a task runs
+/// on a worker that did not start it, so what builds its body has to be `Send`
+/// (§2 D6) and the pool's starter is what asks for that (the body itself stays
+/// on that worker, #2830); at `no` nothing crosses, so it does not — and asking
+/// there would refuse a task holding the plain count
 /// [ADR-312](../../../docs/specification/adr/adr-312.md) D9 gives a `Shared` at
 /// one user thread.
 #[test]
@@ -411,8 +412,8 @@ fn the_switch_decides_which_executor_a_task_is_started_on() {
 
     let at_yes = lower_at(source, "yes");
     assert!(
-        at_yes.contains("TaskHandle::start_on_pool(async move"),
-        "a thread of its own, so the future must be `Send`: {at_yes}"
+        at_yes.contains("TaskHandle::start_on_pool_pinned(move || async move"),
+        "the pool, one worker to its end, so the body need not be `Send` (#2830): {at_yes}"
     );
 }
 

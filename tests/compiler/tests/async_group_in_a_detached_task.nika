@@ -1,0 +1,28 @@
+// A detached task whose body holds a group builds and runs at both
+// settings: at `yes` it runs on one worker of the pool to its end (#2830,
+// ADR-async-v6 D20).
+enum Failed { Missing }
+
+impl Error for Failed {
+    fn message(ref self) -> String {
+        return "missing"
+    }
+}
+
+fn load(name: String) -> String throws {
+    if name == "" {
+        throw Failed::Missing
+    }
+    return name + "!"
+}
+
+fn both() -> String throws {
+    let (a, b) = (async load("a"), async load("b"))
+    return f"{a}{b}"
+}
+
+fn main() throws {
+    let h = async(detached) fn { both() }
+    let x = h.join() catch { "caught" }
+    println(x)
+}

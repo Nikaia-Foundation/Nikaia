@@ -186,6 +186,20 @@ pub fn start_on_pool(future: impl Future<Output = ()> + Send + 'static) {
     }
 }
 
+/// **Start a task on the pool that runs on one worker to its end** (#2830):
+/// `make` crosses, the future it builds does not, so the future need not be
+/// `Send`. What the emitter writes for a task at `yes`, since a task's body
+/// may hold a group, and a group stays on its thread (ADR-async-v6 D20).
+/// With no pool, as [`start_on_pool`], the task runs on this thread.
+pub fn start_on_pool_pinned<F: Future<Output = ()> + 'static>(
+    make: impl FnOnce() -> F + Send + 'static,
+) {
+    match crate::rt::handle().user_pool() {
+        Some(pool) => pool.start_on_pool_pinned(make),
+        None => start(make()),
+    }
+}
+
 /// **A call that cannot pause, driven where no `.await` can be written**
 /// ([ADR-288](../../../../docs/specification/adr/adr-288.md) D31).
 ///
