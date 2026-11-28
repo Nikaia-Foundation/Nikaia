@@ -10049,7 +10049,16 @@ fn hb_text_field_roots(item: ref Item, words: ref winnow_grammar::InternerContex
 /// plain text (`fields` true), then those into a copied scalar field.
 fn hb_stored_fields(args: ref Vec[FnArg], result: ref String, body: ref Block, words: ref winnow_grammar::InternerContext, fields: ref collections::BTreeMap[String, bool], walks: ref collections::BTreeMap[String, String]) -> (Vec[ref Expr], Vec[ref Expr]) {
     let mut literals: Vec[ref Expr] = []
-    if result != "" {
+    // Most functions store nothing (#2893: the walks below over every
+    // function cost `check` 2 %): a literal counts only with a field
+    // `fields` lists, so without one there is nothing to find; the ways out
+    // are looked at only where the result is such a struct, and the body
+    // only where a `mut` parameter can take a literal.
+    if fields.is_empty() {
+        return ([], [])
+    }
+    let prefix = f"{result}."
+    if result != "" && fields.keys().any(fn(key) { key.starts_with(prefix) }) {
         for way in hb_ways_out(body) {
             for arm in hb_text_arms(way) {
                 match arm {
@@ -10061,7 +10070,8 @@ fn hb_stored_fields(args: ref Vec[FnArg], result: ref String, body: ref Block, w
             }
         }
     }
-    for expr in visited_in_block(body) {
+    let stores: Vec[ref Expr] = if args.iter().any(fn(arg) { arg.mutable }) { visited_in_block(body) } else { [] }
+    for expr in stores {
         match expr {
             Expr::MethodCall { receiver, method, args: given, .. } => {
                 let word = words.resolve(method)

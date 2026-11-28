@@ -7186,7 +7186,9 @@ pub(crate) fn hb_text_field_roots(item: &Item, words: &winnow_grammar::InternerC
 
 pub(crate) fn hb_stored_fields<'r>(args: &[FnArg], result: &str, body: &'r Block, words: &winnow_grammar::InternerContext, fields: &collections::BTreeMap<String, bool>, walks: &collections::BTreeMap<String, String>) -> (Vec<&'r Expr>, Vec<&'r Expr>) {
     #[allow(unused_mut)] let mut literals: Vec<&Expr> = vec![];
-    if result != "" {
+    if fields.is_empty() { return (vec![], vec![]); }
+    let prefix = format!("{}.", result);
+    if result != "" && fields.keys().any(|key| { key.starts_with(&*prefix) }) {
         for way in hb_ways_out(body) {
             for arm in hb_text_arms(way) {
                 match arm {
@@ -7196,7 +7198,9 @@ pub(crate) fn hb_stored_fields<'r>(args: &[FnArg], result: &str, body: &'r Block
             }
         }
     }
-    for expr in visited_in_block(body) {
+    let stores: Vec<&Expr> = if args.iter().any(|arg| { arg.mutable }) { visited_in_block(body) } else { vec![] }; #[allow(unused_mut, clippy::redundant_locals)] let mut literals = literals;
+    for expr in stores.iter() {
+        let expr = *expr;
         match expr {
             Expr::MethodCall { receiver, method, args: given, .. } => {
                 let receiver = nikaia_std::boxed::open(receiver); let method = *method;
