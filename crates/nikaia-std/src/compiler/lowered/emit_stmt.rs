@@ -760,6 +760,7 @@ impl EmitState {
                     Expr::Index { base: keeper, index, .. } => {
                         let keeper = nikaia_std::boxed::open(keeper); let index = nikaia_std::boxed::open(index);
                         if self.reads_through_handle(world, &walk, &scope.function, keeper) {
+                            if op.is_none() && self.emit_stmt_assign_rehold(world, walk, out, host, keeper, index, field, value, span, depth, flow, scope)? { return Ok(()); }
                             self.emit_stmt_assign_held(world, walk, out, host, keeper, index, field, op, value, span, depth, flow, scope)?;
                             return Ok(());
                         }
@@ -917,6 +918,45 @@ impl EmitState {
         self.emit_core_index_expr(world, walk, out, host, index, depth, flow, scope)?;
         out.push("), __nikaia_stored); }");
         Ok(())
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn emit_stmt_assign_rehold<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, keeper: &Expr, index: &Expr, field: winnow_grammar::Symbol, value: &Expr, span: &Span, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<bool, nikaia_std::error::Thrown<EmitRefused>> {
+        let at = span.start as i64;
+        let root = match emit_read_root(world, keeper) { Some(__nikaia_value) => __nikaia_value, None => return Ok(false) };
+        let keeps = match self.emit_stmt_held_keeps(&walk, &scope.function, at, &root) { Some(__nikaia_value) => __nikaia_value, None => return Ok(false) };
+        let key = match self.keep_plan_key(&walk, &scope.function) { Some(__nikaia_value) => __nikaia_value, None => return Ok(false) };
+        let plan = match self.keep_plans.get(&key) { Some(__nikaia_value) => __nikaia_value, None => return Ok(false) };
+        let named = match plan.keeper_structs.get(&root) { Some(__nikaia_value) => __nikaia_value, None => return Ok(false) };
+        let holds = match plan.holds.get(&(at, nikaia_std::block::Text::from(root.to_string()))) { Some(__nikaia_value) => __nikaia_value, None => return Ok(false) };
+        let mut buffers: Vec<i64> = vec![];
+        for (_, held) in holds.iter() {
+            buffers.reserve(held.iter().size_hint().0); for b in held.iter() {
+                let b = nikaia_std::num::value(b);
+                buffers.push(b);
+            }
+        }
+        let name = nikaia_std::block::Text::from(emit_text(world, field).to_string());
+        let ats = match self.emit_held_field_at(world, &named, &name, self.emit_stmt_held_place(&walk, &scope.function, at, &root), &buffers) { Some(__nikaia_value) => __nikaia_value, None => return Ok(false) };
+        let (before, after) = emit_around(self.facts.nullable_sites.get(&at))?;
+        out.push("{ let __nikaia_stored = ");
+        out.push(&before);
+        self.emit_expr(world, walk, out, host, value, depth, flow, scope)?;
+        out.push(&after);
+        out.push("; let __nikaia_slot = &mut ");
+        self.emit_expr(world, walk, out, host, keeper, depth, flow.place(), scope)?;
+        if only_literals(index) {
+            out.push("[");
+            self.emit_core_index_expr(world, walk, out, host, index, depth, flow.inferred(), scope)?;
+            out.push("]");
+        } else {
+            out.push("[nikaia_std::index::at(");
+            self.emit_core_index_expr(world, walk, out, host, index, depth, flow, scope)?;
+            out.push(")]");
+        }
+        out.push(&format!("; let mut __nikaia_value = __nikaia_slot.get().clone(); __nikaia_value.{} = __nikaia_stored; *__nikaia_slot = __nikaia_value.__hold_at([{}], {}); }}", escaped_name(&name), keeps, ats));
+        Ok(true)
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.

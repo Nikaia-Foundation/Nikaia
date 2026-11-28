@@ -931,9 +931,14 @@ fn walked_statement(stmt: ref Stmt, span: ref Span, ask: ref BufferAsk, holes_of
             }
             // **An element overwritten drops the one it replaces** (ADR-tether-v1
             // D12, supervisor decision on #2858): `xs[i] = w` and `m[k] = w` are
-            // a removal and a put, as `m.insert(k, w)` is.
+            // a removal and a put, as `m.insert(k, w)` is; so is `xs[i].f = w`,
+            // one field of it (#2878): the field's handle is replaced.
             let overwritten = op == null && match target {
                 Expr::Index { .. } => true,
+                Expr::Field { base, .. } => match base {
+                    Expr::Index { .. } => true,
+                    else => false,
+                },
                 else => false,
             }
             if overwritten {

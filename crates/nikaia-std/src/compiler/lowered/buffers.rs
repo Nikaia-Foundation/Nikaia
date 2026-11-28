@@ -661,7 +661,11 @@ pub(crate) fn walked_statement(stmt: &Stmt, span: &Span, ask: &BufferAsk<'_, '_,
                     walk.wholes.insert((at, nikaia_std::block::Text::from(root.to_string())), nikaia_std::index::or(bound.as_ref().map(|__nikaia_it| __nikaia_it.at), || 0));
                 }
             }
-            let overwritten = op.is_none() && matches!(target, Expr::Index { .. });
+            let overwritten = op.is_none() && match target {
+                Expr::Index { .. } => true,
+                Expr::Field { base, .. } => { let base = nikaia_std::boxed::open(base); matches!(base, Expr::Index { .. }) },
+                _ => false,
+            };
             if overwritten {
                 shed(&root, walk);
                 put_into(&root, 0, &origins, put_shape(value, &origins, ask, &walk), walk);

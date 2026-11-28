@@ -1,0 +1,70 @@
+// An overwrite of one field of an element of a list of structs of views is a
+// removal and a put (ADR-tether-v1 D12, #2878), as an overwrite of the whole
+// element is (#2858): the element is held again by the new buffer's keep and
+// the one it replaced is freed, instead of a keep of the frame holding every
+// buffer the loop reads. `--tethers` says how `recent` holds its structs; the
+// program prints what it did.
+use std::env
+use std::fs
+use std::process
+
+fn toolchain() -> String throws {
+	let exe = env::current_exe()?.display() ?? ""
+	if exe.len() > 0 {
+		return exe
+	}
+	return "target/fast/nikaia"
+}
+
+fn main() throws {
+	let tmp = fs::scratch()
+	let program = [
+		"struct Word { text: String }",
+		"",
+		"fn make(i: i64) -> String {",
+		"    let mut g = String()",
+		"    g.push_str(f\"w{i % 50} \")",
+		"    for _k in 0..<64 { g.push_str(\"abcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefghijk \") }",
+		"    return g",
+		"}",
+		"",
+		"fn main() throws {",
+		"    let mut recent: Vec[Word] = []",
+		"    let mut total = 0",
+		"    for i in 0..<4000 {",
+		"        let text = make(i)",
+		"        for w in text.split(\" \") {",
+		"            if w.len() > 0 {",
+		"                if recent.len() < 64 {",
+		"                    recent.push(Word { text: w })",
+		"                } else {",
+		"                    total += recent[(i % 64)].text.len() as i64",
+		"                    recent[(i % 64)].text = w",
+		"                }",
+		"                break",
+		"            }",
+		"        }",
+		"    }",
+		"    println(f\"{recent.len()} {total}\")",
+		"}",
+	].join("\n")
+	fs::write("main.nika", tmp, f"{program}\n")
+	let lowered = process::run(
+		toolchain(),
+		["lower", "--tethers", "main.nika"]; dir: tmp.path().to_text(),
+	)
+	let mut on = false
+	for line in lowered.stdout.lines() {
+		if line == "main (keeps):" {
+			on = true
+		} else if !line.starts_with(" ") {
+			on = false
+		}
+		if on {
+			println(line)
+		}
+	}
+	let ran = process::run(toolchain(), ["run", "main.nika"]; dir: tmp.path().to_text())
+	print(ran.stdout)
+	println(f"exit {lowered.code} {ran.code}")
+}

@@ -1030,6 +1030,9 @@ impl EmitState {
                 match element {
                     Expr::Index { base: keeper, index, .. } => {
                         if self.reads_through_handle(world, walk, scope.function, keeper) {
+                            if op == null && self.emit_stmt_assign_rehold(world, walk, out, host, keeper, index, field, value, span, depth, flow, scope) {
+                                return
+                            }
                             self.emit_stmt_assign_held(world, walk, out, host, keeper, index, field, op, value, span, depth, flow, scope)
                             return
                         }
@@ -1285,6 +1288,50 @@ impl EmitState {
         out.push(", nikaia_std::index::at(")
         self.emit_core_index_expr(world, walk, out, host, index, depth, flow, scope)
         out.push("), __nikaia_stored); }")
+    }
+
+    /// **A field overwritten in a held struct is held anew** (ADR-tether-v1
+    /// D12, supervisor decision on #2878): the overwrite is a removal and a
+    /// put, so the element is held again by the keeps of the buffers the value
+    /// points into and the old handles are dropped - the struct read, the
+    /// field written, `__hold_at` with the field at its buffer's place, every
+    /// other field found among the new keeps or copied into them. The value
+    /// first, then the position, as a plain write runs them (ADR-293 D2).
+    /// False, writing nothing, where the plan holds no value there.
+    fn emit_stmt_assign_rehold[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, keeper: ref Expr, index: ref Expr, field: winnow_grammar::Symbol, value: ref Expr, span: ref Span, depth: i64, flow: EmitFlow, scope: ref EmitScope) -> bool sync throws {
+        let at = span.start as i64
+        let root = emit_read_root(world, keeper) ?? return false
+        let keeps = self.emit_stmt_held_keeps(walk, scope.function, at, root) ?? return false
+        let key = self.keep_plan_key(walk, scope.function) ?? return false
+        let plan = self.keep_plans.get(key) ?? return false
+        let named = plan.keeper_structs.get(root) ?? return false
+        let holds = plan.holds.get((at, root.clone())) ?? return false
+        let mut buffers: Vec[i64] = []
+        for (_, held) in holds {
+            for b in held {
+                buffers.push(b)
+            }
+        }
+        let name = emit_text(world, field).clone()
+        let ats = self.emit_held_field_at(world, named, name, self.emit_stmt_held_place(walk, scope.function, at, root), buffers) ?? return false
+        let (before, after) = emit_around(self.facts.nullable_sites.get(at))
+        out.push("{ let __nikaia_stored = ")
+        out.push(before)
+        self.emit_expr(world, walk, out, host, value, depth, flow, scope)
+        out.push(after)
+        out.push("; let __nikaia_slot = &mut ")
+        self.emit_expr(world, walk, out, host, keeper, depth, flow.place(), scope)
+        if only_literals(index) {
+            out.push("[")
+            self.emit_core_index_expr(world, walk, out, host, index, depth, flow.inferred(), scope)
+            out.push("]")
+        } else {
+            out.push("[nikaia_std::index::at(")
+            self.emit_core_index_expr(world, walk, out, host, index, depth, flow, scope)
+            out.push(")]")
+        }
+        out.push(f"; let mut __nikaia_value = __nikaia_slot.get().clone(); __nikaia_value.{escaped_name(name)} = __nikaia_stored; *__nikaia_slot = __nikaia_value.__hold_at([{keeps}], {ats}); }}")
+        return true
     }
 
     /// **A field of a held struct is written through its handle** (ADR-tether-v1

@@ -1,0 +1,5 @@
+main (keeps):
+    `text` lives in a keep of its own, held by each view kept of it, because what keeps the views drops entries while the loop goes on
+    `recent` holds each struct with a handle on the buffer it points into
+64 11018
+exit 0 0

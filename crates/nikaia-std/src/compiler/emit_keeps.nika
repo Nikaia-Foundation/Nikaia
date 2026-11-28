@@ -493,4 +493,45 @@ impl EmitState {
         let joined = at.join(", ")
         return f"[{joined}]"
     }
+
+    /// **Where each field of a held struct is checked when one field of it is
+    /// overwritten** (ADR-tether-v1 D12, #2878): `[At; fields]` for its
+    /// `__hold_at`, the field written at the place of the buffer the plan
+    /// names for the value (`In` where it is plainly a view of it, else
+    /// `Near`), every other field `Found` among the new keeps, so a view of a
+    /// buffer the element no longer holds is copied. Null where `name` is no
+    /// struct of views the file declares without type parameters.
+    fn emit_held_field_at(ref self, world: ref EmitWorld, name: ref String, written: ref String, place: (i64, bool)?, buffers: ref Vec[i64]) -> String? {
+        let mut declared: Vec[FieldDef]? = null
+        for item in world.items {
+            match item.node {
+                Item::Struct { name: own, generics, fields, .. } => {
+                    if world.words.resolve(own) == name && generics.len() == 0 && self.borrowing.contains(name) {
+                        declared = fields.clone()
+                    }
+                },
+                else => {},
+            }
+        }
+        let fields = declared ?? return null
+        let (buffer, sure) = place ?? (-2, false)
+        let mut keep = -1
+        for k in 0..<buffers.len() {
+            if keep < 0 && buffers[k] == buffer {
+                keep = k
+            }
+        }
+        let mut at: Vec[String] = []
+        for field in fields {
+            if world.words.resolve(field.name) != written || buffer < 0 || keep < 0 {
+                at.push("nikaia_std::tether::At::Found")
+            } else if sure {
+                at.push(f"nikaia_std::tether::At::In({keep}, __place_{buffer})")
+            } else {
+                at.push(f"nikaia_std::tether::At::Near({keep}, __place_{buffer})")
+            }
+        }
+        let joined = at.join(", ")
+        return f"[{joined}]"
+    }
 }

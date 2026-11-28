@@ -359,5 +359,25 @@ impl EmitState {
         let joined = nikaia_std::block::Text::from(at.join(", "));
         Some(format!("[{}]", joined))
     }
+    pub(crate) fn emit_held_field_at(&self, world: &EmitWorld<'_, '_, '_, '_>, name: &str, written: &str, place: Option<(i64, bool)>, buffers: &[i64]) -> Option<String> {
+        let mut declared: Option<Vec<FieldDef>> = None;
+        for item in world.items.iter() {
+            match &item.node {
+                Item::Struct { name: own, generics, fields, .. } => {
+                    let own = *own;
+                    if world.words.resolve(own) == name && generics.is_empty() && self.borrowing.contains(name) { declared = Some(fields.copy_owned()); }
+                },
+                _ => { },
+            }
+        }
+        let fields = match declared { Some(__nikaia_value) => __nikaia_value, None => return None };
+        let (buffer, sure) = nikaia_std::index::or(place, || (-2, false.into()));
+        let mut keep: i64 = -1;
+        for k in 0..buffers.len() as i64 { if keep < 0 && *unsafe { nikaia_std::proven::read(&buffers, (k) as usize) } == buffer { keep = k; } }
+        let mut at: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
+        for field in fields.iter() { if world.words.resolve(field.name) != written || buffer < 0 || keep < 0 { at.push(String::from("nikaia_std::tether::At::Found")); } else if sure { at.push(format!("nikaia_std::tether::At::In({}, __place_{})", keep, buffer)); } else { at.push(format!("nikaia_std::tether::At::Near({}, __place_{})", keep, buffer)); } }
+        let joined = nikaia_std::block::Text::from(at.join(", "));
+        Some(format!("[{}]", joined))
+    }
 }
 

@@ -201,7 +201,10 @@ freed when its last view leaves. A view is compared and hashed by **content**,
 never by `(buffer, range)`, so a key cut from two buffers is one key. An
 overwrite drops the entry it replaces: `xs[i] = v` on a list and `insert` on a
 map whose key may be present remove an entry as `remove` does (supervisor
-decision, 2026-11-28, #2858).
+decision, 2026-11-28, #2858). So does `xs[i].f = v`, an overwrite of one
+field of a held struct: the element is held again, the field's view by a
+handle on its new buffer, and the handle it replaced is dropped (supervisor
+decision, 2026-11-28, #2878).
 
 ### D13 — Views are followed by origin, and the analysis errs towards a keep.
 
