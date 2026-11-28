@@ -1,0 +1,22 @@
+// Every task of a diamond that lends the pending value reads the one value
+// by reference, the first readers as the last does: each `keep` hands back
+// a view of it that is still there where it is printed (ADR-async-v6 D8,
+// #2596).
+
+fn load() -> String {
+    let mut g = String()
+    g.push_str("hi")
+    return g
+}
+
+fn keep(s: String) -> String {
+    return s
+}
+
+fn main() throws {
+    let a = async load()
+    let b = async keep(a)
+    let c = async keep(a)
+    let d = async keep(a)
+    println(f"{b} {c} {d}")
+}
