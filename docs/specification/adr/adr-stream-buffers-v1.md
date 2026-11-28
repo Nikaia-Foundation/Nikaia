@@ -137,6 +137,12 @@ A stream fails at run time only for its input: a read that fails (the loop
 (ADR-yaml-1 D8). The pool does not run out (D3), a wait is a full channel's
 (D4), and an item fits a buffer (D6).
 
+**Rejected:** a copy on the stream path (#2735's owned form: superseded);
+keeping every buffer a view points into (unbounded); waiting when the pool is
+full (a program that holds views and waits for the next item hangs); a pool
+that grows (unbounded, an out-of-memory end from outside); copying when the
+pool is full (a copy the program did not ask for, ADR-tether-v1 D3).
+
 ### D10 — A stream's signature writes its items as views with no source named.
 
 (supervisor, 2026-11-28, #2870) A free function whose ledger entry says
@@ -145,13 +151,11 @@ A stream fails at run time only for its input: a read that fails (the loop
 `text.lines()` is, with the stream's pool as its source; assigned to a place
 that holds a `String`, it is a counted keep (D2, D5). `.collect()` stays
 `NK2308`, `.cloned()` is the copy. Outside such an entry, `ref String` with no
-source stays refused. No new syntax: this is D1 applied to the signature.
-
-**Rejected:** a copy on the stream path (#2735's owned form: superseded);
-keeping every buffer a view points into (unbounded); waiting when the pool is
-full (a program that holds views and waits for the next item hangs); a pool
-that grows (unbounded, an out-of-memory end from outside); copying when the
-pool is full (a copy the program did not ask for, ADR-tether-v1 D3).
+source keeps its meaning elsewhere: a ledger entry's own result, a warning
+in user code. No new syntax: this is D1 applied to the signature. Built for
+a `for` over the call; a combinator over it (`map`, `filter`, `take`, ...)
+still walks owned items, a copy per line that D1 does not allow, to be
+removed (#2881).
 
 ## 5. Consequences
 
