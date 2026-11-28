@@ -904,11 +904,12 @@ impl EmitState {
             } else {
                 out.push(f"let {mut_word}{local} = {kept.put ?? ""}")
             }
-            let read_at = out.mark()
-            self.emit_expr(world, walk, out, host, value, depth, flow, inner)
+            // **A file read per turn reads into its loop's spare** (#2859).
             if self.reads_into_spare(walk, scope.function, at) {
-                emit_stmt_read_into(out, read_at, at)
+                walk.read_into = f"__spare_{at}"
             }
+            self.emit_expr(world, walk, out, host, value, depth, flow, inner)
+            walk.read_into = null
             out.push(");")
             return
         }
@@ -2064,22 +2065,4 @@ fn emit_stmt_replaced(plan: ref BufferPlan, at: i64) -> bool {
         }
     }
     return false
-}
-
-/// **A file read into the buffer its loop freed** (#2859, Perceus's reuse):
-/// the call written from `start`, `fs::read_to_string(path, root).await`,
-/// becomes `fs::read_to_string_into(path, root, __spare_N.take()).await`. A
-/// call written any other way is left as it is, and reads into a new buffer.
-fn emit_stmt_read_into(mut out: EmitOut, start: i64, at: i64) {
-    let written = out.buf.bytes[start..].text() catch { return }
-    let name = written.find("read_to_string(") ?? return
-    let head = written.before(name.start)
-    if head != "fs::" && head != "nikaia_std::fs::" {
-        return
-    }
-    let close = written.rfind(").await") ?? return
-    let closed_at = start + written.before(close.start).bytes.len()
-    let named_at = start + head.bytes.len() + 14
-    out.insert_at(closed_at, f", __spare_{at}.take()")
-    out.insert_at(named_at, "_into")
 }

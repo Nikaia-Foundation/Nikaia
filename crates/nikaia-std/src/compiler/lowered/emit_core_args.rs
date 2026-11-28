@@ -1093,9 +1093,11 @@ impl EmitState {
     pub(crate) fn emit_core_called<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, out: &mut EmitOut, host: &H, func: &Expr, args: &[Expr], config: &[ConfigArg], unchecked: bool, depth: i64, flow: EmitFlow, scope: &EmitScope) -> Result<(), nikaia_std::error::Thrown<EmitRefused>> {
         let path_types = nikaia_std::block::Text::from(walk.path_types.to_string());
         walk.path_types = String::from("");
+        let read_into = emit_call_read_into(world, func, (walk.read_into).as_deref());
+        walk.read_into = None;
         if self.emit_call_special(world, walk, out, host, func, args, config, depth, flow, scope)? { return Ok(()); }
         if self.opens_a_paused_scope(world, func, args) && self.emit_call_paused_scope(world, walk, out, host, args, depth, &flow, scope)? { return Ok(()); }
-        self.emit_expr(world, walk, out, host, func, depth, flow, scope)?;
+        if read_into.is_some() { out.push("nikaia_std::fs::read_to_string_into"); } else { self.emit_expr(world, walk, out, host, func, depth, flow, scope)?; }
         if host.overlaps_user_code() {
             match func {
                 Expr::Path(segments, _) => { if emit_call_on_the_pool(&unaliased_in(world.aliases, &emit_arg_joined(world, segments))) { out.push("_on_pool"); } },
@@ -1166,6 +1168,7 @@ impl EmitState {
             valued = written;
             walk.boxed_scope = boxed;
         } else { self.emit_core_args(world, walk, out, host, &callee, args, &takes, depth, flow, scope)?; }
+        if read_into.is_some() { out.push(&format!(", {}.take()", nikaia_std::index::or(read_into.as_deref(), || ""))); }
         match func {
             Expr::Variable(name, _) => { let name = *name; self.emit_core_dsl_parameters(world, walk, out, host, &emit_text(world, name), args.len() as i64, config, depth, flow, scope)?; },
             _ => { },
@@ -2139,6 +2142,17 @@ impl EmitState {
             return Ok(true);
         }
         Ok(false)
+    }
+}
+
+pub(crate) fn emit_call_read_into(world: &EmitWorld<'_, '_, '_, '_>, func: &Expr, spare: Option<&str>) -> Option<String> {
+    let named = match spare { Some(__nikaia_value) => __nikaia_value, None => return None };
+    match func {
+        Expr::Path(segments, _) => {
+            let callee = unaliased_in(world.aliases, &emit_arg_joined(world, segments));
+            if callee == "fs::read_to_string" || callee == "std::fs::read_to_string" { Some(nikaia_std::block::Text::from(named.to_string())) } else { None }
+        },
+        _ => None,
     }
 }
 

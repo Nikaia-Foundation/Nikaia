@@ -662,9 +662,9 @@ impl EmitState {
                 let place_mut = if kept.replaced { "mut " } else { "" };
                 out.push(&format!("let ({}{}, {}__place_{}) = {}", mut_word, local, place_mut, at, nikaia_std::index::or(kept.put.as_deref(), || "")));
             } else { out.push(&format!("let {}{} = {}", mut_word, local, nikaia_std::index::or(kept.put.as_deref(), || ""))); }
-            let read_at = out.mark();
+            if self.reads_into_spare(&walk, &scope.function, at) { walk.read_into = Some(format!("__spare_{}", at)); }
             self.emit_expr(world, walk, out, host, value, depth, flow, &inner)?;
-            if self.reads_into_spare(&walk, &scope.function, at) { emit_stmt_read_into(out, read_at, at); }
+            walk.read_into = None;
             out.push(");");
             return Ok(());
         }
@@ -1459,20 +1459,5 @@ pub(crate) fn emit_stmt_replaced(plan: &BufferPlan, at: i64) -> bool {
         if buffer == at { return true; }
     }
     false
-}
-
-pub(crate) fn emit_stmt_read_into(out: &mut EmitOut, start: i64, at: i64) {
-    let written = match nikaia_std::bytes::text_of_a_cut(&*out.buf, nikaia_std::index::get(&out.buf.as_bytes(), nikaia_std::index::at(start..))) {
-        Ok(value) => value,
-        Err(_error) => { return; },
-    };
-    let name = match nikaia_std::text::find_first(&written, &"read_to_string(") { Some(__nikaia_value) => __nikaia_value, None => return };
-    let head = written.before(name.start);
-    if head != "fs::" && head != "nikaia_std::fs::" { return; }
-    let close = match nikaia_std::text::rfind(&written, &").await") { Some(__nikaia_value) => __nikaia_value, None => return };
-    let closed_at = start + written.before(close.start).as_bytes().len() as i64;
-    let named_at = start + head.as_bytes().len() as i64 + 14;
-    out.insert_at(closed_at, &format!(", __spare_{}.take()", at));
-    out.insert_at(named_at, "_into");
 }
 
