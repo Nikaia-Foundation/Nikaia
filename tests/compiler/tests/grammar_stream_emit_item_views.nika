@@ -1,7 +1,7 @@
 // An emitting `@stream` entry whose item type can view the input writes its
 // item rule's result at the grammar's lifetime, `Option<Item<'a>>`, not the
 // fold closure's `'_`, which rustc refused as a missing lifetime (#2835,
-// ADR-grammar-typed-read-v1 D7: an item views the input it is parsed from).
+// ADR-grammar-typed-read-v2 D7: an item views the input it is parsed from).
 
 struct Item {
 	word: String,
