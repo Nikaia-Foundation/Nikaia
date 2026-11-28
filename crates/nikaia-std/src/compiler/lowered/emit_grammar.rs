@@ -50,9 +50,24 @@ pub(crate) fn emit_own_ws_rule() -> &'static str { "NIKAIA_OWN_WS" }
 
 pub(crate) fn emit_default_ws() -> String { String::from("multispace0") }
 
-pub(crate) fn emit_same_line_function(name: &str) -> String {
+pub(crate) fn emit_same_line_function(name: &str, stream: bool) -> String {
     let mut out: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
     out.push(String::from("#[allow(non_snake_case, dead_code)]\n"));
+    if stream {
+        out.push(format!("fn {}_{}<B, C>(i: &mut ::winnow_grammar::rt::InputOf<B, C>) -> ::core::result::Result<(), ::winnow_grammar::ParseError>\n", emit_same_line_rule(), name));
+        out.push(String::from("where\n"));
+        out.push(String::from("    B: ::winnow_grammar::rt::Slice,\n"));
+        out.push(String::from("    C: ::winnow_grammar::Ctx,\n"));
+        out.push(String::from("    C::State: ::winnow_grammar::StateOf<::nikaia_std::grammar::LineBreaks>,\n"));
+        out.push(String::from("{\n"));
+        out.push(String::from("    let at = ::winnow::stream::Location::current_token_start(&*i) as i64;\n"));
+        out.push(String::from("    if ::winnow_grammar::StateOf::<::nikaia_std::grammar::LineBreaks>::state(&mut ::winnow_grammar::Ctx::cx_mut(&mut i.state).user_state).began_a_line(at) {\n"));
+        out.push(String::from("        return Err(::winnow_grammar::ParseError::from_stream(&*i));\n"));
+        out.push(String::from("    }\n"));
+        out.push(String::from("    Ok(())\n"));
+        out.push(String::from("}\n"));
+        return nikaia_std::block::Text::from(out.join(""));
+    }
     out.push(format!("fn {}_{}<B, S>(i: &mut ::winnow_grammar::rt::Input<B, S>) -> ::core::result::Result<(), ::winnow_grammar::ParseError>\n", emit_same_line_rule(), name));
     out.push(String::from("where\n"));
     out.push(String::from("    B: ::winnow_grammar::rt::Slice,\n"));
@@ -430,7 +445,7 @@ impl EmitState {
         }
         out.push("    }\n");
         if !bytes && !emit_stream_readers(def, self.offered_to_rust).is_empty() { out.push("} }\n"); } else { out.push("}\n"); }
-        if lines { out.push(&emit_same_line_function(name)); }
+        if lines { out.push(&emit_same_line_function(name, def.rules.iter().any(|rule| { rule.stream && rule.is_entry }))); }
         Ok(())
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
@@ -497,12 +512,17 @@ impl EmitState {
                     let mut bound_bytes: Vec<String> = vec![]; #[allow(unused_mut, clippy::redundant_locals)] let mut as_texts = as_texts; #[allow(unused_mut, clippy::redundant_locals)] let mut covered = covered;
                     emit_bytes_bindings(world, &alt.pattern.node, &mut bound_bytes);
                     for (name, range) in as_texts.iter().zip(covered.iter()) { if nikaia_std::list::contains(&bound_bytes, &name) { if bytes { prelude = format!("{}let {} = ::nikaia_std::grammar::covered_raw(input, {}); ", prelude, name, range); } else { prelude = format!("{}let {} = ::nikaia_std::grammar::covered(input, {}).as_bytes(); ", prelude, name, range); } } else if bytes { prelude = format!("{}let {} = ::nikaia_std::grammar::covered_bytes::<_, __WgEr>(input, {})?; ", prelude, name, range); } else { prelude = format!("{}let {} = ::nikaia_std::grammar::covered(input, {}); ", prelude, name, range); } }
-                    if !as_texts.is_empty() || positions && !as_spans.is_empty() { prelude = format!("{}let _state = &mut input.state; ", prelude); }
+                    if !as_texts.is_empty() || positions && !as_spans.is_empty() { prelude = format!("{}let _state = ::winnow_grammar::Ctx::cx_mut(&mut input.state); ", prelude); }
                     if self.emit_action_can_fail(world, action) {
                         if prelude != "" { out.push(&format!("{{ {}", prelude)); }
                         self.emit_failing_action(world, walk, out, host, action, emit_passes_a_cut(&alt.pattern.node))?;
                         if prelude != "" { out.push(" }"); }
-                    } else if prelude != "" { self.emit_stmt_block_opening_with(world, walk, out, host, action, 3, EmitFlow::plain(), &EmitScope::plain(), &EmitTail::Return, Some(prelude))?; } else { self.emit_core_block(world, walk, out, host, action, 3, EmitFlow::plain(), &EmitScope::plain(), &EmitTail::Return)?; }
+                    } else {
+                        let either = nikaia_std::index::or(rule.ret_type.as_ref().map(|__nikaia_it| __nikaia_it.either), || false);
+                        if either { out.push("{ let __wg_either = "); }
+                        if prelude != "" { self.emit_stmt_block_opening_with(world, walk, out, host, action, 3, EmitFlow::plain(), &EmitScope::plain(), &EmitTail::Return, Some(prelude))?; } else { self.emit_core_block(world, walk, out, host, action, 3, EmitFlow::plain(), &EmitScope::plain(), &EmitTail::Return)?; }
+                        if either { out.push("; ::nikaia_std::either_text::either(__wg_either) }"); }
+                    }
                     out.push("\n");
                 },
                 None => {
@@ -762,15 +782,20 @@ impl EmitState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
-    pub(crate) fn member_into<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, host: &H, ty: &Type, value: &str) -> Result<String, std::boxed::Box<dyn std::error::Error>> {
+    pub(crate) fn member_into<H: EmitHost>(&self, world: &EmitWorld<'_, '_, '_, '_>, walk: &mut EmitWalk, host: &H, ty: &Type, value: &str, from_either: bool) -> Result<String, std::boxed::Box<dyn std::error::Error>> {
+        if ty.either && emit_text(world, ty.name) == "String" && ty.generics.is_empty() { return Ok(format!("::nikaia_std::either_text::either({})", value)); }
+        if from_either && !ty.is_view && emit_text(world, ty.name) == "String" && ty.generics.is_empty() {
+            if ty.is_nullable { return Ok(format!("{}.map(::std::convert::Into::into)", value)); }
+            return Ok(format!("::std::convert::Into::into({})", value));
+        }
         if !member_lists_text(world, ty) { return Ok(format!("::nikaia_std::grammar::IntoMember::into_member({})", value)); }
         if ty.is_nullable {
             let mut inner = ty.clone();
             inner.is_nullable = false;
-            return Ok(format!("{}.map(|x| -> {} {{ {} }})", value, host.ty_named(walk, &inner)?, self.member_into(world, walk, host, &inner, "x")?));
+            return Ok(format!("{}.map(|x| -> {} {{ {} }})", value, host.ty_named(walk, &inner)?, self.member_into(world, walk, host, &inner, "x", from_either)?));
         }
         let item = nikaia_std::index::get(&ty.generics, 0);
-        Ok(format!("{}.into_iter().map(|x| -> {} {{ {} }}).collect::<{}>()", value, host.ty_named(walk, item)?, self.member_into(world, walk, host, item, "x")?, host.ty_named(walk, ty)?))
+        Ok(format!("{}.into_iter().map(|x| -> {} {{ {} }}).collect::<{}>()", value, host.ty_named(walk, item)?, self.member_into(world, walk, host, item, "x", from_either)?, host.ty_named(walk, ty)?))
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
@@ -843,7 +868,11 @@ impl EmitState {
                         None => { },
                     }
                     let mut one = nothing.copy_owned();
-                    { let __nikaia_stored = format!("Some(Some({}))", self.member_into(world, walk, host, &unsafe { nikaia_std::proven::read(&fields, (i) as usize) }.ty, "v")?); unsafe { nikaia_std::proven::write(&mut one, (i) as usize, __nikaia_stored) }; }
+                    let from_either = nikaia_std::index::or(match walk.grammar_rule_types.get(&emit_text(world, unsafe { nikaia_std::proven::read(&fields, (i) as usize) }.value)) {
+                        Some(__nikaia_it) => Some(__nikaia_it.contains("EitherText")),
+                        None => None,
+                    }, || false);
+                    { let __nikaia_stored = format!("Some(Some({}))", self.member_into(world, walk, host, &unsafe { nikaia_std::proven::read(&fields, (i) as usize) }.ty, "v", from_either)?); unsafe { nikaia_std::proven::write(&mut one, (i) as usize, __nikaia_stored) }; }
                     out.push(&format!("        {}if(i == {}) v:{}\n", separator, i, emit_text(world, unsafe { nikaia_std::proven::read(&fields, (i) as usize) }.value)));
                     out.push(&format!("            -> {{ Some({}) }}\n", emit_members_tuple(&one)));
                     separator = "| ";
@@ -901,7 +930,7 @@ pub(crate) fn emit_named_option(world: &EmitWorld<'_, '_, '_, '_>, spec: &FoldSp
 pub(crate) fn member_lists_text(world: &EmitWorld<'_, '_, '_, '_>, ty: &Type) -> bool { emit_text(world, ty.name) == "Vec" && ty.generics.len() == 1 && !ty.is_view && member_text_inside(world, unsafe { nikaia_std::proven::read(&ty.generics, (0) as usize) }) }
 
 pub(crate) fn member_text_inside(world: &EmitWorld<'_, '_, '_, '_>, ty: &Type) -> bool {
-    if ty.is_view || ty.is_tuple || (*ty.code).is_some() { return false; }
+    if ty.is_view && !ty.either || ty.is_tuple || (*ty.code).is_some() { return false; }
     if emit_text(world, ty.name) == "String" && ty.generics.is_empty() { return true; }
     member_lists_text(world, ty)
 }

@@ -1,0 +1,9 @@
+// A text takes no `[…]` (ADR-374 D3): a cut in brackets is NK1214 whatever
+// its bounds, its own ends and a literal's length included, and the help
+// names the cuts by name, `before`, `after` and `between` (#2521).
+fn main() throws {
+    let t = "ab-cd"
+    println(t[0..<t.len()])
+    println(t["ab".len()..])
+    println(t[..<t.len() - "d".len()])
+}

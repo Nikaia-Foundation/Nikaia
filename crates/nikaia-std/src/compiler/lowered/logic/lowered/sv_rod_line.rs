@@ -29,11 +29,11 @@ pub(crate) fn sv_status(source: &str) -> String {
     for raw in source.lines() {
         let line = raw.trim();
         if line.starts_with("(set-info :status ") {
-            let rest = nikaia_std::block::Text::from(nikaia_std::block::Text::from(nikaia_std::index::get(&line, nikaia_std::index::at("(set-info :status ".len() as i64..)).replace(')', "")).trim().to_string());
+            let rest = nikaia_std::block::Text::from(nikaia_std::block::Text::from(nikaia_std::index::or(line.strip_prefix("(set-info :status "), || "").replace(')', "")).trim().to_string());
             if rest == "sat" || rest == "unsat" { return rest; }
         }
         if line.starts_with("; EXPECT: ") {
-            let rest = nikaia_std::block::Text::from(nikaia_std::index::get(&line, nikaia_std::index::at("; EXPECT: ".len() as i64..)).trim().to_string());
+            let rest = nikaia_std::block::Text::from(nikaia_std::index::or(line.strip_prefix("; EXPECT: "), || "").trim().to_string());
             if rest == "sat" || rest == "unsat" { return rest; }
         }
     }

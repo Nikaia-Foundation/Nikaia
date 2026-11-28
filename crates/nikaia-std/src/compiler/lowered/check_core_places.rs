@@ -794,116 +794,16 @@ pub(crate) fn check_core_places_text_key(state: &CheckState, world: &CheckWorld<
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
-pub(crate) fn check_core_places_literal_bytes(expr: &Expr) -> i64 {
-    match expr {
-        Expr::LitStr { text, .. } => text.len() as i64,
-        Expr::LitChar(written, _) => if literal_is_a_byte(written) { 1 } else { -1 },
-        _ => -1,
-    }
-}
-
-// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
-// this was written - see `contracts::sync`.
 pub(crate) fn check_core_places_leaves(expr: &Expr) -> bool { matches!(expr, Expr::Return(_, _) | Expr::Break(_) | Expr::Continue(_) | Expr::Throw(_, _)) }
-
-// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
-// this was written - see `contracts::sync`.
-pub(crate) fn check_core_places_either_position(one: &CheckTextPosition, other: &CheckTextPosition) -> Option<CheckTextPosition> {
-    let step = if one.step == other.step { one.step } else { -1 };
-    if other.text == "" || other.text == one.text { return Some(CheckTextPosition { text: nikaia_std::block::Text::from(one.text.to_string()), step }); }
-    if one.text == "" { return Some(CheckTextPosition { text: nikaia_std::block::Text::from(other.text.to_string()), step }); }
-    None
-}
-
-// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
-// this was written - see `contracts::sync`.
-pub(crate) fn check_core_places_block_position(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, block: &Block) -> Option<CheckTextPosition> {
-    if block.stmts.len() != 1 { return None; }
-    match &unsafe { nikaia_std::proven::read(&block.stmts, (0) as usize) }.node {
-        Stmt::Expr(value) => check_core_places_text_position(state, world, value),
-        _ => None,
-    }
-}
-
-// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
-// this was written - see `contracts::sync`.
-pub(crate) fn check_core_places_text_position(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, expr: &Expr) -> Option<CheckTextPosition> {
-    match expr {
-        Expr::LitInt { value, .. } => {
-            let value = *value;
-            if value == 0u64 { return Some(CheckTextPosition { text: String::from(""), step: -1 }); }
-            return None;
-        },
-        Expr::MethodCall { receiver, method, args, .. } => {
-            let receiver = nikaia_std::boxed::open(receiver); let method = *method;
-            let called = world.words.resolve(method);
-            if state.a_text_bytes_view(world, receiver) { return None; }
-            if called == "len" && args.is_empty() && check_core_places_literal_bytes(receiver) >= 0 { return Some(CheckTextPosition { text: String::from(""), step: -1 }); }
-            if called == "len" && args.is_empty() { return Some(CheckTextPosition { text: check_core_places_text_key(state, world, receiver), step: -1 }); }
-            return None;
-        },
-        Expr::Coalesce { value, fallback, .. } => {
-            let value = nikaia_std::boxed::open(value); let fallback = nikaia_std::boxed::open(fallback);
-            let found = match check_core_places_text_position(state, world, value) { Some(__nikaia_value) => __nikaia_value, None => return None };
-            if check_core_places_leaves(fallback) || state.exits(world, fallback) { return Some(found); }
-            let other = match check_core_places_text_position(state, world, fallback) { Some(__nikaia_value) => __nikaia_value, None => return None };
-            return check_core_places_either_position(&found, &other);
-        },
-        Expr::If { then_branch, else_branch, .. } => {
-            let otherwise: &Block = match else_branch { Some(__nikaia_value) => __nikaia_value, None => return None };
-            let one = match check_core_places_block_position(state, world, then_branch) { Some(__nikaia_value) => __nikaia_value, None => return None };
-            let other = match check_core_places_block_position(state, world, otherwise) { Some(__nikaia_value) => __nikaia_value, None => return None };
-            return check_core_places_either_position(&one, &other);
-        },
-        Expr::Variable(name, _) => {
-            let name = *name;
-            let local = match state.binding(world.words.resolve(name)) { Some(__nikaia_value) => __nikaia_value, None => return None };
-            let kept = match *nikaia_std::index::get(&state.text_positions, &local.id) { Some(__nikaia_value) => __nikaia_value, None => return None };
-            return Some(CheckTextPosition { text: nikaia_std::block::Text::from(kept.text.to_string()), step: kept.step });
-        },
-        Expr::Binary { op, lhs, rhs, .. } => {
-            let lhs = nikaia_std::boxed::open(lhs); let rhs = nikaia_std::boxed::open(rhs);
-            let adds = matches!(op, BinaryOp::Add);
-            let subtracts = matches!(op, BinaryOp::Sub);
-            if !adds && !subtracts { return None; }
-            let from = match check_core_places_text_position(state, world, lhs) { Some(__nikaia_value) => __nikaia_value, None => return None };
-            match rhs {
-                Expr::LitInt { value, negative, .. } => {
-                    let negative = *negative; let value = *value;
-                    if adds && !negative && from.step > 0 && (i64::try_from(value).unwrap_or_else(|_| panic!("the value does not fit in an `i64`"))) == from.step { return Some(CheckTextPosition { text: nikaia_std::block::Text::from(from.text.to_string()), step: -1 }); }
-                    return None;
-                },
-                Expr::MethodCall { receiver, method, args, .. } => {
-                    let receiver = nikaia_std::boxed::open(receiver); let method = *method;
-                    if world.words.resolve(method) == "len" && args.is_empty() && check_core_places_literal_bytes(receiver) >= 0 { return Some(CheckTextPosition { text: nikaia_std::block::Text::from(from.text.to_string()), step: -1 }); }
-                    return None;
-                },
-                _ => return None,
-            }
-        },
-        _ => return None,
-    }
-}
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
 pub(crate) fn check_core_places_text_cut(state: &mut CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, text: &Expr, index: &Expr, span: &Span) {
     let shown = written_expression(world.words, text);
-    let mut bounds: Vec<&Expr> = vec![];
-    let mut start_zero = false;
     let mut cut: String = written_expression(world.words, index);
     match index {
         Expr::Range { start, end, .. } => {
             let start = nikaia_std::boxed::open(start); let end = nikaia_std::boxed::open(end);
-            bounds.push(start);
-            bounds.push(end);
-            match start {
-                Expr::LitInt { value, .. } => {
-                    let value = *value;
-                    start_zero = value == 0u64;
-                },
-                _ => { },
-            }
             match end {
                 Expr::MethodCall { receiver, method, args, .. } => {
                     let receiver = nikaia_std::boxed::open(receiver); let method = *method;
@@ -914,31 +814,20 @@ pub(crate) fn check_core_places_text_cut(state: &mut CheckState, world: &CheckWo
         },
         _ => { },
     }
-    let key = check_core_places_text_key(&state, world, text);
-    let mut message: String = String::from("");
-    if bounds.is_empty() { message = format!("`{}` is cut by a range kept in a name, and a text is cut only by a position it handed out.", shown); }
-    for bound in bounds.iter() {
-        let bound = *bound;
-        if message == "" {
-            let position: Option<CheckTextPosition> = check_core_places_text_position(&state, world, bound);
-            if position.is_none() { message = format!("`{}` is cut at `{}`, a number the program made up: a text is cut at its own positions, by name (ADR-374 D3).", shown, written_expression(world.words, bound)); } else {
-                let p = nikaia_std::index::or(position, || CheckTextPosition { text: String::from(""), step: -1 });
-                if p.text != "" && p.text != key { message = format!("`{}` is cut at `{}`, a position of another text.", shown, written_expression(world.words, bound)); }
-            }
-        }
-    }
-    if message == "" { return; }
+    let message = format!("`{}` is cut with brackets, `{}[{}]`, and a text takes no `[…]`: it is cut by name, at its own positions (ADR-374 D3).", shown, shown, cut);
     let mut readers = format!("`{}.graphemes` for what a reader sees", shown);
-    if start_zero {
-        match index {
-            Expr::Range { end, inclusive, .. } => {
-                let end = nikaia_std::boxed::open(end); let inclusive = *inclusive;
-                if !inclusive { readers = format!("`{}.graphemes.take({})` for what a reader sees", shown, written_expression(world.words, end)); }
-            },
-            _ => { },
-        }
+    match index {
+        Expr::Range { start, end, inclusive, .. } => {
+            let start = nikaia_std::boxed::open(start); let end = nikaia_std::boxed::open(end); let inclusive = *inclusive;
+            let from_zero = match start {
+                Expr::LitInt { value, .. } => { let value = *value; value == 0u64 },
+                _ => false,
+            };
+            if from_zero && !inclusive { readers = format!("`{}.graphemes.take({})` for what a reader sees", shown, written_expression(world.words, end)); }
+        },
+        _ => { },
     }
-    state.findings.push(check_refusal("NK1214", span, message, vec![String::from("A number counts bytes, scalars or graphemes only through a view; the text's own positions are bytes it knows to be on a scalar's start.")], Some(format!("Cut at a match with `{}.before(m.start)`, `{}.after(m.end)` or `{}.between(p, q)`; or say the view: `{}.bytes[{}].text()` for bytes, {}.", shown, shown, shown, shown, cut, readers))));
+    state.findings.push(check_refusal("NK1214", span, message, vec![String::from("Brackets count elements, and a boundary in a text is not one; `Bytes` and lists keep `[a..<b]` with numbers.")], Some(format!("Cut at a match with `{}.before(m.start)`, `{}.after(m.end)` or `{}.between(p, q)`; or say the view: `{}.bytes[{}].text()` for bytes, {}.", shown, shown, shown, shown, cut, readers))));
 }
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before

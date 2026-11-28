@@ -1610,13 +1610,6 @@ fn check_core_stmt_let[H: CheckHost](mut state: CheckState, world: ref CheckWorl
             state.facts.text_bytes_typed_lets.insert(span.start as i64)
         }
     }
-    // **A position a text handed out keeps where it came from** (ADR-320 D5).
-    if !mutable && names.len() == 1 && shape.len() == 0 {
-        let position = check_core_places_text_position(state, world, value)
-        if position != null {
-            state.text_positions.insert(id, position ?? CheckTextPosition { text: "", step: -1 })
-        }
-    }
     // **A position, or a match, keeps the text it belongs to** (ADR-374 D5).
     if names.len() == 1 && shape.len() == 0 {
         let held: CheckPosText? = check_pos_text_of(state, world, value)
