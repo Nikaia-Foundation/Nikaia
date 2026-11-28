@@ -109,6 +109,11 @@ pub fn project_check_summary(findings: ref Vec[CheckFinding], violations: i64) -
     if untethered > 0 {
         refused.push(f"{untethered} buffer{project_check_plural(untethered)} whose views have no one place to live")
     }
+    // **A view of a stream's item kept where it grows** (ADR-stream-buffers-v1 D2).
+    let streamed = project_check_count(findings, "NK2308")
+    if streamed > 0 {
+        refused.push(f"{streamed} view{project_check_plural(streamed)} of a stream kept in a place that grows")
+    }
     // `NK21xx` is running things at once, and its two rules want two lines: what
     // a `spawn` took with it is a value to clone, and an `overlap` whose
     // branches meet is a block to take apart. Counted apart from the line below
@@ -206,6 +211,7 @@ pub fn project_check_summary(findings: ref Vec[CheckFinding], violations: i64) -
         changed_under -
         tethered -
         untethered -
+        streamed -
         tasks -
         walked -
         lent_out -

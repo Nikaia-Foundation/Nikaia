@@ -1,0 +1,27 @@
+// A map that drops entries while the loop keeps reading holds each view with a
+// handle of its own; one keep for the loop would keep every buffer it read
+// (ADR-tether-v1 D4, D12). Moved from `tether_keep::cache` (#2849).
+use std::fs
+use std::collections
+
+fn files() -> fs::Root throws {
+    let root = fs::scratch()
+    fs::write("app.conf", root, "# settings\nhost = example.org\nport = 8080\ninclude = extra.conf\n")
+    fs::write("extra.conf", root, "mode = fast\nhost = override.org\n")
+    return root
+}
+
+fn main() throws {
+    let root = files()
+    let mut last_seen = collections::HashMap()
+    let mut round = 0
+    while round < 1000 {
+        let text = fs::read_to_string("app.conf", root)
+        for line in text.lines() {
+            last_seen.insert(line, round)
+        }
+        if last_seen.len() > 2 { last_seen.clear() }
+        round = round + 1
+    }
+    println(f"{last_seen.len()} lines remembered")
+}

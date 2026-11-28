@@ -402,6 +402,19 @@ pub fn tethers_report(texts: &[String], ledger: &Ledger, here: &collections::BTr
         lines.push(format!("{} (keeps):\n", plan.key));
         lines.reserve(said.iter().size_hint().0); for line in said.iter() { lines.push(nikaia_std::block::Text::from(line.to_string())); }
     }
+    lines.reserve(plans.iter().size_hint().0); for plan in plans.iter() {
+        if plan.streams.is_empty() { continue; }
+        lines.push(format!("{} (stream):\n", plan.key));
+        lines.reserve(plan.streams.iter().size_hint().0); for one in plan.streams.iter() {
+            let mut counts: String = String::from("counts nothing");
+            if !one.counted.is_empty() {
+                let mut named: Vec<String> = nikaia_std::block::list(nikaia_std::block::Place::Block);
+                named.reserve(one.counted.iter().size_hint().0); for place in one.counted.iter() { named.push(format!("`{}`", place)); }
+                counts = format!("counts {}", nikaia_std::block::Text::from(named.join(", ")));
+            }
+            lines.push(format!("    `{}` over `{}()` {}: a pool of {} buffers\n", one.binding, one.callee, counts, one.pool));
+        }
+    }
     if lines.is_empty() { return String::from("no view in a signature here, so there is no state to solve.\n"); }
     nikaia_std::block::Text::from(lines.join(""))
 }

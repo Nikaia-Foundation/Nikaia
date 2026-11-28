@@ -1,0 +1,35 @@
+// Views of every file of a recursive include in one map, reached through a
+// `mut` parameter: one keep, many buffers (ADR-tether-v1 D2). Moved from
+// `tether_keep::merge` (#2849).
+use std::fs
+use std::collections
+
+fn load(path: String, root: fs::Root, mut into: collections::HashMap[String, String]) throws {
+    let text = fs::read_to_string(path, root)
+    for line in text.lines() {
+        let parts: Vec[String] = line.split("=").collect()
+        if parts.len() == 2 {
+            let key = parts[0].trim()
+            let value = parts[1].trim()
+            if key == "include" {
+                load(value.clone(), root, into)
+            } else {
+                into.insert(key, value)
+            }
+        }
+    }
+}
+
+fn files() -> fs::Root throws {
+    let root = fs::scratch()
+    fs::write("app.conf", root, "# settings\nhost = example.org\nport = 8080\ninclude = extra.conf\n")
+    fs::write("extra.conf", root, "mode = fast\nhost = override.org\n")
+    return root
+}
+
+fn main() throws {
+    let root = files()
+    let mut merged: collections::HashMap[String, String] = collections::HashMap()
+    load("app.conf", root, merged)
+    println(f"host = {merged["host"] ?? "-"}, mode = {merged["mode"] ?? "-"}")
+}

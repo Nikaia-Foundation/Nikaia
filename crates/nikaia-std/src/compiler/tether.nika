@@ -597,6 +597,27 @@ pub fn tethers_report(texts: ref Vec[String], ledger: ref Ledger, here: ref coll
             lines.push(line.clone())
         }
     }
+    // **Each loop over a stream, what it counts and its pool**
+    // (ADR-stream-buffers-v1 D3): the places that hold a view of an item
+    // across turns, and the buffers the pool holds for them, for the one
+    // being read and for the one an unfinished line moves into.
+    for plan in plans {
+        if plan.streams.len() == 0 {
+            continue
+        }
+        lines.push(f"{plan.key} (stream):\n")
+        for one in plan.streams {
+            let mut counts: String = "counts nothing"
+            if one.counted.len() > 0 {
+                let mut named: Vec[String] = []
+                for place in one.counted {
+                    named.push(f"`{place}`")
+                }
+                counts = f"counts {named.join(", ")}"
+            }
+            lines.push(f"    `{one.binding}` over `{one.callee}()` {counts}: a pool of {one.pool} buffers\n")
+        }
+    }
     // "here" and not "in this program", for the reason `sharing`'s report
     // gives: a report is about one file.
     if lines.len() == 0 {

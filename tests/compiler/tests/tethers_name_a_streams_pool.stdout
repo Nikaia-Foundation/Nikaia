@@ -1,0 +1,5 @@
+count (stream):
+    `line` over `io::lines()` counts nothing: a pool of 2 buffers
+main (stream):
+    `line` over `io::lines()` counts `prev`, `before`: a pool of 4 buffers
+exit 0
