@@ -22,7 +22,8 @@
 #![deny(unsafe_op_in_unsafe_fn)]
 
 use std::any::Any;
-use std::sync::{Arc, Mutex, OnceLock};
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::{Arc, OnceLock};
 
 /// **A value whose references may outlive what they point into, as far as the
 /// compiler is told.**
@@ -70,20 +71,42 @@ impl<T: Clone> Clone for Dangling<T> {
 
 /// Buffers whose views outlive the scope that made them.
 ///
-/// **Append-only, and nothing in it ever moves**: a buffer is boxed when it
-/// arrives and the box is freed only when the `Keep` is, so a view of an
+/// **Append-only, and nothing in it ever moves**: a buffer is put behind an
+/// `Arc` when it arrives and freed only when the `Keep` is, so a view of an
 /// earlier buffer stays valid while later ones arrive. That is what lets one
 /// `Keep` serve a loop over many files or a recursive include, with no
-/// per-view count: one per buffer (ADR-tether-v1 D11), and no table of buffers.
+/// per-view count: one per buffer (ADR-tether-v1 D11).
 ///
-/// **The first buffer takes no lock and no list.** A keep of a buffer's own -
-/// one per file a pruned list reads, held by the elements that point into it -
-/// holds exactly one, so that one lives in a slot set once, and only a second
-/// takes the lock, which is for [`Keep::put`] through `&self` from two tasks at
-/// once: once per **buffer**, never per view.
+/// **Each buffer has a place** ([`Place`]), handed out by [`Keep::put_at`] and
+/// [`Keep::put_viewed_at`], and read back by it in O(1) with no lock
+/// ([`Keep::view_in`], ADR-tether-v1 D15): the first buffer lives in a slot of
+/// the keep itself, the rest in slots of chunks that double in size, each slot
+/// set once. A put claims its place with one atomic step, so two tasks may put
+/// through `&self` at once; nothing is ever moved or removed, so a slot once
+/// set may be read for as long as the `Keep` is borrowed.
 pub struct Keep {
     first: OnceLock<Entry>,
-    rest: Mutex<Vec<Entry>>,
+    rest: OnceLock<Box<Rest>>,
+    /// How many places have been handed out.
+    taken: AtomicUsize,
+}
+
+/// The places after the first: chunk `k` holds places `2^k .. 2^(k+1)`,
+/// allocated when the first of them is taken.
+struct Rest {
+    chunks: [OnceLock<Box<[OnceLock<Entry>]>>; usize::BITS as usize],
+}
+
+/// **Where a buffer lives in its [`Keep`]**: handed out when it is put there,
+/// so that a view of it can be checked against that one buffer
+/// ([`Keep::view_in`]) instead of searched for among them all.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Place(usize);
+
+/// The chunk of [`Rest`] place `at` (at least 1) is in, and its index there.
+fn chunk_of(at: usize) -> (usize, usize) {
+    let k = (usize::BITS - 1 - at.leading_zeros()) as usize;
+    (k, at - (1 << k))
 }
 
 /// One buffer.
@@ -97,47 +120,90 @@ enum Entry {
     Viewed(Arc<dyn Viewed>),
 }
 
+impl Entry {
+    /// `text`, where it lies in this buffer: the same bytes, borrowed from it.
+    fn within<'a>(&'a self, text: &str) -> Option<&'a str> {
+        match self {
+            Entry::Viewed(buffer) => within(buffer.bytes(), text),
+            Entry::Opaque(_) => None,
+        }
+    }
+}
+
 impl Keep {
     pub fn new() -> Keep {
         Keep {
             first: OnceLock::new(),
-            rest: Mutex::new(Vec::new()),
+            rest: OnceLock::new(),
+            taken: AtomicUsize::new(0),
         }
     }
 
-    fn rest(&self) -> std::sync::MutexGuard<'_, Vec<Entry>> {
-        self.rest
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner())
+    /// The slot of place `at`, where it has been made.
+    fn slot(&self, at: usize) -> Option<&OnceLock<Entry>> {
+        if at == 0 {
+            return Some(&self.first);
+        }
+        let (k, i) = chunk_of(at);
+        self.rest.get()?.chunks[k].get()?.get(i)
     }
 
-    fn keep(&self, entry: Entry) {
-        if let Err(entry) = self.first.set(entry) {
-            self.rest().push(entry);
+    /// The buffer at `at`, once it is there.
+    fn entry(&self, at: Place) -> Option<&Entry> {
+        self.slot(at.0)?.get()
+    }
+
+    fn keep(&self, entry: Entry) -> Place {
+        let at = self.taken.fetch_add(1, Ordering::Relaxed);
+        let slot = if at == 0 {
+            &self.first
+        } else {
+            let (k, i) = chunk_of(at);
+            let rest = self.rest.get_or_init(|| {
+                Box::new(Rest {
+                    chunks: std::array::from_fn(|_| OnceLock::new()),
+                })
+            });
+            &rest.chunks[k].get_or_init(|| (0..1usize << k).map(|_| OnceLock::new()).collect())[i]
+        };
+        if slot.set(entry).is_err() {
+            unreachable!("a place is handed out once");
         }
+        Place(at)
     }
 
     /// Move a buffer in, and hand back the place it now lives, for as long as
     /// this `Keep` is borrowed.
     pub fn put<B: Any + Send + Sync>(&self, buffer: B) -> &B {
+        self.put_at(buffer).0
+    }
+
+    /// [`Keep::put`], and the buffer's [`Place`] in this `Keep`.
+    pub fn put_at<B: Any + Send + Sync>(&self, buffer: B) -> (&B, Place) {
         let shared: Arc<B> = Arc::new(buffer);
         let at: *const B = Arc::as_ptr(&shared);
-        self.keep(Entry::Opaque(shared));
+        let place = self.keep(Entry::Opaque(shared));
         // SAFETY: the `Arc` was just stored and is never removed or handed out
         // until `self` is dropped, so the buffer it points at stays alive and
         // in place; nothing writes to it. So the reference is valid for as
         // long as `self` is borrowed, which is the lifetime it is given.
-        unsafe { &*at }
+        (unsafe { &*at }, place)
     }
 
     /// [`Keep::put`], for a buffer views of text are cut from - which
     /// [`Keep::find`] can then find a view in.
     pub fn put_viewed<B: Viewed>(&self, buffer: B) -> &B {
+        self.put_viewed_at(buffer).0
+    }
+
+    /// [`Keep::put_viewed`], and the buffer's [`Place`] in this `Keep`, which
+    /// [`Keep::view_in`] checks a view against.
+    pub fn put_viewed_at<B: Viewed>(&self, buffer: B) -> (&B, Place) {
         let shared: Arc<B> = Arc::new(buffer);
         let at: *const B = Arc::as_ptr(&shared);
-        self.keep(Entry::Viewed(shared));
-        // SAFETY: as in `put`.
-        unsafe { &*at }
+        let place = self.keep(Entry::Viewed(shared));
+        // SAFETY: as in `put_at`.
+        (unsafe { &*at }, place)
     }
 
     /// The same text, as a view of a buffer this `Keep` holds - or `None`
@@ -145,24 +211,15 @@ impl Keep {
     ///
     /// **Found by address**, not by content: the view handed back is the very
     /// bytes `text` is, now borrowed from this `Keep` rather than from
-    /// wherever `text` was borrowed from.
+    /// wherever `text` was borrowed from. A search among the buffers, for a
+    /// view the compiler names no buffer for; one it does goes to
+    /// [`Keep::view_in`].
     pub fn find(&self, text: &str) -> Option<&str> {
         if text.is_empty() {
             return Some("");
         }
-        let found = |entry: &Entry| match entry {
-            Entry::Viewed(buffer) => {
-                // SAFETY: as in `put` - the `Arc` stays in this `Keep` until it
-                // is dropped, so the buffer lives, stays in place and is never
-                // written for as long as `self` is borrowed; so a reference to
-                // it may be given that lifetime rather than the lock's.
-                let buffer: &dyn Viewed = unsafe { &*Arc::as_ptr(buffer) };
-                within(buffer.bytes(), text)
-            }
-            Entry::Opaque(_) => None,
-        };
-        let first = self.first.get()?;
-        found(first).or_else(|| self.rest().iter().find_map(found))
+        let taken = self.taken.load(Ordering::Acquire);
+        (0..taken).find_map(|at| self.slot(at)?.get()?.within(text))
     }
 
     /// The same text, as a view of this `Keep`: found in the buffer it points
@@ -172,21 +229,73 @@ impl Keep {
     pub fn view(&self, text: &str) -> &str {
         match self.find(text) {
             Some(found) => found,
-            None => self.put_viewed(text.to_owned()).as_str(),
+            None => self.copy(text),
         }
+    }
+
+    /// **The same text, as a view of the buffer at `at`**, which the compiler
+    /// says it points into (ADR-tether-v1 D15): one comparison of addresses,
+    /// no search. Where it is not there the plan was wrong, which is the
+    /// compiler's defect: a program copies the text into this `Keep`, so it
+    /// stays sound, and a run under `nikaia test` (which sets
+    /// `NIKAIA_TEST_DIR` for every test it runs) panics at the caller's line
+    /// instead, so the tests find a wrong plan rather than a copy hiding it.
+    #[track_caller]
+    pub fn view_in(&self, at: Place, text: &str) -> &str {
+        self.checked(at, text, under_test())
+    }
+
+    /// [`Keep::view_in`], for a view the plan names this buffer for although
+    /// it may be a literal there (`if c { w } else { "none" }`): where it is
+    /// not in the buffer it is copied, in a test as in a program.
+    pub fn view_near(&self, at: Place, text: &str) -> &str {
+        self.checked(at, text, false)
+    }
+
+    #[track_caller]
+    fn checked(&self, at: Place, text: &str, strict: bool) -> &str {
+        if let Some(found) = self.entry(at).and_then(|entry| entry.within(text)) {
+            return found;
+        }
+        if text.is_empty() {
+            return "";
+        }
+        if strict {
+            wrong_plan();
+        }
+        self.copy(text)
+    }
+
+    /// A copy of `text`, put here.
+    fn copy(&self, text: &str) -> &str {
+        self.put_viewed(text.to_owned()).as_str()
     }
 
     /// How many buffers are kept, for `--tethers` and for tests.
     pub fn len(&self) -> usize {
-        match self.first.get() {
-            Some(_) => 1 + self.rest().len(),
-            None => 0,
-        }
+        self.taken.load(Ordering::Acquire)
     }
 
     pub fn is_empty(&self) -> bool {
         self.len() == 0
     }
+}
+
+/// Whether this run is one of `nikaia test`'s: the runner gives every test it
+/// runs its own directory in `NIKAIA_TEST_DIR` (`nikaia_std::fs::TEST_DIR_VAR`,
+/// ADR-247 D5). Read once, and only where a view missed its buffer.
+fn under_test() -> bool {
+    static UNDER_TEST: OnceLock<bool> = OnceLock::new();
+    *UNDER_TEST.get_or_init(|| std::env::var_os("NIKAIA_TEST_DIR").is_some())
+}
+
+/// A view was not in the buffer the compiler named for it (ADR-tether-v1 D15).
+#[track_caller]
+#[cold]
+fn wrong_plan() -> ! {
+    panic!(
+        "a view is not in the buffer the compiler planned for it (ADR-tether-v1 D15). This is a bug in Nikaia, not in your program: the compiler's plan of where its text lives was wrong. Please report it, with this message, at https://github.com/Nikaia-Foundation/Nikaia/issues."
+    )
 }
 
 impl Default for Keep {
@@ -250,7 +359,8 @@ impl Viewed for Vec<u8> {
 pub struct Held {
     // Declared first, so it is dropped before the handle on its buffer.
     text: Dangling<&'static str>,
-    _keep: Arc<Keep>,
+    /// `None` for a literal, which needs no keep (ADR-tether-v1 D8, D15).
+    _keep: Option<Arc<Keep>>,
 }
 
 impl Held {
@@ -279,7 +389,41 @@ impl Held {
             // nothing else - and the clone stored beside it keeps `keep`, and
             // so the buffer, alive and in place as long as this value.
             text: Dangling::new(unsafe { std::mem::transmute::<&str, &'static str>(view) }),
-            _keep: Arc::clone(keep),
+            _keep: Some(Arc::clone(keep)),
+        }
+    }
+
+    /// `text`, held by `keep`, where the compiler says it lies in the buffer
+    /// at `at` ([`Keep::view_in`]: one comparison; a miss is the compiler's
+    /// fault, copied in a program and a panic under `nikaia test`).
+    #[track_caller]
+    pub fn in_place(keep: Arc<Keep>, at: Place, text: &str) -> Held {
+        // SAFETY: as in `new` - `view_in` hands back nothing but a view of
+        // `keep`'s own buffers, and `keep` is stored beside it.
+        let view = unsafe { std::mem::transmute::<&str, &'static str>(keep.view_in(at, text)) };
+        Held {
+            text: Dangling::new(view),
+            _keep: Some(keep),
+        }
+    }
+
+    /// [`Held::in_place`], for a view that may be a literal where the plan
+    /// names a buffer ([`Keep::view_near`]): a miss is copied, never a panic.
+    pub fn near(keep: Arc<Keep>, at: Place, text: &str) -> Held {
+        // SAFETY: as in `in_place`.
+        let view = unsafe { std::mem::transmute::<&str, &'static str>(keep.view_near(at, text)) };
+        Held {
+            text: Dangling::new(view),
+            _keep: Some(keep),
+        }
+    }
+
+    /// **A literal, held with no keep and no copy** (ADR-tether-v1 D8, D15):
+    /// it is `'static` already.
+    pub fn literal(text: &'static str) -> Held {
+        Held {
+            text: Dangling::new(text),
+            _keep: None,
         }
     }
 }
@@ -393,6 +537,19 @@ impl<'a, const N: usize> Keeps<'a, N> {
             .unwrap_or_else(|| self.keeps[0].view(text))
     }
 
+    /// `text`, as a view of the buffer at `at` in keep `keep`, which the
+    /// compiler says it points into ([`Keep::view_in`]).
+    #[track_caller]
+    pub fn view_in(&self, keep: usize, at: Place, text: &str) -> &'a str {
+        self.keeps[keep].view_in(at, text)
+    }
+
+    /// [`Keeps::view_in`], where the view may be a literal
+    /// ([`Keep::view_near`]).
+    pub fn view_near(&self, keep: usize, at: Place, text: &str) -> &'a str {
+        self.keeps[keep].view_near(at, text)
+    }
+
     /// One of the keeps.
     pub fn get(&self, at: usize) -> &'a Keep {
         self.keeps[at]
@@ -409,12 +566,27 @@ pub trait Rebase<'a> {
     /// The same type, over `'a`.
     type At;
     fn rebase<const N: usize>(self, keeps: &Keeps<'a, N>) -> Self::At;
+
+    /// The same, where the compiler names the buffer at `at` of the first
+    /// keep for every view in it: each view of text is checked against that
+    /// buffer ([`Keeps::view_near`]) instead of searched for. What has no such
+    /// view, or is not written for it, is rebased as [`Rebase::rebase`] does.
+    fn rebase_near<const N: usize>(self, keeps: &Keeps<'a, N>, at: Place) -> Self::At
+    where
+        Self: Sized,
+    {
+        let _ = at;
+        self.rebase(keeps)
+    }
 }
 
 impl<'a> Rebase<'a> for &str {
     type At = &'a str;
     fn rebase<const N: usize>(self, keeps: &Keeps<'a, N>) -> &'a str {
         keeps.view(self)
+    }
+    fn rebase_near<const N: usize>(self, keeps: &Keeps<'a, N>, at: Place) -> &'a str {
+        keeps.view_near(0, at, self)
     }
 }
 
@@ -423,12 +595,20 @@ impl<'a, T: Rebase<'a>> Rebase<'a> for Option<T> {
     fn rebase<const N: usize>(self, keeps: &Keeps<'a, N>) -> Option<T::At> {
         self.map(|value| value.rebase(keeps))
     }
+    fn rebase_near<const N: usize>(self, keeps: &Keeps<'a, N>, at: Place) -> Option<T::At> {
+        self.map(|value| value.rebase_near(keeps, at))
+    }
 }
 
 impl<'a, T: Rebase<'a>> Rebase<'a> for Vec<T> {
     type At = Vec<T::At>;
     fn rebase<const N: usize>(self, keeps: &Keeps<'a, N>) -> Vec<T::At> {
         self.into_iter().map(|value| value.rebase(keeps)).collect()
+    }
+    fn rebase_near<const N: usize>(self, keeps: &Keeps<'a, N>, at: Place) -> Vec<T::At> {
+        self.into_iter()
+            .map(|value| value.rebase_near(keeps, at))
+            .collect()
     }
 }
 
@@ -578,6 +758,18 @@ rebased_tuples!(
 pub trait Hold<const N: usize> {
     type Held;
     fn hold(self, keeps: [Arc<Keep>; N]) -> Self::Held;
+
+    /// The same, where the compiler names the buffer at `at` of the first
+    /// keep for the views in it (ADR-tether-v1 D15): a view of text is checked
+    /// against that buffer ([`Held::near`]) instead of searched for; what is
+    /// not written for it is held as [`Hold::hold`] does.
+    fn hold_near(self, keeps: [Arc<Keep>; N], at: Place) -> Self::Held
+    where
+        Self: Sized,
+    {
+        let _ = at;
+        self.hold(keeps)
+    }
 }
 
 impl<const N: usize> Hold<N> for &str {
@@ -585,12 +777,21 @@ impl<const N: usize> Hold<N> for &str {
     fn hold(self, keeps: [Arc<Keep>; N]) -> Held {
         Held::new(&keeps, self)
     }
+    fn hold_near(self, keeps: [Arc<Keep>; N], at: Place) -> Held {
+        match keeps.into_iter().next() {
+            Some(keep) => Held::near(keep, at, self),
+            None => panic!("a held view needs a keep"),
+        }
+    }
 }
 
 impl<const N: usize, T: Hold<N>> Hold<N> for Option<T> {
     type Held = Option<T::Held>;
     fn hold(self, keeps: [Arc<Keep>; N]) -> Option<T::Held> {
         self.map(|value| value.hold(keeps))
+    }
+    fn hold_near(self, keeps: [Arc<Keep>; N], at: Place) -> Option<T::Held> {
+        self.map(|value| value.hold_near(keeps, at))
     }
 }
 
@@ -982,6 +1183,104 @@ mod tests {
         assert_eq!(held.keeps()[0].len(), 1);
     }
 
+    /// **A view is checked against the buffer named for it** (ADR-tether-v1
+    /// D15): found there by its place, among many, with nothing copied.
+    #[test]
+    fn a_view_is_found_in_the_buffer_at_its_place() {
+        let keep = Keep::new();
+        let mut places = Vec::new();
+        for n in 0..100 {
+            let (text, at) = keep.put_viewed_at(format!("buffer {n}"));
+            places.push((text.as_str(), at));
+        }
+        assert_eq!(keep.len(), 100);
+        for (n, (text, at)) in places.iter().enumerate() {
+            let tail = &text[7..];
+            let found = keep.view_in(*at, tail);
+            assert_eq!(found.as_ptr(), tail.as_ptr());
+            assert_eq!(found, n.to_string());
+        }
+        // Nothing was copied in.
+        assert_eq!(keep.len(), 100);
+        assert_eq!(keep.view_in(places[3].1, ""), "");
+    }
+
+    /// **A view not in its named buffer is the compiler's fault**: a program
+    /// copies it, a run under `nikaia test` panics.
+    #[test]
+    fn a_view_not_in_its_named_buffer_is_copied_or_panics_under_test() {
+        let keep = Keep::new();
+        let (first, at_first) = keep.put_viewed_at("first".to_string());
+        let (_, at_second) = keep.put_viewed_at("second".to_string());
+        // In a program: a copy the keep owns.
+        let copied = keep.checked(at_second, &first[..3], false);
+        assert_eq!(copied, "fir");
+        assert_ne!(copied.as_ptr(), first.as_ptr());
+        assert_eq!(keep.len(), 3);
+        // Under `nikaia test`: a panic naming the compiler.
+        let caught = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            keep.checked(at_second, &first[..3], true);
+        }));
+        let said = caught.expect_err("a wrong plan panics under test");
+        let said = said
+            .downcast_ref::<String>()
+            .map(String::as_str)
+            .or(said.downcast_ref::<&str>().copied());
+        assert!(
+            said.unwrap_or("")
+                .contains("bug in Nikaia, not in your program")
+        );
+        // The right buffer is found under test too.
+        assert_eq!(keep.checked(at_first, &first[1..], true), "irst");
+        // A literal where the plan may hand one is copied either way.
+        assert_eq!(keep.view_near(at_first, "literal"), "literal");
+    }
+
+    /// Places stay right while tasks put through `&self` at once.
+    #[test]
+    fn buffers_put_from_two_threads_keep_their_places() {
+        let keep = Arc::new(Keep::new());
+        let workers: Vec<_> = (0..4)
+            .map(|t| {
+                let keep = Arc::clone(&keep);
+                std::thread::spawn(move || {
+                    let mut seen = Vec::new();
+                    for n in 0..50 {
+                        let (text, at) = keep.put_viewed_at(format!("{t}-{n}"));
+                        seen.push((at, text.len()));
+                    }
+                    for (at, len) in seen {
+                        let whole = keep.entry(at).and_then(|e| match e {
+                            Entry::Viewed(b) => Some(b.bytes().len()),
+                            Entry::Opaque(_) => None,
+                        });
+                        assert_eq!(whole, Some(len));
+                    }
+                })
+            })
+            .collect();
+        for worker in workers {
+            worker.join().unwrap();
+        }
+        assert_eq!(keep.len(), 200);
+    }
+
+    #[test]
+    fn a_held_literal_takes_no_keep() {
+        let held = Held::literal("static");
+        assert_eq!(&*held, "static");
+        assert!(held._keep.is_none());
+        let keep = Arc::new(Keep::new());
+        let (text, at) = keep.put_viewed_at("a b".to_string());
+        let b = &text[2..];
+        let held = Held::in_place(Arc::clone(&keep), at, b);
+        assert_eq!(held.as_ptr(), b.as_ptr());
+        drop(keep);
+        assert_eq!(&*held, "b");
+        let near = Held::near(Arc::new(Keep::new()), Place(0), "x");
+        assert_eq!(&*near, "x");
+    }
+
     #[test]
     fn a_later_buffer_does_not_move_an_earlier_one() {
         let keep = Keep::new();
@@ -994,7 +1293,7 @@ mod tests {
         assert_eq!(keep.len(), 1001);
     }
 
-    // `Held` holds a handle on a `Keep`, whose lock is interior mutability -
+    // `Held` holds a handle on a `Keep`, whose slots are interior mutability -
     // but a key hashes and compares by its text alone, which never changes.
     #[allow(clippy::mutable_key_type)]
     #[test]
