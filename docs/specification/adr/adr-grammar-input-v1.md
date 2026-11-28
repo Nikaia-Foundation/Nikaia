@@ -1,7 +1,7 @@
 # ADR-grammar-input-v1: A Grammar Reads a `String` or a `Bytes` as Its Argument Decides, Checks Text Where It Becomes Text, Holds What It Read as Views and Symbols, and Interns Into the Caller's Table
 
 **Status:** Accepted
-**Date:** November 19, 2026 (the consolidation, #904; the decisions themselves October 3 to November 2, 2026)
+**Date:** November 19, 2026 (the consolidation, #904; the decisions themselves October 3 to November 2, 2026); D14 November 28, 2026 (owner, #1934)
 **Answers:** what a grammar reads and how it holds what it read: which input
 an entry takes, where text cut from `Bytes` is checked as UTF-8, what a view of
 the input is and how long it lives, how a view is hashed, whose table an
@@ -73,7 +73,8 @@ let e = Record::record(raw)
 The same grammar is parsed over either. With a `Bytes` it parses its bytes;
 with a `String` it parses the text. Nothing in the grammar says which, and a
 grammar called with both is compiled for both. Every element of Part II 10.8
-means the same over both inputs; the differences are D2 and D3.
+means the same over both inputs; the differences are D2 and D3, and D14 for
+a grammar marked `@text`.
 
 ### D2 — What becomes text from `Bytes` is checked as UTF-8 where it becomes text.
 
@@ -170,6 +171,32 @@ A read-only mapping with no `Cleanup` and nothing observable attached may be
 left to the kernel at exit - the one relaxation of "cleanup always runs"
 ([ADR-297](adr-297.md)), by proof of non-observability, not by a flag. It is an
 allowance; [ADR-014](adr-014.md) records that it is not taken.
+
+### D14 — A grammar for a text format checks its `Bytes` input once and cuts it at text positions.
+
+A grammar marked `@text` describes a format that is text throughout (YAML,
+JSON, TOML). Over a `Bytes` input such an entry checks the whole input as
+UTF-8 once, before the parse, with D3's error at the first byte that is not
+UTF-8. From there it parses the input as text: `here` and `span(p)` are
+`text::Pos` and `text::Match` of it (ADR-374 D7), and an element that yields
+text cuts at those positions with no check of its own (ADR-374 D8). D2 stays as
+it is for a grammar without `@text`, so a binary format is never refused whole.
+
+Over a stream (ADR-stream-buffers-v1) the check runs once per stream buffer,
+when it is filled. A UTF-8 sequence cut by the end of a buffer is not checked
+there; it moves with the rest of the token to the start of the next buffer
+(ADR-stream-buffers-v1 D8) and is checked whole. A `@text` entry called with a
+`String` checks nothing: the text was checked when it was made.
+
+Why: on the yaml benchmark the check per cut cost 2.94 % of the instructions
+(#1934), every scalar, key and tag checked again where it became text and
+overlapping cuts checked more than once. One vectorised check of the whole
+input costs less than the cuts, and ADR-374 already says how a text, once
+checked, is cut without a second check. Rejected: a package checking its input
+itself and entering the grammar over a `String` (every text format repeats the
+step, and a stream has no `String` to enter with); a flag on `Bytes` that it was
+made from text (a property of a value standing in for a property of the
+format); keeping D2 for every format (a check per cut, paid again on overlap).
 
 ## 5. Consequences
 
