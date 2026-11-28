@@ -4,10 +4,10 @@
 fn main() throws {
 	let d = "a"
 	let mut files = [("x", d + "1")]
-	for n in 2..3 { files.push((f"s{n}", d + "2")) }
+	for n in 2..<4 { files.push((f"s{n}", d + "2")) }
 	for (name, t) in files { println(f"{name} {t}") }
 	let mut names = ["x", "y"]
-	for n in 2..3 { names.push(f"s{n}") }
+	for n in 2..<4 { names.push(f"s{n}") }
 	for name in names { println(name) }
 	let mut counted = [("one", 1)]
 	counted.insert(0, (f"zero{d}", 0))
