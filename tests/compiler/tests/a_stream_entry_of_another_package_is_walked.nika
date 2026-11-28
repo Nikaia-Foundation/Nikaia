@@ -1,4 +1,4 @@
-// #1505: a program walks another package's `@stream` entry (ADR-grammar-typed-read-v1
+// #1505: a program walks another package's `@stream` entry (ADR-grammar-typed-read-v2
 // D7): the call is a sequence of the package's item type, walked through the
 // function the package writes beside its `pub grammar`, since the engine's
 // reader is that crate's alone (#1464). A `break` stops the walk, and the

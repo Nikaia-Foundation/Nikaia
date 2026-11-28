@@ -2844,7 +2844,7 @@ impl EmitState {
     }
 
     /// **A call that hands a reflected field to a function** (Part II 10.3,
-    /// ADR-grammar-typed-read-v1 D4): it goes to the copy for the field the binding stands
+    /// ADR-grammar-typed-read-v2 D4): it goes to the copy for the field the binding stands
     /// at in this turn, and the field is no argument of it.
     fn emit_call_field_copy[H: EmitHost](ref self, world: ref EmitWorld, mut walk: EmitWalk, mut out: EmitOut, host: ref H, func: ref Expr, args: ref Vec[Expr], depth: i64, flow: EmitFlow, scope: ref EmitScope) -> bool sync throws {
         let callee: String = match func {
@@ -2926,7 +2926,7 @@ impl EmitState {
     }
 
     /// **`path::f[T](…)`, the type parameters of a function reached by a
-    /// path** (ADR-330 D9, ADR-grammar-typed-read-v1 D11): `::<T>`, written after the
+    /// path** (ADR-330 D9, ADR-grammar-typed-read-v2 D11): `::<T>`, written after the
     /// callee's name, where `base` is a path to a function of a ledger whose
     /// signature names one type parameter and every type written is a name or a
     /// type no expression spells (#1079);

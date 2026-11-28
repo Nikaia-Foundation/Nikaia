@@ -593,7 +593,7 @@ impl EmitState {
                 }
             },
             Stmt::Expr(expr) => self.emit_stmt_expr(world, walk, out, host, expr, span, depth, tail, here, scope),
-            // **An item handed to a `@stream` entry's walk** (ADR-grammar-typed-read-v1
+            // **An item handed to a `@stream` entry's walk** (ADR-grammar-typed-read-v2
             // D7, amended 2026-11-18, #2061): the action reaches the engine's
             // sink through its context (winnow-grammar ADR 28), which holds
             // the item until the parse takes what emitted it. The entry's
@@ -1424,7 +1424,7 @@ impl EmitState {
         } else {
             "is walked by a `for` that can't run inside the parser's walk"
         }
-        // **A step that can fail is bound before it is unwrapped** (ADR-025
+        // **A step that can fail is bound before it is unwrapped** (ADR-loop-failure-v1
         // D1): a `_` there takes a hidden name, which `let _ = _?` cannot read.
         let fallible = self.facts.fallible_loops.contains(at)
         let mut each: Vec[String] = []
@@ -1476,7 +1476,7 @@ impl EmitState {
         // D1): the sequence is bound once and stepped with a `.next().await`.
         // Off the checker's set and not off the shape, as the `?` below is.
         if self.facts.pausing_loops.contains(at) {
-            // ADR-025 D1's `?`: a step that can fail fails the enclosing
+            // ADR-loop-failure-v1 D1's `?`: a step that can fail fails the enclosing
             // function.
             let mut unwrap: String? = null
             let lent_item = if self.facts.lent_stream_loops.contains(at) { "&" } else { "" }
@@ -1544,7 +1544,7 @@ impl EmitState {
             }
         }
         out.push(" ")
-        // ADR-025 D1: a step that can fail fails the enclosing function.
+        // ADR-loop-failure-v1 D1: a step that can fail fails the enclosing function.
         let mut unwrap: String? = null
         // A `@stream` call's item is lent from the input (#2708): the step
         // is held for the turn, and the name is a reference to it.
@@ -1580,7 +1580,7 @@ impl EmitState {
     }
 
     /// **Whether a `for` runs its body as the parser's `each`**
-    /// (ADR-grammar-typed-read-v1 D7, #2708): its iterable is the call of a
+    /// (ADR-grammar-typed-read-v2 D7, #2708): its iterable is the call of a
     /// `@stream` entry, of this file's grammar or a package's, in a function
     /// that fails into its own channel, outside a `catch` (whose guarded half
     /// the closure could not break out to), and whose body does not pause
@@ -1634,7 +1634,7 @@ impl EmitState {
     }
 
     /// **The body of a `for` over a `@stream` call is the parser's `each`**
-    /// (ADR-grammar-typed-read-v1 D7, #2708): no thread and no channel. The
+    /// (ADR-grammar-typed-read-v2 D7, #2708): no thread and no channel. The
     /// call's lowering lends the input and wraps `walk.each_body` in the
     /// closure the engine calls with each item as `__wg_one`. In it, the body
     /// runs as a `for` over that one item, so a `break` and a `continue` are
@@ -1665,7 +1665,7 @@ impl EmitState {
             allowed = "#[allow(unused_mut)] "
         }
         let bound = emit_stmt_tuple_pattern(names, shape)
-        // **The item is lent from the input** (ADR-grammar-typed-read-v1 D7,
+        // **The item is lent from the input** (ADR-grammar-typed-read-v2 D7,
         // #2708): bound to the engine's reference, never a copy, where the
         // checker lends it; a `mut` head owns a copy of it.
         let lent = self.facts.lent_stream_loops.contains(at)

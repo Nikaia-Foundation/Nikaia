@@ -2610,7 +2610,7 @@ fn check_core_stmt_for[H: CheckHost](mut state: CheckState, world: ref CheckWorl
         state.facts.owned_loops.insert(span.start as i64)
     }
     // **A `for` over a `@stream` call lends each item from the input**
-    // (ADR-grammar-typed-read-v1 D7, ADR-views-v4 D5, #2708): the item is a
+    // (ADR-grammar-typed-read-v2 D7, ADR-views-v4 D5, #2708): the item is a
     // view, as a list's element is in a walk over the place, so one kept past
     // its turn is copied with `.clone()`. A `mut` head owns a copy of it.
     let streamed = !mutable && bindings.len() == 1 && shape.len() == 0 && a_sequence_type(over) && (grammar_a_stream_call(world, iter) || check_core_stmt_a_stream_let_walked(state, world, iter, span))
@@ -2895,7 +2895,7 @@ fn check_core_stmt_jump(mut state: CheckState, word: ref String, span: ref Span)
     return Ty::Unknown
 }
 
-/// **A `let` bound to a `@stream` call** (ADR-grammar-typed-read-v1 D7,
+/// **A `let` bound to a `@stream` call** (ADR-grammar-typed-read-v2 D7,
 /// #2708): one name, no type, no `mut`, and every value handed to the call a
 /// literal or a name that cannot change, so that the call made where the
 /// `for` that walks the name stands reads what it would have read here. A
@@ -2998,7 +2998,7 @@ fn check_core_stmt_a_pending_task(mut state: CheckState, world: ref CheckWorld, 
     }
 }
 
-/// **`emit item`** (ADR-grammar-typed-read-v1 D7, amended 2026-11-18, #2061): only in
+/// **`emit item`** (ADR-grammar-typed-read-v2 D7, amended 2026-11-18, #2061): only in
 /// the action of a rule a `@stream` entry reaches (`NK1371`), and the item
 /// has the entry's item type. Whether the parse could still undo it is the
 /// grammar's question (`grammar_emits_undone`, `NK1370`).
@@ -3007,7 +3007,7 @@ fn check_core_stmt_emit[H: CheckHost](mut state: CheckState, world: ref CheckWor
     match state.emitting {
         item => state.expect_type(world, found, item.clone(), span, "argument", fn(was, wanted) { f"This `emit` hands over `{was}`, but the `@stream` entry's items are `{wanted}`." }),
         null => {
-            let notes: Vec[String] = ["An item goes to the walk of a `@stream` entry (ADR-grammar-typed-read-v1 D7): `for item in G::entry(input)` sees it as the parser produces it. A function, or a rule no `@stream` entry reaches, has no walk to hand it to."]
+            let notes: Vec[String] = ["An item goes to the walk of a `@stream` entry (ADR-grammar-typed-read-v2 D7): `for item in G::entry(input)` sees it as the parser produces it. A function, or a rule no `@stream` entry reaches, has no walk to hand it to."]
             let help: String = if state.inside_an_action != null { "Reach this rule from a `@stream` entry, `@stream entry rule items -> Item = ...`, or let the action build its value instead." } else { "Return the value instead, or emit it from the action of a rule a `@stream` entry reaches." }
             state.findings.push(check_refusal("NK1371", span, "`emit` hands an item to the walk of a `@stream` entry, but no `@stream` entry reaches this place.", notes, help))
         },

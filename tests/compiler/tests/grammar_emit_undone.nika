@@ -1,5 +1,5 @@
 // An `emit` is allowed only where the parse cannot go back past it
-// (ADR-grammar-typed-read-v1 D7, amended 2026-11-18, #2061): the compiler does not hold
+// (ADR-grammar-typed-read-v2 D7, amended 2026-11-18, #2061): the compiler does not hold
 // items back. Each `emit` in rule `line` below is NK1370, for the choice its
 // grammar is named after; `Committed` cuts before what may fail, and passes.
 

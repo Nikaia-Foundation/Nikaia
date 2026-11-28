@@ -1,13 +1,13 @@
 // crates/nikaia-std/src/compiler/toml.nika
 //
-// **TOML read into a declared struct** (ADR-grammar-typed-read-v1, #2602).
+// **TOML read into a declared struct** (ADR-grammar-typed-read-v2, #2602).
 //
 // `Toml::read[T]` reads a TOML document into the struct `T` the caller
 // declares: the struct says which keys there are, which a document must give
 // and which it may leave out, and the grammar reads each key by its field's
 // type (Part II 10.3, `T::kind`). A key the struct does not name, a field
 // given twice, a field missing and a value of the wrong type are refused with
-// the line and column, by `members` (ADR-grammar-typed-read-v1 D3).
+// the line and column, by `members` (ADR-grammar-typed-read-v2 D3).
 //
 // **What it reads.** Comments, blank lines, bare and quoted keys, `[table]`
 // headers at the root, a table also inline (`k = { a = 1 }`), text in double
@@ -25,7 +25,7 @@
 // parser's furthest failure past the key, and `members`' own refusals ("is
 // missing", "is given twice") would lose to it.
 
-/// **A TOML document read into a declared struct** (ADR-grammar-typed-read-v1,
+/// **A TOML document read into a declared struct** (ADR-grammar-typed-read-v2,
 /// #2602): `Toml::read[T](text)` gives the `T` the document describes, or
 /// throws the first place it does not.
 pub grammar Toml {

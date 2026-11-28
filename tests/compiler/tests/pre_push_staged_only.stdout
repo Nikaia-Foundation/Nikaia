@@ -11,6 +11,7 @@ the tools move staged:
   adr-refs green
   badges red
   version red
+  lowered-digest green
   exit 1
 the tools move staged, a builder's run:
   index green
@@ -18,4 +19,5 @@ the tools move staged, a builder's run:
   adr-refs green
   badges stale (the driver's)
   version green
+  lowered-digest green
   exit 0

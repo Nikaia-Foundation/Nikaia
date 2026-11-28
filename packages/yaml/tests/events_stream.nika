@@ -1,4 +1,4 @@
-// `Yaml::events`: the stream walked as it is parsed (ADR-grammar-typed-read-v1 D7,
+// `Yaml::events`: the stream walked as it is parsed (ADR-grammar-typed-read-v2 D7,
 // #1443), each event handed over one at a time, owned. Every block of
 // `events.nika` again, with the same output: the events and spans of the
 // tree's walk, `events(documents(input))`.

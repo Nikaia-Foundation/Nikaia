@@ -296,7 +296,7 @@ fn check_program_unroll[H: CheckHost](mut state: CheckState, world: ref CheckWor
 }
 
 /// **Each copy of a function that takes a reflected field** (Part II 10.3,
-/// ADR-grammar-typed-read-v1 D4), walked at its field as a turn of the loop is; what a
+/// ADR-grammar-typed-read-v2 D4), walked at its field as a turn of the loop is; what a
 /// copy calls with its field asks for more copies, walked in the next round.
 fn check_program_field_copies[H: CheckHost](mut state: CheckState, world: ref CheckWorld, host: ref H) sync {
     let mut walked: collections::BTreeSet[(String, String)] = collections::BTreeSet()

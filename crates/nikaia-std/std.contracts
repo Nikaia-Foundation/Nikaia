@@ -6168,7 +6168,7 @@ signature = "(self: ref io::IoError) -> String"
 
 # A step of this one can **fail**, and that is a fact a caller cannot get from
 # anywhere else: a `for` over it is a place the enclosing function can fail
-# from, and the compiler makes that function say `throws` (ADR-025 D1, `NK2701`).
+# from, and the compiler makes that function say `throws` (ADR-loop-failure-v1 D1, `NK2701`).
 # What a `std` call fails with.
 #
 # Part I 7.1's error type, for the library: `NotFound(what)` where the thing is

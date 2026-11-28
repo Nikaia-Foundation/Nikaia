@@ -517,7 +517,7 @@ fn a_hole_that_does_not_parse_is_not_the_checkers_business() {
     assert_eq!(finding.span.start, 23, "{finding:?}");
 }
 
-// --- a loop whose step can fail (ADR-025) ------------------------------------
+// --- a loop whose step can fail (ADR-loop-failure-v1) ------------------------------------
 
 /// `NK2701`: a turn of the loop reads, a read can fail, and the function does
 /// not say so.
@@ -555,7 +555,7 @@ fn a_loop_that_can_fail_is_fine_where_the_failure_may_leave() {
 
 /// The stream may be named first, and it is the same loop.
 ///
-/// ADR-025 D7: this is why the emitter asks the type checker rather than
+/// ADR-loop-failure-v1 D7: this is why the emitter asks the type checker rather than
 /// matching on the name `io::lines` - the name is not there to match.
 #[test]
 fn naming_the_stream_first_does_not_hide_it() {
@@ -838,12 +838,12 @@ fn the_type_of_a_literal_is_read_off_its_first_character() {
     assert!(findings("fn label() -> ref String { return \"{ a brace }\" }").is_empty());
 }
 
-// --- a written call that can fail (ADR-023 D8, ADR-025 D1) -------------------
+// --- a written call that can fail (ADR-023 D8, ADR-loop-failure-v1 D1) -------------------
 
 /// `NK2605`: the function calls something that can fail and declares nothing.
 ///
 /// The same rule as `NK2701` one line earlier in the block, and the case the
-/// rule was generalised *from*: ADR-025 D1 says an implicit fallible call
+/// rule was generalised *from*: ADR-loop-failure-v1 D1 says an implicit fallible call
 /// "fails the enclosing function, exactly as a written call would" - and the
 /// written call had no code. So a caller lowered in silence, and the ledger
 /// then published `signature = "() -> String"` with no `throws` at all - a
@@ -937,7 +937,7 @@ fn a_method_that_can_fail_is_the_same_rule() {
 /// where the function declares `throws`, and this is what guarantees the `?`
 /// always has somewhere to go. An inference that gave `record` a `throws` it
 /// never wrote would have made the lowering work and the ledger lie (ADR-023
-/// D1, ADR-025 D1), so the refusal is load-bearing rather than a leftover.
+/// D1, ADR-loop-failure-v1 D1), so the refusal is load-bearing rather than a leftover.
 #[test]
 fn the_refusal_does_not_weaken_when_the_method_call_propagates() {
     let body = "enum ZuVoll { Voll }\n\

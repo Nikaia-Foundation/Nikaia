@@ -258,7 +258,7 @@ whether the value is that variant; what a variant carries is read with a
 `NK1171`.
 
 **A reflected field is a `meta::Field`, and a function may take one**
-([ADR-grammar-typed-read-v1](adr/adr-grammar-typed-read-v1.md) D4). `fn wire_name(f: meta::Field) ->
+([ADR-grammar-typed-read-v2](adr/adr-grammar-typed-read-v2.md) D4). `fn wire_name(f: meta::Field) ->
 String?` is a build-time function over a field: its parameter is `comptime` by
 its type (writing the word changes nothing), so each call is made with the
 field of an unrolled turn and calls the copy made for that field
@@ -353,7 +353,7 @@ be taken for, and every arm is checked. Each type's copy holds only the arm it
 takes. In an arm whose pattern names `Map(K, V)` or `List(E)`, `T()` is the
 empty collection of whatever type `T` is, a `HashMap`, a `BTreeMap` or a `Vec`,
 made in each copy; outside such an arm `T()` is refused with `NK1117`
-([ADR-grammar-typed-read-v1](adr/adr-grammar-typed-read-v1.md) D14). A `meta::Type`
+([ADR-grammar-typed-read-v2](adr/adr-grammar-typed-read-v2.md) D14). A `meta::Type`
 exists only while the program is built: one that would
 reach the running program is refused with `NK1231`.
 
@@ -439,7 +439,7 @@ The `dsl` keyword embeds **foreign syntax** in a Nikaia file: SQL, HTML, regex, 
 
 **How a row's fields are named** ([ADR-database-v1](adr/adr-database-v1.md) D12, D13, D14, D22). The row is the record the grammar describes. A field whose type is a `Record` is a namespace, reached through it (`u.a.id`); a field one level down is also reached by its own name (`u.name`) where nothing else in the row answers to that name, and reading a shared short name is `NK1107`, whose help names the full paths. Deeper fields are reached only by their full path. A database driver gives each alias of the query, or its table, a namespace holding its columns, and a column named with `AS` a field of the row; a column whose name cannot be a field is refused at the query, asking for `AS`. The grammar reads the statement and the schema; it names no table, and the compiler knows records, not tables. The schema is a build-time argument of the block, `dsl sqlite::Sql(schema: APP) { … } eod`, resolved from a `comptime` value. A column the schema lacks is refused by the grammar at the query, while the program is built. The compiler does not understand SQL; the driver owns the grammar, and a vendor's database is a package.
 
-**A block may name the struct its rows are** ([ADR-database-v1](adr/adr-database-v1.md) D15-D19): `dsl sqlite::Sql(schema: APP) -> Contact { … } eod`, and each row is a `Contact`. Columns match fields by name, never by position: a field of a scalar type matches the flat column of its name, a field of a struct type matches the namespace of its name, by the same rules. Every column needs a field (`NK1219`) and every field a column (`NK1220`); `extra_columns: true` leaves a column without a field unread, and `missing_fields: true` makes a `T?` field without a column `null`. Both are the compiler's, taken from any block with `-> T` and never handed to the grammar. A flat field whose name two tables' columns share is `NK1222`. A column that may be `NULL` goes only into a `T?` field (`NK1221`); one that cannot may go into either. A `NULL` that reaches a field that is not a `T?` while the program runs makes `execute` fail with an error naming the field, the column and its table. A field is a scalar, its `T?`, or a struct for a group; anything else is `NK1218`. These are the mapping rule of 10.8's `members[S]` with SQL's settings: the strictest, checked while building ([ADR-grammar-typed-read-v1](adr/adr-grammar-typed-read-v1.md) D9).
+**A block may name the struct its rows are** ([ADR-database-v1](adr/adr-database-v1.md) D15-D19): `dsl sqlite::Sql(schema: APP) -> Contact { … } eod`, and each row is a `Contact`. Columns match fields by name, never by position: a field of a scalar type matches the flat column of its name, a field of a struct type matches the namespace of its name, by the same rules. Every column needs a field (`NK1219`) and every field a column (`NK1220`); `extra_columns: true` leaves a column without a field unread, and `missing_fields: true` makes a `T?` field without a column `null`. Both are the compiler's, taken from any block with `-> T` and never handed to the grammar. A flat field whose name two tables' columns share is `NK1222`. A column that may be `NULL` goes only into a `T?` field (`NK1221`); one that cannot may go into either. A `NULL` that reaches a field that is not a `T?` while the program runs makes `execute` fail with an error naming the field, the column and its table. A field is a scalar, its `T?`, or a struct for a group; anything else is `NK1218`. These are the mapping rule of 10.8's `members[S]` with SQL's settings: the strictest, checked while building ([ADR-grammar-typed-read-v2](adr/adr-grammar-typed-read-v2.md) D9).
 
 **Example: Embedding SQL**
 SQL written in a `dsl` block is verified while the program is built, against the
@@ -648,7 +648,7 @@ grammar Yml {
 }
 ```
 
-**A rule may take types** ([ADR-grammar-typed-read-v1](adr/adr-grammar-typed-read-v1.md) D1, D2), in
+**A rule may take types** ([ADR-grammar-typed-read-v2](adr/adr-grammar-typed-read-v2.md) D1, D2), in
 brackets before its values: `entry rule read[T] -> T = v:Value[T] eof -> { v }`.
 A call of the entry writes them, `Json::read[Contact](bytes)`, and a rule hands
 them on, `Value[A]`; a bound may stand on one (`[S: Struct]`), and a value
@@ -678,7 +678,7 @@ pub grammar Json {
 }
 ```
 
-**`members[S]` builds a struct, and the compiler owns it** ([ADR-grammar-typed-read-v1](adr/adr-grammar-typed-read-v1.md) D3-D5).
+**`members[S]` builds a struct, and the compiler owns it** ([ADR-grammar-typed-read-v2](adr/adr-grammar-typed-read-v2.md) D3-D5).
 `members[S](key, value, sep; name:, null:, unknown:)` reads members `key value`
 separated by `sep`, in any order, and yields an `S`. `value` is a rule with
 `_` for its type, applied with each field's type. `name:` is a build-time
@@ -716,9 +716,8 @@ without an action, as a `par_fold`'s is: exactly one element, through its
 sequences and groups, repeats a rule of that type (`item*`, `item+`,
 `list(item, ",")`), and the rest is matched and dropped
 (`@stream entry rule events -> Event = "---" event*`); any other body is
-`NK1349`. `@stream` on a rule that is not an entry is refused where it stands. A Rust user of a rust-library also gets `parse_<rule>_reader` over a
-`std::io::Read` where a feature reaches the entry (ADR-393 D4), whose items are an owned form of the item type; a Nikaia entry
-takes `String` or `Bytes`.
+`NK1349`. `@stream` on a rule that is not an entry is refused where it stands. A Nikaia entry takes `String`, `Bytes` or a byte stream (standard input, a file read as a stream, a connection); over a stream its items view the stream's buffers, and every place that holds them past a turn is counted while building or refused ([ADR-stream-buffers-v1](adr/adr-stream-buffers-v1.md)). A Rust user of a rust-library also gets `parse_<rule>_reader` over a
+`std::io::Read` where a feature reaches the entry (ADR-393 D4), whose items are the same views, each carrying a counted handle on its buffer.
 
 **An action may not pause.** A call that can pause is refused where it stands
 with `NK2209`. A fold's `init`, `step` and `merge` are action code. An action

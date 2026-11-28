@@ -1,0 +1,81 @@
+// scripts/pre-push.nika sees two generated records go stale (#2850): a
+// comments-only change through adr-rename.nika passed it and turned develop
+// red, `LOWERED_DIGEST` naming another lowered set and `tests/compiler`'s
+// `nikaia.derived` an old source hash. In a temp repository made of HEAD with
+// this checkout's scripts: a docs file staged skips both checks; a compiler
+// `.nika` staged with the lowered set as it is keeps `lowered-digest` green; a
+// lowered file changed and staged turns it red, naming `nikaia lower-std`; a
+// source of `tests/compiler` changed and staged turns `derived` red, naming
+// the build that records its hashes, and so does a new source the record
+// does not list. The hashes vary with HEAD and are cut from the lines.
+use std::env
+use std::fs
+use std::process
+
+fn toolchain() -> String throws {
+    let exe = env::current_exe()?.display() ?? ""
+    if exe.len() > 0 { return exe }
+    return "target/fast/nikaia"
+}
+
+fn root() -> String throws {
+    return env::current_main()?.parent()?.parent()?.parent()?.parent()?.display() ?? "../.."
+}
+
+fn sh(dir: String, script: String) -> String throws {
+    let out = process::run("sh", ["-c", f"set -e; {script}"]; dir: dir)
+    if !out.ok { println(f"setup failed: {script}\n{out.stderr}") }
+    return out.stdout.trim().clone()
+}
+
+// The lines of the two new checks of a builder's pre-push run, and what they
+// say, without hashes, and its exit code.
+fn steps(nikaia: String, work: ref fs::Root) -> String throws {
+    let out = process::run(nikaia, ["run", "scripts/pre-push.nika"]; dir: work.path().to_text())
+    let mut lines = String()
+    for line in out.stdout.lines() {
+        let shown = line.find(": hashes ")?.start
+        let named = line.find(" names LOWERED_DIGEST ")?.start
+        if line.starts_with("lowered-digest ") || line.starts_with("derived ") || line.starts_with("run `") || line.contains("/src/") {
+            let cut = match (shown, named) {
+                (null, null) => line.clone(),
+                (null, at) => f"{line.before(at)} names another LOWERED_DIGEST than the staged set hashes to",
+                (at, _) => f"{line.before(at)}: hashes otherwise than recorded",
+            }
+            lines.push_str(f"  {cut}\n")
+        }
+    }
+    return f"{lines}  exit {out.code}"
+}
+
+fn main() throws {
+    let tmp = fs::scratch()
+    let repo = root()
+    let nikaia = toolchain()
+    let work = tmp.join("work")
+    let dir = work.path().to_text()
+    let id = "git config user.email t@t; git config user.name t; git config commit.gpgsign false"
+    let tool = "crates/nikaia-std/src/compiler/fmt.nika"
+    let lowered = "crates/nikaia-std/src/compiler/lowered/fmt.rs"
+    let source = "tests/compiler/src/list_beside_caller.nika"
+    // As pre_push_staged_only.nika: this checkout's objects, HEAD's tree in
+    // the index, only the files the test changes written out.
+    let objects = sh(repo.clone(), "realpath $(git rev-parse --git-path objects)")
+    sh(tmp.path().to_text(), f"git init -q -b develop work; echo {objects} > work/.git/objects/info/alternates")
+    sh(dir.clone(), f"git read-tree $(git -C {repo} rev-parse HEAD^{{tree}}); git checkout-index README.md {tool} {lowered} {source}; mkdir -p scripts; s=\"scripts/pre-push.nika scripts/slot.nika scripts/check-adr-refs.nika scripts/bump.py scripts/badges.py scripts/self_hosting.py\"; for f in $s; do cp {repo}/$f $f; done; {id}; git add $s; git commit -q -m base")
+    sh(dir.clone(), "echo note >> README.md; git add README.md")
+    println("a docs file staged:")
+    println(steps(nikaia.clone(), work))
+    sh(dir.clone(), f"echo '// a comment' >> {tool}; git add {tool}")
+    println("a compiler source staged, the lowered set as it is:")
+    println(steps(nikaia.clone(), work))
+    sh(dir.clone(), f"echo '// a comment' >> {lowered}; git add {lowered}")
+    println("a lowered file changed and staged:")
+    println(steps(nikaia.clone(), work))
+    sh(dir.clone(), f"git reset -q HEAD -- {tool} {lowered}; echo '// a comment' >> {source}; git add {source}")
+    println("a source of tests/compiler changed and staged:")
+    println(steps(nikaia.clone(), work))
+    sh(dir.clone(), f"git reset -q HEAD -- {source}; echo 'fn f() {{}}' > tests/compiler/src/added.nika; git add tests/compiler/src/added.nika")
+    println("a new source of tests/compiler staged:")
+    println(steps(nikaia, work))
+}

@@ -1,0 +1,258 @@
+# ADR-loop-failure-v1: A Loop Can Fail, and the Rule Was Already Written
+
+**Status:** Accepted
+**History:** the record this one replaces is archived in [`docs/history/adr`](../../history/adr/README.md); D4 changed November 28, 2026 (owner, #2834)
+**Related:** [ADR-297](adr-297.md) D1, D4 and Part I 6.4 (a block's end may fail —
+the same rule, one line earlier), [ADR-023](adr-023.md) D8 (the events nothing
+marks), [ADR-020](adr-020.md) (the ledger D6 extends),
+[ADR-024](adr-024.md) (the checker D7 asks)
+
+## 1. Context
+
+Part III 17.1 specified four streaming functions. They are not one problem.
+They are two, and only one is a question about the language.
+
+### 1.1 What actually goes wrong
+
+```nika
+fn count_rows(path: &str) -> i64 throws {
+    let mut n = 0
+    for line in fs::lines(path) { n += 1 }
+    return n
+}
+```
+
+Suppose the read fails at line three — a bad sector, a dropped mount, a byte
+that is not UTF-8. The loop must get *something* from the stream. An iterator's
+step answers with two cases, a value or an end. There are **three**: here is a
+line, there are no more, and *I could not find out*.
+
+Press three cases into two and "I could not find out" becomes "there are no
+more". Then `count_rows` **returns 2, successfully**. No `catch` fires, the
+`throws` is never reached, and a ten-million-line file reports 2 — which the
+caller cannot tell from a two-line file.
+
+### 1.2 The specification already refuses this, one line earlier
+
+Part I 6.4 asks the identical question about the *closing brace* of a block. A
+resource's `cleanup` runs there, nobody wrote the call, it appears in no
+signature, and it can fail. The answer is not subtle:
+
+> **A cleanup error is an error.** The cleanup is a call the compiler writes,
+> and it is answered like one.
+
+So the language already decided what an implicit call that can fail does, for
+one case; the rule is general.
+
+## 2. The two walls
+
+Independent, and separating them is most of the work here.
+
+**Wall A — `for` performs a call that no signature declares.** A failure is
+announced at a **declaration** and travels at a **call**, and both need
+something written. `for line in xs { }` performs a step per turn; the programmer
+wrote no call and the step is in no signature, so there is nowhere for `throws`
+to attach. Exactly the shape of the closing brace in 6.4.
+
+**Wall B — an iterator may not hand out views into a buffer it owns.** Not about
+failure at all, and it stands even after Wall A falls.
+
+```nika
+let data = fs::map(&path)      // `data` owns the pages
+for line in data.lines() { }   // the iterator borrows them
+```
+
+works, because the views point into something the iterator does **not** own.
+`fs::lines(path)` cannot: one call opens the file *and* yields views, so the
+iterator owns the buffer and hands out references into itself. That is a lending
+iterator, and the language below cannot express one.
+
+Not a limitation inherited by accident — it is why Rust's own `BufRead::lines()`
+allocates a `String` per line. And it says something about the specified
+signature: fusing "own a buffer" and "yield views of it" into one value is
+exactly what Nikaia's ownership model keeps apart ([ADR-tether-v1](adr-tether-v1.md)). **The
+two-call form is not a workaround for the one-call form. It is the model.**
+
+Nothing in the repository iterates lines. The flagship declares
+`@frame(boundary: "\n")` and folds over the mapped pages — the frame *is* "one
+record per line", and no sequence of lines is ever materialised. Nikaia's answer
+to *process a file line by line* is the grammar protocol, and has been since
+[ADR-grammar-syntax-v1](adr-grammar-syntax-v1.md).
+
+## 3. Decisions
+
+### D1 — An implicit call that can fail propagates, and the compiler makes you declare it.
+
+Stated once, generally, instead of once per case:
+
+> Where the language performs a call the programmer did not write — the
+> `cleanup` at a block's end, the step of a `for` — a failure of that call
+> **fails the enclosing function**, exactly as a written call would. The function
+> must declare `throws`, and the compiler says which implicit call is the reason.
+
+Part I 6.4 is the first case, iteration the second. A third — an operator or a
+conversion that can fail — is covered in advance rather than reopening the
+question.
+
+### D2 — Nothing marks the loop, for the reason nothing marks the call.
+
+This adds the fourth row to [ADR-023](adr-023.md) D8's table of invisible
+control-flow events, and takes the same answer: nothing marks it.
+
+Swift writes `for try await line in …` and Zig `while (try it.next())`; both are
+D1 with a marker on it. Nikaia takes the answer and leaves the marker, because
+half-visibility is what D8 rejected, and four unmarked events are more
+consistent than three unmarked and one marked.
+
+The cost is D8's cost: a reader of a diff cannot see it. The ledger records it,
+and tooling can show all four.
+
+### D3 — `fs::lines` and `fs::bytes` are removed from the specification.
+
+Not deferred — **removed**, the same move [ADR-grammar-parallel-v1](adr-grammar-parallel-v1.md) made by
+dissolving its gap rather than filling it:
+
+* the specified form is the one Wall B forbids, and the form that works is
+  `fs::map(path)` + `.lines()`, which exists and is what the examples use;
+* the properties 17.1 promised them — tethered views, no allocation per line,
+  constant memory — are exactly the properties `fs::map` has, because they are
+  properties of a *mapping*;
+* and the language's own answer to line-oriented input is `@frame`.
+
+A file is seekable and mappable. Fusing "open it" and "walk it" into one call
+buys nothing here and costs the separation the tethering model rests on.
+
+What replaces them in the specification is a sentence saying so and pointing at
+`map` and `@frame` — because a reader looking for `lines` needs to be told where
+it went, not to find a gap.
+
+### D4 — `std::io`'s streams stay, because a pipe is genuinely different.
+
+Standard input is not seekable and cannot be mapped: its bytes do not exist
+until they are read. There is no way to move the failure to the call, so Wall A
+is real here and D1 answers it.
+
+Wall B does not arise as it did: `io::lines()` yields views of the stream's
+buffers, held as ADR-stream-buffers-v1 says (owner, November 28, 2026, #2834):
+a line used in the loop's body is a borrow, a line kept longer is counted or
+refused (`NK2308`), and `.clone()` keeps one past that.
+
+### D5 — `NK2701`: a loop whose step can fail, in a function that does not declare `throws`.
+
+A new range, `NK27xx` — *implicit calls* — because that is what the family is.
+
+```text
+error[NK2701]: this function can fail because reading the next line can fail
+  --> count.nika:3
+   |
+ 3 |     for line in io::lines() {
+   |     ^ each turn of this loop reads from standard input, and a read can fail
+   |
+  help: declare the error:  fn count_rows() -> i64 throws
+```
+
+The shape is that of `NK2605` for a failing cleanup, deliberately: it is the
+same rule, and two diagnostics for one rule should read as one thing.
+
+### D6 — The ledger says which types iterate fallibly.
+
+A type contract gains `iterates = "throws"`, read exactly as `sync` and
+`signature` are — the caller cannot see the body, so the ledger is where the
+fact lives.
+
+One key, as the ledger's other extensions were — the property it was designed
+around.
+
+### D7 — Stage 0 lowers the propagation with the type checker's answer, not with a name.
+
+The emitter asks [ADR-024](adr-024.md)'s checker, which infers the type of the
+iterator expression and looks it up in the ledger — so
+
+```nika
+let stream = io::lines()
+for line in stream { … }
+```
+
+is the same to it as the direct form, because `let` carries the type. Matching
+on the name `io::lines` would have handled one and quietly not the other.
+
+## 4. Prior art
+
+The landscape divides on one axis: **what the language does with errors
+elsewhere.**
+
+| language | answer | what it pays |
+| :--- | :--- | :--- |
+| **Go, classically** | the loop yields values; the error is asked for afterwards | exactly the silent truncation of §1.1 |
+| **Go, since 1.23** | a sequence of pairs | an unwrap per turn |
+| **Rust** | the item *is* a result | an unwrap per turn **and** an allocation per line |
+| **Java** | the checked exception wrapped in an unchecked one | the checking itself |
+| **Python, C#, Kotlin** | the exception propagates from the step | nothing is in the signature |
+| **Swift** | `for try await line in …`, enclosing function `throws` | a marker on the loop |
+| **Zig** | `while (try it.next())` | a marker on the loop |
+
+**Go's classic answer is the counter-example, in production.** Its scanner stops
+at a line over 64 KB by default and reports it only if asked; a caller who does
+not ask sees a shorter file. There are linters whose whole job is to demand that
+line.
+
+**Java is the cautionary one.** It has checked exceptions — failures at the
+declaration, like `throws` — and could not reconcile them with an iterator step
+that declares none. It gave up the checking and wrapped the failure in an
+*unchecked* exception. The language that invented checked exceptions stopped at
+this exact wall.
+
+Nikaia has an advantage Java did not: **`for` is a construct of the language,
+not sugar over an interface users implement.** Java had to fit an existing
+signature; Nikaia gets to say what `for` does, which is D1.
+
+The pattern: a language that *declares* failures and owns its loop arrives at
+propagation. One that carries failures as values arrives at unwrapping. One that
+asks afterwards gets the bug.
+
+## 5. Considered and rejected
+
+* **Treat a failed read as the end of the stream.** §1.1. Refused by Part I
+  6.4's own words about the same failure at the other end of the block.
+* **The same, with the compiler forcing the check afterwards.** Fairer, still
+  wrong: the loop body has already *acted* on truncated data — counted, summed,
+  written rows — before the check is reached. Propagation stops at the failure;
+  a check afterwards stops after the damage.
+* **Make the item a value that may be a failure.** Honest, and it puts an unwrap
+  at the top of every loop over a stream — the shape Chapter 7 exists to remove,
+  added back where a program is most likely to be iterating something large.
+* **Hand the loop body to the stream**, `fs::lines(path) fn { … }`. Wall A
+  dissolves, since it is a call. But `break` and `return` out of the lambda need
+  non-local return, which Kotlin needed `inline fun` for: a large feature bought
+  to avoid a small one, leaving the language with two looping forms.
+* **Keep `fs::lines` and let it allocate per line.** It would work and be a
+  quiet lie: the specification promises tethered views and no allocation, and a
+  program written against that promise would find out in production.
+* **A lending-iterator protocol of Nikaia's own**, lowered to `while let`. It
+  would make `fs::lines` expressible and break [ADR-grammar-lowering-v1](adr-grammar-lowering-v1.md) D2 — every
+  `for` in the language would depend on a protocol the target does not have.
+  Worth revisiting when Stage 1 owns its backend; not worth it to keep one
+  function that has no caller.
+
+## 6. Consequences
+
+**A `for` is a fourth place a function can fail from**, and Part I 3.3 says so.
+
+**`fs::lines` and `fs::bytes` are gone from Part III 17.1**, with a sentence
+saying where to look instead. The availability table loses their `wasm32-*` row
+as well — the WASM question they answered comes back with the target.
+
+**`io::lines()` reads an unbounded input in constant memory.**
+
+**The emitter reads the type checker's answers** (D7): the checker that reports
+([ADR-024](adr-024.md) D3) is also what tells the emitter what to emit.
+
+## 7. How Stage 0 lowers it
+
+* `NK2701` is reported with the source line and a caret, in the shape of a
+  failing cleanup's `NK2605`.
+* `for line in io::lines() { … }` lowers to a loop whose step propagates, and
+  the type checker resolves the stream through `let`, so naming it first is the
+  same loop.
+* One binding per fallible loop. A stream of pairs does not exist in `std`, and
+  a `for (a, b)` over one is refused rather than guessed at.

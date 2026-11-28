@@ -1,5 +1,5 @@
 // A walk of `Yaml::events` whose items are kept past the loop
-// (ADR-grammar-typed-read-v1 D7, #2708): the `for` runs its body as the
+// (ADR-grammar-typed-read-v2 D7, #2708): the `for` runs its body as the
 // parser's `each`, and an item views the input it is parsed from, so one kept
 // beyond its turn is a copy, `.clone()`.
 use yaml

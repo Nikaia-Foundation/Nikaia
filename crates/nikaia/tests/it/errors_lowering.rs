@@ -244,7 +244,7 @@ fn a_written_call_propagates_its_failure() {
 /// one type checker (ADR-288), and it is the one that knows `s` is a `Stats` and
 /// that `Stats::add` carries `throws`. It writes that answer down as
 /// `check::Checked::fallible_methods` and the emitter looks it up, exactly as
-/// `fallible_loops` has been handed over since ADR-025 D7.
+/// `fallible_loops` has been handed over since ADR-loop-failure-v1 D7.
 ///
 /// Run in `tests/language/src/errors_lowering.nika`, because `Ok(s.add(1))` is
 /// a `Result` inside an `Ok` and only `rustc` says so.
@@ -524,7 +524,7 @@ fn a_function_that_cannot_fail_has_no_entry() {
 /// **Which of the two answers, and why this one.** The inference is *not*
 /// extended to give `ruft` a `throws` it never declared, the way `sync` is
 /// inferred. ADR-023 D1 derives the error **set** and leaves the declaration
-/// in the source - "in source, `throws` is bare" - and ADR-025 D1 says what
+/// in the source - "in source, `throws` is bare" - and ADR-loop-failure-v1 D1 says what
 /// happens when a body contradicts it in so many words: "the function must
 /// declare `throws`, and the compiler says which implicit call is the reason".
 /// Inferring the keyword would also have to know about `catch`, which this

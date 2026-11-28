@@ -4,5 +4,5 @@ error[NK1250]: `Lit::maybe[f64]` can't read a `f64`: no arm of the `match` in `V
  16 | 	let x: f64? = Lit::maybe[f64](Bytes("null".bytes().collect())) catch {
     |                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
     |
-    = note: `Value` chooses its pattern by `T::kind` (ADR-grammar-typed-read-v1 D6), reached by `Lit::maybe[f64]` then `Value[f64?]` then `Value[f64]`.
+    = note: `Value` chooses its pattern by `T::kind` (ADR-grammar-typed-read-v2 D6), reached by `Lit::maybe[f64]` then `Value[f64?]` then `Value[f64]`.
     = help: Add an arm for `F64` to the `match` in `Value`, or call it with a type an arm takes.

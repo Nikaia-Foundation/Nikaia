@@ -8,4 +8,4 @@ version = 1
 toolchain = "rustc 1.97.0 (2d8144b78 2026-07-07)"
 
 [units."src/main.nika"]
-source = "1f7565defcc9e68689cc04493b8d24c26f2b9c82d41ba9fc80d6b3339e7fa1d6"
+source = "f13d182bdfe2b9ec883bd42f69eafc1fddab3298cab85e6c338c0194116b1adf"

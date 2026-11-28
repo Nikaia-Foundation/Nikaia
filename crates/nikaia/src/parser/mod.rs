@@ -863,7 +863,7 @@ pub fn parse_unrefined(input: &str) -> Result<Parsed> {
         comments,
         dumped_source: crate::check::accepted_dump_dir().map(|_| input.to_text()),
     };
-    // ADR-grammar-typed-read-v1 D1: a rule that takes types becomes one rule per list of
+    // ADR-grammar-typed-read-v2 D1: a rule that takes types becomes one rule per list of
     // type arguments, and each call of it the call of its copy.
     expand_grammar_types(&mut parsed)?;
     // ADR-347: a one-variant enum written by its type's name becomes the long
@@ -876,7 +876,7 @@ pub fn parse_unrefined(input: &str) -> Result<Parsed> {
     Ok(parsed)
 }
 
-/// **A rule may take types** ([ADR-grammar-typed-read-v1](../../../../docs/specification/adr/adr-grammar-typed-read-v1.md)
+/// **A rule may take types** ([ADR-grammar-typed-read-v2](../../../../docs/specification/adr/adr-grammar-typed-read-v2.md)
 /// D1, Part II 10.8): each call `G::read[i64](input)` of an entry that takes
 /// types becomes the call of its copy, `G::read__i64(input)`, and the rules
 /// are copied once per list of type arguments (`grammar_types.nika`), so no
@@ -2098,7 +2098,7 @@ grammar! {
                     generics: Vec::new(),
                 }
             }
-          // **Only an entry streams** (ADR-grammar-typed-read-v1 D7): the items are
+          // **Only an entry streams** (ADR-grammar-typed-read-v2 D7): the items are
           // handed to the caller, and only an entry has one.
           | stream_attr frame_attr? KW_RULE
             fail("Only an entry can be `@stream`: its items are handed to the \
@@ -2170,7 +2170,7 @@ grammar! {
                     span: Span::from(_span),
                     args: values.args,
                     config: values.config,
-                    // **A rule may take types** (ADR-grammar-typed-read-v1 D1), in
+                    // **A rule may take types** (ADR-grammar-typed-read-v2 D1), in
                     // brackets before its values: `rule Value[T] -> T`.
                     generics: generics.unwrap_or_default(),
                 }
@@ -2182,7 +2182,7 @@ grammar! {
         // the same thing would be one more thing to know.
         rule rule_label -> String = "#" text:STRING -> { text }
 
-        // **`@stream`** (ADR-grammar-typed-read-v1 D7): the entry hands its items over one
+        // **`@stream`** (ADR-grammar-typed-read-v2 D7): the entry hands its items over one
         // at a time. Its body is the repetition alone, as a `par_fold` is
         // the whole of its rule: no list is built for an action to read.
         rule stream_attr -> () = "@stream" -> { () }
@@ -2281,7 +2281,7 @@ grammar! {
         // **The form without the arrow is refused by name** and not by
         // *expected `->`*, with the caret on the brace the arrow goes in front of.
         rule g_alt -> GrammarAlt =
-            // **A `match` on a kind chooses the pattern** (ADR-grammar-typed-read-v1 D2):
+            // **A `match` on a kind chooses the pattern** (ADR-grammar-typed-read-v2 D2):
             // the alternative is the arm the type takes, chosen per copy.
             c:g_choose -> {
                 GrammarAlt { pattern: c, action: None }
@@ -2320,7 +2320,7 @@ grammar! {
             }
 
         // **`match T::kind { Kind => alternatives … }`** in a rule body
-        // ([ADR-grammar-typed-read-v1](../../../../docs/specification/adr/adr-grammar-typed-read-v1.md)
+        // ([ADR-grammar-typed-read-v2](../../../../docs/specification/adr/adr-grammar-typed-read-v2.md)
         // D2, D6, Part II 10.8): each arm names a kind as an arm of a `match`
         // on a kind does (ADR-330 D4), and holds alternatives with their own
         // actions; `refuse("why")` there needs none. The value is a
@@ -2459,7 +2459,7 @@ grammar! {
           | r:g_ref -> { r }
 
         // **`members[S](key, value, sep; null: N, unknown: U)`**
-        // ([ADR-grammar-typed-read-v1](../../../../docs/specification/adr/adr-grammar-typed-read-v1.md)
+        // ([ADR-grammar-typed-read-v2](../../../../docs/specification/adr/adr-grammar-typed-read-v2.md)
         // D3, Part II 10.8): `value` is a rule with `_` for its type, applied
         // with each field's type; the options name rules. The fields are
         // filled by the copy for a known `S` (`grammar_types.nika`). `name:`
@@ -2725,7 +2725,7 @@ grammar! {
             KW_CONTINUE semi? -> { Stmt::Continue }
 
         // **`emit item` hands one item to a `@stream` entry's walk**
-        // ([ADR-grammar-typed-read-v1](../../../../docs/specification/adr/adr-grammar-typed-read-v1.md)
+        // ([ADR-grammar-typed-read-v2](../../../../docs/specification/adr/adr-grammar-typed-read-v2.md)
         // D7, #2061), in the action of a rule the entry
         // reaches. `emit` is no reserved word, so a call, a field, an index
         // or an assignment of a name `emit` (`emit(x)`, `emit.x`, `emit = 1`)

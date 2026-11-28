@@ -93,7 +93,7 @@ pub fn emit_contracts_state[H: EmitContractsHost, P: EmitHolesHost](host: ref H,
 
     // One type check, both of its answers about where a failure leaves.
     //
-    // ADR-025 D7 for the loops: the type checker knows which `for` iterates
+    // ADR-loop-failure-v1 D7 for the loops: the type checker knows which `for` iterates
     // something whose step can fail, because it infers the iterator's type
     // and reads the ledger. Matching on the name `io::lines` here would
     // have caught the one-line form and quietly missed

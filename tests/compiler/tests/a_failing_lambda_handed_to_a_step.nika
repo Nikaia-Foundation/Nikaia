@@ -1,7 +1,7 @@
 // A lambda that can fail, handed to `map`, `filter` or `for_each`, fails
 // the call where the lambda fails: a list's own `map` and `for_each` at
 // once, a sequence's `map` and `filter` where the walk is taken
-// (`throws = "throws(f)"`, ADR-025 D1). The walk stops at the first
+// (`throws = "throws(f)"`, ADR-loop-failure-v1 D1). The walk stops at the first
 // failure, and nothing after it is computed. It was refused as `NK2606`
 // (#2736).
 struct Bad { why: String }

@@ -2092,7 +2092,7 @@ A call may also name a function's type arguments in brackets, `parse[Config](tex
 the types fill the type parameters in order. The call is warned with `NK1233`
 ([ADR-330](adr/adr-330.md) D9) where a value argument's type could have said
 the type, and not where the brackets are the only place that says it,
-`json::read[Contact](bytes)` ([ADR-grammar-typed-read-v1](adr/adr-grammar-typed-read-v1.md) D11).
+`json::read[Contact](bytes)` ([ADR-grammar-typed-read-v2](adr/adr-grammar-typed-read-v2.md) D11).
 
 **A type may take values as well as types in its brackets** ([ADR-333](adr/adr-333.md)), as
 `Array[f64, 3]` takes its length. A value parameter is marked `comptime` and written with its
@@ -3256,6 +3256,16 @@ each `replace` that works in its source's buffer (ADR-text-reuse-1 D5); the lang
 the same line as an inlay hint there.
 
 There is no struct with lifetime parameters in Nikaia.
+
+**A stream's buffers are not kept without a bound.** A file, a pipe or a
+connection read as a stream reads into a fixed pool of buffers, and its items
+view them. Such a view lives for the turn of the loop that reads it, or in a
+place the compiler counts while building: a fixed number of names, a bounded
+channel to another task. Kept in anything that grows across turns, a list or a
+map of views, it is refused with `NK2308`, whose help names `.clone()`,
+keeping only what is needed, and handing the items to a task. The pool is the
+sum the compiler counted, so it never runs out, and a full channel is the only
+thing that stops the reading ([ADR-stream-buffers-v1](adr/adr-stream-buffers-v1.md)).
 
 **An escape whose buffer cannot be shared is refused.** Where a slice escapes
 and its buffer lives on the stack or came from a foreign library, no tether is

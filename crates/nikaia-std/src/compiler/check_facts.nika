@@ -124,7 +124,7 @@ pub struct CheckFacts {
     pub walks_fields: collections::BTreeMap[String, String],
     pub unrolled_calls: collections::BTreeMap[i64, String],
     /// **The copies of a function that takes a reflected field** (Part II
-    /// 10.3, ADR-grammar-typed-read-v1 D4): keyed by the function and the struct whose
+    /// 10.3, ADR-grammar-typed-read-v2 D4): keyed by the function and the struct whose
     /// fields it is called with, one copy per field.
     pub field_copies: collections::BTreeMap[(String, String), Vec[FieldContract]],
     /// **The kind of each type a copy is made for, or a path names**
@@ -141,7 +141,7 @@ pub struct CheckFacts {
     /// emits the one arm its type takes.
     pub kind_matches: collections::BTreeSet[i64],
     /// **`T()` in a `Map` or `List` arm of a `match` on a kind**
-    /// (ADR-grammar-typed-read-v1 D14), by the callee's id: each copy writes the
+    /// (ADR-grammar-typed-read-v2 D14), by the callee's id: each copy writes the
     /// empty collection of its own type.
     pub kind_constructors: collections::BTreeSet[i64],
     /// The functions that make such a `T()`, each with its parameter: a copy
@@ -168,7 +168,7 @@ pub struct CheckFacts {
     pub pausing_loops: collections::BTreeSet[i64],
     pub owned_loops: collections::BTreeSet[i64],
     /// **The `for`s over a `@stream` call, whose one binding is lent from the
-    /// input** (ADR-grammar-typed-read-v1 D7, #2708), by the `for`'s start:
+    /// input** (ADR-grammar-typed-read-v2 D7, #2708), by the `for`'s start:
     /// the emitter binds the item by reference, never a copy of it.
     pub lent_stream_loops: collections::BTreeSet[i64],
     /// **A `let` bound to a `@stream` call that one `for` walks** (#2708):
@@ -708,7 +708,7 @@ pub struct CheckFacts {
     /// one, so nothing is cloned per call.
     pub lent_rule_values: collections::BTreeSet[String],
     /// **A `@stream` entry whose items are handed over by `emit`**
-    /// (ADR-grammar-typed-read-v1 D7, amended 2026-11-18, #2061), by `Grammar::rule`: its
+    /// (ADR-grammar-typed-read-v2 D7, amended 2026-11-18, #2061), by `Grammar::rule`: its
     /// engine items are `Option<Item>`, the repetition's own values `None` and
     /// each emitted item `Some`, and its walk hands on only the `Some`.
     pub emitting_entries: collections::BTreeSet[String],

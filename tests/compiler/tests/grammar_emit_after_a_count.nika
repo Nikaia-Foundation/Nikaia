@@ -1,6 +1,6 @@
 // A `count(p)` and a `here` cannot fail (zero times is a count), so a call
 // they alone follow before a cut is committed: the `emit`s in rule `word`
-// below pass NK1370's analysis (ADR-grammar-typed-read-v1 D7, amended 2026-11-18, #1443)
+// below pass NK1370's analysis (ADR-grammar-typed-read-v2 D7, amended 2026-11-18, #1443)
 // and run, in the order the parse makes them. Nothing is skipped (`WS`).
 
 struct Item {
