@@ -388,6 +388,20 @@ impl CheckState {
         return found.lent || found.ty.is_a_view()
     }
 
+    /// Whether a name is a tuple a lending walk hands a `for` (#2597): its
+    /// parts are read in place, and one handed over is not this body's.
+    fn a_tuple_a_walk_lends(ref self, name: ref String) -> bool sync {
+        let found = self.binding(name) ?? return false
+        return self.flow.walk_lent_tuples.contains(found.id)
+    }
+
+    /// Whether an expression is a part of such a tuple, `p.1`: a `let` over
+    /// it is a view of the part, as the lowering binds it (`&p.1`).
+    fn a_part_of_a_tuple_a_walk_lends(ref self, world: ref CheckWorld, value: ref Expr) -> bool sync {
+        let path = dotted_path(world, value) ?? return false
+        return path.contains(".") && self.a_tuple_a_walk_lends(a_root_segment(path))
+    }
+
     /// Whether an expression is a name a `let` over a place bound.
     fn a_lent_let(ref self, world: ref CheckWorld, side: ref Expr) -> bool sync {
         let name = match side {
@@ -495,7 +509,7 @@ impl CheckState {
         if node >= 0 {
             stand_in = self.a_part_taken_out(world, path, ty)
         }
-        if path.contains(".") && self.lent_here(root) && stand_in == null {
+        if path.contains(".") && (self.lent_here(root) || self.a_tuple_a_walk_lends(root)) && stand_in == null {
             self.a_part_of_a_loan_handed_over(path, root, to, span)
             return
         }

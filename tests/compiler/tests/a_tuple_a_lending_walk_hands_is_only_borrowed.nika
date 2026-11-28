@@ -1,0 +1,33 @@
+// A tuple a lending walk hands is lent, as one a walk over the place hands
+// is (#2597): `p.1` given to `??` takes it out of a value the body does not
+// own, so it is refused with a `.clone()` help, for `iter()`, for the
+// second name of `enumerate()` and for each side of `zip(..)`, not handed to
+// the language below as a move out of a reference.
+fn size(b: ref Bytes) -> i64 {
+    return b.len()
+}
+
+fn walked(v: ref Vec[(String, Bytes?)]) throws {
+    for p in v.iter() {
+        println(f"{size(p.1 ?? Bytes([]))}")
+    }
+}
+
+fn counted(v: ref Vec[(String, Bytes?)]) throws {
+    for (i, p) in v.iter().enumerate() {
+        println(f"{i} {size(p.1 ?? Bytes([]))}")
+    }
+}
+
+fn zipped(v: ref Vec[(String, Bytes?)], w: ref Vec[i64]) throws {
+    for (p, n) in v.iter().zip(w.iter()) {
+        println(f"{n} {size(p.1 ?? Bytes([]))}")
+    }
+}
+
+fn main() throws {
+    let v: Vec[(String, Bytes?)] = [("a", Bytes([1, 2])), ("b", null)]
+    walked(v)
+    counted(v)
+    zipped(v, [1, 2])
+}

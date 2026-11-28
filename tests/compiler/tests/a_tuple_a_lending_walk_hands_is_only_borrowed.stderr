@@ -1,0 +1,28 @@
+error[NK2106]: `p.1` is given to `??`, but `p` is only borrowed here.
+   --> tests/a_tuple_a_lending_walk_hands_is_only_borrowed.nika:12:9
+    |
+ 12 |         println(f"{size(p.1 ?? Bytes([]))}")
+    |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: `p` belongs to whoever lent it (a parameter without `keep`, a `for` over a list, a `let` over a place), so you can't give a part of it away.
+    = note: Nikaia never makes a copy behind your back.
+    = help: Hand over a copy: `p.1.clone()`.
+error[NK2106]: `p.1` is given to `??`, but `p` is only borrowed here.
+   --> tests/a_tuple_a_lending_walk_hands_is_only_borrowed.nika:18:9
+    |
+ 18 |         println(f"{i} {size(p.1 ?? Bytes([]))}")
+    |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: `p` belongs to whoever lent it (a parameter without `keep`, a `for` over a list, a `let` over a place), so you can't give a part of it away.
+    = note: Nikaia never makes a copy behind your back.
+    = help: Hand over a copy: `p.1.clone()`.
+error[NK2106]: `p.1` is given to `??`, but `p` is only borrowed here.
+   --> tests/a_tuple_a_lending_walk_hands_is_only_borrowed.nika:24:9
+    |
+ 24 |         println(f"{n} {size(p.1 ?? Bytes([]))}")
+    |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: `p` belongs to whoever lent it (a parameter without `keep`, a `for` over a list, a `let` over a place), so you can't give a part of it away.
+    = note: Nikaia never makes a copy behind your back.
+    = help: Hand over a copy: `p.1.clone()`.
+

@@ -232,6 +232,18 @@ impl CheckState {
     }
     // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
     // this was written - see `contracts::sync`.
+    pub(crate) fn a_tuple_a_walk_lends(&self, name: &str) -> bool {
+        let found = match self.binding(name) { Some(__nikaia_value) => __nikaia_value, None => return false };
+        self.flow.walk_lent_tuples.contains(&found.id)
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
+    pub(crate) fn a_part_of_a_tuple_a_walk_lends(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, value: &Expr) -> bool {
+        let path = match dotted_path(world, value) { Some(__nikaia_value) => __nikaia_value, None => return false };
+        path.contains('.') && self.a_tuple_a_walk_lends(&a_root_segment(&path))
+    }
+    // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+    // this was written - see `contracts::sync`.
     pub(crate) fn a_lent_let(&self, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, side: &Expr) -> bool {
         let name = match side {
             Expr::Variable(symbol, _) => { let symbol = *symbol; nikaia_std::block::Text::from(world.words.resolve(symbol).to_string()) },
@@ -304,7 +316,7 @@ impl CheckState {
         }
         let mut stand_in: Option<String> = None;
         if node >= 0 { stand_in = self.a_part_taken_out(world, path, ty); }
-        if path.contains('.') && self.lent_here(&root) && stand_in.is_none() {
+        if path.contains('.') && (self.lent_here(&root) || self.a_tuple_a_walk_lends(&root)) && stand_in.is_none() {
             self.a_part_of_a_loan_handed_over(path, &root, to, span);
             return;
         }

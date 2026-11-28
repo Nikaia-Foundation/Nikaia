@@ -955,7 +955,8 @@ pub(crate) fn check_core_stmt_let<H: CheckHost>(state: &mut CheckState, world: &
     let bytes_view = !mutable && names.len() == 1 && shape.is_empty() && state.a_text_bytes_view(world, value);
     let mut moved_out = false;
     let mut handing_refused = false;
-    if seen_through || element_view == 1 { check_core_stmt_lent_let(state, world, names, span); } else if over_part == 1 && state.takes_away(world, &found) { } else if over_part == 2 && state.takes_away(world, &found) {
+    let over_a_walked_tuple = !mutable && ty.is_none() && names.len() == 1 && shape.is_empty() && state.a_part_of_a_tuple_a_walk_lends(world, value);
+    if seen_through || element_view == 1 || over_a_walked_tuple { check_core_stmt_lent_let(state, world, names, span); } else if over_part == 1 && state.takes_away(world, &found) { } else if over_part == 2 && state.takes_away(world, &found) {
         let to = format!("bound to `{}` by a `let`", nikaia_std::block::Text::from(bound_names.join("`, `")));
         let before = state.findings.len() as i64;
         state.hands_over(world, value, &found, &to, span);
@@ -1760,6 +1761,26 @@ pub(crate) fn check_core_stmt_unwritable_element(state: &CheckState, world: &Che
 
 // sync (Part II, 12.1): pure CPU, cannot pause. Checked before
 // this was written - see `contracts::sync`.
+pub(crate) fn check_core_stmt_lent_walk_parts(state: &CheckState, world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, iter: &Expr, names: i64, shape: &[i64]) -> Vec<bool> {
+    if !shape.is_empty() { return vec![]; }
+    if names == 1 { return vec![check_core_stmt_a_lending_walk(state, iter)]; }
+    if names != 2 { return vec![]; }
+    match iter {
+        Expr::MethodCall { receiver, method, args, .. } => {
+            let receiver = nikaia_std::boxed::open(receiver); let method = *method;
+            let called = format!("{}", world.words.resolve(method));
+            if called == "enumerate" && args.is_empty() { vec![false, check_core_stmt_a_lending_walk(state, receiver)] } else if called == "zip" && args.len() == 1 { vec![check_core_stmt_a_lending_walk(state, receiver), check_core_stmt_a_lending_walk(state, unsafe { nikaia_std::proven::read(&args, (0) as usize) })] } else { vec![] }
+        },
+        _ => vec![],
+    }
+}
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
+pub(crate) fn check_core_stmt_a_lending_walk(state: &CheckState, walk: &Expr) -> bool { !is_a_place(walk) && state.flow.lent_walks.contains(&(id_of(walk) as i64)) }
+
+// sync (Part II, 12.1): pure CPU, cannot pause. Checked before
+// this was written - see `contracts::sync`.
 pub(crate) fn check_core_stmt_from_iter(world: &CheckWorld<'_, '_, '_, '_, '_, '_, '_, '_>, iter: &Expr) -> bool {
     match iter {
         Expr::MethodCall { receiver, method, .. } => { let receiver = nikaia_std::boxed::open(receiver); let method = *method; ::core::convert::identity(match (AsRef::<str>::as_ref(&(world.words.resolve(method))), AsRef::<str>::as_ref(&("iter")), ) { (__nikaia_f0, __nikaia_t, ) => __nikaia_t.len() == __nikaia_f0.len() && __nikaia_t.strip_prefix(__nikaia_f0).is_some() }) || check_core_stmt_from_iter(world, receiver) },
@@ -1899,6 +1920,7 @@ pub(crate) fn check_core_stmt_for<H: CheckHost>(state: &mut CheckState, world: &
         } else { state.a_for_mut_over_a_place(world, iter, &over, span); }
     }
     let streams = check_core_a_stream_call(world, iter);
+    let lent_parts = check_core_stmt_lent_walk_parts(&state, world, iter, bindings.len() as i64, shape);
     let mut frame: Vec<CheckLocal> = vec![];
     let mut at: i64 = 0;
     frame.reserve(bindings.iter().size_hint().0); for b in bindings.iter() {
@@ -1927,10 +1949,12 @@ pub(crate) fn check_core_stmt_for<H: CheckHost>(state: &mut CheckState, world: &
         if streams { state.flow.stream_lines.insert(id); }
         if !lent && name != "_" && (state.flow.lent_walks.contains(&(id_of(iter) as i64)) || element.is_a_view()) && check_owned_text(&bound) { state.flow.lent_text_params.insert(id); }
         state.declared_binding(id, span, &name);
+        let lent_by_the_walk = !lent && !mutable && name != "_" && (lent_parts.len() as i64) > unsafe { nikaia_std::proven::sub::<i64>(at, 1) } && *unsafe { nikaia_std::proven::read(&lent_parts, (nikaia_std::proven::sub::<i64>(at, 1)) as usize) } && check_core_stmt_a_tuple(&element);
         let mut local = CheckLocal::free(name, bound, id);
         local.written_mut = name_mut;
         if mut_view { local.view_of = nikaia_std::index::or(dotted_path(world, iter), || "".into()); }
         local.lent = lent && !mut_view && !copied && !a_view;
+        if lent_by_the_walk { state.flow.walk_lent_tuples.insert(id); }
         if !name_mut { local.without_mut = Some(CheckImmutable { at: Span { start: span.start, end: span.end }, kind: CheckKind::Loop, over: nikaia_std::block::Text::from(walked_list.to_string()) }); }
         frame.push(local);
     }

@@ -427,6 +427,10 @@ pub struct CheckFlow {
     /// **A walk whose items are lent** (#626), by the call that makes it: a
     /// walk of views of a list's elements, and one that hands those on.
     pub lent_walks: collections::BTreeSet[i64],
+    /// **The `for` names a lending walk hands a tuple to** (#2597), by
+    /// binding: a part of one handed to a keeper or to `??` is taken out of
+    /// a value the body does not own (`NK2106`).
+    pub walk_lent_tuples: collections::BTreeSet[i64],
     /// The parameters of a lambda the call being walked hands a lent item
     /// to, by name, for `lambda_parameter` to bind as lent.
     pub lent_params: collections::BTreeSet[String],
@@ -688,6 +692,7 @@ impl CheckFlow {
             walk_view: false,
             walk_item: null,
             lent_walks: collections::BTreeSet(),
+            walk_lent_tuples: collections::BTreeSet(),
             lent_params: collections::BTreeSet(),
             lent_text_params: collections::BTreeSet(),
             stream_lines: collections::BTreeSet(),
