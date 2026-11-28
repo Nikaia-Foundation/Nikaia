@@ -1,0 +1,40 @@
+// A text field of a lent struct parameter, put into a struct literal that is
+// pushed into a `mut` parameter or handed back, is a view of that parameter
+// (ADR-views-v4 D5, D16, D32, #2478): `walk`'s `n` is inferred lent, not
+// `keep`, so a caller passes a loop's view of an element, and uses `n` after
+// `wrap`.
+
+struct N {
+	raw: String,
+}
+
+struct E {
+	v: String,
+}
+
+fn walk(n: N, mut out: Vec[E]) {
+	out.push(E { v: n.raw })
+}
+
+fn wrap(n: N) -> E {
+	return E { v: n.raw }
+}
+
+fn make(text: String) -> String {
+	let mut g = String()
+	g.push_str(text)
+	return g
+}
+
+fn main() throws {
+	let ns = [N { raw: make("abc") }, N { raw: make("def") }]
+	let mut out: Vec[E] = []
+	for n in ns {
+		walk(n, out)
+	}
+	println(f"{out[0].v} {out[1].v}")
+	let n = N { raw: make("ghi") }
+	let e = wrap(n)
+	println(e.v)
+	println(n.raw)
+}

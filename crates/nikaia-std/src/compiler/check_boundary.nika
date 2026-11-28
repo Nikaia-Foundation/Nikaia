@@ -413,12 +413,32 @@ impl CheckState {
         if found.without_mut != null {
             let held = found.without_mut ?? return false
             a_parameter = held.kind == CheckKind::Parameter
+            // **An element a `for` binds out of a lent list parameter**
+            // (ADR-views-v4 D5, #2478): `n.raw` of `for n in ns` is a place
+            // of `ns`, as `ns[0].raw` is.
+            if held.kind == CheckKind::Loop && held.over != "" {
+                a_parameter = self.a_lent_list_parameter(held.over)
+            }
         }
         let a_view = match found.ty {
             Ty::Named { view, .. } => view,
             else => false,
         }
         return a_parameter && a_view
+    }
+
+    /// A parameter written `ref` that holds a list: `ns` of `ns: ref Vec[N]`.
+    fn a_lent_list_parameter(ref self, name: ref String) -> bool sync {
+        let found = self.binding(name) ?? return false
+        let held = found.without_mut ?? return false
+        if held.kind != CheckKind::Parameter {
+            return false
+        }
+        return match found.ty {
+            Ty::Named { name: list, args, view } => view && args.len() == 1 && (a_type_base(list) == "Vec" || a_type_base(list) == "Array"),
+            Ty::Pointed { slice, mutable, .. } => slice && !mutable,
+            else => false,
+        }
     }
 
     /// **A field read off a `let` over a place or a `for`'s element**

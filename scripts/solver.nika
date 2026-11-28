@@ -704,11 +704,11 @@ fn solver_status(source: String) -> String {
 	for raw in source.lines() {
 		let line = raw.trim()
 		if line.starts_with("(set-info :status ") {
-			let rest = line["(set-info :status ".len()..].replace(")", "").trim().clone()
+			let rest = (line.strip_prefix("(set-info :status ") ?? "").replace(")", "").trim().clone()
 			if rest == "sat" || rest == "unsat" { return rest }
 		}
 		if line.starts_with("; EXPECT: ") {
-			let rest = line["; EXPECT: ".len()..].trim().clone()
+			let rest = (line.strip_prefix("; EXPECT: ") ?? "").trim().clone()
 			if rest == "sat" || rest == "unsat" || rest == "error" { return rest }
 		}
 	}
